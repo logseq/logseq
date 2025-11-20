@@ -61,7 +61,7 @@
 }
 
 .cp__repos-quick-actions {
-  @apply -mx-2 px-2 pb-1.5 pt-3 border-t flex flex-col rounded-b h-fit;
+  @apply -mx-2 pl-1 pr-2 pb-1.5 pt-3 border-t flex flex-col rounded-b h-fit;
 
   .ui__button {
     @apply w-full !py-4 !justify-start opacity-70 font-medium hover:opacity-90

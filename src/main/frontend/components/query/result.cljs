@@ -29,7 +29,7 @@
                            form (common-util/safe-read-string {:log-error? false} q)]
                        (cond
                          (and (symbol? form)
-                 ;; Queries only containing template should trigger a query
+                              ;; Queries only containing template should trigger a query
                               (not (re-matches template/template-re (string/trim q))))
                          nil
 
@@ -54,10 +54,13 @@
 
         :else
         (let [[k result] (query-custom/custom-query query {:current-block-uuid current-block-uuid
-                                                           :built-in-query? (:built-in-query? config)})]
+                                                           :built-in-query? (:built-in-query? config)
+                                                           :today-query? (:today-query? config)})]
           [k (rum/react result)]))
       (catch :default e
-        (reset! *query-error e)))))
+        (js/console.error e)
+        (reset! *query-error e)
+        [nil nil]))))
 
 (defn get-group-by-page [{:keys [result-transform query] :as query-m}
                          {:keys [table? db-graph?]}]

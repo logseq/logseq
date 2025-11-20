@@ -88,7 +88,7 @@
     }
 
     .property-value {
-      @apply pl-1;
+      @apply pl-1 min-h-[28px];
 
       .jtrigger-id {
         @apply left-[-34px] top-[2px];
@@ -177,7 +177,7 @@
 }
 
 .ui__button.empty-btn, .empty-text-btn {
-  @apply !h-6 !px-0 font-normal opacity-50;
+  @apply !h-6 !px-0 !text-base opacity-50 font-normal;
 }
 
 .ui__button.empty-btn:hover, .empty-text-btn:hover {
@@ -363,9 +363,6 @@ a.control-link {
 .ls-property-dropdown {
   @apply w-[260px] p-1.5;
 
-  .ui__dropdown-menu-item, .ui__dropdown-menu-sub-trigger {
-  }
-
   [role=separator] {
     @apply my-2;
   }
@@ -431,7 +428,8 @@ a.control-link {
 }
 
 .ls-property-choices-sub-pane {
-  @apply w-[220px] p-0;
+  @apply w-[220px] px-0 pb-8 overflow-y-scroll;
+  max-height: 100vh;
 
   > ul.choices-list {
     @apply m-0 px-1.5 pt-1 pb-[1px];

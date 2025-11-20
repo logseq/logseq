@@ -9,13 +9,16 @@
             [datascript.core :as d]
             [frontend.common.missionary :as c.m]
             [frontend.worker.rtc.client-op :as client-op]
+            [frontend.worker.rtc.exception :as r.ex]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
             [frontend.worker.rtc.ws-util :as ws-util]
             [frontend.worker.state :as worker-state]
             [logseq.common.path :as path]
+            [logseq.db :as ldb]
             [malli.core :as ma]
-            [missionary.core :as m])
-  (:import [missionary Cancelled]))
+            [missionary.core :as m]))
+
+(defonce ^:private max-asset-size (* 100 1024 1024))
 
 (defn- create-local-updates-check-flow
   "Return a flow that emits value if need to push local-updates"
@@ -50,48 +53,34 @@
                                        repo (str block-uuid) asset-type))))
 
 (defn- remote-block-ops=>remote-asset-ops
-  [db-before remove-ops]
-  (keep
-   (fn [remove-op]
-     (let [block-uuid (:block-uuid remove-op)]
-       (when-let [ent (d/entity db-before [:block/uuid block-uuid])]
-         (when-let [asset-type (:logseq.property.asset/type ent)]
-           {:op :remove-asset
-            :block/uuid block-uuid
-            :logseq.property.asset/type asset-type}))))
-   remove-ops))
+  [db-before db-after remove-ops update-ops]
+  (concat
+   (keep
+    (fn [remove-op]
+      (let [block-uuid (:block-uuid remove-op)]
+        (when-let [ent (d/entity db-before [:block/uuid block-uuid])]
+          (when-let [asset-type (:logseq.property.asset/type ent)]
+            {:op :remove-asset
+             :block/uuid block-uuid
+             :logseq.property.asset/type asset-type}))))
+    remove-ops)
+   (keep
+    (fn [update-op]
+      (let [block-uuid (:self update-op)]
+        (when-let [ent (d/entity db-after [:block/uuid block-uuid])]
+          (let [remote-metadata (:logseq.property.asset/remote-metadata ent)
+                checksum (:logseq.property.asset/checksum ent)
+                asset-type (:logseq.property.asset/type ent)]
+            (when (and remote-metadata checksum asset-type)
+              {:op :update-asset
+               :block/uuid block-uuid})))))
+    update-ops)))
 
 (defn emit-remote-asset-updates-from-block-ops
-  [db-before remove-ops]
+  [db-before db-after remove-ops update-ops]
   (when-let [asset-update-ops
-             (not-empty (remote-block-ops=>remote-asset-ops db-before remove-ops))]
+             (not-empty (remote-block-ops=>remote-asset-ops db-before db-after remove-ops update-ops))]
     (reset! *remote-asset-updates asset-update-ops)))
-
-(defn new-task--emit-remote-asset-updates-from-push-asset-upload-updates
-  [repo db push-asset-upload-updates-message]
-  (m/sp
-    (let [{:keys [uploaded-assets]} push-asset-upload-updates-message]
-      (when-let [asset-update-ops
-                 (->> uploaded-assets
-                      (map
-                       (fn [[asset-uuid remote-metadata]]
-                         (m/sp
-                           (let [ent (d/entity db [:block/uuid asset-uuid])
-                                 asset-type (:logseq.property.asset/type ent)
-                                 local-checksum (:logseq.property.asset/checksum ent)
-                                 remote-checksum (get remote-metadata "checksum")]
-                             (when (or (and local-checksum remote-checksum
-                                            (not= local-checksum remote-checksum))
-                                       (and asset-type
-                                            (nil? (m/? (new-task--get-asset-file-metadata
-                                                        repo asset-uuid asset-type)))))
-                               {:op :update-asset
-                                :block/uuid asset-uuid})))))
-                      (apply m/join vector)
-                      m/?
-                      (remove nil?)
-                      not-empty)]
-        (reset! *remote-asset-updates asset-update-ops)))))
 
 (defn- create-mixed-flow
   "Return a flow that emits different events:
@@ -145,20 +134,22 @@
 
 (defn- new-task--concurrent-upload-assets
   "Concurrently upload assets with limited max concurrent count"
-  [repo conn asset-uuid->url asset-uuid->asset-type+checksum]
+  [repo conn asset-uuid->url asset-uuid->asset-metadata]
   (->> (fn [[asset-uuid url]]
          (m/sp
-           (let [[asset-type checksum] (get asset-uuid->asset-type+checksum asset-uuid)
+           (let [[asset-type checksum] (get asset-uuid->asset-metadata asset-uuid)
                  r (c.m/<?
                     (worker-state/<invoke-main-thread :thread-api/rtc-upload-asset
                                                       repo (str asset-uuid) asset-type checksum url))]
              (when (:ex-data r)
                (throw (ex-info "upload asset failed" r)))
-             (d/transact! conn
-                          [{:block/uuid asset-uuid
-                            :logseq.property.asset/remote-metadata {:checksum checksum :type asset-type}}]
-                       ;; Don't generate rtc ops again, (block-ops & asset-ops)
-                          {:persist-op? false})
+             ;; asset might be deleted by the user before uploaded successfully
+             (when (d/entity @conn [:block/uuid asset-uuid])
+               (ldb/transact! conn
+                              [{:block/uuid asset-uuid
+                                :logseq.property.asset/remote-metadata {:checksum checksum :type asset-type}}]
+                            ;; Don't generate rtc ops again, (block-ops & asset-ops)
+                              {:persist-op? false}))
              (client-op/remove-asset-op repo asset-uuid))))
        (c.m/concurrent-exec-flow 3 (m/seed asset-uuid->url))
        (m/reduce (constantly nil))))
@@ -177,17 +168,24 @@
                                   (when (contains? asset-op :remove-asset)
                                     (:block/uuid asset-op)))
                                 asset-ops)
-            asset-uuid->asset-type+checksum
+            asset-uuid->asset-metadata
             (into {}
                   (keep
                    (fn [asset-uuid]
                      (let [ent (d/entity @conn [:block/uuid asset-uuid])]
                        (when-let [tp (:logseq.property.asset/type ent)]
                          (when-let [checksum (:logseq.property.asset/checksum ent)]
-                           [asset-uuid [tp checksum]])))))
+                           (let [size (:logseq.property.asset/size ent 0)]
+                             (if (> size max-asset-size)
+                               (do (add-log-fn :rtc.asset.log/asset-too-large
+                                               {:asset-uuid asset-uuid
+                                                :asset-name (:block/title ent)
+                                                :size size})
+                                   nil)
+                               [asset-uuid [tp checksum]])))))))
                   upload-asset-uuids)
             asset-uuid->url
-            (when (seq asset-uuid->asset-type+checksum)
+            (when (seq asset-uuid->asset-metadata)
               (->> (m/? (ws-util/send&recv get-ws-create-task
                                            {:action "get-assets-upload-urls"
                                             :graph-uuid graph-uuid
@@ -195,11 +193,11 @@
                                             (into {}
                                                   (map (fn [[asset-uuid [asset-type checksum]]]
                                                          [asset-uuid {"checksum" checksum "type" asset-type}]))
-                                                  asset-uuid->asset-type+checksum)}))
+                                                  asset-uuid->asset-metadata)}))
                    :asset-uuid->url))]
         (when (seq asset-uuid->url)
           (add-log-fn :rtc.asset.log/upload-assets {:asset-uuids (keys asset-uuid->url)}))
-        (m/? (new-task--concurrent-upload-assets repo conn asset-uuid->url asset-uuid->asset-type+checksum))
+        (m/? (new-task--concurrent-upload-assets repo conn asset-uuid->url asset-uuid->asset-metadata))
         (when (seq remove-asset-uuids)
           (add-log-fn :rtc.asset.log/remove-assets {:asset-uuids remove-asset-uuids})
           (m/? (ws-util/send&recv get-ws-create-task
@@ -228,16 +226,25 @@
                   asset-update-ops)
             asset-uuid->asset-type (into {}
                                          (keep (fn [asset-uuid]
-                                                 (when-let [tp (:logseq.property.asset/type
-                                                                (d/entity @conn [:block/uuid asset-uuid]))]
-                                                   [asset-uuid tp])))
+                                                 (when-let [ent (d/entity @conn [:block/uuid asset-uuid])]
+                                                   (let [asset-type (:logseq.property.asset/type ent)]
+                                                     [asset-uuid asset-type]))))
                                          update-asset-uuids)
             asset-uuid->url
-            (when (seq asset-uuid->asset-type)
+            (when-let [asset-uuids
+                       (->> asset-uuid->asset-type
+                            (map
+                             (fn [[asset-uuid asset-type]]
+                               (m/sp
+                                 (when (nil? (m/? (new-task--get-asset-file-metadata repo asset-uuid asset-type)))
+                                   asset-uuid))))
+                            (apply m/join vector)
+                            m/?
+                            (remove nil?))]
               (->> (m/? (ws-util/send&recv get-ws-create-task
                                            {:action "get-assets-download-urls"
                                             :graph-uuid graph-uuid
-                                            :asset-uuids (keys asset-uuid->asset-type)}))
+                                            :asset-uuids asset-uuids}))
                    :asset-uuid->url))]
         (doseq [[asset-uuid asset-type] remove-asset-uuid->asset-type]
           (c.m/<? (worker-state/<invoke-main-thread :thread-api/unlink-asset
@@ -250,6 +257,7 @@
   [db]
   (d/q '[:find [(pull ?b [:block/uuid
                           :logseq.property.asset/type
+                          :logseq.property.asset/size
                           :logseq.property.asset/checksum])
                 ...]
          :where
@@ -274,7 +282,7 @@
 
 (defn create-assets-sync-loop
   [repo get-ws-create-task graph-uuid major-schema-version conn *auto-push?]
-  (let [started-dfv         (m/dfv)
+  (let [started-dfv (m/dfv)
         add-log-fn (fn [type message]
                      (assert (map? message) message)
                      (rtc-log-and-state/rtc-log type (assoc message :graph-uuid graph-uuid)))
@@ -300,9 +308,10 @@
            m/ap
            (m/reduce {} nil)
            m/?)
-          (catch Cancelled e
-            (add-log-fn :rtc.asset.log/cancelled {})
-            (throw e)))))}))
+          (catch :default e
+            (let [ex (r.ex/e->ex-info e)]
+              (add-log-fn :rtc.asset.log/cancelled {:e ex})
+              (throw ex))))))}))
 
 (comment
   (def x (atom 1))

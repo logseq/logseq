@@ -1,9 +1,8 @@
 (ns frontend.worker.rtc.const
   "RTC constants"
-  (:require [logseq.common.defkeywords :as common-def :refer [defkeywords]]))
-
-(goog-define RTC-E2E-TEST* false)
-(def RTC-E2E-TEST RTC-E2E-TEST*)
+  (:require [logseq.common.defkeywords :as common-def :refer [defkeywords]]
+            [logseq.db.frontend.kv-entity :as kv-entity]
+            [logseq.db.frontend.property :as db-property]))
 
 (defkeywords
   :rtc/ignore-attr-when-init-upload
@@ -25,24 +24,24 @@
 (def ignore-attrs-when-init-upload
   (into #{}
         (keep (fn [[kw config]] (when (get-in config [:rtc :rtc/ignore-attr-when-init-upload]) kw)))
-        (common-def/get-all-defined-kw->config)))
+        db-property/built-in-properties))
 
 (def ignore-attrs-when-init-download
   (into #{}
         (keep (fn [[kw config]] (when (get-in config [:rtc :rtc/ignore-attr-when-init-download]) kw)))
-        (common-def/get-all-defined-kw->config)))
+        db-property/built-in-properties))
 
 (def ignore-attrs-when-syncing
   (into #{}
         (keep (fn [[kw config]] (when (get-in config [:rtc :rtc/ignore-attr-when-syncing]) kw)))
-        (common-def/get-all-defined-kw->config)))
+        db-property/built-in-properties))
 
 (def ignore-entities-when-init-upload
   (into #{}
         (keep (fn [[kw config]] (when (get-in config [:rtc :rtc/ignore-entity-when-init-upload]) kw)))
-        (common-def/get-all-defined-kw->config)))
+        kv-entity/kv-entities))
 
 (def ignore-entities-when-init-download
   (into #{}
         (keep (fn [[kw config]] (when (get-in config [:rtc :rtc/ignore-entity-when-init-download]) kw)))
-        (common-def/get-all-defined-kw->config)))
+        kv-entity/kv-entities))

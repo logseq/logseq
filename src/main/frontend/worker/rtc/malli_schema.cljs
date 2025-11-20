@@ -30,6 +30,11 @@
      [:map
       [:db-ident :keyword]
       [:value :string]]]]
+   [:rename-db-ident
+    [:cat :keyword
+     [:map
+      [:db-ident-or-block-uuid [:or :keyword :uuid]]
+      [:new-db-ident :keyword]]]]
    [:move
     [:cat :keyword
      [:map
@@ -43,6 +48,7 @@
     [:cat :keyword
      [:map
       [:block-uuid :uuid]
+      [:db/ident {:optional true} :keyword]
       [:page-name :string]
       [:block/title :string]]]]
    [:remove-page
@@ -191,11 +197,18 @@
       [:map
        [:ex-message :string]
        [:ex-data [:map [:type :keyword]]]]]
+     ["init-request"
+      (concat [:map
+               [:max-remote-schema-version {:optional true} :string]
+               [:server-schema-version {:optional true} :string]
+               [:server-builtin-db-idents {:optional true} [:set :keyword]]]
+              (m/children apply-ops-response-schema))]
      ["register-graph-updates"
       [:map
        [:t :int]
        [:max-remote-schema-version {:optional true} :string]]]
      ["apply-ops" apply-ops-response-schema]
+     ["push-asset-block-updates" apply-ops-response-schema]
      ["branch-graph"
       [:map
        [:graph-uuid :uuid]
@@ -232,7 +245,8 @@
      ["inject-users-info" [:map]]
      [nil data-from-ws-schema-fallback]]))
 
-(def data-from-ws-coercer (m/coercer data-from-ws-schema mt/string-transformer))
+(def data-from-ws-coercer (m/coercer data-from-ws-schema mt/string-transformer nil
+                                     #(m/-fail! ::data-from-ws-schema (select-keys % [:value]))))
 (def data-from-ws-validator (m/validator data-from-ws-schema))
 
 (def ^:large-vars/data-var data-to-ws-schema
@@ -244,6 +258,12 @@
      [:multi {:dispatch :action}
       ["list-graphs"
        [:map]]
+      ["init-request"
+       [:map
+        [:graph-uuid :uuid]
+        [:schema-version db-schema/major-schema-version-string-schema]
+        [:t-before :int]
+        [:get-graph-skeleton :boolean]]]
       ["register-graph-updates"
        [:map
         [:graph-uuid :uuid]

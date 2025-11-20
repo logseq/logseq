@@ -11,6 +11,8 @@
             [clojure.string :as string]
             [frontend.util :as util]))
 
+#?(:cljs (set! *warn-on-infer* false))
+
 ;; ======================================================================
 ;; Interpreter
 

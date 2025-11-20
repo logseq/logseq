@@ -4,6 +4,7 @@
             [datascript.core :as d]
             [frontend.common.missionary :as c.m]
             [frontend.common.thread-api :refer [def-thread-api]]
+            [frontend.worker-common.util :as worker-util]
             [frontend.worker.device :as worker-device]
             [frontend.worker.rtc.asset :as r.asset]
             [frontend.worker.rtc.branch-graph :as r.branch-graph]
@@ -13,14 +14,13 @@
             [frontend.worker.rtc.exception :as r.ex]
             [frontend.worker.rtc.full-upload-download-graph :as r.upload-download]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
-            [frontend.worker.rtc.migrate :as r.migrate]
             [frontend.worker.rtc.remote-update :as r.remote-update]
             [frontend.worker.rtc.skeleton]
+            [frontend.worker.rtc.throttle :as r.throttle]
             [frontend.worker.rtc.ws :as ws]
             [frontend.worker.rtc.ws-util :as ws-util :refer [gen-get-ws-create-map--memoized]]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
-            [frontend.worker.util :as worker-util]
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
@@ -41,7 +41,7 @@
   and filter messages with :req-id=
   - `push-updates`
   - `online-users-updated`.
-  - `push-asset-upload-updates`"
+  - `push-asset-block-updates`"
   [get-ws-create-task]
   (m/ap
     (loop []
@@ -52,7 +52,7 @@
                                  (contains?
                                   #{"online-users-updated"
                                     "push-updates"
-                                    "push-asset-upload-updates"}
+                                    "push-asset-block-updates"}
                                   (:req-id data))))
                        (ws/recv-flow ws)))
                 (catch js/CloseEvent _
@@ -60,17 +60,6 @@
         (if (identical? x sentinel)
           (recur)
           x)))))
-
-(defn- create-local-updates-check-flow
-  "Return a flow: emit if need to push local-updates"
-  [repo *auto-push? interval-ms]
-  (let [auto-push-flow (m/watch *auto-push?)
-        clock-flow (c.m/clock interval-ms :clock)
-        merge-flow (m/latest vector auto-push-flow clock-flow)]
-    (m/eduction (filter first)
-                (map second)
-                (filter (fn [v] (when (pos? (client-op/get-unpushed-block-ops-count repo)) v)))
-                merge-flow)))
 
 (defn- create-pull-remote-updates-flow
   "Return a flow: emit to pull remote-updates.
@@ -123,7 +112,7 @@
 (defn- create-mixed-flow
   "Return a flow that emits all kinds of events:
   `:remote-update`: remote-updates data from server
-  `:remote-asset-update`: remote asset-updates from server
+  `:remote-asset-block-update`: remote asset-updates from server
   `:local-update-check`: event to notify to check if there're some new local-updates, then push to remote.
   `:online-users-updated`: online users info updated
   `:pull-remote-updates`: pull remote updates
@@ -134,11 +123,11 @@
                                     (case (:req-id data)
                                       "push-updates" {:type :remote-update :value data}
                                       "online-users-updated" {:type :online-users-updated :value data}
-                                      "push-asset-upload-updates" {:type :remote-asset-update :value data})))
+                                      "push-asset-block-updates" {:type :remote-asset-block-update :value data})))
                              (get-remote-updates get-ws-create-task))
         local-updates-check-flow (m/eduction
                                   (map (fn [data] {:type :local-update-check :value data}))
-                                  (create-local-updates-check-flow repo *auto-push? 2000))
+                                  (r.throttle/create-local-updates-check-flow repo *auto-push? 2000))
         inject-user-info-flow (create-inject-users-info-flow repo (m/watch *online-users))
         mix-flow (c.m/mix remote-updates-flow local-updates-check-flow inject-user-info-flow)]
     (c.m/mix mix-flow (create-pull-remote-updates-flow 60000 mix-flow))))
@@ -164,23 +153,12 @@
        ws-state (assoc :ws-state ws-state)))
    (m/reductions {} nil ws-state-flow)))
 
-(defn- add-migration-client-ops!
-  [repo db server-schema-version]
-  (when server-schema-version
-    (let [client-schema-version (ldb/get-graph-schema-version db)
-          added-ops (r.migrate/add-migration-client-ops! repo db server-schema-version client-schema-version)]
-      (when (seq added-ops)
-        (log/info :add-migration-client-ops
-                  {:repo repo
-                   :server-schema-version server-schema-version
-                   :client-schema-version client-schema-version})))))
-
 (defn- update-remote-schema-version!
   [conn server-schema-version]
   (when server-schema-version
-    (d/transact! conn [(ldb/kv :logseq.kv/remote-schema-version server-schema-version)]
-                 {:gen-undo-ops? false
-                  :persist-op? false})))
+    (ldb/transact! conn [(ldb/kv :logseq.kv/remote-schema-version server-schema-version)]
+                   {:gen-undo-ops? false
+                    :persist-op? false})))
 
 (defonce ^:private *rtc-lock (atom nil))
 (defn- holding-rtc-lock
@@ -230,9 +208,9 @@
                                      (rtc-log-and-state/rtc-log type (assoc message :graph-uuid graph-uuid)))
         {:keys [*current-ws get-ws-create-task]}
         (gen-get-ws-create-map--memoized ws-url)
-        get-ws-create-task (r.client/ensure-register-graph-updates
-                            get-ws-create-task graph-uuid major-schema-version
-                            repo conn *last-calibrate-t *online-users *server-schema-version add-log-fn)
+        get-ws-create-task (r.client/ensure-register-graph-updates--memoized
+                            get-ws-create-task graph-uuid major-schema-version repo conn date-formatter
+                            *last-calibrate-t *online-users *server-schema-version add-log-fn)
         {:keys [assets-sync-loop-task]}
         (r.asset/create-assets-sync-loop repo get-ws-create-task graph-uuid major-schema-version conn *auto-push?)
         mixed-flow                 (create-mixed-flow repo get-ws-create-task *auto-push? *online-users)]
@@ -250,24 +228,23 @@
           (log/info :rtc :loop-starting)
           ;; init run to open a ws
           (m/? get-ws-create-task)
+          ;; NOTE: Set dfv after ws connection is established,
+          ;; ensuring the ws connection is already up when the cloud-icon turns green.
           (started-dfv true)
           (update-remote-schema-version! conn @*server-schema-version)
-          (add-migration-client-ops! repo @conn @*server-schema-version)
           (reset! *assets-sync-loop-canceler
                   (c.m/run-task :assets-sync-loop-task
                     assets-sync-loop-task))
           (->>
            (let [event (m/?> mixed-flow)]
              (case (:type event)
-               :remote-update
+               (:remote-update :remote-asset-block-update)
                (try (r.remote-update/apply-remote-update graph-uuid repo conn date-formatter event add-log-fn)
                     (catch :default e
-                      (when (= ::r.remote-update/need-pull-remote-data (:type (ex-data e)))
+                      (if (= ::r.remote-update/need-pull-remote-data (:type (ex-data e)))
                         (m/? (r.client/new-task--pull-remote-data
-                              repo conn graph-uuid major-schema-version date-formatter get-ws-create-task add-log-fn)))))
-               :remote-asset-update
-               (m/? (r.asset/new-task--emit-remote-asset-updates-from-push-asset-upload-updates
-                     repo @conn (:value event)))
+                              repo conn graph-uuid major-schema-version date-formatter get-ws-create-task add-log-fn))
+                        (throw (r.ex/e->ex-info e)))))
 
                :local-update-check
                (m/? (r.client/new-task--push-local-ops
@@ -286,9 +263,10 @@
            (m/ap)
            (m/reduce {} nil)
            (m/?))
-          (catch Cancelled e
-            (add-log-fn :rtc.log/cancelled {})
-            (throw e))
+          (catch :default e
+            (let [ex (r.ex/e->ex-info e)]
+              (add-log-fn :rtc.log/cancelled {:e ex})
+              (throw ex)))
           (finally
             (started-dfv :final) ;; ensure started-dfv can recv a value(values except the first one will be disregarded)
             (when @*assets-sync-loop-canceler (@*assets-sync-loop-canceler))))))}))
@@ -307,10 +285,11 @@
    :canceler nil
    :*last-stop-exception nil})
 
+(def ^:private rtc-loop-metadata-keys (set (keys empty-rtc-loop-metadata)))
+
 (defonce ^:private *rtc-loop-metadata (atom empty-rtc-loop-metadata
                                             :validator
-                                            (fn [v] (= (set (keys empty-rtc-loop-metadata))
-                                                       (set (keys v))))))
+                                            (fn [v] (= rtc-loop-metadata-keys (set (keys v))))))
 
 (defn- validate-rtc-start-conditions
   "Return exception if validation failed"
@@ -399,23 +378,28 @@
     (let [repo (worker-state/get-current-repo)
           token (worker-state/get-id-token)
           conn (worker-state/get-datascript-conn repo)]
-      (when (and repo
-                 (sqlite-util/db-based-graph? repo)
-                 token conn)
-        (when stop-before-start? (rtc-stop))
-        (let [ex (m/? (new-task--rtc-start* repo token))]
-          (when-let [ex-data* (ex-data ex)]
-            (case (:type ex-data*)
-              (:rtc.exception/not-rtc-graph
-               :rtc.exception/major-schema-version-mismatched
-               :rtc.exception/lock-failed)
-              (log/info :rtc-start-failed ex)
+      (if-not (and repo
+                   (sqlite-util/db-based-graph? repo)
+                   conn token)
+        (log/info :skip-new-task--rtc-start
+                  {:repo repo
+                   :some?-conn (some? conn)
+                   :some?-token (some? token)})
+        (do
+          (when stop-before-start? (rtc-stop))
+          (let [ex (m/? (new-task--rtc-start* repo token))]
+            (when-let [ex-data* (ex-data ex)]
+              (case (:type ex-data*)
+                (:rtc.exception/not-rtc-graph
+                 :rtc.exception/major-schema-version-mismatched
+                 :rtc.exception/lock-failed)
+                (log/info :rtc-start-failed ex)
 
-              :rtc.exception/not-found-db-conn
-              (log/error :rtc-start-failed ex)
+                :rtc.exception/not-found-db-conn
+                (log/error :rtc-start-failed ex)
 
-              (log/error :BUG-unknown-error ex))
-            (r.ex/->map ex)))))))
+                (log/error :BUG-unknown-error ex))
+              ex)))))))
 
 (defn rtc-stop
   []
@@ -545,7 +529,7 @@
           (ex-info "Not found db-conn" {:type :rtc.exception/not-found-db-conn :repo repo}))]
     (m/sp
       (if (instance? ExceptionInfo r)
-        (r.ex/->map r)
+        r
         (let [major-schema-version (db-schema/major-version schema-version)
               {:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
           (m/? (r.upload-download/new-task--upload-graph
@@ -563,7 +547,7 @@
           (ex-info "Not found db-conn" {:type :rtc.exception/not-found-db-conn :repo repo}))]
     (m/sp
       (if (instance? ExceptionInfo r)
-        (r.ex/->map r)
+        r
         (let [major-schema-version (db-schema/major-version schema-version)
               {:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
           (m/? (r.upload-download/new-task--branch-graph
@@ -654,11 +638,6 @@
   (def-thread-api :thread-api/rtc-download-info-list
     [token graph-uuid schema-version]
     (new-task--download-info-list token graph-uuid schema-version)))
-
-(def-thread-api :thread-api/rtc-add-migration-client-ops
-  [repo server-schema-version]
-  (when-let [db @(worker-state/get-datascript-conn repo)]
-    (add-migration-client-ops! repo db server-schema-version)))
 
 ;;; ================ API (ends) ================
 

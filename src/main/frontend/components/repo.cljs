@@ -84,7 +84,7 @@
                                      (state/pub-event! [:rtc/download-remote-graph GraphName GraphUUID GraphSchemaVersion])
 
                                      :else
-                                     (when-not (util/capacitor-new?)
+                                     (when-not (util/capacitor?)
                                        (state/pub-event! [:graph/pull-down-remote-graph repo]))))))]
       (when-let [time (some-> (or last-seen-at created-at) (safe-locale-date))]
         [:small.text-muted-foreground (str "Last opened at: " time)])]
@@ -127,6 +127,8 @@
                                            (state/pub-event! [:graph/unlinked repo (state/get-current-repo)]))))))}
               "Delete local graph"))
            (when (and db-based? root
+                      (user-handler/logged-in?)
+                      (user-handler/rtc-group?)
                       (not remote?)
                       (= url (state/get-current-repo)))
              (shui/dropdown-menu-item
@@ -151,7 +153,7 @@
                                   (p/do!
                                    (rtc-flows/trigger-rtc-start repo)
                                    (rtc-handler/<get-remote-graphs)))))))}
-              "Use Logseq sync (Beta testing)"))
+              "Use Logseq sync (Alpha testing)"))
            (when (and remote? (or (and db-based? manager?) (not db-based?)))
              (shui/dropdown-menu-item
               {:key "delete-remotely"
@@ -179,6 +181,11 @@
               "Delete from server")))))]]]))
 
 (rum/defc repos-cp < rum/reactive
+  {:will-mount (fn [state]
+                 (let [login? (:auth/id-token @state/state)]
+                   (when (and login? (user-handler/rtc-group?))
+                     (rtc-handler/<get-remote-graphs)))
+                 state)}
   []
   (let [login? (boolean (state/sub :auth/id-token))
         repos (state/sub [:me :repos])
@@ -196,7 +203,7 @@
                           (config/db-based-graph? (:url item)))))
         {remote-graphs true local-graphs false} (group-by (comp boolean :remote?) repos)]
     [:div#graphs
-     (when-not (util/capacitor-new?)
+     (when-not (util/capacitor?)
        [:h1.title (t :graph/all-graphs)])
 
      [:div.pl-1.content.mt-3
@@ -206,7 +213,7 @@
        (when (seq local-graphs)
          (repos-inner local-graphs))
 
-       (when-not (util/capacitor-new?)
+       (when-not (util/capacitor?)
          [:div.flex.flex-row.my-4
           (if util/web-platform?
             [:div.mr-8
@@ -234,7 +241,7 @@
             :background "gray"
             :disabled remotes-loading?
             :on-click (fn []
-                        (when-not (util/capacitor-new?)
+                        (when-not (util/capacitor?)
                           (file-sync/load-session-graphs))
                         (rtc-handler/<get-remote-graphs)))]]
          (repos-inner remote-graphs)])]]))
@@ -348,7 +355,7 @@
                  (repo-handler/combine-local-&-remote-graphs repos (concat remotes rtc-graphs)) repos))
         items-fn #(repos-dropdown-links repos current-repo downloading-graph-id opts)
         header-fn #(when (> (count repos) 1)                ; show switch to if there are multiple repos
-                     [:div.font-medium.text-sm.opacity-50.px-1.py-1.flex.flex-row.justify-between.items-center
+                     [:div.font-medium.md:text-sm.md:opacity-50.px-1.py-1.flex.flex-row.justify-between.items-center
                       [:h4.pb-1 (t :left-side-bar/switch)]
 
                       (when (and (file-sync/enable-sync?) login?)
@@ -372,10 +379,11 @@
      [:div.cp__repos-list-wrap
       (for [{:keys [hr item hover-detail title options icon]} (items-fn)]
         (let [on-click' (:on-click options)
-              href' (:href options)]
+              href' (:href options)
+              menu-item (if (util/mobile?) ui/menu-link shui/dropdown-menu-item)]
           (if hr
-            (shui/dropdown-menu-separator)
-            (shui/dropdown-menu-item
+            (if (util/mobile?) [:hr.py-2] (shui/dropdown-menu-separator))
+            (menu-item
              (assoc options
                     :title hover-detail
                     :on-click (fn [^js e]

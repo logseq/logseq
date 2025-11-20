@@ -1,7 +1,6 @@
 (ns frontend.components.property.value
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
-            [cljs-time.local :as local]
             [clojure.set :as set]
             [clojure.string :as string]
             [dommy.core :as d]
@@ -28,7 +27,6 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
-            [goog.dom :as gdom]
             [goog.functions :refer [debounce]]
             [lambdaisland.glogi :as log]
             [logseq.common.util.macro :as macro-util]
@@ -57,7 +55,7 @@
     (if (= text "Empty")
       (shui/button (merge {:class "empty-btn" :variant :text} opts)
                    text)
-      (shui/button (merge {:class "empty-btn !text-base" :variant :text} opts)
+      (shui/button (merge {:class "empty-btn" :variant :text} opts)
                    text))))
 
 (rum/defc property-empty-text-value
@@ -96,6 +94,11 @@
 
 (rum/defc icon-row
   [block editing?]
+  (hooks/use-effect!
+   (fn []
+     (fn []
+       (when editing?
+         (editor-handler/restore-last-saved-cursor!)))))
   (let [icon-value (:logseq.property/icon block)
         clear-overlay! (fn []
                          (shui/popup-hide-all!))
@@ -109,36 +112,18 @@
                         (when icon (select-keys icon [:type :id :color]))))
                      (clear-overlay!)
                      (when editing?
-                       (editor-handler/restore-last-saved-cursor!)))]
-
-    (hooks/use-effect!
-     (fn []
-       (when editing?
-         (clear-overlay!)
-         (let [^js container (or (some-> js/document.activeElement (.closest ".page"))
-                                 (gdom/getElement "main-content-container"))
-               icon (get block :logseq.property/icon)]
-           (util/schedule
-            (fn []
-              (when-let [^js target (some-> (.querySelector container (str "#ls-block-" (str (:block/uuid block))))
-                                            (.querySelector ".block-main-container"))]
-                (state/set-editor-action! :property-icon-picker)
-                (shui/popup-show! target
-                                  #(icon-component/icon-search
-                                    {:on-chosen on-chosen!
-                                     :icon-value icon
-                                     :del-btn? (some? icon)})
-                                  {:id :ls-icon-picker
-                                   :on-after-hide #(state/set-editor-action! nil)
-                                   :content-props {:onEscapeKeyDown #(when editing? (editor-handler/restore-last-saved-cursor!))}
-                                   :align :start})))))))
-     [editing?])
-
-    [:div.col-span-3.flex.flex-row.items-center.gap-2
-     (icon-component/icon-picker icon-value
-                                 {:disabled? config/publishing?
-                                  :del-btn? (some? icon-value)
-                                  :on-chosen on-chosen!})]))
+                       (editor-handler/restore-last-saved-cursor!)))
+        icon (get block :logseq.property/icon)]
+    (if editing?
+      (icon-component/icon-search
+       {:on-chosen on-chosen!
+        :icon-value icon
+        :del-btn? (some? icon)})
+      [:div.col-span-3.flex.flex-row.items-center.gap-2
+       (icon-component/icon-picker icon-value
+                                   {:disabled? config/publishing?
+                                    :del-btn? (some? icon-value)
+                                    :on-chosen on-chosen!})])))
 
 (defn select-type?
   [block property]
@@ -249,8 +234,7 @@
        (p/do!
         (ui-outliner-tx/transact!
          {:outliner-op :save-block}
-         (doseq [block blocks]
-           (db-property-handler/delete-property-value! (:db/id block) (:db/ident property) value)))
+         (db-property-handler/batch-delete-property-value! (map :db/id blocks) (:db/ident property) value))
         (when (or (not many?)
                   ;; values will be cleared
                   (and many? (<= (count (get block (:db/ident property))) 1)))
@@ -361,7 +345,7 @@
         initial-day value
         initial-month (when value
                         (let [d (tc/to-date-time value)]
-                          (js/Date. (t/last-day-of-the-month  (t/date-time (t/year d) (t/month d))))))
+                          (js/Date. (t/last-day-of-the-month (t/date-time (t/year d) (t/month d))))))
         select-handler!
         (fn [^js d]
           (when d
@@ -406,22 +390,22 @@
                                   :title "Overdue"))
        content])))
 
-(defn- human-date-label [date]
-  (let [given-date (date/start-of-day date)
-        now (local/local-now)
-        today (date/start-of-day now)
-        tomorrow (t/plus today (t/days 1))
-        yesterday (t/minus today (t/days 1))]
+(defn- start-of-local-day [^js d]
+  ;; clone the date and reset to local midnight
+  (doto (js/Date. d)
+    (.setHours 0 0 0 0)))
+
+(defn- human-date-label [utc-ms]
+  ;; utc-ms is stored deadline/scheduled time
+  (let [given-date (start-of-local-day (js/Date. utc-ms))
+        today      (start-of-local-day (js/Date.))
+        ms-in-day  (* 24 60 60 1000)
+        tomorrow   (js/Date. (+ (.getTime today) ms-in-day))
+        yesterday  (js/Date. (- (.getTime today) ms-in-day))]
     (cond
-      (and (t/before? given-date today) (not (t/before? given-date yesterday)))
-      "Yesterday"
-
-      (and (not (t/before? given-date today)) (t/before? given-date tomorrow))
-      "Today"
-
-      (and (not (t/before? given-date tomorrow)) (t/before? given-date (t/plus tomorrow (t/days 1))))
-      "Tomorrow"
-
+      (= (.getTime given-date) (.getTime yesterday)) "Yesterday"
+      (= (.getTime given-date) (.getTime today))     "Today"
+      (= (.getTime given-date) (.getTime tomorrow))  "Tomorrow"
       :else nil)))
 
 (rum/defc datetime-value
@@ -433,16 +417,18 @@
                        (rum/with-key
                          (page-cp {:disable-preview? true
                                    :show-non-exists-page? true
-                                   :label (human-date-label date)}
+                                   :label (human-date-label value)}
                                   {:block/name page-title})
                          page-title)))
                    (let [date (js/Date. value)
                          hours (.getHours date)
                          minutes (.getMinutes date)]
                      [:span.select-none
-                      (str (util/zero-pad hours)
-                           ":"
-                           (util/zero-pad minutes))])]]
+                      (if (= 0 hours minutes)
+                        (ui/icon "edit" {:size 14 :class "text-muted-foreground hover:text-foreground align-middle"})
+                        (str (util/zero-pad hours)
+                             ":"
+                             (util/zero-pad minutes)))])]]
       (if (or repeated-task? (contains? #{:logseq.property/deadline :logseq.property/scheduled} property-id))
         (overdue date content)
         content))))
@@ -512,7 +498,7 @@
                             (rum/with-key
                               (page-cp {:disable-preview? true
                                         :meta-click? other-position?
-                                        :label (human-date-label (t/to-default-time-zone date))} value)
+                                        :label (human-date-label value)} value)
                               (:db/id value)))]
               (if (or repeated-task? (contains? #{:logseq.property/deadline :logseq.property/scheduled} (:db/id property)))
                 (overdue compare-value content)
@@ -563,7 +549,16 @@
         id (:db/id page-entity)
         class? (or (= :block/tags (:db/ident property))
                    (and (= :logseq.property.class/extends (:db/ident property))
-                        (ldb/class? block)))
+                        (ldb/class? block))
+                   (let [classes (:logseq.property/classes property)]
+                     (and (seq classes)
+                          (every? (fn [class]
+                                    (or
+                                     (= :logseq.class/Tag (:db/ident class))
+                                     (some (fn [e]
+                                             (= :logseq.class/Tag (:db/ident e)))
+                                           (ldb/get-class-extends class))))
+                                  classes))))
         ;; Note: property and other types shouldn't be converted to class
         page? (ldb/internal-page? page-entity)]
     (cond
@@ -579,7 +574,12 @@
                                     [inline-class-uuid]
                                     ;; Only 1st class b/c page normally has
                                     ;; one of and not all these classes
-                                    (mapv :block/uuid (take 1 classes)))}]
+                                    (let [tag (db/entity :logseq.class/Tag)
+                                          classes' (if (= (map :db/id classes) [(:db/id tag)])
+                                                     classes
+                                                     (->> (remove (fn [c] (= (:db/id c) (:db/id tag))) classes)
+                                                          (take 1)))]
+                                      (mapv :block/uuid classes')))}]
         (p/let [page (if class?
                        (db-page-handler/<create-class! page create-options)
                        (page-handler/<create! page create-options))]
@@ -618,9 +618,13 @@
                          (not (and (ldb/class? block) (= (:db/ident property) :logseq.property.class/extends)))
                          (not= (:db/ident property) :logseq.property.view/type))
                   (concat sorted-items
-                          [{:value clear-value
-                            :label clear-value-label
-                            :clear? true}])
+                          (when-not (or (= (:logseq.property/default-value property)
+                                           (get block (:db/ident property)))
+                                        (= (:logseq.property/scalar-default-value property)
+                                           (get block (:db/ident property))))
+                            [{:value clear-value
+                              :label clear-value-label
+                              :clear? true}]))
                   sorted-items)
                 (remove #(= :logseq.property/empty-placeholder (:value %))))
         k :on-chosen
@@ -640,7 +644,8 @@
                (f chosen selected?)))]
     (hooks/use-effect!
      (fn []
-       (set-items! (sort-select-items property selected-choices items)))
+       (when-not (= (count items) (count sorted-items))
+         (set-items! (sort-select-items property selected-choices items))))
      [items])
     (select/select (assoc opts
                           :selected-choices selected-choices
@@ -648,23 +653,12 @@
                           :close-modal? false
                           k f'))))
 
-(defn- get-node-icon
-  [node]
-  (cond
-    (ldb/class? node)
-    "hash"
-    (ldb/property? node)
-    "letter-p"
-    (entity-util/page? node)
-    "page"
-    :else
-    "letter-n"))
-
 (rum/defc ^:large-vars/cleanup-todo select-node < rum/static
   [property
    {:keys [block multiple-choices? dropdown? input-opts on-input add-new-choice! target] :as opts}
    result]
-  (let [repo (state/get-current-repo)
+  (let [[*input set-input!] (hooks/use-state nil)
+        repo (state/get-current-repo)
         classes (:logseq.property/classes property)
         tags? (= :block/tags (:db/ident property))
         alias? (= :block/alias (:db/ident property))
@@ -688,21 +682,24 @@
                                       ;; hide parent extends for existing values
                                       (set/union (set (map :block/uuid extends))))
                       options (if (ldb/class? block)
-                                (model/get-all-classes repo)
+                                (model/get-all-classes repo {:except-extends-hidden-tags? true})
                                 result)
 
                       excluded-options (->> options
                                             (remove (fn [e] (contains? exclude-ids (:block/uuid e)))))]
                   excluded-options)
 
-                (contains? #{:class :property} property-type)
-                (let [classes (model/get-all-classes
-                               repo
-                               {:except-root-class? true
-                                :except-private-tags? (not (contains? #{:logseq.property/template-applied-to} (:db/ident property)))})]
-                  (if (= property-type :class)
-                    classes
-                    (property-handler/get-class-property-choices)))
+                (= :class property-type)
+                (cond->
+                 (model/get-all-classes
+                  repo
+                  {:except-root-class? true
+                   :except-private-tags? (not (contains? #{:logseq.property/template-applied-to} (:db/ident property)))})
+                  (not (or (and (entity-util/page? block) (not (ldb/internal-page? block))) (:logseq.property/created-from-property block)))
+                  (conj (db/entity :logseq.class/Page)))
+
+                (= :property property-type)
+                (property-handler/get-class-property-choices)
 
                 (seq classes)
                 (->>
@@ -746,22 +743,24 @@
                                     node)
                              id (:db/id node)
                              [header label] (if (integer? id)
-                                              (let [node-title (if (seq (:logseq.property/classes property))
-                                                                 (db-content/recur-replace-uuid-in-block-title node)
-                                                                 (block-handler/block-unique-title node))
-                                                    title (subs node-title 0 256)
-                                                    node (or (db/entity id) node)
-                                                    icon (get-node-icon node)
-                                                    header (when-not (db/page? node)
-                                                             (when-let [breadcrumb (state/get-component :block/breadcrumb)]
-                                                               [:div.text-xs.opacity-70
-                                                                (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid node) {})]))
-                                                    label [:div.flex.flex-row.items-center.gap-1
-                                                           (when-not (or (:logseq.property/classes property)
-                                                                         (contains? #{:class :property} (:logseq.property/type property)))
-                                                             (ui/icon icon {:size 14}))
-                                                           [:div title]]]
-                                                [header label])
+                                              (when-let [title (if (seq (:logseq.property/classes property))
+                                                                 (some-> (db-content/recur-replace-uuid-in-block-title node)
+                                                                         (subs 0 256))
+                                                                 (block-handler/block-unique-title node))]
+                                                (let [node (or (db/entity id) node)
+                                                      header (when-not (db/page? node)
+                                                               (when-let [breadcrumb (state/get-component :block/breadcrumb)]
+                                                                 [:div.text-xs.opacity-70
+                                                                  (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid node)
+                                                                              {:disabled? true})]))
+                                                      label [:div.flex.flex-row.items-center.gap-1
+                                                             (when-not (or (:logseq.property/classes property)
+                                                                           (contains? #{:class :property} property-type))
+                                                               (icon-component/get-node-icon-cp node {:ignore-current-icon? true}))
+                                                             [:div (if (contains? #{:class :property :page} property-type)
+                                                                     title
+                                                                     (block-handler/block-title-with-icon node title icon-component/icon))]]]
+                                                  [header label]))
                                               [nil (:block/title node)])]
                          (assoc node
                                 :header header
@@ -769,13 +768,15 @@
                                 :label label
                                 :value id
                                 :disabled? (and tags? (contains?
-                                                       (set/union #{:logseq.class/Journal :logseq.class/Whiteboard} ldb/internal-tags)
+                                                       (set/union #{:logseq.class/Journal :logseq.class/Whiteboard}
+                                                                  (set/difference ldb/internal-tags #{:logseq.class/Page}))
                                                        (:db/ident node)))))) nodes)
         classes' (remove (fn [class] (= :logseq.class/Root (:db/ident class))) classes)
         opts' (cond->
                (merge
                 opts
                 {:multiple-choices? multiple-choices?
+                 :tap-*input-val set-input!
                  :items options
                  :selected-choices selected-choices
                  :dropdown? dropdown?
@@ -786,13 +787,17 @@
                                               "Set alias"
                                               :else
                                               (str "Set " (:block/title property)))
-                 :show-new-when-not-exact-match? (if (or extends-property?
-                                                         ;; Don't allow creating private tags
-                                                         (and (= :block/tags (:db/ident property))
-                                                              (seq (set/intersection (set (map :db/ident classes'))
-                                                                                     ldb/private-tags))))
-                                                   false
-                                                   true)
+                 :show-new-when-not-exact-match? (not
+                                                  (or (and extends-property?
+                                                           (or (contains? (set children-pages) (:db/id block))
+                                                               (when-let [input (when *input @*input)]
+                                                                 (when-not (string/blank? input)
+                                                                   (some (fn [ident]
+                                                                           (= input (:block/title (db/entity ident)))) ldb/extends-hidden-tags)))))
+                                                      ;; Don't allow creating private tags
+                                                      (and (= :block/tags (:db/ident property))
+                                                           (seq (set/intersection (set (map :db/ident classes'))
+                                                                                  ldb/private-tags)))))
                  :extract-chosen-fn :value
                  :extract-fn (fn [x] (or (:label-value x) (:label x)))
                  :input-opts input-opts
@@ -822,6 +827,10 @@
                                          :label (:block/title e)}))))
                                   (when-not add-tag-property?
                                     (log/error :msg "No :db/id found or created for chosen" :chosen chosen)))))})
+
+                (= :block/tags (:db/ident property))
+                (assoc :exact-match-exclude-items
+                       (set (map (fn [ident] (:block/title (db/entity ident))) ldb/private-tags)))
 
                 (and (seq classes') (not tags-or-alias?))
                 (assoc
@@ -1035,6 +1044,7 @@
              (blocks-container config (ldb/sort-by-order value-block))
              (rum/with-key
                (block-container (assoc config
+                                       :block/uuid (:block/uuid value-block)
                                        :property-default-value? default-value?) value-block)
                (str (:db/id block) "-" (:db/id property) "-" (:db/id value-block)))))]
 
@@ -1055,7 +1065,8 @@
       (entity-util/page? v-block)
       (rum/with-key
         (page-cp {:disable-preview? true
-                  :tag? class?} v-block)
+                  :tag? class?
+                  :with-tags? false} v-block)
         (:db/id v-block))
 
       :else
@@ -1085,7 +1096,12 @@
         [:span.number (str value')]
 
         :else
-        (inline-text {} :markdown (str value'))))))
+        [:span.inline-flex.w-full
+         (let [value' (str value')
+               value' (if (string/blank? value')
+                        "Empty"
+                        value')]
+           (inline-text {} :markdown value'))]))))
 
 (rum/defc select-item
   [property type value {:keys [page-cp inline-text other-position? property-position table-view? _icon?] :as opts}]
@@ -1107,6 +1123,7 @@
        (when value
          (let [opts {:disable-preview? true
                      :tag? tag?
+                     :with-tags? false
                      :property-position property-position
                      :other-position? other-position?
                      :table-view? table-view?
@@ -1236,12 +1253,17 @@
         set-property-value! (fn [value & {:keys [exit-editing?]
                                           :or {exit-editing? true}}]
                               (p/do!
-                               (when (and (not (string/blank? value))
-                                          (not= (string/trim (str number-value))
-                                                (string/trim (str value))))
-                                 (db-property-handler/set-block-property! (:db/id block)
-                                                                          (:db/ident property)
-                                                                          value))
+                               (if (string/blank? value)
+                                 (when (get block (:db/ident property))
+                                   (db-property-handler/remove-block-property! (:db/id block) (:db/ident property)))
+                                 (when (not= (string/trim (str number-value))
+                                             (string/trim (str value)))
+                                   (db-property-handler/set-block-property! (:db/id block)
+                                                                            (:db/ident property)
+                                                                            value)))
+
+                               (set-value! (str (db-property/property-value-content
+                                                 (get (db/entity (:db/id block)) (:db/ident property)))))
 
                                (when exit-editing?
                                  (set-editing! false))))]
@@ -1266,9 +1288,7 @@
                       (reset! *value (util/evalue e)))
          :on-blur (fn [_e]
                     (p/do!
-                     (set-property-value! value)
-                     (when (not= value (db-property/property-value-content (db/entity (:db/id value-block))))
-                       (set-value! (db-property/property-value-content value-block)))))
+                     (set-property-value! value)))
          :on-key-down (fn [e]
                         (let [input (rum/deref *input-ref)
                               pos (cursor/pos input)
@@ -1500,7 +1520,10 @@
              value-cp [:div.property-value-inner
                        {:data-type type
                         :class (str (when empty-value? "empty-value")
-                                    (when-not (:other-position? opts) " w-full"))}
+                                    (when-not (:other-position? opts) " w-full"))
+                        :on-pointer-down (fn [e]
+                                           (when-not (some-> (.-target e) (.closest "[data-radix-popper-content-wrapper]"))
+                                             (state/clear-selection!)))}
                        (cond
                          (and multiple-values? (contains? #{:default :url} type) (not closed-values?) (not editing?))
                          (property-normal-block-value block property v opts)

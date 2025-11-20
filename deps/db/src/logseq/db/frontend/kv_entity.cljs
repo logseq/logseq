@@ -2,30 +2,38 @@
   "kv entities used by logseq db"
   (:require [logseq.common.defkeywords :refer [defkeywords]]))
 
-(defkeywords
-  :logseq.kv/db-type                      {:doc "Set to \"db\" if it's a db-graph"}
-  :logseq.kv/graph-uuid                   {:doc "Store graph-uuid if it's a rtc enabled graph"
-                                           :rtc {:rtc/ignore-entity-when-init-upload true
-                                                 :rtc/ignore-entity-when-init-download true}}
-  :logseq.kv/import-type                  {:doc "If graph is imported, identifies how a graph is imported including which UI or CLI import process. CLI scripts can set this to a custom value.
+(def kv-entities
+  (apply
+   hash-map
+   (defkeywords
+     :logseq.kv/db-type                      {:doc "Set to \"db\" if it's a db-graph"}
+     :logseq.kv/graph-uuid                   {:doc "Store graph-uuid if it's a rtc enabled graph"
+                                              :rtc {:rtc/ignore-entity-when-init-upload true
+                                                    :rtc/ignore-entity-when-init-download true}}
+     :logseq.kv/import-type                  {:doc "If graph is imported, identifies how a graph is imported including which UI or CLI import process. CLI scripts can set this to a custom value.
                                                  UI values include :file-graph and :sqlite-db and CLI values start with :cli e.g. :cli/default."}
-  :logseq.kv/imported-at                  {:doc "Time if graph is imported"}
-  :logseq.kv/graph-local-tx               {:doc "local rtc tx-id"
-                                           :rtc {:rtc/ignore-entity-when-init-upload true
-                                                 :rtc/ignore-entity-when-init-download true}}
-  :logseq.kv/schema-version               {:doc "Graph's current schema version"}
-  :logseq.kv/remote-schema-version        {:doc "Graph's remote schema version.
+     :logseq.kv/imported-at                  {:doc "Time if graph is imported"}
+     :logseq.kv/graph-local-tx               {:doc "local rtc tx-id"
+                                              :rtc {:rtc/ignore-entity-when-init-upload true
+                                                    :rtc/ignore-entity-when-init-download true}}
+     :logseq.kv/schema-version               {:doc "Graph's current schema version"}
+     :logseq.kv/remote-schema-version        {:doc "Graph's remote schema version.
 RTC won't start when major-schema-versions don't match"
-                                           :rtc {:rtc/ignore-entity-when-init-upload true
-                                                 :rtc/ignore-entity-when-init-download true}}
-  :logseq.kv/graph-created-at             {:doc "Graph's created at time"}
-  :logseq.kv/latest-code-lang             {:doc "Latest lang used by a #Code-block"
-                                           :rtc {:rtc/ignore-entity-when-init-upload true
-                                                 :rtc/ignore-entity-when-init-download true}}
-  :logseq.kv/graph-backup-folder          {:doc "Backup folder for automated backup feature"
-                                           :rtc {:rtc/ignore-entity-when-init-upload true
-                                                 :rtc/ignore-entity-when-init-download true}}
-  :logseq.kv/graph-initial-schema-version {:doc "Graph's schema version when created"}
-  :logseq.kv/graph-last-gc-at             {:doc "Last time graph gc at"
-                                           :rtc {:rtc/ignore-entity-when-init-upload true
-                                                 :rtc/ignore-entity-when-init-download true}})
+                                              :rtc {:rtc/ignore-entity-when-init-upload true
+                                                    :rtc/ignore-entity-when-init-download true}}
+     :logseq.kv/graph-created-at             {:doc "Graph's created at time"}
+     :logseq.kv/latest-code-lang             {:doc "Latest lang used by a #Code-block"
+                                              :rtc {:rtc/ignore-entity-when-init-upload true
+                                                    :rtc/ignore-entity-when-init-download true}}
+     :logseq.kv/graph-backup-folder          {:doc "Backup folder for automated backup feature"
+                                              :rtc {:rtc/ignore-entity-when-init-upload true
+                                                    :rtc/ignore-entity-when-init-download true}}
+     :logseq.kv/graph-initial-schema-version {:doc "Graph's schema version when created"}
+
+     :logseq.kv/graph-last-gc-at             {:doc "Last time graph gc at"
+                                              :rtc {:rtc/ignore-entity-when-init-upload true
+                                                    :rtc/ignore-entity-when-init-download true}}
+
+     :logseq.kv/graph-text-embedding-model-name   {:doc "Graph's text-embedding model name"
+                                                   :rtc {:rtc/ignore-entity-when-init-upload true
+                                                         :rtc/ignore-entity-when-init-download true}})))

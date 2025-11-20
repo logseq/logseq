@@ -1,0 +1,99 @@
+/* Stack top bar elements */
+
+.ParallaxPage-stackTopBarDismissTriggerContainer {
+  /* INNER-LAYOUT */
+  display: grid;
+  place-items: center;
+}
+
+.ParallaxPage-stackTopBarTitleContainer {
+  /* INNER-LAYOUT */
+  display: grid;
+  place-items: center;
+}
+
+/* Page */
+
+.ParallaxPage-view {
+  --header-height: 49px;
+
+  /* SELF-LAYOUT */
+  /* Adding 60px to make it fully visible below iOS Safari's bottom UI */
+  /* Subtracting 1px to avoid sub-pixel gap in Safari */
+  height: calc(
+    var(--silk-100-lvh-dvh-pct) + 60px -
+      (env(safe-area-inset-top, 0px) + var(--header-height) + 1px)
+  );
+  top: calc(env(safe-area-inset-top, 0px) + var(--header-height) - 1px);
+}
+@media (min-width: 1000px) {
+  .ParallaxPage-view {
+    height: calc(var(--silk-100-lvh-dvh-pct) - var(--header-height));
+  }
+}
+
+.ParallaxPage-content {
+  /* SELF-LAYOUT */
+  box-sizing: border-box;
+  width: 100%;
+
+  /* APPEARANCE */
+  background-color: white;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
+
+/* Page top bar elements */
+
+.ParallaxPage-topBarDismissTrigger {
+  /* SELF-LAYOUT */
+  grid-area: 1 / 1;
+  align-self: center;
+  margin-left: -14px;
+  width: 36px;
+  height: 44px;
+
+  /* APPEARANCE */
+  border-radius: 12px;
+  outline-offset: -5px;
+  appearance: none;
+  border: none;
+  background-color: transparent;
+
+  /* INTERACTIVITY */
+  cursor: pointer;
+
+  /* TRANSFORMATION */
+  opacity: 0;
+  visibility: hidden;
+
+  /* INNER-LAYOUT */
+  padding: 0;
+  display: grid;
+  align-items: center;
+}
+
+.ParallaxPage-topBarDismissIcon {
+  /* SELF-LAYOUT */
+  width: 36px;
+  height: 36px;
+
+  /* APPEARANCE */
+  color: rgb(75, 85, 99);
+}
+
+.ParallaxPage-topBarTitle {
+  /* SELF-LAYOUT */
+  grid-area: 1 / 1;
+  max-width: 100%;
+
+  /* APPEARANCE */
+  opacity: 0;
+
+  /* TEXT */
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  font-size: 17.25px;
+  font-weight: 620;
+  color: rgb(31, 41, 55);
+}

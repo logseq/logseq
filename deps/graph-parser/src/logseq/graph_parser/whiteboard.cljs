@@ -47,12 +47,9 @@
     (concat portal-refs shape-link-refs)))
 
 (defn- with-whiteboard-block-refs
-  [shape page-id]
+  [shape]
   (let [refs (or (get-shape-refs shape) [])]
-    (merge {:block/refs (if (seq refs) refs [])
-            :block/path-refs (if (seq refs)
-                               (conj refs page-id)
-                               [])})))
+    {:block/refs (if (seq refs) refs [])}))
 
 (defn- with-whiteboard-content
   "Main purpose of this function is to populate contents when shapes are used as references in outliner."
@@ -72,7 +69,7 @@
     (merge (when shape?
              (merge
               {:block/uuid (uuid (:id shape))}
-              (with-whiteboard-block-refs shape page-id)
+              (with-whiteboard-block-refs shape)
               (with-whiteboard-content shape)))
            (when (nil? (:block/parent block)) {:block/parent page-id})
            (when (nil? (:block/format block)) {:block/format :markdown}) ;; TODO: read from config

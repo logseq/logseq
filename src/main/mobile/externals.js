@@ -1,7 +1,6 @@
 import { Keyboard } from '@capacitor/keyboard'
 import { Capacitor } from '@capacitor/core'
 import { StatusBar, Style } from '@capacitor/status-bar'
-import { App } from '@capacitor/app'
 
 function initGlobalListeners (opts = {}) {
   console.debug('[externals] init global listeners')

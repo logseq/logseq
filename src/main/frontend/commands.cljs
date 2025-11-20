@@ -260,7 +260,7 @@
 
 (defn db-based-priorities
   []
-  (map (fn [e] (:block/title e))
+  (map (fn [e] (str "Priority " (:block/title e)))
        (db-pu/get-closed-property-values :logseq.property/priority)))
 
 (defn get-priorities
@@ -272,7 +272,8 @@
                   (db-based-priorities)
                   (file-based-priorities))
                 (mapv (fn [item]
-                        (let [command item]
+                        (let [command item
+                              item (string/replace item #"^Priority " "")]
                           [command
                            (->priority item)
                            (str "Set priority to " item)
@@ -763,12 +764,13 @@
       (db-property-handler/set-block-property! (:db/id block) property-id value))))
 
 (defmethod handle-step :editor/set-property-on-block-property [[_ block-property-id property-id value]]
-  (when (config/db-based-graph? (state/get-current-repo))
-    (let [updated-block (when-let [block-uuid (:block/uuid (state/get-edit-block))]
-                          (db/entity [:block/uuid block-uuid]))
-          block-property-value (get updated-block block-property-id)]
-      (when block-property-value
-        (db-property-handler/set-block-property! (:db/id block-property-value) property-id value)))))
+  (let [repo (state/get-current-repo)]
+    (when (config/db-based-graph? repo)
+      (let [updated-block (when-let [block-uuid (:block/uuid (state/get-edit-block))]
+                            (db/entity [:block/uuid block-uuid]))
+            block-property-value (get updated-block block-property-id)]
+        (when block-property-value
+          (db-property-handler/set-block-property! (:db/id block-property-value) property-id value))))))
 
 (defmethod handle-step :editor/upsert-type-block [[_ type lang]]
   (when (config/db-based-graph? (state/get-current-repo))
@@ -789,7 +791,7 @@
   [priority]
   (when-let [block (state/get-edit-block)]
     (if (nil? priority)
-      (db-property-handler/remove-block-property! (:block/uuid block) :logseq.property/priority)
+      (db-property-handler/set-block-property! (:block/uuid block) :logseq.property/priority :logseq.property/empty-placeholder)
       (db-property-handler/batch-set-property-closed-value! [(:block/uuid block)] :logseq.property/priority priority))))
 
 (defmethod handle-step :editor/set-priority [[_ priority] _format]
@@ -930,11 +932,8 @@
 
 (defn handle-steps
   [vector' format]
-  (if (config/db-based-graph? (state/get-current-repo))
-    (p/doseq [step vector']
-      (handle-step step format))
-    (doseq [step vector']
-      (handle-step step format))))
+  (p/doseq [step vector']
+    (handle-step step format)))
 
 (defn exec-plugin-simple-command!
   [pid {:keys [block-id] :as cmd} action]

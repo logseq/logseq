@@ -5,10 +5,12 @@
             [frontend.db :as db]
             [frontend.db.react :as react]
             [frontend.fs :as fs]
+            [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.common.path :as path]))
+            [logseq.common.path :as path]
+            [logseq.db :as ldb]))
 
 (defn- update-editing-block-title-if-changed!
   [tx-data]
@@ -23,9 +25,8 @@
           (state/set-edit-content! new-title))))))
 
 (defn invoke-hooks
-  [{:keys [_request-id repo tx-meta tx-data deleted-block-uuids deleted-assets affected-keys blocks]}]
+  [{:keys [repo tx-meta tx-data deleted-block-uuids deleted-assets affected-keys blocks]}]
   ;; (prn :debug
-  ;;      :request-id request-id
   ;;      :tx-meta tx-meta
   ;;      :tx-data tx-data)
   (let [{:keys [from-disk? new-graph? initial-pages? end?]} tx-meta
@@ -34,7 +35,13 @@
     (when (= repo (state/get-current-repo))
       (when (seq deleted-block-uuids)
         (let [ids (map (fn [id] (:db/id (db/entity [:block/uuid id]))) deleted-block-uuids)]
-          (state/sidebar-remove-deleted-block! ids)))
+          (state/sidebar-remove-deleted-block! ids))
+        (when-let [block-id (state/get-current-page)]
+          (when (contains? (set (map str deleted-block-uuids)) block-id)
+            (let [parent (:block/parent (ldb/get-page (db/get-db) block-id))]
+              (if parent
+                (route-handler/redirect-to-page! (:block/uuid parent))
+                (route-handler/redirect-to-home!))))))
 
       (when-let [conn (db/get-db repo false)]
         (cond
@@ -86,7 +93,8 @@
                 (state/set-state! :editor/edit-block-fn nil)
                 (when delete-blocks?
                   (util/mobile-keep-keyboard-open))
-                (react/refresh! repo affected-keys)
+                (when-not (:skip-refresh? tx-meta)
+                  (react/refresh! repo affected-keys))
                 (when edit-block-f
                   (util/schedule edit-block-f)))
 

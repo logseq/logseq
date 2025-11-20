@@ -1,0 +1,16 @@
+.Sidebar-view {
+  /* SELF-LAYOUT */
+  z-index: 1;
+  /* Adding 60px to make it fully visible below iOS Safari's bottom UI */
+  height: calc(var(--silk-100-lvh-dvh-pct) + 60px);
+}
+
+.Sidebar-content {
+  /* SELF-LAYOUT */
+  box-sizing: border-box;
+  width: min(90vw, 325px);
+
+  /* APPEARANCE */
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  background-color: white;
+}

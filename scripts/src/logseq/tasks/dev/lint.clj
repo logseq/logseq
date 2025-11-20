@@ -24,7 +24,7 @@
 (defn kondo-git-changes
   "Run clj-kondo across dirs and only for files that git diff detects as unstaged changes"
   []
-  (let [kondo-dirs ["src" "deps/common" "deps/db" "deps/graph-parser" "deps/outliner" "deps/publishing"]
+  (let [kondo-dirs ["src" "deps/common" "deps/db" "deps/graph-parser" "deps/outliner" "deps/publishing" "deps/cli"]
         dir-regex (re-pattern (str "^(" (string/join "|" kondo-dirs) ")"))
         dir-to-files (->> (shell {:out :string} "git diff --name-only")
                           :out
@@ -43,13 +43,14 @@
           (when (pos? (:exit res)) (System/exit (:exit res)))))
       (println "No clj* files have changed to lint."))))
 
-(defn- validate-frontend-not-in-worker
+(defn- validate-frontend-not-in-workers
   []
   (let [res (shell {:out :string}
-                   "git grep -h" "\\[frontend.*:as" "src/main/frontend/worker")
+                   "git grep -h" "\\[frontend.*:as"
+                   "src/main/frontend/worker" "src/main/frontend/worker_common" "src/main/frontend/inference_worker")
         req-lines (->> (:out res)
                        string/split-lines
-                       (remove #(re-find #"frontend\.worker|frontend\.common" %)))]
+                       (remove #(re-find #"frontend\.worker|frontend\.common|frontend\.inference-worker" %)))]
 
     (if (seq req-lines)
       (do
@@ -58,10 +59,10 @@
         (System/exit 1))
       (println "Valid worker namespaces!"))))
 
-(defn- validate-worker-not-in-frontend
+(defn- validate-workers-not-in-frontend
   []
   (let [res (shell {:out :string :continue true}
-                   "grep -r --exclude-dir=worker" "\\[frontend.worker.*:" "src/main/frontend")
+                   "grep -r --exclude-dir=worker --exclude-dir=inference_worker" "\\[frontend.worker.*:" "src/main/frontend")
         ;; allow reset-file b/c it's only affects tests
         allowed-exceptions #{"src/main/frontend/handler/file_based/file.cljs:            [frontend.worker.file.reset :as file-reset]"}
         invalid-lines (when (= 0 (:exit res))
@@ -75,8 +76,7 @@
       (println "Valid frontend namespaces!"))))
 
 (defn worker-and-frontend-separate
-  "Ensures worker is independent of frontend"
+  "Ensures workers are independent of frontend"
   []
-  (validate-frontend-not-in-worker)
-  (validate-worker-not-in-frontend))
-
+  (validate-frontend-not-in-workers)
+  (validate-workers-not-in-frontend))

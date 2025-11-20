@@ -1,6 +1,7 @@
 (ns mobile.components.editor-toolbar
   "Mobile editor toolbar"
   (:require [frontend.commands :as commands]
+            [frontend.components.svg :as svg]
             [frontend.handler.editor :as editor-handler]
             [frontend.mobile.camera :as mobile-camera]
             [frontend.mobile.haptics :as haptics]
@@ -10,7 +11,10 @@
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
             [logseq.common.util.page-ref :as page-ref]
-            [mobile.init :as init]
+            [logseq.shui.ui :as shui]
+            [mobile.components.recorder :as recorder]
+            [mobile.init :as mobile-init]
+            [mobile.state :as mobile-state]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -22,27 +26,29 @@
     (let [textarea-el (gdom/getElement edit-input-id)]
       (.blur textarea-el))))
 
-(rum/defc indent-outdent [indent? icon]
-  [:div
-   [:button.bottom-action
-    {:on-pointer-down (fn [e]
-                        (util/stop e)
-                        (haptics/haptics)
-                        (blur-if-compositing)
-                        (editor-handler/indent-outdent indent?))}
-    (ui/icon icon {:size ui/icon-size})]])
-
 (rum/defc command
-  [command-handler {:keys [icon class]} & [event?]]
-  [:div
-   [:button.bottom-action
-    {:on-pointer-down (fn [e]
+  [command-handler {:keys [icon class button-opts]} & [event?]]
+  (shui/button
+   (merge
+    {:variant :ghost
+     :on-pointer-down (fn [e]
                         (util/stop e)
                         (haptics/haptics)
                         (if event?
                           (command-handler e)
                           (command-handler)))}
-    (ui/icon icon {:size ui/icon-size :class class})]])
+    button-opts)
+   (if (string? icon)
+     (ui/icon icon {:size ui/icon-size :class class})
+     icon)))
+
+(rum/defc indent-outdent
+  [indent? icon]
+  (command
+   (fn []
+     (blur-if-compositing)
+     (editor-handler/indent-outdent indent?))
+   {:icon icon}))
 
 (defn- insert-text
   [text opts]
@@ -73,10 +79,13 @@
 (rum/defc mobile-bar < rum/reactive
   []
   (when (and (util/mobile?)
+             (not (state/sub :editor/code-block-context))
              (or (state/sub :editor/editing?)
                  (= "app-keep-keyboard-open-input" (some-> js/document.activeElement (.-id)))))
-    (let [commands' (commands)]
+    (let [commands' (commands)
+          quick-add? (mobile-state/quick-add-open?)]
       [:div#mobile-editor-toolbar
+       {:on-click #(util/stop %)}
        [:div.toolbar-commands
         ;; (command (editor-handler/move-up-down true) {:icon "arrow-bar-to-up"})
         ;; (command (editor-handler/move-up-down false) {:icon "arrow-bar-to-down"})
@@ -92,9 +101,14 @@
         (for [command' commands']
           command')
         (command #(let [parent-id (state/get-edit-input-id)]
-                    (mobile-camera/embed-photo parent-id)) {:icon "camera"} true)]
+                    (mobile-camera/embed-photo parent-id)) {:icon "camera"} true)
+        (when-not quick-add?
+          (command (fn [] (recorder/record!)) {:icon (svg/audio-lines 20)}))]
        [:div.toolbar-hide-keyboard
-        (command #(p/do!
-                   (editor-handler/save-current-block!)
-                   (state/clear-edit!)
-                   (init/keyboard-hide)) {:icon "keyboard-show"})]])))
+        (if quick-add?
+          (command (fn [] (recorder/record!))
+                   {:icon (svg/audio-lines 20)})
+          (command #(p/do!
+                     (editor-handler/save-current-block!)
+                     (state/clear-edit!)
+                     (mobile-init/keyboard-hide)) {:icon "keyboard-show"}))]])))

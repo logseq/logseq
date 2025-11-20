@@ -36,10 +36,7 @@ issues](https://github.com/logseq/logseq/issues?q=is%3Aopen+is%3Aissue+label%3A%
 to help you get started. These are issues that are beginner-friendly and do not
 require advanced knowledge of the codebase. We encourage new contributors to
 start with these issues and gradually work their way up to more challenging
-tasks. We also have a project board to keep track of community contributions
-[Logseq - Develop Together
-💪](https://github.com/orgs/logseq/projects/5?query=is%3Aopen+sort%3Aupdated-desc).
-Another way to help with coding is by extending Logseq with
+tasks. Another way to help with coding is by extending Logseq with
 [plugins](https://docs.logseq.com/#/page/Plugins) and submitting them to the [marketplace](https://github.com/logseq/marketplace) so that the
 whole community can benefit.
 
@@ -100,7 +97,8 @@ behavior and design you'd like to add.
 code without a signed CLA.
 
 After doing the above, you are ready to work on your PR! To create a PR, fork
-this repository and then create a branch for the fix. Once you push your code to
+this repository and then create a branch for the fix. If contributing to the [database version](/README.md#-database-version), create a branch from master. If contributing to the file (text-only) version e.g. any version up to `0.10.X`, create a branch from [version/file](https://github.com/logseq/logseq/tree/version/file/).
+Once you push your code to
 your fork, you'll be able to open a PR to the Logseq repository. For more info,
 you can follow this [GitHub
 guide](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request-from-a-fork).

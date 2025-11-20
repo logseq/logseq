@@ -1,6 +1,7 @@
 (ns logseq.e2e.outliner-basic-test
   (:require
    [clojure.test :refer [deftest testing is use-fixtures]]
+   [logseq.e2e.assert :as assert]
    [logseq.e2e.block :as b]
    [logseq.e2e.fixtures :as fixtures]
    [logseq.e2e.keyboard :as k]
@@ -100,6 +101,7 @@
     (b/indent)
     (k/arrow-up)
     (b/delete-blocks)
+    (util/wait-editor-visible)
     (is (= "b1" (util/get-edit-content)))
     (is (= 1 (util/page-blocks-count)))))
 
@@ -123,3 +125,52 @@
 
 (deftest delete-test-with-children-test
   (delete-test-with-children))
+
+(deftest delete-concat-test-2-blocks
+  (testing "Delete concat with empty block"
+    (b/new-blocks ["" "b2"])
+    (b/indent)
+    (k/arrow-up)
+    (k/delete)
+    (util/wait-editor-visible)
+    (is (= "b2" (util/get-edit-content)))
+    (util/exit-edit)
+    (is (= ["b2"] (util/get-page-blocks-contents)))))
+
+(deftest delete-concat-test-3-blocks
+  (testing "Delete concat with empty block"
+    (b/new-blocks ["" "b2" "b3"])
+    (b/indent)
+    (k/arrow-up)
+    (k/arrow-up)
+    (k/delete)
+    (util/wait-editor-visible)
+    (is (= "b2" (util/get-edit-content)))
+    (util/exit-edit)
+    (is (= ["b2" "b3"] (util/get-page-blocks-contents)))))
+
+(deftest delete-concat-test-with-children
+  (testing "Delete concat with children blocks"
+    (b/new-blocks ["" "b2" "b3"])
+    (b/indent)
+    (k/arrow-up)
+    (b/indent)
+    (k/arrow-up)
+    (k/delete)
+    (util/wait-editor-visible)
+    (is (= "" (util/get-edit-content)))
+    (is (= 3 (util/page-blocks-count)))))
+
+(deftest delete-concat-test-with-tag
+  (testing "Delete concat with tag"
+    (b/new-blocks ["" "b2"])
+    (b/indent)
+    (util/set-tag "tag1")
+    (k/arrow-up)
+    (k/delete)
+    (util/wait-editor-visible)
+    (is (= "b2" (util/get-edit-content)))
+    (util/exit-edit)
+    (assert/assert-is-visible
+     ".ls-block a.tag:has-text('tag1')")
+    (is (= ["b2"] (util/get-page-blocks-contents)))))

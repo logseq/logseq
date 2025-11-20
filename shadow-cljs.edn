@@ -6,8 +6,7 @@
 
  ;; "." for /static
  :dev-http {3001 ["static" "."]
-            3002 "static/mobile"
-            8021 "static/rtc-e2e-test"}
+            3002 "static/mobile"}
 
  :js-options {:js-package-dirs ["node_modules" "packages/tldraw/apps"]}
 
@@ -18,12 +17,9 @@
                         :resolve {"react" {:target :global
                                            :global "React"}
                                   "react-dom" {:target :global
-                                               :global "ReactDOM"}}} ;; handle `require(xxx.css)`
-        :modules       {:shared
-                        {:entries []}
-                        :main
-                        {:init-fn frontend.core/init
-                         :depends-on #{:shared}}
+                                               :global "ReactDOM"}}}
+        :modules       {:main
+                        {:init-fn frontend.core/init}
                         :code-editor
                         {:entries [frontend.extensions.code]
                          :depends-on #{:main}}
@@ -32,25 +28,20 @@
                          :depends-on #{:main}}
                         :tldraw
                         {:entries [frontend.extensions.tldraw]
-                         :depends-on #{:main}}
-                        :db-worker
-                        {:init-fn frontend.worker.db-worker/init
-                         :depends-on #{:shared}
-                         :web-worker true}}
+                         :depends-on #{:main}}}
 
         :output-dir       "./static/js"
         :asset-path       "/static/js"
-        :release          {:asset-path "https://asset.logseq.com/static/js"}
         :compiler-options {:infer-externs      :auto
                            :output-feature-set :es-next-in
                            :source-map true
                            :externs ["datascript/externs.js"
                                      "externs.js"]
                            :warnings {:fn-deprecated false
-                                      :redef false}
-                           :cross-chunk-method-motion false}
+                                      :redef false}}
         :build-hooks [(shadow.hooks/git-revision-hook "--long --always --dirty")]
         :closure-defines {lambdaisland.glogi.console/colorize "false"
+                          lambdaisland.glogi.console/timestamp "true"
                           goog.debug.LOGGING_ENABLED true
                           frontend.modules.instrumentation.sentry/SENTRY-DSN #shadow/env "LOGSEQ_SENTRY_DSN"
                           frontend.modules.instrumentation.posthog/POSTHOG-TOKEN #shadow/env "LOGSEQ_POSTHOG_TOKEN"
@@ -60,35 +51,84 @@
                           frontend.config/ENABLE-RTC-SYNC-PRODUCTION #shadow/env ["ENABLE_RTC_SYNC_PRODUCTION" :as :bool :default true]
                           frontend.config/REVISION #shadow/env ["LOGSEQ_REVISION" :default "dev"]} ;; set by git-revision-hook
 
-        ;; NOTE: electron, browser/mobile-app use different asset-paths.
-        ;;   For browser/mobile-app devs, assets are located in /static/js(via HTTP root).
-        ;;   For electron devs, assets are located in ./js(via relative path).
-        ;; :dev      {:asset-path "./js"}
         :devtools {:before-load frontend.core/stop          ;; before live-reloading any code call this function
                    :after-load frontend.core/start          ;; after live-reloading finishes call this function
                    :watch-path "/static"
                    :preloads [devtools.preload
-                              shadow.remote.runtime.cljs.browser]}}
+                              shadow.remote.runtime.cljs.browser]
+                   :loader-mode :eval
+                   ;; :ignore-warnings true
+                   }}
 
+  :db-worker {:target        :browser
+              :module-loader true
+              :js-options    {:js-provider    :external
+                              :external-index "target/db-worker.js"
+                              :external-index-format :esm
+                              :entry-keys ["module" "browser" "main"]
+                              :export-conditions ["module" "import", "browser" "require" "default"]}
+              :modules       {:db-worker
+                              {:init-fn frontend.worker.db-worker/init
+                               :web-worker true
+                               :prepend-js "importScripts('db-worker-bundle.js');"}}
+
+              :output-dir       "./static/js"
+              :asset-path       "/static/js"
+              :release          {:asset-path "https://asset.logseq.com/static/js"}
+              :compiler-options {:infer-externs      :auto
+                                 :output-feature-set :es-next-in
+                                 :source-map true
+                                 :externs ["datascript/externs.js"
+                                           "externs.js"]
+                                 :warnings {:fn-deprecated false
+                                            :redef false}}
+              :closure-defines {goog.debug.LOGGING_ENABLED true
+                                lambdaisland.glogi.console/colorize "false"
+                                lambdaisland.glogi.console/timestamp "true"}
+              :devtools {:watch-path "/static"
+                         :preloads [devtools.preload
+                                    shadow.remote.runtime.cljs.browser]
+                         :loader-mode :eval}}
+
+  :inference-worker {:target        :browser
+                     :module-loader true
+                     :js-options    {:js-provider    :external
+                                     :external-index "target/inference-worker.js"
+                                     :external-index-format :esm
+                                     :entry-keys ["module" "browser" "main"]
+                                     :export-conditions ["module" "import", "browser" "require" "default"]}
+                     :modules       {:inference-worker
+                                     {:init-fn frontend.inference-worker.inference-worker/init
+                                      :web-worker true
+                                      :prepend-js "importScripts('inference-worker-bundle.js');\n"}}
+
+                     :output-dir       "./static/js"
+                     :asset-path       "/static/js"
+                     :release          {:asset-path "https://asset.logseq.com/static/js"}
+                     :compiler-options {:infer-externs      :auto
+                                        :output-feature-set :es-next-in
+                                        :source-map true
+                                        :externs ["datascript/externs.js"
+                                                  "externs.js"]
+                                        :warnings {:fn-deprecated false
+                                                   :redef false}}
+                     :closure-defines {goog.debug.LOGGING_ENABLED true}
+                     :devtools {:watch-path "/static"
+                                :preloads [devtools.preload
+                                           shadow.remote.runtime.cljs.browser]}}
   :mobile {:target        :browser
            :module-loader true
            :js-options    {:ignore-asset-requires true
                            :resolve {"react" {:target :global
                                               :global "React"}
                                      "react-dom" {:target :global
-                                                  :global "ReactDOM"}}} ;; handle `require(xxx.css)`
-           :modules       {:shared
-                           {:entries []}
-                           :main
-                           {:init-fn mobile.core/init
-                            :depends-on #{:shared}}
+                                                  :global "ReactDOM"}}}
+           ;; handle `require(xxx.css)`
+           :modules       {:main
+                           {:init-fn mobile.core/init}
                            :code-editor
                            {:entries [frontend.extensions.code]
-                            :depends-on #{:main}}
-                           :db-worker
-                           {:init-fn frontend.worker.db-worker/init
-                            :depends-on #{:shared}
-                            :web-worker true}}
+                            :depends-on #{:main}}}
 
            :output-dir       "./static/mobile/js"
            :asset-path       "./js"
@@ -99,24 +139,26 @@
                               :externs ["datascript/externs.js"
                                         "externs.js"]
                               :warnings {:fn-deprecated false
-                                         :redef false}
-                              :cross-chunk-method-motion false}
+                                         :redef false}}
            :build-hooks [(shadow.hooks/git-revision-hook "--long --always --dirty")]
            :closure-defines
-           {;; Set to switch file sync server to dev, set this to false in `yarn watch`
+           {lambdaisland.glogi.console/colorize "false"
+            lambdaisland.glogi.console/timestamp "true"
+            goog.debug.LOGGING_ENABLED true
+            frontend.modules.instrumentation.sentry/SENTRY-DSN #shadow/env "LOGSEQ_SENTRY_DSN"
+            frontend.modules.instrumentation.posthog/POSTHOG-TOKEN #shadow/env "LOGSEQ_POSTHOG_TOKEN"
+            ;; frontend.config/ENABLE-PLUGINS #shadow/env ["ENABLE_PLUGINS" :as :bool :default true]
+            ;; Set to switch file sync server to dev, set this to false in `yarn watch`
             frontend.config/ENABLE-FILE-SYNC-PRODUCTION #shadow/env ["ENABLE_FILE_SYNC_PRODUCTION" :as :bool :default true]
-            frontend.config/ENABLE-RTC-SYNC-PRODUCTION #shadow/env ["ENABLE_RTC_SYNC_PRODUCTION" :as :bool :default true]}
+            frontend.config/ENABLE-RTC-SYNC-PRODUCTION #shadow/env ["ENABLE_RTC_SYNC_PRODUCTION" :as :bool :default true]
+            frontend.config/REVISION #shadow/env ["LOGSEQ_REVISION" :default "dev"]}
 
-;; NOTE: electron, browser/mobile-app use different asset-paths.
-                  ;;   For browser/mobile-app devs, assets are located in /static/js(via HTTP root).
-                  ;;   For electron devs, assets are located in ./js(via relative path).
-                  ;; :dev      {:asset-path "./js"}
            :devtools {:before-load mobile.core/stop!          ;; before live-reloading any code call this function
                       :after-load mobile.core/render!          ;; after live-reloading finishes call this function
                       :watch-path "/static/mobile"
                       :preloads [devtools.preload
-                                 shadow.remote.runtime.cljs.browser]}}
-
+                                 shadow.remote.runtime.cljs.browser]
+                      :loader-mode :eval}}
   :electron {:target :node-script
              :output-to "static/electron.js"
              :main electron.core/main
@@ -141,14 +183,6 @@
          :compiler-options {:static-fns false}
          :main frontend.test.frontend-node-test-runner/main}
 
-  :rtc-e2e-test {:target :karma
-                 :closure-defines {frontend.worker.rtc.const/RTC-E2E-TEST* true}
-                 :output-to "static/rtc-e2e-test/main.js"
-                 :devtools {:enabled true}
-                 :compiler-options {:source-map true
-                                    :warnings {:fn-deprecated false
-                                               :redef false}}}
-
   :gen-malli-kondo-config {:target :node-script
                            :closure-defines {frontend.util/NODETEST true}
                            :devtools {:enabled false}
@@ -158,17 +192,13 @@
 
   :publishing {:target :browser
                :module-loader true
-               :js-options {;; handle `require(xxx.css)`
-                            :ignore-asset-requires true
+               :js-options {:ignore-asset-requires true
                             :resolve {"react" {:target :global
                                                :global "React"}
                                       "react-dom" {:target :global
                                                    :global "ReactDOM"}}}
-               :modules {:shared
-                         {:entries []}
-                         :main
-                         {:init-fn frontend.publishing/init
-                          :depends-on #{:shared}}
+               :modules {:main
+                         {:init-fn frontend.publishing/init}
                          :code-editor
                          {:entries [frontend.extensions.code]
                           :depends-on #{:main}}
@@ -177,26 +207,19 @@
                           :depends-on #{:main}}
                          :tldraw
                          {:entries [frontend.extensions.tldraw]
-                          :depends-on #{:main}}
-                         :db-worker
-                         {:init-fn frontend.worker.db-worker/init
-                          :depends-on #{:shared}
-                          :web-worker true}}
+                          :depends-on #{:main}}}
 
                :output-dir "./static/js/publishing"
                :asset-path "static/js"
                :closure-defines {logseq.common.config/PUBLISHING true
                                  goog.debug.LOGGING_ENABLED true}
                :compiler-options {:infer-externs :auto
-                                  :output-feature-set :es-next
+                                  :output-feature-set :es-next-in
                                   :source-map true
                                   :externs ["datascript/externs.js"
                                             "externs.js"]
                                   :warnings {:fn-deprecated false
-                                             :redef false}
-                                  ;; https://github.com/thheller/shadow-cljs/issues/611#issuecomment-620845276
-                                  ;; fixes cljs.spec bug with code splitting
-                                  :cross-chunk-method-motion false}
+                                             :redef false}}
                :devtools {:before-load frontend.core/stop
                           :after-load frontend.core/start
                           :preloads [devtools.preload]}}

@@ -5,7 +5,7 @@
             ["path" :as node-path]
             [babashka.cli :as cli]
             [clojure.edn :as edn]
-            [datascript.core :as d]
+            [logseq.db :as ldb]
             [logseq.db.common.sqlite-cli :as sqlite-cli]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.outliner.cli :as outliner-cli]
@@ -51,9 +51,9 @@
              (count (filter :block/title init-tx)) "blocks ...")
     ;; (fs/writeFileSync "txs.edn" (with-out-str (cljs.pprint/pprint _txs)))
     ;; (cljs.pprint/pprint _txs)
-    (d/transact! conn init-tx)
-    (when (seq block-props-tx) (d/transact! conn block-props-tx))
-    (when (seq misc-tx) (d/transact! conn misc-tx))
+    (ldb/transact! conn init-tx)
+    (when (seq block-props-tx) (ldb/transact! conn block-props-tx))
+    (when (seq misc-tx) (ldb/transact! conn misc-tx))
     (println (if graph-exists? "Updated graph" "Created graph") (str db-name "!"))
     (when (:validate options)
       (validate-db/validate-db @conn db-name {:group-errors true :closed-maps true :humanize true}))))

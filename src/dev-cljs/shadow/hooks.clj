@@ -12,24 +12,6 @@
         (string/trim out))
       (println err))))
 
-(defn purge-css
-  {:shadow.build/stage :flush}
-  [state {:keys [css-source
-                 js-globs
-                 public-dir]}]
-  (case (:shadow.build/mode state)
-    :release
-    (exec "purgecss --css " css-source
-          (for [content (if (string? js-globs) [js-globs] js-globs)]
-            (str "--content " content))
-          "-o" public-dir)
-
-    :dev
-    (do
-      (exec "mkdir -p" public-dir)
-      (exec "cp" css-source (str public-dir "/" (last (string/split css-source #"/"))))))
-  state)
-
 (defn git-revision-hook
   {:shadow.build/stage :configure}
   [build-state & args]

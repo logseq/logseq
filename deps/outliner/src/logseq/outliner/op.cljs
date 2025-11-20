@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [logseq.db :as ldb]
+            [logseq.db.sqlite.export :as sqlite-export]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.property :as outliner-property]
             [logseq.outliner.transaction :as outliner-tx]
@@ -26,7 +27,7 @@
    [:move-blocks
     [:catn
      [:op :keyword]
-     [:args [:tuple ::ids ::id :boolean]]]]
+     [:args [:tuple ::ids ::id ::option]]]]
    [:move-blocks-up-down
     [:catn
      [:op :keyword]
@@ -53,6 +54,10 @@
     [:catn
      [:op :keyword]
      [:args [:tuple ::block-id ::property-id ::value]]]]
+   [:batch-delete-property-value
+    [:catn
+     [:op :keyword]
+     [:args [:tuple ::block-ids ::property-id ::value]]]]
    [:create-property-text-block
     [:catn
      [:op :keyword]
@@ -90,6 +95,11 @@
      [:op :keyword]
      [:args [:tuple ::property-id ::values]]]]
 
+   [:batch-import-edn
+    [:catn
+     [:op :keyword]
+     [:args [:tuple ::import-edn ::option]]]]
+
    ;; transact
    [:transact
     [:catn
@@ -124,6 +134,7 @@
                        ::value :any
                        ::values [:sequential ::value]
                        ::option [:maybe map?]
+                       ::import-edn map?
                        ::blocks [:sequential ::block]
                        ::ids [:sequential ::id]
                        ::uuid uuid?
@@ -139,6 +150,19 @@
 (defn register-op-handlers!
   [handlers]
   (reset! *op-handlers handlers))
+
+(defn- import-edn-data
+  [conn *result export-map {:keys [tx-meta] :as import-options}]
+  (let [{:keys [init-tx block-props-tx misc-tx error] :as _txs}
+        (try (sqlite-export/build-import export-map @conn (dissoc import-options :tx-meta))
+             (catch :default e
+               (js/console.error "Import EDN error: " e)
+               {:error "An unexpected error occurred building the import. See the javascript console for details."}))]
+    ;; (cljs.pprint/pprint _txs)
+    (if error
+      (reset! *result {:error error})
+      (ldb/transact! conn (vec (concat init-tx block-props-tx misc-tx))
+                     (merge {::sqlite-export/imported-data? true} tx-meta)))))
 
 (defn ^:large-vars/cleanup-todo apply-ops!
   [repo conn ops date-formatter opts]
@@ -171,11 +195,11 @@
            (outliner-core/delete-blocks! repo conn date-formatter blocks (merge opts opts')))
 
          :move-blocks
-         (let [[block-ids target-block-id sibling?] args
+         (let [[block-ids target-block-id opts] args
                blocks (keep #(d/entity @conn %) block-ids)
                target-block (d/entity @conn target-block-id)]
            (when (and target-block (seq blocks))
-             (outliner-core/move-blocks! repo conn blocks target-block sibling?)))
+             (outliner-core/move-blocks! repo conn blocks target-block opts)))
 
          :move-blocks-up-down
          (let [[block-ids up?] args
@@ -211,6 +235,9 @@
          :batch-remove-property
          (apply outliner-property/batch-remove-property! conn args)
 
+         :batch-delete-property-value
+         (apply outliner-property/batch-delete-property-value! conn args)
+
          :class-add-property
          (apply outliner-property/class-add-property! conn args)
 
@@ -225,6 +252,9 @@
 
          :add-existing-values-to-closed-values
          (apply outliner-property/add-existing-values-to-closed-values! conn args)
+
+         :batch-import-edn
+         (apply import-edn-data conn *result args)
 
          :transact
          (apply ldb/transact! conn args)

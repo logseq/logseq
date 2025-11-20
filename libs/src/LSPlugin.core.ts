@@ -154,6 +154,7 @@ interface PluginLocalOptions {
   url: string // Plugin package absolute fs location
   name: string
   version: string
+  runtime: string
   mode: 'shadow' | 'iframe'
   webPkg?: any // web plugin package.json data
   settingsSchema?: SettingSchemaDesc[]
@@ -166,6 +167,7 @@ interface PluginLocalOptions {
 
 interface PluginLocalSDKMetadata {
   version: string
+  runtime: string
 
   [key: string]: any
 }
@@ -571,21 +573,22 @@ class PluginLocal extends EventEmitter<
     const { repo, version } = this._options
     const localRoot = (this._localRoot = this.isWebPlugin ? `${repo || url}/${version}` : safetyPathNormalize(url))
     const logseq: Partial<LSPluginPkgConfig> = pkg.logseq || {}
-    const validateEntry = (main) => main && /\.(js|html)$/.test(main)
+    // const validateEntry = (main) => main && /\.(js|html)$/.test(main)
 
-    // Entry from main
+    // entry from main
     const entry = logseq.entry || logseq.main || pkg.main
 
-    if (validateEntry(entry)) {
-      // Theme has no main
-      this._options.entry = this._resolveResourceFullUrl(entry, localRoot)
-
+    if (logseq.devEntry) {
       // development mode entry
       this._options.devEntry = logseq.devEntry
+      this._options.entry = logseq.devEntry
+    } else {
+      // theme has no main
+      this._options.entry = this._resolveResourceFullUrl(entry, localRoot)
+    }
 
-      if (logseq.mode) {
-        this._options.mode = logseq.mode
-      }
+    if (logseq.mode) {
+      this._options.mode = logseq.mode
     }
 
     const title = logseq.title || pkg.title
@@ -669,7 +672,7 @@ class PluginLocal extends EventEmitter<
           ? `<script src="${sdkPathRoot}/lsplugin.user.js?v=${tag}"></script>`
           : `<script src="https://cdn.jsdelivr.net/npm/@logseq/libs/dist/lsplugin.user.min.js?v=${tag}"></script>`
       }
-    
+
   </head>
   <body>
   <div id="app"></div>

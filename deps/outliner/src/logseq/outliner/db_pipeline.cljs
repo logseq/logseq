@@ -12,7 +12,7 @@
   "Modified copy of frontend.worker.pipeline/invoke-hooks that handles new DB graphs but
    doesn't handle updating DB graphs well yet e.g. doesn't handle :block/tx-id"
   [conn tx-report]
-  (when (not (get-in tx-report [:tx-meta :pipeline-replace?]))
+  (when-not (:transact-new-graph-refs? (:tx-meta tx-report))
     ;; TODO: Handle block edits with separate :block/refs rebuild as deleting property values is buggy
     (outliner-pipeline/transact-new-db-graph-refs conn tx-report)))
 

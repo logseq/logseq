@@ -75,8 +75,8 @@
                    :block/parent page-id
                    :block/page page-id
                    :block/title (if org?
-                                    (str "#+" (string/upper-case (name key)) ": " value)
-                                    (str (name key) ":: " value))
+                                  (str "#+" (string/upper-case (name key)) ": " value)
+                                  (str (name key) ":: " value))
                    :block/format format
                    :block/properties {key value}
                    :block/pre-block? true}
