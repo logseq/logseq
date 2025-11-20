@@ -855,7 +855,11 @@
 (defn- create-page!
   [repo conn title options]
   (let [config (worker-state/get-config repo)]
-    (worker-page/create! repo conn config title options)))
+    (try
+      (worker-page/create! repo conn config title options)
+      (catch :default e
+        (js/console.error e)
+        (throw e)))))
 
 (defn- outliner-register-op-handlers!
   []
