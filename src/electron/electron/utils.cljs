@@ -7,8 +7,8 @@
             [clojure.string :as string]
             [electron.configs :as cfgs]
             [electron.logger :as logger]
-            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.cli.common.graph :as cli-common-graph]
+            [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
 
 (defonce *win (atom nil)) ;; The main window
@@ -213,6 +213,10 @@
   [path]
   (let [ext (string/lower-case (node-path/extname path))]
     (contains? #{".md" ".markdown" ".org" ".js" ".edn" ".css"} ext)))
+
+(defn read-file-raw
+  [path]
+  (fs/readFileSync path))
 
 (defn read-file
   [path]

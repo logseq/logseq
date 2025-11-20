@@ -132,7 +132,7 @@
 (defn <make-data-url
   [path]
   (let [repo-dir (config/get-repo-dir (state/get-current-repo))]
-    (p/let [binary (fs/read-file repo-dir path {})
+    (p/let [binary (fs/read-file-raw repo-dir path {})
             blob (js/Blob. (array binary) (clj->js {:type "image"}))]
       (when blob (js/URL.createObjectURL blob)))))
 
@@ -178,7 +178,7 @@
         ;(mobile-util/convert-file-src full-path)
 
         (config/db-based-graph? (state/get-current-repo)) ; memory fs
-        (p/let [binary (fs/read-file repo-dir path {})
+        (p/let [binary (fs/read-file-raw repo-dir path {})
                 blob (js/Blob. (array binary) (clj->js {:type "image"}))]
           (when blob (js/URL.createObjectURL blob)))))))
 
@@ -193,7 +193,7 @@
     (p/let [result (p/catch (fs/readdir path {:path-only? true})
                             (constantly nil))]
       (p/all (map (fn [path]
-                    (p/let [data (fs/read-file path "" {})]
+                    (p/let [data (fs/read-file-raw path "" {})]
                       (let [path' (util/node-path.join "assets" (util/node-path.basename path))]
                         [path' data]))) result)))))
 
@@ -221,7 +221,7 @@
   (let [repo-dir (config/get-repo-dir repo)
         file-path (path/path-join common-config/local-assets-dir
                                   (str asset-block-id "." asset-type))]
-    (fs/read-file repo-dir file-path {})))
+    (fs/read-file-raw repo-dir file-path {})))
 
 (defn <get-asset-file-metadata
   [repo asset-block-id asset-type]

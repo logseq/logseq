@@ -98,6 +98,9 @@
 (defmethod handle :readFile [_window [_ path]]
   (utils/read-file path))
 
+(defmethod handle :readFileRaw [_window [_ path]]
+  (utils/read-file-raw path))
+
 (defn writable?
   [path]
   (assert (string? path))
