@@ -19,13 +19,13 @@
                            (->> (map (fn [e] (dissoc e :db/id)) ent-maps) explainer not-empty))]
       (let [ent-errors
             (->> (db-validate/group-errors-by-entity db ent-maps (:errors explanation))
-                 (map #(-> (dissoc % :errors-by-type)
-                           (update :errors (fn [errs]
-                                             ;; errs looks like: {178 {:logseq.property/hide? ["disallowed key"]}}
-                                             ;; map is indexed by :in which is unused since all errors are for the same map
-                                             (->> (me/humanize {:errors errs})
-                                                  vals
-                                                  (apply merge-with into)))))))]
+                 (map #(update % :errors
+                               (fn [errs]
+                                 ;; errs looks like: {178 {:logseq.property/hide? ["disallowed key"]}}
+                                 ;; map is indexed by :in which is unused since all errors are for the same map
+                                 (->> (me/humanize {:errors errs})
+                                      vals
+                                      (apply merge-with into))))))]
         (println "Found" (count ent-errors)
                  (if (= 1 (count ent-errors)) "entity" "entities")
                  "with errors:")

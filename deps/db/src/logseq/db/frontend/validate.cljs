@@ -77,22 +77,7 @@
                                    (fn [id] (select-keys (d/entity db id)
                                                          [:block/name :block/tags :db/id :block/created-at]))))
                  :dispatch-key (->> (dissoc ent :db/id) (db-malli-schema/entity-dispatch-key db))
-                 :errors errors'
-               ;; Group by type to reduce verbosity
-               ;; TODO: Move/remove this to another fn if unused
-                 :errors-by-type
-                 (->> (group-by :type errors')
-                      (map (fn [[type' type-errors]]
-                             [type'
-                              {:in-value-distinct (->> type-errors
-                                                       (map #(select-keys % [:in :value]))
-                                                       distinct
-                                                       vec)
-                               :schema-distinct (->> (map :schema type-errors)
-                                                     (map m/form)
-                                                     distinct
-                                                     vec)}]))
-                      (into {}))})))))
+                 :errors errors'})))))
 
 (defn validate-db!
   "Validates all the entities of the given db using :eavt datoms. Returns a map
@@ -112,8 +97,7 @@
     (cond-> {:datom-count (count datoms)
              :entities ent-maps*}
       (some? errors)
-      (assoc :errors (map #(-> (dissoc % :errors-by-type)
-                               (update :errors (fn [errs] (me/humanize {:errors errs}))))
+      (assoc :errors (map #(update % :errors (fn [errs] (me/humanize {:errors errs})))
                           (group-errors-by-entity db ent-maps errors))))))
 
 (defn graph-counts
