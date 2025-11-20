@@ -317,7 +317,9 @@
                         (text/namespace-page? original-page-name'))
         page-entity (when (and db (not skip-existing-page-check?))
                       (if class?
-                        (ldb/get-case-page db original-page-name')
+                        (some->> (ldb/page-exists? db original-page-name' #{:logseq.class/tag})
+                                 first
+                                 (d/entity db))
                         (ldb/get-page db original-page-name')))
         original-page-name' (or from-page (:block/title page-entity) original-page-name')
         page (merge
