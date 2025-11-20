@@ -427,12 +427,15 @@
                             (remove string/blank?)
                             (distinct))
         col (->> (distinct (concat col children-pages))
-                 (remove nil?))]
+                 (remove nil?))
+        export-to-db-graph? @*export-to-db-graph?]
     (map
      (fn [item]
        (let [macro? (and (map? item)
                          (= "macro" (:type item)))
-             tag? (or (contains? structured-tags item) tag?)]
+             tag? (if export-to-db-graph?
+                    tag?
+                    (or (contains? structured-tags item) tag?))]
          (when-not macro?
            (let [m (page-name->map item db true date-formatter {:class? tag?})
                  result (cond->> m
@@ -445,14 +448,15 @@
              ;; Changing a :block/uuid should be done cautiously here as it can break
              ;; the identity of built-in concepts in db graphs
              (if (and id
-                      (when-let [ident (:db/ident result)]
-                        (nil? (d/entity db ident))))
+                      (or (when-let [ident (:db/ident result)]
+                            (nil? (d/entity db ident)))
+                          export-to-db-graph?))
                (assoc result :block/uuid id)
                result))))) col)))
 
 (defn- with-page-refs-and-tags
-  [{:keys [title body tags refs marker priority] :as block} db date-formatter parse-block]
-  (let [db-based? (and (ldb/db-based-graph? db) (not *export-to-db-graph?))
+  [{:keys [title body tags refs marker priority] :as block} db date-formatter]
+  (let [db-based? (and (ldb/db-based-graph? db) (not @*export-to-db-graph?))
         refs (->> (concat tags refs (when-not db-based? [marker priority]))
                   (remove string/blank?)
                   (distinct))
@@ -552,9 +556,9 @@
     (map (fn [page] (page-name->map page db true date-formatter)) page-refs)))
 
 (defn- with-page-block-refs
-  [block db date-formatter & {:keys [parse-block]}]
+  [block db date-formatter]
   (some-> block
-          (with-page-refs-and-tags db date-formatter parse-block)
+          (with-page-refs-and-tags db date-formatter)
           with-block-refs
           (update :refs (fn [col] (remove nil? col)))))
 
@@ -626,7 +630,7 @@
     properties))
 
 (defn- construct-block
-  [block properties timestamps body encoded-content format pos-meta {:keys [block-pattern db date-formatter parse-block remove-properties? db-graph-mode? export-to-db-graph?]}]
+  [block properties timestamps body encoded-content format pos-meta {:keys [block-pattern db date-formatter remove-properties? db-graph-mode? export-to-db-graph?]}]
   (let [id (get-custom-id-or-new-id properties)
         ref-pages-in-properties (->> (:page-refs properties)
                                      (remove string/blank?))
@@ -667,7 +671,7 @@
         db-based? (or db-graph-mode? export-to-db-graph?)
         block (-> block
                   (assoc :body body)
-                  (with-page-block-refs db date-formatter {:parse-block parse-block}))
+                  (with-page-block-refs db date-formatter))
         block (if db-based? block
                   (-> block
                       (update :tags (fn [tags] (map #(assoc % :block/format format) tags)))
@@ -715,7 +719,7 @@
   * `ast`: mldoc ast.
   * `content`: markdown or org-mode text.
   * `format`: content's format, it could be either :markdown or :org-mode.
-  * `options`: Options are :user-config, :block-pattern, :parse-block, :date-formatter, :db and
+  * `options`: Options are :user-config, :block-pattern, :date-formatter, :db and
      * :db-graph-mode? : Set when a db graph in the frontend
      * :export-to-db-graph? : Set when exporting to a db graph"
   [ast content format {:keys [user-config db-graph-mode? export-to-db-graph?] :as options}]
