@@ -68,7 +68,7 @@
                    (js/process.exit 1))))))
 
 (def ^:private table
-  [{:cmds ["list"] :desc "List graphs"
+  [{:cmds ["list"] :desc "List local graphs"
     :fn (lazy-load-fn 'logseq.cli.commands.graph/list-graphs)}
    {:cmds ["show"] :desc "Show DB graph(s) info"
     :description "For each graph, prints information related to a graph's creation and anything that is helpful for debugging."
