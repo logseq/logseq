@@ -52,7 +52,7 @@
                   (and
                    (= url-type "Page_ref")
                    (and (string? value)
-                        (not (or (common-config/local-asset? value)
+                        (not (or (common-config/local-relative-asset? value)
                                  (common-config/draw? value))))
                    value)
 
@@ -63,7 +63,7 @@
 
                   (and (= url-type "Search")
                        (= format :org)
-                       (not (common-config/local-asset? value))
+                       (not (common-config/local-relative-asset? value))
                        value)
 
                   (and

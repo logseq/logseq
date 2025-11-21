@@ -95,7 +95,7 @@
 
                 (and (= "change" type)
                      (= dir repo-dir)
-                     (not (common-config/local-asset? path)))
+                     (not (common-config/local-relative-asset? path)))
                 (handle-add-and-change! repo path content db-content ctime mtime (not global-dir)) ;; no backup for global dir
 
                 (and (= "unlink" type)

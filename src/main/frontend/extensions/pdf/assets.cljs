@@ -35,26 +35,28 @@
 (defn get-in-repo-assets-full-filename
   [url]
   (let [repo-dir (config/get-repo-dir (state/get-current-repo))]
-    (when (some-> url (string/trim) (string/includes? repo-dir))
+    (if (some-> url (string/trim) (string/includes? repo-dir))
       (some-> (string/split url repo-dir)
               (last)
-              (string/replace-first "/assets/" "")))))
+              (string/replace-first "/assets/" ""))
+      url)))
 
 (defn inflate-asset
   [original-path & {:keys [href block]}]
   (let [web-link? (string/starts-with? original-path "http")
-        blob-res? (some-> href (string/starts-with? "blob"))
-        asset-res? (some-> href (string/starts-with? "assets"))
-        filename  (util/node-path.basename original-path)
-        ext-name  "pdf"
-        url       (if blob-res? href
-                      (assets-handler/normalize-asset-resource-url original-path))
-        filename' (if (or asset-res? web-link? blob-res?) filename
-                      (some-> url (js/decodeURIComponent)
-                              (get-in-repo-assets-full-filename)
-                              (string/replace '"/" "_")))
-        filekey   (gp-exporter/safe-sanitize-file-name
-                   (subs filename' 0 (- (count filename') (inc (count ext-name)))))]
+        protocol-link? (common-config/protocol-path? href)
+        filename (util/node-path.basename original-path)
+        ext-name "pdf"
+        url (if protocol-link?
+              href
+              (assets-handler/normalize-asset-resource-url original-path))
+        filename' (if protocol-link?
+                    filename
+                    (some-> url (js/decodeURIComponent)
+                            (get-in-repo-assets-full-filename)
+                            (string/replace '"/" "_")))
+        filekey (gp-exporter/safe-sanitize-file-name
+                 (subs filename' 0 (- (count filename') (inc (count ext-name)))))]
     (when-let [key (and (not (string/blank? filekey))
                         (if web-link?
                           (str filekey "__" (hash url))
