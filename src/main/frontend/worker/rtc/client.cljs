@@ -2,10 +2,12 @@
   "Fns about push local updates"
   (:require [clojure.string :as string]
             [datascript.core :as d]
+            [frontend.common.crypt :as crypt]
             [frontend.common.missionary :as c.m]
             [frontend.worker.flows :as worker-flows]
             [frontend.worker.rtc.branch-graph :as r.branch-graph]
             [frontend.worker.rtc.client-op :as client-op]
+            [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.exception :as r.ex]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
             [frontend.worker.rtc.malli-schema :as rtc-schema]
@@ -19,21 +21,23 @@
             [missionary.core :as m]
             [tick.core :as tick]))
 
-(defn- apply-remote-updates-from-apply-ops
-  [apply-ops-resp graph-uuid repo conn date-formatter add-log-fn]
-  (if-let [remote-ex (:ex-data apply-ops-resp)]
-    (do (add-log-fn :rtc.log/pull-remote-data (assoc remote-ex :sub-type :pull-remote-data-exception))
-        (case (:type remote-ex)
-          :graph-lock-failed nil
-          :graph-lock-missing
-          (throw r.ex/ex-remote-graph-lock-missing)
-          :rtc.exception/get-s3-object-failed
-          (throw (ex-info (:ex-message apply-ops-resp) (:ex-data apply-ops-resp)))
-          ;;else
-          (throw (ex-info "Unavailable3" {:remote-ex remote-ex}))))
-    (do (assert (pos? (:t apply-ops-resp)) apply-ops-resp)
-        (r.remote-update/apply-remote-update
-         graph-uuid repo conn date-formatter {:type :remote-update :value apply-ops-resp} add-log-fn))))
+(defn- task--apply-remote-updates-from-apply-ops
+  [apply-ops-resp graph-uuid repo conn date-formatter aes-key add-log-fn]
+  (m/sp
+    (if-let [remote-ex (:ex-data apply-ops-resp)]
+      (do (add-log-fn :rtc.log/pull-remote-data (assoc remote-ex :sub-type :pull-remote-data-exception))
+          (case (:type remote-ex)
+            :graph-lock-failed nil
+            :graph-lock-missing
+            (throw r.ex/ex-remote-graph-lock-missing)
+            :rtc.exception/get-s3-object-failed
+            (throw (ex-info (:ex-message apply-ops-resp) (:ex-data apply-ops-resp)))
+            ;;else
+            (throw (ex-info "Unavailable3" {:remote-ex remote-ex}))))
+      (do (assert (pos? (:t apply-ops-resp)) apply-ops-resp)
+          (m/?
+           (r.remote-update/task--apply-remote-update
+            graph-uuid repo conn date-formatter {:type :remote-update :value apply-ops-resp} aes-key add-log-fn))))))
 
 (defn- new-task--init-request
   [get-ws-create-task graph-uuid major-schema-version repo conn *last-calibrate-t *server-schema-version add-log-fn]
@@ -95,7 +99,7 @@
   see also `ws/get-mws-create`.
   But ensure `init-request` and `calibrate-graph-skeleton` has been sent"
   [get-ws-create-task graph-uuid major-schema-version repo conn date-formatter
-   *last-calibrate-t *online-users *server-schema-version add-log-fn]
+   *last-calibrate-t *online-users *server-schema-version *aes-key add-log-fn]
   (m/sp
     (let [ws (m/? get-ws-create-task)
           sent-3rd-value [graph-uuid major-schema-version repo]
@@ -141,7 +145,8 @@
                          :repo repo
                          :graph-uuid graph-uuid
                          :remote-schema-version max-remote-schema-version}))
-          (apply-remote-updates-from-apply-ops init-request-resp graph-uuid repo conn date-formatter add-log-fn)))
+          (m/? (task--apply-remote-updates-from-apply-ops
+                init-request-resp graph-uuid repo conn date-formatter @*aes-key add-log-fn))))
       ws)))
 
 (defn- ->pos
@@ -437,9 +442,34 @@
     (client-op/add-ops! repo rename-db-ident-ops)
     nil))
 
+(defn- task--encrypt-remote-ops
+  [aes-key remote-ops]
+  (assert aes-key)
+  (let [encrypt-attr-set (conj rtc-const/encrypt-attr-set :page-name)]
+    (m/sp
+      (loop [[remote-op & rest-remote-ops] remote-ops
+             result []]
+        (if-not remote-op
+          result
+          (let [[op-type op-value] remote-op]
+            (case op-type
+              :update-page
+              (recur rest-remote-ops
+                     (conj result
+                           [op-type (c.m/<? (crypt/<encrypt-map aes-key encrypt-attr-set op-value))]))
+              :update
+              (let [av-coll* (c.m/<?
+                              (crypt/<encrypt-av-coll
+                               aes-key rtc-const/encrypt-attr-set (:av-coll op-value)))]
+                (recur rest-remote-ops
+                       (conj result [op-type (assoc op-value :av-coll av-coll*)])))
+
+              ;; else
+              (recur rest-remote-ops (conj result remote-op)))))))))
+
 (defn new-task--push-local-ops
   "Return a task: push local updates"
-  [repo conn graph-uuid major-schema-version date-formatter get-ws-create-task *remote-profile? add-log-fn]
+  [repo conn graph-uuid major-schema-version date-formatter get-ws-create-task *remote-profile? aes-key add-log-fn]
   (m/sp
     (let [block-ops-map-coll (client-op/get&remove-all-block-ops repo)
           update-kv-value-ops-map-coll (client-op/get&remove-all-update-kv-value-ops repo)
@@ -453,10 +483,13 @@
                       other-remote-ops)]
       (when-let [ops-for-remote (rtc-schema/to-ws-ops-decoder remote-ops)]
         (let [local-tx (client-op/get-local-tx repo)
+              ops-for-remote* (if aes-key
+                                (m/? (task--encrypt-remote-ops aes-key ops-for-remote))
+                                ops-for-remote)
               r (try
                   (let [message (cond-> {:action "apply-ops"
                                          :graph-uuid graph-uuid :schema-version (str major-schema-version)
-                                         :ops ops-for-remote :t-before local-tx}
+                                         :ops ops-for-remote* :t-before local-tx}
                                   (true? @*remote-profile?) (assoc :profile true))
                         r (m/? (ws-util/send&recv get-ws-create-task message))]
                     (r.throttle/add-rtc-api-call-record! message)
@@ -486,12 +519,13 @@
                       (throw (ex-info "Unavailable1" {:remote-ex remote-ex})))))
 
             (do (assert (pos? (:t r)) r)
-                (r.remote-update/apply-remote-update
-                 graph-uuid repo conn date-formatter {:type :remote-update :value r} add-log-fn)
+                (m/?
+                 (r.remote-update/task--apply-remote-update
+                  graph-uuid repo conn date-formatter {:type :remote-update :value r} aes-key add-log-fn))
                 (add-log-fn :rtc.log/push-local-update {:remote-t (:t r)}))))))))
 
 (defn new-task--pull-remote-data
-  [repo conn graph-uuid major-schema-version date-formatter get-ws-create-task add-log-fn]
+  [repo conn graph-uuid major-schema-version date-formatter get-ws-create-task aes-key add-log-fn]
   (m/sp
     (let [local-tx (client-op/get-local-tx repo)
           message {:action "apply-ops"
@@ -499,4 +533,4 @@
                    :ops [] :t-before (or local-tx 1)}
           r (m/? (ws-util/send&recv get-ws-create-task message))]
       (r.throttle/add-rtc-api-call-record! message)
-      (apply-remote-updates-from-apply-ops r graph-uuid repo conn date-formatter add-log-fn))))
+      (m/? (task--apply-remote-updates-from-apply-ops r graph-uuid repo conn date-formatter aes-key add-log-fn)))))

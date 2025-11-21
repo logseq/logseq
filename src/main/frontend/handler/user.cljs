@@ -119,8 +119,7 @@
       (let [refresh-token (js/localStorage.getItem refresh-token-key)]
         (when (and refresh-token (not= refresh-token "undefined"))
           (state/set-auth-refresh-token refresh-token)
-          (js/localStorage.setItem "refresh-token" refresh-token)))))
-  )
+          (js/localStorage.setItem "refresh-token" refresh-token))))))
 
 (defn- clear-tokens
   ([]

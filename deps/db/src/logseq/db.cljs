@@ -554,6 +554,7 @@
 
 (defn get-key-value
   [db key-ident]
+  (assert (= "logseq.kv" (namespace key-ident)) key-ident)
   (:kv/value (d/entity db key-ident)))
 
 (def kv sqlite-util/kv)
@@ -571,6 +572,10 @@
 (defn get-graph-remote-schema-version
   [db]
   (when db (get-key-value db :logseq.kv/remote-schema-version)))
+
+(defn get-graph-rtc-e2ee?
+  [db]
+  (when db (get-key-value db :logseq.kv/graph-rtc-e2ee?)))
 
 (def get-all-properties db-db/get-all-properties)
 (def get-class-extends db-class/get-class-extends)

@@ -90,13 +90,7 @@
    :db-ident {:db/unique :db.unique/identity}
    :db-ident-or-block-uuid {:db/unique :db.unique/identity}
    :local-tx {:db/index true}
-   :graph-uuid {:db/index true}
-   :aes-key-jwk {:db/index true}
-
-   ;; device
-   :device/uuid {:db/unique :db.unique/identity}
-   :device/public-key-jwk {}
-   :device/private-key-jwk {}})
+   :graph-uuid {:db/index true}})
 
 (defn update-graph-uuid
   [repo graph-uuid]

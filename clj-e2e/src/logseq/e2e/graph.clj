@@ -16,20 +16,41 @@
   []
   (util/search-and-click "Go to all graphs"))
 
-(defn new-graph
+(defn- input-e2ee-password
+  []
+  (w/click "input[type=\"password\"]")
+  (util/input "e2etest")
+  (w/click "button:text(\"Submit\")"))
+
+(defn- new-graph-helper
   [graph-name enable-sync?]
   (util/search-and-click "Add a DB graph")
   (w/wait-for "h2:text(\"Create a new graph\")")
   (w/click "input[placeholder=\"your graph name\"]")
   (util/input graph-name)
   (when enable-sync?
+    (w/wait-for "button#rtc-sync" {:timeout 3000})
     (w/click "button#rtc-sync"))
-  (w/click "button:text(\"Submit\")")
+  (w/click "button:not([disabled]):text(\"Submit\")")
   (when enable-sync?
+    (input-e2ee-password)
     (w/wait-for "button.cloud.on.idle" {:timeout 20000}))
   ;; new graph can blocks the ui because the db need to be created and restored,
   ;; I have no idea why `search-and-click` failed to auto-wait sometimes.
   (util/wait-timeout 1000))
+
+(defn new-graph
+  [graph-name enable-sync?]
+  (try
+    (new-graph-helper graph-name enable-sync?)
+    (catch com.microsoft.playwright.TimeoutError e
+      ;; sometimes, 'Use Logseq Sync?' option not showing
+      ;; because of user-group not recv from server yet
+      ;; workaround: try again
+      (if enable-sync?
+        (do (w/click "button.ui__dialog-close")
+            (new-graph-helper graph-name enable-sync?))
+        (throw e)))))
 
 (defn wait-for-remote-graph
   [graph-name]
@@ -52,6 +73,7 @@
   (goto-all-graphs)
   (w/click (.last (w/-query (format "div[data-testid='logseq_db_%1$s'] span:has-text('%1$s')" to-graph-name))))
   (when wait-sync?
+    (input-e2ee-password)
     (w/wait-for "button.cloud.on.idle" {:timeout 20000}))
   (assert/assert-graph-loaded?))
 

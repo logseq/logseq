@@ -49,7 +49,10 @@
     (->
      (when (not= result :timeout)
        (assert (some? download-info-s3-url) result)
-       (state/<invoke-db-worker :thread-api/rtc-download-graph-from-s3 graph-uuid graph-name download-info-s3-url))
+       (p/let [r (state/<invoke-db-worker :thread-api/rtc-download-graph-from-s3
+                                          graph-uuid graph-name download-info-s3-url)]
+         (when (instance? ExceptionInfo r)
+           (log/error :rtc-download-graph-from-s3 r))))
      (p/finally
        #(state/set-state! :rtc/downloading-graph-uuid nil)))))
 
@@ -160,12 +163,14 @@
 
 (defn <rtc-invite-email
   [graph-uuid email]
-  (let [token (state/get-auth-id-token)]
-    (->
-     (p/do!
-      (state/<invoke-db-worker :thread-api/rtc-grant-graph-access
-                               token (str graph-uuid) [] [email])
-      (notification/show! "Invitation sent!" :success))
-     (p/catch (fn [e]
-                (notification/show! "Something wrong, please try again." :error)
-                (js/console.error e))))))
+  (let [token (state/get-auth-id-token)
+        user-uuid (user-handler/user-uuid)]
+    (when (and user-uuid token)
+      (->
+       (p/do!
+         (state/<invoke-db-worker :thread-api/rtc-grant-graph-access
+                                  token (str graph-uuid) user-uuid email)
+         (notification/show! "Invitation sent!" :success))
+       (p/catch (fn [e]
+                  (notification/show! "Something wrong, please try again." :error)
+                  (js/console.error e)))))))

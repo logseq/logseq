@@ -260,7 +260,7 @@
       (ldb/transact! datascript-conn [{:db/ident :logseq.kv/graph-last-gc-at
                                        :kv/value (common-util/time-ms)}]))))
 
-(defn- create-or-open-db!
+(defn- <create-or-open-db!
   [repo {:keys [config datoms] :as opts}]
   (when-not (worker-state/get-sqlite-conn repo)
     (p/let [[db search-db client-ops-db :as dbs] (get-dbs repo)
@@ -414,7 +414,7 @@
    (when close-other-db?
      (close-other-dbs! repo))
    (when @shared-service/*master-client?
-     (create-or-open-db! repo (dissoc opts :close-other-db?)))
+     (<create-or-open-db! repo (dissoc opts :close-other-db?)))
    nil))
 
 (def-thread-api :thread-api/create-or-open-db
