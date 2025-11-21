@@ -16,7 +16,7 @@ All commands work with both local graphs and the current in-app graph except for
 
 Now let's use the CLI!
 
-```
+```sh
 $ logseq -h
 Usage: logseq [command] [options]
 
@@ -61,7 +61,7 @@ $ logseq show db-test
 
 To run a command against the current desktop graph, set `$LOGSEQ_API_SERVER_TOKEN` once or set `-a` each time with a valid token for the desktop's HTTP API server:
 
-```
+```sh
 # Search your current graph and print highlighted results one per line like grep
 $ logseq search woot -a my-token
 Search found 100 results:
@@ -75,7 +75,7 @@ $ logseq search woot
 ```
 
 Here are more examples of all the available commands:
-```
+```sh
 # Search a local graph
 $ logseq search page -g woot
 Search found 23 results:
@@ -176,7 +176,7 @@ First install the following dependencies:
 * Run `yarn install` to install npm dependencies.
 * Install [babashka](https://github.com/babashka/babashka).
 
-To install the CLI locally, `yarn link`.
+To install the CLI locally so that local changes are immediately reflected in `logseq`, `yarn link`.
 
 ### Testing
 
@@ -184,7 +184,7 @@ Testing is done with nbb-logseq and
 [nbb-test-runner](https://github.com/nextjournal/nbb-test-runner). Some basic
 usage:
 
-```
+```sh
 # Run all tests
 $ yarn test
 # List available options
@@ -196,3 +196,14 @@ $ yarn test -i focus
 ### Managing dependencies
 
 See [standard nbb/cljs library advice in graph-parser](/deps/graph-parser/README.md#managing-dependencies).
+
+### Build
+
+To build and install a local version of the CLI:
+```sh
+$ bb build:vendor-nbb-deps && npm pack && npm install -g ./logseq-cli-*.tgz
+# Run this to bring local code back to a clean state. Not running this will cause local dev issues
+$ git checkout nbb.edn && rm -rf vendor logseq-cli*.tgz
+```
+
+The above is useful for testing the build process and ensuring the released tarball has no issues.
