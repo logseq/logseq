@@ -87,8 +87,7 @@
 (defn normalize-asset-resource-url
   "try to convert resource file to url asset link"
   [path]
-  (let [protocol-link? (->> #{"file://" "http://" "https://" "assets://"}
-                            (some #(string/starts-with? (string/lower-case path) %)))]
+  (let [protocol-link? (common-config/protocol-path? path)]
     (cond
       protocol-link?
       path
@@ -152,35 +151,39 @@
 
 (defn <make-asset-url
   "Make asset URL for UI element, to fill img.src"
-  [path] ;; path start with "/assets"(editor) or compatible for "../assets"(whiteboards)
-  (if config/publishing?
-    ;; Relative path needed since assets are not under '/' if published graph is not under '/'
-    (string/replace-first path #"^/" "")
-    (let [repo      (state/get-current-repo)
-          repo-dir  (config/get-repo-dir repo)
-          ;; Hack for path calculation
-          path      (string/replace path #"^(\.\.)?/" "./")
-          full-path (path/path-join repo-dir path)
-          data-url? (string/starts-with? path "data:")]
-      (cond
-        data-url?
-        path ;; just return the original
+  ([path] (<make-asset-url path (try (js/URL. path) (catch :default _ nil))))
+  ([path ^js js-url]
+   ;; path start with "/assets"(editor) or compatible for "../assets"(whiteboards)
+   (if config/publishing?
+     ;; Relative path needed since assets are not under '/' if published graph is not under '/'
+     (string/replace-first path #"^/" "")
+     (let [repo (state/get-current-repo)
+           repo-dir (config/get-repo-dir repo)
+           local-asset? (common-config/local-relative-asset? path)
+           ;; Hack for path calculation
+           path (string/replace path #"^(\.\.)?/" "./")
+           js-url? (not (nil? js-url))]
+       (cond
+         js-url?
+         path                                               ;; just return the original
 
-        (and (alias-enabled?)
-             (check-alias-path? path))
-        (resolve-asset-real-path-url (state/get-current-repo) path)
+         (and (alias-enabled?)
+              (check-alias-path? path))
+         (resolve-asset-real-path-url (state/get-current-repo) path)
 
-        (util/electron?)
-        ;; fullpath will be encoded
-        (path/prepend-protocol "file:" full-path)
+         (util/electron?)
+         (let [full-path (if local-asset?
+                           (path/path-join repo-dir path) path)]
+           ;; fullpath will be encoded
+           (path/prepend-protocol "file:" full-path))
 
-        ;(mobile-util/native-platform?)
-        ;(mobile-util/convert-file-src full-path)
+         ;(mobile-util/native-platform?)
+         ;(mobile-util/convert-file-src full-path)
 
-        (config/db-based-graph? (state/get-current-repo)) ; memory fs
-        (p/let [binary (fs/read-file-raw repo-dir path {})
-                blob (js/Blob. (array binary) (clj->js {:type "image"}))]
-          (when blob (js/URL.createObjectURL blob)))))))
+         (config/db-based-graph? (state/get-current-repo))  ; memory fs
+         (p/let [binary (fs/read-file-raw repo-dir path {})
+                 blob (js/Blob. (array binary) (clj->js {:type "image"}))]
+           (when blob (js/URL.createObjectURL blob))))))))
 
 (defn get-file-checksum
   [^js/Blob file]

@@ -767,7 +767,7 @@
        :add-hl! add-hl!})]))
 
 (rum/defc ^:large-vars/data-var pdf-viewer
-  [_url ^js pdf-document {:keys [identity filename initial-hls initial-page initial-scale initial-error]} ops]
+  [_url ^js pdf-document {:keys [identity filename pdf-current initial-hls initial-page initial-scale initial-error]} ops]
   (let [*el-ref (rum/create-ref)
         [state, set-state!] (rum/use-state {:viewer nil :bus nil :link nil :el nil})
         [ano-state, set-ano-state!] (rum/use-state {:loaded-pages []})
@@ -879,7 +879,11 @@
        (when (and page-ready? viewer)
          [(when-not in-system-window?
             (rum/with-key (pdf-resizer viewer) "pdf-resizer"))
-          (rum/with-key (pdf-toolbar viewer {:on-external-window! #(open-external-win! (state/get-current-pdf))}) "pdf-toolbar")])])))
+          (rum/with-key
+           (pdf-toolbar viewer
+            {:on-external-window! #(open-external-win! (state/get-current-pdf))
+             :pdf-current pdf-current})
+           "pdf-toolbar")])])))
 
 (rum/defcs pdf-password-input <
   (rum/local "" ::password)
@@ -931,9 +935,10 @@
       "auto"))
 
 (rum/defc ^:large-vars/data-var pdf-loader
-  [{:keys [url hls-file identity filename] :as pdf-current}]
+  [{:keys [url hls-file identity filename block] :as pdf-current}]
   (let [repo           (state/get-current-repo)
         db-based?      (config/db-based-graph?)
+        file-based?    (not db-based?)
         *doc-ref       (rum/use-ref nil)
         [loader-state, set-loader-state!] (rum/use-state {:error nil :pdf-document nil :status nil})
         [hls-state, set-hls-state!] (rum/use-state {:initial-hls nil :latest-hls nil :extra nil :loaded false :error nil})
@@ -944,23 +949,20 @@
                          (set-hls-state! #(merge % {:initial-hls [] :latest-hls latest-hls})))
         set-hls-extra! (fn [extra]
                          (if db-based?
-                           (do
+                           (when block
                              (debounce-set-last-visit-scale! (:block pdf-current) (:scale extra))
                              (debounce-set-last-visit-page! (:block pdf-current) (:page extra)))
                            (set-hls-state! #(merge % {:extra extra}))))]
 
-    ;; current pdf effects
-    (when-not db-based?
-      (hooks/use-effect!
-       (fn []
+    (hooks/use-effect!
+     (fn []
+       (when file-based?
+          ;; ensure ref page
          (when pdf-current
            (pdf-assets/file-based-ensure-ref-page! pdf-current)))
-       [pdf-current]))
 
-    ;; load highlights
-    (if db-based?
-      (hooks/use-effect!
-       (fn []
+       (when file-based?
+         ;; load highlights
          (when pdf-current
            (let [pdf-block (:block pdf-current)]
              (p/let [data (db-async/<get-pdf-annotations repo (:db/id pdf-block))
@@ -970,53 +972,53 @@
                                    1))
                (set-initial-scale! (get-last-visit-scale pdf-block))
                (set-hls-state! {:initial-hls highlights :latest-hls highlights :loaded true})))))
-       [pdf-current])
-      (hooks/use-effect!
-       (fn []
-         (p/catch
-          (p/let [data (pdf-assets/file-based-load-hls-data$ pdf-current)
-                  {:keys [highlights extra]} data]
-            (set-initial-page! (or (when-let [page (:page extra)]
-                                     (util/safe-parse-int page)) 1))
-            (set-initial-scale! (or (:scale extra) "auto"))
-            (set-hls-state! {:initial-hls highlights :latest-hls highlights :extra extra :loaded true}))
+       #())
+     [pdf-current])
 
-          ;; error
-          (fn [^js e]
-            (js/console.error "[load hls error]" e)
-
-            (let [msg (str (util/format "Error: failed to load the highlights file: \"%s\". \n"
-                                        (:hls-file pdf-current))
-                           e)]
-              (notification/show! msg :error)
-              (set-hls-state! {:loaded true :error e}))))
-
-         ;; cancel
-         #())
-       [hls-file]))
+    (hooks/use-effect!
+     (fn []
+       (if file-based?
+         (-> (p/let [data (pdf-assets/file-based-load-hls-data$ pdf-current)
+                     {:keys [highlights extra]} data]
+               (set-initial-page! (or (when-let [page (:page extra)]
+                                        (util/safe-parse-int page)) 1))
+               (set-initial-scale! (or (:scale extra) "auto"))
+               (set-hls-state! {:initial-hls highlights :latest-hls highlights :extra extra :loaded true}))
+             (p/catch
+              (fn [^js e]
+                (js/console.error "[load hls error]" e)
+                (let [msg (str (util/format "Error: failed to load the highlights file: \"%s\". \n"
+                                            (:hls-file pdf-current))
+                               e)]
+                  (notification/show! msg :error)
+                  (set-hls-state! {:loaded true :error e})))))
+         ;; for db-based, just mark loaded
+         (set-hls-state! {:loaded true}))
+       #())
+     [hls-file pdf-current])
 
     ;; cache highlights
-    (when-not db-based?
-      (let [persist-hls-data!
-            (hooks/use-callback
-             (util/debounce
-              (fn [latest-hls extra]
-                (pdf-assets/file-based-persist-hls-data$
-                 pdf-current latest-hls extra))
-              4000) [pdf-current])]
+    (let [persist-hls-data!
+          (hooks/use-callback
+           (util/debounce
+            (fn [latest-hls extra]
+              (pdf-assets/file-based-persist-hls-data$
+               pdf-current latest-hls extra))
+            4000) [pdf-current])]
 
-        (hooks/use-effect!
-         (fn []
+      (hooks/use-effect!
+       (fn []
+         ;; persist highlights
+         (when file-based?
            (when (= :completed (:status loader-state))
-             (p/catch
-              (when-not (:error hls-state)
-                (p/do! (persist-hls-data! (:latest-hls hls-state) (:extra hls-state))))
+             (-> (when-not (:error hls-state)
+                   (p/do! (persist-hls-data! (:latest-hls hls-state) (:extra hls-state))))
+                 (p/catch
+                  (fn [e]
+                    (js/console.error "[write hls error]" e))))))
+         #())
 
-            ;; write hls file error
-              (fn [e]
-                (js/console.error "[write hls error]" e)))))
-
-         [(:latest-hls hls-state) (:extra hls-state)])))
+       [(:latest-hls hls-state) (:extra hls-state)]))
 
     ;; load document
     (hooks/use-effect!
@@ -1033,7 +1035,6 @@
                             :supportsMouseWheelZoomCtrlKey true
                             :supportsMouseWheelZoomMetaKey true}]
          (set-loader-state! {:status :loading})
-
          (-> (get-doc$ (clj->js opts))
              (p/then (fn [doc]
                        (set-loader-state! {:pdf-document doc :status :completed})))
@@ -1041,6 +1042,7 @@
          #()))
      [url doc-password])
 
+    ;; handle load errors
     (hooks/use-effect!
      (fn []
        (when-let [error (:error loader-state)]
@@ -1092,17 +1094,15 @@
             initial-error (:error hls-state)]
 
         (if (= status-doc :loading)
-
-          [:div.flex.justify-center.items-center.h-screen.text-gray-500.text-lg
-           svg/loading]
-
+          [:div.flex.justify-center.items-center.h-screen.text-gray-500.text-lg svg/loading]
           (when-let [pdf-document (and (:loaded hls-state) (:pdf-document loader-state))]
             [(rum/with-key (pdf-viewer
                             url pdf-document
-                            {:identity      identity
-                             :filename      filename
-                             :initial-hls   initial-hls
-                             :initial-page  initial-page
+                            {:identity identity
+                             :filename filename
+                             :pdf-current pdf-current
+                             :initial-hls initial-hls
+                             :initial-page initial-page
                              :initial-scale initial-scale
                              :initial-error initial-error}
                             {:set-dirty-hls! set-dirty-hls!
