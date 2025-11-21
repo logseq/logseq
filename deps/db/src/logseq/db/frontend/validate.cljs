@@ -11,7 +11,7 @@
 (def ^:private db-schema-validator (m/validator db-malli-schema/DB))
 (def ^:private db-schema-explainer (m/explainer db-malli-schema/DB))
 (def ^:private closed-db-schema-validator (m/validator (mu/closed-schema db-malli-schema/DB)))
-(def closed-db-schema-explainer (m/explainer (mu/closed-schema db-malli-schema/DB)))
+(def ^:private closed-db-schema-explainer (m/explainer (mu/closed-schema db-malli-schema/DB)))
 
 (defn get-schema-validator
   [closed-schema?]

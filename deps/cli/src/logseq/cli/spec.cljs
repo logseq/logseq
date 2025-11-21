@@ -88,4 +88,7 @@
   {:graphs {:alias :g
             :coerce []
             :require true
-            :desc "Local graph(s) to validate"}})
+            :desc "Local graph(s) to validate"}
+   :closed {:alias :c
+            :default true
+            :desc "Validate entities have no extra keys"}})
