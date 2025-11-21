@@ -11,9 +11,9 @@
 
 (defn- validate-db*
   "Validate datascript db as a vec of entity maps"
-  [db ent-maps* _options]
+  [db ent-maps* {:keys [closed]}]
   (let [ent-maps (db-malli-schema/update-properties-in-ents db ent-maps*)
-        explainer db-validate/closed-db-schema-explainer]
+        explainer (db-validate/get-schema-explainer closed)]
     (if-let [explanation (binding [db-malli-schema/*db-for-validate-fns* db
                                    db-malli-schema/*closed-values-validate?* true]
                            (->> (map (fn [e] (dissoc e :db/id)) ent-maps) explainer not-empty))]
