@@ -196,7 +196,7 @@
                 (common-config/draw? ref-value)
 
                 ;; 3. local asset link
-                (boolean (common-config/local-asset? ref-value))))))))
+                (boolean (common-config/local-relative-asset? ref-value))))))))
 
 (defn link?
   [format link]
