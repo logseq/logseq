@@ -21,6 +21,7 @@ import Capacitor
 
     private weak var currentParent: UIViewController?
     private weak var placeholderView: UIView?
+    private var snapshots: [ObjectIdentifier: UIImage] = [:]
 
     func attach(to parent: UIViewController, leavePlaceholderInPreviousParent: Bool = false) {
         let vc = bridgeController
@@ -55,5 +56,21 @@ import Capacitor
     func clearPlaceholder() {
         placeholderView?.removeFromSuperview()
         placeholderView = nil
+    }
+
+    func storeSnapshot(for parent: UIViewController) {
+        let vc = bridgeController
+        guard currentParent === parent else { return }
+        let bounds = vc.view.bounds
+        guard bounds.width > 0, bounds.height > 0 else { return }
+        let renderer = UIGraphicsImageRenderer(bounds: bounds)
+        let image = renderer.image { _ in
+            vc.view.drawHierarchy(in: bounds, afterScreenUpdates: true)
+        }
+        snapshots[ObjectIdentifier(parent)] = image
+    }
+
+    func snapshot(for parent: UIViewController) -> UIImage? {
+        snapshots[ObjectIdentifier(parent)]
     }
 }
