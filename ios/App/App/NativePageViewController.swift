@@ -26,7 +26,6 @@ class NativePageViewController: UIViewController, UIGestureRecognizerDelegate {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .systemBackground
-        SharedWebViewController.instance.attach(to: self)
     }
 
     override func viewWillAppear(_ animated: Bool) {

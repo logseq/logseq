@@ -10,6 +10,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
     var navController: UINavigationController?
     private var pathStack: [String] = ["/"]
     private var ignoreRoutePopCount = 0
+    private var popSnapshotView: UIView?
     private lazy var navigationSwipeGesture: UISwipeGestureRecognizer = {
         let gesture = UISwipeGestureRecognizer(target: self, action: #selector(handleNavigationSwipe(_:)))
         gesture.direction = .right // allow back/open without edge-only gesture
@@ -191,6 +192,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
               "to:", toVC.targetPath)
 
         if isPop {
+            let previousPathStack = pathStack
+
             // Keep native bookkeeping aligned with the upcoming pop
             if pathStack.count > 1 {
                 _ = pathStack.popLast()
@@ -199,25 +202,49 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
                 pathStack[pathStack.count - 1] = toVC.targetPath
             }
 
-            // Move shared webview to destination before pop completes, but leave a snapshot
-            // on the previous screen so the transition doesn't show a blank page.
-            SharedWebViewController.instance.attach(
-                to: toVC,
-                leavePlaceholderInPreviousParent: fromVC != nil
-            )
-
-            // Trigger browser back so Reitit updates route-match while attached to destination
-            if let webView = SharedWebViewController.instance.bridgeController.bridge?.webView,
-               webView.canGoBack {
-                ignoreRoutePopCount += 1
-                webView.goBack()
-            } else {
-                // Fallback: ask JS to render without adding history
-                ignoreRoutePopCount += 1
+            // Show a snapshot of the destination while the webview stays on the current page.
+            popSnapshotView?.removeFromSuperview()
+            popSnapshotView = nil
+            SharedWebViewController.instance.storeSnapshot(for: toVC)
+            if let snapshot = SharedWebViewController.instance.snapshot(for: toVC) {
+                let imageView = UIImageView(image: snapshot)
+                imageView.frame = toVC.view.bounds
+                imageView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+                imageView.contentMode = .scaleToFill
+                toVC.view.addSubview(imageView)
+                popSnapshotView = imageView
             }
 
-            coordinator.animate(alongsideTransition: nil) { _ in
+            coordinator.animate(alongsideTransition: { _ in
+                // no-op; we move the webview after the transition decision
+            }) { context in
+                guard !context.isCancelled else {
+                    self.pathStack = previousPathStack
+                    if let fromVC {
+                        SharedWebViewController.instance.attach(to: fromVC)
+                    }
+                    SharedWebViewController.instance.clearPlaceholder()
+                    return
+                }
+
+                SharedWebViewController.instance.attach(
+                    to: toVC,
+                    leavePlaceholderInPreviousParent: fromVC != nil
+                )
+                if let webView = SharedWebViewController.instance.bridgeController.bridge?.webView,
+                   webView.canGoBack {
+                    self.ignoreRoutePopCount += 1
+                    webView.goBack()
+                } else {
+                    self.ignoreRoutePopCount += 1
+                }
                 SharedWebViewController.instance.clearPlaceholder()
+                if let snapshotView = self.popSnapshotView {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                        snapshotView.removeFromSuperview()
+                        self.popSnapshotView = nil
+                    }
+                }
             }
         }
     }
@@ -226,6 +253,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
         guard let current = viewController as? NativePageViewController else { return }
         SharedWebViewController.instance.clearPlaceholder()
         SharedWebViewController.instance.attach(to: current)
+        SharedWebViewController.instance.storeSnapshot(for: current)
         attachNavigationSwipeGesture()
         updateSidebarGestureAttachment(for: current)
     }
