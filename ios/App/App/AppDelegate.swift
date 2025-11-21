@@ -199,8 +199,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
                 pathStack[pathStack.count - 1] = toVC.targetPath
             }
 
-            // Move shared webview to destination before pop completes
-            SharedWebViewController.instance.attach(to: toVC)
+            // Move shared webview to destination before pop completes, but leave a snapshot
+            // on the previous screen so the transition doesn't show a blank page.
+            SharedWebViewController.instance.attach(
+                to: toVC,
+                leavePlaceholderInPreviousParent: fromVC != nil
+            )
 
             // Trigger browser back so Reitit updates route-match while attached to destination
             if let webView = SharedWebViewController.instance.bridgeController.bridge?.webView,
@@ -211,11 +215,16 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
                 // Fallback: ask JS to render without adding history
                 ignoreRoutePopCount += 1
             }
+
+            coordinator.animate(alongsideTransition: nil) { _ in
+                SharedWebViewController.instance.clearPlaceholder()
+            }
         }
     }
 
     func navigationController(_ navigationController: UINavigationController, didShow viewController: UIViewController, animated: Bool) {
         guard let current = viewController as? NativePageViewController else { return }
+        SharedWebViewController.instance.clearPlaceholder()
         SharedWebViewController.instance.attach(to: current)
         attachNavigationSwipeGesture()
         updateSidebarGestureAttachment(for: current)
