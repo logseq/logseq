@@ -191,6 +191,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
               "to:", toVC.targetPath)
 
         if isPop {
+            let previousPathStack = pathStack
+
             // Keep native bookkeeping aligned with the upcoming pop
             if pathStack.count > 1 {
                 _ = pathStack.popLast()
@@ -206,18 +208,26 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
                 leavePlaceholderInPreviousParent: fromVC != nil
             )
 
-            // Trigger browser back so Reitit updates route-match while attached to destination
-            if let webView = SharedWebViewController.instance.bridgeController.bridge?.webView,
-               webView.canGoBack {
-                ignoreRoutePopCount += 1
-                webView.goBack()
-            } else {
-                // Fallback: ask JS to render without adding history
-                ignoreRoutePopCount += 1
-            }
-
-            coordinator.animate(alongsideTransition: nil) { _ in
+            coordinator.animate(alongsideTransition: nil) { context in
                 SharedWebViewController.instance.clearPlaceholder()
+
+                guard !context.isCancelled else {
+                    self.pathStack = previousPathStack
+                    if let fromVC {
+                        SharedWebViewController.instance.attach(to: fromVC)
+                    }
+                    return
+                }
+
+                // Trigger browser back so Reitit updates route-match while attached to destination
+                if let webView = SharedWebViewController.instance.bridgeController.bridge?.webView,
+                   webView.canGoBack {
+                    self.ignoreRoutePopCount += 1
+                    webView.goBack()
+                } else {
+                    // Fallback: ask JS to render without adding history
+                    self.ignoreRoutePopCount += 1
+                }
             }
         }
     }
