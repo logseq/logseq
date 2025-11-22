@@ -8,6 +8,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.mobile.flows :as mobile-flows]
             [frontend.mobile.intent :as intent]
+            [frontend.mobile.sync-background :as mobile-sync-bg]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -83,6 +84,9 @@
                                           (when lock
                                             ;; lock acquired, meaning the worker has terminated
                                             (js/window.location.reload)))))))))
+  (mobile-sync-bg/on-app-state-change (.-isActive state))
+  (when (false? (.-isActive state))
+    (mobile-sync-bg/trigger!))
   (reset! mobile-flows/*mobile-app-state (.-isActive state)))
 
 (defn- general-init!
@@ -117,7 +121,12 @@
                      #(util/scroll-to-top true))
 
   (.addListener App "appStateChange" app-state-change-handler)
-  (.addListener Network "networkStatusChange" #(reset! mobile-flows/*mobile-network-status %)))
+  (.addListener Network "networkStatusChange"
+                (fn [status]
+                  (reset! mobile-flows/*mobile-network-status status)
+                  (mobile-sync-bg/on-network-change (.-connected status))
+                  (when (.-connected status)
+                    (mobile-sync-bg/trigger!)))))
 
 (defn init! []
   (.addEventListener js/window "sendIntentReceived" intent/handle-received)

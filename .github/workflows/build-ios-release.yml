@@ -11,9 +11,9 @@ on:
         default: "master"
 
 env:
-  CLOJURE_VERSION: '1.11.1.1413'
-  NODE_VERSION: '22'
-  JAVA_VERSION: '11'
+  CLOJURE_VERSION: "1.11.1.1413"
+  NODE_VERSION: "22"
+  JAVA_VERSION: "11"
 
 jobs:
   build-app:
@@ -40,7 +40,7 @@ jobs:
       - name: Setup Java JDK
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
+          distribution: "zulu"
           java-version: ${{ env.JAVA_VERSION }}
 
       - name: Cache clojure deps
@@ -84,6 +84,9 @@ jobs:
 
       - name: Prepare iOS build
         run: npx cap sync ios
+
+      - name: Enable Xcode File System Synchronized Groups
+        run: defaults write com.apple.dt.Xcode IDEFileSystemSynchronizedGroupsEnabled -bool YES
 
       - name: Build and upload iOS app
         run: fastlane beta
