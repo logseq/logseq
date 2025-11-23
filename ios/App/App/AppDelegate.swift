@@ -144,6 +144,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
         if pathStack.last == path {
             return
         }
+        // Get the CURRENT VC before pushing
+        if let fromVC = nav.topViewController as? NativePageViewController {
+            print("store snapshot BEFORE push for:", fromVC.targetPath)
+            SharedWebViewController.instance.storeSnapshot(for: fromVC)
+        } else {
+            print("⚠️ No valid fromVC when pushing")
+        }
+
         let vc = NativePageViewController(path: path, push: true)
         pathStack.append(path)
         nav.pushViewController(vc, animated: animated)
@@ -205,7 +213,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
             // Show a snapshot of the destination while the webview stays on the current page.
             popSnapshotView?.removeFromSuperview()
             popSnapshotView = nil
-            SharedWebViewController.instance.storeSnapshot(for: toVC)
             if let snapshot = SharedWebViewController.instance.snapshot(for: toVC) {
                 let imageView = UIImageView(image: snapshot)
                 imageView.frame = toVC.view.bounds
@@ -227,10 +234,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
                     return
                 }
 
-                SharedWebViewController.instance.attach(
-                    to: toVC,
-                    leavePlaceholderInPreviousParent: fromVC != nil
-                )
                 if let webView = SharedWebViewController.instance.bridgeController.bridge?.webView,
                    webView.canGoBack {
                     self.ignoreRoutePopCount += 1
@@ -238,12 +241,25 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
                 } else {
                     self.ignoreRoutePopCount += 1
                 }
-                SharedWebViewController.instance.clearPlaceholder()
+
+                SharedWebViewController.instance.attach(
+                  to: toVC,
+                  leavePlaceholderInPreviousParent: fromVC != nil
+                )
+
+                // Make sure snapshot stays above the webview
                 if let snapshotView = self.popSnapshotView {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    toVC.view.bringSubviewToFront(snapshotView)
+                }
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    SharedWebViewController.instance.clearPlaceholder()
+                    if let snapshotView = self.popSnapshotView {
+                        print("remove snapshot view")
                         snapshotView.removeFromSuperview()
                         self.popSnapshotView = nil
                     }
+
                 }
             }
         }
@@ -251,9 +267,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
 
     func navigationController(_ navigationController: UINavigationController, didShow viewController: UIViewController, animated: Bool) {
         guard let current = viewController as? NativePageViewController else { return }
+
         SharedWebViewController.instance.clearPlaceholder()
+
         SharedWebViewController.instance.attach(to: current)
-        SharedWebViewController.instance.storeSnapshot(for: current)
+
         attachNavigationSwipeGesture()
         updateSidebarGestureAttachment(for: current)
     }
