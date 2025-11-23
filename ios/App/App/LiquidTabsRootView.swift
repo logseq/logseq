@@ -13,12 +13,13 @@ struct LiquidTabsRootView: View {
         case first
         case second
         case third
+        case fourth
         case search
     }
 
     @State private var selectedTab: TabSelection = .first
 
-    // Convenience: first three tabs from CLJS, rest ignored
+    // Convenience: first four tabs from CLJS, rest ignored
     private var firstTab: LiquidTab? {
         store.tabs.first
     }
@@ -31,6 +32,10 @@ struct LiquidTabsRootView: View {
         store.tabs.count > 2 ? store.tabs[2] : nil
     }
 
+    private var fourthTab: LiquidTab? {
+        store.tabs.count > 3 ? store.tabs[3] : nil
+    }
+
     // Map selection -> CLJS tab id
     private func tabId(for selection: TabSelection) -> String? {
         switch selection {
@@ -40,6 +45,8 @@ struct LiquidTabsRootView: View {
             return secondTab?.id
         case .third:
             return thirdTab?.id
+        case .fourth:
+            return fourthTab?.id
         case .search:
             return "search"
         }
@@ -51,11 +58,13 @@ struct LiquidTabsRootView: View {
             if id == firstTab?.id { return .first }
             if id == secondTab?.id { return .second }
             if id == thirdTab?.id { return .third }
+            if id == fourthTab?.id { return .fourth }
             if id == "search" { return .search }
         }
         if firstTab != nil { return .first }
         if secondTab != nil { return .second }
         if thirdTab != nil { return .third }
+        if fourthTab != nil { return .fourth }
         return .search
     }
 
@@ -100,13 +109,26 @@ struct LiquidTabsRootView: View {
                         }
                     }
 
+                    // ---- Tab 4 (normal) ----
+                    if let tab = fourthTab {
+                        Tab(tab.title,
+                            systemImage: tab.systemImage,
+                            value: TabSelection.fourth
+                        ) {
+                            NativeNavHost(navController: navController)
+                                .ignoresSafeArea()
+                        }
+                    }
+
                     // ---- Search tab (special role) ----
                     Tab(value: TabSelection.search, role: .search) {
-                        SearchTabHost(navController: navController
-                                      , isSearchFocused: $isSearchFocused
-                                      , selectedTab: $selectedTab
-                                      , firstTabId: firstTab?.id
-                                      , store: store)
+                        SearchTabHost(
+                            navController: navController,
+                            isSearchFocused: $isSearchFocused,
+                            selectedTab: $selectedTab,
+                            firstTabId: firstTab?.id,
+                            store: store
+                        )
                     }
                 }
                 // Set initial selection once we have tabs
@@ -168,20 +190,24 @@ private struct SearchTabHost: View {
             NativeNavHost(navController: navController)
                 .ignoresSafeArea()
                 .onAppear {
+                    // Focus the search field when entering search tab
                     DispatchQueue.main.async {
                         isSearchFocused = true
                     }
                     print("search tab appear, isSearching:", isSearching)
                 }
                 .onDisappear {
+                    // Clear focus when leaving search tab
                     isSearchFocused = false
                 }
                 .onChange(of: isSearching) { searching in
                     if searching {
+                        // User is actively searching
                         wasSearching = true
                     } else if wasSearching,
                               selectedTab.wrappedValue == .search,
                               let firstId = firstTabId {
+                        // User tapped Cancel: jump back to first tab
                         wasSearching = false
                         selectedTab.wrappedValue = .first
                         store.selectedId = firstId
