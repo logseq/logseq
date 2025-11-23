@@ -24,6 +24,12 @@
                    (shui/tabler-icon "home" {:size 24}))
       [:small "Journals"]]
      [:span.as-item
+      {:class (when (= current-tab "favorites") "active")
+       :data-tab "favorites"}
+      (shui/button {:variant :icon}
+                   (shui/tabler-icon "star" {:size 24}))
+      [:small "Favorites"]]
+     [:span.as-item
       {:class (when (= current-tab "search") "active")
        :data-tab "search"}
       (shui/button {:variant :icon}

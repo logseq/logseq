@@ -45,11 +45,8 @@
 
          (route-handler/set-route-match! route)
 
-         (when (not= route-name :left-sidebar)
-           (reset! mobile-state/*left-sidebar-open? false)
-           (bottom-tabs/show!))
+         (bottom-tabs/show!)
          (case route-name
-           :left-sidebar (bottom-tabs/hide!)
            :page
            (let [id-str (get-in route [:path-params :name])]
              (when (util/uuid-string? id-str)
@@ -60,9 +57,6 @@
                                                        {:children? false
                                                         :skip-refresh? true})]
                      (when entity
-                     ;; close sidebar
-                       (when (mobile-state/left-sidebar-open?)
-                         (mobile-state/close-left-sidebar!))
                        (when (state/get-edit-block)
                          (state/clear-edit!))
                        (when (mobile-state/quick-add-open?)

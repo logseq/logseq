@@ -50,24 +50,8 @@
   []
   (= :ls-quick-add (get-in @*popup-data [:opts :id])))
 
-(defonce *left-sidebar-open? (atom false))
-
-(defn open-left-sidebar!
-  []
-  (reset! *left-sidebar-open? true)
-  (state/pub-event! [:mobile/redirect-to {:k :left-sidebar}]))
-
-(defn left-sidebar-open?
-  []
-  @*left-sidebar-open?)
-
 (defn redirect-to-tab! [name]
   (set-tab! (str name)))
-
-(defn close-left-sidebar!
-  []
-  (reset! *left-sidebar-open? false)
-  (state/pub-event! [:mobile/redirect-to {:k :home}]))
 
 (defonce *log (atom []))
 (defn log-append!

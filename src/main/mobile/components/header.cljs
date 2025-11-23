@@ -131,12 +131,7 @@
              (not @native-top-bar-listener?))
     (.addListener mobile-util/native-top-bar "buttonTapped"
                   (fn [^js e]
-                    (prn :debug :id (.-id e)
-                         :sidebar-open? (mobile-state/left-sidebar-open?))
                     (case (.-id e)
-                      "menu" (if (mobile-state/left-sidebar-open?)
-                               (mobile-state/close-left-sidebar!)
-                               (mobile-state/open-left-sidebar!))
                       "title" (open-graph-switcher!)
                       "calendar" (open-journal-calendar!)
                       "settings-actions" (open-settings-actions!)
@@ -152,8 +147,6 @@
                      (not= route-name :home))
           base {:title title
                 :hidden (boolean hidden?)}
-          left-buttons (when (= tab "home")
-                         [{:id "menu" :systemIcon "line.3.horizontal"}])
           right-buttons (cond
                           (= tab "home")
                           [{:id "calendar" :systemIcon "calendar"}]
@@ -163,7 +156,6 @@
 
                           :else nil)
           header (cond-> base
-                   left-buttons (assoc :leftButtons left-buttons)
                    right-buttons (assoc :rightButtons right-buttons)
                    (= tab "home") (assoc :titleClickable true))]
       (when-not skip?

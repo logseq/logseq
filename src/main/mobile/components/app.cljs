@@ -16,6 +16,7 @@
             [logseq.shui.ui :as shui]
             [mobile.bottom-tabs :as bottom-tabs]
             [mobile.components.editor-toolbar :as editor-toolbar]
+            [mobile.components.favorites :as favorites]
             [mobile.components.header :as mobile-header]
             [mobile.components.popup :as popup]
             [mobile.components.search :as search]
@@ -85,26 +86,6 @@
        #(.removeEventListener js/window "orientationchange" handle-size!)))
    []))
 
-(comment
-  (rum/defc main-content-inner < rum/static
-    [tab route-match]
-    (let [view (get-in route-match [:data :view])
-          home? (and (= tab "home") (nil? view))]
-      [:<>
-       [:div#home-container {:class (when-not home? "hidden")}
-        (home)]
-       (case (keyword tab)
-         :home
-         (when view
-           (view route-match))
-         :settings
-         (settings/page)
-         :search
-         (if view
-           (view route-match)
-           (search/search))
-         "Not Found")])))
-
 (rum/defc main-content-inner < rum/static
   [tab route-match]
   (let [view (get-in route-match [:data :view])
@@ -126,20 +107,22 @@
      ;; These views scroll independently from the journals layer.
      (when-not home?
        [:div#main-content-container.px-5
-        (case (keyword tab)
-          :home
-          (when view
-            (view route-match))
+        (if view
+          (view route-match)
+          (case (keyword tab)
+            :home
+            nil
 
-          :settings
-          (settings/page)
+            :favorites
+            (favorites/favorites)
 
-          :search
-          (if view
-            (view route-match)
-            (search/search))
+            :settings
+            (settings/page)
 
-          nil)])]))
+            :search
+            (search/search)
+
+            nil))])]))
 
 (rum/defc main-content < rum/reactive
   [tab]
