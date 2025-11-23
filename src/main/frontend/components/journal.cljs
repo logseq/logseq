@@ -31,8 +31,6 @@
 (rum/defc all-journals < rum/reactive db-mixins/query
   []
   (let [data (sub-journals)]
-    (prn :debug :data (count data))
-    (js/console.dir (util/app-scroll-container-node))
     (when (seq data)
       [:div#journals
        (ui/virtualized-list
