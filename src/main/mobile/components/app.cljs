@@ -149,7 +149,6 @@
 
      (ui-component/keep-keyboard-virtual-input)
      (ui-component/install-notifications)
-     (ui-component/install-modals)
 
      (shui-toaster/install-toaster)
      (shui-dialog/install-modals)
