@@ -37,13 +37,13 @@
      (fn [route]
        (let [route-name (get-in route [:data :name])
              path (-> js/location .-hash (string/replace-first #"^#" ""))]
-         (prn :debug :route-name route-name :path path)
-         (route-handler/set-route-match! route)
          (mobile-nav/notify-route-change!
           {:route {:to route-name
                    :path-params (:path-params route)
                    :query-params (:query-params route)}
            :path path})
+
+         (route-handler/set-route-match! route)
 
          (when (not= route-name :left-sidebar)
            (reset! mobile-state/*left-sidebar-open? false)
