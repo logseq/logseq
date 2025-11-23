@@ -51,10 +51,6 @@
                            (not-empty (state/get-selection-blocks))
                            (editor-handler/clear-selection!)
 
-                           ;; TODO: move ui-related code to mobile events
-                           (not-empty (cc-ui/get-modal))
-                           (cc-ui/close-modal!)
-
                            (state/editing?)
                            (editor-handler/escape-editing)
 
