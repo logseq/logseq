@@ -1,9 +1,9 @@
-(ns mobile.components.left-sidebar
-  "Mobile left sidebar"
+(ns mobile.components.favorites
+  "Favorites tab content"
   (:require [frontend.components.left-sidebar :as app-left-sidebar]
             [rum.core :as rum]))
 
-(rum/defc left-sidebar
+(rum/defc favorites
   []
   [:div.px-2
    [:div.left-sidebar-inner
