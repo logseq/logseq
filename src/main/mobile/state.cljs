@@ -13,28 +13,6 @@
 (defn use-search-last-input-at []
   (r/use-atom *search-last-input-at))
 
-(defonce *modal-blocks (atom []))
-(defonce *blocks-navigation-history (atom []))
-(defn open-block-modal!
-  [block]
-  (when (:db/id block)
-    (reset! *modal-blocks [block])
-    (when-not (= (:db/id block) (:db/id (last @*blocks-navigation-history)))
-      (swap! *blocks-navigation-history conj block))))
-
-(defn close-block-modal!
-  "Close top block sheet"
-  []
-  (reset! *modal-blocks [])
-  (reset! *blocks-navigation-history []))
-
-(defn pop-navigation-history!
-  []
-  (when (seq @*blocks-navigation-history)
-    (let [stack (swap! *blocks-navigation-history pop)]
-      (when (seq stack)
-        (reset! *modal-blocks [(last stack)])))))
-
 (defonce *popup-data (atom nil))
 (defn set-popup!
   [data]
