@@ -8,6 +8,7 @@
             [frontend.db :as db]
             [frontend.db.conn :as db-conn]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
@@ -29,9 +30,9 @@
   (let [apply-date! (fn [date]
                       (let [page-name (date/journal-name (gdate/Date. (js/Date. date)))]
                         (if-let [journal (db/get-page page-name)]
-                          (mobile-state/open-block-modal! journal)
-                          (-> (page-handler/<create! page-name {:redirect? false})
-                              (p/then #(mobile-state/open-block-modal! (db/get-page page-name)))))))]
+                          (route-handler/redirect-to-page! (:block/uuid journal))
+                          (p/let [page (page-handler/<create! page-name {:redirect? false})]
+                            (route-handler/redirect-to-page! (:block/uuid page))))))]
     (-> (.showDatePicker mobile-util/ui-local)
         (p/then (fn [^js e] (some-> e (.-value) (apply-date!)))))))
 
