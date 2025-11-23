@@ -76,7 +76,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
         // no-op, unless you want to clean anything up
     }
 
-    private func handleShortcutItem(_ shortcutItem: UIApplicationShortcutItem) -> Bool {
+    @discardableResult
+    func handleShortcutItem(_ shortcutItem: UIApplicationShortcutItem) -> Bool {
         switch shortcutItem.type {
         case "logseq.quickadd":
             donateQuickAddShortcut()

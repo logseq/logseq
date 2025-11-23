@@ -54,6 +54,8 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
         // 4) Start observing route changes (your existing logic)
         (UIApplication.shared.delegate as? AppDelegate)?.startRouteObservation()
+
+        handleInitialSceneOptions(connectionOptions)
     }
 
     // Optional, but nice to have:
@@ -62,4 +64,65 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     func sceneWillResignActive(_ scene: UIScene) { }
     func sceneWillEnterForeground(_ scene: UIScene) { }
     func sceneDidEnterBackground(_ scene: UIScene) { }
+
+    func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+        forwardUserActivity(userActivity)
+    }
+
+    func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+        forwardURLContexts(URLContexts)
+    }
+
+    func windowScene(_ windowScene: UIWindowScene,
+                     performActionFor shortcutItem: UIApplicationShortcutItem,
+                     completionHandler: @escaping (Bool) -> Void) {
+        let handled = (UIApplication.shared.delegate as? AppDelegate)?
+            .handleShortcutItem(shortcutItem) ?? false
+        completionHandler(handled)
+    }
+
+    private func handleInitialSceneOptions(_ options: UIScene.ConnectionOptions) {
+        if let shortcut = options.shortcutItem {
+            DispatchQueue.main.async {
+                _ = (UIApplication.shared.delegate as? AppDelegate)?
+                    .handleShortcutItem(shortcut)
+            }
+        }
+
+        if let activity = options.userActivities.first {
+            forwardUserActivity(activity)
+        }
+
+        if !options.urlContexts.isEmpty {
+            forwardURLContexts(options.urlContexts)
+        }
+    }
+
+    private func forwardUserActivity(_ userActivity: NSUserActivity) {
+        guard let appDelegate = UIApplication.shared.delegate as? AppDelegate else { return }
+        _ = appDelegate.application(UIApplication.shared,
+                                    continue: userActivity,
+                                    restorationHandler: { _ in })
+    }
+
+    private func forwardURLContexts(_ contexts: Set<UIOpenURLContext>) {
+        guard let appDelegate = UIApplication.shared.delegate as? AppDelegate else { return }
+        for context in contexts {
+            let sceneOptions = context.options
+            var appOptions: [UIApplication.OpenURLOptionsKey: Any] = [:]
+            if let sourceApplication = sceneOptions.sourceApplication {
+                appOptions[.sourceApplication] = sourceApplication
+            }
+            if let annotation = sceneOptions.annotation {
+                appOptions[.annotation] = annotation
+            }
+            appOptions[.openInPlace] = sceneOptions.openInPlace
+            if let eventAttribution = sceneOptions.eventAttribution {
+                appOptions[.eventAttribution] = eventAttribution
+            }
+            _ = appDelegate.application(UIApplication.shared,
+                                        open: context.url,
+                                        options: appOptions)
+        }
+    }
 }
