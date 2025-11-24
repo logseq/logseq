@@ -6,6 +6,7 @@
             [frontend.components.rtc.indicator :as rtc-indicator]
             [frontend.date :as date]
             [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.db.conn :as db-conn]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
@@ -15,6 +16,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.date :as gdate]
+            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
@@ -139,8 +141,6 @@
   (when (mobile-util/native-ios?)
     (let [hidden? (and (= tab "search")
                        (not= route-name :page))
-          skip? (and (= tab "home")
-                     (not= route-name :home))
           base {:title title
                 :hidden (boolean hidden?)}
           right-buttons (cond
@@ -154,9 +154,8 @@
           header (cond-> base
                    right-buttons (assoc :rightButtons right-buttons)
                    (= tab "home") (assoc :titleClickable true))]
-      (when-not skip?
-        (.configure mobile-util/native-top-bar
-                    (clj->js header))))))
+      (.configure mobile-util/native-top-bar
+                  (clj->js header)))))
 
 (rum/defc rtc-indicator-btn
   []
@@ -168,29 +167,38 @@
        (rtc-indicator/indicator))]))
 
 (rum/defc header-inner
-  [tab route-name]
-  (let [current-repo (state/get-current-repo)
-        short-repo-name (if current-repo
+  [current-repo tab route-match]
+  (let [short-repo-name (if current-repo
                           (db-conn/get-short-repo-name current-repo)
-                          "Select a Graph")]
+                          "Select a Graph")
+        route-name (get-in route-match [:data :name])]
     (hooks/use-effect!
      (fn []
        (when (mobile-util/native-ios?)
          (register-native-top-bar-events!)
-         (configure-native-top-bar!
-          {:tab tab
-           :title (if (= tab "home")
-                    short-repo-name
-                    (string/capitalize tab))
-           :hidden? (and (= tab "search")
-                         (not= route-name :page))
-           :route-name route-name}))
+         (p/let [block (when (= route-name :page)
+                         (let [id (get-in route-match [:parameters :path :name])]
+                           (when (common-util/uuid-string? id)
+                             (db-async/<get-block current-repo (uuid id) {:children? false}))))
+                 title (cond block
+                             (:block/title block)
+                             (= tab "home")
+                             short-repo-name
+                             :else
+                             (string/capitalize tab))]
+           (configure-native-top-bar!
+            {:tab tab
+             :title title
+             :hidden? (and (= tab "search")
+                           (not= route-name :page))
+             :route-name route-name})))
        nil)
-     [tab short-repo-name route-name])
+     [tab short-repo-name route-match])
 
     [:<>]))
 
 (rum/defc header < rum/reactive
-  [tab]
+  [current-repo tab]
   (let [route-match (state/sub :route-match)]
-    (header-inner tab (get-in route-match [:data :name]))))
+    (header-inner current-repo tab
+                  route-match)))
