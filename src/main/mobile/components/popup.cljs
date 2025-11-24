@@ -21,7 +21,7 @@
 
 (defn- present-native-sheet!
   [data]
-  (when-let [plugin mobile-util/native-bottom-sheet]
+  (when-let [^js plugin mobile-util/native-bottom-sheet]
     (let [{:keys [opts]} data
           id (:id opts)
           popup-exists? (and id (= id (get-in @*last-popup-data [:opts :id])))]
@@ -36,7 +36,7 @@
 
 (defn- dismiss-native-sheet!
   []
-  (when-let [plugin mobile-util/native-bottom-sheet]
+  (when-let [^js plugin mobile-util/native-bottom-sheet]
     (mobile-state/set-popup! nil)
     (reset! *last-popup-data nil)
     (.dismiss plugin #js {})))
@@ -64,7 +64,7 @@
 
 (defonce native-sheet-listener
   (when (mobile-util/native-ios?)
-    (when-let [plugin mobile-util/native-bottom-sheet]
+    (when-let [^js plugin mobile-util/native-bottom-sheet]
       (.addListener plugin "state" handle-native-sheet-state!))))
 
 (defn popup-show!
