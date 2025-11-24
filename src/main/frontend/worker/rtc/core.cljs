@@ -254,21 +254,27 @@
            (let [event (m/?> mixed-flow)]
              (case (:type event)
                (:remote-update :remote-asset-block-update)
-
                (try
                  (m/? (r.remote-update/task--apply-remote-update
                        graph-uuid repo conn date-formatter event @*aes-key add-log-fn))
                  (catch :default e
-                   (if (= ::r.remote-update/need-pull-remote-data (:type (ex-data e)))
+                   (if (= :rtc.exception/local-graph-too-old (:type (ex-data e)))
                      (m/? (r.client/new-task--pull-remote-data
                            repo conn graph-uuid major-schema-version date-formatter get-ws-create-task @*aes-key
                            add-log-fn))
-                     (throw (r.ex/e->ex-info e)))))
+                     (throw e))))
 
                :local-update-check
-               (m/? (r.client/new-task--push-local-ops
-                     repo conn graph-uuid major-schema-version date-formatter
-                     get-ws-create-task *remote-profile? @*aes-key add-log-fn))
+               (try
+                 (m/? (r.client/new-task--push-local-ops
+                       repo conn graph-uuid major-schema-version date-formatter
+                       get-ws-create-task *remote-profile? @*aes-key add-log-fn))
+                 (catch :default e
+                   (if (= :rtc.exception/local-graph-too-old (:type (ex-data e)))
+                     (m/? (r.client/new-task--pull-remote-data
+                           repo conn graph-uuid major-schema-version date-formatter get-ws-create-task @*aes-key
+                           add-log-fn))
+                     (throw e))))
 
                :online-users-updated
                (reset! *online-users (:online-users (:value event)))

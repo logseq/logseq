@@ -34,7 +34,7 @@
             (throw (ex-info (:ex-message apply-ops-resp) (:ex-data apply-ops-resp)))
             ;;else
             (throw (ex-info "Unavailable3" {:remote-ex remote-ex}))))
-      (do (assert (pos? (:t apply-ops-resp)) apply-ops-resp)
+      (do (assert (and (pos? (:t apply-ops-resp)) (pos? (:t-query-end apply-ops-resp))) apply-ops-resp)
           (m/?
            (r.remote-update/task--apply-remote-update
             graph-uuid repo conn date-formatter {:type :remote-update :value apply-ops-resp} aes-key add-log-fn))))))
@@ -46,15 +46,19 @@
           get-graph-skeleton? (or (nil? @*last-calibrate-t)
                                   (< 500 (- t-before @*last-calibrate-t)))]
       (try
-        (let [{remote-t :t
+        (let [{_remote-t :t
+               remote-t-query-end :t-query-end
                server-schema-version :server-schema-version
                server-builtin-db-idents :server-builtin-db-idents
                :as resp}
-              (m/? (ws-util/send&recv get-ws-create-task {:action "init-request"
-                                                          :graph-uuid graph-uuid
-                                                          :schema-version (str major-schema-version)
-                                                          :t-before t-before
-                                                          :get-graph-skeleton get-graph-skeleton?}))]
+              (m/? (ws-util/send&recv get-ws-create-task
+                                      {:action "init-request"
+                                       :graph-uuid graph-uuid
+                                       :schema-version (str major-schema-version)
+                                       :api-version "20251124"
+                                       :t-before t-before
+                                       :get-graph-skeleton get-graph-skeleton?}
+                                      :timeout-ms 30000))]
           (if-let [remote-ex (:ex-data resp)]
             (do
               (add-log-fn :rtc.log/init-request remote-ex)
@@ -66,11 +70,11 @@
             (do
               (when server-schema-version
                 (reset! *server-schema-version server-schema-version)
-                (reset! *last-calibrate-t remote-t))
-              (when remote-t
-                (rtc-log-and-state/update-remote-t graph-uuid remote-t)
+                (reset! *last-calibrate-t remote-t-query-end))
+              (when remote-t-query-end
+                (rtc-log-and-state/update-remote-t graph-uuid remote-t-query-end)
                 (when (not t-before)
-                  (client-op/update-local-tx repo remote-t)))
+                  (client-op/update-local-tx repo remote-t-query-end)))
               (when (and server-schema-version server-builtin-db-idents)
                 (r.skeleton/calibrate-graph-skeleton server-schema-version server-builtin-db-idents @conn))
               resp)))
@@ -488,10 +492,13 @@
                                 ops-for-remote)
               r (try
                   (let [message (cond-> {:action "apply-ops"
-                                         :graph-uuid graph-uuid :schema-version (str major-schema-version)
-                                         :ops ops-for-remote* :t-before local-tx}
+                                         :graph-uuid graph-uuid
+                                         :schema-version (str major-schema-version)
+                                         :api-version "20251124"
+                                         :ops ops-for-remote*
+                                         :t-before local-tx}
                                   (true? @*remote-profile?) (assoc :profile true))
-                        r (m/? (ws-util/send&recv get-ws-create-task message))]
+                        r (m/? (ws-util/send&recv get-ws-create-task message :timeout-ms 30000))]
                     (r.throttle/add-rtc-api-call-record! message)
                     r)
                   (catch :default e
@@ -518,19 +525,22 @@
                   (do (rollback repo block-ops-map-coll update-kv-value-ops-map-coll rename-db-ident-ops-map-coll)
                       (throw (ex-info "Unavailable1" {:remote-ex remote-ex})))))
 
-            (do (assert (pos? (:t r)) r)
+            (do (assert (and (pos? (:t r)) (pos? (:t-query-end r))) r)
                 (m/?
                  (r.remote-update/task--apply-remote-update
                   graph-uuid repo conn date-formatter {:type :remote-update :value r} aes-key add-log-fn))
-                (add-log-fn :rtc.log/push-local-update {:remote-t (:t r)}))))))))
+                (add-log-fn :rtc.log/push-local-update {:remote-t (:t r) :remote-t-query-end (:t-query-end r)}))))))))
 
 (defn new-task--pull-remote-data
   [repo conn graph-uuid major-schema-version date-formatter get-ws-create-task aes-key add-log-fn]
   (m/sp
     (let [local-tx (client-op/get-local-tx repo)
           message {:action "apply-ops"
-                   :graph-uuid graph-uuid :schema-version (str major-schema-version)
-                   :ops [] :t-before (or local-tx 1)}
-          r (m/? (ws-util/send&recv get-ws-create-task message))]
+                   :graph-uuid graph-uuid
+                   :schema-version (str major-schema-version)
+                   :api-version "20251124"
+                   :ops []
+                   :t-before local-tx}
+          r (m/? (ws-util/send&recv get-ws-create-task message :timeout-ms 30000))]
       (r.throttle/add-rtc-api-call-record! message)
       (m/? (task--apply-remote-updates-from-apply-ops r graph-uuid repo conn date-formatter aes-key add-log-fn)))))
