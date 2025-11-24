@@ -17,7 +17,7 @@
                                             (state/get-current-repo)
                                             {:export-type :block :block-id [:block/uuid block-uuid]})
             pull-data (with-out-str (pprint/pprint result))]
-      (when-not (= :export-edn-error result)
+      (when-not (:export-edn-error result)
         (.writeText js/navigator.clipboard pull-data)
         (println pull-data)
         (notification/show! "Copied block's data!" :success)))
@@ -30,7 +30,7 @@
                                            :rows rows
                                            :group-by? group-by?})
           pull-data (with-out-str (pprint/pprint result))]
-    (when-not (= :export-edn-error result)
+    (when-not (:export-edn-error result)
       (.writeText js/navigator.clipboard pull-data)
       (println pull-data)
       (notification/show! "Copied view nodes' data!" :success))))
@@ -41,7 +41,7 @@
                                             (state/get-current-repo)
                                             {:export-type :page :page-id page-id})
             pull-data (with-out-str (pprint/pprint result))]
-      (when-not (= :export-edn-error result)
+      (when-not (:export-edn-error result)
         (.writeText js/navigator.clipboard pull-data)
         (println pull-data)
         (notification/show! "Copied page's data!" :success)))
@@ -52,7 +52,7 @@
                                           (state/get-current-repo)
                                           {:export-type :graph-ontology})
           pull-data (with-out-str (pprint/pprint result))]
-    (when-not (= :export-edn-error result)
+    (when-not (:export-edn-error result)
       (.writeText js/navigator.clipboard pull-data)
       (println pull-data)
       (js/console.log (str "Exported " (count (:classes result)) " classes and "
@@ -73,7 +73,7 @@
                                           {:export-type :graph
                                            :graph-options {:include-timestamps? true}})
           pull-data (with-out-str (pprint/pprint result))]
-    (when-not (= :export-edn-error result)
+    (when-not (:export-edn-error result)
       (let [data-str (some->> pull-data
                               js/encodeURIComponent
                               (str "data:text/edn;charset=utf-8,"))

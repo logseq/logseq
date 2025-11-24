@@ -1096,7 +1096,12 @@
         [:span.number (str value')]
 
         :else
-        (inline-text {} :markdown (str value'))))))
+        [:span.inline-flex.w-full
+         (let [value' (str value')
+               value' (if (string/blank? value')
+                        "Empty"
+                        value')]
+           (inline-text {} :markdown value'))]))))
 
 (rum/defc select-item
   [property type value {:keys [page-cp inline-text other-position? property-position table-view? _icon?] :as opts}]

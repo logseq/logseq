@@ -77,6 +77,7 @@
   (doseq [graph graphs]
     (if (fs/existsSync (cli-util/get-graph-path graph))
       (let [conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))
+            _ (cli-util/ensure-db-graph-for-command @conn)
             query* (when (string? (first args)) (common-util/safe-read-string {:log-error? false} (first args)))
             results (cond
                       ;; Run datalog query if detected
@@ -100,7 +101,7 @@
       (cli-util/error "Graph" (pr-str graph) "does not exist"))))
 
 (defn query
-  [{{:keys [args api-server-token]} :opts :as m}]
-  (if api-server-token
+  [{{:keys [args api-server-token] :as opts} :opts :as m}]
+  (if (cli-util/api-command? opts)
     (api-query (first args) api-server-token)
     (local-query m)))

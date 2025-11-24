@@ -163,7 +163,9 @@
   (let [new-type (:logseq.property/type schema)
         cardinality (:db/cardinality schema)
         ident (:db/ident property)
-        cardinality (if (= cardinality :many) :db.cardinality/many :db.cardinality/one)
+        cardinality (if (#{:many :db.cardinality/many} cardinality)
+                      :db.cardinality/many
+                      :db.cardinality/one)
         old-type (:logseq.property/type property)
         old-ref-type? (db-property-type/user-ref-property-types old-type)
         ref-type? (db-property-type/user-ref-property-types new-type)]

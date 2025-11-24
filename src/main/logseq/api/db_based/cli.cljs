@@ -1,14 +1,14 @@
 (ns logseq.api.db-based.cli
   "API fns for CLI"
-  (:require [frontend.handler.ui :as ui-handler]
+  (:require [clojure.string :as string]
+            [frontend.handler.ui :as ui-handler]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [logseq.cli.common.mcp.tools :as cli-common-mcp-tools]
+            [logseq.common.config :as common-config]
             [logseq.db.sqlite.util :as sqlite-util]
-            [promesa.core :as p]
-            [clojure.string :as string]
-            [logseq.common.config :as common-config]))
+            [promesa.core :as p]))
 
 (defn list-tags
   [options]
@@ -53,6 +53,7 @@
     (ui-handler/re-render-root!)
     (cli-common-mcp-tools/summarize-upsert-operations ops options)))
 
+
 (defn import-edn
   "Given EDN data as a transitized string, converts to EDN and imports it."
   [edn-data*]
@@ -70,7 +71,7 @@
   (p/let [options (-> (js->clj options* :keywordize-keys true)
                       (update :export-type (fnil keyword :graph)))
           result (state/<invoke-db-worker :thread-api/export-edn (state/get-current-repo) options)]
-    (when (= :export-edn-error result)
-      (throw (ex-info "Export EDN error" {})))
+    (when (:export-edn-error result)
+      (throw (ex-info (str "Export EDN Error: " (:export-edn-error result)) {})))
     {:export-body (sqlite-util/transit-write result)
      :graph (string/replace-first (state/get-current-repo) common-config/db-version-prefix "")}))

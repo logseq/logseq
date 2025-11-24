@@ -83,3 +83,12 @@
    :debug-tool {:alias :t
                 :coerce :keyword
                 :desc "Debug mcp tool with direct invocation"}})
+
+(def validate
+  {:graphs {:alias :g
+            :coerce []
+            :require true
+            :desc "Local graph(s) to validate"}
+   :closed {:alias :c
+            :default true
+            :desc "Validate entities have no extra keys"}})

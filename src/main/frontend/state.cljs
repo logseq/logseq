@@ -286,7 +286,7 @@
       :reactive/query-dbs                    {}
 
       ;; login, userinfo, token, ...
-      :auth/refresh-token                    (storage/get "refresh-token")
+      :auth/refresh-token                    (some-> (storage/get "refresh-token") str)
       :auth/access-token                     nil
       :auth/id-token                         nil
 
@@ -2149,7 +2149,7 @@ Similar to re-frame subscriptions"
   (sub :auth/id-token))
 
 (defn get-auth-refresh-token []
-  (:auth/refresh-token @state))
+  (str (:auth/refresh-token @state)))
 
 (defn set-file-sync-manager [graph-uuid v]
   (when (and graph-uuid v)

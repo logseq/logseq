@@ -55,6 +55,7 @@
     (cli-util/error "Command missing required option 'graph'"))
   (if (fs/existsSync (cli-util/get-graph-path graph))
     (let [conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))
+          _ (cli-util/ensure-db-graph-for-command @conn)
           nodes (->> (d/datoms @conn :aevt :block/title)
                      (filter (fn [datom]
                                (string/includes? (:v datom) search-term)))
@@ -63,7 +64,7 @@
       (format-results nodes search-term {:raw raw}))
     (cli-util/error "Graph" (pr-str graph) "does not exist")))
 
-(defn search [{{:keys [search-terms api-server-token]} :opts :as m}]
-  (if api-server-token
+(defn search [{{:keys [search-terms] :as opts} :opts :as m}]
+  (if (cli-util/api-command? opts)
     (api-search (string/join " " search-terms) m)
     (local-search (string/join " " search-terms) m)))

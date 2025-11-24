@@ -68,7 +68,7 @@
                    (js/process.exit 1))))))
 
 (def ^:private table
-  [{:cmds ["list"] :desc "List graphs"
+  [{:cmds ["list"] :desc "List local graphs"
     :fn (lazy-load-fn 'logseq.cli.commands.graph/list-graphs)}
    {:cmds ["show"] :desc "Show DB graph(s) info"
     :description "For each graph, prints information related to a graph's creation and anything that is helpful for debugging."
@@ -97,15 +97,19 @@
     :description "Import with EDN into a local graph or the current in-app graph if --api-server-token is given. See https://github.com/logseq/docs/blob/master/db-version.md#edn-data-export for more about this import type."
     :fn (lazy-load-fn 'logseq.cli.commands.import-edn/import-edn)
     :spec cli-spec/import-edn}
-   {:cmds ["append"] :desc "Appends text to current page"
+   {:cmds ["append"] :desc "Append text to current page"
     :description "Append text to current page of current in-app graph."
     :fn (lazy-load-fn 'logseq.cli.commands.append/append)
     :args->opts [:args] :require [:args] :coerce {:args []}
     :spec cli-spec/append}
    {:cmds ["mcp-server"] :desc "Run a MCP server"
-    :description "Run a MCP server against a local graph if --graph is given or against the current in-app graph. By default the MCP server runs as a HTTP Streamable server. Use --stdio to run it as a stdio server."
+    :description "Run a MCP server against a local graph if --graph is given or against the current in-app graph. For the in-app graph, the API server must be on in the app. By default the MCP server runs as a HTTP Streamable server. Use --stdio to run it as a stdio server."
     :fn (lazy-load-fn 'logseq.cli.commands.mcp-server/start)
     :spec cli-spec/mcp-server}
+   {:cmds ["validate"] :desc "Validate DB graph"
+    :description "Validate a local DB graph. Exit 1 if there are validation errors"
+    :fn (lazy-load-fn 'logseq.cli.commands.validate/validate)
+    :spec cli-spec/validate}
    {:cmds ["help"] :fn help-command :desc "Print a command's help"
     :args->opts [:command] :require [:command]}
    {:cmds []

@@ -900,7 +900,7 @@
        (cond
          (and (vector? x)
               (= "Link" (first x))
-              (common-config/local-asset? (second (:url (second x)))))
+              (common-config/local-relative-asset? (second (:url (second x)))))
          (swap! results update :asset-links conj x)
          (and (vector? x)
               (= "Macro" (first x))
