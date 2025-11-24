@@ -207,7 +207,9 @@
                     db-graph?
                     ;; Remove tags changing case with `Escape`
                     ((fn [tags']
-                       (let [ref-titles (set (map :block/title (:block/refs m)))
+                       (let [ref-titles (->> (map :block/title (:block/refs m))
+                                             (remove nil?)
+                                             set)
                              lc-ref-titles (set (map string/lower-case ref-titles))]
                          (remove (fn [tag]
                                    (when-let [title (:block/title tag)]

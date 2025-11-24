@@ -36,9 +36,9 @@
                          highlight-content-query
                          #(string/replace % search-term (highlight search-term)))]
       (println (string/join "\n"
-                           (->> results
-                                (map #(string/replace % "\n" "\\\\n"))
-                                (map highlight-fn)))))))
+                            (->> results
+                                 (map #(string/replace % "\n" "\\\\n"))
+                                 (map highlight-fn)))))))
 
 (defn- api-search
   [search-term {{:keys [api-server-token raw limit]} :opts}]
@@ -46,13 +46,16 @@
         (if (= 200 (.-status resp))
           (p/let [body (.json resp)]
             (let [{:keys [blocks]} (js->clj body :keywordize-keys true)]
-              (format-results (map :block/title blocks) search-term {:raw raw :api? true})))
+              (format-results (map :title blocks) search-term {:raw raw :api? true})))
           (cli-util/api-handle-error-response resp)))
       (p/catch cli-util/command-catch-handler)))
 
 (defn- local-search [search-term {{:keys [graph raw limit]} :opts}]
+  (when-not graph
+    (cli-util/error "Command missing required option 'graph'"))
   (if (fs/existsSync (cli-util/get-graph-path graph))
     (let [conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))
+          _ (cli-util/ensure-db-graph-for-command @conn)
           nodes (->> (d/datoms @conn :aevt :block/title)
                      (filter (fn [datom]
                                (string/includes? (:v datom) search-term)))
@@ -61,7 +64,7 @@
       (format-results nodes search-term {:raw raw}))
     (cli-util/error "Graph" (pr-str graph) "does not exist")))
 
-(defn search [{{:keys [graph search-terms api-server-token]} :opts :as m}]
-  (if api-server-token
-    (api-search (string/join " " (into [graph] search-terms)) m)
+(defn search [{{:keys [search-terms] :as opts} :opts :as m}]
+  (if (cli-util/api-command? opts)
+    (api-search (string/join " " search-terms) m)
     (local-search (string/join " " search-terms) m)))

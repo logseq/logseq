@@ -109,6 +109,7 @@
                   ;; (js/alert "Current file can't be saved! Please copy its content to your local file system and click the refresh button.")
                   ))))))
 
+;; read-file should return string on all platforms
 (defn read-file
   ([dir path]
    (let [fs (get-fs dir)
@@ -118,6 +119,11 @@
      (read-file dir path options)))
   ([dir path options]
    (protocol/read-file (get-fs dir) dir path options)))
+
+(defn read-file-raw
+  [dir path & {:as options}]
+  (let [fs (get-fs dir)]
+    (protocol/read-file-raw fs dir path options)))
 
 (defn rename!
   "Rename files, incoming relative path, converted to absolute path"

@@ -3,11 +3,17 @@
   commands but are separate because command namespaces are lazy loaded")
 
 (def export
-  {:file {:alias :f
+  {:graph {:alias :g
+           :desc "Local graph to export"}
+   :file {:alias :f
           :desc "File to save export"}})
 
 (def export-edn
-  {:include-timestamps? {:alias :T
+  {:api-server-token {:alias :a
+                      :desc "API server token to export current graph"}
+   :graph {:alias :g
+           :desc "Local graph to export"}
+   :include-timestamps? {:alias :T
                          :desc "Include timestamps in export"}
    :file {:alias :f
           :desc "File to save export"}
@@ -27,7 +33,7 @@
 
 (def import-edn
   {:api-server-token {:alias :a
-                      :desc "API server token to query current graph"}
+                      :desc "API server token to import into current graph"}
    :graph {:alias :g
            :desc "Local graph to import into"}
    :file {:alias :f
@@ -35,20 +41,22 @@
           :desc "EDN File to import"}})
 
 (def query
-  {:graphs {:alias :g
+  {:api-server-token {:alias :a
+                      :desc "API server token to query current graph"}
+   :graphs {:alias :g
             :coerce []
-            :desc "Additional graphs to local query"}
+            :desc "Local graph(s) to query"}
    :properties-readable {:alias :p
                          :coerce :boolean
                          :desc "Make properties on local, entity queries show property values instead of ids"}
    :title-query {:alias :t
-                 :desc "Invoke local query on :block/title"}
-   :api-server-token {:alias :a
-                      :desc "API server token to query current graph"}})
+                 :desc "Invoke local query on :block/title"}})
 
 (def search
   {:api-server-token {:alias :a
                       :desc "API server token to search current graph"}
+   :graph {:alias :g
+           :desc "Local graph to search"}
    :raw {:alias :r
          :desc "Print raw response"}
    :limit {:alias :l
@@ -75,3 +83,12 @@
    :debug-tool {:alias :t
                 :coerce :keyword
                 :desc "Debug mcp tool with direct invocation"}})
+
+(def validate
+  {:graphs {:alias :g
+            :coerce []
+            :require true
+            :desc "Local graph(s) to validate"}
+   :closed {:alias :c
+            :default true
+            :desc "Validate entities have no extra keys"}})
