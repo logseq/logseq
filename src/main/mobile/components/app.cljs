@@ -155,11 +155,11 @@
         {:keys [open? content-fn opts]} (rum/react mobile-state/*popup-data)
         show-popup? (and open? content-fn)]
     [:div.w-full.h-full
-     (if show-popup?
-       [:div.h-full
-        (ui-component/keep-keyboard-virtual-input)
-        (popup/popup opts content-fn)]
-       (app current-repo {:login? login?}))
+     [:<>
+      [:div.w-full.h-full {:class (when show-popup? "hidden")}
+       (app current-repo {:login? login?})]
+      (when show-popup?
+        (popup/popup opts content-fn))]
      (editor-toolbar/mobile-bar)
      (when show-action-bar?
        (selection-toolbar/action-bar))]))
