@@ -623,11 +623,11 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-ref-open-blocks-level
   []
-  (or
-   (when-let [value (:ref/default-open-blocks-level (get-config))]
-     (when (pos-int? value)
-       (min value 9)))
-   2))
+  (if-let [value (:ref/default-open-blocks-level (get-config))]
+    (if (and (int? value) (>= value 0))
+      (min value 9)
+      2)
+    2))
 
 (defn get-export-bullet-indentation
   []
