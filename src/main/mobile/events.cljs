@@ -16,7 +16,8 @@
   (shui/popup-show! nil
                     (fn []
                       (quick-add/quick-add))
-                    {:id :ls-quick-add}))
+                    {:id :ls-quick-add
+                     :default-height 600}))
 
 (defmethod events/handle :mobile/start-audio-record [_]
   (recorder/record! {:save-to-today? true}))
