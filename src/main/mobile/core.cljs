@@ -66,19 +66,15 @@
                                                         :skip-refresh? true})]
                      (when entity
                        (when (state/get-edit-block)
-                         (state/clear-edit!))
-                       (when (mobile-state/quick-add-open?)
-                         (mobile-state/close-popup!))))))))
+                         (state/clear-edit!))))))))
 
            :graphs
            (mobile-state/redirect-to-tab! "settings")
 
            :import
-           (p/do!
-            (p/delay 300)
-            (shui/popup-show! nil (fn []
-                                    (imports/importer {}))
-                              {:id :import}))
+           (shui/popup-show! nil (fn []
+                                   (imports/importer {}))
+                             {:id :import})
 
            nil)))
 

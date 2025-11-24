@@ -72,7 +72,6 @@
             [logseq.outliner.property :as outliner-property]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.popup.core :as shui-popup]
-            [mobile.state :as mobile-state]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -4067,7 +4066,7 @@
              (move-blocks! children today-last-child {:sibling? true})
              (move-blocks! children today {:sibling? false})))
          (state/close-modal!)
-         (mobile-state/set-popup! nil)
+         (shui-popup/hide!)
          (when (seq children)
            (notification/show! "Blocks added to today!" :success)))))))
 
