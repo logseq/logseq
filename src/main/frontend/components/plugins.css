@@ -769,6 +769,10 @@
   }
 }
 
+.lsp-daemon-container {
+  @apply fixed top-0 left-0 z-10;
+}
+
 .lsp-ui-float-container {
   top: 40%;
   left: 30%;
