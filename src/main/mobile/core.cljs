@@ -29,6 +29,7 @@
   []
   (.render root (app/main)))
 
+(defonce ^:private *route-timeout (atom nil))
 (defn set-router!
   []
   (let [router (rf/router routes nil)]
@@ -36,14 +37,21 @@
      router
      (fn [route]
        (let [route-name (get-in route [:data :name])
-             path (-> js/location .-hash (string/replace-first #"^#" ""))]
+             path (-> js/location .-hash (string/replace-first #"^#" ""))
+             pop? (= :pop @mobile-nav/navigation-source)
+             timeout @*route-timeout]
+         (when timeout
+           (js/clearTimeout timeout))
          (mobile-nav/notify-route-change!
           {:route {:to route-name
                    :path-params (:path-params route)
                    :query-params (:query-params route)}
            :path path})
 
-         (route-handler/set-route-match! route)
+         (if pop?
+           (route-handler/set-route-match! route)
+           (reset! *route-timeout
+                   (js/setTimeout #(route-handler/set-route-match! route) 200)))
 
          (bottom-tabs/show!)
          (case route-name
