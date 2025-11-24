@@ -36,4 +36,5 @@ RTC won't start when major-schema-versions don't match"
 
      :logseq.kv/graph-text-embedding-model-name   {:doc "Graph's text-embedding model name"
                                                    :rtc {:rtc/ignore-entity-when-init-upload true
-                                                         :rtc/ignore-entity-when-init-download true}})))
+                                                         :rtc/ignore-entity-when-init-download true}}
+     :logseq.kv/graph-rtc-e2ee?              {:doc "true if it's a rtc graph with E2EE enabled"})))

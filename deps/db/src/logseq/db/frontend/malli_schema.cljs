@@ -89,15 +89,16 @@
   expected to be a coll if the property has a :many cardinality. validate-fn is
   a fn that is called directly on each value to return a truthy value.
   validate-fn varies by property type"
-  [db validate-fn [property property-val] & {:keys [new-closed-value? _skip-strict-url-validate?]
-                                             :as validate-option}]
+  [db validate-fn [property property-val] & {:keys [new-closed-value? :closed-values-validate? _skip-strict-url-validate?]
+                                             :as validate-options}]
   ;; For debugging
   ;; (when (not (internal-ident? (:db/ident property))) (prn :validate-val (dissoc property :property/closed-values) property-val))
   (let [validate-fn' (if (db-property-type/property-types-with-db (:logseq.property/type property))
                        (fn [value]
-                         (validate-fn db value validate-option))
+                         (validate-fn db value validate-options))
                        validate-fn)
-        validate-fn'' (if (and (db-property-type/closed-value-property-types (:logseq.property/type property))
+        validate-fn'' (if (and closed-values-validate?
+                               (db-property-type/closed-value-property-types (:logseq.property/type property))
                                ;; new closed values aren't associated with the property yet
                                (not new-closed-value?)
                                (seq (:property/closed-values property)))
@@ -226,6 +227,12 @@
   "`true` allows updating a block's other property when it has invalid URL value"
   false)
 
+(def ^:dynamic *closed-values-validate?*
+  "By default this is false because we can't ensure this when merging updates from server.
+   `true` allows for non RTC graphs to have higher data quality and avoid
+   possible UX bugs related to closed values."
+  false)
+
 (def property-tuple
   "A tuple of a property map and a property value"
   (into
@@ -241,7 +248,8 @@
                 {:error/message error-message})
               (fn [tuple]
                 (validate-property-value *db-for-validate-fns* schema-fn tuple
-                                         {:skip-strict-url-validate? *skip-strict-url-validate?*}))])])
+                                         {:skip-strict-url-validate? *skip-strict-url-validate?*
+                                          :closed-values-validate? *closed-values-validate?*}))])])
         db-property-type/built-in-validation-schemas)))
 
 (def block-properties

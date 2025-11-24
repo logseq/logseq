@@ -68,7 +68,7 @@
                    (js/process.exit 1))))))
 
 (def ^:private table
-  [{:cmds ["list"] :desc "List graphs"
+  [{:cmds ["list"] :desc "List local graphs"
     :fn (lazy-load-fn 'logseq.cli.commands.graph/list-graphs)}
    {:cmds ["show"] :desc "Show DB graph(s) info"
     :description "For each graph, prints information related to a graph's creation and anything that is helpful for debugging."
@@ -78,35 +78,38 @@
     :fn (lazy-load-fn 'logseq.cli.commands.search/search)
     :desc "Search DB graph"
     :description "Search a local graph or the current in-app graph if --api-server-token is given. For a local graph it only searches the :block/title of blocks."
-    :args->opts [:graph :search-terms] :coerce {:search-terms []} :require [:graph]
+    :args->opts [:search-terms] :coerce {:search-terms []}
     :spec cli-spec/search}
    {:cmds ["query"] :desc "Query DB graph(s)"
     :description "Query a local graph or the current in-app graph if --api-server-token is given. For a local graph, queries are a datalog query or an entity query. A datalog query can use built-in rules. An entity query consists of one or more integers, uuids or :db/ident keywords. For an in-app query, queries can be an advanced or simple query."
     :fn (lazy-load-fn 'logseq.cli.commands.query/query)
-    :args->opts [:graph :args] :coerce {:args []} :no-keyword-opts true :require [:graph]
+    :args->opts [:args] :coerce {:args []} :no-keyword-opts true
     :spec cli-spec/query}
    {:cmds ["export"] :desc "Export DB graph as Markdown"
-    :description "Export a graph to Markdown like the in-app graph export."
+    :description "Export a local graph to Markdown like the in-app graph export."
     :fn (lazy-load-fn 'logseq.cli.commands.export/export)
-    :args->opts [:graph] :require [:graph]
     :spec cli-spec/export}
    {:cmds ["export-edn"] :desc "Export DB graph as EDN"
-    :description "Export a graph to EDN like the in-app graph EDN export. See https://github.com/logseq/docs/blob/master/db-version.md#edn-data-export for more about this export type."
+    :description "Export a local graph to EDN or the current in-app graph if --api-server-token is given. See https://github.com/logseq/docs/blob/master/db-version.md#edn-data-export for more about this export type."
     :fn (lazy-load-fn 'logseq.cli.commands.export-edn/export)
-    :args->opts [:graph] :require [:graph]
     :spec cli-spec/export-edn}
-   {:cmds ["append"] :desc "Appends text to current page"
-    :fn (lazy-load-fn 'logseq.cli.commands.append/append)
-    :args->opts [:args] :require [:args] :coerce {:args []}
-    :spec cli-spec/append}
-   {:cmds ["mcp-server"] :desc "Run a MCP server"
-    :description "Run a MCP server against a local graph if --graph is given or against the current in-app graph. By default the MCP server runs as a HTTP Streamable server. Use --stdio to run it as a stdio server."
-    :fn (lazy-load-fn 'logseq.cli.commands.mcp-server/start)
-    :spec cli-spec/mcp-server}
    {:cmds ["import-edn"] :desc "Import into DB graph with EDN"
     :description "Import with EDN into a local graph or the current in-app graph if --api-server-token is given. See https://github.com/logseq/docs/blob/master/db-version.md#edn-data-export for more about this import type."
     :fn (lazy-load-fn 'logseq.cli.commands.import-edn/import-edn)
     :spec cli-spec/import-edn}
+   {:cmds ["append"] :desc "Append text to current page"
+    :description "Append text to current page of current in-app graph."
+    :fn (lazy-load-fn 'logseq.cli.commands.append/append)
+    :args->opts [:args] :require [:args] :coerce {:args []}
+    :spec cli-spec/append}
+   {:cmds ["mcp-server"] :desc "Run a MCP server"
+    :description "Run a MCP server against a local graph if --graph is given or against the current in-app graph. For the in-app graph, the API server must be on in the app. By default the MCP server runs as a HTTP Streamable server. Use --stdio to run it as a stdio server."
+    :fn (lazy-load-fn 'logseq.cli.commands.mcp-server/start)
+    :spec cli-spec/mcp-server}
+   {:cmds ["validate"] :desc "Validate DB graph"
+    :description "Validate a local DB graph. Exit 1 if there are validation errors"
+    :fn (lazy-load-fn 'logseq.cli.commands.validate/validate)
+    :spec cli-spec/validate}
    {:cmds ["help"] :fn help-command :desc "Print a command's help"
     :args->opts [:command] :require [:command]}
    {:cmds []
