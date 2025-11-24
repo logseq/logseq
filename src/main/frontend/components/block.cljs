@@ -2228,20 +2228,21 @@
      (when (and (or (not fold-button-right?) collapsable? collapsed?)
                 (not (:table? config)))
        [:a.block-control
-        {:id       (str "control-" uuid)
-         :on-click (fn [event]
-                     (util/stop event)
-                     (state/clear-edit!)
-                     (p/do!
-                      (if ref?
-                        (state/toggle-collapsed-block! uuid)
-                        (if collapsed?
-                          (editor-handler/expand-block! uuid)
-                          (editor-handler/collapse-block! uuid)))
-                      (haptics/haptics))
-                     ;; debug config context
-                     (when (and (state/developer-mode?) (.-metaKey event))
-                       (js/console.debug "[block config]==" config)))}
+        {:id (str "control-" uuid)
+         :on-pointer-down
+         (fn [event]
+           (util/stop event)
+           (state/clear-edit!)
+           (p/do!
+            (if ref?
+              (state/toggle-collapsed-block! uuid)
+              (if collapsed?
+                (editor-handler/expand-block! uuid)
+                (editor-handler/collapse-block! uuid)))
+            (haptics/haptics))
+            ;; debug config context
+           (when (and (state/developer-mode?) (.-metaKey event))
+             (js/console.debug "[block config]==" config)))}
         [:span {:class (if (or (and control-show? (or collapsed? collapsable?))
                                (and collapsed? (or page-title? order-list? config/publishing? (util/mobile?))))
                          "control-show cursor-pointer"
