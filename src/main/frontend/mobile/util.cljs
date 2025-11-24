@@ -86,7 +86,7 @@
 (defn check-ios-zoomed-display
   "Detect whether iOS device is in Zoom Display"
   []
-  (p/let [is-zoomed? (p/chain (.isZoomed ios-utils)
+  (p/let [is-zoomed? (p/chain (.isZoomed ^js ios-utils)
                               #(js->clj % :keywordize-keys true))]
     (when (:isZoomed is-zoomed?)
       (let [^js cl (.-classList js/document.documentElement)]
