@@ -3,7 +3,6 @@
   (:require ["../externals.js"]
             [frontend.components.journal :as journal]
             [frontend.handler.common :as common-handler]
-            [frontend.handler.user :as user-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.rum :as frum]
             [frontend.state :as state]
@@ -11,6 +10,7 @@
             [frontend.util :as util]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.hooks :as hooks]
+            [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.toaster.core :as shui-toaster]
             [logseq.shui.ui :as shui]
             [mobile.bottom-tabs :as bottom-tabs]
@@ -128,7 +128,7 @@
     (main-content-inner tab route-match)))
 
 (rum/defc app
-  [current-repo {:keys [login?]}]
+  [current-repo]
   (let [[tab] (mobile-state/use-tab)]
     (use-screen-size-effects!)
     (use-theme-effects! current-repo)
@@ -142,17 +142,11 @@
                            "mt-16"
                            "mt-24")}
      (mobile-header/header current-repo tab)
-     (main-content tab)
-     (ui-component/keep-keyboard-virtual-input)
-     (ui-component/install-notifications)
-     (shui-toaster/install-toaster)
-     (shui-dialog/install-modals)]))
+     (main-content tab)]))
 
 (rum/defc main < rum/reactive
   []
   (let [current-repo (state/sub :git/current-repo)
-        login? (and (state/sub :auth/id-token)
-                    (user-handler/logged-in?))
         show-action-bar? (state/sub :mobile/show-action-bar?)
         {:keys [open? content-fn opts]} (rum/react mobile-state/*popup-data)
         show-popup? (and open? content-fn)
@@ -160,11 +154,15 @@
     [:main.w-full.h-full
      {:class (util/classnames
               [{:ls-fold-button-on-right fold-button-on-right?}])}
-     [:<>
-      [:div.w-full.h-full {:class (when show-popup? "hidden")}
-       (app current-repo {:login? login?})]
-      (when show-popup?
-        (popup/popup opts content-fn))]
+     [:div.w-full.h-full {:class (when show-popup? "hidden")}
+      (app current-repo)]
+     (when show-popup?
+       (popup/popup opts content-fn))
      (editor-toolbar/mobile-bar)
      (when show-action-bar?
-       (selection-toolbar/action-bar))]))
+       (selection-toolbar/action-bar))
+     (shui-popup/install-popups)
+     (ui-component/keep-keyboard-virtual-input)
+     (ui-component/install-notifications)
+     (shui-toaster/install-toaster)
+     (shui-dialog/install-modals)]))
