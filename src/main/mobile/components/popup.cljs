@@ -10,6 +10,7 @@
             [rum.core :as rum]))
 
 (defonce *last-popup-modal? (atom nil))
+(defonce *last-popup-data (atom nil))
 
 (defn- popup-min-height
   [default-height]
@@ -21,17 +22,22 @@
 (defn- present-native-sheet!
   [opts]
   (when-let [plugin mobile-util/native-bottom-sheet]
-    (.present
-     plugin
-     (clj->js
-      (let [height (popup-min-height (:default-height opts))]
-        (cond-> {:allowFullHeight (not= (:type opts) :action-sheet)}
-          height (assoc :defaultHeight height)))))))
+    (let [id (:id opts)
+          popup-exists? (and id (= id (:id @*last-popup-data)))]
+      (when-not popup-exists?
+        (reset! *last-popup-data opts)
+        (.present
+         plugin
+         (clj->js
+          (let [height (popup-min-height (:default-height opts))]
+            (cond-> {:allowFullHeight (not= (:type opts) :action-sheet)}
+              height (assoc :defaultHeight height)))))))))
 
 (defn- dismiss-native-sheet!
   []
   (when-let [plugin mobile-util/native-bottom-sheet]
     (mobile-state/set-popup! nil)
+    (reset! *last-popup-data nil)
     (.dismiss plugin #js {})))
 
 (defn- handle-native-sheet-state!

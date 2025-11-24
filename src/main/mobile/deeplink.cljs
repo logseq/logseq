@@ -40,7 +40,7 @@
       (and (= hostname "mobile") (= pathname "/go/quick-add"))
       (editor-handler/show-quick-add)
       (and (= hostname "mobile")
-           (contains? #{"/go/left-sidebar" "/go/favorites"} pathname))
+           (contains? #{"/go/favorites"} pathname))
       (mobile-state/redirect-to-tab! "favorites")
       (= hostname "graph")
       (let [graph-name (some-> pathname

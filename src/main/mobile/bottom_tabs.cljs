@@ -5,8 +5,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.util :as util]
             [logseq.common.util :as common-util]
-            [mobile.state :as mobile-state]
-            [promesa.core :as p]))
+            [mobile.state :as mobile-state]))
 
 ;; Capacitor plugin instance:
 ;; Make sure the plugin is registered as `LiquidTabs` on the native side.
@@ -59,37 +58,39 @@
       ;; data is like { query: string }
      (f (.-query data)))))
 
-(defn configure
-  []
-  (p/do!
-   (configure-tabs
-    [{:id "home"       :title "Home"       :systemImage "house" :role "normal"}
-     {:id "favorites"  :title "Favorites"  :systemImage "star"  :role "normal"}
-     {:id "quick-add"  :title "Capture"    :systemImage "plus"  :role "normal"}
-     {:id "settings"   :title "Settings"   :systemImage "gear"  :role "normal"}])
-   (add-tab-selected-listener!
-    (fn [tab]
-      (reset! mobile-state/*search-input "")
-      (when-not (= tab "quick-add")
-        (mobile-state/set-tab! tab))
-      (case tab
-        "home"
-        (do
-          (route-handler/redirect-to-home!)
-          (util/scroll-to-top false))
-        "quick-add"
-        (editor-handler/show-quick-add)
+(defonce add-tab-listeners!
+  (do
+    (add-tab-selected-listener!
+     (fn [tab]
+       (reset! mobile-state/*search-input "")
+       (when-not (= tab "quick-add")
+         (mobile-state/set-tab! tab))
+       (case tab
+         "home"
+         (do
+           (route-handler/redirect-to-home!)
+           (util/scroll-to-top false))
+         "quick-add"
+         (editor-handler/show-quick-add)
                        ;; TODO: support longPress detection
                        ;; (if (= "longPress" interaction)
                        ;;   (state/pub-event! [:mobile/start-audio-record])
                        ;;   (editor-handler/show-quick-add))
-        nil)))
-   (add-search-listener!
-    (fn [q]
+         nil)))
+    (add-search-listener!
+     (fn [q]
       ;; wire up search handler
-      (js/console.log "Native search query" q)
-      (reset! mobile-state/*search-input q)
-      (reset! mobile-state/*search-last-input-at (common-util/time-ms))))))
+       (js/console.log "Native search query" q)
+       (reset! mobile-state/*search-input q)
+       (reset! mobile-state/*search-last-input-at (common-util/time-ms))))))
+
+(defn configure
+  []
+  (configure-tabs
+   [{:id "home"       :title "Home"       :systemImage "house" :role "normal"}
+    {:id "favorites"  :title "Favorites"  :systemImage "star"  :role "normal"}
+    {:id "quick-add"  :title "Capture"    :systemImage "plus"  :role "normal"}
+    {:id "settings"   :title "Settings"   :systemImage "gear"  :role "normal"}]))
 
 (defn hide!
   []
