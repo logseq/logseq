@@ -17,12 +17,16 @@ public class NativeTopBarPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     private func navigationController() -> UINavigationController? {
-        // AppViewController is embedded inside NativePageViewController, which
-        // lives in the root UINavigationController created in AppDelegate.
         if let nav = bridge?.viewController?.parent?.navigationController {
             return nav
         }
-        return bridge?.viewController?.navigationController
+        if let nav = bridge?.viewController?.navigationController {
+            return nav
+        }
+        if let appDelegate = UIApplication.shared.delegate as? AppDelegate {
+            return appDelegate.navController // or appDelegate.mainNavController
+        }
+        return nil
     }
 
     @objc func configure(_ call: CAPPluginCall) {
