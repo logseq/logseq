@@ -8,6 +8,7 @@
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.conn :as db-conn]
+            [frontend.flows :as flows]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
@@ -133,19 +134,29 @@
                       "title" (open-graph-switcher!)
                       "calendar" (open-journal-calendar!)
                       "settings-actions" (open-settings-actions!)
+                      "sync" (shui/popup-show! nil
+                                               (rtc-indicator/details)
+                                               {})
+
                       nil)))
     (reset! native-top-bar-listener? true)))
 
 (defn- configure-native-top-bar!
-  [{:keys [tab title route-name]}]
+  [repo {:keys [tab title route-name sync-color]}]
   (when (mobile-util/native-ios?)
     (let [hidden? (and (= tab "search")
                        (not= route-name :page))
+          rtc-indicator? (and repo
+                              (ldb/get-graph-rtc-uuid (db/get-db))
+                              (user-handler/logged-in?))
           base {:title title
                 :hidden (boolean hidden?)}
           right-buttons (cond
                           (= tab "home")
-                          [{:id "calendar" :systemIcon "calendar"}]
+                          (cond-> [{:id "calendar" :systemIcon "calendar"}]
+                            rtc-indicator?
+                            (conj {:id "sync" :systemIcon "circle.fill" :color sync-color
+                                   :size "small"}))
 
                           (= tab "settings")
                           [{:id "settings-actions" :systemIcon "ellipsis"}]
@@ -157,21 +168,19 @@
       (.configure mobile-util/native-top-bar
                   (clj->js header)))))
 
-(rum/defc rtc-indicator-btn
-  []
-  (let [repo (state/get-current-repo)]
-    [:div.flex.flex-row.items-center.gap-2
-     (when (and repo
-                (ldb/get-graph-rtc-uuid (db/get-db))
-                (user-handler/logged-in?))
-       (rtc-indicator/indicator))]))
-
 (rum/defc header-inner
   [current-repo tab route-match]
   (let [short-repo-name (if current-repo
                           (db-conn/get-short-repo-name current-repo)
                           "Select a Graph")
-        route-name (get-in route-match [:data :name])]
+        route-name (get-in route-match [:data :name])
+        detail-info (hooks/use-flow-state (m/watch rtc-indicator/*detail-info))
+        _ (hooks/use-flow-state flows/current-login-user-flow)
+        online? (hooks/use-flow-state flows/network-online-event-flow)
+        rtc-state (:rtc-state detail-info)
+        sync-color (if (and online? (= :open rtc-state))
+                     "green"
+                     "yellow")]
     (hooks/use-effect!
      (fn []
        (when (mobile-util/native-ios?)
@@ -187,11 +196,13 @@
                              :else
                              (string/capitalize tab))]
            (configure-native-top-bar!
+            current-repo
             {:tab tab
              :title title
              :hidden? (and (= tab "search")
                            (not= route-name :page))
-             :route-name route-name})))
+             :route-name route-name
+             :sync-color sync-color})))
        nil)
      [tab short-repo-name route-match])
 
