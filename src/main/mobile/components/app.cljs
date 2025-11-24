@@ -157,11 +157,10 @@
         show-action-bar? (state/sub :mobile/show-action-bar?)
         {:keys [open? content-fn opts]} (rum/react mobile-state/*popup-data)
         show-popup? (and open? content-fn)]
-    [:div.app-main.w-full.h-full
-     [:div.flex.flex-col.flex-1.w-full.h-full {:class (when show-popup? "hidden")}
-      (app current-repo {:login? login?})
-      (editor-toolbar/mobile-bar)
-      (when show-action-bar?
-        (selection-toolbar/action-bar))]
-     (when show-popup?
-       (popup/popup opts content-fn))]))
+    [:<>
+     (if show-popup?
+       (popup/popup opts content-fn)
+       (app current-repo {:login? login?}))
+     (editor-toolbar/mobile-bar)
+     (when show-action-bar?
+       (selection-toolbar/action-bar))]))
