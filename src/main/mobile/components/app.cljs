@@ -11,7 +11,6 @@
             [frontend.util :as util]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.hooks :as hooks]
-            [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.toaster.core :as shui-toaster]
             [logseq.shui.ui :as shui]
             [mobile.bottom-tabs :as bottom-tabs]
@@ -144,10 +143,8 @@
      (main-content tab)
      (ui-component/keep-keyboard-virtual-input)
      (ui-component/install-notifications)
-
      (shui-toaster/install-toaster)
-     (shui-dialog/install-modals)
-     (shui-popup/install-popups)]))
+     (shui-dialog/install-modals)]))
 
 (rum/defc main < rum/reactive
   []
