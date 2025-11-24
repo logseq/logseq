@@ -114,7 +114,7 @@ public class NativeBottomSheetPlugin: CAPPlugin, CAPBridgedPlugin {
 
                 // After a short delay, JS should have navigated away from the sheet route.
                 // Now we fade the webview in and remove snapshot/placeholder.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     webView.alpha = 1
                     // Remove the frozen background
                     self.clearSnapshot()
