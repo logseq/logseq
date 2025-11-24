@@ -138,7 +138,9 @@
          (bottom-tabs/configure))
        (when-let [element (util/app-scroll-container-node)]
          (common-handler/listen-to-scroll! element))) [])
-    [:div.mt-24.h-full
+    [:div.h-full {:class (if (contains? #{"search" "favorites"} tab)
+                           "mt-16"
+                           "mt-24")}
      (mobile-header/header tab)
      (main-content tab)
      (ui-component/keep-keyboard-virtual-input)
