@@ -477,7 +477,7 @@
          (pdf-highlights-list viewer))]]]))
 
 (rum/defc ^:large-vars/cleanup-todo pdf-toolbar
-  [^js viewer {:keys [on-external-window!]}]
+  [^js viewer {:keys [on-external-window! pdf-current]}]
   (let [[area-mode?, set-area-mode!] (use-atom *area-mode?)
         [outline-visible?, set-outline-visible!] (rum/use-state false)
         [finder-visible?, set-finder-visible!] (rum/use-state false)
@@ -490,6 +490,8 @@
         group-id          (.-$groupIdentity viewer)
         in-system-window? (.-$inSystemWindow viewer)
         doc               (pdf-windows/resolve-own-document viewer)
+        ;; asset block container for db mode
+        asset-block (:block pdf-current)
         dispatch-extra-state!
         (fn []
           (js/setTimeout
@@ -594,10 +596,11 @@
          (svg/search2 19)]
 
         ;; annotations
-        [:a.button
-         {:title    "Annotations page"
-          :on-click #(pdf-assets/goto-annotations-page! (:pdf/current @state/state))}
-         (svg/annotations 16)]
+        (when asset-block
+          [:a.button
+           {:title "Annotations page"
+            :on-click #(pdf-assets/goto-annotations-page! (:pdf/current @state/state))}
+           (svg/annotations 16)])
 
         ;; system window
         [:a.button

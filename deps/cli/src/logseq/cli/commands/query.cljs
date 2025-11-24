@@ -71,36 +71,37 @@
     (if (= 1 (count (first res))) (mapv first res) res)))
 
 (defn- local-query
-  [{{:keys [graph args graphs properties-readable title-query]} :opts}]
-  (let [graphs' (into [graph] graphs)]
-    (doseq [graph' graphs']
-      (if (fs/existsSync (cli-util/get-graph-path graph'))
-        (let [conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))
-              query* (when (string? (first args)) (common-util/safe-read-string {:log-error? false} (first args)))
-              results (cond
-                        ;; Run datalog query if detected
-                        (and (vector? query*) (= :find (first query*)))
-                        (local-datalog-query @conn query*)
-                        ;; Runs predefined title query. Predefined queries could better off in a separate command
-                        ;; since they could be more powerful and have different args than query command
-                        title-query
-                        (let [query '[:find (pull ?b [*])
-                                      :in $ % ?search-term
-                                      :where (block-content ?b ?search-term)]
-                              res (d/q query @conn (rules/extract-rules rules/db-query-dsl-rules)
-                                       (string/join " " args))]
-                          ;; Remove nesting for most queries which just have one :find binding
-                          (if (= 1 (count (first res))) (mapv first res) res))
-                        :else
-                        (local-entities-query @conn properties-readable args))]
-          (when (> (count graphs') 1)
-            (println "Results for graph" (pr-str graph')))
-          (pprint/pprint results))
-        (cli-util/error "Graph" (pr-str graph') "does not exist")))))
+  [{{:keys [args graphs properties-readable title-query]} :opts}]
+  (when-not graphs
+    (cli-util/error "Command missing required option 'graphs'"))
+  (doseq [graph graphs]
+    (if (fs/existsSync (cli-util/get-graph-path graph))
+      (let [conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))
+            _ (cli-util/ensure-db-graph-for-command @conn)
+            query* (when (string? (first args)) (common-util/safe-read-string {:log-error? false} (first args)))
+            results (cond
+                      ;; Run datalog query if detected
+                      (and (vector? query*) (= :find (first query*)))
+                      (local-datalog-query @conn query*)
+                      ;; Runs predefined title query. Predefined queries could better off in a separate command
+                      ;; since they could be more powerful and have different args than query command
+                      title-query
+                      (let [query '[:find (pull ?b [*])
+                                    :in $ % ?search-term
+                                    :where (block-content ?b ?search-term)]
+                            res (d/q query @conn (rules/extract-rules rules/db-query-dsl-rules)
+                                     (string/join " " args))]
+                        ;; Remove nesting for most queries which just have one :find binding
+                        (if (= 1 (count (first res))) (mapv first res) res))
+                      :else
+                      (local-entities-query @conn properties-readable args))]
+        (when (> (count graphs) 1)
+          (println "Results for graph" (pr-str graph)))
+        (pprint/pprint results))
+      (cli-util/error "Graph" (pr-str graph) "does not exist"))))
 
 (defn query
-  [{{:keys [graph args api-server-token]} :opts :as m}]
-  (if api-server-token
-    ;; graph can be query since it's not used for api-query
-    (api-query (or graph (first args)) api-server-token)
+  [{{:keys [args api-server-token] :as opts} :opts :as m}]
+  (if (cli-util/api-command? opts)
+    (api-query (first args) api-server-token)
     (local-query m)))

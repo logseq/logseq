@@ -1,4 +1,7 @@
 PODS:
+  - AparajitaCapacitorSecureStorage (7.1.6):
+    - Capacitor
+    - KeychainSwift (~> 21.0)
   - Capacitor (7.2.0):
     - CapacitorCordova
   - CapacitorActionSheet (7.0.1):
@@ -32,10 +35,12 @@ PODS:
     - Capacitor
   - JcesarmobileSslSkip (0.4.0):
     - Capacitor
+  - KeychainSwift (21.0.0)
   - SendIntent (7.0.0):
     - Capacitor
 
 DEPENDENCIES:
+  - "AparajitaCapacitorSecureStorage (from `../../node_modules/@aparajita/capacitor-secure-storage`)"
   - "Capacitor (from `../../node_modules/@capacitor/ios`)"
   - "CapacitorActionSheet (from `../../node_modules/@capacitor/action-sheet`)"
   - "CapacitorApp (from `../../node_modules/@capacitor/app`)"
@@ -55,7 +60,13 @@ DEPENDENCIES:
   - "JcesarmobileSslSkip (from `../../node_modules/@jcesarmobile/ssl-skip`)"
   - SendIntent (from `../../node_modules/send-intent`)
 
+SPEC REPOS:
+  trunk:
+    - KeychainSwift
+
 EXTERNAL SOURCES:
+  AparajitaCapacitorSecureStorage:
+    :path: "../../node_modules/@aparajita/capacitor-secure-storage"
   Capacitor:
     :path: "../../node_modules/@capacitor/ios"
   CapacitorActionSheet:
@@ -94,6 +105,7 @@ EXTERNAL SOURCES:
     :path: "../../node_modules/send-intent"
 
 SPEC CHECKSUMS:
+  AparajitaCapacitorSecureStorage: 502bff73187cf9d0164459458ccf47ec65d5895a
   Capacitor: 03bc7cbdde6a629a8b910a9d7d78c3cc7ed09ea7
   CapacitorActionSheet: 4213427449132ae4135674d93010cb011725647e
   CapacitorApp: febecbb9582cb353aed037e18ec765141f880fe9
@@ -111,8 +123,9 @@ SPEC CHECKSUMS:
   CapacitorStatusBar: 6e7af040d8fc4dd655999819625cae9c2d74c36f
   CapgoCapacitorNavigationBar: 067b1c1d1ede5ce96200a730ce7fd498e9641509
   JcesarmobileSslSkip: 5fa98636a64c36faa50f32ab4daf34e38f4d45b9
+  KeychainSwift: 4a71a45c802fd9e73906457c2dcbdbdc06c9419d
   SendIntent: 8a6f646a4489f788d253ffbd1082a98ea388d870
 
-PODFILE CHECKSUM: 00fbb7ba3788966b68cb8a5a6f2abc380d7b7b9a
+PODFILE CHECKSUM: bf3859ae3f2ef96dbee7c801e4be9d91c6e68077
 
 COCOAPODS: 1.16.2

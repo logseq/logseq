@@ -26,8 +26,10 @@
               verbose
               (pprint/pprint ent-errors)
               humanize
-              (pprint/pprint (map #(-> (dissoc % :errors-by-type)
-                                       (update :errors (fn [errs] (me/humanize {:errors errs}))))
+              (pprint/pprint (map #(update % :errors (fn [errs]
+                                                       (->> (me/humanize {:errors errs})
+                                                            vals
+                                                            (apply merge-with into))))
                                   ent-errors))
               :else
               (pprint/pprint (map :entity ent-errors))))

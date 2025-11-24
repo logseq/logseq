@@ -8,15 +8,15 @@
                :default ["mldoc" :refer [Mldoc]])
             #?(:org.babashka/nbb [logseq.common.log :as log]
                :default [lambdaisland.glogi :as log])
-            [goog.object :as gobj]
-            [cljs-bean.core :as bean]
-            [logseq.graph-parser.utf8 :as utf8]
-            [clojure.string :as string]
-            [logseq.common.util :as common-util]
-            [logseq.common.config :as common-config]
             #_:clj-kondo/ignore
+            [cljs-bean.core :as bean]
+            [clojure.string :as string]
+            [goog.object :as gobj]
+            [logseq.common.config :as common-config]
+            [logseq.common.util :as common-util]
+            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.schema.mldoc :as mldoc-schema]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.graph-parser.utf8 :as utf8]))
 
 (defonce parseJson (gobj/get Mldoc "parseJson"))
 (defonce parseInlineJson (gobj/get Mldoc "parseInlineJson"))
@@ -103,7 +103,7 @@
                       (common-util/safe-subs line level)
                       ;; Otherwise, trim these invalid spaces
                       (string/triml line)))
-               (if remove-first-line? lines r))
+                  (if remove-first-line? lines r))
         content (if remove-first-line? body (cons f body))]
     (string/join "\n" content)))
 
@@ -111,16 +111,16 @@
   [ast content]
   (let [content (utf8/encode content)]
     (map (fn [[block pos-meta]]
-          (if (and (vector? block)
-                   (= "Src" (first block)))
-            (let [{:keys [start_pos end_pos]} pos-meta
-                  content (utf8/substring content start_pos end_pos)
-                  spaces (re-find #"^[\t ]+" (first (string/split-lines content)))
-                  content (if spaces (remove-indentation-spaces content (count spaces) true)
-                              content)
-                  block ["Src" (assoc (second block) :full_content content)]]
-              [block pos-meta])
-            [block pos-meta])) ast)))
+           (if (and (vector? block)
+                    (= "Src" (first block)))
+             (let [{:keys [start_pos end_pos]} pos-meta
+                   content (utf8/substring content start_pos end_pos)
+                   spaces (re-find #"^[\t ]+" (first (string/split-lines content)))
+                   content (if spaces (remove-indentation-spaces content (count spaces) true)
+                               content)
+                   block ["Src" (assoc (second block) :full_content content)]]
+               [block pos-meta])
+             [block pos-meta])) ast)))
 
 (defn collect-page-properties
   [ast config]
@@ -196,7 +196,7 @@
                 (common-config/draw? ref-value)
 
                 ;; 3. local asset link
-                (boolean (common-config/local-asset? ref-value))))))))
+                (boolean (common-config/local-relative-asset? ref-value))))))))
 
 (defn link?
   [format link]

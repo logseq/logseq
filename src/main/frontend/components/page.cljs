@@ -698,7 +698,7 @@
                                                    :container-id (:container-id state)
                                                    :whiteboard? whiteboard?}))])])
 
-         (when (and (not preview?) (not show-tabs?))
+         (when-not preview?
            [:div.ml-1.flex.flex-col.gap-8
             (when today?
               (today-queries repo today? sidebar?))
