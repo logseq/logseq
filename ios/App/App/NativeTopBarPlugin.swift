@@ -12,6 +12,7 @@ public class NativeTopBarPlugin: CAPPlugin, CAPBridgedPlugin {
     private class NativeTopBarButton: UIButton {
         var buttonId: String = ""
         override var intrinsicContentSize: CGSize {
+            // Keep a consistent tap target; icon size is controlled via SF Symbol configuration
             CGSize(width: 36, height: 32)
         }
     }
@@ -24,7 +25,7 @@ public class NativeTopBarPlugin: CAPPlugin, CAPBridgedPlugin {
             return nav
         }
         if let appDelegate = UIApplication.shared.delegate as? AppDelegate {
-            return appDelegate.navController // or appDelegate.mainNavController
+            return appDelegate.navController
         }
         return nil
     }
@@ -70,11 +71,12 @@ public class NativeTopBarPlugin: CAPPlugin, CAPBridgedPlugin {
                     button.setTitle(title, for: .normal)
                     button.setTitleColor(nav.navigationBar.tintColor, for: .normal)
                     button.titleLabel?.font = UIFont.systemFont(ofSize: 17, weight: .semibold)
-                    button.addTarget(self, action: #selector(titleTapped(_:)), for: .touchUpInside)
+                    button.addTarget(self, action: #selector(self.titleTapped(_:)), for: .touchUpInside)
                     topVC.navigationItem.titleView = button
                 } else {
                     topVC.navigationItem.title = title
                 }
+
                 topVC.navigationItem.leftBarButtonItems = self.buildButtons(from: leftButtons)
                 topVC.navigationItem.rightBarButtonItems = self.buildButtons(from: rightButtons)
             }
@@ -83,6 +85,8 @@ public class NativeTopBarPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
+    // MARK: - Button building
+
     private func buildButtons(from array: [JSObject]) -> [UIBarButtonItem] {
         return array.compactMap { obj in
             guard let id = obj["id"] as? String else { return nil }
@@ -90,14 +94,19 @@ public class NativeTopBarPlugin: CAPPlugin, CAPBridgedPlugin {
 
             let button = NativeTopBarButton(type: .system)
             button.buttonId = id
-            if let image = UIImage(systemName: systemIconName) {
+
+            // Size: small / medium / large -> SF Symbol pointSize
+            let symbolConfig = symbolConfiguration(for: obj)
+            if let image = UIImage(systemName: systemIconName, withConfiguration: symbolConfig) {
                 button.setImage(image, for: .normal)
             }
+
+            // Per-button color: prefers "tintColor", then "color"
             button.tintColor = tintColor(for: obj)
             button.imageView?.contentMode = .scaleAspectFit
             button.addTarget(self, action: #selector(buttonTapped(_:)), for: .touchUpInside)
 
-            // Use a fixed-size container via frames to avoid Auto Layout conflicts with the bar wrapper.
+            // Fixed tap target; icon itself is sized by SF Symbol config
             let container = UIView(frame: CGRect(x: 0, y: 0, width: 36, height: 32))
             button.frame = container.bounds
             button.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -109,11 +118,29 @@ public class NativeTopBarPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     private func tintColor(for obj: JSObject) -> UIColor {
-        if let hex = obj["tintColor"] as? String {
+        if let hex = (obj["tintColor"] as? String) ?? (obj["color"] as? String) {
             return hex.toUIColor(defaultColor: .label)
         }
         return .label
     }
+
+    private func symbolConfiguration(for obj: JSObject) -> UIImage.SymbolConfiguration {
+        let sizeString = (obj["size"] as? String)?.lowercased()
+
+        let pointSize: CGFloat
+        switch sizeString {
+        case "small":
+            pointSize = 8
+        case "large":
+            pointSize = 19
+        default: // "medium" or nil
+            pointSize = 15
+        }
+
+        return UIImage.SymbolConfiguration(pointSize: pointSize, weight: .semibold)
+    }
+
+    // MARK: - Actions
 
     @objc private func buttonTapped(_ sender: NativeTopBarButton) {
         notifyListeners("buttonTapped", data: ["id": sender.buttonId])
