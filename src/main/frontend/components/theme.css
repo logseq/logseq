@@ -139,13 +139,27 @@ main.ls-fold-button-on-right {
 
   .ls-block {
     .block-control {
-      @apply absolute -right-3 pr-2 pt-1 top-0 z-[1]
-      opacity-50 active:opacity-100;
+      @apply absolute top-0 -right-1 z-[1];
+      opacity: 0.6;
       margin-top: 3px;
 
+      /* Increase touch hit area */
+      padding: 6px 8px;          /* bigger hit box */
+      border-radius: 6px;         /* helps touch ergonomics */
+      cursor: pointer;
+      transition: opacity 0.15s ease, transform 0.15s ease;
+
+      &:hover {
+          opacity: 1;
+      }
+
+      &:active {
+          opacity: 1;
+          transform: scale(0.92);   /* subtle tactile feedback */
+      }
+
       .rotating-arrow.collapsed svg {
-        margin-left: -2px;
-        transform: rotate(180deg);
+          transform: rotate(180deg);
       }
     }
 

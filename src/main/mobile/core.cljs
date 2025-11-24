@@ -36,6 +36,8 @@
     (rfe/start!
      router
      (fn [route]
+       (when (state/get-edit-block)
+         (state/clear-edit!))
        (let [route-name (get-in route [:data :name])
              path (-> js/location .-hash (string/replace-first #"^#" ""))
              pop? (= :pop @mobile-nav/navigation-source)
@@ -61,12 +63,9 @@
                (let [page-uuid (uuid id-str)
                      repo (state/get-current-repo)]
                  (when (and repo page-uuid)
-                   (p/let [entity (db-async/<get-block repo page-uuid
-                                                       {:children? false
-                                                        :skip-refresh? true})]
-                     (when entity
-                       (when (state/get-edit-block)
-                         (state/clear-edit!))))))))
+                   (db-async/<get-block repo page-uuid
+                                        {:children? false
+                                         :skip-refresh? true})))))
 
            :graphs
            (mobile-state/redirect-to-tab! "settings")
