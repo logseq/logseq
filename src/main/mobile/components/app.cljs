@@ -23,7 +23,6 @@
             [mobile.components.selection-toolbar :as selection-toolbar]
             [mobile.components.settings :as settings]
             [mobile.components.ui :as ui-component]
-            [mobile.components.ui-silk :as ui-silk]
             [mobile.state :as mobile-state]
             [rum.core :as rum]))
 
@@ -143,10 +142,6 @@
     [:div.mt-24.h-full
      (mobile-header/header tab)
      (main-content tab)
-     ;; bottom tabs
-     (when-not (mobile-util/native-ios?)
-       (ui-silk/app-silk-tabs))
-
      (ui-component/keep-keyboard-virtual-input)
      (ui-component/install-notifications)
 

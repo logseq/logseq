@@ -45,9 +45,6 @@
                            (shui-dialog/has-modal?)
                            (shui-dialog/close!)
 
-                           (not-empty @mobile-state/*popup-data)
-                           (mobile-state/set-popup! nil)
-
                            (not-empty (state/get-selection-blocks))
                            (editor-handler/clear-selection!)
 

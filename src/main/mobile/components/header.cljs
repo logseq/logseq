@@ -108,10 +108,7 @@
                      (shui/tabler-icon "bug" {:class "opacity-70" :size 22})
                      "Report bug"])
       (ui/menu-link {:on-click (fn []
-                                 (mobile-state/set-popup! nil)
-                                 (mobile-state/set-popup!
-                                  {:open? true
-                                   :content-fn (fn [] (log))}))}
+                                 (shui/popup-show! nil (fn [] (log)) {}))}
                     [:span.text-lg.flex.gap-2.items-center
                      "Check log"])])
    {:title "Actions"

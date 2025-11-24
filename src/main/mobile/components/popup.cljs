@@ -31,6 +31,7 @@
 (defn- dismiss-native-sheet!
   []
   (when-let [plugin mobile-util/native-bottom-sheet]
+    (mobile-state/set-popup! nil)
     (.dismiss plugin #js {})))
 
 (defn- handle-native-sheet-state!
@@ -117,6 +118,6 @@
                         [:span.text-lg.flex.items-center text]))]
                     (when-not (string? content-fn) content-fn)))]
     [:div {:class "flex flex-col items-center p-2 w-full h-full"}
-     [:div.app-silk-popup-content-inner.w-full.h-full
+     [:div.app-popup
       (when title [:h2.py-2.opacity-40 title])
       content]]))

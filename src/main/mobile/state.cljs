@@ -20,10 +20,6 @@
   (when data
     (state/pub-event! [:mobile/clear-edit])))
 
-(defn close-popup!
-  []
-  (set-popup! nil))
-
 (defn quick-add-open?
   []
   (= :ls-quick-add (get-in @*popup-data [:opts :id])))
