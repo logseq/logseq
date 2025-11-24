@@ -14,6 +14,11 @@ public class NativeBottomSheetPlugin: CAPPlugin, CAPBridgedPlugin {
     private weak var previousParent: UIViewController?
     private var sheetController: NativeBottomSheetViewController?
 
+    /// Single source of truth: when true, the bottom sheet owns the shared webview.
+    public static var isPresentingSheet: Bool = false
+
+    // MARK: - Public API
+
     @objc func present(_ call: CAPPluginCall) {
         guard #available(iOS 15.0, *) else {
             call.reject("Native sheet requires iOS 15 or newer")
@@ -21,6 +26,7 @@ public class NativeBottomSheetPlugin: CAPPlugin, CAPBridgedPlugin {
         }
 
         DispatchQueue.main.async {
+            // If a sheet is already visible, just resolve.
             if self.sheetController != nil {
                 call.resolve()
                 return
@@ -42,17 +48,27 @@ public class NativeBottomSheetPlugin: CAPPlugin, CAPBridgedPlugin {
             }
 
             self.previousParent = host
-            let hasSnapshot = self.showSnapshot(in: host)
+
+            // Optional: snapshot for a nice frozen background (does not affect ownership)
+            _ = self.showSnapshot(in: host)
+
+            // MARK: sheet takes ownership of the shared webview
+            NativeBottomSheetPlugin.isPresentingSheet = true
+
             SharedWebViewController.instance.attach(
                 to: controller,
-                leavePlaceholderInPreviousParent: !hasSnapshot
+                // IMPORTANT: do not leave a live webview behind the sheet
+                leavePlaceholderInPreviousParent: false
             )
+
+            self.notifyListeners("state", data: ["presenting": true])
 
             host.present(controller, animated: true) {
                 self.notifyListeners("state", data: ["presented": true])
+                call.resolve()
             }
+
             self.sheetController = controller
-            call.resolve()
         }
     }
 
@@ -63,18 +79,25 @@ public class NativeBottomSheetPlugin: CAPPlugin, CAPBridgedPlugin {
                 return
             }
             controller.dismiss(animated: true) {
+                // handleSheetDismissed will run via viewDidDisappear / delegate
                 call.resolve()
             }
         }
     }
 
+    // MARK: - Internal helpers
+
     private func handleSheetDismissed() {
         guard sheetController != nil else { return }
 
         DispatchQueue.main.async {
+            // MARK: sheet releases ownership
+            NativeBottomSheetPlugin.isPresentingSheet = false
+
             if let previous = self.previousParent {
                 SharedWebViewController.instance.attach(to: previous)
             }
+
             self.clearSnapshot()
             SharedWebViewController.instance.clearPlaceholder()
             self.sheetController = nil
@@ -85,12 +108,17 @@ public class NativeBottomSheetPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private func showSnapshot(in host: UIViewController) -> Bool {
         clearSnapshot()
+
+        // Make sure layout is up-to-date (important after tab switches)
+        host.view.layoutIfNeeded()
+
         guard let snapshot = SharedWebViewController.instance.makeSnapshotView() else {
             return false
         }
         snapshot.frame = host.view.bounds
         snapshot.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         host.view.addSubview(snapshot)
+        host.view.bringSubviewToFront(snapshot)
         backgroundSnapshotView = snapshot
         return true
     }

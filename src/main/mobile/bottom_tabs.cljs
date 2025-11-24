@@ -72,10 +72,10 @@
            (util/scroll-to-top false))
          "quick-add"
          (editor-handler/show-quick-add)
-                       ;; TODO: support longPress detection
-                       ;; (if (= "longPress" interaction)
-                       ;;   (state/pub-event! [:mobile/start-audio-record])
-                       ;;   (editor-handler/show-quick-add))
+         ;; TODO: support longPress detection
+         ;; (if (= "longPress" interaction)
+         ;;   (state/pub-event! [:mobile/start-audio-record])
+         ;;   (editor-handler/show-quick-add))
          nil)))
     (add-search-listener!
      (fn [q]

@@ -31,7 +31,6 @@
                  (state/clear-selection!)
                  state)
    :will-unmount (fn [state]
-                   (state/clear-edit!)
                    (state/clear-selection!)
                    state)
    :did-mount (fn [state]
