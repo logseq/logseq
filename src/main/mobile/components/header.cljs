@@ -9,6 +9,7 @@
             [frontend.db.async :as db-async]
             [frontend.db.conn :as db-conn]
             [frontend.flows :as flows]
+            [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
@@ -19,6 +20,7 @@
             [goog.date :as gdate]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
@@ -117,6 +119,41 @@
    {:title "Actions"
     :default-height false}))
 
+(defn open-page-settings
+  [block]
+  (shui/popup-show!
+   nil
+   (fn []
+     [:div.-mx-2
+      (ui/menu-link
+       {:on-click shui/popup-hide!}
+       [:span.text-lg.flex.gap-2.items-center
+        (shui/tabler-icon "copy" {:class "opacity-80" :size 22})
+        "Copy"])
+
+      (ui/menu-link
+       {:on-click #(-> (shui/dialog-confirm!
+                        (str "⚠️ Are you sure you want to delete this "
+                             (if (entity-util/page? block) "page" "block")
+                             "?"))
+                       (p/then
+                        (fn []
+                          (shui/popup-hide!)
+                          (some->
+                           (:block/uuid block)
+                           (page-handler/<delete!
+                            (fn []
+                              ;; FIXME: empty screen, wrong route state
+                              (mobile-state/redirect-to-tab! "home"))
+                            {:error-handler
+                             (fn [{:keys [msg]}]
+                               (notification/show! msg :warning))})))))}
+       [:span.text-lg.flex.gap-2.items-center.text-red-700
+        (shui/tabler-icon "trash" {:class "opacity-80" :size 22})
+        "Delete"])])
+   {:title "Actions"
+    :default-height false}))
+
 (defn- open-graph-switcher! []
   (ui-component/open-popup!
    (fn []
@@ -137,12 +174,23 @@
                       "sync" (shui/popup-show! nil
                                                (rtc-indicator/details)
                                                {})
+                      "favorite" (when-let [id (state/get-current-page)]
+                                   (when (common-util/uuid-string? id)
+                                     (when-let [block (db/entity [:block/uuid (uuid id)])]
+                                       (let [favorited? (page-handler/favorited? (str (:block/uuid block)))]
+                                         (if favorited?
+                                           (page-handler/<unfavorite-page! id)
+                                           (page-handler/<favorite-page! id))))))
+                      "page-setting" (when-let [id (state/get-current-page)]
+                                       (when (common-util/uuid-string? id)
+                                         (when-let [block (db/entity [:block/uuid (uuid id)])]
+                                           (open-page-settings block))))
 
                       nil)))
     (reset! native-top-bar-listener? true)))
 
 (defn- configure-native-top-bar!
-  [repo {:keys [tab title route-name sync-color]}]
+  [repo {:keys [tab title route-name route-view sync-color favorited?]}]
   (when (mobile-util/native-ios?)
     (let [hidden? (and (= tab "search")
                        (not= route-name :page))
@@ -151,12 +199,18 @@
                               (user-handler/logged-in?))
           base {:title title
                 :hidden (boolean hidden?)}
+          page? (= route-name :page)
           right-buttons (cond
                           (= tab "home")
-                          (cond-> [{:id "calendar" :systemIcon "calendar"}]
-                            rtc-indicator?
+                          (cond-> []
+                            (nil? route-view)
+                            (conj {:id "calendar" :systemIcon "calendar"})
+                            (and rtc-indicator? (not page?))
                             (conj {:id "sync" :systemIcon "circle.fill" :color sync-color
-                                   :size "small"}))
+                                   :size "small"})
+                            page?
+                            (into [{:id "page-setting" :systemIcon "ellipsis"}
+                                   {:id "favorite" :systemIcon (if favorited? "star.fill" "star")}]))
 
                           (= tab "settings")
                           [{:id "settings-actions" :systemIcon "ellipsis"}]
@@ -174,13 +228,21 @@
                           (db-conn/get-short-repo-name current-repo)
                           "Select a Graph")
         route-name (get-in route-match [:data :name])
+        route-view (get-in route-match [:data :view])
         detail-info (hooks/use-flow-state (m/watch rtc-indicator/*detail-info))
         _ (hooks/use-flow-state flows/current-login-user-flow)
         online? (hooks/use-flow-state flows/network-online-event-flow)
         rtc-state (:rtc-state detail-info)
-        sync-color (if (and online? (= :open rtc-state))
-                     "green"
-                     "yellow")]
+        unpushed-block-update-count (:pending-local-ops detail-info)
+        pending-asset-ops           (:pending-asset-ops detail-info)
+        sync-color (if (and online?
+                            (= :open rtc-state)
+                            (zero? unpushed-block-update-count)
+                            (zero? pending-asset-ops))
+                     ;; green
+                     "#16A34A"
+                     ;; yellow
+                     "#CA8A04")]
     (hooks/use-effect!
      (fn []
        (when (mobile-util/native-ios?)
@@ -189,6 +251,8 @@
                          (let [id (get-in route-match [:parameters :path :name])]
                            (when (common-util/uuid-string? id)
                              (db-async/<get-block current-repo (uuid id) {:children? false}))))
+                 favorited? (when block
+                              (page-handler/favorited? (str (:block/uuid block))))
                  title (cond block
                              (:block/title block)
                              (= tab "home")
@@ -202,9 +266,11 @@
              :hidden? (and (= tab "search")
                            (not= route-name :page))
              :route-name route-name
-             :sync-color sync-color})))
+             :route-view route-view
+             :sync-color sync-color
+             :favorited? favorited?})))
        nil)
-     [tab short-repo-name route-match])
+     [tab short-repo-name route-match sync-color])
 
     [:<>]))
 
