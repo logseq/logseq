@@ -152,17 +152,21 @@
 
      (shui-toaster/install-toaster)
      (shui-dialog/install-modals)
-     (shui-popup/install-popups)
-     (popup/popup)]))
+     (shui-popup/install-popups)]))
 
 (rum/defc main < rum/reactive
   []
   (let [current-repo (state/sub :git/current-repo)
         login? (and (state/sub :auth/id-token)
                     (user-handler/logged-in?))
-        show-action-bar? (state/sub :mobile/show-action-bar?)]
-    [:<>
-     (app current-repo {:login? login?})
-     (editor-toolbar/mobile-bar)
-     (when show-action-bar?
-       (selection-toolbar/action-bar))]))
+        show-action-bar? (state/sub :mobile/show-action-bar?)
+        {:keys [open? content-fn opts]} (rum/react mobile-state/*popup-data)
+        show-popup? (and open? content-fn)]
+    [:div.app-main.w-full.h-full
+     [:div.flex.flex-col.flex-1.w-full.h-full {:class (when show-popup? "hidden")}
+      (app current-repo {:login? login?})
+      (editor-toolbar/mobile-bar)
+      (when show-action-bar?
+        (selection-toolbar/action-bar))]
+     (when show-popup?
+       (popup/popup opts content-fn))]))
