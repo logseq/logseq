@@ -90,19 +90,42 @@ public class NativeBottomSheetPlugin: CAPPlugin, CAPBridgedPlugin {
     private func handleSheetDismissed() {
         guard sheetController != nil else { return }
 
+        // JS listens to this to start updating the background route
+        notifyListeners("state", data: ["dismissing": true])
+
+        let shared = SharedWebViewController.instance
+        let previous = self.previousParent
+
         DispatchQueue.main.async {
-            // MARK: sheet releases ownership
-            NativeBottomSheetPlugin.isPresentingSheet = false
+            guard let previous = previous else { return }
 
-            if let previous = self.previousParent {
-                SharedWebViewController.instance.attach(to: previous)
+            // We keep the snapshot/placeholder visible.
+            // Hide the real webview container so its sheet content never flashes.
+            if let webView = shared.bridgeController.bridge?.webView {
+                webView.alpha = 0
+
+                // Attach immediately so JS updates run in the correct context
+                shared.attach(to: previous)
+
+                // Sheet is logically gone now
+                NativeBottomSheetPlugin.isPresentingSheet = false
+                self.sheetController = nil
+                self.previousParent = nil
+
+                // After a short delay, JS should have navigated away from the sheet route.
+                // Now we fade the webview in and remove snapshot/placeholder.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    webView.alpha = 1
+                    // Remove the frozen background
+                    self.clearSnapshot()
+                    shared.clearPlaceholder()
+
+                    self.notifyListeners("state", data: [
+                                                    "presented": false,
+                                                    "dismissing": false
+                                                  ])
+                }
             }
-
-            self.clearSnapshot()
-            SharedWebViewController.instance.clearPlaceholder()
-            self.sheetController = nil
-            self.previousParent = nil
-            self.notifyListeners("state", data: ["presented": false])
         }
     }
 
