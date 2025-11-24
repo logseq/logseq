@@ -97,7 +97,7 @@
 (defn- open-settings-actions! []
   (ui-component/open-popup!
    (fn []
-     [:div.-mx-2
+     [:div
       (when (user-handler/logged-in?)
         (ui/menu-link {:on-click #(user-handler/logout)}
                       [:span.text-lg.flex.gap-2.items-center.text-red-700
@@ -115,8 +115,7 @@
                     [:span.text-lg.flex.gap-2.items-center
                      "Check log"])])
    {:title "Actions"
-    :default-height false
-    :type :action-sheet}))
+    :default-height false}))
 
 (defn- open-graph-switcher! []
   (ui-component/open-popup!
@@ -124,8 +123,7 @@
      [:div.px-1
       (repo/repos-dropdown-content {})])
    {:title "Select a Graph"
-    :default-height false
-    :type :action-sheet}))
+    :default-height false}))
 
 (defn- register-native-top-bar-events! []
   (when (and (mobile-util/native-ios?)
