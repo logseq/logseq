@@ -132,7 +132,7 @@
   [:map
    [:t :int]
    [:t-before :int]
-   [:t-query-end :int]
+   [:t-query-end {:optional true} :int] ;TODO: remove 'optional' later, be compatible with old-clients for now
    [:affected-blocks
     [:map-of :uuid
      [:multi {:dispatch :op :decode/string #(update % :op keyword)}
