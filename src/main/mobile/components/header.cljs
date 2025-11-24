@@ -165,7 +165,7 @@
 (defn- register-native-top-bar-events! []
   (when (and (mobile-util/native-ios?)
              (not @native-top-bar-listener?))
-    (.addListener mobile-util/native-top-bar "buttonTapped"
+    (.addListener ^js mobile-util/native-top-bar "buttonTapped"
                   (fn [^js e]
                     (case (.-id e)
                       "title" (open-graph-switcher!)
@@ -219,7 +219,7 @@
           header (cond-> base
                    right-buttons (assoc :rightButtons right-buttons)
                    (= tab "home") (assoc :titleClickable true))]
-      (.configure mobile-util/native-top-bar
+      (.configure ^js mobile-util/native-top-bar
                   (clj->js header)))))
 
 (rum/defc header-inner
