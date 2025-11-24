@@ -67,11 +67,30 @@
     (when-let [^js plugin mobile-util/native-bottom-sheet]
       (.addListener plugin "state" handle-native-sheet-state!))))
 
+(defn- wrap-calc-commands-popup-side
+  [pos opts]
+  (let [[side mh] (let [[_x y _ height] pos
+                        vh (.-clientHeight js/document.body)
+                        [th bh] [y (- vh (+ y height) 310)]]
+                    (case (if (> bh 280) "bottom"
+                              (if (> (- th bh) 100)
+                                "top" "bottom"))
+                      "top" ["top" th]
+                      ["bottom" bh]))]
+    (-> (assoc opts :auto-side? false)
+        (assoc :max-popup-height mh)
+        (assoc-in [:content-props :side] side))))
+
 (defn popup-show!
   [event content-fn {:keys [id] :as opts}]
   (cond
     (and (keyword? id) (= "editor.commands" (namespace id)))
-    (let [pid (shui-popup/show! event content-fn opts)]
+    (let [opts (wrap-calc-commands-popup-side event opts)
+          side (some-> opts :content-props :side)
+          max-h (some-> opts :max-popup-height (js/parseInt) (- 48))
+          _ (when max-h (js/document.documentElement.style.setProperty
+                         (str "--" side "-popup-content-max-height") (str max-h "px")))
+          pid (shui-popup/show! event content-fn opts)]
       (reset! *last-popup-modal? false) pid)
 
     :else
