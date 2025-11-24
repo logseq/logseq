@@ -154,9 +154,11 @@
         show-action-bar? (state/sub :mobile/show-action-bar?)
         {:keys [open? content-fn opts]} (rum/react mobile-state/*popup-data)
         show-popup? (and open? content-fn)]
-    [:<>
+    [:div.w-full.h-full
      (if show-popup?
-       (popup/popup opts content-fn)
+       [:div.h-full
+        (ui-component/keep-keyboard-virtual-input)
+        (popup/popup opts content-fn)]
        (app current-repo {:login? login?}))
      (editor-toolbar/mobile-bar)
      (when show-action-bar?
