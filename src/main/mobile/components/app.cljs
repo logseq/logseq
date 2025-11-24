@@ -155,8 +155,11 @@
                     (user-handler/logged-in?))
         show-action-bar? (state/sub :mobile/show-action-bar?)
         {:keys [open? content-fn opts]} (rum/react mobile-state/*popup-data)
-        show-popup? (and open? content-fn)]
-    [:div.w-full.h-full
+        show-popup? (and open? content-fn)
+        fold-button-on-right? (state/enable-fold-button-right?)]
+    [:main.w-full.h-full
+     {:class (util/classnames
+              [{:ls-fold-button-on-right fold-button-on-right?}])}
      [:<>
       [:div.w-full.h-full {:class (when show-popup? "hidden")}
        (app current-repo {:login? login?})]
