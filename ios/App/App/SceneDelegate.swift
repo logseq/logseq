@@ -13,9 +13,15 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
         guard let windowScene = scene as? UIWindowScene else { return }
 
-        // 1) Create your nav controller as before
+        // 1) Create your nav controller
         let nav = UINavigationController()
         nav.navigationBar.prefersLargeTitles = false
+
+        // Make nav bar fully transparent by default so it doesn't
+        // show a background over the Capacitor splash / web splash.
+        nav.navigationBar.isTranslucent = true
+        nav.navigationBar.setBackgroundImage(UIImage(), for: .default)
+        nav.navigationBar.shadowImage = UIImage()
 
         // hook the delegate on AppDelegate so all your existing
         // UINavigationControllerDelegate logic keeps working
@@ -26,19 +32,25 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
         if #available(iOS 15.0, *) {
             let appearance = UINavigationBarAppearance()
+            // Transparent: no blur, no background color
             appearance.configureWithTransparentBackground()
-            appearance.backgroundEffect = UIBlurEffect(style: .systemMaterial)
-            appearance.backgroundColor = UIColor.systemBackground.withAlphaComponent(0.6)
             appearance.shadowColor = .clear
+
             nav.navigationBar.standardAppearance = appearance
             nav.navigationBar.scrollEdgeAppearance = appearance
             nav.navigationBar.compactAppearance = appearance
         }
 
         let rootPath = "/"
-        let rootVC = NativePageViewController(path: rootPath,
-                                              push: true,
-                                              title: "Logseq")
+        // Start with NO title so "Logseq" isn't shown during splash.
+        let rootVC = NativePageViewController(
+            path: rootPath,
+            push: true,
+            title: nil // or "" – plugin will set real title later
+        )
+        // Just to be extra safe:
+        rootVC.navigationItem.title = ""
+
         nav.setViewControllers([rootVC], animated: false)
         self.navController = nav
 
@@ -100,9 +112,11 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
     private func forwardUserActivity(_ userActivity: NSUserActivity) {
         guard let appDelegate = UIApplication.shared.delegate as? AppDelegate else { return }
-        _ = appDelegate.application(UIApplication.shared,
-                                    continue: userActivity,
-                                    restorationHandler: { _ in })
+        _ = appDelegate.application(
+            UIApplication.shared,
+            continue: userActivity,
+            restorationHandler: { _ in }
+        )
     }
 
     private func forwardURLContexts(_ contexts: Set<UIOpenURLContext>) {
@@ -120,9 +134,11 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             if let eventAttribution = sceneOptions.eventAttribution {
                 appOptions[.eventAttribution] = eventAttribution
             }
-            _ = appDelegate.application(UIApplication.shared,
-                                        open: context.url,
-                                        options: appOptions)
+            _ = appDelegate.application(
+                UIApplication.shared,
+                open: context.url,
+                options: appOptions
+            )
         }
     }
 }
