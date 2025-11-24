@@ -15,6 +15,16 @@
     "@jridgewell/gen-mapping" "^0.3.5"
     "@jridgewell/trace-mapping" "^0.3.24"
 
+"@aparajita/capacitor-secure-storage@^7.1.6":
+  version "7.1.6"
+  resolved "https://registry.yarnpkg.com/@aparajita/capacitor-secure-storage/-/capacitor-secure-storage-7.1.6.tgz#43e669e33dc6d680797d32ac85d2d116cc2b7397"
+  integrity sha512-KIfLOm/oSciUiWsOMtMv2nzlnwW3LERid0DvZ3djt7UORBQvFqpvSefiLG5kkc8D34pGkb2ZqAz0ZprrI9LiTQ==
+  dependencies:
+    "@capacitor/android" "^7.4.4"
+    "@capacitor/app" "^7.1.0"
+    "@capacitor/core" "^7.4.4"
+    "@capacitor/ios" "^7.4.4"
+
 "@axe-core/playwright@=4.4.4":
   version "4.4.4"
   resolved "https://registry.yarnpkg.com/@axe-core/playwright/-/playwright-4.4.4.tgz#3786c5f6bba38d1991b608584b00ae2744544573"
@@ -182,10 +192,20 @@
   resolved "https://registry.yarnpkg.com/@capacitor/android/-/android-7.2.0.tgz#f30e313315ab92c500bd57d9f0c4716a46b42f40"
   integrity sha512-zdhEy3jZPG5Toe/pGzKtDgIiBGywjaoEuQWnGVjBYPlSAEUtAhpZ2At7V0SCb26yluAuzrAUV0Ue+LQeEtHwFQ==
 
+"@capacitor/android@^7.4.4":
+  version "7.4.4"
+  resolved "https://registry.yarnpkg.com/@capacitor/android/-/android-7.4.4.tgz#a14a1e844bd5079982427e247fdd17555b5fbedd"
+  integrity sha512-y8knfV1JXNrd6XZZLZireGT+EBCN0lvOo+HZ/s7L8LkrPBu4nY5UZn0Wxz4yOezItEII9rqYJSHsS5fMJG9gdw==
+
 "@capacitor/app@7.0.1":
   version "7.0.1"
   resolved "https://registry.yarnpkg.com/@capacitor/app/-/app-7.0.1.tgz#0d0709fb4dde5046c24853f2d6b77a7ea411f748"
   integrity sha512-ArlVZAAla4MwQoKh26x2AaTDOBh5Vhp1VhMKR3RwqZSsZnazKTFGNrPbr9Ez5r1knnEDfApyjwp1uZnXK1WTYQ==
+
+"@capacitor/app@^7.1.0":
+  version "7.1.0"
+  resolved "https://registry.yarnpkg.com/@capacitor/app/-/app-7.1.0.tgz#d275eebbb0fec6104b3f9c41f09f7598d7808b47"
+  integrity sha512-W7m09IWrUjZbo7AKeq+rc/KyucxrJekTBg0l4QCm/yDtCejE3hebxp/W2esU26KKCzMc7H3ClkUw32E9lZkwRA==
 
 "@capacitor/assets@^3.0.5":
   version "3.0.5"
@@ -291,6 +311,13 @@
   dependencies:
     tslib "^2.1.0"
 
+"@capacitor/core@^7.4.4":
+  version "7.4.4"
+  resolved "https://registry.yarnpkg.com/@capacitor/core/-/core-7.4.4.tgz#b752dd7a12141e40d1c8ce2e37a79571d9f83518"
+  integrity sha512-xzjxpr+d2zwTpCaN0k+C6wKSZzWFAb9OVEUtmO72ihjr/NEDoLvsGl4WLfjWPcCO2zOy0b2X52tfRWjECFUjtw==
+  dependencies:
+    tslib "^2.1.0"
+
 "@capacitor/device@^7.0.2":
   version "7.0.2"
   resolved "https://registry.yarnpkg.com/@capacitor/device/-/device-7.0.2.tgz#406bde129d3fcf55f0de0b691509535e2a00e315"
@@ -310,6 +337,11 @@
   version "7.2.0"
   resolved "https://registry.yarnpkg.com/@capacitor/ios/-/ios-7.2.0.tgz#c3d9435582e5267b57085229e5678d1d53b15b5a"
   integrity sha512-MQgRZcXZpbpjN83bjkGrzQd7s3XeHBZplmWf38/msF/siMGJKLrXNmNzmmPIWA5Xpi/aH6UoJFk1wXuU2U+zMg==
+
+"@capacitor/ios@^7.4.4":
+  version "7.4.4"
+  resolved "https://registry.yarnpkg.com/@capacitor/ios/-/ios-7.4.4.tgz#051c37df4ffa878bd757b3849ce61668ac174083"
+  integrity sha512-Xp3bGWlSQAwsZGngRMWTdoD2agdMV12Whnm+/xsYPxfQSj+Tksbr7r/8Mso7VWkpnTKO4iMlx762g3PjW+wi4w==
 
 "@capacitor/keyboard@7.0.1":
   version "7.0.1"

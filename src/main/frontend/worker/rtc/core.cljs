@@ -5,11 +5,11 @@
             [frontend.common.missionary :as c.m]
             [frontend.common.thread-api :refer [def-thread-api]]
             [frontend.worker-common.util :as worker-util]
-            [frontend.worker.device :as worker-device]
             [frontend.worker.rtc.asset :as r.asset]
             [frontend.worker.rtc.branch-graph :as r.branch-graph]
             [frontend.worker.rtc.client :as r.client]
             [frontend.worker.rtc.client-op :as client-op]
+            [frontend.worker.rtc.crypt :as rtc-crypt]
             [frontend.worker.rtc.db :as rtc-db]
             [frontend.worker.rtc.exception :as r.ex]
             [frontend.worker.rtc.full-upload-download-graph :as r.upload-download]
@@ -188,11 +188,22 @@
       (swap! *graph-uuid->*online-users assoc graph-uuid *online-users)
       *online-users)))
 
+(defn- task--update-*aes-key
+  [get-ws-create-task db user-uuid graph-uuid *aes-key]
+  (m/sp
+    (when (ldb/get-graph-rtc-e2ee? db)
+      (let [aes-key (m/? (rtc-crypt/task--get-aes-key get-ws-create-task user-uuid graph-uuid))]
+        (when (nil? aes-key)
+          (throw (ex-info "not found aes-key" {:type :rtc.exception/not-found-graph-aes-key
+                                               :graph-uuid graph-uuid
+                                               :user-uuid user-uuid})))
+        (reset! *aes-key aes-key)))))
+
 (declare new-task--inject-users-info)
 (defn- create-rtc-loop
   "Return a map with [:rtc-state-flow :rtc-loop-task :*rtc-auto-push? :onstarted-task]
   TODO: auto refresh token if needed"
-  [graph-uuid schema-version repo conn date-formatter token
+  [graph-uuid schema-version repo conn date-formatter token user-uuid
    & {:keys [auto-push? debug-ws-url] :or {auto-push? true}}]
   (let [major-schema-version       (db-schema/major-version schema-version)
         ws-url                     (or debug-ws-url (ws-util/get-ws-url token))
@@ -202,17 +213,19 @@
         *online-users              (get-or-create-*online-users graph-uuid)
         *assets-sync-loop-canceler (atom nil)
         *server-schema-version     (atom nil)
+        *aes-key                   (atom nil)
         started-dfv                (m/dfv)
         add-log-fn                 (fn [type message]
                                      (assert (map? message) message)
                                      (rtc-log-and-state/rtc-log type (assoc message :graph-uuid graph-uuid)))
-        {:keys [*current-ws get-ws-create-task]}
+        {:keys [*current-ws] get-ws-create-task0 :get-ws-create-task}
         (gen-get-ws-create-map--memoized ws-url)
         get-ws-create-task (r.client/ensure-register-graph-updates--memoized
-                            get-ws-create-task graph-uuid major-schema-version repo conn date-formatter
-                            *last-calibrate-t *online-users *server-schema-version add-log-fn)
+                            get-ws-create-task0 graph-uuid major-schema-version repo conn date-formatter
+                            *last-calibrate-t *online-users *server-schema-version *aes-key add-log-fn)
         {:keys [assets-sync-loop-task]}
-        (r.asset/create-assets-sync-loop repo get-ws-create-task graph-uuid major-schema-version conn *auto-push?)
+        (r.asset/create-assets-sync-loop
+         repo get-ws-create-task graph-uuid major-schema-version conn *auto-push? *aes-key)
         mixed-flow                 (create-mixed-flow repo get-ws-create-task *auto-push? *online-users)]
     (assert (some? *current-ws))
     {:rtc-state-flow       (create-rtc-state-flow (create-ws-state-flow *current-ws))
@@ -227,6 +240,7 @@
         (try
           (log/info :rtc :loop-starting)
           ;; init run to open a ws
+          (m/? (task--update-*aes-key get-ws-create-task0 @conn user-uuid graph-uuid *aes-key))
           (m/? get-ws-create-task)
           ;; NOTE: Set dfv after ws connection is established,
           ;; ensuring the ws connection is already up when the cloud-icon turns green.
@@ -234,29 +248,41 @@
           (update-remote-schema-version! conn @*server-schema-version)
           (reset! *assets-sync-loop-canceler
                   (c.m/run-task :assets-sync-loop-task
-                    assets-sync-loop-task))
+                    assets-sync-loop-task
+                    :fail #(log/info :assets-sync-loop-task-stopped %)))
           (->>
            (let [event (m/?> mixed-flow)]
              (case (:type event)
                (:remote-update :remote-asset-block-update)
-               (try (r.remote-update/apply-remote-update graph-uuid repo conn date-formatter event add-log-fn)
-                    (catch :default e
-                      (if (= ::r.remote-update/need-pull-remote-data (:type (ex-data e)))
-                        (m/? (r.client/new-task--pull-remote-data
-                              repo conn graph-uuid major-schema-version date-formatter get-ws-create-task add-log-fn))
-                        (throw (r.ex/e->ex-info e)))))
+               (try
+                 (m/? (r.remote-update/task--apply-remote-update
+                       graph-uuid repo conn date-formatter event @*aes-key add-log-fn))
+                 (catch :default e
+                   (if (= :rtc.exception/local-graph-too-old (:type (ex-data e)))
+                     (m/? (r.client/new-task--pull-remote-data
+                           repo conn graph-uuid major-schema-version date-formatter get-ws-create-task @*aes-key
+                           add-log-fn))
+                     (throw e))))
 
                :local-update-check
-               (m/? (r.client/new-task--push-local-ops
-                     repo conn graph-uuid major-schema-version date-formatter
-                     get-ws-create-task *remote-profile? add-log-fn))
+               (try
+                 (m/? (r.client/new-task--push-local-ops
+                       repo conn graph-uuid major-schema-version date-formatter
+                       get-ws-create-task *remote-profile? @*aes-key add-log-fn))
+                 (catch :default e
+                   (if (= :rtc.exception/local-graph-too-old (:type (ex-data e)))
+                     (m/? (r.client/new-task--pull-remote-data
+                           repo conn graph-uuid major-schema-version date-formatter get-ws-create-task @*aes-key
+                           add-log-fn))
+                     (throw e))))
 
                :online-users-updated
                (reset! *online-users (:online-users (:value event)))
 
                :pull-remote-updates
                (m/? (r.client/new-task--pull-remote-data
-                     repo conn graph-uuid major-schema-version date-formatter get-ws-create-task add-log-fn))
+                     repo conn graph-uuid major-schema-version date-formatter get-ws-create-task @*aes-key
+                     add-log-fn))
 
                :inject-users-info
                (m/? (new-task--inject-users-info token graph-uuid major-schema-version))))
@@ -335,20 +361,20 @@
 (defn- new-task--rtc-start*
   [repo token]
   (m/sp
-    ;; ensure device metadata existing first
-    (m/? (worker-device/new-task--ensure-device-metadata! token))
     (let [{:keys [conn user-uuid graph-uuid schema-version remote-schema-version date-formatter] :as r}
           (validate-rtc-start-conditions repo token)]
       (if (instance? ExceptionInfo r)
         r
         (let [{:keys [rtc-state-flow *rtc-auto-push? *rtc-remote-profile? rtc-loop-task *online-users onstarted-task]}
-              (create-rtc-loop graph-uuid schema-version repo conn date-formatter token)
+              (create-rtc-loop graph-uuid schema-version repo conn date-formatter token user-uuid)
               *last-stop-exception (atom nil)
               canceler (c.m/run-task :rtc-loop-task
                          rtc-loop-task
                          :fail (fn [e]
                                  (reset! *last-stop-exception e)
                                  (log/info :rtc-loop-task e)
+                                 (when-not (or (instance? Cancelled e) (= "missionary.Cancelled" (ex-message e)))
+                                   (println (.-stack e)))
                                  (when (= :rtc.exception/ws-timeout (some-> e ex-data :type))
                                    ;; if fail reason is websocket-timeout, try to restart rtc
                                    (worker-state/<invoke-main-thread :thread-api/rtc-start-request repo))))
@@ -460,13 +486,20 @@
                         :schema-version (str major-schema-version)})))
 
 (defn new-task--grant-access-to-others
-  [token graph-uuid & {:keys [target-user-uuids target-user-emails]}]
-  (let [{:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
-    (ws-util/send&recv get-ws-create-task
-                       (cond-> {:action "grant-access"
-                                :graph-uuid graph-uuid}
-                         target-user-uuids (assoc :target-user-uuids target-user-uuids)
-                         target-user-emails (assoc :target-user-emails target-user-emails)))))
+  [token graph-uuid user-uuid target-user-email]
+  (m/sp
+    (let [{:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))
+          encrypted-aes-key
+          (m/? (rtc-crypt/task--encrypt-graph-aes-key-by-other-user-public-key
+                get-ws-create-task graph-uuid user-uuid target-user-email))
+          resp (m/? (ws-util/send&recv get-ws-create-task
+                                       (cond-> {:action "grant-access"
+                                                :graph-uuid graph-uuid
+                                                :target-user-email+encrypted-aes-key-coll
+                                                [{:user/email target-user-email
+                                                  :encrypted-aes-key (ldb/write-transit-str encrypted-aes-key)}]})))]
+      (when (:ex-data resp)
+        (throw (ex-info (:ex-message resp) (:ex-data resp)))))))
 
 (defn new-task--get-block-content-versions
   "Return a task that return map [:ex-data :ex-message :versions]"
@@ -589,10 +622,8 @@
   (rtc-toggle-remote-profile))
 
 (def-thread-api :thread-api/rtc-grant-graph-access
-  [token graph-uuid target-user-uuids target-user-emails]
-  (new-task--grant-access-to-others token graph-uuid
-                                    :target-user-uuids target-user-uuids
-                                    :target-user-emails target-user-emails))
+  [token graph-uuid user-uuid target-user-email]
+  (new-task--grant-access-to-others token graph-uuid user-uuid target-user-email))
 
 (def-thread-api :thread-api/rtc-get-graphs
   [token]

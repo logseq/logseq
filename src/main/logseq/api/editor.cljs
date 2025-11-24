@@ -491,8 +491,7 @@
                    db-based? (config/db-based-graph?)
                    key-ns? (namespace (keyword key))
                    key (if (and db-based? (not key-ns?))
-                         (api-block/get-db-ident-from-property-name
-                          key (api-block/resolve-property-prefix-for-db this))
+                         (api-block/get-db-ident-from-property-name key this)
                          key)]
              (property-handler/remove-block-property!
               (state/get-current-repo)
@@ -506,8 +505,7 @@
              (when-let [properties (some-> block-uuid (db-model/get-block-by-uuid) (:block/properties))]
                (when (seq properties)
                  (let [property-name (api-block/sanitize-user-property-name key)
-                       ident (api-block/get-db-ident-from-property-name
-                              property-name (api-block/resolve-property-prefix-for-db this))
+                       ident (api-block/get-db-ident-from-property-name property-name this)
                        property-value (or (get properties property-name)
                                           (get properties (keyword property-name))
                                           (get properties ident))

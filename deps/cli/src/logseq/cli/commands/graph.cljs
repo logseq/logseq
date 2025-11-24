@@ -22,6 +22,7 @@
     (let [graph-dir (cli-util/get-graph-path graph)]
       (if (fs/existsSync graph-dir)
         (let [conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))
+              _ (cli-util/ensure-db-graph-for-command @conn)
               kv-value #(:kv/value (d/entity @conn %))]
           (pprint/print-table
            (map #(array-map "Name" (first %) "Value" (second %))

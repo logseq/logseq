@@ -159,7 +159,9 @@
                       (remove-temp-block-data)
                       (remove (fn [m] (and (map? m) (= (:db/ident m) :block/path-refs))))
                       (common-util/fast-remove-nils)
-                      (remove empty?))
+                      (remove (fn [m] (or ;; db/id
+                                       (integer? m)
+                                       (empty? m)))))
          delete-blocks-tx (when-not (string? repo-or-conn)
                             (delete-blocks/update-refs-history-and-macros @repo-or-conn tx-data tx-meta))
          tx-data (distinct (concat tx-data delete-blocks-tx))]
@@ -552,6 +554,7 @@
 
 (defn get-key-value
   [db key-ident]
+  (assert (= "logseq.kv" (namespace key-ident)) key-ident)
   (:kv/value (d/entity db key-ident)))
 
 (def kv sqlite-util/kv)
@@ -569,6 +572,10 @@
 (defn get-graph-remote-schema-version
   [db]
   (when db (get-key-value db :logseq.kv/remote-schema-version)))
+
+(defn get-graph-rtc-e2ee?
+  [db]
+  (when db (get-key-value db :logseq.kv/graph-rtc-e2ee?)))
 
 (def get-all-properties db-db/get-all-properties)
 (def get-class-extends db-class/get-class-extends)

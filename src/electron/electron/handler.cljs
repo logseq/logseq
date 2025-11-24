@@ -22,6 +22,7 @@
             [electron.fs-watcher :as watcher]
             [electron.git :as git]
             [electron.handler-interface :refer [handle]]
+            [electron.keychain :as keychain]
             [electron.logger :as logger]
             [electron.plugin :as plugin]
             [electron.server :as server]
@@ -97,6 +98,9 @@
 
 (defmethod handle :readFile [_window [_ path]]
   (utils/read-file path))
+
+(defmethod handle :readFileRaw [_window [_ path]]
+  (utils/read-file-raw path))
 
 (defn writable?
   [path]
@@ -613,6 +617,15 @@
 
 (defmethod handle :cancel-all-requests [_ args]
   (apply rsapi/cancel-all-requests (rest args)))
+
+(defmethod handle :keychain/save-e2ee-password [_window [_ key encrypted-text]]
+  (keychain/<set-password! key encrypted-text))
+
+(defmethod handle :keychain/get-e2ee-password [_window [_ key]]
+  (keychain/<get-password key))
+
+(defmethod handle :keychain/delete-e2ee-password [_window [_ key]]
+  (keychain/<delete-password! key))
 
 (defmethod handle :default [args]
   (logger/error "Error: no ipc handler for:" args))

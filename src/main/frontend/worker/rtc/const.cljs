@@ -45,3 +45,7 @@
   (into #{}
         (keep (fn [[kw config]] (when (get-in config [:rtc :rtc/ignore-entity-when-init-download]) kw)))
         kv-entity/kv-entities))
+
+(def encrypt-attr-set
+  "block attributes that need to be encrypted"
+  #{:block/title :block/name})

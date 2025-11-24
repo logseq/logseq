@@ -9,8 +9,8 @@
             [frontend.util :as util]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]
-            [logseq.common.path :as path]))
+            [logseq.common.path :as path]
+            [promesa.core :as p]))
 
 (defn- <contents-matched?
   [disk-content db-content]
@@ -94,6 +94,12 @@
                  path
                  (path/path-join dir path))]
       (ipc/ipc "readFile" path)))
+
+  (read-file-raw [_this dir path _options]
+    (let [path (if (nil? dir)
+                 path
+                 (path/path-join dir path))]
+      (ipc/ipc "readFileRaw" path)))
 
   (write-file! [this repo dir path content opts]
     (p/let [fpath (path/path-join dir path)

@@ -9,6 +9,7 @@ android {
 
 apply from: "../capacitor-cordova-android-plugins/cordova.variables.gradle"
 dependencies {
+    implementation project(':aparajita-capacitor-secure-storage')
     implementation project(':capacitor-community-safe-area')
     implementation project(':capacitor-action-sheet')
     implementation project(':capacitor-app')

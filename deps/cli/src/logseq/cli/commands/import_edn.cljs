@@ -12,7 +12,7 @@
 (defn- print-success [import-map]
   (println (str "Imported " (cli-util/summarize-build-edn import-map) "!")))
 
-(defn- api-import [api-server-token import-map]
+(defn- api-import [{:keys [api-server-token]} import-map]
   (-> (p/let [resp (cli-util/api-fetch api-server-token "logseq.cli.import_edn" [(sqlite-util/transit-write import-map)])]
         (if (= 200 (.-status resp))
           (print-success import-map)
@@ -20,8 +20,11 @@
       (p/catch cli-util/command-catch-handler)))
 
 (defn- local-import [{:keys [graph]} import-map]
-  (if (and graph (fs/existsSync (cli-util/get-graph-path graph)))
+  (when-not graph
+    (cli-util/error "Command missing required option 'graph'"))
+  (if (fs/existsSync (cli-util/get-graph-path graph))
     (let [conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))
+          _ (cli-util/ensure-db-graph-for-command @conn)
           {:keys [init-tx block-props-tx misc-tx]}
           (sqlite-export/build-import import-map @conn {})
           txs (vec (concat init-tx block-props-tx misc-tx))]
@@ -29,8 +32,8 @@
       (print-success import-map))
     (cli-util/error "Graph" (pr-str graph) "does not exist")))
 
-(defn import-edn [{{:keys [api-server-token file] :as opts} :opts}]
+(defn import-edn [{{:keys [file] :as opts} :opts}]
   (let [edn (edn/read-string (str (fs/readFileSync file)))]
-    (if api-server-token
-      (api-import api-server-token edn)
+    (if (cli-util/api-command? opts)
+      (api-import opts edn)
       (local-import opts edn))))
