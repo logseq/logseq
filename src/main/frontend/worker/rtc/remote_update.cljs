@@ -628,6 +628,7 @@
     (let [{remote-latest-t :t
            remote-t-before :t-before
            remote-t :t-query-end} remote-update-data
+          remote-t (or remote-t remote-latest-t) ;TODO: remove this, be compatible with old-clients for now
           local-tx (client-op/get-local-tx repo)]
       (cond
         (not (and (pos? remote-t)
@@ -670,7 +671,8 @@
                                        aes-key rtc-const/encrypt-attr-set
                                        remote-update-data))
                                  remote-update-data)
-            remote-t (:t-query-end remote-update-data)
+            ;; TODO: remove this 'or', be compatible with old-clients for now
+            remote-t (or (:t-query-end remote-update-data) (:t remote-update-data))
             {affected-blocks-map :affected-blocks refed-blocks :refed-blocks} remote-update-data
             {:keys [remove-ops-map move-ops-map update-ops-map update-page-ops-map remove-page-ops-map]}
             (affected-blocks->diff-type-ops repo affected-blocks-map)
