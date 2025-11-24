@@ -4079,8 +4079,6 @@
 (defn quick-add-open-last-block!
   []
   (when-let [add-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)]
-    (prn :debug :add-page add-page
-         :children (:block/_parent add-page))
     (when (:block/_parent add-page)
       (let [block (last (ldb/sort-by-order (:block/_parent add-page)))]
         (edit-block! block :max {:container-id :unknown-container})))))
