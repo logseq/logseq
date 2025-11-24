@@ -141,7 +141,7 @@
     [:div.h-full {:class (if (contains? #{"search" "favorites"} tab)
                            "mt-16"
                            "mt-24")}
-     (mobile-header/header tab)
+     (mobile-header/header current-repo tab)
      (main-content tab)
      (ui-component/keep-keyboard-virtual-input)
      (ui-component/install-notifications)
