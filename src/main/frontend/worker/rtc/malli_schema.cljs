@@ -132,6 +132,7 @@
   [:map
    [:t :int]
    [:t-before :int]
+   [:t-query-end :int]
    [:affected-blocks
     [:map-of :uuid
      [:multi {:dispatch :op :decode/string #(update % :op keyword)}
@@ -282,6 +283,7 @@
       ["init-request"
        [:map
         [:graph-uuid :uuid]
+        [:api-version :string]
         [:schema-version db-schema/major-schema-version-string-schema]
         [:t-before :int]
         [:get-graph-skeleton :boolean]]]
@@ -294,6 +296,7 @@
         [:map
          [:req-id :string]
          [:action :string]
+         [:api-version :string]
          [:profile {:optional true} :boolean]
          [:graph-uuid :uuid]
          [:schema-version db-schema/major-schema-version-string-schema]
