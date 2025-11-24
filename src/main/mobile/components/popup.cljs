@@ -7,7 +7,6 @@
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.ui :as shui]
             [mobile.state :as mobile-state]
-            [promesa.core :as p]
             [rum.core :as rum]))
 
 (defonce *last-popup-modal? (atom nil))
@@ -45,7 +44,8 @@
 (defn- handle-native-sheet-state!
   [^js data]
   (let [presented? (.-presented data)
-        presenting? (.-presenting data)]
+        presenting? (.-presenting data)
+        dismissing? (.-dismissing data)]
     (cond
       presenting?
       nil
@@ -54,10 +54,13 @@
       (when (mobile-state/quick-add-open?)
         (editor-handler/quick-add-open-last-block!))
 
-      :else
+      dismissing?
       (when (some? @mobile-state/*popup-data)
         (state/pub-event! [:mobile/clear-edit])
-        (mobile-state/set-popup! nil)))))
+        (mobile-state/set-popup! nil))
+
+      :else
+      nil)))
 
 (defonce native-sheet-listener
   (when (mobile-util/native-ios?)
