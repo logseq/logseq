@@ -58,6 +58,28 @@ import Capacitor
         placeholderView = nil
     }
 
+    func makeSnapshotView() -> UIView? {
+        let vc = bridgeController
+        let bounds = vc.view.bounds
+        guard bounds.width > 0, bounds.height > 0 else { return nil }
+
+        if let snapshotView = vc.view.snapshotView(afterScreenUpdates: true) {
+            snapshotView.frame = bounds
+            snapshotView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            return snapshotView
+        }
+
+        let renderer = UIGraphicsImageRenderer(bounds: bounds)
+        let image = renderer.image { _ in
+            vc.view.drawHierarchy(in: bounds, afterScreenUpdates: true)
+        }
+        let imageView = UIImageView(image: image)
+        imageView.frame = bounds
+        imageView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        imageView.contentMode = .scaleToFill
+        return imageView
+    }
+
     func storeSnapshot(for parent: UIViewController) {
         let vc = bridgeController
         guard currentParent === parent else { return }

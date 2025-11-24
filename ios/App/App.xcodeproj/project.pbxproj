@@ -21,6 +21,7 @@
                 5FFF7D7427E343FA00B00DA8 /* ShareViewController.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 5FFF7D6A27E343FA00B00DA8 /* ShareViewController.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
                 7435D10C2704659F00AB88E0 /* FolderPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7435D10B2704659F00AB88E0 /* FolderPicker.swift */; };
                 7435D10F2704660B00AB88E0 /* FolderPicker.m in Sources */ = {isa = PBXBuildFile; fileRef = 7435D10E2704660B00AB88E0 /* FolderPicker.m */; };
+                D3F4A5B62F1234567890ABCE /* NativeBottomSheetPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3F4A5B62F1234567890ABCD /* NativeBottomSheetPlugin.swift */; };
                 A1B2C3D41E2F3A4B5C6D7E90 /* NativePageViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D41E2F3A4B5C6D7E8F /* NativePageViewController.swift */; };
                 A1B2C3D41E2F3A4B5C6D7E92 /* SharedWebViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D41E2F3A4B5C6D7E91 /* SharedWebViewController.swift */; };
                 ABCDEF0123456789000000AB /* NativeTopBarPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCDEF0123456789000000AA /* NativeTopBarPlugin.swift */; };
@@ -98,6 +99,7 @@
                 7435D10D2704660A00AB88E0 /* App-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "App-Bridging-Header.h"; sourceTree = "<group>"; };
                 7435D10E2704660B00AB88E0 /* FolderPicker.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FolderPicker.m; sourceTree = "<group>"; };
                 8A489CEC51E94726DDD58810 /* Pods-Logseq.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Logseq.release.xcconfig"; path = "Target Support Files/Pods-Logseq/Pods-Logseq.release.xcconfig"; sourceTree = "<group>"; };
+                D3F4A5B62F1234567890ABCD /* NativeBottomSheetPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeBottomSheetPlugin.swift; sourceTree = "<group>"; };
                 A1B2C3D41E2F3A4B5C6D7E8F /* NativePageViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativePageViewController.swift; sourceTree = "<group>"; };
                 A1B2C3D41E2F3A4B5C6D7E91 /* SharedWebViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedWebViewController.swift; sourceTree = "<group>"; };
                 ABCDEF0123456789000000AA /* NativeTopBarPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeTopBarPlugin.swift; sourceTree = "<group>"; };
@@ -205,6 +207,7 @@
                                 CBF2D2E12DE95970006338BE /* AppViewController.swift */,
                                 CBF2D2D92DE83CB0006338BE /* UILocalPlugin.swift */,
                                 ABCDEF0123456789000000AA /* NativeTopBarPlugin.swift */,
+                                D3F4A5B62F1234567890ABCD /* NativeBottomSheetPlugin.swift */,
                                 5FF86329283B5ADB0047731B /* Utils.swift */,
                                 5FF8632B283B5BFD0047731B /* Utils.m */,
                                 D32752BF2754C5AB0039291C /* AppDebug.entitlements */,
@@ -456,6 +459,7 @@
                                 D3D62A0A275C92880003FBDC /* FileContainer.swift in Sources */,
                                 CBF2D2DA2DE83CB8006338BE /* UILocalPlugin.swift in Sources */,
                                 ABCDEF0123456789000000AB /* NativeTopBarPlugin.swift in Sources */,
+                                D3F4A5B62F1234567890ABCE /* NativeBottomSheetPlugin.swift in Sources */,
                                 A1B2C3D41E2F3A4B5C6D7E90 /* NativePageViewController.swift in Sources */,
                                 A1B2C3D41E2F3A4B5C6D7E92 /* SharedWebViewController.swift in Sources */,
                                 D3D62A0C275C928F0003FBDC /* FileContainer.m in Sources */,

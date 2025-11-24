@@ -564,3 +564,11 @@ body, #root {
     -webkit-overflow-scrolling: touch;
     padding-bottom: 48px;
 }
+
+.cp__select-main {
+    width: 100%;
+}
+
+.cp__select {
+    --palettle-container-height: 100%;
+}

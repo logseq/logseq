@@ -13,5 +13,6 @@ import Capacitor
     bridge?.registerPluginInstance(UILocalPlugin())
     bridge?.registerPluginInstance(NativeTopBarPlugin())
     bridge?.registerPluginInstance(LiquidTabsPlugin())
+    bridge?.registerPluginInstance(NativeBottomSheetPlugin())
   }
 }
