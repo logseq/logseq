@@ -2,7 +2,6 @@
   "Mobile search"
   (:require [clojure.string :as string]
             [frontend.components.cmdk.core :as cmdk]
-            [frontend.db.async :as db-async]
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
             [frontend.search :as search]
@@ -58,8 +57,8 @@
 
     [:div.app-search
      (when (and (string/blank? input) (seq recents))
-       [:div.mb-4
-        [:div.px-4.text-sm.font-medium.text-muted-foreground
+       [:div
+        [:div.px-2.font-medium.text-muted-foreground
          [:div.flex.flex-item.items-center.justify-between.mt-2
           "Recent"
           (shui/button
@@ -72,12 +71,12 @@
            "Clear")]]
 
         (for [item recents]
-          [:div.px-2
+          [:div
            (ui/menu-link
             {:on-click #(set-input! item)}
             item)])])
      (if (seq result)
-       [:ul.px-3
+       [:ul
         {:class (when (and (not (string/blank? input))
                            (seq search-result))
                   "as-results")}
@@ -89,12 +88,12 @@
                             (route-handler/redirect-to-page! (str id))))}
              [:div.flex.flex-col.gap-1.py-1
               (when header
-                [:div.opacity-60.text-sm
+                [:div.opacity-60
                  header])
               [:div.flex.flex-row.items-start.gap-1
                (when (and page? icon) (ui/icon icon {:size 15
                                                      :class "text-muted-foreground mt-1"}))
                [:div text]]]]))]
        (when-not (string/blank? input)
-         [:div.px-4.text-muted-foreground
+         [:div.font-medium.text-muted-foreground
           "No results"]))]))

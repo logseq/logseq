@@ -23,8 +23,8 @@ html.has-mobile-keyboard {
     @apply opacity-100;
   }
 
-  .app-popup {
-    padding-bottom: calc(var(--ls-native-kb-height, 0px) + 24px);
+  .app-popup, #main-content-container {
+    padding-bottom: calc(var(--ls-native-kb-height, 0px) + 160px);
   }
 }
 
@@ -299,7 +299,7 @@ body, #root {
     height: 100%;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    padding-bottom: 48px;
+    padding-bottom: 160px;
 }
 
 .cp__select-main, .cp__emoji-icon-picker, .ls-property-key {
