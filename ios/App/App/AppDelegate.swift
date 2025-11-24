@@ -257,8 +257,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
     ) {
         guard let current = viewController as? NativePageViewController else { return }
 
-        SharedWebViewController.instance.clearPlaceholder()
-        SharedWebViewController.instance.attach(to: current)
+        if !NativeBottomSheetPlugin.isPresentingSheet {
+            SharedWebViewController.instance.clearPlaceholder()
+            SharedWebViewController.instance.attach(to: current)
+        }
 
         attachNavigationSwipeGesture()
     }

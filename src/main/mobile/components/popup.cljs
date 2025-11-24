@@ -7,6 +7,7 @@
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.ui :as shui]
             [mobile.state :as mobile-state]
+            [promesa.core :as p]
             [rum.core :as rum]))
 
 (defonce *last-popup-modal? (atom nil))
@@ -20,18 +21,19 @@
     :else 400))
 
 (defn- present-native-sheet!
-  [opts]
+  [data]
   (when-let [plugin mobile-util/native-bottom-sheet]
-    (let [id (:id opts)
-          popup-exists? (and id (= id (:id @*last-popup-data)))]
+    (let [{:keys [opts]} data
+          id (:id opts)
+          popup-exists? (and id (= id (get-in @*last-popup-data [:opts :id])))]
       (when-not popup-exists?
-        (reset! *last-popup-data opts)
+        (reset! *last-popup-data data)
         (.present
          plugin
          (clj->js
           (let [height (popup-min-height (:default-height opts))]
             (cond-> {:allowFullHeight (not= (:type opts) :action-sheet)}
-              height (assoc :defaultHeight height)))))))))
+              (int? height) (assoc :defaultHeight height)))))))))
 
 (defn- dismiss-native-sheet!
   []
@@ -42,10 +44,20 @@
 
 (defn- handle-native-sheet-state!
   [^js data]
-  (let [presented? (.-presented data)]
-    (if presented?
-      (when (mobile-state/quick-add-open?)
-        (editor-handler/quick-add-open-last-block!))
+  (let [presented? (.-presented data)
+        presenting? (.-presenting data)]
+    (cond
+      presenting?
+      (p/do!
+       (when (mobile-state/quick-add-open?)
+         (editor-handler/quick-add-open-last-block!))
+       (when-let [data @*last-popup-data]
+         (mobile-state/set-popup! data)))
+
+      presented?
+      nil
+
+      :else
       (when (some? @mobile-state/*popup-data)
         (state/pub-event! [:mobile/clear-edit])
         (mobile-state/set-popup! nil)))))
@@ -64,12 +76,12 @@
 
     :else
     (when content-fn
-      (mobile-state/set-popup! {:open? true
-                                :content-fn content-fn
-                                :opts opts})
       (reset! *last-popup-modal? true)
       (when (mobile-util/native-ios?)
-        (present-native-sheet! opts)))))
+        (let [data {:open? true
+                    :content-fn content-fn
+                    :opts opts}]
+          (present-native-sheet! data))))))
 
 (defn popup-hide!
   [& args]
