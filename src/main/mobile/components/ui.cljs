@@ -4,6 +4,7 @@
             [frontend.rum :as r]
             [frontend.state :as state]
             [logseq.shui.ui :as shui]
+            [mobile.components.popup :as popup]
             [mobile.state :as mobile-state]
             [react-transition-group :refer [CSSTransition TransitionGroup]]
             [rum.core :as rum]))
@@ -111,7 +112,4 @@
 
 (defn open-popup!
   [content-fn opts]
-  (mobile-state/set-popup!
-   {:open? true
-    :content-fn content-fn
-    :opts opts}))
+  (popup/popup-show! nil content-fn opts))

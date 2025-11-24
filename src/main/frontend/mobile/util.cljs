@@ -24,9 +24,11 @@
 (defonce folder-picker (registerPlugin "FolderPicker"))
 (defonce ui-local (registerPlugin "UILocal"))
 (defonce native-top-bar nil)
+(defonce native-bottom-sheet nil)
 (defonce ios-utils nil)
 (when (native-ios?)
   (set! native-top-bar (registerPlugin "NativeTopBarPlugin"))
+  (set! native-bottom-sheet (registerPlugin "NativeBottomSheetPlugin"))
   (set! ios-utils (registerPlugin "Utils")))
 
 (defn hide-splash []
