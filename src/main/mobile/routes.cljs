@@ -7,7 +7,8 @@
    ["/page/:name"
     {:name :page
      :view (fn [route-match]
-             (page/page-cp route-match))}]
+             [:div.mt-6
+              (page/page-cp (assoc route-match :mobile-page? true))])}]
    ["/graphs"
     {:name :graphs}]
    ["/import"
