@@ -5,7 +5,7 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]))
 
-(defonce ^:private navigation-source (atom nil))
+(defonce navigation-source (atom nil))
 (defonce ^:private initialised? (atom false))
 
 ;; Track whether the latest change came from a native back gesture / popstate.
