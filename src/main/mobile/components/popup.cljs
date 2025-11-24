@@ -48,14 +48,11 @@
         presenting? (.-presenting data)]
     (cond
       presenting?
-      (p/do!
-       (when (mobile-state/quick-add-open?)
-         (editor-handler/quick-add-open-last-block!))
-       (when-let [data @*last-popup-data]
-         (mobile-state/set-popup! data)))
+      nil
 
       presented?
-      nil
+      (when (mobile-state/quick-add-open?)
+        (editor-handler/quick-add-open-last-block!))
 
       :else
       (when (some? @mobile-state/*popup-data)
@@ -81,7 +78,8 @@
         (let [data {:open? true
                     :content-fn content-fn
                     :opts opts}]
-          (present-native-sheet! data))))))
+          (present-native-sheet! data)
+          (mobile-state/set-popup! data))))))
 
 (defn popup-hide!
   [& args]
