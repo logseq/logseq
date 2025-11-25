@@ -43,14 +43,10 @@
 
 (defn- handle-native-sheet-state!
   [^js data]
-  (let [presented? (.-presented data)
-        presenting? (.-presenting data)
+  (let [presenting? (.-presenting data)
         dismissing? (.-dismissing data)]
     (cond
       presenting?
-      nil
-
-      presented?
       (when (mobile-state/quick-add-open?)
         (editor-handler/quick-add-open-last-block!))
 
@@ -108,16 +104,12 @@
   (cond
     (= :download-rtc-graph (first args))
     (do
-      (when (mobile-util/native-ios?)
-        (dismiss-native-sheet!))
-      (mobile-state/set-popup! nil)
+      (dismiss-native-sheet!)
       (mobile-state/redirect-to-tab! "home"))
 
     :else
     (if (and @*last-popup-modal? (not (= (first args) :editor.commands/commands)))
-      (if (mobile-util/native-ios?)
-        (dismiss-native-sheet!)
-        (mobile-state/set-popup! nil))
+      (dismiss-native-sheet!)
       (apply shui-popup/hide! args))))
 
 (set! shui/popup-show! popup-show!)
