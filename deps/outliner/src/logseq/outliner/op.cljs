@@ -161,8 +161,12 @@
     ;; (cljs.pprint/pprint _txs)
     (if error
       (reset! *result {:error error})
-      (ldb/transact! conn (vec (concat init-tx block-props-tx misc-tx))
-                     (merge {::sqlite-export/imported-data? true} tx-meta)))))
+      (try
+        (ldb/transact! conn (vec (concat init-tx block-props-tx misc-tx))
+                       (merge {::sqlite-export/imported-data? true} tx-meta))
+        (catch :default e
+          (js/console.error "Unexpected Import EDN error:" e)
+          (reset! *result {:error (str "Unexpected Import EDN error: " (pr-str (ex-message e)))}))))))
 
 (defn ^:large-vars/cleanup-todo apply-ops!
   [repo conn ops date-formatter opts]
