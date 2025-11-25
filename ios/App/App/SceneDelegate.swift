@@ -16,7 +16,6 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // 1) Create your nav controller
         let nav = UINavigationController()
         nav.navigationBar.prefersLargeTitles = false
-        nav.view.backgroundColor = .logseqBackground
 
         // hook the delegate on AppDelegate so all your existing
         // UINavigationControllerDelegate logic keeps working
@@ -45,7 +44,6 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // 3) Standard UIWindowScene setup
         let window = UIWindow(windowScene: windowScene)
         window.rootViewController = hosting
-        window.backgroundColor = .logseqBackground
         self.window = window
         window.makeKeyAndVisible()
 
