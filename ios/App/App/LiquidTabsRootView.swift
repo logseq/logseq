@@ -183,7 +183,6 @@ struct LiquidTabsRootView: View {
                     )
                     .searchFocused($isSearchFocused)
                     .searchToolbarBehavior(.minimize)
-                    .searchPresentationToolbarBehavior(.avoidHidingContent)
                     .onChange(of: searchText) { query in
                         // Forward query to CLJS
                         LiquidTabsPlugin.shared?.notifySearchChanged(query: query)
