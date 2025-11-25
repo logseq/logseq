@@ -77,10 +77,8 @@ public class NativeTopBarPlugin: CAPPlugin, CAPBridgedPlugin {
 
             // --- NAVIGATION BAR (top) ---
             let appearance = UINavigationBarAppearance()
-            appearance.configureWithOpaqueBackground()
-            appearance.backgroundColor = resolvedBackgroundColor
+            appearance.configureWithTransparentBackground()
             appearance.shadowColor = .clear
-            nav.navigationBar.isTranslucent = false
 
             appearance.titleTextAttributes = [
               .foregroundColor: resolvedTintColor
