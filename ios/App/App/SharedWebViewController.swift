@@ -21,17 +21,6 @@ import Capacitor
         // Ensure the view is loaded so that vc.webView is created
         vc.loadViewIfNeeded()
 
-        // Host view uses opaque logseq background to avoid black flashes.
-        vc.view.backgroundColor = .logseqBackground
-        vc.view.isOpaque = true
-
-        // Ensure the internal WKWebView is also opaque with the same background.
-        if let webView = vc.webView {
-            webView.isOpaque = true
-            webView.backgroundColor = .logseqBackground
-            webView.scrollView.backgroundColor = .logseqBackground
-        }
-
         return vc
     }()
 
@@ -53,9 +42,6 @@ import Capacitor
            placeholderView == nil,
            let snapshot = previous.view.snapshotView(afterScreenUpdates: true) {
 
-            previous.view.backgroundColor = .logseqBackground
-
-            snapshot.backgroundColor = .logseqBackground
             snapshot.frame = previous.view.bounds
             snapshot.autoresizingMask = [.flexibleWidth, .flexibleHeight]
             previous.view.addSubview(snapshot)
@@ -72,24 +58,10 @@ import Capacitor
         // 3) Attach to new parent
         currentParent = parent
 
-        // Parent view is also opaque with the same background.
-        parent.view.backgroundColor = .logseqBackground
-        parent.view.isOpaque = true
-
         parent.addChild(vc)
 
         vc.view.frame = parent.view.bounds
         vc.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-
-        // Keep host view opaque; background is logseqBackground.
-        vc.view.backgroundColor = .logseqBackground
-        vc.view.isOpaque = true
-
-        if let webView = vc.webView {
-            webView.isOpaque = true
-            webView.backgroundColor = .logseqBackground
-            webView.scrollView.backgroundColor = .logseqBackground
-        }
 
         parent.view.addSubview(vc.view)
         vc.didMove(toParent: parent)
@@ -113,7 +85,6 @@ import Capacitor
         if let snapshotView = vc.view.snapshotView(afterScreenUpdates: true) {
             snapshotView.frame = bounds
             snapshotView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-            snapshotView.backgroundColor = .logseqBackground
             return snapshotView
         }
 
