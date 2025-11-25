@@ -25,17 +25,6 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             appDelegate.navController = nav
         }
 
-        if #available(iOS 15.0, *) {
-            let appearance = UINavigationBarAppearance()
-            // Transparent: no blur, no background color
-            appearance.configureWithTransparentBackground()
-            appearance.shadowColor = .clear
-
-            nav.navigationBar.standardAppearance = appearance
-            nav.navigationBar.scrollEdgeAppearance = appearance
-            nav.navigationBar.compactAppearance = appearance
-        }
-
         let rootPath = "/"
         // Start with NO title so "Logseq" isn't shown during splash.
         let rootVC = NativePageViewController(

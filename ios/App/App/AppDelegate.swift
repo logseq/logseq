@@ -37,6 +37,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
                 _ = self.handleShortcutItem(shortcutItem)
             }
         }
+
         return true
     }
 
