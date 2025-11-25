@@ -1362,7 +1362,7 @@
                         (when (and new-val (not (storage/get ::storage-spec/http-server-enabled)))
                           (storage/set ::storage-spec/http-server-enabled true))
                         (-> (ipc/ipc :server/set-config {:mcp-enabled? new-val})
-                            ;; Dont start server if it's not running
+                            ;; Don't start server if it's not running
                             (p/then #(when (= "running" (state/sub [:electron/server :status]))
                                        (p/let [_ (p/delay 1000)]
                                          (ipc/ipc :server/do :restart))))
