@@ -121,13 +121,7 @@ class DatePickerDialogViewController: UIViewController {
 
         if #available(iOS 12.0, *) {
             if traitCollection.userInterfaceStyle != previousTraitCollection?.userInterfaceStyle {
-                if traitCollection.userInterfaceStyle == .dark {
-                    print("switch to dark mode")
-                    dialogView.backgroundColor = .black
-                } else {
-                    print("switch to light mode")
-                    dialogView.backgroundColor = .white
-                }
+                dialogView.backgroundColor = .logseqBackground
             }
         }
     }
@@ -141,17 +135,20 @@ class DatePickerDialogViewController: UIViewController {
         // Create hosting view controller
         let view = self.view!
 
-        view.backgroundColor = .black.withAlphaComponent(0.4)
+        view.backgroundColor = .logseqBackground.withAlphaComponent(0.4)
         view.isUserInteractionEnabled = true
 
-        if isDarkMode() {
-            dialogView.backgroundColor = .black
-        } else {
-            dialogView.backgroundColor = .white
-        }
+        dialogView.backgroundColor = .logseqBackground
 
-        dialogView.layer.cornerRadius = 10
-        dialogView.clipsToBounds = true
+        dialogView.layer.cornerRadius = 14
+        dialogView.clipsToBounds = false   // IMPORTANT: allow shadow
+
+        dialogView.layer.shadowColor = UIColor.black.cgColor
+        dialogView.layer.shadowOpacity = isDarkMode() ? 0.4 : 0.15
+        dialogView.layer.shadowOffset = CGSize(width: 0, height: 6)
+        dialogView.layer.shadowRadius = 16
+        dialogView.layer.masksToBounds = false
+
         view.addSubview(dialogView)
 
         dialogView.translatesAutoresizingMaskIntoConstraints = false
