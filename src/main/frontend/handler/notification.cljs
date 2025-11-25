@@ -27,15 +27,14 @@
    (show! content status clear? uid timeout nil))
   ([content status clear? uid timeout close-cb]
    (assert (keyword? status) "status should be a keyword")
-   ;; (let [contents (state/get-notification-contents)
-   ;;       uid (or uid (keyword (util/unique-id)))]
-   ;;   (state/set-state! :notification/contents (assoc contents
-   ;;                                                   uid {:content content
-   ;;                                                        :status status
-   ;;                                                        :close-cb close-cb}))
+   (let [contents (state/get-notification-contents)
+         uid (or uid (keyword (util/unique-id)))]
+     (state/set-state! :notification/contents (assoc contents
+                                                     uid {:content content
+                                                          :status status
+                                                          :close-cb close-cb}))
 
-   ;;   (when (and (not= status :error) (not (false? clear?)))
-   ;;     (js/setTimeout #(clear! uid) (or timeout 2000)))
+     (when (and (not= status :error) (not (false? clear?)))
+       (js/setTimeout #(clear! uid) (or timeout 2000)))
 
-   ;;   uid)
-   ))
+     uid)))
