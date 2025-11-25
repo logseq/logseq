@@ -40,8 +40,7 @@ class NativePageViewController: UIViewController, UIGestureRecognizerDelegate {
               let popGesture = nav.interactivePopGestureRecognizer else { return }
 
         popGesture.delegate = self
-        let isSidebar = (targetPath == "/left-sidebar")
-        popGesture.isEnabled = !isSidebar && nav.viewControllers.count > 1
+        popGesture.isEnabled = nav.viewControllers.count > 1
     }
 
     func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
@@ -50,9 +49,6 @@ class NativePageViewController: UIViewController, UIGestureRecognizerDelegate {
             gestureRecognizer === nav.interactivePopGestureRecognizer
         else { return true }
 
-        if targetPath == "/left-sidebar" {
-            return false
-        }
         return nav.viewControllers.count > 1
     }
 
