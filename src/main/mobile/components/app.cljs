@@ -49,24 +49,23 @@
     (home-inner db-restoring?)))
 
 (defn use-theme-effects!
-  [current-repo]
-  (let [[theme] (frum/use-atom-in state/state :ui/theme)]
-    (hooks/use-effect!
-     (fn []
-       (state/sync-system-theme!)
-       (ui/setup-system-theme-effect!))
-     [])
-    (hooks/use-effect!
-     #(let [^js doc js/document.documentElement
-            ^js cls (.-classList doc)
-            ^js cls-body (.-classList js/document.body)]
-        (.setAttribute doc "data-theme" theme)
-        (if (= theme "dark")                               ;; for tailwind dark mode
-          (do (.add cls "dark") (.add cls "ion-palette-dark")
-              (doto cls-body (.remove "light-theme") (.add "dark-theme")))
-          (do (.remove cls "dark") (.remove cls "ion-palette-dark")
-              (doto cls-body (.remove "dark-theme") (.add "light-theme")))))
-     [theme]))
+  [current-repo theme]
+  (hooks/use-effect!
+   (fn []
+     (state/sync-system-theme!)
+     (ui/setup-system-theme-effect!))
+   [])
+  (hooks/use-effect!
+   #(let [^js doc js/document.documentElement
+          ^js cls (.-classList doc)
+          ^js cls-body (.-classList js/document.body)]
+      (.setAttribute doc "data-theme" theme)
+      (if (= theme "dark")                               ;; for tailwind dark mode
+        (do (.add cls "dark")
+            (doto cls-body (.remove "light-theme") (.add "dark-theme")))
+        (do (.remove cls "dark")
+            (doto cls-body (.remove "dark-theme") (.add "light-theme")))))
+   [theme])
 
   (hooks/use-effect!
    (fn []
@@ -84,7 +83,7 @@
        #(.removeEventListener js/window "orientationchange" handle-size!)))
    []))
 
-(rum/defc main-content-inner < rum/static
+(rum/defc main-content < rum/static
   [tab route-match]
   (let [view (get-in route-match [:data :view])
         ;; We are on the journals home screen if the tab is :home
@@ -122,27 +121,22 @@
 
             nil))])]))
 
-(rum/defc main-content < rum/reactive
-  [tab]
-  (let [route-match (state/sub :route-match)]
-    (main-content-inner tab route-match)))
-
 (rum/defc app
-  [current-repo]
-  (let [[tab] (mobile-state/use-tab)]
+  [current-repo route-match]
+  (let [[tab] (mobile-state/use-tab)
+        [theme] (frum/use-atom-in state/state :ui/theme)]
     (use-screen-size-effects!)
-    (use-theme-effects! current-repo)
+    (use-theme-effects! current-repo theme)
     (hooks/use-effect!
      (fn []
        (when (mobile-util/native-ios?)
          (bottom-tabs/configure))
        (when-let [element (util/app-scroll-container-node)]
          (common-handler/listen-to-scroll! element))) [])
-    [:div.h-full {:class (if (contains? #{"search" "favorites"} tab)
-                           "mt-16"
-                           "mt-24")}
+    [:div.h-full {:class (when (contains? #{"search"} tab)
+                           "mt-16")}
      (mobile-header/header current-repo tab)
-     (main-content tab)]))
+     (main-content tab route-match)]))
 
 (rum/defc main < rum/reactive
   []
@@ -150,12 +144,13 @@
         show-action-bar? (state/sub :mobile/show-action-bar?)
         {:keys [open? content-fn opts]} (rum/react mobile-state/*popup-data)
         show-popup? (and open? content-fn)
-        fold-button-on-right? (state/enable-fold-button-right?)]
+        fold-button-on-right? (state/enable-fold-button-right?)
+        route-match (state/sub :route-match)]
     [:main.w-full.h-full
      {:class (util/classnames
               [{:ls-fold-button-on-right fold-button-on-right?}])}
      [:div.w-full.h-full {:class (when show-popup? "hidden")}
-      (app current-repo)]
+      (app current-repo route-match)]
      (when show-popup?
        (popup/popup opts content-fn))
      (editor-toolbar/mobile-bar)
