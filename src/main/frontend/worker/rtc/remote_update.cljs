@@ -16,7 +16,6 @@
             [frontend.worker.state :as worker-state]
             [lambdaisland.glogi :as log]
             [logseq.clj-fractional-indexing :as index]
-            [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.common.property-util :as db-property-util]
@@ -26,11 +25,6 @@
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.transaction :as outliner-tx]
             [missionary.core :as m]))
-
-(defkeywords
-  ::need-pull-remote-data {:doc "
-remote-update's :remote-t-before > :local-tx,
-so need to pull earlier remote-data from websocket."})
 
 (defmulti ^:private transact-db! (fn [action & _args] action))
 
@@ -607,32 +601,34 @@ so need to pull earlier remote-data from websocket."})
   [aes-key encrypt-attr-set remote-update-data]
   (assert aes-key)
   (m/sp
-   (let [{affected-blocks-map :affected-blocks refed-blocks :refed-blocks} remote-update-data
-         affected-blocks-map'
-         (loop [[[block-uuid affected-block] & rest-affected-blocks] affected-blocks-map
-                affected-blocks-map-result {}]
-           (if-not block-uuid
-             affected-blocks-map-result
-             (let [affected-block' (c.m/<? (crypt/<decrypt-map aes-key encrypt-attr-set affected-block))]
-               (recur rest-affected-blocks (assoc affected-blocks-map-result block-uuid affected-block')))))
-         refed-blocks'
-         (loop [[refed-block & rest-refed-blocks] refed-blocks
-                refed-blocks-result []]
-           (if-not refed-block
-             refed-blocks-result
-             (let [refed-block' (c.m/<? (crypt/<decrypt-map aes-key encrypt-attr-set refed-block))]
-               (recur rest-refed-blocks (conj refed-blocks-result refed-block')))))]
-     (assoc remote-update-data
-            :affected-blocks affected-blocks-map'
-            :refed-blocks refed-blocks'))))
+    (let [{affected-blocks-map :affected-blocks refed-blocks :refed-blocks} remote-update-data
+          affected-blocks-map'
+          (loop [[[block-uuid affected-block] & rest-affected-blocks] affected-blocks-map
+                 affected-blocks-map-result {}]
+            (if-not block-uuid
+              affected-blocks-map-result
+              (let [affected-block' (c.m/<? (crypt/<decrypt-map aes-key encrypt-attr-set affected-block))]
+                (recur rest-affected-blocks (assoc affected-blocks-map-result block-uuid affected-block')))))
+          refed-blocks'
+          (loop [[refed-block & rest-refed-blocks] refed-blocks
+                 refed-blocks-result []]
+            (if-not refed-block
+              refed-blocks-result
+              (let [refed-block' (c.m/<? (crypt/<decrypt-map aes-key encrypt-attr-set refed-block))]
+                (recur rest-refed-blocks (conj refed-blocks-result refed-block')))))]
+      (assoc remote-update-data
+             :affected-blocks affected-blocks-map'
+             :refed-blocks refed-blocks'))))
 
 (defn apply-remote-update-check
   "If the check passes, return true"
   [repo remote-update-event add-log-fn]
   (let [remote-update-data (:value remote-update-event)]
     (assert (rtc-schema/data-from-ws-validator remote-update-data) remote-update-data)
-    (let [remote-t (:t remote-update-data)
-          remote-t-before (:t-before remote-update-data)
+    (let [{remote-latest-t :t
+           remote-t-before :t-before
+           remote-t :t-query-end} remote-update-data
+          remote-t (or remote-t remote-latest-t) ;TODO: remove this, be compatible with old-clients for now
           local-tx (client-op/get-local-tx repo)]
       (cond
         (not (and (pos? remote-t)
@@ -640,21 +636,28 @@ so need to pull earlier remote-data from websocket."})
         (throw (ex-info "invalid remote-data" {:data remote-update-data}))
 
         (<= remote-t local-tx)
-        (do (add-log-fn :rtc.log/apply-remote-update {:sub-type :skip :remote-t remote-t :local-t local-tx})
+        (do (add-log-fn :rtc.log/apply-remote-update
+                        {:sub-type :skip
+                         :remote-t remote-t
+                         :remote-latest-t remote-latest-t
+                         :local-t local-tx})
             false)
 
         (< local-tx remote-t-before)
         (do (add-log-fn :rtc.log/apply-remote-update {:sub-type :need-pull-remote-data
-                                                      :remote-t remote-t :local-t local-tx
+                                                      :remote-latest-t remote-latest-t
+                                                      :remote-t remote-t
+                                                      :local-t local-tx
                                                       :remote-t-before remote-t-before})
             (throw (ex-info "need pull earlier remote-data"
-                            {:type ::need-pull-remote-data
+                            {:type :rtc.exception/local-graph-too-old
                              :local-tx local-tx})))
 
         (<= remote-t-before local-tx remote-t) true
 
         :else (throw (ex-info "unreachable" {:remote-t remote-t
                                              :remote-t-before remote-t-before
+                                             :remote-latest-t remote-latest-t
                                              :local-t local-tx}))))))
 
 (defn task--apply-remote-update
@@ -668,7 +671,8 @@ so need to pull earlier remote-data from websocket."})
                                        aes-key rtc-const/encrypt-attr-set
                                        remote-update-data))
                                  remote-update-data)
-            remote-t (:t remote-update-data)
+            ;; TODO: remove this 'or', be compatible with old-clients for now
+            remote-t (or (:t-query-end remote-update-data) (:t remote-update-data))
             {affected-blocks-map :affected-blocks refed-blocks :refed-blocks} remote-update-data
             {:keys [remove-ops-map move-ops-map update-ops-map update-page-ops-map remove-page-ops-map]}
             (affected-blocks->diff-type-ops repo affected-blocks-map)
