@@ -21,15 +21,15 @@ import Capacitor
         // Ensure the view is loaded so that vc.webView is created
         vc.loadViewIfNeeded()
 
-        // Set the background for the host view behind the WKWebView
+        // Host view uses opaque logseq background to avoid black flashes.
         vc.view.backgroundColor = .logseqBackground
-        vc.view.isOpaque = false   // Prevent black flashes during view transitions
+        vc.view.isOpaque = true
 
-        // Ensure the internal WKWebView is transparent
+        // Ensure the internal WKWebView is also opaque with the same background.
         if let webView = vc.webView {
-            webView.isOpaque = false
-            webView.backgroundColor = .clear
-            webView.scrollView.backgroundColor = .clear
+            webView.isOpaque = true
+            webView.backgroundColor = .logseqBackground
+            webView.scrollView.backgroundColor = .logseqBackground
         }
 
         return vc
@@ -39,17 +39,21 @@ import Capacitor
     private weak var placeholderView: UIView?
     private var snapshots: [ObjectIdentifier: UIImage] = [:]
 
+    // MARK: - Attach / Detach
+
     /// Attach the shared WebView host (`bridgeController`) to a new parent view controller.
     /// Optionally leave a snapshot placeholder in the previous parent for smoother transitions.
     func attach(to parent: UIViewController, leavePlaceholderInPreviousParent: Bool = false) {
         let vc = bridgeController
         guard currentParent !== parent else { return }
 
-        // If needed, create a snapshot placeholder in the old parent
+        // 1) Snapshot current parent if requested
         if leavePlaceholderInPreviousParent,
            let previous = currentParent,
            placeholderView == nil,
-           let snapshot = vc.view.snapshotView(afterScreenUpdates: false) {
+           let snapshot = previous.view.snapshotView(afterScreenUpdates: true) {
+
+            previous.view.backgroundColor = .logseqBackground
 
             snapshot.backgroundColor = .logseqBackground
             snapshot.frame = previous.view.bounds
@@ -58,24 +62,34 @@ import Capacitor
             placeholderView = snapshot
         }
 
-        // Detach from previous parent
+        // 2) Detach from previous parent
         if let previous = currentParent {
             vc.willMove(toParent: nil)
             vc.view.removeFromSuperview()
             vc.removeFromParent()
-            previous.didMove(toParent: nil)
         }
 
-        // Attach to the new parent
+        // 3) Attach to new parent
         currentParent = parent
+
+        // Parent view is also opaque with the same background.
+        parent.view.backgroundColor = .logseqBackground
+        parent.view.isOpaque = true
+
         parent.addChild(vc)
 
         vc.view.frame = parent.view.bounds
         vc.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
 
-        // Ensure the new parent also uses the unified background color
-        parent.view.backgroundColor = .logseqBackground
-        parent.view.isOpaque = false
+        // Keep host view opaque; background is logseqBackground.
+        vc.view.backgroundColor = .logseqBackground
+        vc.view.isOpaque = true
+
+        if let webView = vc.webView {
+            webView.isOpaque = true
+            webView.backgroundColor = .logseqBackground
+            webView.scrollView.backgroundColor = .logseqBackground
+        }
 
         parent.view.addSubview(vc.view)
         vc.didMove(toParent: parent)
@@ -86,6 +100,8 @@ import Capacitor
         placeholderView?.removeFromSuperview()
         placeholderView = nil
     }
+
+    // MARK: - Live Snapshot View (for transitions)
 
     /// Create a snapshot view of the current WebView for use during transitions.
     func makeSnapshotView() -> UIView? {
@@ -104,11 +120,10 @@ import Capacitor
         // Fallback: render manually as an image
         let format = UIGraphicsImageRendererFormat()
         format.scale = vc.view.window?.screen.scale ?? UIScreen.main.scale
-        format.opaque = true // Avoid transparency to prevent blended dark edges
+        format.opaque = true // fully opaque with logseq background
 
         let renderer = UIGraphicsImageRenderer(bounds: bounds, format: format)
         let image = renderer.image { ctx in
-            // Fill background first to match the actual page appearance
             UIColor.logseqBackground.setFill()
             ctx.fill(bounds)
             vc.view.drawHierarchy(in: bounds, afterScreenUpdates: true)
@@ -122,6 +137,8 @@ import Capacitor
 
         return imageView
     }
+
+    // MARK: - Cached Snapshots (per parent)
 
     /// Store a static snapshot image for a given parent view controller.
     /// Used for caching between transitions.
@@ -148,6 +165,6 @@ import Capacitor
 
     /// Retrieve a previously stored snapshot for a given parent.
     func snapshot(for parent: UIViewController) -> UIImage? {
-        snapshots[ObjectIdentifier(parent)]
+        return snapshots[ObjectIdentifier(parent)]
     }
 }
