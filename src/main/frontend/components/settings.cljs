@@ -241,25 +241,31 @@
      [:div {:style {:text-align "right"}}
       (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-wide-mode))])])
 
-(defn editor-font-family-row [t font]
+(defn editor-font-family-row [t {:keys [type global]}]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "font_family"}
     (t :settings-page/editor-font)]
-   [:div.col-span-2.flex.gap-2
-    (for [t [:default :serif :mono]
-          :let [t (name t)
-                tt (string/capitalize t)
-                active? (= font t)]]
-      (shui/button
-       {:variant :secondary
-        :class (when active? " border-primary border-[2px]")
-        :style {:width "4.4rem"}
-        :on-click #(state/set-editor-font! t)}
-       [:span.flex.flex-col
-        {:class (str "ls-font-" t)}
-        [:strong "Ag"]
-        [:small tt]]))]])
+   [:div.flex.flex-col.col-span-2
+    [:div.flex.gap-2
+     (for [t [:default :serif :mono]
+           :let [t (name t)
+                 tt (string/capitalize t)
+                 active? (= (or type "default") t)]]
+       (shui/button
+         {:variant :secondary
+          :class (when active? " border-primary border-[2px]")
+          :style {:width "4.4rem"}
+          :on-click #(state/set-editor-font! {:type t})}
+         [:span.flex.flex-col
+          {:class (str "ls-font-" t)}
+          [:strong "Ag"]
+          [:small tt]]))]
+    [:div.pt-3
+     [:label.w-full.flex.items-center.cursor-pointer
+      (shui/checkbox {:checked (boolean global)
+                      :on-checked-change #(state/set-editor-font! {:global %})})
+      [:span.pl-1.text-sm.opacity-70 "Set as global font family"]]]]])
 
 (rum/defcs switch-spell-check-row < rum/reactive
   [state t]
