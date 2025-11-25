@@ -45,6 +45,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // 3) Standard UIWindowScene setup
         let window = UIWindow(windowScene: windowScene)
         window.rootViewController = hosting
+        window.backgroundColor = .logseqBackground
         self.window = window
         window.makeKeyAndVisible()
 
