@@ -185,7 +185,7 @@ private class NativeBottomSheetViewController: UIViewController, UISheetPresenta
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .systemBackground
+        view.backgroundColor = .logseqBackground
         configureSheet()
     }
 

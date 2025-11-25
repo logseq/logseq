@@ -30,6 +30,23 @@ public class NativeTopBarPlugin: CAPPlugin, CAPBridgedPlugin {
         return nil
     }
 
+    // MARK: - UITabBar lookup
+
+    /// Recursively search for a UITabBar in the given view hierarchy.
+    private func findTabBar(in view: UIView) -> UITabBar? {
+        if let tabBar = view as? UITabBar {
+            return tabBar
+        }
+        for subview in view.subviews {
+            if let found = findTabBar(in: subview) {
+                return found
+            }
+        }
+        return nil
+    }
+
+    // MARK: - Public API
+
     @objc func configure(_ call: CAPPluginCall) {
         let title = call.getString("title")
         let leftButtons = call.getArray("leftButtons", JSObject.self) ?? []
@@ -45,26 +62,39 @@ public class NativeTopBarPlugin: CAPPlugin, CAPBridgedPlugin {
                 call.reject("Navigation controller not found")
                 return
             }
+
             nav.setNavigationBarHidden(hidden, animated: true)
             guard !hidden else {
                 call.resolve()
                 return
             }
 
+            // Resolve dynamic colors from JS
+            let resolvedBackgroundColor =
+              backgroundColorHex?.toUIColor(defaultColor: .logseqBackground) ?? .logseqBackground
+            let resolvedTintColor =
+              tintColorHex?.toUIColor(defaultColor: .label) ?? .label
+
+            // --- NAVIGATION BAR (top) ---
             let appearance = UINavigationBarAppearance()
             appearance.configureWithOpaqueBackground()
-            appearance.backgroundColor = backgroundColorHex?.toUIColor(defaultColor: .systemBackground)
+            appearance.backgroundColor = resolvedBackgroundColor
             appearance.shadowColor = .clear
+            nav.navigationBar.isTranslucent = false
+
             appearance.titleTextAttributes = [
-                .foregroundColor: tintColorHex?.toUIColor(defaultColor: .label) ?? .label
+              .foregroundColor: resolvedTintColor
             ]
 
             nav.navigationBar.standardAppearance = appearance
             nav.navigationBar.scrollEdgeAppearance = appearance
-            nav.navigationBar.tintColor = tintColorHex?.toUIColor(defaultColor: .label) ?? .label
+            nav.navigationBar.compactAppearance = appearance
+            nav.navigationBar.tintColor = resolvedTintColor
 
             if let topVC = nav.topViewController {
+                // Reset any previous custom title view
                 topVC.navigationItem.titleView = nil
+
                 if titleClickable, let title {
                     let button = NativeTopBarButton(type: .system)
                     button.buttonId = "title"

@@ -25,7 +25,7 @@ class NativePageViewController: UIViewController, UIGestureRecognizerDelegate {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .systemBackground
+        view.backgroundColor = .logseqBackground
     }
 
     override func viewWillAppear(_ animated: Bool) {
