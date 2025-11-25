@@ -16,12 +16,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // 1) Create your nav controller
         let nav = UINavigationController()
         nav.navigationBar.prefersLargeTitles = false
-
-        // Make nav bar fully transparent by default so it doesn't
-        // show a background over the Capacitor splash / web splash.
-        nav.navigationBar.isTranslucent = true
-        nav.navigationBar.setBackgroundImage(UIImage(), for: .default)
-        nav.navigationBar.shadowImage = UIImage()
+        nav.view.backgroundColor = .logseqBackground
 
         // hook the delegate on AppDelegate so all your existing
         // UINavigationControllerDelegate logic keeps working

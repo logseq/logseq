@@ -192,7 +192,9 @@
 (defn- configure-native-top-bar!
   [repo {:keys [tab title route-name route-view sync-color favorited?]}]
   (when (mobile-util/native-ios?)
-    (let [hidden? (and (= tab "search")
+    (let [hidden? (and (contains? #{"search"
+                                    ;; "favorites"
+                                    }tab)
                        (not= route-name :page))
           rtc-indicator? (and repo
                               (ldb/get-graph-rtc-uuid (db/get-db))
