@@ -93,14 +93,13 @@
     ;; - Journals layer keeps its own scroll container and is always in the DOM.
     ;; - Page layer keeps its own independent scroll container.
     ;; This ensures switching tabs does not reset scrollTop.
-    [:div#main-container
+    [:<>
      ;; Journals scroll container (keep-alive)
      ;; This element stays mounted permanently and only toggles visibility.
-     [:div#app-main-home {:class (when-not home? "hidden")}
-      [:div.px-5
-       (home)]]
+     [:div#app-main-home.px-5 {:class (when-not home? "hidden")}
+      (home)]
 
-     ;; Other pages: page, search, settings, etc.
+     ;; Other pages:  search, settings, etc.
      ;; These views scroll independently from the journals layer.
      (when-not home?
        [:div#main-content-container.px-5
