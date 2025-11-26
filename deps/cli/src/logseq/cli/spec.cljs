@@ -89,6 +89,5 @@
             :coerce []
             :require true
             :desc "Local graph(s) to validate"}
-   :closed {:alias :c
-            :default true
-            :desc "Validate entities have no extra keys"}})
+   :open-schema {:alias :o
+                 :desc "Validate with open schema to allow extra keys/attributes in an entity map"}})
