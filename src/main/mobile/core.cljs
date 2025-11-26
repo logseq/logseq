@@ -68,7 +68,7 @@
                                          :skip-refresh? true})))))
 
            :graphs
-           (mobile-state/redirect-to-tab! "settings")
+           (mobile-state/set-tab! "settings")
 
            :import
            (shui/popup-show! nil (fn []
