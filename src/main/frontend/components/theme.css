@@ -16,7 +16,7 @@
   }
 }
 
-.visible-scrollbar , html.custom-scrollbar {
+.visible-scrollbar, html.custom-scrollbar {
   ::-webkit-scrollbar-thumb {
     background-color: var(--lx-gray-05, var(--ls-scrollbar-foreground-color, var(--rx-gray-05)));
   }
@@ -89,7 +89,8 @@ html[data-theme='light'] .theme-container {
   }
 }
 
-html[data-theme='dark'] .theme-container {}
+html[data-theme='dark'] .theme-container {
+}
 
 html.locked-scroll {
   overflow: hidden !important;
@@ -195,6 +196,14 @@ html[data-font='serif'] .ls-block, .ls-font-serif {
   font-family: Lyon-Text, Georgia, ui-serif, serif;
 }
 
+html[data-font='serif'][data-font-global='true'] {
+  --ls-font-family: Lyon-Text, Georgia, ui-serif, serif;
+}
+
 html[data-font='mono'] .ls-block, .ls-font-mono {
   font-family: iawriter-mono, Nitti, Menlo, Courier, monospace;
+}
+
+html[data-font='mono'][data-font-global='true'] {
+  --ls-font-family: iawriter-mono, Nitti, Menlo, Courier, monospace;
 }
