@@ -45,7 +45,7 @@
      {:id "copy-ref"
       :label "Copy ref"
       :icon "registered"
-      :system-icon "number.square"
+      :system-icon "r.square"
       :handler (fn []
                  (editor-handler/copy-block-refs)
                  (close!))}
