@@ -4,7 +4,8 @@
             [frontend.state :as state]))
 
 (defonce *tab (atom "home"))
-(defn set-tab! [tab] (reset! *tab tab))
+(defn set-tab! [tab]
+  (reset! *tab tab))
 (defn use-tab [] (r/use-atom *tab))
 (defonce *search-input (atom ""))
 (defn use-search-input []
