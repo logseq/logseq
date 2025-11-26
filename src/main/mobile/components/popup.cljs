@@ -6,6 +6,7 @@
             [frontend.ui :as ui]
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.ui :as shui]
+            [mobile.bottom-tabs :as bottom-tabs]
             [mobile.state :as mobile-state]
             [rum.core :as rum]))
 
@@ -105,7 +106,7 @@
     (= :download-rtc-graph (first args))
     (do
       (dismiss-native-sheet!)
-      (mobile-state/redirect-to-tab! "home"))
+      (mobile-state/set-tab! "home"))
 
     :else
     (if (and @*last-popup-modal? (not (= (first args) :editor.commands/commands)))

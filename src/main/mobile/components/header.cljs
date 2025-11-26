@@ -144,7 +144,7 @@
                            (page-handler/<delete!
                             (fn []
                               ;; FIXME: empty screen, wrong route state
-                              (mobile-state/redirect-to-tab! "home"))
+                              (mobile-state/set-tab! "home"))
                             {:error-handler
                              (fn [{:keys [msg]}]
                                (notification/show! msg :warning))})))))}
