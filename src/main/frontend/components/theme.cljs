@@ -63,9 +63,12 @@
      [accent-color])
 
     (hooks/use-effect!
-     #(some-> js/document.documentElement
-              (.setAttribute "data-font" (or editor-font "default")))
-     [editor-font])
+      (fn []
+        (when-let [{:keys [type global]} editor-font]
+          (doto js/document.documentElement
+            (.setAttribute "data-font" (or type "default"))
+            (.setAttribute "data-font-global" (boolean global)))))
+      [editor-font])
 
     (hooks/use-effect!
      #(let [doc js/document.documentElement]
