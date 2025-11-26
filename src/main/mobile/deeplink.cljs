@@ -11,7 +11,6 @@
             [frontend.util.text :as text-util]
             [goog :refer [Uri]]
             [logseq.common.util :as common-util]
-            [mobile.state :as mobile-state]
             [promesa.core :as p]))
 
 (def *link-to-another-graph (atom false))

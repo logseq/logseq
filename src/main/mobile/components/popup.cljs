@@ -6,7 +6,6 @@
             [frontend.ui :as ui]
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.ui :as shui]
-            [mobile.bottom-tabs :as bottom-tabs]
             [mobile.state :as mobile-state]
             [rum.core :as rum]))
 
