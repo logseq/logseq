@@ -323,6 +323,11 @@
   resolved "https://registry.yarnpkg.com/@capacitor/device/-/device-7.0.2.tgz#406bde129d3fcf55f0de0b691509535e2a00e315"
   integrity sha512-OMGMBjLbh7ApaqW1oOJIV73iyrFK/T5v2MzuQYq3GLT+jnGvCuj/y82Ofq2Fz9/hlJ2fukztPwG1K80jyk0i6w==
 
+"@capacitor/dialog@^7.0.2":
+  version "7.0.2"
+  resolved "https://registry.yarnpkg.com/@capacitor/dialog/-/dialog-7.0.2.tgz#ff0b50a0fd4d9792fd6e47dcf28e2cee49c41568"
+  integrity sha512-2lRMKEdBV/2LMCwHbC5a03jiU4tdlIN4hXAqmQMxnaa7CAVLfk/vEE+vxA5mpnI/pzoXF/QDQEUXJUd10hbcKA==
+
 "@capacitor/filesystem@7.0.1":
   version "7.0.1"
   resolved "https://registry.yarnpkg.com/@capacitor/filesystem/-/filesystem-7.0.1.tgz#b0518d781f7640e936f529b80a59724e221d0471"

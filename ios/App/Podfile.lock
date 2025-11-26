@@ -17,6 +17,8 @@ PODS:
   - CapacitorCordova (7.2.0)
   - CapacitorDevice (7.0.2):
     - Capacitor
+  - CapacitorDialog (7.0.2):
+    - Capacitor
   - CapacitorFilesystem (7.0.1):
     - Capacitor
   - CapacitorHaptics (7.0.1):
@@ -49,6 +51,7 @@ DEPENDENCIES:
   - "CapacitorCommunitySafeArea (from `../../node_modules/@capacitor-community/safe-area`)"
   - "CapacitorCordova (from `../../node_modules/@capacitor/ios`)"
   - "CapacitorDevice (from `../../node_modules/@capacitor/device`)"
+  - "CapacitorDialog (from `../../node_modules/@capacitor/dialog`)"
   - "CapacitorFilesystem (from `../../node_modules/@capacitor/filesystem`)"
   - "CapacitorHaptics (from `../../node_modules/@capacitor/haptics`)"
   - "CapacitorKeyboard (from `../../node_modules/@capacitor/keyboard`)"
@@ -83,6 +86,8 @@ EXTERNAL SOURCES:
     :path: "../../node_modules/@capacitor/ios"
   CapacitorDevice:
     :path: "../../node_modules/@capacitor/device"
+  CapacitorDialog:
+    :path: "../../node_modules/@capacitor/dialog"
   CapacitorFilesystem:
     :path: "../../node_modules/@capacitor/filesystem"
   CapacitorHaptics:
@@ -114,6 +119,7 @@ SPEC CHECKSUMS:
   CapacitorCommunitySafeArea: 3f049619072ab5d0da2529bcb05b358ff6c13dc1
   CapacitorCordova: 5967b9ba03915ef1d585469d6e31f31dc49be96f
   CapacitorDevice: 81ae78d5d1942707caad79276badd458bf6ec603
+  CapacitorDialog: 5bf72a94b747fb339df6f64ef60812e5e4630ad2
   CapacitorFilesystem: e6261c410436f54908c11f94336c5b58286b1db0
   CapacitorHaptics: 1f1e17041f435d8ead9ff2a34edd592c6aa6a8d6
   CapacitorKeyboard: 09fd91dcde4f8a37313e7f11bde553ad1ed52036
@@ -126,6 +132,6 @@ SPEC CHECKSUMS:
   KeychainSwift: 4a71a45c802fd9e73906457c2dcbdbdc06c9419d
   SendIntent: 8a6f646a4489f788d253ffbd1082a98ea388d870
 
-PODFILE CHECKSUM: bf3859ae3f2ef96dbee7c801e4be9d91c6e68077
+PODFILE CHECKSUM: 2ba428e46e22e2bca616c46fc132c5699b98e54b
 
 COCOAPODS: 1.16.2

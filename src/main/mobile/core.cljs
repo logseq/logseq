@@ -17,9 +17,8 @@
             [mobile.events]
             [mobile.init :as init]
             [mobile.navigation :as mobile-nav]
-            [mobile.routes :refer [routes]]
+            [mobile.routes :refer [routes] :as mobile-routes]
             [mobile.state :as mobile-state]
-            [promesa.core :as p]
             [reitit.frontend :as rf]
             [reitit.frontend.easy :as rfe]))
 

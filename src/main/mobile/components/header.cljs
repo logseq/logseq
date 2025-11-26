@@ -1,6 +1,7 @@
 (ns mobile.components.header
   "App top header"
-  (:require [clojure.string :as string]
+  (:require ["@capacitor/dialog" :refer [Dialog]]
+            [clojure.string :as string]
             [frontend.common.missionary :as c.m]
             [frontend.components.repo :as repo]
             [frontend.components.rtc.indicator :as rtc-indicator]
@@ -132,22 +133,27 @@
         "Copy"])
 
       (ui/menu-link
-       {:on-click #(-> (shui/dialog-confirm!
-                        (str "⚠️ Are you sure you want to delete this "
-                             (if (entity-util/page? block) "page" "block")
-                             "?"))
-                       (p/then
+       {:on-click
+        (fn []
+          (p/do!
+           (shui/popup-hide!)
+           (-> (.confirm ^js Dialog
+                         #js {:title "Confirm"
+                              :message (str "Are you sure to delete this "
+                                            (if (entity-util/page? block) "page" "block")
+                                            "?")})
+               (p/then
+                (fn [^js result]
+                  (let [value (.-value result)]
+                    (when value
+                      (some->
+                       (:block/uuid block)
+                       (page-handler/<delete!
                         (fn []
-                          (shui/popup-hide!)
-                          (some->
-                           (:block/uuid block)
-                           (page-handler/<delete!
-                            (fn []
-                              ;; FIXME: empty screen, wrong route state
-                              (mobile-state/set-tab! "home"))
-                            {:error-handler
-                             (fn [{:keys [msg]}]
-                               (notification/show! msg :warning))})))))}
+                          (js/history.back))
+                        {:error-handler
+                         (fn [{:keys [msg]}]
+                           (notification/show! msg :warning))})))))))))}
        [:span.text-lg.flex.gap-2.items-center.text-red-700
         (shui/tabler-icon "trash" {:class "opacity-80" :size 22})
         "Delete"])])

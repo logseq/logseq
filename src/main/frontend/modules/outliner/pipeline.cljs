@@ -37,7 +37,8 @@
         (let [ids (map (fn [id] (:db/id (db/entity [:block/uuid id]))) deleted-block-uuids)]
           (state/sidebar-remove-deleted-block! ids))
         (when-let [block-id (state/get-current-page)]
-          (when (contains? (set (map str deleted-block-uuids)) block-id)
+          (when (and (contains? (set (map str deleted-block-uuids)) block-id)
+                     (not (util/mobile?)))
             (let [parent (:block/parent (ldb/get-page (db/get-db) block-id))]
               (if parent
                 (route-handler/redirect-to-page! (:block/uuid parent))
