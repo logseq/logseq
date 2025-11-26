@@ -524,8 +524,10 @@
         db-based? (config/db-based-graph? repo)]
 
     (when (nil? @src)
-      (p/then (assets-handler/<make-asset-url href js-url)
-              #(reset! src (common-util/safe-decode-uri-component %))))
+      (-> (assets-handler/<make-asset-url href js-url)
+          (p/then (fn [url]
+                    (reset! src (common-util/safe-decode-uri-component url))))
+          (p/catch #(js/console.log "Failed to load asset:" %))))
     (:image-placeholder config)
     (if-not @src
       (:image-placeholder config)
@@ -1079,8 +1081,9 @@
                       {:will-mount (fn [state]
                                      (let [block (last (:rum/args state))
                                            asset-type (:logseq.property.asset/type block)
+                                           external-src? (not (string/blank? (:logseq.property.asset/external-src block)))
                                            path (path/path-join common-config/local-assets-dir (str (:block/uuid block) "." asset-type))]
-                                       (p/let [result (if config/publishing?
+                                       (p/let [result (if (or external-src? config/publishing?)
                                                         ;; publishing doesn't have window.pfs defined
                                                         true
                                                         (fs/file-exists? (config/get-repo-dir (state/get-current-repo)) path))]

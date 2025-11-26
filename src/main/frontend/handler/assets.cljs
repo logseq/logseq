@@ -188,9 +188,9 @@
            (when blob (js/URL.createObjectURL blob))))))))
 
 (defn get-file-checksum
-  [^js/Blob file]
-  (-> (.arrayBuffer file)
-      (.then db-asset/<get-file-array-buffer-checksum)))
+  [^js file]
+  (-> (if (string? file) file (.arrayBuffer file))
+      (p/then db-asset/<get-file-array-buffer-checksum)))
 
 (defn <get-all-assets
   []
