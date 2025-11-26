@@ -15,6 +15,7 @@ import UIKit
         bridge?.registerPluginInstance(NativeTopBarPlugin())
         bridge?.registerPluginInstance(LiquidTabsPlugin())
         bridge?.registerPluginInstance(NativeBottomSheetPlugin())
+        bridge?.registerPluginInstance(NativeSelectionActionBarPlugin())
     }
 
     public override func viewDidLoad() {

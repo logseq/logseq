@@ -42,6 +42,7 @@
 		D3D62A0A275C92880003FBDC /* FileContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3D62A09275C92880003FBDC /* FileContainer.swift */; };
 		D3D62A0C275C928F0003FBDC /* FileContainer.m in Sources */ = {isa = PBXBuildFile; fileRef = D3D62A0B275C928F0003FBDC /* FileContainer.m */; };
 		D3F4A5B62F1234567890ABCE /* NativeBottomSheetPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3F4A5B62F1234567890ABCD /* NativeBottomSheetPlugin.swift */; };
+		D3F4A5B62F1234567890ABD1 /* NativeSelectionActionBarPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3F4A5B62F1234567890ABCF /* NativeSelectionActionBarPlugin.swift */; };
 		FE647FF427BDFEDE00F3206B /* FsWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE647FF327BDFEDE00F3206B /* FsWatcher.swift */; };
 		FE647FF627BDFEF500F3206B /* FsWatcher.m in Sources */ = {isa = PBXBuildFile; fileRef = FE647FF527BDFEF500F3206B /* FsWatcher.m */; };
 		FE96D6102A1B811A001ECE32 /* SharedData.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE96D60F2A1B811A001ECE32 /* SharedData.swift */; };
@@ -123,6 +124,7 @@
 		D3D62A09275C92880003FBDC /* FileContainer.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FileContainer.swift; sourceTree = "<group>"; };
 		D3D62A0B275C928F0003FBDC /* FileContainer.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = FileContainer.m; sourceTree = "<group>"; };
 		D3F4A5B62F1234567890ABCD /* NativeBottomSheetPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeBottomSheetPlugin.swift; sourceTree = "<group>"; };
+		D3F4A5B62F1234567890ABCF /* NativeSelectionActionBarPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeSelectionActionBarPlugin.swift; sourceTree = "<group>"; };
 		DE5650F4AD4E2242AB9C012D /* Pods-Logseq.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Logseq.debug.xcconfig"; path = "Target Support Files/Pods-Logseq/Pods-Logseq.debug.xcconfig"; sourceTree = "<group>"; };
 		FE647FF327BDFEDE00F3206B /* FsWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FsWatcher.swift; sourceTree = "<group>"; };
 		FE647FF527BDFEF500F3206B /* FsWatcher.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FsWatcher.m; sourceTree = "<group>"; };
@@ -211,6 +213,7 @@
 				CBF2D2D92DE83CB0006338BE /* UILocalPlugin.swift */,
 				ABCDEF0123456789000000AA /* NativeTopBarPlugin.swift */,
 				D3F4A5B62F1234567890ABCD /* NativeBottomSheetPlugin.swift */,
+				D3F4A5B62F1234567890ABCF /* NativeSelectionActionBarPlugin.swift */,
 				5FF86329283B5ADB0047731B /* Utils.swift */,
 				5FF8632B283B5BFD0047731B /* Utils.m */,
 				D32752BF2754C5AB0039291C /* AppDebug.entitlements */,
@@ -463,6 +466,7 @@
 				CBF2D2DA2DE83CB8006338BE /* UILocalPlugin.swift in Sources */,
 				ABCDEF0123456789000000AB /* NativeTopBarPlugin.swift in Sources */,
 				D3F4A5B62F1234567890ABCE /* NativeBottomSheetPlugin.swift in Sources */,
+				D3F4A5B62F1234567890ABD1 /* NativeSelectionActionBarPlugin.swift in Sources */,
 				A1B2C3D41E2F3A4B5C6D7E90 /* NativePageViewController.swift in Sources */,
 				D3C620AA2ED4B9A80009CCDA /* Theme.swift in Sources */,
 				A1B2C3D41E2F3A4B5C6D7E92 /* SharedWebViewController.swift in Sources */,

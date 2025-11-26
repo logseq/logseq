@@ -1,4 +1,5 @@
 (ns mobile.routes
+  "Routes used in mobile app"
   (:require [frontend.components.page :as page]))
 
 (def routes

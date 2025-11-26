@@ -13,6 +13,7 @@
             [lambdaisland.glogi :as log]
             [logseq.shui.ui :as shui]
             [mobile.components.app :as app]
+            [mobile.components.selection-toolbar :as selection-toolbar]
             [mobile.events]
             [mobile.init :as init]
             [mobile.navigation :as mobile-nav]
@@ -36,6 +37,7 @@
      (fn [route]
        (when (state/get-edit-block)
          (state/clear-edit!))
+       (selection-toolbar/close-selection-bar!)
        (let [route-name (get-in route [:data :name])
              path (-> js/location .-hash (string/replace-first #"^#" ""))
              pop? (= :pop @mobile-nav/navigation-source)
