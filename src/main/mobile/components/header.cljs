@@ -226,7 +226,7 @@
                           :else nil)
           header (cond-> base
                    right-buttons (assoc :rightButtons right-buttons)
-                   (= tab "home") (assoc :titleClickable true))]
+                   (and (= tab "home") (not route-view)) (assoc :titleClickable true))]
       (.configure ^js mobile-util/native-top-bar
                   (clj->js header)))))
 
