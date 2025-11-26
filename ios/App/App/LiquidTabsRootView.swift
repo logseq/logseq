@@ -108,6 +108,17 @@ struct LiquidTabsRootView: View {
         }
     }
 
+
+    private func selection(forId id: String) -> TabSelection? {
+        if id == firstTab?.id { return .first }
+        if id == secondTab?.id { return .second }
+        if id == thirdTab?.id { return .third }
+        if id == fourthTab?.id { return .fourth }
+        if id == "search" { return .search }
+        return nil
+    }
+
+
     private func initialSelection() -> TabSelection {
         if let id = store.selectedId {
             if id == firstTab?.id { return .first }
@@ -238,6 +249,20 @@ struct LiquidTabsRootView: View {
                         isSearchFocused = false
                         hackShowKeyboard = false
                     }
+                }
+                .onChange(of: store.selectedId) { newId in
+                    guard let id = newId,
+                          let newSelection = selection(forId: id) else {
+                        return
+                    }
+
+                    // If it's already selected, treat it as a no-op for programmatic changes
+                    // (if you want programmatic re-tap behavior, you could call handleRetap here)
+                    if newSelection == selectedTab {
+                        return
+                    }
+
+                    selectedTab = newSelection
                 }
                 // Disable content animation on selection changes (only tab bar animates)
                 .animation(nil, value: selectedTab)
