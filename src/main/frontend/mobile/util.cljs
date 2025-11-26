@@ -25,10 +25,12 @@
 (defonce ui-local (registerPlugin "UILocal"))
 (defonce native-top-bar nil)
 (defonce native-bottom-sheet nil)
+(defonce native-selection-action-bar nil)
 (defonce ios-utils nil)
 (when (native-ios?)
   (set! native-top-bar (registerPlugin "NativeTopBarPlugin"))
   (set! native-bottom-sheet (registerPlugin "NativeBottomSheetPlugin"))
+  (set! native-selection-action-bar (registerPlugin "NativeSelectionActionBarPlugin"))
   (set! ios-utils (registerPlugin "Utils")))
 
 (defn hide-splash []
