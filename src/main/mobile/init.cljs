@@ -13,9 +13,7 @@
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [logseq.shui.dialog.core :as shui-dialog]
-            [mobile.components.ui :as cc-ui]
             [mobile.deeplink :as deeplink]
-            [mobile.state :as mobile-state]
             [promesa.core :as p]))
 
 ;; FIXME: `appUrlOpen` are fired twice when receiving a same intent.

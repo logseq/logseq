@@ -78,7 +78,7 @@
          ;;   (editor-handler/show-quick-add))
          nil)))
     (add-watch mobile-state/*tab ::select-tab
-               (fn [_ _ old new]
+               (fn [_ _ _old new]
                  (when new (select! new))))
     (add-search-listener!
      (fn [q]
@@ -94,17 +94,3 @@
     {:id "favorites"  :title "Favorites"  :systemImage "star"  :role "normal"}
     {:id "quick-add"  :title "Capture"    :systemImage "plus"  :role "normal"}
     {:id "settings"   :title "Settings"   :systemImage "gear"  :role "normal"}]))
-
-(defn hide!
-  []
-  nil
-  ;; (when (mobile-util/native-ios?)
-  ;;   (.hide ^js TabsBar))
-  )
-
-(defn show!
-  []
-  nil
-  ;; (when (mobile-util/native-ios?)
-  ;;   (.show ^js TabsBar))
-  )

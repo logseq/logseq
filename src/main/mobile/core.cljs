@@ -12,7 +12,6 @@
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [logseq.shui.ui :as shui]
-            [mobile.bottom-tabs :as bottom-tabs]
             [mobile.components.app :as app]
             [mobile.events]
             [mobile.init :as init]
@@ -54,7 +53,6 @@
            (reset! *route-timeout
                    (js/setTimeout #(route-handler/set-route-match! route) 200)))
 
-         (bottom-tabs/show!)
          (case route-name
            :page
            (let [id-str (get-in route [:path-params :name])]
