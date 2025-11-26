@@ -91,7 +91,7 @@
 (defmethod events/handle :redirect-to-home [_]
   (page-handler/create-today-journal!)
   (when (util/capacitor?)
-    (mobile-state/redirect-to-tab! "home")))
+    (mobile-state/set-tab! "home")))
 
 (defmethod events/handle :page/show-delete-dialog [[_ selected-rows ok-handler]]
   (shui/dialog-open!

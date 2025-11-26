@@ -77,6 +77,9 @@
          ;;   (state/pub-event! [:mobile/start-audio-record])
          ;;   (editor-handler/show-quick-add))
          nil)))
+    (add-watch mobile-state/*tab ::select-tab
+               (fn [_ _ old new]
+                 (when new (select! new))))
     (add-search-listener!
      (fn [q]
       ;; wire up search handler

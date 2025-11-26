@@ -24,9 +24,6 @@
   []
   (= :ls-quick-add (get-in @*popup-data [:opts :id])))
 
-(defn redirect-to-tab! [name]
-  (set-tab! (str name)))
-
 (defonce *log (atom []))
 (defn log-append!
   [record]
