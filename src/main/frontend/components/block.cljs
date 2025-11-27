@@ -355,7 +355,9 @@
           (let [handle-copy!
                 (fn [_e]
                   (-> (util/copy-image-to-clipboard image-src)
-                      (p/then #(notification/show! "Copied!" :success))))
+                      (p/then #(notification/show! "Copied!" :success))
+                      (p/catch (fn [error]
+                                 (js/console.error error)))))
                 handle-delete!
                 (fn [_e]
                   (when-let [block-id (get-blockid)]
@@ -381,47 +383,38 @@
                                       :href src
                                       :title title
                                       :full-text full-text})))))))]
-            [:.asset-action-bar {:aria-hidden "true"}
-             (shui/button-group
-              (shui/button
-               {:variant :outline
-                :size :icon
-                :class "h-7 w-7"
-                :on-pointer-down util/stop
-                :on-click (fn [e]
-                            (shui/popup-show! (.closest (.-target e) ".asset-action-bar")
-                                              (fn []
-                                                [:div
-                                                 {:on-click #(shui/popup-hide!)}
-                                                 (shui/dropdown-menu-item
-                                                  {:on-click #(some-> (db/entity [:block/uuid (get-blockid)])
-                                                                      (editor-handler/edit-block! :max {:container-id :unknown-container}))}
-                                                  [:span.flex.items-center.gap-1
-                                                   (ui/icon "edit") (t :asset/edit-block)])
-                                                 (shui/dropdown-menu-item
-                                                  {:on-click handle-copy!}
-                                                  [:span.flex.items-center.gap-1
-                                                   (ui/icon "copy") (t :asset/copy)])
-                                                 (when (util/electron?)
-                                                   (shui/dropdown-menu-item
-                                                    {:on-click (fn [e]
-                                                                 (util/stop e)
-                                                                 (if local?
-                                                                   (ipc/ipc "openFileInFolder" image-src)
-                                                                   (js/window.apis.openExternal image-src)))}
-                                                    [:span.flex.items-center.gap-1
-                                                     (ui/icon "folder-pin") (t (if local? :asset/show-in-folder :asset/open-in-browser))]))
-
-                                                 (when-not config/publishing?
-                                                   [:<>
-                                                    (shui/dropdown-menu-separator)
-                                                    (shui/dropdown-menu-item
-                                                     {:on-click handle-delete!}
-                                                     [:span.flex.items-center.gap-1.text-red-700
-                                                      (ui/icon "trash") (t :asset/delete)])])])
-                                              {:align :start
-                                               :dropdown-menu? true}))}
-               (shui/tabler-icon "dots-vertical")))])])])))
+            (when asset-block
+              [:.asset-action-bar {:aria-hidden "true"}
+               (shui/dropdown-menu
+                {:on-pointer-down util/stop}
+                (shui/dropdown-menu-trigger
+                 {:as-child true}
+                 (shui/button
+                  {:variant :outline
+                   :size :icon
+                   :class "h-6 w-6"}
+                  (shui/tabler-icon "dots-vertical")))
+                (shui/dropdown-menu-content
+                 (shui/dropdown-menu-item
+                  {:on-click handle-copy!}
+                  [:span.flex.items-center.gap-1
+                   (ui/icon "copy") (t :asset/copy)])
+                 (when (util/electron?)
+                   (shui/dropdown-menu-item
+                    {:on-click (fn [e]
+                                 (util/stop e)
+                                 (if local?
+                                   (ipc/ipc "openFileInFolder" image-src)
+                                   (js/window.apis.openExternal image-src)))}
+                    [:span.flex.items-center.gap-1
+                     (ui/icon "folder-pin") (t (if local? :asset/show-in-folder :asset/open-in-browser))]))
+                 (when-not config/publishing?
+                   [:<>
+                    (shui/dropdown-menu-separator)
+                    (shui/dropdown-menu-item
+                     {:on-click handle-delete!}
+                     [:span.flex.items-center.gap-1.text-red-700
+                      (ui/icon "trash") (t :asset/delete)])])))]))])])))
 
 (rum/defcs ^:large-vars/cleanup-todo resizable-image <
   (rum/local nil ::size)

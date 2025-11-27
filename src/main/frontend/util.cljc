@@ -1364,13 +1364,44 @@
        (set! (.-src image) data-url))))
 
 #?(:cljs
-   (defn write-blob-to-clipboard
-     [blob]
-     (->> blob
-          (js-obj (.-type blob))
-          (js/ClipboardItem.)
-          (array)
-          (js/navigator.clipboard.write))))
+   (def native-clipboard (gobj/get CapacitorClipboard "Clipboard")))
+
+#?(:cljs
+   (do
+     ;; Helper: Blob -> data URL (returns a JS Promise)
+     (defn blob->data-url [blob]
+       (js/Promise.
+        (fn [resolve reject]
+          (let [reader (js/FileReader.)]
+            (set! (.-onload reader)
+                  (fn [_e]
+                    ;; result is a "data:<mime>;base64,..." string
+                    (resolve (.-result reader))))
+            (set! (.-onerror reader)
+                  (fn [_e]
+                    (reject (.-error reader))))
+            (.readAsDataURL reader blob)))))
+
+     (defn write-blob-to-clipboard [blob]
+       (if native-clipboard
+         ;; 1) Native (Capacitor) path – expects a data URL
+         (-> (blob->data-url blob)
+             (.then (fn [data-url]
+                        ;; Your Capacitor plugin signature: { image: <data-url> }
+                      (.write native-clipboard #js {:image data-url})))
+             (.then (fn []
+                      (js/console.log "Copied via native clipboard")))
+             (.catch (fn [err]
+                       (js/console.error "Native clipboard failed" err))))
+
+         ;; 2) Web Clipboard API path (desktop browsers etc.)
+         (let [item (js/ClipboardItem.
+                     (js-obj (.-type blob) blob))]
+           (-> (.write (.-clipboard js/navigator) (array item))
+               (.then (fn []
+                        (js/console.log "Copied via web clipboard")))
+               (.catch (fn [err]
+                         (js/console.error "Web clipboard failed" err)))))))))
 
 #?(:cljs
    (defn copy-image-to-clipboard
