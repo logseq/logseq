@@ -100,8 +100,6 @@
 (rum/defc main-content < rum/static
   [tab route-match]
   (let [view (get-in route-match [:data :view])
-        ;; We are on the journals home screen if the tab is :home
-        ;; AND there is no view (e.g. not viewing a specific journal page)
         home? (and (= tab "home") (nil? view))]
     ;; Two-layer structure:
     ;; - Journals layer keeps its own scroll container and is always in the DOM.
@@ -109,13 +107,11 @@
     ;; Both are absolutely positioned and stacked; we toggle visibility.
     [:div.h-full.relative
      ;; Journals scroll container (keep-alive)
-     ;; This element stays mounted permanently and only toggles visibility.
      [:div#app-main-home.px-5.absolute.inset-0.overflow-y-auto
       {:class (when-not home? "invisible pointer-events-none")}
       (home)]
 
      ;; Other pages: search, settings, specific page, etc.
-     ;; These views scroll independently from the journals layer.
      (when-not home?
        (other-page view tab route-match))]))
 
