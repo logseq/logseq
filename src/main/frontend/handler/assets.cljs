@@ -152,7 +152,9 @@
               (map vector rel-paths blob-urls)))))
 
 (defn <make-asset-url
-  "Make asset URL for UI element, to fill img.src"
+  "Make accessible asset url from path.
+   If path is absolute url, return it directly.
+   If path is relative path, return blob url or file url according to environment."
   ([path] (<make-asset-url path (try (js/URL. path) (catch :default _ nil))))
   ([path ^js js-url]
    ;; path start with "/assets"(editor) or compatible for "../assets"(whiteboards)

@@ -349,12 +349,13 @@
   [block]
   (let [hl-value (:logseq.property.pdf/hl-value block)
         asset (:logseq.property/asset block)
-        file-path (str "../assets/" (:block/uuid asset) ".pdf")]
+        external-src (:logseq.property.asset/external-src asset)
+        file-path (or external-src (str "../assets/" (:block/uuid asset) ".pdf"))]
     (if asset
       (->
        (p/let [href (assets-handler/<make-asset-url file-path)]
          (state/set-state! :pdf/ref-highlight hl-value)
-        ;; open pdf viewer
+         ;; open pdf viewer
          (state/set-current-pdf! (inflate-asset file-path {:href href :block asset})))
        (p/catch (fn [error]
                   (js/console.error error))))
