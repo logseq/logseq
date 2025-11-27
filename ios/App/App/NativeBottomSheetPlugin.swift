@@ -20,10 +20,6 @@ public class NativeBottomSheetPlugin: CAPPlugin, CAPBridgedPlugin {
     // MARK: - Public API
 
     @objc func present(_ call: CAPPluginCall) {
-        guard #available(iOS 15.0, *) else {
-            call.reject("Native sheet requires iOS 15 or newer")
-            return
-        }
 
         DispatchQueue.main.async {
             // If a sheet is already visible, just resolve.
@@ -114,7 +110,7 @@ public class NativeBottomSheetPlugin: CAPPlugin, CAPBridgedPlugin {
 
                 // After a short delay, JS should have navigated away from the sheet route.
                 // Now we fade the webview in and remove snapshot/placeholder.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.065) {
                     webView.alpha = 1
                     // Remove the frozen background
                     self.clearSnapshot()
@@ -167,7 +163,6 @@ private struct NativeBottomSheetConfiguration {
     let allowFullHeight: Bool
 }
 
-@available(iOS 15.0, *)
 private class NativeBottomSheetViewController: UIViewController, UISheetPresentationControllerDelegate {
     let configuration: NativeBottomSheetConfiguration
     var onDismiss: (() -> Void)?
@@ -217,18 +212,12 @@ private class NativeBottomSheetViewController: UIViewController, UISheetPresenta
     }
 
     private func configureCustomDetent(sheet: UISheetPresentationController, height: CGFloat) {
-        if #available(iOS 16.0, *) {
-            let identifier = UISheetPresentationController.Detent.Identifier("logseq.custom")
-            let custom = UISheetPresentationController.Detent.custom(identifier: identifier) { _ in
-                height
-            }
-            sheet.detents = configuration.allowFullHeight ? [custom, .large()] : [custom]
-            sheet.selectedDetentIdentifier = identifier
-        } else {
-            sheet.detents = [.medium(), .large()]
-            let threshold = UIScreen.main.bounds.height * 0.65
-            sheet.selectedDetentIdentifier = height >= threshold ? .large : .medium
+        let identifier = UISheetPresentationController.Detent.Identifier("logseq.custom")
+        let custom = UISheetPresentationController.Detent.custom(identifier: identifier) { _ in
+            height
         }
+        sheet.detents = configuration.allowFullHeight ? [custom, .large()] : [custom]
+        sheet.selectedDetentIdentifier = identifier
     }
 
     private func notifyDismissed() {
