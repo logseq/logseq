@@ -343,7 +343,13 @@
                                                        3))
       :favorites/updated?                    (atom 0)
       :db/async-queries                      (atom {})
-      :db/latest-transacted-entity-uuids     (atom {})})))
+      :db/latest-transacted-entity-uuids     (atom {})
+
+      ;; db onboarding
+      :onboarding/entry-point                "none"
+      :onboarding/status                     "not_started"
+      :onboarding/current-step               0
+      :onboarding/wizard-path                nil})))
 
 ;; User configuration getters under :config (and sometimes :me)
 ;; ========================================
@@ -1585,6 +1591,30 @@ Similar to re-frame subscriptions"
   []
   (let [value @(:ui/toggle-highlight-recent-blocks? @state)]
     (set-state! :ui/toggle-highlight-recent-blocks? (not value))))
+
+;; DB Onboarding state management
+(defn set-onboarding-entry-point!
+  [entry-point]
+  (set-state! :onboarding/entry-point entry-point))
+
+(defn set-onboarding-status!
+  [status]
+  (set-state! :onboarding/status status))
+
+(defn set-onboarding-current-step!
+  [step]
+  (set-state! :onboarding/current-step step))
+
+(defn set-onboarding-wizard-path!
+  [path]
+  (set-state! :onboarding/wizard-path path))
+
+(defn reset-onboarding-state!
+  []
+  (set-state! :onboarding/entry-point "none")
+  (set-state! :onboarding/status "not_started")
+  (set-state! :onboarding/current-step 0)
+  (set-state! :onboarding/wizard-path nil))
 
 (defn shortcut-tooltip-enabled?
   []

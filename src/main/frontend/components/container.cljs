@@ -15,6 +15,7 @@
             [frontend.components.repo :as repo]
             [frontend.components.right-sidebar :as right-sidebar]
             [frontend.components.theme :as theme]
+            [frontend.components.onboarding.root :as onboarding-root]
             [frontend.components.window-controls :as window-controls]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t tt]]
@@ -1078,6 +1079,8 @@
         :current-repo current-repo
         :db-restoring? db-restoring?})
       (app-context-menu-observer)
+
+      (onboarding-root/onboarding-root)
 
       [:a#download.hidden]
       [:a#download-as-edn-v2.hidden]
