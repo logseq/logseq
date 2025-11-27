@@ -1596,13 +1596,13 @@
 (defn hook-custom-routes
   [routes]
   (cond-> routes
-          config/lsp-enabled?
-          (concat (some->> (plugin-handler/get-route-renderers)
-                           (mapv (fn [custom-route]
-                                   (when-let [{:keys [name path render]} custom-route]
-                                     (when (not (string/blank? path))
-                                       [path {:name name :view (fn [r] (render r custom-route))}]))))
-                           (remove nil?)))))
+    config/lsp-enabled?
+    (concat (some->> (plugin-handler/get-route-renderers)
+                     (mapv (fn [custom-route]
+                             (when-let [{:keys [name path render]} custom-route]
+                               (when (not (string/blank? path))
+                                 [path {:name name :view (fn [r] (render r custom-route))}]))))
+                     (remove nil?)))))
 
 (defn hook-daemon-renderers
   []

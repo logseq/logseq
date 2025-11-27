@@ -133,12 +133,6 @@ const common = {
         'node_modules/@sqlite.org/sqlite-wasm/sqlite-wasm/jswasm/sqlite3.wasm',
       ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'js'))),
       () => gulp.src([
-        'packages/ui/dist/silkhq/*.css*',
-      ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'css'))),
-      () => gulp.src([
-        'packages/ui/dist/silkhq/*.js*',
-      ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'js'))),
-      () => gulp.src([
         'node_modules/inter-ui/inter.css',
       ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'css'))),
       () => gulp.src('node_modules/inter-ui/Inter (web)/*.*').
