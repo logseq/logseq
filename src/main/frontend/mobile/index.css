@@ -26,36 +26,6 @@
   }
 }
 
-#mobile-editor-toolbar {
-  @apply fixed bottom-0 left-0 w-full z-[99999] flex justify-between bg-background px-2;
-
-  will-change: transform;
-  transform: translateY(calc(-1 * var(--ls-native-kb-height, 0)));
-  opacity: var(--ls-native-toolbar-opacity, 0);
-  transition: transform 250ms ease-out, opacity 50ms ease-out;
-
-  button {
-    @apply flex items-center py-2 px-2;
-  }
-
-  .submenu {
-    @apply fixed left-0 bottom-0 w-full flex-row justify-evenly items-center z-10 bg-base-2
-    hidden overflow-x-auto overflow-y-hidden h-5 border;
-
-    &.show-submenu {
-      @apply flex;
-    }
-  }
-
-  .toolbar-commands {
-    @apply flex justify-between items-center overflow-y-hidden overflow-x-auto;
-
-    &::-webkit-scrollbar {
-      @apply h-1;
-    }
-  }
-}
-
 html.is-native-ipad {
   .action-bar {
     @apply w-[70%] min-w-[550px];
