@@ -77,11 +77,25 @@
   (hooks/use-effect!
    (fn []
      (let [handle-size! (fn []
-                          (.setProperty (.-style js/document.body) "--ls-full-screen-height" (str js/window.screen.height "px")))]
+                          (.setProperty (.-style js/document.body)
+                                        "--ls-full-screen-height"
+                                        (str js/window.screen.height "px")))]
        (handle-size!)
        (.addEventListener js/window "orientationchange" handle-size!)
        #(.removeEventListener js/window "orientationchange" handle-size!)))
    []))
+
+(rum/defc other-page
+  [view tab route-match]
+  [:div#main-content-container.px-5.ls-layer
+   (if view
+     (view route-match)
+     (case (keyword tab)
+       :home nil
+       :favorites (favorites/favorites)
+       :settings (settings/page)
+       :search (search/search)
+       nil))])
 
 (rum/defc main-content < rum/static
   [tab route-match]
@@ -91,34 +105,19 @@
         home? (and (= tab "home") (nil? view))]
     ;; Two-layer structure:
     ;; - Journals layer keeps its own scroll container and is always in the DOM.
-    ;; - Page layer keeps its own independent scroll container.
-    ;; This ensures switching tabs does not reset scrollTop.
-    [:<>
+    ;; - Page/other-tab layer keeps its own independent scroll container.
+    ;; Both are absolutely positioned and stacked; we toggle visibility.
+    [:div.h-full.relative
      ;; Journals scroll container (keep-alive)
      ;; This element stays mounted permanently and only toggles visibility.
-     [:div#app-main-home.px-5 {:class (when-not home? "hidden")}
+     [:div#app-main-home.px-5.absolute.inset-0.overflow-y-auto
+      {:class (when-not home? "invisible pointer-events-none")}
       (home)]
 
-     ;; Other pages:  search, settings, etc.
+     ;; Other pages: search, settings, specific page, etc.
      ;; These views scroll independently from the journals layer.
      (when-not home?
-       [:div#main-content-container.px-5
-        (if view
-          (view route-match)
-          (case (keyword tab)
-            :home
-            nil
-
-            :favorites
-            (favorites/favorites)
-
-            :settings
-            (settings/page)
-
-            :search
-            (search/search)
-
-            nil))])]))
+       (other-page view tab route-match))]))
 
 (rum/defc app
   [current-repo route-match]
@@ -131,7 +130,8 @@
        (when (mobile-util/native-ios?)
          (bottom-tabs/configure))
        (when-let [element (util/app-scroll-container-node)]
-         (common-handler/listen-to-scroll! element))) [])
+         (common-handler/listen-to-scroll! element)))
+     [])
     [:div.h-full {:class (if (contains? #{"search"} tab)
                            "mt-20"
                            "mt-24")}
@@ -149,10 +149,11 @@
     [:main.w-full.h-full
      {:class (util/classnames
               [{:ls-fold-button-on-right fold-button-on-right?}])}
-     [:div.w-full.h-full {:class (when show-popup? "hidden")}
+     [:div.w-full.h-full {:class (when show-popup? "invisible")}
       (app current-repo route-match)]
      (when show-popup?
-       (popup/popup opts content-fn))
+       [:div.ls-layer
+        (popup/popup opts content-fn)])
      (editor-toolbar/mobile-bar)
      (when show-action-bar?
        (selection-toolbar/action-bar))
