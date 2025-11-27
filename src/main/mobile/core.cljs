@@ -3,7 +3,6 @@
   (:require ["react-dom/client" :as rdc]
             [clojure.string :as string]
             [frontend.background-tasks]
-            [frontend.components.imports :as imports]
             [frontend.db.async :as db-async]
             [frontend.handler :as fhandler]
             [frontend.handler.db-based.rtc-background-tasks]
@@ -11,7 +10,6 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
-            [logseq.shui.ui :as shui]
             [mobile.components.app :as app]
             [mobile.components.selection-toolbar :as selection-toolbar]
             [mobile.events]
@@ -65,14 +63,6 @@
                    (db-async/<get-block repo page-uuid
                                         {:children? false
                                          :skip-refresh? true})))))
-
-           :graphs
-           (mobile-state/set-tab! "settings")
-
-           :import
-           (shui/popup-show! nil (fn []
-                                   (imports/importer {}))
-                             {:id :import})
 
            nil)))
 
