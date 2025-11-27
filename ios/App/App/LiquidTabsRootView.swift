@@ -54,12 +54,16 @@ struct LiquidTabsRootView: View {
     // Controls whether the hidden UITextField should grab keyboard focus.
     @State private var hackShowKeyboard: Bool = false
 
-    // Native selection type
+    // Native selection type: dynamic tabs + search
     enum TabSelection: Hashable {
-        case first, second, third, fourth, search
+        case content(Int) // index into store.tabs
+        case search
     }
 
-    @State private var selectedTab: TabSelection = .first
+    @State private var selectedTab: TabSelection = .content(0)
+
+    // (optional) cap number of main tabs if you like
+    private let maxMainTabs = 6
 
     // MARK: - Re-Tap Logic
 
@@ -93,44 +97,45 @@ struct LiquidTabsRootView: View {
 
     // MARK: - Tab Helpers
 
-    private var firstTab: LiquidTab? { store.tabs.first }
-    private var secondTab: LiquidTab? { store.tabs.count > 1 ? store.tabs[1] : nil }
-    private var thirdTab: LiquidTab? { store.tabs.count > 2 ? store.tabs[2] : nil }
-    private var fourthTab: LiquidTab? { store.tabs.count > 3 ? store.tabs[3] : nil }
+    private var firstTab: LiquidTab? {
+        store.tabs.first
+    }
 
+    /// Get tab id for a selection
     private func tabId(for selection: TabSelection) -> String? {
         switch selection {
-        case .first:  return firstTab?.id
-        case .second: return secondTab?.id
-        case .third:  return thirdTab?.id
-        case .fourth: return fourthTab?.id
-        case .search: return "search"
+        case .content(let index):
+            guard index >= 0 && index < store.tabs.count else { return nil }
+            return store.tabs[index].id
+        case .search:
+            return "search"
         }
     }
 
-
+    /// Map a tab id back to TabSelection
     private func selection(forId id: String) -> TabSelection? {
-        if id == firstTab?.id { return .first }
-        if id == secondTab?.id { return .second }
-        if id == thirdTab?.id { return .third }
-        if id == fourthTab?.id { return .fourth }
-        if id == "search" { return .search }
+        if id == "search" {
+            return .search
+        }
+
+        if let index = store.tabs.firstIndex(where: { $0.id == id }) {
+            return .content(index)
+        }
+
         return nil
     }
 
-
+    /// Compute initial selection based on store.selectedId or available tabs
     private func initialSelection() -> TabSelection {
-        if let id = store.selectedId {
-            if id == firstTab?.id { return .first }
-            if id == secondTab?.id { return .second }
-            if id == thirdTab?.id { return .third }
-            if id == fourthTab?.id { return .fourth }
-            if id == "search" { return .search }
+        if let id = store.selectedId,
+           let sel = selection(forId: id) {
+            return sel
         }
-        if firstTab != nil { return .first }
-        if secondTab != nil { return .second }
-        if thirdTab != nil { return .third }
-        if fourthTab != nil { return .fourth }
+
+        if !store.tabs.isEmpty {
+            return .content(0)
+        }
+
         return .search
     }
 
@@ -149,36 +154,14 @@ struct LiquidTabsRootView: View {
                     // Main TabView using the PROXY BINDING
                     TabView(selection: tabSelectionProxy) {
 
-                        // ---- Tab 1 ----
-                        if let tab = firstTab {
-                            Tab(tab.title, systemImage: tab.systemImage, value: TabSelection.first) {
-                                NativeNavHost(navController: navController)
-                                    .ignoresSafeArea()
-                                    .background(Color.logseqBackground)
-                            }
-                        }
-
-                        // ---- Tab 2 ----
-                        if let tab = secondTab {
-                            Tab(tab.title, systemImage: tab.systemImage, value: TabSelection.second) {
-                                NativeNavHost(navController: navController)
-                                    .ignoresSafeArea()
-                                    .background(Color.logseqBackground)
-                            }
-                        }
-
-                        // ---- Tab 3 ----
-                        if let tab = thirdTab {
-                            Tab(tab.title, systemImage: tab.systemImage, value: TabSelection.third) {
-                                NativeNavHost(navController: navController)
-                                    .ignoresSafeArea()
-                                    .background(Color.logseqBackground)
-                            }
-                        }
-
-                        // ---- Tab 4 ----
-                        if let tab = fourthTab {
-                            Tab(tab.title, systemImage: tab.systemImage, value: TabSelection.fourth) {
+                        // ---- Dynamic main tabs, using Tab(...) API ----
+                        ForEach(Array(store.tabs.prefix(maxMainTabs).enumerated()),
+                                id: \.element.id) { index, tab in
+                            Tab(
+                                tab.title,
+                                systemImage: tab.systemImage,
+                                value: TabSelection.content(index)
+                            ) {
                                 NativeNavHost(navController: navController)
                                     .ignoresSafeArea()
                                     .background(Color.logseqBackground)
@@ -191,7 +174,7 @@ struct LiquidTabsRootView: View {
                                 navController: navController,
                                 isSearchFocused: $isSearchFocused,
                                 selectedTab: $selectedTab,
-                                firstTabId: firstTab?.id,
+                                firstTabId: store.tabs.first?.id,
                                 store: store
                             )
                             .ignoresSafeArea()
@@ -216,9 +199,32 @@ struct LiquidTabsRootView: View {
                 .onAppear {
                     let initial = initialSelection()
                     selectedTab = initial
-                    if initial == .search {
+                    if case .search = initial {
                         isSearchPresented = true
                     }
+
+                    let appearance = UITabBarAppearance()
+                    appearance.configureWithOpaqueBackground()
+
+                    // Background
+                    appearance.backgroundColor = UIColor.logseqBackground
+
+                    // Selected text color
+                    appearance.stackedLayoutAppearance.selected.titleTextAttributes = [
+                        .foregroundColor: UIColor.label
+                    ]
+
+                    // Unselected text color (70%)
+                    let dimmed = UIColor.label.withAlphaComponent(0.7)
+                    appearance.stackedLayoutAppearance.normal.titleTextAttributes = [
+                        .foregroundColor: dimmed
+                    ]
+
+                    // Apply the appearance
+                    let tabBar = UITabBar.appearance()
+                    tabBar.tintColor = .label
+                    tabBar.standardAppearance = appearance
+                    tabBar.scrollEdgeAppearance = appearance
                 }
                 // Handle STANDARD tab selection changes
                 .onChange(of: selectedTab) { newValue in
@@ -227,9 +233,10 @@ struct LiquidTabsRootView: View {
                         LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
                     }
 
-                    if newValue == .search {
+                    switch newValue {
+                    case .search:
                         isSearchPresented = true
-                    } else {
+                    case .content:
                         hackShowKeyboard = false
                         isSearchFocused = false
                         isSearchPresented = false
@@ -257,7 +264,6 @@ struct LiquidTabsRootView: View {
                     }
 
                     // If it's already selected, treat it as a no-op for programmatic changes
-                    // (if you want programmatic re-tap behavior, you could call handleRetap here)
                     if newSelection == selectedTab {
                         return
                     }
@@ -333,12 +339,12 @@ private struct SearchTabHost: View {
                     if searching {
                         wasSearching = true
                     } else if wasSearching,
-                              selectedTab.wrappedValue == .search,
+                              case .search = selectedTab.wrappedValue,
                               let firstId = firstTabId {
 
-                        // Cancel logic - Programmatic switch
+                        // Cancel logic - Programmatic switch back to first content tab
                         wasSearching = false
-                        selectedTab.wrappedValue = .first
+                        selectedTab.wrappedValue = .content(0)
                         store.selectedId = firstId
                         LiquidTabsPlugin.shared?.notifyTabSelected(id: firstId)
                     }
