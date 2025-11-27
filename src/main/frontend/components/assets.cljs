@@ -8,6 +8,8 @@
    [frontend.context.i18n :refer [t]]
    [frontend.handler.assets :as assets-handler]
    [frontend.handler.notification :as notification]
+   [frontend.handler.editor :as editor-handler]
+   [frontend.handler.route :as route-handler]
    [frontend.state :as state]
    [frontend.ui :as ui]
    [frontend.util :as util]
@@ -221,3 +223,59 @@
        [:div.pt-4
         [:h2.font-bold.opacity-80 "Selected directories:"]
         (alias-directories)])]))
+
+(rum/defc edit-external-src-form
+  [asset-block {:keys [url title on-saved]}]
+  (let [[saving? set-saving?] (rum/use-state false)
+        create? (nil? asset-block)]
+    [:form.pt-3.flex.flex-col.gap-2
+     {:on-submit (fn [^js e]
+                   (.preventDefault e)
+                   (let [^js form-data (js/FormData. (.-currentTarget e))
+                         repo (state/get-current-repo)
+                         title (.get form-data "title")
+                         src (.get form-data "src")]
+                     (if create?
+                       (-> (do (set-saving? true)
+                               (editor-handler/db-based-save-assets! repo [{:title title :src src}]))
+                           (p/then (fn [res]
+                                     (when-let [asset-block (some-> (seq res) (first))]
+                                       (when on-saved (on-saved asset-block)))))
+                           (p/catch (fn [^js e]
+                                      (js/console.error e)
+                                      (notification/show! (str e))))
+                           (p/finally #(set-saving? false)))
+                       ;; update asset block
+                       (notification/show! (str "TODO: update asset block:" (pr-str asset-block)))
+                       )))}
+     [:label [:span.block.pb-2.text-sm.opacity-60 "Asset title:"]
+      (shui/input {:small true :default-value title :name "title"})]
+     [:label [:span.block.pb-2.text-sm.opacity-60 "Asset src:"]
+      (shui/input {:small true :default-value url :name "src"})]
+     [:div.flex.justify-end.pt-3
+      (ui/button (if create? "Create" "Save") {:disabled saving?})]]))
+
+(rum/defc edit-external-src-content
+  [asset-block pdf-current]
+  [:div.edit-external-src-content
+   (let [on-saved! (fn [asset-block]
+                     (when-let [uuid' (:block/uuid asset-block)]
+                       (when pdf-current (state/set-current-pdf! nil))
+                       (shui/dialog-close!)
+                       (route-handler/redirect-to-page! uuid')))]
+     (if asset-block
+       [:div.py-2
+        [:strong "TODO: Edit external asset source block:"]
+        [:pre (pr-str asset-block)]]
+
+       (when-let [url (:url pdf-current)]
+         [:div.pb-2
+          (shui/alert
+           {:variant "warning"}
+           (shui/alert-description
+            "⚠️ PDF annotations should be with internal asset(pdf) ref block to work properly."
+            ))
+
+          (let [title (util/node-path.basename url)]
+            (edit-external-src-form asset-block {:url url :title title :on-saved on-saved!}))])
+       ))])

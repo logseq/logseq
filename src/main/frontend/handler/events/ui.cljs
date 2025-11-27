@@ -15,6 +15,7 @@
             [frontend.components.shell :as shell]
             [frontend.components.user.login :as login]
             [frontend.components.whiteboard :as whiteboard]
+            [frontend.components.assets :as assets]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -309,6 +310,13 @@
    (merge {:close-btn?      false
            :center?         true
            :close-backdrop? false} opts)))
+
+(defmethod events/handle :asset/dialog-edit-external-src [[_ asset-block pdf-current]]
+  (shui/dialog-open!
+   (assets/edit-external-src-content asset-block pdf-current)
+   {:id :edit-external-asset-source-dialog
+    :title (str (if asset-block "Edit" "Create" ) " internal asset ref block")
+    :center? true}))
 
 (defn- enable-beta-features!
   []

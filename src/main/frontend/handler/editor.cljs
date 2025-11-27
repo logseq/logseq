@@ -1535,7 +1535,8 @@
 (defn- new-asset-block
   [repo ^js file {:keys [repo-dir asset-dir-rpath external-src]}]
   ;; WARN file name maybe fully qualified path when paste file
-  (p/let [[file external-src] (if (string? file) [nil file] [file external-src])
+  (p/let [[file title] (if (map? file) [(:src file) (:title file)] [file nil])
+          [file external-src] (if (string? file) [nil file] [file external-src])
           file-name (node-path/basename (or (some-> file (.-name)) (str external-src)))
           file-name-without-ext* (db-asset/asset-name->title file-name)
           file-name-without-ext (if (= file-name-without-ext* "image")
@@ -1569,7 +1570,7 @@
                  file-rpath (str asset-dir-rpath "/" file-path)
                  dir repo-dir]
              (db-based-write-asset! repo dir file file-rpath)))
-         {:block/title file-name-without-ext
+         {:block/title (or title file-name-without-ext)
           :block/uuid block-id
           :logseq.property.asset/type ext
           :logseq.property.asset/external-src external-src
