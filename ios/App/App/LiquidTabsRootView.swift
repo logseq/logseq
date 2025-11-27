@@ -204,10 +204,7 @@ struct LiquidTabsRootView: View {
                     }
 
                     let appearance = UITabBarAppearance()
-                    appearance.configureWithOpaqueBackground()
-
-                    // Background
-                    appearance.backgroundColor = UIColor.logseqBackground
+                    appearance.configureWithTransparentBackground()
 
                     // Selected text color
                     appearance.stackedLayoutAppearance.selected.titleTextAttributes = [
