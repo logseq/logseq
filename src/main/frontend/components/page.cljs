@@ -173,12 +173,16 @@
                                     (date/journal-title->int (date/today))))
                        (state/pub-event! [:journal/insert-template page-name]))))
                  state)}
-  [state block* {:keys [sidebar? whiteboard? hide-add-button?] :as config}]
+  [state block* {:keys [sidebar? whiteboard? hide-add-button? journals?] :as config}]
   (when-let [id (:db/id block*)]
     (let [block (db/sub-block id)
           block-id (:block/uuid block)
           block? (not (db/page? block))
-          children (:block/_parent block)
+          full-children (:block/_parent block)
+          mobile-length-limit 50
+          [children more?] (if (and (> (count full-children) mobile-length-limit) (util/mobile?) journals?)
+                             [(take mobile-length-limit full-children) true]
+                             [full-children false])
           quick-add-page-id (:db/id (db-db/get-built-in-page (db/get-db) common-config/quick-add-page-name))
           children (cond
                      (and (= id quick-add-page-id)
@@ -222,8 +226,14 @@
               blocks (if block? [block] (db/sort-by-order children block))]
           [:div.relative
            (page-blocks-inner block blocks config sidebar? whiteboard? block-id)
-           (when-not hide-add-button?
-             (add-button block config))])))))
+           (when more?
+             (shui/button {:variant :ghost
+                           :class "text-muted-foreground w-full"
+                           :on-click (fn [] (route-handler/redirect-to-page! (:block/uuid block)))}
+                          "Load more"))
+           (when-not more?
+             (when-not hide-add-button?
+               (add-button block config)))])))))
 
 (rum/defc today-queries < rum/reactive
   [repo today? sidebar?]
