@@ -116,7 +116,7 @@
            (.on "record-end" (fn [^js blob]
                                (when @*save?
                                  (save-asset-audio! blob @*transcribe?))
-                               (mobile-state/close-popup!)))
+                               (shui/popup-hide!)))
            (.on "record-progress" (gfun/throttle
                                    (fn [time]
                                      (when @*recorder
@@ -172,10 +172,10 @@
 
 (defn- show-recorder
   []
-  (mobile-state/set-popup! {:open? true
-                            :content-fn (fn [] (audio-recorder-aux))
-                            :opts {:id :ls-audio-record
-                                   :default-height 300}}))
+  (shui/popup-show! nil
+                    (fn [] (audio-recorder-aux))
+                    {:id :ls-audio-record
+                     :default-height 300}))
 
 (defn record!
   [& {:keys [save-to-today?]}]

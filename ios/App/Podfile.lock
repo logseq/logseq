@@ -17,6 +17,8 @@ PODS:
   - CapacitorCordova (7.2.0)
   - CapacitorDevice (7.0.2):
     - Capacitor
+  - CapacitorDialog (7.0.2):
+    - Capacitor
   - CapacitorFilesystem (7.0.1):
     - Capacitor
   - CapacitorHaptics (7.0.1):
@@ -38,8 +40,6 @@ PODS:
   - KeychainSwift (21.0.0)
   - SendIntent (7.0.0):
     - Capacitor
-  - StayLiquid (0.1.0):
-    - Capacitor (>= 6.0.0)
 
 DEPENDENCIES:
   - "AparajitaCapacitorSecureStorage (from `../../node_modules/@aparajita/capacitor-secure-storage`)"
@@ -51,6 +51,7 @@ DEPENDENCIES:
   - "CapacitorCommunitySafeArea (from `../../node_modules/@capacitor-community/safe-area`)"
   - "CapacitorCordova (from `../../node_modules/@capacitor/ios`)"
   - "CapacitorDevice (from `../../node_modules/@capacitor/device`)"
+  - "CapacitorDialog (from `../../node_modules/@capacitor/dialog`)"
   - "CapacitorFilesystem (from `../../node_modules/@capacitor/filesystem`)"
   - "CapacitorHaptics (from `../../node_modules/@capacitor/haptics`)"
   - "CapacitorKeyboard (from `../../node_modules/@capacitor/keyboard`)"
@@ -61,7 +62,6 @@ DEPENDENCIES:
   - "CapgoCapacitorNavigationBar (from `../../node_modules/@capgo/capacitor-navigation-bar`)"
   - "JcesarmobileSslSkip (from `../../node_modules/@jcesarmobile/ssl-skip`)"
   - SendIntent (from `../../node_modules/send-intent`)
-  - StayLiquid (from `../../node_modules/stay-liquid`)
 
 SPEC REPOS:
   trunk:
@@ -86,6 +86,8 @@ EXTERNAL SOURCES:
     :path: "../../node_modules/@capacitor/ios"
   CapacitorDevice:
     :path: "../../node_modules/@capacitor/device"
+  CapacitorDialog:
+    :path: "../../node_modules/@capacitor/dialog"
   CapacitorFilesystem:
     :path: "../../node_modules/@capacitor/filesystem"
   CapacitorHaptics:
@@ -106,8 +108,6 @@ EXTERNAL SOURCES:
     :path: "../../node_modules/@jcesarmobile/ssl-skip"
   SendIntent:
     :path: "../../node_modules/send-intent"
-  StayLiquid:
-    :path: "../../node_modules/stay-liquid"
 
 SPEC CHECKSUMS:
   AparajitaCapacitorSecureStorage: 502bff73187cf9d0164459458ccf47ec65d5895a
@@ -119,6 +119,7 @@ SPEC CHECKSUMS:
   CapacitorCommunitySafeArea: 3f049619072ab5d0da2529bcb05b358ff6c13dc1
   CapacitorCordova: 5967b9ba03915ef1d585469d6e31f31dc49be96f
   CapacitorDevice: 81ae78d5d1942707caad79276badd458bf6ec603
+  CapacitorDialog: 5bf72a94b747fb339df6f64ef60812e5e4630ad2
   CapacitorFilesystem: e6261c410436f54908c11f94336c5b58286b1db0
   CapacitorHaptics: 1f1e17041f435d8ead9ff2a34edd592c6aa6a8d6
   CapacitorKeyboard: 09fd91dcde4f8a37313e7f11bde553ad1ed52036
@@ -130,8 +131,7 @@ SPEC CHECKSUMS:
   JcesarmobileSslSkip: 5fa98636a64c36faa50f32ab4daf34e38f4d45b9
   KeychainSwift: 4a71a45c802fd9e73906457c2dcbdbdc06c9419d
   SendIntent: 8a6f646a4489f788d253ffbd1082a98ea388d870
-  StayLiquid: dac4b6cd7761472754f97d367ba4651ca79fcd2e
 
-PODFILE CHECKSUM: 3223217c556441dd921e66e1c855a0e8ee98159c
+PODFILE CHECKSUM: 2ba428e46e22e2bca616c46fc132c5699b98e54b
 
 COCOAPODS: 1.16.2

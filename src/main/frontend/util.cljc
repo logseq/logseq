@@ -93,27 +93,20 @@
 #?(:cljs (defonce ^js node-path utils/nodePath))
 #?(:cljs (defonce ^js sem-ver semver))
 #?(:cljs (defonce ^js full-path-extname pathCompleteExtname))
-#?(:cljs
-   (defn mobile-page-scroll
-     ([] (some-> (js/document.querySelector ".app-silk-index-scroll-content") (.-parentNode)))
-     ([el] (if el
-             (some-> (or (.closest el ".app-silk-scroll-content")
-                         (.closest el ".app-silk-index-scroll-content")) (.-parentNode))
-             (mobile-page-scroll)))))
 
 #?(:cljs (defn app-scroll-container-node
            ([]
-            (if (capacitor?)
-              (mobile-page-scroll)
-              (gdom/getElement "main-content-container")))
+            (or
+             (gdom/getElement "main-content-container")
+             (gdom/getElement "app-main-home")))
            ([el]
-            (if (capacitor?)
-              (mobile-page-scroll el)
-              (if (some-> el (.closest "#main-content-container"))
-                (app-scroll-container-node)
-                (or
-                 (gdom/getElementByClass "sidebar-item-list")
-                 (app-scroll-container-node)))))))
+            (if (or
+                 (some-> el (.closest "#main-content-container"))
+                 (some-> el (.closest "#app-main-home")))
+              (app-scroll-container-node)
+              (or
+               (gdom/getElementByClass "sidebar-item-list")
+               (app-scroll-container-node))))))
 #?(:cljs (defonce el-visible-in-viewport? utils/elementIsVisibleInViewport))
 #?(:cljs (defonce convert-to-roman utils/convertToRoman))
 #?(:cljs (defonce convert-to-letters utils/convertToLetters))

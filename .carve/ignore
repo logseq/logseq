@@ -88,3 +88,6 @@ frontend.rum/use-atom-in
 frontend.common.missionary/<!
 ;; only used in deps/common
 frontend.common.missionary/background-task-running?
+;; defonce
+mobile.components.popup/native-sheet-listener
+mobile.bottom-tabs/add-tab-listeners!

@@ -121,13 +121,7 @@ class DatePickerDialogViewController: UIViewController {
 
         if #available(iOS 12.0, *) {
             if traitCollection.userInterfaceStyle != previousTraitCollection?.userInterfaceStyle {
-                if traitCollection.userInterfaceStyle == .dark {
-                    print("switch to dark mode")
-                    dialogView.backgroundColor = .black
-                } else {
-                    print("switch to light mode")
-                    dialogView.backgroundColor = .white
-                }
+                dialogView.backgroundColor = .logseqBackground
             }
         }
     }
@@ -141,17 +135,20 @@ class DatePickerDialogViewController: UIViewController {
         // Create hosting view controller
         let view = self.view!
 
-        view.backgroundColor = .black.withAlphaComponent(0.4)
+        view.backgroundColor = .logseqBackground.withAlphaComponent(0.4)
         view.isUserInteractionEnabled = true
 
-        if isDarkMode() {
-            dialogView.backgroundColor = .black
-        } else {
-            dialogView.backgroundColor = .white
-        }
+        dialogView.backgroundColor = .logseqBackground
 
-        dialogView.layer.cornerRadius = 10
-        dialogView.clipsToBounds = true
+        dialogView.layer.cornerRadius = 14
+        dialogView.clipsToBounds = false   // IMPORTANT: allow shadow
+
+        dialogView.layer.shadowColor = UIColor.black.cgColor
+        dialogView.layer.shadowOpacity = isDarkMode() ? 0.4 : 0.15
+        dialogView.layer.shadowOffset = CGSize(width: 0, height: 6)
+        dialogView.layer.shadowRadius = 16
+        dialogView.layer.masksToBounds = false
+
         view.addSubview(dialogView)
 
         dialogView.translatesAutoresizingMaskIntoConstraints = false
@@ -199,6 +196,12 @@ public class UILocalPlugin: CAPPlugin, CAPBridgedPlugin {
 
     public let identifier = "UILocalPlugin"
     public let jsName = "UILocal"
+    public static let navigationNotification = Notification.Name("UILocalPluginNavigation")
+    public static let routeChangeNotification = Notification.Name("UILocalPluginRouteChanged")
+    private static var navigationReady = false
+    private static var pendingRoutes: [[String: Any]] = []
+    private static var pendingPaths: [(path: String, push: Bool)] = []
+    private var navigationObserver: NSObjectProtocol?
 
     private var call: CAPPluginCall?
     private var selectedDate: Date?
@@ -207,7 +210,8 @@ public class UILocalPlugin: CAPPlugin, CAPBridgedPlugin {
 
     public let pluginMethods: [CAPPluginMethod] = [
       CAPPluginMethod(name: "showDatePicker", returnType: CAPPluginReturnPromise),
-      CAPPluginMethod(name: "transcribeAudio2Text", returnType: CAPPluginReturnPromise)
+      CAPPluginMethod(name: "transcribeAudio2Text", returnType: CAPPluginReturnPromise),
+      CAPPluginMethod(name: "routeDidChange", returnType: CAPPluginReturnPromise)
     ]
 
 @available(iOS 26.0, *)
@@ -474,6 +478,84 @@ private func scoreTranscript(_ text: String, locale: Locale) -> Int {
     }
 
     override public func load() {
+        super.load()
         print("🔅 UILocalPlugin loaded")
+        navigationObserver = NotificationCenter.default.addObserver(
+            forName: UILocalPlugin.navigationNotification,
+            object: nil,
+            queue: OperationQueue.main
+        ) { [weak self] notification in
+            guard let strongSelf = self else { return }
+
+            if let route = notification.userInfo?["route"] as? [String: Any] {
+                strongSelf.notifyListeners(
+                    "nativeNavigation",
+                    data: ["route": route]
+                )
+                return
+            }
+
+            if let path = notification.userInfo?["path"] as? String {
+                var data: [String: Any] = ["path": path]
+                if let push = notification.userInfo?["push"] as? Bool {
+                    data["push"] = push
+                }
+                strongSelf.notifyListeners(
+                    "nativeNavigation",
+                    data: data
+                )
+            }
+        }
+        UILocalPlugin.navigationReady = true
+
+        // Flush any pending navigation requests that arrived before the plugin loaded.
+        UILocalPlugin.pendingRoutes.forEach { route in
+            NotificationCenter.default.post(
+                name: UILocalPlugin.navigationNotification,
+                object: nil,
+                userInfo: ["route": route]
+            )
+        }
+        UILocalPlugin.pendingRoutes.removeAll()
+
+        UILocalPlugin.pendingPaths.forEach { payload in
+            NotificationCenter.default.post(
+                name: UILocalPlugin.navigationNotification,
+                object: nil,
+                userInfo: ["path": payload.path, "push": payload.push]
+            )
+        }
+        UILocalPlugin.pendingPaths.removeAll()
+    }
+
+    deinit {
+        if let navigationObserver {
+            NotificationCenter.default.removeObserver(navigationObserver)
+        }
+    }
+
+    @objc func routeDidChange(_ call: CAPPluginCall) {
+        let route = call.getObject("route") as? [String: Any]
+        let path = call.getString("path")
+        let push = call.getBool("push") ?? true
+        let navigationType = call.getString("navigationType") ?? (push ? "push" : "replace")
+
+        var entry: [String: Any] = [:]
+        if let path = path {
+            entry["path"] = path
+        }
+        if let route = route {
+            entry["route"] = route
+        }
+        entry["push"] = push
+        entry["navigationType"] = navigationType
+
+        NotificationCenter.default.post(
+            name: UILocalPlugin.routeChangeNotification,
+            object: nil,
+            userInfo: entry
+        )
+
+        call.resolve()
     }
 }

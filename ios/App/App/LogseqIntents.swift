@@ -1,10 +1,16 @@
 import AppIntents
 import UIKit
 
+import AppIntents
+import UIKit
+
 @available(iOS 18.0, *)
 struct QuickAddIntent: AppIntent {
     static var title: LocalizedStringResource = "Quick Add"
     static var description = IntentDescription("Open Logseq Quick Add")
+
+    /// 🔑 ensure the app is launched when this intent runs
+    static var openAppWhenRun: Bool = true
 
     func perform() async throws -> some IntentResult & OpensIntent {
         let url = URL(string: "https://logseq.com/mobile/go/quick-add")!
@@ -16,6 +22,8 @@ struct QuickAddIntent: AppIntent {
 struct RecordAudioIntent: AppIntent {
     static var title: LocalizedStringResource = "Record Audio"
     static var description = IntentDescription("Open Logseq Record Audio")
+
+    static var openAppWhenRun: Bool = true
 
     func perform() async throws -> some IntentResult & OpensIntent {
         let url = URL(string: "https://logseq.com/mobile/go/audio")!

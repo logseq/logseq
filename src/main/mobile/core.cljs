@@ -1,20 +1,22 @@
 (ns mobile.core
   "Mobile core"
   (:require ["react-dom/client" :as rdc]
+            [clojure.string :as string]
             [frontend.background-tasks]
-            [frontend.components.imports :as imports]
             [frontend.db.async :as db-async]
             [frontend.handler :as fhandler]
             [frontend.handler.db-based.rtc-background-tasks]
+            [frontend.handler.route :as route-handler]
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
-            [logseq.shui.ui :as shui]
             [mobile.components.app :as app]
+            [mobile.components.selection-toolbar :as selection-toolbar]
             [mobile.events]
             [mobile.init :as init]
+            [mobile.navigation :as mobile-nav]
+            [mobile.routes :refer [routes] :as mobile-routes]
             [mobile.state :as mobile-state]
-            [promesa.core :as p]
             [reitit.frontend :as rf]
             [reitit.frontend.easy :as rfe]))
 
@@ -24,56 +26,48 @@
   []
   (.render root (app/main)))
 
-(def routes
-  [["/"
-    {:name :home}]
-   ["/page/:name"
-    {:name :page}]
-   ["/graphs"
-    {:name :graphs}]
-   ["/import"
-    {:name :import}]])
-
+(defonce ^:private *route-timeout (atom nil))
 (defn set-router!
   []
-  (rfe/start!
-   (rf/router routes nil)
-   (fn [route]
-     (let [route-name (get-in route [:data :name])]
-       (case route-name
-         :page
-         (let [id-str (get-in route [:path-params :name])]
-           (when (util/uuid-string? id-str)
-             (let [page-uuid (uuid id-str)
-                   repo (state/get-current-repo)]
-               (when (and repo page-uuid)
-                 (p/let [entity (db-async/<get-block repo page-uuid
-                                                     {:children? false
-                                                      :skip-refresh? true})]
-                   (when entity
-                     ;; close sidebar
-                     (when (mobile-state/left-sidebar-open?)
-                       (mobile-state/close-left-sidebar!))
-                     (when (state/get-edit-block)
-                       (state/clear-edit!))
-                     (when (mobile-state/quick-add-open?)
-                       (mobile-state/close-popup!))
-                     (mobile-state/open-block-modal! entity)))))))
+  (let [router (rf/router routes nil)]
+    (rfe/start!
+     router
+     (fn [route]
+       (when (state/get-edit-block)
+         (state/clear-edit!))
+       (selection-toolbar/close-selection-bar!)
+       (let [route-name (get-in route [:data :name])
+             path (-> js/location .-hash (string/replace-first #"^#" ""))
+             pop? (= :pop @mobile-nav/navigation-source)
+             timeout @*route-timeout]
+         (when timeout
+           (js/clearTimeout timeout))
+         (mobile-nav/notify-route-change!
+          {:route {:to route-name
+                   :path-params (:path-params route)
+                   :query-params (:query-params route)}
+           :path path})
 
-         :graphs
-         (mobile-state/redirect-to-tab! "settings")
+         (if pop?
+           (route-handler/set-route-match! route)
+           (reset! *route-timeout
+                   (js/setTimeout #(route-handler/set-route-match! route) 200)))
 
-         :import
-         (p/do!
-          (p/delay 300)
-          (shui/popup-show! nil (fn []
-                                  (imports/importer {}))
-                            {:id :import}))
+         (case route-name
+           :page
+           (let [id-str (get-in route [:path-params :name])]
+             (when (util/uuid-string? id-str)
+               (let [page-uuid (uuid id-str)
+                     repo (state/get-current-repo)]
+                 (when (and repo page-uuid)
+                   (db-async/<get-block repo page-uuid
+                                        {:children? false
+                                         :skip-refresh? true})))))
 
-         nil)))
+           nil)))
 
    ;; set to false to enable HistoryAPI
-   {:use-fragment true}))
+     {:use-fragment true})))
 
 (defn ^:export init []
   ;; init is called ONCE when the page loads

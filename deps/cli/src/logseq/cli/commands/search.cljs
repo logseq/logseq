@@ -36,9 +36,9 @@
                          highlight-content-query
                          #(string/replace % search-term (highlight search-term)))]
       (println (string/join "\n"
-                           (->> results
-                                (map #(string/replace % "\n" "\\\\n"))
-                                (map highlight-fn)))))))
+                            (->> results
+                                 (map #(string/replace % "\n" "\\\\n"))
+                                 (map highlight-fn)))))))
 
 (defn- api-search
   [search-term {{:keys [api-server-token raw limit]} :opts}]
