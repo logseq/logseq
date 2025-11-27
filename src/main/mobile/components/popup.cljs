@@ -72,11 +72,12 @@
   [pos opts]
   (let [[side mh] (let [[_x y _ height] pos
                         vh (.-clientHeight js/document.body)
-                        [th bh] [y (- vh (+ y height) 310)]]
-                    (case (if (> bh 280) "bottom"
-                              (if (> (- th bh) 100)
-                                "top" "bottom"))
-                      "top" ["top" th]
+                        [th bh] [(- y 85) (- vh (+ y height) 310)]
+                        direction (if (> bh 280) "bottom"
+                                      (if (> (- th bh) 100)
+                                        "top" "bottom"))]
+                    (if (= "top" direction)
+                      ["top" th]
                       ["bottom" bh]))]
     (-> (assoc opts :auto-side? false)
         (assoc :max-popup-height mh)
