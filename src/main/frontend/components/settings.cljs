@@ -253,14 +253,14 @@
                  tt (string/capitalize t)
                  active? (= (or type "default") t)]]
        (shui/button
-         {:variant :secondary
-          :class (when active? " border-primary border-[2px]")
-          :style {:width "4.4rem"}
-          :on-click #(state/set-editor-font! {:type t})}
-         [:span.flex.flex-col
-          {:class (str "ls-font-" t)}
-          [:strong "Ag"]
-          [:small tt]]))]
+        {:variant :secondary
+         :class (when active? " border-primary border-[2px]")
+         :style {:width "4.4rem"}
+         :on-click #(state/set-editor-font! {:type t})}
+        [:span.flex.flex-col
+         {:class (str "ls-font-" t)}
+         [:strong "Ag"]
+         [:small tt]]))]
     [:div.pt-3
      [:label.w-full.flex.items-center.cursor-pointer
       (shui/checkbox {:checked (boolean global)
@@ -1270,7 +1270,7 @@
   []
   (let [user-uuid (user-handler/user-uuid)
         token (state/get-auth-id-token)
-        refresh-token (state/get-auth-refresh-token)
+        refresh-token (str (state/get-auth-refresh-token))
         [rsa-key-pair set-rsa-key-pair!] (hooks/use-state :not-inited)
         [init-key-err set-init-key-err!] (hooks/use-state nil)
         [get-key-err set-get-key-err!] (hooks/use-state nil)

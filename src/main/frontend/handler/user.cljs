@@ -87,7 +87,9 @@
    :sub))
 
 (defn logged-in? []
-  (some? (state/get-auth-refresh-token)))
+  (let [token (state/get-auth-refresh-token)]
+    (when (string? token)
+      (not (string/blank? token)))))
 
 (defn- set-token-to-localstorage!
   ([id-token access-token]
