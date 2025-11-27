@@ -51,22 +51,9 @@
          (if pop?
            (route-handler/set-route-match! route)
            (reset! *route-timeout
-                   (js/setTimeout #(route-handler/set-route-match! route) 200)))
+                   (js/setTimeout #(route-handler/set-route-match! route) 200)))))
 
-         (case route-name
-           :page
-           (let [id-str (get-in route [:path-params :name])]
-             (when (util/uuid-string? id-str)
-               (let [page-uuid (uuid id-str)
-                     repo (state/get-current-repo)]
-                 (when (and repo page-uuid)
-                   (db-async/<get-block repo page-uuid
-                                        {:children? false
-                                         :skip-refresh? true})))))
-
-           nil)))
-
-   ;; set to false to enable HistoryAPI
+     ;; set to false to enable HistoryAPI
      {:use-fragment true})))
 
 (defn ^:export init []
