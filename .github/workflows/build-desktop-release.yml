@@ -410,7 +410,7 @@ jobs:
 
   build-macos-x64:
     needs: [ compile-cljs ]
-    runs-on: macos-13
+    runs-on: macos-14
 
     steps:
       - name: Download The Static Asset
