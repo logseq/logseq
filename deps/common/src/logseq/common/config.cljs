@@ -59,7 +59,6 @@
     (catch :default _
       false)))
 
-
 (defn remove-asset-protocol
   [s]
   (if (local-protocol-asset? s)

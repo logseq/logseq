@@ -615,7 +615,7 @@
   (rum/local false ::all-collapsed?)
   (rum/local false ::control-show?)
   (rum/local nil   ::current-page)
-  [state {:keys [repo page preview? sidebar? tag-dialog? linked-refs? unlinked-refs? config journals?] :as option}]
+  [state {:keys [repo page preview? sidebar? tag-dialog? linked-refs? unlinked-refs? config journals? mobile-page?] :as option}]
   (let [current-repo (state/sub :git/current-repo)
         page (or page (some-> (:db/id option) db/entity))
         config (assoc config
@@ -654,7 +654,7 @@
          (if (and whiteboard-page? (not sidebar?))
            [:div ((state/get-component :whiteboard/tldraw-preview) (:block/uuid page))] ;; FIXME: this is not reactive
            [:div.relative.grid.gap-4.sm:gap-8.page-inner.mb-16
-            (when-not (or block? sidebar?)
+            (when-not (or block? sidebar? mobile-page?)
               [:div.flex.flex-row.space-between
                (when (and (or (mobile-util/native-platform?) (util/mobile?)) (not db-based?))
                  [:div.flex.flex-row.pr-2
