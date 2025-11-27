@@ -5,7 +5,9 @@
             [frontend.background-tasks]
             [frontend.handler :as fhandler]
             [frontend.handler.db-based.rtc-background-tasks]
+            [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
+            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [lambdaisland.glogi :as log]
             [mobile.components.app :as app]
@@ -17,6 +19,40 @@
             [mobile.state :as mobile-state]
             [reitit.frontend :as rf]
             [reitit.frontend.easy :as rfe]))
+
+(defn- alert*
+  [content status timeout]
+  (if (string? content)
+    (mobile-util/alert {:title content
+                        :type (or (when (keyword? status) (name status)) "info")
+                        :duration timeout
+                        :position "top"})
+    (log/warn ::native-alert-non-string {:content content})))
+
+(defn- alert
+  "Native mobile alert replacement for `frontend.handler.notification/show!`."
+  ([content]
+   (alert content :info nil nil nil nil))
+  ([content status]
+   (alert content status nil nil nil nil))
+  ([content status clear?]
+   (alert content status clear? nil nil nil))
+  ([content status clear? uid]
+   (alert content status clear? uid nil nil))
+  ([content status clear? uid timeout]
+   (alert content status clear? uid timeout nil))
+  ([content status _clear? _uid timeout _close-cb]
+   (alert* content status timeout)))
+
+(set! notification/show! alert)
+
+(set! notification/clear!
+      (fn [_]
+        (mobile-util/hide-alert)))
+
+(set! notification/clear-all!
+      (fn [_]
+        (mobile-util/hide-alert)))
 
 (defonce ^js root (rdc/createRoot (.getElementById js/document "root")))
 

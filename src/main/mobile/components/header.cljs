@@ -105,7 +105,9 @@
    (fn []
      [:div
       (when (user-handler/logged-in?)
-        (ui/menu-link {:on-click #(user-handler/logout)}
+        (ui/menu-link {:on-click #(p/do!
+                                   (user-handler/logout)
+                                   (shui/popup-hide!))}
                       [:span.text-lg.flex.gap-2.items-center.text-red-700
                        (shui/tabler-icon "logout" {:class "opacity-80" :size 22})
                        "Logout"]))

@@ -9,6 +9,7 @@ import Capacitor
 import Foundation
 import Speech
 import NaturalLanguage
+import Drops
 
 func isDarkMode() -> Bool {
     if #available(iOS 12.0, *) {
@@ -211,8 +212,122 @@ public class UILocalPlugin: CAPPlugin, CAPBridgedPlugin {
     public let pluginMethods: [CAPPluginMethod] = [
       CAPPluginMethod(name: "showDatePicker", returnType: CAPPluginReturnPromise),
       CAPPluginMethod(name: "transcribeAudio2Text", returnType: CAPPluginReturnPromise),
-      CAPPluginMethod(name: "routeDidChange", returnType: CAPPluginReturnPromise)
+      CAPPluginMethod(name: "routeDidChange", returnType: CAPPluginReturnPromise),
+      CAPPluginMethod(name: "alert", returnType: CAPPluginReturnPromise),
+      CAPPluginMethod(name: "hideAlert", returnType: CAPPluginReturnPromise)
     ]
+
+    @objc func alert(_ call: CAPPluginCall) {
+        guard let title = call.getString("title") ?? call.getString("message") else {
+            call.reject("title is required")
+            return
+        }
+
+        let subtitle = call.getString("subtitle") ?? call.getString("description")
+        let type = call.getString("type")?.lowercased()
+        let iconName = call.getString("icon")
+        let iconColorHex = call.getString("iconColor") ?? call.getString("tintColor")
+        let position = (call.getString("position")?.lowercased() == "bottom") ? Drop.Position.bottom : Drop.Position.top
+        let durationSeconds = call.getDouble("duration")
+        let accessibilityMessage = call.getString("accessibility")
+
+        let drop = Drop(
+          title: title,
+          subtitle: subtitle,
+          icon: buildIcon(type: type, iconName: iconName, hexColor: iconColorHex),
+          action: nil,
+          position: position,
+          duration: durationSeconds.flatMap { Drop.Duration.seconds($0) } ?? .recommended,
+          accessibility: accessibilityMessage.map { Drop.Accessibility(message: $0) }
+        )
+
+        Drops.show(drop)
+        call.resolve()
+    }
+
+    @objc func hideAlert(_ call: CAPPluginCall) {
+        Drops.hideAll()
+        call.resolve()
+    }
+
+    private func buildIcon(type: String?, iconName: String?, hexColor: String?) -> UIImage? {
+        let tint = color(fromHex: hexColor) ?? color(for: type)
+
+        if let iconName, let image = UIImage(systemName: iconName) {
+            guard let tint else { return image }
+            return image.withTintColor(tint, renderingMode: .alwaysOriginal)
+        }
+
+        guard let type else { return nil }
+
+        let symbolName: String
+        switch type {
+        case "success":
+            symbolName = "checkmark.circle.fill"
+        case "warning":
+            symbolName = "exclamationmark.triangle.fill"
+        case "error", "danger":
+            symbolName = "xmark.octagon.fill"
+        default:
+            symbolName = "info.circle.fill"
+        }
+
+        if let tint {
+            return UIImage(systemName: symbolName)?
+              .withTintColor(tint, renderingMode: .alwaysOriginal)
+        }
+
+        return UIImage(systemName: symbolName)
+    }
+
+    private func color(for type: String?) -> UIColor? {
+        guard let type else { return nil }
+        switch type {
+        case "success":
+            return .systemGreen
+        case "warning":
+            return .systemOrange
+        case "error", "danger":
+            return .systemRed
+        default:
+            return .systemBlue
+        }
+    }
+
+    private func color(fromHex hexString: String?) -> UIColor? {
+        guard var hex = hexString?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased(),
+              !hex.isEmpty else {
+            return nil
+        }
+
+        if hex.hasPrefix("#") {
+            hex.removeFirst()
+        }
+
+        var rgbValue: UInt64 = 0
+        guard Scanner(string: hex).scanHexInt64(&rgbValue) else { return nil }
+
+        switch hex.count {
+        case 6:
+            return UIColor(
+              red: CGFloat((rgbValue & 0xFF0000) >> 16) / 255.0,
+              green: CGFloat((rgbValue & 0x00FF00) >> 8) / 255.0,
+              blue: CGFloat(rgbValue & 0x0000FF) / 255.0,
+              alpha: 1.0
+            )
+        case 8:
+            return UIColor(
+              red: CGFloat((rgbValue & 0xFF000000) >> 24) / 255.0,
+              green: CGFloat((rgbValue & 0x00FF0000) >> 16) / 255.0,
+              blue: CGFloat((rgbValue & 0x0000FF00) >> 8) / 255.0,
+              alpha: CGFloat(rgbValue & 0x000000FF) / 255.0
+            )
+        default:
+            return nil
+        }
+    }
 
 @available(iOS 26.0, *)
 func recognizeWithAutoLocale(from file: URL,
