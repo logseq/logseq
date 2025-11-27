@@ -28,13 +28,13 @@ def capacitor_pods
   pod 'CapacitorStatusBar', :path => '../../node_modules/@capacitor/status-bar'
   pod 'CapgoCapacitorNavigationBar', :path => '../../node_modules/@capgo/capacitor-navigation-bar'
   pod 'SendIntent', :path => '../../node_modules/send-intent'
-  pod 'Drops', :git => 'https://github.com/omaralbeik/Drops.git', :tag => '1.7.0'
   pod 'JcesarmobileSslSkip', :path => '../../node_modules/@jcesarmobile/ssl-skip'
 end
 
 target 'Logseq' do
   capacitor_pods
   # Add your Pods here
+  pod 'Drops', :git => 'https://github.com/omaralbeik/Drops.git', :tag => '1.7.0'
 end
 
 
