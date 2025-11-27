@@ -19,10 +19,6 @@ html.has-mobile-keyboard {
     @apply overflow-hidden
   }
 
-  #mobile-editor-toolbar {
-    @apply opacity-100;
-  }
-
   .app-popup, #main-content-container {
     padding-bottom: calc(var(--ls-native-kb-height, 0px) + 160px);
   }
@@ -264,13 +260,6 @@ ul {
 
 .menu-link, .cp__repos-quick-actions .ui__button {
   @apply text-base;
-}
-
-#mobile-editor-toolbar {
-  button {
-    @apply !bg-transparent hover:!bg-transparent active:!bg-transparent;
-    color: currentColor;
-  }
 }
 
 .no-repos {
