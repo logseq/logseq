@@ -10,6 +10,7 @@ import {
   CommandGroup,
   CommandInput,
   CommandItem,
+  CommandSeparator,
 } from '@/components/ui/command'
 import {
   Popover,
@@ -123,6 +124,7 @@ const MultiSelect = React.forwardRef<HTMLButtonElement, MultiSelectProps>(
               }}
               placeholder="Search ..."
             />
+            <CommandSeparator />
             <CommandEmpty>No item found.</CommandEmpty>
             <CommandGroup className="max-h-64 overflow-auto">
               {options.map((option) => (

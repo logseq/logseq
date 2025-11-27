@@ -10,7 +10,6 @@
 }
 
 .ls-property-input {
-  @apply min-w-[224px];
 }
 
 .ls-property-dialog {
@@ -44,4 +43,37 @@
 .ls-repeat-task-frequency .property-value-inner {
   @apply border rounded pl-2;
   min-width: 3em;
+}
+
+/* Fix separator width in combobox context - remove padding from ui__dropdown-menu-content when it contains cp__select-main */
+.ui__dropdown-menu-content:has(.cp__select-main) {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+/* Add padding back to input and results to maintain visual spacing */
+.ui__dropdown-menu-content .cp__select-main .input-wrap {
+  padding-left: 4px;
+  padding-right: 4px;
+  overflow-x: hidden !important;
+}
+
+.ui__dropdown-menu-content .cp__select-main .item-results-wrap {
+  padding-left: 4px;
+  padding-right: 4px;
+  overflow-x: hidden !important;
+}
+
+/* Separator now spans full width since parent has no horizontal padding */
+.ui__dropdown-menu-content .cp__select-main .ui__select-separator {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  width: 100% !important;
+}
+
+/* Ensure quoted text in "New option" stays gray-11 - override general gray-12 rule */
+.ui__dropdown-menu-content .menu-link-wrap .menu-link .text-gray-11,
+.menu-links-wrapper .menu-link-wrap .menu-link .text-gray-11,
+.menu-links-outer .menu-link-wrap .menu-link .text-gray-11 {
+  color: var(--lx-gray-11, var(--rx-gray-11)) !important;
 }

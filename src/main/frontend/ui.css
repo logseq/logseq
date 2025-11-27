@@ -24,6 +24,7 @@
 
       &:hover, &.chosen {
         background-color: var(--lx-gray-04, var(--ls-menu-hover-color, hsl(var(--secondary))));
+        color: var(--lx-gray-12, var(--rx-gray-12));
 
         .has-help small {
           visibility: visible;
@@ -42,6 +43,46 @@
   &.no-padding {
     padding: 0 !important;
   }
+}
+
+/* General dropdown menu-link styles - opacity and grayscale for unselected items */
+/* Apply to all dropdown contexts (ui__dropdown-menu-content, menu-links-wrapper, etc.) */
+.ui__dropdown-menu-content .menu-link-wrap .menu-link:not(.chosen),
+.menu-links-wrapper .menu-link-wrap .menu-link:not(.chosen),
+.menu-links-outer .menu-link-wrap .menu-link:not(.chosen) {
+  @apply opacity-80 grayscale transition-opacity transition-all ease-in;
+  color: var(--lx-gray-12, var(--rx-gray-12)) !important;
+}
+
+/* Hover state - full opacity, no grayscale, gradient background */
+.ui__dropdown-menu-content .menu-link-wrap .menu-link:hover:not(.chosen),
+.menu-links-wrapper .menu-link-wrap .menu-link:hover:not(.chosen),
+.menu-links-outer .menu-link-wrap .menu-link:hover:not(.chosen) {
+  @apply !opacity-100 cursor-pointer grayscale-0;
+  background: linear-gradient(to right, var(--lx-gray-03-alpha, var(--rx-gray-03-alpha)), var(--lx-gray-01-alpha, var(--rx-gray-01-alpha))) !important;
+  color: var(--lx-gray-12, var(--rx-gray-12)) !important;
+}
+
+/* Selected state - full opacity, no grayscale, background color */
+.ui__dropdown-menu-content .menu-link-wrap .menu-link.chosen,
+.menu-links-wrapper .menu-link-wrap .menu-link.chosen,
+.menu-links-outer .menu-link-wrap .menu-link.chosen {
+  @apply !opacity-100 bg-gray-03-alpha dark:bg-gray-04-alpha grayscale-0;
+  color: var(--lx-gray-12, var(--rx-gray-12)) !important;
+  background-color: var(--lx-gray-03-alpha, var(--rx-gray-03-alpha)) !important;
+}
+
+/* Override color for all nested elements */
+.ui__dropdown-menu-content .menu-link-wrap .menu-link *,
+.menu-links-wrapper .menu-link-wrap .menu-link *,
+.menu-links-outer .menu-link-wrap .menu-link * {
+  color: var(--lx-gray-12, var(--rx-gray-12)) !important;
+}
+
+.ui__dropdown-menu-content .menu-link-wrap .menu-link.chosen *,
+.menu-links-wrapper .menu-link-wrap .menu-link.chosen *,
+.menu-links-outer .menu-link-wrap .menu-link.chosen * {
+  color: var(--lx-gray-12, var(--rx-gray-12)) !important;
 }
 
 .ui__ac-group-name {

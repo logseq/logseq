@@ -25,6 +25,23 @@
                                     (:value result)) result)
         header (:header result)
         selected-choices (rum/react *selected-choices)
+        is-new-option? (and (string? value) (string/starts-with? value "New option:"))
+        value-content (if is-new-option?
+                       (let [parts (string/split value #"New option: " 2)
+                             input-text (second parts)]
+                         [:div.flex.flex-row.items-center.gap-2
+                          [:span.inline-flex.items-center.justify-center
+                           {:style {:width "16px"
+                                    :height "16px"
+                                    :background-color "#057EFF"
+                                    :border "1px solid #369EFF"
+                                    :border-radius "4px"
+                                    :flex-shrink 0}}
+                           (ui/icon "plus" {:size 12 :style {:color "white"}})]
+                          [:span.text-gray-12 "New option:"]
+                          (when input-text
+                            [:span.text-gray-11 (str "\"" input-text "\"")])])
+                       value)
         row [:div.flex.flex-row.justify-between.w-full
              {:class (when chosen? "chosen")
               :on-pointer-down util/stop-propagation}
@@ -34,7 +51,7 @@
                               :on-click (fn [e]
                                           (.preventDefault e))
                               :disabled (:disabled? result)}))
-              value]
+              value-content]
              (when (and (map? result) (:id result))
                [:div.tip.flex
                 [:code.opacity-20.bg-transparent (:id result)]])]]
@@ -147,7 +164,7 @@
                          (cons
                           (first search-result')
                           (cons {:value @*input
-                                 :label (str "+ New option: " @*input)}
+                                 :label (str "New option: " @*input)}
                                 (rest search-result')))
                          (remove nil?))
                         search-result')
@@ -213,6 +230,7 @@
          :*toggle-fn *toggle})
        [:<>
         (if (fn? input-container) (input-container) input-container)
+        (shui/select-separator)
         (results-container-f)])]))
 
 (defn select-config

@@ -40,7 +40,7 @@
       &.chosen,
       &.chosen p {
         background-color: var(--lx-gray-03, var(--ls-a-chosen-bg, var(--rx-gray-03)));
-        color: var(--ls-secondary-text-color);
+        color: var(--lx-gray-12, var(--rx-gray-12));
       }
 
       .dark &.chosen,
@@ -49,7 +49,7 @@
       }
 
       &:hover p {
-        color: var(--ls-secondary-text-color);
+        color: var(--lx-gray-12, var(--rx-gray-12));
       }
     }
 
