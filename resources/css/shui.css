@@ -59,7 +59,7 @@ html {
     .menu-links-wrapper,
     .menu-links-outer,
     .absolute-modal[data-modal-name] {
-      background-color: var(--lx-popover-bg, var(--lx-gray-01, hsl(var(--popover))));
+      background-color: var(--lx-popover-bg, var(--lx-gray-02, hsl(var(--popover))));
     }
   }
 
