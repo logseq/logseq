@@ -133,7 +133,7 @@
        (when-let [element (util/app-scroll-container-node)]
          (common-handler/listen-to-scroll! element))) [])
     [:div.h-full {:class (if (contains? #{"search"} tab)
-                           "mt-16"
+                           "mt-20"
                            "mt-24")}
      (mobile-header/header current-repo tab)
      (main-content tab route-match)]))
