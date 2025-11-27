@@ -415,6 +415,28 @@
 
     (import-second-time-assertions conn conn2 journal-title original-data {:build-journal 20250210})))
 
+(deftest import-class-page
+  (let [class-uuid (random-uuid)
+        original-data
+        {:classes {:user.class/C0 {}
+                   :user.class/C1 {:build/class-extends [:user.class/C0]
+                                   :build/class-properties [:user.property/p1]
+                                   :block/uuid class-uuid
+                                   :build/keep-uuid? true}}
+         :properties {:user.property/p1 {:logseq.property/type :default}}
+         :pages-and-blocks [{:page {:block/uuid class-uuid}
+                             :blocks [{:block/title "class block"}]}]}
+        conn (db-test/create-conn-with-blocks (assoc original-data :build-existing-tx? true))
+        conn2 (db-test/create-conn)
+        imported-page (export-page-and-import-to-another-graph conn conn2 "C1")]
+
+    (is (= (expand-classes (:classes original-data)) (:classes imported-page))
+        "Class page is imported")
+    (is (= (expand-properties (:properties original-data)) (:properties imported-page))
+        "Class page's properties are imported")
+    (is (= (:pages-and-blocks original-data) (:pages-and-blocks imported-page))
+        "Page's blocks are imported")))
+
 (deftest import-page-with-different-property-types
   (let [block-object-uuid (random-uuid)
         original-data
