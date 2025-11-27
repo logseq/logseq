@@ -11,7 +11,6 @@
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [mobile.components.ui :as mobile-ui]
             [rum.core :as rum]))
 
 (rum/defc page-blocks
@@ -58,8 +57,11 @@
            "Quick add"]
           (when mobile? add-button)]
          (if mobile?
-           (mobile-ui/classic-app-container-wrap
-            (page-blocks add-page))
+           [:main#app-container-wrapper.ls-fold-button-on-right
+            [:div#app-container.pt-2
+             [:div#main-container.flex.flex-1
+              [:div.w-full
+               (page-blocks add-page)]]]]
            [:div.content {:class "block -ml-6"}
             (page-blocks add-page)])
          (when-not mobile? add-button)]))))
