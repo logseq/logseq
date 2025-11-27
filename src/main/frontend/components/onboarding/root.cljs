@@ -1,6 +1,7 @@
 (ns frontend.components.onboarding.root
   "Central controller for DB onboarding flows"
-  (:require [frontend.components.onboarding.shared :as shared]
+  (:require [clojure.string :as string]
+            [frontend.components.onboarding.shared :as shared]
             [frontend.state :as state]
             [frontend.rum :as frum]
             [frontend.ui :as ui]
@@ -31,7 +32,7 @@
                 "Logseq DB is here"]
                
                [:p.text-base.opacity-70.mb-6
-                "A new way to grow your graph – smarter tags, reusable templates, and collections."]
+                "Turn your notes into a flexible database – without changing how you write."]
                
                [:div.mb-6.rounded-lg.bg-gray-100.dark:bg-gray-800
                 {:style {:width "100%"
@@ -39,27 +40,29 @@
                          :display "flex"
                          :align-items "center"
                          :justify-content "center"}}
-                [:span.text-sm.opacity-50 "Image/GIF placeholder"]]
+                [:span.text-sm.opacity-50 "Image / video placeholder"]]
                
                [:ul.space-y-3.mb-8
                 [:li.flex.items-start
                  [:span.mr-3 "•"]
-                 [:span "Turn tags into reusable templates for people, books, meetings, and more."]]
+                 [:span "Keep typing in bullets and pages, just like today."]]
                 [:li.flex.items-start
                  [:span.mr-3 "•"]
-                 [:span "Fill in fields like Author, Status, or Participants without breaking your writing flow."]]
+                 [:span "Add simple fields like Author, Status, or Participants when you need them."]]
                 [:li.flex.items-start
                  [:span.mr-3 "•"]
-                 [:span "Get automatic collections on tag pages instead of manual index pages."]]]
+                 [:span "See all your books, people, or meetings in tidy lists that stay up to date."]]]
                
                [:div.flex.gap-3.justify-end
+                ;; Secondary button - quiet style
                 (ui/button
                  "Not now"
-                 :intent "logseq"
+                 :variant :secondary
                  :on-click (fn []
                             (state/reset-onboarding-state!)
                             (shui/dialog-close!)))
                 
+                ;; Primary button - blue
                 (ui/button
                  "Get Logseq DB"
                  :on-click (fn []
@@ -93,7 +96,7 @@
                            :align-items "center"
                            :justify-content "center"
                            :margin "0 auto"}}
-                  [:span.text-sm.opacity-50 "Welcome illustration placeholder"]]
+                  [:span.text-sm.opacity-50 "Image / video placeholder"]]
                  
                  [:div.flex.justify-center
                   (ui/button
@@ -132,8 +135,10 @@
                       [:h2.text-2xl.font-bold.mb-4
                        (:title slide)]
                       
-                      [:p.text-base.opacity-70.mb-6
-                       (:description slide)]
+                      ;; Render description as multiple paragraphs (split by newlines)
+                      [:div.text-base.opacity-70.mb-6
+                       (for [para (string/split (:description slide) #"\n\n")]
+                         [:p.mb-3 {:key para} para])]
                       
                       [:div.mb-6.rounded-lg.bg-gray-100.dark:bg-gray-800
                        {:style {:width "100%"
@@ -149,27 +154,38 @@
                    [:div.flex.justify-between.items-center
                     (if is-first?
                       [:div]
+                      ;; Secondary button for Previous on slides 2-3
                       (ui/button
                        "Previous"
-                       :intent "logseq"
+                       :variant :secondary
                        :on-click (fn []
                                   (state/set-onboarding-current-step! (dec slide-id)))))
                     
                     (if is-last?
-                      [:div.flex.gap-3
+                      [:div.flex.gap-3.items-center
+                       ;; Tertiary button for Previous on slide 4 (left side)
+                       (ui/button
+                        "Previous"
+                        :variant :ghost
+                        :on-click (fn []
+                                   (state/set-onboarding-current-step! (dec slide-id))))
+                       
+                       ;; Secondary button for Skip
                        (ui/button
                         "Skip for now"
-                        :intent "logseq"
+                        :variant :secondary
                         :on-click (fn []
                                    (shui/dialog-close!)
                                    (state/set-onboarding-status! "skipped")
                                    (state/reset-onboarding-state!)))
                        
+                       ;; Primary button for Set up
                        (ui/button
                         "Set up my DB graph"
                         :on-click (fn []
                                    (shui/dialog-close!)
                                    (state/set-onboarding-current-step! 5)))]
+                      ;; Primary button for Next on slides 1-3
                       (ui/button
                        "Next"
                        :on-click (fn []
@@ -229,8 +245,10 @@
                       [:h2.text-2xl.font-bold.mb-4
                        (:title slide)]
                       
-                      [:p.text-base.opacity-70.mb-6
-                       (:description slide)]
+                      ;; Render description as multiple paragraphs (split by newlines)
+                      [:div.text-base.opacity-70.mb-6
+                       (for [para (string/split (:description slide) #"\n\n")]
+                         [:p.mb-3 {:key para} para])]
                       
                       [:div.mb-6.rounded-lg.bg-gray-100.dark:bg-gray-800
                        {:style {:width "100%"
@@ -246,27 +264,38 @@
                    [:div.flex.justify-between.items-center
                     (if is-first?
                       [:div]
+                      ;; Secondary button for Previous on slides 2-3
                       (ui/button
                        "Previous"
-                       :intent "logseq"
+                       :variant :secondary
                        :on-click (fn []
                                   (state/set-onboarding-current-step! (dec slide-id)))))
                     
                     (if is-last?
-                      [:div.flex.gap-3
+                      [:div.flex.gap-3.items-center
+                       ;; Tertiary button for Previous on slide 4 (left side)
+                       (ui/button
+                        "Previous"
+                        :variant :ghost
+                        :on-click (fn []
+                                   (state/set-onboarding-current-step! (dec slide-id))))
+                       
+                       ;; Secondary button for Skip
                        (ui/button
                         "Skip for now"
-                        :intent "logseq"
+                        :variant :secondary
                         :on-click (fn []
                                    (shui/dialog-close!)
                                    (state/set-onboarding-status! "skipped")
                                    (state/reset-onboarding-state!)))
                        
+                       ;; Primary button for Set up
                        (ui/button
                         "Set up my DB graph"
                         :on-click (fn []
                                    (shui/dialog-close!)
                                    (state/set-onboarding-current-step! 5)))]
+                      ;; Primary button for Next on slides 1-3
                       (ui/button
                        "Next"
                        :on-click (fn []

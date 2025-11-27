@@ -23,21 +23,21 @@
 ;; Carousel slide definitions
 (def carousel-slides
   [{:id 1
-    :title "Tags as Classes"
-    :description "Turn hashtags into reusable templates. Create #Book, #Person, or #Meeting classes with property templates attached."
-    :example-text "Create a #Book class once, then use it anywhere. Each tag becomes an object with structured metadata."}
+    :title "Turn tags into smart templates"
+    :description "Take a tag like #Book and give it fields such as Author, Status, or Rating.\n\nEvery time you use #Book, those fields appear, ready to fill in.\n\nIf you've used databases before: tags work like reusable \"classes\" for your notes."
+    :example-text "Later, you can use the setup wizard to add more templates for your graph."}
    {:id 2
-    :title "Properties & Instances"
-    :description "When you tag a block or page, you immediately get property fields to fill in metadata like Author, Status, or Participants."
-    :example-text "Tag a block with #Person and fill in their name, role, and contact info right there."}
+    :title "Add fields right where you write"
+    :description "When you tag a block or page, Logseq adds fields you can fill in – like Author, Status, Date, or Participants.\n\nYou keep writing in bullets; the details sit right next to your notes."
+    :example-text "For example, tag a block with #Person and store their name, role, and contact info there."}
    {:id 3
-    :title "Collections on Tag Pages"
-    :description "Navigate to any tag page and see a collection of all objects that have that tag. It's like an automatic index that stays up to date."
-    :example-text "Visit the #Book page to see all your books, complete with their metadata, all in one place."}
+    :title "See everything in one place"
+    :description "Each tag gets its own page with a list of all notes that use it.\n\nIt's like an automatic index: add a new #Book or #Meeting, and it appears in the list instantly."
+    :example-text "Visit the #Book page to see all your books, with their metadata, in one view."}
    {:id 4
-    :title "Keep Your Markdown"
-    :description "Don't worry - you can import your existing Markdown graph into Logseq DB, or start fresh with a new graph."
-    :example-text "Your writing stays the same. Your graph just gets smarter with structured data."}])
+    :title "Keep your Markdown, add structure"
+    :description "You don't have to start over. You can import your existing Markdown graph into Logseq DB, or create a new graph from scratch.\n\nYour daily notes, pages, and links keep working – they just gain smarter tags and fields."
+    :example-text "You can run the setup wizard now or come back to it later from Settings."}])
 
 ;; Default tag templates for setup wizard
 (def default-tag-templates
