@@ -620,6 +620,46 @@
               (state/set-developer-mode! mode)))
           [:div.text-sm.opacity-50 (t :settings-page/developer-mode-desc)]))
 
+(defn db-onboarding-debug-row [t]
+  [:div.cp__settings-db-onboarding-debug
+   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+    [:div.flex.flex-col
+     [:label.block.text-sm.font-medium.leading-5.opacity-70
+      (t :settings-page/db-onboarding-debug)]
+     [:div.text-sm.opacity-50.mt-1
+      (t :settings-page/db-onboarding-debug-desc)]]
+
+    [:div.mt-1.sm:mt-0.sm:col-span-2.flex.flex-col.gap-2
+     (shui/button
+      {:size :sm
+       :variant :outline
+       :on-click (fn []
+                   (js/console.log "[Onboarding] Triggering MD update popup")
+                   (state/set-onboarding-entry-point! "md_update_popup")
+                   (state/set-onboarding-status! "in_progress")
+                   (state/set-onboarding-current-step! 0))}
+      (t :settings-page/trigger-md-update))
+
+     (shui/button
+      {:size :sm
+       :variant :outline
+       :on-click (fn []
+                   (js/console.log "[Onboarding] Triggering DB first run")
+                   (state/set-onboarding-entry-point! "db_first_run")
+                   (state/set-onboarding-status! "in_progress")
+                   (state/set-onboarding-current-step! 0))}
+      (t :settings-page/trigger-db-first-run))
+
+     (shui/button
+      {:size :sm
+       :variant :outline
+       :on-click (fn []
+                   (js/console.log "[Onboarding] Triggering replay tour")
+                   (state/set-onboarding-entry-point! "db_replay_tour")
+                   (state/set-onboarding-status! "in_progress")
+                   (state/set-onboarding-current-step! 1))}
+      (t :settings-page/trigger-replay-tour))]]])
+
 (rum/defc plugin-enabled-switcher
   [t]
   (let [value (state/lsp-enabled?-or-theme)
@@ -823,6 +863,7 @@
      (when-not (mobile-util/native-platform?) (developer-mode-row t developer-mode?))
      (when (util/electron?) (https-user-agent-row https-agent-opts))
      (when (util/electron?) (auto-chmod-row t))
+     (db-onboarding-debug-row t)
      ;; (clear-cache-row t)
 
      ;; (ui/admonition
