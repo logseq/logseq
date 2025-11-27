@@ -1561,7 +1561,7 @@
 
         (if (assets-handler/exceed-limit-size? file)
           (do
-            (notification/show! [:div "Asset size shouldn't be larger than 100M"]
+            (notification/show! "Asset size shouldn't be larger than 100M"
                                 :warning
                                 false)
             (throw (ex-info "Asset size shouldn't be larger than 100M" {:file-name file-name})))
@@ -2301,8 +2301,7 @@
 
                  (catch :default ^js/Error e
                    (notification/show!
-                    [:p.content
-                     (util/format "Template insert error: %s" (.-message e))]
+                    (util/format "Template insert error: %s" (.-message e))
                     :error)))))))))))
 
 (defn template-on-chosen-handler
@@ -2419,8 +2418,7 @@
                 ;; cursor in other positions of :ke|y: or ke|y::, move to line end for inserting value.
                 (if (property-file/property-key-exist?-when-file-based format content property-key)
                   (notification/show!
-                   [:p.content
-                    (util/format "Property key \"%s\" already exists!" property-key)]
+                   (util/format "Property key \"%s\" already exists!" property-key)
                    :error)
                   (cursor/move-cursor-to-line-end input)))
 
