@@ -14,7 +14,7 @@
 
 .ls-property-dialog {
   .ls-property-key {
-    @apply overflow-y-hidden h-[286px];
+    @apply overflow-y-hidden max-h-[286px];
 
     .cp__select-main {
       .item-results-wrap {
@@ -62,6 +62,8 @@
 .ui__dropdown-menu-content .cp__select-main .item-results-wrap {
   padding: 0 4px !important;
   overflow-x: hidden !important;
+  overflow-y: auto !important;
+  max-height: 300px;
 }
 
 /* Remove vertical padding from scroll viewport for clean cutoff */
