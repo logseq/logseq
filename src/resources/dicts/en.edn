@@ -176,7 +176,6 @@
  :asset/copy "Copy image"
  :asset/maximize "Maximize image"
  :asset/ref-block "Asset ref block"
- :asset/edit-block "Edit block"
  :asset/confirm-delete "Are you sure you want to delete this {1}?"
  :asset/physical-delete "Remove the file too (notice it can't be restored)"
  :color/gray "Gray"
