@@ -165,8 +165,7 @@
    (fn []
      [:div.px-1
       (repo/repos-dropdown-content {})])
-   {:title "Select a Graph"
-    :default-height false}))
+   {:default-height false}))
 
 (defn- register-native-top-bar-events! []
   (when (and (mobile-util/native-ios?)
