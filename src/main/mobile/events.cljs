@@ -6,6 +6,7 @@
             [logseq.shui.ui :as shui]
             [mobile.components.recorder :as recorder]
             [mobile.init :as init]
+            [mobile.state :as mobile-state]
             [reitit.frontend.easy :as rfe]))
 
 (defmethod events/handle :mobile/clear-edit [_]
@@ -24,3 +25,7 @@
 
 (defmethod events/handle :mobile/redirect-to [[_ {:keys [k params query]}]]
   (rfe/push-state k params query))
+
+(defmethod events/handle :mobile/set-tab [[_ tab]]
+  (when tab
+    (mobile-state/set-tab! tab)))
