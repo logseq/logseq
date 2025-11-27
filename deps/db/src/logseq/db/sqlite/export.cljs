@@ -466,7 +466,7 @@
                       (shallow-copy-page page-entity)
                       (when (and include-alias? (:block/alias page-entity))
                         {:block/alias (set (map #(vector :block/uuid (:block/uuid %)) (:block/alias page-entity)))})))
-        page-blocks-export {:pages-and-blocks [{:page page :blocks blocks}]
+        page-blocks-export {:pages-and-blocks [{:page page :blocks (or blocks [])}]
                             :properties properties
                             :classes classes}]
     (assoc (merge-export-maps page-blocks-export page-ent-export)
@@ -486,7 +486,26 @@
                          (remove :logseq.property/created-from-property))
         {:keys [pvalue-uuids] :as blocks-export}
         (build-blocks-export db page-blocks options)
-        page-blocks-export (build-page-blocks-export db page-entity (merge blocks-export options))
+        ontology-page-export
+        (when (and (not (:ontology-page? options))
+                   (or (entity-util/class? page-entity) (entity-util/property? page-entity)))
+          (build-mixed-properties-and-classes-export db [page-entity] {:include-uuid? true}))
+        class-page-properties-export
+        (when-let [props
+                     (and (not (:ontology-page? options))
+                          (entity-util/class? page-entity)
+                          (->> (:logseq.property.class/properties page-entity)
+                               (map :db/ident)
+                               seq))]
+            {:properties (build-export-properties db props {:shallow-copy? true})})
+        page-block-options (cond-> blocks-export
+                             ontology-page-export
+                             (merge-export-maps ontology-page-export class-page-properties-export)
+                             true
+                             (merge options
+                                    {:blocks (:blocks blocks-export)}
+                                    (when ontology-page-export {:ontology-page? true})))
+        page-blocks-export (build-page-blocks-export db page-entity page-block-options)
         page-block-uuids (set/union pvalue-uuids (:pvalue-uuids page-blocks-export))
         page-export (assoc page-blocks-export :pvalue-uuids page-block-uuids)]
     page-export))
