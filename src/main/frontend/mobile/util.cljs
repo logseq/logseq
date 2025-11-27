@@ -23,8 +23,15 @@
 
 (defonce folder-picker (registerPlugin "FolderPicker"))
 (defonce ui-local (registerPlugin "UILocal"))
+(defonce native-top-bar nil)
+(defonce native-bottom-sheet nil)
+(defonce native-selection-action-bar nil)
+(defonce ios-utils nil)
 (when (native-ios?)
-  (defonce ios-utils (registerPlugin "Utils")))
+  (set! native-top-bar (registerPlugin "NativeTopBarPlugin"))
+  (set! native-bottom-sheet (registerPlugin "NativeBottomSheetPlugin"))
+  (set! native-selection-action-bar (registerPlugin "NativeSelectionActionBarPlugin"))
+  (set! ios-utils (registerPlugin "Utils")))
 
 (defn hide-splash []
   (.hide SplashScreen))
@@ -81,7 +88,7 @@
 (defn check-ios-zoomed-display
   "Detect whether iOS device is in Zoom Display"
   []
-  (p/let [is-zoomed? (p/chain (.isZoomed ios-utils)
+  (p/let [is-zoomed? (p/chain (.isZoomed ^js ios-utils)
                               #(js->clj % :keywordize-keys true))]
     (when (:isZoomed is-zoomed?)
       (let [^js cl (.-classList js/document.documentElement)]

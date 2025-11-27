@@ -31,7 +31,6 @@
                  (state/clear-selection!)
                  state)
    :will-unmount (fn [state]
-                   (state/clear-edit!)
                    (state/clear-selection!)
                    state)
    :did-mount (fn [state]
@@ -51,7 +50,10 @@
                          (when-not mobile? (shui/shortcut ["mod" "e"]))
                          "Add to today")]]
         [:div.ls-quick-add.flex.flex-1.flex-col.w-full.gap-4
-         [:div.border-b.pb-4.flex.flex-row.justify-between.gap-4.items-center
+         [:div.flex.flex-row.justify-between.gap-4.items-center
+          {:class (if mobile?
+                    "pt-4"
+                    "border-b pb-4")}
           [:div.font-medium
            "Quick add"]
           (when mobile? add-button)]

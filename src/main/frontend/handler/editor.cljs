@@ -72,7 +72,7 @@
             [logseq.outliner.property :as outliner-property]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.popup.core :as shui-popup]
-            [mobile.state :as mobile-state]
+            [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -4067,7 +4067,7 @@
              (move-blocks! children today-last-child {:sibling? true})
              (move-blocks! children today {:sibling? false})))
          (state/close-modal!)
-         (mobile-state/set-popup! nil)
+         (shui/popup-hide!)
          (when (seq children)
            (notification/show! "Blocks added to today!" :success)))))))
 
@@ -4080,8 +4080,6 @@
 (defn quick-add-open-last-block!
   []
   (when-let [add-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)]
-    (prn :debug :add-page add-page
-         :children (:block/_parent add-page))
     (when (:block/_parent add-page)
       (let [block (last (ldb/sort-by-order (:block/_parent add-page)))]
         (edit-block! block :max {:container-id :unknown-container})))))
