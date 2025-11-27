@@ -92,5 +92,5 @@
   (configure-tabs
    [{:id "home"       :title "Home"       :systemImage "house" :role "normal"}
     {:id "favorites"  :title "Favorites"  :systemImage "star"  :role "normal"}
-    {:id "quick-add"  :title "Capture"    :systemImage "plus"  :role "normal"}
+    {:id "quick-add"  :title "Capture"    :systemImage "tray"  :role "normal"}
     {:id "settings"   :title "Settings"   :systemImage "gear"  :role "normal"}]))
