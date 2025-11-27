@@ -2149,7 +2149,7 @@ Similar to re-frame subscriptions"
   (sub :auth/id-token))
 
 (defn get-auth-refresh-token []
-  (str (:auth/refresh-token @state)))
+  (:auth/refresh-token @state))
 
 (defn set-file-sync-manager [graph-uuid v]
   (when (and graph-uuid v)
