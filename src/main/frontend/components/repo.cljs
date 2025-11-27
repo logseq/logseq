@@ -336,7 +336,10 @@
 
    (when-not config/publishing?
      (shui/button {:size :sm :variant :ghost
-                   :on-click #(route-handler/redirect-to-all-graphs)}
+                   :on-click (fn []
+                               (if (util/mobile?)
+                                 (state/pub-event! [:mobile/set-tab "settings"])
+                                 (route-handler/redirect-to-all-graphs)))}
                   (shui/tabler-icon "layout-2") [:span (t :all-graphs)]))])
 
 (rum/defcs repos-dropdown-content < rum/reactive
