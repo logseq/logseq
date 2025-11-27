@@ -4452,10 +4452,8 @@
 
 (rum/defc block-list
   [config blocks]
-  (let [mobile? (util/mobile?)
-        [ready? set-ready?] (hooks/use-state
-                             (not (and mobile? (not (:journals? config)))))
-        [virtualized? _] (hooks/use-state (not (or (util/rtc-test?)
+  (let [[virtualized? _] (hooks/use-state (not (or (util/rtc-test?)
+                                                   (and (util/mobile?) (:journals? config))
                                                    (if (:journals? config)
                                                      (< (count blocks) 50)
                                                      (< (count blocks) 10))
@@ -4496,7 +4494,6 @@
         *wrap-ref (hooks/use-ref nil)]
     (hooks/use-effect!
      (fn []
-       (when mobile? (util/schedule #(set-ready? true)))
        (when virtualized?
          (when (:current-page? config)
            (let [ref (.-current *virtualized-ref)]
@@ -4525,14 +4522,13 @@
     [:div.blocks-list-wrap
      {:data-level (or (:level config) 0)
       :ref *wrap-ref}
-     (when ready?
-       (cond
-         virtualized?
-         (ui/virtualized-list virtual-opts)
-         :else
-         (map-indexed (fn [idx block]
-                        (rum/with-key (render-item idx) (str (:container-id config) "-" (:db/id block))))
-                      blocks)))]))
+     (cond
+       virtualized?
+       (ui/virtualized-list virtual-opts)
+       :else
+       (map-indexed (fn [idx block]
+                      (rum/with-key (render-item idx) (str (:container-id config) "-" (:db/id block))))
+                    blocks))]))
 
 (rum/defcs blocks-container < mixins/container-id rum/static
   {:init (fn [state]
