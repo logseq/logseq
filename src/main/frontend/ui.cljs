@@ -21,6 +21,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.shortcut.config :as shortcut-config]
             [frontend.modules.shortcut.core :as shortcut]
+            [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.rum :as r]
             [frontend.state :as state]
@@ -201,15 +202,27 @@
           (dropdown-content-wrapper dropdown-state close-fn modal-content modal-class {:z-index z-index}))))]))
 
 ;; `sequence` can be a list of symbols, a list of strings, or a string
-(defn render-keyboard-shortcut [sequence & {:as opts}]
+;; If `shortcut-id` is provided, uses raw binding from shortcut system for data attribute matching
+(defn render-keyboard-shortcut [sequence & {:keys [shortcut-id] :as opts}]
   (let [sequence (if (string? sequence)
                    (-> sequence ;; turn string into sequence
                        (string/trim)
                        (string/lower-case)
                        (string/split #" "))
                    sequence)
+        ;; Get raw binding for data attribute matching
+        raw-binding (if shortcut-id
+                      ;; Get raw binding from shortcut system
+                      (shortcut-dh/shortcut-binding shortcut-id)
+                      ;; Otherwise use sequence as-is (it's already the raw format)
+                      (if (and (coll? sequence) (every? string? sequence))
+                        sequence
+                        (if (string? sequence)
+                          [sequence]
+                          sequence)))
         opts (merge {:interactive? false
-                     :aria-hidden? true} opts)]
+                     :aria-hidden? true
+                     :raw-binding raw-binding} opts)]
     [:span.keyboard-shortcut
      (shui/shortcut sequence opts)]))
 

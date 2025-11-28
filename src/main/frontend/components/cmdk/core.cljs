@@ -826,6 +826,9 @@
                                     (util/stop-propagation e))
       (and meta? (= keyname "o"))
       (open-current-item-link state)
+      (= keyname "/") (do
+                        (shui/shortcut-press! "/" true)
+                        nil)  ; Don't prevent default, allow typing
       :else nil)))
 
 (defn- keyup-handler

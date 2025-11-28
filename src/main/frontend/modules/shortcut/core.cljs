@@ -12,7 +12,8 @@
             [frontend.util :as util]
             [goog.events :as events]
             [goog.ui.KeyboardShortcutHandler.EventType :as EventType]
-            [lambdaisland.glogi :as log])
+            [lambdaisland.glogi :as log]
+            [logseq.shui.ui :as shui])
   (:import [goog.events KeyCodes KeyNames]
            [goog.ui KeyboardShortcutHandler]))
 
@@ -135,8 +136,18 @@
     (let [f (fn [e]
               (let [id (keyword (.-identifier e))
                     shortcut-map (dh/shortcuts-map-by-handler-id handler-id state) ;; required to get shortcut map dynamically
-                    dispatch-fn (get shortcut-map id)]
+                    dispatch-fn (get shortcut-map id)
+                    binding (dh/shortcut-binding id)]
                 (state/set-state! :editor/latest-shortcut id)
+                ;; Trigger animation for visible shortcuts
+                (when binding
+                  (let [bindings (if (coll? binding) binding [binding])]
+                    (doseq [b bindings]
+                      (when b
+                        ;; Use the raw binding, not decorated, for matching data attributes
+                        (try
+                          (shui/shortcut-press! b true)
+                          (catch :default _e nil))))))
                 ;; trigger fn
                 (when dispatch-fn
                   (plugin-handler/hook-lifecycle-fn! id dispatch-fn e))))

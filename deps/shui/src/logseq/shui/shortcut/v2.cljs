@@ -81,32 +81,42 @@
 
 (defn- normalize-binding
   "Normalizes a shortcut binding to a string format for data attributes.
-   Examples: 'cmd+k', 'shift+cmd+k', 'cmd up'"
+   Examples: 'cmd+k', 'shift+cmd+k', 'cmd up'
+   Handles 'mod' -> 'meta' on Mac, 'ctrl' on Windows/Linux for consistency with shortcut system."
   [binding]
-  (cond
-    (string? binding)
-    (string/lower-case (string/trim binding))
-    
-    (coll? binding)
-    (let [first-item (first binding)
-          keys (flatten-keys binding)
-          normalize-key (fn [k]
-                         (cond
-                           (string? k) (string/lower-case k)
-                           (keyword? k) (name k)
-                           (symbol? k) (name k)
-                           (number? k) (str k)
-                           :else (str k)))]
-      (string/join "+" (map normalize-key keys)))
-    
-    (keyword? binding)
-    (name binding)
-    
-    (symbol? binding)
-    (name binding)
-    
-    :else
-    (str binding)))
+  (let [normalize-key (fn [k]
+                       (cond
+                         (string? k) (let [lowered (string/lower-case k)]
+                                      ;; Convert 'mod' to 'meta' on Mac, 'ctrl' on Windows/Linux
+                                      ;; to match what the shortcut system uses
+                                      (if (= lowered "mod")
+                                        (if mac? "meta" "ctrl")
+                                        lowered))
+                         (keyword? k) (name k)
+                         (symbol? k) (name k)
+                         (number? k) (str k)
+                         :else (str k)))]
+    (cond
+      (string? binding)
+      (let [trimmed (string/trim binding)
+            normalized (string/lower-case trimmed)]
+        ;; Handle 'mod' in strings like "mod+k"
+        (if (string/includes? normalized "mod")
+          (string/replace normalized "mod" (if mac? "meta" "ctrl"))
+          normalized))
+      
+      (coll? binding)
+      (let [keys (flatten-keys binding)]
+        (string/join "+" (map normalize-key keys)))
+      
+      (keyword? binding)
+      (name binding)
+      
+      (symbol? binding)
+      (name binding)
+      
+      :else
+      (str binding))))
 
 (defn- detect-style
   "Automatically detects style from shortcut format.
@@ -140,7 +150,7 @@
 
 (defn shortcut-press!
   "Central helper to trigger key press animation.
-   Finds all nodes with matching data-shortcut-binding and toggles pressed class.
+   Finds all nodes with matching data-shortcut-binding and animates individual keys.
    Optionally highlights parent row.
    
    Args:
@@ -150,24 +160,46 @@
   ([binding highlight-row?]
    (let [normalized (normalize-binding binding)
          selector (str "[data-shortcut-binding=\"" normalized "\"]")
-         elements (.querySelectorAll js/document selector)]
-     (doseq [^js el (array-seq elements)]
-       (.add (.-classList el) "shui-shortcut-key-pressed")
-       (when highlight-row?
-         (let [^js row (or (.closest el ".shui-shortcut-row")
-                            (.-parentElement el))]
-           (when row
-             (.add (.-classList row) "shui-shortcut-row--pressed"))))
-       ;; Auto-reset after animation duration
-       (js/setTimeout
-        (fn []
-          (.remove (.-classList el) "shui-shortcut-key-pressed")
-          (when highlight-row?
-            (let [^js row (or (.closest el ".shui-shortcut-row")
-                              (.-parentElement el))]
-              (when row
-                (.remove (.-classList row) "shui-shortcut-row--pressed")))))
-        160)))))
+         containers (.querySelectorAll js/document selector)]
+     (doseq [^js container (array-seq containers)]
+       ;; Find all individual keys within this container
+       (let [keys (.querySelectorAll container "kbd.shui-shortcut-key")]
+         (if (> (.-length keys) 0)
+           ;; Animate individual keys
+           (doseq [^js key-el (array-seq keys)]
+             (.add (.-classList key-el) "shui-shortcut-key-pressed")
+             (when highlight-row?
+               (let [^js row (or (.closest container ".shui-shortcut-row")
+                                 (.-parentElement container))]
+                 (when row
+                   (.add (.-classList row) "shui-shortcut-row--pressed"))))
+             ;; Auto-reset after animation duration
+             (js/setTimeout
+              (fn []
+                (.remove (.-classList key-el) "shui-shortcut-key-pressed")
+                (when highlight-row?
+                  (let [^js row (or (.closest container ".shui-shortcut-row")
+                                    (.-parentElement container))]
+                    (when row
+                      (.remove (.-classList row) "shui-shortcut-row--pressed")))))
+              160))
+           ;; Fallback: animate container if no keys found
+           (do
+             (.add (.-classList container) "shui-shortcut-key-pressed")
+             (when highlight-row?
+               (let [^js row (or (.closest container ".shui-shortcut-row")
+                                  (.-parentElement container))]
+                 (when row
+                   (.add (.-classList row) "shui-shortcut-row--pressed"))))
+             (js/setTimeout
+              (fn []
+                (.remove (.-classList container) "shui-shortcut-key-pressed")
+                (when highlight-row?
+                  (let [^js row (or (.closest container ".shui-shortcut-row")
+                                    (.-parentElement container))]
+                    (when row
+                      (.remove (.-classList row) "shui-shortcut-row--pressed")))))
+              160))))))))
 
 (rum/defc combo-keys
   "Renders combo keys (simultaneous key combinations) with separator."
@@ -252,8 +284,10 @@
    - :aria-label - accessibility label for container
    - :aria-hidden? - if true, hides from screen readers (default: false for decorative hints)
    - :animate-on-press? - if true, enables press animation (default: true)
-   - :glow? - if true, adds inner glow effect to combo/separate keys (default: true)"
-  [shortcut & {:keys [style size theme interactive? aria-label aria-hidden? animate-on-press? glow?]
+   - :glow? - if true, adds inner glow effect to combo/separate keys (default: true)
+   - :raw-binding - raw binding format for data-shortcut-binding (for animation matching).
+                    If not provided, will normalize from shortcut prop."
+  [shortcut & {:keys [style size theme interactive? aria-label aria-hidden? animate-on-press? glow? raw-binding]
                :or {style :auto
                     size :xs
                     interactive? false
@@ -293,6 +327,14 @@
                      
                      :else
                      [(str binding)])
+              ;; Use raw-binding if provided, otherwise normalize from binding
+              binding-for-data (if raw-binding
+                                 (if (coll? raw-binding)
+                                   (if (= (count raw-binding) 1)
+                                     (first raw-binding)
+                                     raw-binding)
+                                   raw-binding)
+                                 binding)
               render-fn (case detected-style
                           :combo combo-keys
                           :separate separate-keys
@@ -307,5 +349,5 @@
            (when (< 0 index)
              [:span.text-gray-11.text-sm {:key (str "sep-" index)
                                            :style {:margin "0 4px"}} "|"])
-           (render-fn keys binding opts)])))))
+           (render-fn keys binding-for-data opts)])))))
 

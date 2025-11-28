@@ -482,4 +482,6 @@
                                   :white-space "nowrap"}}
                          (shui/shortcut
                           (string/join " | " (map #(dh/binding-for-display id %) binding))
-                          {:size :md :interactive? true})])]]))))])])]]))
+                          {:size :md 
+                           :interactive? true
+                           :raw-binding binding})])]]))))])])]]))
