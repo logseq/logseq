@@ -115,6 +115,9 @@
          (when value
            [:span.text-gray-11 (to-string value)])])
       (when shortcut
-        [:div {:class "flex gap-1"
-               :style {:opacity (if (or highlighted hover?) 1 0.9)}}
-         (shui/shortcut shortcut)])]]))
+        [:div {:class "flex gap-1 shui-shortcut-row items-center"
+               :style {:opacity (if (or highlighted hover?) 1 0.9)
+                       :min-height "20px"
+                       :flex-wrap "nowrap"}}
+         (shui/shortcut shortcut {:interactive? false
+                                   :aria-hidden? true})])]]))

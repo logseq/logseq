@@ -669,10 +669,10 @@
             (if (= show :more)
               [:div.flex.flex-row.gap-1.items-center
                "Show less"
-               (shui/shortcut "mod up" nil)]
+               (shui/shortcut "mod up" {:style :compact})]
               [:div.flex.flex-row.gap-1.items-center
                "Show more"
-               (shui/shortcut "mod down" nil)])])])
+               (shui/shortcut "mod down" {:style :compact})])])])
 
       [:div.search-results
        (for [item visible-items
@@ -805,6 +805,10 @@
                   (show-less)
                   (move-highlight state -1))
       (and enter? (not composing?)) (do
+                                      (when shift?
+                                        (shui/shortcut-press! "shift+return" true))
+                                      (when-not shift?
+                                        (shui/shortcut-press! "return" true))
                                       (handle-action :default state e)
                                       (util/stop-propagation e))
       esc? (let [filter' @(::filter state)]
@@ -817,6 +821,7 @@
                  (util/stop e)
                  (handle-input-change state nil ""))))
       (and meta? (= keyname "c")) (do
+                                    (shui/shortcut-press! (if goog.userAgent/MAC "cmd+c" "ctrl+c") true)
                                     (copy-block-ref state)
                                     (util/stop-propagation e))
       (and meta? (= keyname "o"))
@@ -923,16 +928,9 @@
    [[:span.opacity-60 text]
      ;; shortcut
     (when (not-empty shortcut)
-      (for [key shortcut]
-        [:div.ui__button-shortcut-key
-         (case key
-           "cmd" [:div (if goog.userAgent/MAC "⌘" "Ctrl")]
-           "shift" [:div "⇧"]
-           "return" [:div "⏎"]
-           "esc" [:div.tracking-tightest {:style {:transform   "scaleX(0.8) scaleY(1.2) "
-                                                  :font-size   "0.5rem"
-                                                  :font-weight "500"}} "ESC"]
-           (cond-> key (string? key) .toUpperCase))]))]))
+      (shui/shortcut shortcut {:style :separate
+                                :interactive? false
+                                :aria-hidden? true}))]))
 
 (rum/defc hints
   [state]

@@ -207,7 +207,9 @@
                        (string/trim)
                        (string/lower-case)
                        (string/split #" "))
-                   sequence)]
+                   sequence)
+        opts (merge {:interactive? false
+                     :aria-hidden? true} opts)]
     [:span.keyboard-shortcut
      (shui/shortcut sequence opts)]))
 

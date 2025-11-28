@@ -267,11 +267,148 @@ div[data-radix-popper-content-wrapper] {
   }
 }
 
-.ui__button-shortcut-key {
-  @apply text-xs font-normal h-5 w-5 flex items-center justify-center rounded bg-gray-06-alpha;
+/* Deprecated: .ui__button-shortcut-key - replaced by shui-shortcut-key */
 
-  &:first-of-type {
-    @apply ml-2;
+/* Unified Keyboard Shortcut Component Styles */
+
+/* Combo Keys - simultaneous key combinations with separator */
+.shui-shortcut-combo {
+  @apply flex items-start relative rounded;
+  background-color: rgba(223, 239, 254, 0.14);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+
+/* Glow effect for combo and separate keys */
+/* Combo keys: glow on container (wraps all keys together) */
+.shui-shortcut-combo.shui-shortcut-glow {
+  box-shadow: rgba(255, 255, 255, 0.15) 0px 1px 0px 0px inset, rgba(0, 0, 0, 0.15) 0px -1px 0px 0px inset;
+  border: none;
+}
+
+/* Separate keys: glow on individual keys (not container) */
+.shui-shortcut-separate.shui-shortcut-glow kbd.shui-shortcut-key {
+  box-shadow: rgba(255, 255, 255, 0.15) 0px 1px 0px 0px inset, rgba(0, 0, 0, 0.15) 0px -1px 0px 0px inset;
+  border: none;
+}
+
+.shui-shortcut-combo kbd.shui-shortcut-key {
+  @apply flex flex-col items-center justify-center px-1 py-0.5 relative shrink-0;
+  min-width: fit-content;
+  background: transparent;
+  border: none;
+}
+
+.shui-shortcut-separator {
+  background-color: rgba(224, 243, 255, 0.18);
+  align-self: stretch;
+  flex-shrink: 0;
+  width: 1px;
+}
+
+/* Separate Keys - sequential key presses with 4px gap */
+.shui-shortcut-separate {
+  @apply flex items-start relative;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.shui-shortcut-separate kbd.shui-shortcut-key {
+  @apply flex flex-col items-center justify-center px-1 py-0.5 relative rounded shrink-0;
+  background-color: rgba(223, 239, 254, 0.14);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-sizing: border-box;
+  min-width: fit-content;
+}
+
+/* Compact Keys - minimal text-only style */
+.shui-shortcut-compact {
+  @apply flex items-start relative;
+  font-family: 'Inter', sans-serif;
+  font-weight: normal;
+  line-height: 16px;
+  font-style: normal;
+  color: #ecedee;
+  font-size: 12px;
+  text-align: center;
+  letter-spacing: -0.5px;
+  white-space: nowrap;
+  gap: 2px;
+}
+
+/* Individual key styling with inner glow */
+kbd.shui-shortcut-key,
+.shui-shortcut-key {
+  @apply text-xs font-normal h-5 flex items-center justify-center;
+  font-family: 'Inter', sans-serif;
+  color: #ecedee;
+  font-size: 12px;
+  text-align: center;
+  letter-spacing: -0.5px;
+  padding: 2px 4px;
+  line-height: 16px;
+  min-width: fit-content;
+  transition: transform 140ms ease-out, box-shadow 140ms ease-out;
+  box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+}
+
+/* Keys in separate containers get their own styling */
+.shui-shortcut-separate kbd.shui-shortcut-key {
+  @apply rounded;
+  background-color: rgba(223, 239, 254, 0.14);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-sizing: border-box;
+}
+
+/* Key press animation */
+kbd.shui-shortcut-key-pressed,
+.shui-shortcut-key-pressed {
+  transform: translateY(1px);
+}
+
+/* Key press animation with glow - preserve glow effect */
+/* Combo keys: animate the container */
+.shui-shortcut-combo.shui-shortcut-glow.shui-shortcut-key-pressed {
+  box-shadow: rgba(255, 255, 255, 0.15) 0px 2px 0px 0px inset, rgba(0, 0, 0, 0.15) 0px 0px 0px 0px inset, 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* Separate keys: animate individual keys */
+.shui-shortcut-separate.shui-shortcut-glow kbd.shui-shortcut-key-pressed {
+  box-shadow: rgba(255, 255, 255, 0.15) 0px 2px 0px 0px inset, rgba(0, 0, 0, 0.15) 0px 0px 0px 0px inset, 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* Key press animation without glow */
+.shui-shortcut-combo:not(.shui-shortcut-glow) kbd.shui-shortcut-key-pressed,
+.shui-shortcut-separate:not(.shui-shortcut-glow) kbd.shui-shortcut-key-pressed {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* Row highlight animation */
+.shui-shortcut-row--pressed {
+  background-color: rgba(223, 239, 254, 0.1);
+  transition: background-color 160ms ease-out;
+}
+
+/* Ensure consistent height for shortcut containers */
+.shui-shortcut-row {
+  min-height: 20px;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+/* Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  kbd.shui-shortcut-key,
+  .shui-shortcut-key,
+  .shui-shortcut-row--pressed {
+    transition: none;
+    transform: none;
+    box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+  }
+  
+  .shui-shortcut-row--pressed {
+    background-color: transparent;
   }
 }
 

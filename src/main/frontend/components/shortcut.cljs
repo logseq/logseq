@@ -477,6 +477,9 @@
 
                         (not unset?)
                         [:code.flex.items-center.bg-transparent
+                         {:style {:min-height "20px"
+                                  :flex-wrap "nowrap"
+                                  :white-space "nowrap"}}
                          (shui/shortcut
                           (string/join " | " (map #(dh/binding-for-display id %) binding))
                           {:size :md :interactive? true})])]]))))])])]]))
