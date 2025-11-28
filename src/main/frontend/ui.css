@@ -93,6 +93,147 @@
   max-height: none;
 }
 
+/* Unified combobox styles - applies to both variants (with and without search input) */
+/* When used without search input, the class is on #ui__ac directly */
+#ui__ac.ui__combobox {
+  #ui__ac-inner {
+    padding: 0 4px !important;
+  }
+
+  /* Unified menu-link styles for combobox (without search input variant) */
+  /* Match the beautiful "Add property" dropdown styling */
+  .menu-link-wrap .menu-link:not(.chosen) {
+    @apply opacity-80 grayscale transition-opacity transition-all duration-75 ease-in;
+    color: var(--lx-gray-12, var(--rx-gray-12)) !important;
+  }
+
+  .menu-link-wrap .menu-link.chosen {
+    @apply !opacity-100 grayscale-0;
+    color: var(--lx-gray-12, var(--rx-gray-12)) !important;
+    background-color: var(--lx-gray-03-alpha, var(--rx-gray-03-alpha)) !important;
+  }
+
+  /* Disable separate hover state - only .chosen state should be visually distinct */
+  .menu-link-wrap .menu-link:hover:not(.chosen) {
+    background: none !important;
+    background-color: transparent !important;
+  }
+
+  /* Force gray-12 on all nested elements in menu items */
+  .menu-link-wrap .menu-link * {
+    color: var(--lx-gray-12, var(--rx-gray-12)) !important;
+  }
+
+  /* Force gray-12 on all nested elements in selected items */
+  .menu-link-wrap .menu-link.chosen * {
+    color: var(--lx-gray-12, var(--rx-gray-12)) !important;
+  }
+
+  /* Exception: Preserve gray-11 for quoted text in "New option" */
+  .menu-link-wrap .menu-link .text-gray-11 {
+    color: var(--lx-gray-11, var(--rx-gray-11)) !important;
+  }
+}
+
+/* When used with search input, the class is on a wrapper div */
+.ui__combobox {
+  /* Group name styling - applies to both variants */
+  .ui__ac-group-name {
+    @apply p-2 text-xs text-popover-foreground/20 font-medium;
+  }
+}
+
+/* Also apply unified styles when combobox is used in popover context (like / command) */
+/* This ensures the same beautiful styling as the "Add property" dropdown */
+
+/* Remove padding from popover content when it contains combobox (like dropdown-menu-content) */
+.ui__popover-content:has(#ui__ac.ui__combobox) {
+  padding: 0 !important;
+}
+
+.ui__popover-content #ui__ac.ui__combobox {
+  #ui__ac-inner {
+    padding: 0 4px !important;
+  }
+
+  /* Match the beautiful "Add property" dropdown styling exactly */
+  .menu-link-wrap .menu-link:not(.chosen) {
+    @apply opacity-80 grayscale transition-opacity transition-all duration-75 ease-in;
+    color: var(--lx-gray-12, var(--rx-gray-12)) !important;
+  }
+
+  .menu-link-wrap .menu-link.chosen {
+    @apply !opacity-100 grayscale-0;
+    color: var(--lx-gray-12, var(--rx-gray-12)) !important;
+    background-color: var(--lx-gray-03-alpha, var(--rx-gray-03-alpha)) !important;
+  }
+
+  /* Disable separate hover state - only .chosen state should be visually distinct */
+  .menu-link-wrap .menu-link:hover:not(.chosen) {
+    background: none !important;
+    background-color: transparent !important;
+  }
+
+  /* Force gray-12 on all nested elements in menu items */
+  .menu-link-wrap .menu-link * {
+    color: var(--lx-gray-12, var(--rx-gray-12)) !important;
+  }
+
+  /* Force gray-12 on all nested elements in selected items */
+  .menu-link-wrap .menu-link.chosen * {
+    color: var(--lx-gray-12, var(--rx-gray-12)) !important;
+  }
+
+  /* Exception: Preserve gray-11 for quoted text in "New option" */
+  .menu-link-wrap .menu-link .text-gray-11 {
+    color: var(--lx-gray-11, var(--rx-gray-11)) !important;
+  }
+}
+
+/* Temporary: Apply unified styles to editor popover dropdowns even without ui__combobox class */
+/* This ensures styling works during migration/if class isn't applied yet */
+.ui__popover-content[data-editor-popup-ref="commands"] #ui__ac.cp__commands-slash,
+.ui__popover-content[data-editor-popup-ref="page-search"] #ui__ac.black,
+.ui__popover-content[data-editor-popup-ref="page-search-hashtag"] #ui__ac.black,
+.ui__popover-content[data-editor-popup-ref="block-search"] #ui__ac.ac-block-search {
+  #ui__ac-inner {
+    padding: 0 4px !important;
+  }
+
+  /* Match the beautiful "Add property" dropdown styling exactly */
+  .menu-link-wrap .menu-link:not(.chosen) {
+    @apply opacity-80 grayscale transition-opacity transition-all duration-75 ease-in;
+    color: var(--lx-gray-12, var(--rx-gray-12)) !important;
+  }
+
+  .menu-link-wrap .menu-link.chosen {
+    @apply !opacity-100 grayscale-0;
+    color: var(--lx-gray-12, var(--rx-gray-12)) !important;
+    background-color: var(--lx-gray-03-alpha, var(--rx-gray-03-alpha)) !important;
+  }
+
+  /* Disable separate hover state - only .chosen state should be visually distinct */
+  .menu-link-wrap .menu-link:hover:not(.chosen) {
+    background: none !important;
+    background-color: transparent !important;
+  }
+
+  /* Force gray-12 on all nested elements in menu items */
+  .menu-link-wrap .menu-link * {
+    color: var(--lx-gray-12, var(--rx-gray-12)) !important;
+  }
+
+  /* Force gray-12 on all nested elements in selected items */
+  .menu-link-wrap .menu-link.chosen * {
+    color: var(--lx-gray-12, var(--rx-gray-12)) !important;
+  }
+
+  /* Exception: Preserve gray-11 for quoted text in "New option" */
+  .menu-link-wrap .menu-link .text-gray-11 {
+    color: var(--lx-gray-11, var(--rx-gray-11)) !important;
+  }
+}
+
 .ui__notifications {
   @apply fixed top-12 pointer-events-none w-full;
 

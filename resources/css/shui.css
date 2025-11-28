@@ -56,6 +56,11 @@ html {
 
 
     div[data-radix-popper-content-wrapper] div[role=menu],
+    /* Also apply to popover content when it contains a combobox (unified styling) */
+    div[data-radix-popper-content-wrapper] .ui__popover-content:has(#ui__ac.ui__combobox),
+    div[data-radix-popper-content-wrapper] .ui__popover-content:has(#ui__ac.cp__commands-slash),
+    div[data-radix-popper-content-wrapper] .ui__popover-content:has(#ui__ac.black),
+    div[data-radix-popper-content-wrapper] .ui__popover-content:has(#ui__ac.ac-block-search),
     .menu-links-wrapper,
     .menu-links-outer,
     .absolute-modal[data-modal-name] {

@@ -4,6 +4,7 @@
   new select-type, create an event that calls `select/dialog-select!` with the
   select-type. See the :graph/open command for a full example."
   (:require [clojure.string :as string]
+            [frontend.components.combobox :as combobox]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.handler.common.developer :as dev-common-handler]
@@ -182,31 +183,31 @@
                                  (ui/loading "Loading ...")]
                                 [:div
                                  {:class (when (seq search-result) "py-1")}
-                                 [:div.item-results-wrap
-                                  (ui/auto-complete
-                                   search-result
-                                   {:grouped? grouped?
-                                    :item-render       (or item-cp (fn [result chosen?]
+                                 (combobox/combobox
+                                  search-result
+                                  {:show-search-input? true
+                                   :show-separator? false
+                                   :grouped? grouped?
+                                   :item-render       (or item-cp (fn [result chosen?]
                                                                      (render-item result chosen? multiple-choices? *selected-choices)))
-                                    :class             "cp__select-results"
-                                    :on-chosen         (fn [raw-chosen e]
-                                                         (when clear-input-on-chosen?
-                                                           (reset! *input ""))
-                                                         (let [chosen (extract-chosen-fn raw-chosen)]
-                                                           (if multiple-choices?
-                                                             (if (selected-choices chosen)
-                                                               (do
-                                                                 (swap! *selected-choices disj chosen)
-                                                                 (when on-chosen (on-chosen chosen false @*selected-choices e)))
-                                                               (do
-                                                                 (swap! *selected-choices conj chosen)
-                                                                 (when on-chosen (on-chosen chosen true @*selected-choices e))))
-                                                             (do
-                                                               (when (and close-modal? (not multiple-choices?))
-                                                                 (state/close-modal!))
-                                                               (when on-chosen
-                                                                 (on-chosen chosen true @*selected-choices e))))))
-                                    :empty-placeholder (empty-placeholder t)})]
+                                   :on-chosen         (fn [raw-chosen e]
+                                                        (when clear-input-on-chosen?
+                                                          (reset! *input ""))
+                                                        (let [chosen (extract-chosen-fn raw-chosen)]
+                                                          (if multiple-choices?
+                                                            (if (selected-choices chosen)
+                                                              (do
+                                                                (swap! *selected-choices disj chosen)
+                                                                (when on-chosen (on-chosen chosen false @*selected-choices e)))
+                                                              (do
+                                                                (swap! *selected-choices conj chosen)
+                                                                (when on-chosen (on-chosen chosen true @*selected-choices e))))
+                                                            (do
+                                                              (when (and close-modal? (not multiple-choices?))
+                                                                (state/close-modal!))
+                                                              (when on-chosen
+                                                                (on-chosen chosen true @*selected-choices e))))))
+                                   :empty-placeholder (empty-placeholder t)})
 
                                  (when (and multiple-choices? (fn? on-apply))
                                    [:div.p-4 (ui/button "Apply"

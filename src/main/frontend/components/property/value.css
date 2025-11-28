@@ -45,13 +45,15 @@
   min-width: 3em;
 }
 
-/* Fix separator width in combobox context - remove padding from ui__dropdown-menu-content when it contains cp__select-main */
-.ui__dropdown-menu-content:has(.cp__select-main) {
+/* Fix separator width in combobox context - remove padding from ui__dropdown-menu-content when it contains combobox */
+.ui__dropdown-menu-content:has(.cp__select-main),
+.ui__dropdown-menu-content:has(.ui__combobox) {
   padding: 0 !important;
 }
 
 /* Add padding back to input and results to maintain visual spacing */
-.ui__dropdown-menu-content .cp__select-main .input-wrap {
+.ui__dropdown-menu-content .cp__select-main .input-wrap,
+.ui__dropdown-menu-content .ui__combobox .input-wrap {
   padding-left: 4px;
   padding-right: 4px;
   padding-top: 4px;
@@ -59,7 +61,8 @@
   overflow-x: hidden !important;
 }
 
-.ui__dropdown-menu-content .cp__select-main .item-results-wrap {
+.ui__dropdown-menu-content .cp__select-main .item-results-wrap,
+.ui__dropdown-menu-content .ui__combobox .item-results-wrap {
   padding: 0 4px !important;
   overflow-x: hidden !important;
   overflow-y: auto !important;
@@ -68,66 +71,79 @@
 
 /* Remove vertical padding from scroll viewport for clean cutoff */
 .ui__dropdown-menu-content .cp__select-main [class*="SelectViewport"],
-.ui__dropdown-menu-content .cp__select-main .ui__select-viewport {
+.ui__dropdown-menu-content .cp__select-main .ui__select-viewport,
+.ui__dropdown-menu-content .ui__combobox [class*="SelectViewport"],
+.ui__dropdown-menu-content .ui__combobox .ui__select-viewport {
   padding-top: 0 !important;
   padding-bottom: 0 !important;
 }
 
 /* Remove py-1 padding from results wrapper */
 .ui__dropdown-menu-content .cp__select-main > div[class*="py-1"],
-.ui__dropdown-menu-content .cp__select-main > div[class*="py-"] {
+.ui__dropdown-menu-content .cp__select-main > div[class*="py-"],
+.ui__dropdown-menu-content .ui__combobox > div[class*="py-1"],
+.ui__dropdown-menu-content .ui__combobox > div[class*="py-"] {
   padding-top: 0 !important;
   padding-bottom: 0 !important;
 }
 
 /* Add breathing room to first and last items (scrolls away naturally) */
-.ui__dropdown-menu-content .cp__select-main .item-results-wrap .menu-link:first-child {
+.ui__dropdown-menu-content .cp__select-main .item-results-wrap .menu-link:first-child,
+.ui__dropdown-menu-content .ui__combobox .item-results-wrap .menu-link:first-child {
   margin-top: 4px;
 }
 
-.ui__dropdown-menu-content .cp__select-main .item-results-wrap .menu-link:last-child {
+.ui__dropdown-menu-content .cp__select-main .item-results-wrap .menu-link:last-child,
+.ui__dropdown-menu-content .ui__combobox .item-results-wrap .menu-link:last-child {
   margin-bottom: 4px;
 }
 
-/* Dropdown combobox menu-link styles for cp__select-main */
-/* These rules account for the fact that cp__select-main doesn't use .menu-link-wrap wrapper */
+/* Dropdown combobox menu-link styles for cp__select-main and ui__combobox */
+/* These rules account for the fact that these don't use .menu-link-wrap wrapper */
 
 /* Default state - unselected items: gray-12 text + opacity-80 + grayscale */
-.ui__dropdown-menu-content .cp__select-main .item-results-wrap .menu-link:not(.chosen) {
+.ui__dropdown-menu-content .cp__select-main .item-results-wrap .menu-link:not(.chosen),
+.ui__dropdown-menu-content .ui__combobox .item-results-wrap .menu-link:not(.chosen) {
   @apply opacity-80 grayscale transition-opacity transition-all duration-75 ease-in;
   color: var(--lx-gray-12, var(--rx-gray-12)) !important;
 }
 
 /* Selected state - chosen item: gray-12 text + opacity-100 + no grayscale + background */
-.ui__dropdown-menu-content .cp__select-main .item-results-wrap .menu-link.chosen {
+.ui__dropdown-menu-content .cp__select-main .item-results-wrap .menu-link.chosen,
+.ui__dropdown-menu-content .ui__combobox .item-results-wrap .menu-link.chosen {
   @apply !opacity-100 grayscale-0;
   color: var(--lx-gray-12, var(--rx-gray-12)) !important;
   background-color: var(--lx-gray-03-alpha, var(--rx-gray-03-alpha)) !important;
 }
 
 /* Disable separate hover state - only .chosen state should be visually distinct */
-.ui__dropdown-menu-content .cp__select-main .item-results-wrap .menu-link:hover:not(.chosen) {
+.ui__dropdown-menu-content .cp__select-main .item-results-wrap .menu-link:hover:not(.chosen),
+.ui__dropdown-menu-content .ui__combobox .item-results-wrap .menu-link:hover:not(.chosen) {
   background: none !important;
   background-color: transparent !important;
 }
 
 /* Force gray-12 on all nested elements in menu items */
-.ui__dropdown-menu-content .cp__select-main .item-results-wrap .menu-link * {
+.ui__dropdown-menu-content .cp__select-main .item-results-wrap .menu-link *,
+.ui__dropdown-menu-content .ui__combobox .item-results-wrap .menu-link * {
   color: var(--lx-gray-12, var(--rx-gray-12)) !important;
 }
 
 /* Force gray-12 on all nested elements in selected items */
-.ui__dropdown-menu-content .cp__select-main .item-results-wrap .menu-link.chosen * {
+.ui__dropdown-menu-content .cp__select-main .item-results-wrap .menu-link.chosen *,
+.ui__dropdown-menu-content .ui__combobox .item-results-wrap .menu-link.chosen * {
   color: var(--lx-gray-12, var(--rx-gray-12)) !important;
 }
 
 /* Exception: Preserve gray-11 for quoted text in "New option" */
-.ui__dropdown-menu-content .cp__select-main .item-results-wrap .menu-link .text-gray-11 {
+.ui__dropdown-menu-content .cp__select-main .item-results-wrap .menu-link .text-gray-11,
+.ui__dropdown-menu-content .ui__combobox .item-results-wrap .menu-link .text-gray-11 {
   color: var(--lx-gray-11, var(--rx-gray-11)) !important;
 }
 
 /* Separator now spans full width since parent has no padding */
-.ui__dropdown-menu-content .cp__select-main .ui__select-separator {
+.ui__dropdown-menu-content .cp__select-main .ui__select-separator,
+.ui__dropdown-menu-content .ui__combobox .ui__select-separator {
   margin: 0 !important;
   width: 100% !important;
 }

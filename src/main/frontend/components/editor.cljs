@@ -2,6 +2,7 @@
   (:require [clojure.string :as string]
             [dommy.core :as dom]
             [frontend.commands :as commands :refer [*matched-commands]]
+            [frontend.components.combobox :as combobox]
             [frontend.components.file-based.datetime :as datetime-comp]
             [frontend.components.search :as search]
             [frontend.components.svg :as svg]
@@ -61,10 +62,11 @@
         page? (db/page? (db/entity (:db/id (state/get-edit-block))))
         matched (or (filter-commands page? @*matched) no-matched-commands)
         filtered? (not= matched @commands/*initial-commands)]
-    (ui/auto-complete
+    (combobox/combobox
      matched
      (cond->
-      {:item-render
+      {:show-search-input? false
+       :item-render
        (fn [item]
          (let [command-name (first item)
                command-doc (get item 2)
@@ -193,9 +195,10 @@
                                    (matched-pages-with-new-page (rest matched-pages) db-tag? q))
                              (matched-pages-with-new-page matched-pages db-tag? q)))]
       [:<>
-       (ui/auto-complete
+       (combobox/combobox
         matched-pages'
-        {:on-chosen   (page-on-chosen-handler embed? input id q pos format)
+        {:show-search-input? false
+         :on-chosen   (page-on-chosen-handler embed? input id q pos format)
          :on-enter    (fn []
                         (page-handler/page-not-exists-handler input id q current-pos))
          :item-render (fn [block _chosen?]
@@ -329,9 +332,10 @@
         embed? (and db? (= @commands/*current-command "Block embed"))
         chosen-handler (block-on-chosen-handler embed? input id q format selected-text)
         non-exist-block-handler (editor-handler/block-non-exist-handler input)]
-    (ui/auto-complete
+    (combobox/combobox
      result
-     {:on-chosen   chosen-handler
+     {:show-search-input? false
+      :on-chosen   chosen-handler
       :on-enter    non-exist-block-handler
       :empty-placeholder   [:div.text-gray-500.text-sm.px-4.py-2 (t :editor/block-search)]
       :item-render (fn [{:block/keys [page uuid]}]  ;; content returned from search engine is normalized
