@@ -302,8 +302,6 @@
  :asset/delete "删除图片"
  :asset/maximize "最大化显示图片"
  :asset/ref-block "资源块引用"
- :asset/edit-block "编辑块"
-
  :color/blue "蓝色"
  :color/gray "灰色"
  :color/green "绿色"

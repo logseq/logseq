@@ -204,7 +204,7 @@
     (js/window.location.reload)
     (do
       (log/error :sqlite-error error)
-      (notification/show! [:div (str "SQLiteDB error: " error)] :error))))
+      (notification/show! (str "SQLiteDB error: " error) :error))))
 
 (defrecord InBrowser []
   protocol/PersistentDB
@@ -238,10 +238,10 @@
               (<export-db! repo data))))
         (p/catch (fn [error]
                    (log/error :export-db-error repo error "SQLiteDB save error")
-                   (notification/show! [:div (str "SQLiteDB save error: " error)] :error) {}))))
+                   (notification/show! (str "SQLiteDB save error: " error) :error) {}))))
 
   (<import-db [_this repo data]
     (-> (state/<invoke-db-worker-direct-pass :thread-api/import-db repo data)
         (p/catch (fn [error]
                    (log/error :import-db-error repo error "SQLiteDB import error")
-                   (notification/show! [:div (str "SQLiteDB import error: " error)] :error) {})))))
+                   (notification/show! (str "SQLiteDB import error: " error) :error) {})))))

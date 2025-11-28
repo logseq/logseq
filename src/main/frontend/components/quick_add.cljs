@@ -11,7 +11,6 @@
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [mobile.components.ui :as mobile-ui]
             [rum.core :as rum]))
 
 (rum/defc page-blocks
@@ -31,7 +30,6 @@
                  (state/clear-selection!)
                  state)
    :will-unmount (fn [state]
-                   (state/clear-edit!)
                    (state/clear-selection!)
                    state)
    :did-mount (fn [state]
@@ -51,13 +49,19 @@
                          (when-not mobile? (shui/shortcut ["mod" "e"]))
                          "Add to today")]]
         [:div.ls-quick-add.flex.flex-1.flex-col.w-full.gap-4
-         [:div.border-b.pb-4.flex.flex-row.justify-between.gap-4.items-center
+         [:div.flex.flex-row.justify-between.gap-4.items-center
+          {:class (if mobile?
+                    "pt-4"
+                    "border-b pb-4")}
           [:div.font-medium
            "Quick add"]
           (when mobile? add-button)]
          (if mobile?
-           (mobile-ui/classic-app-container-wrap
-            (page-blocks add-page))
+           [:main#app-container-wrapper.ls-fold-button-on-right
+            [:div#app-container.pt-2
+             [:div#main-container.flex.flex-1
+              [:div.w-full
+               (page-blocks add-page)]]]]
            [:div.content {:class "block -ml-6"}
             (page-blocks add-page)])
          (when-not mobile? add-button)]))))

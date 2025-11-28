@@ -53,7 +53,6 @@
     (ui-handler/re-render-root!)
     (cli-common-mcp-tools/summarize-upsert-operations ops options)))
 
-
 (defn import-edn
   "Given EDN data as a transitized string, converts to EDN and imports it."
   [edn-data*]

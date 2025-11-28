@@ -173,12 +173,17 @@
                                     (date/journal-title->int (date/today))))
                        (state/pub-event! [:journal/insert-template page-name]))))
                  state)}
-  [state block* {:keys [sidebar? whiteboard? hide-add-button?] :as config}]
+  [state block* {:keys [sidebar? whiteboard? hide-add-button? journals?] :as config}]
   (when-let [id (:db/id block*)]
     (let [block (db/sub-block id)
           block-id (:block/uuid block)
           block? (not (db/page? block))
-          children (:block/_parent block)
+          full-children (->> (:block/_parent block)
+                             ldb/sort-by-order)
+          mobile-length-limit 50
+          [children more?] (if (and (> (count full-children) mobile-length-limit) (util/mobile?) journals?)
+                             [(take mobile-length-limit full-children) true]
+                             [full-children false])
           quick-add-page-id (:db/id (db-db/get-built-in-page (db/get-db) common-config/quick-add-page-name))
           children (cond
                      (and (= id quick-add-page-id)
@@ -222,8 +227,14 @@
               blocks (if block? [block] (db/sort-by-order children block))]
           [:div.relative
            (page-blocks-inner block blocks config sidebar? whiteboard? block-id)
-           (when-not hide-add-button?
-             (add-button block config))])))))
+           (when more?
+             (shui/button {:variant :ghost
+                           :class "text-muted-foreground w-full"
+                           :on-click (fn [] (route-handler/redirect-to-page! (:block/uuid block)))}
+                          "Load more"))
+           (when-not more?
+             (when-not hide-add-button?
+               (add-button block config)))])))))
 
 (rum/defc today-queries < rum/reactive
   [repo today? sidebar?]
@@ -615,7 +626,7 @@
   (rum/local false ::all-collapsed?)
   (rum/local false ::control-show?)
   (rum/local nil   ::current-page)
-  [state {:keys [repo page preview? sidebar? tag-dialog? linked-refs? unlinked-refs? config journals?] :as option}]
+  [state {:keys [repo page preview? sidebar? tag-dialog? linked-refs? unlinked-refs? config journals? mobile-page?] :as option}]
   (let [current-repo (state/sub :git/current-repo)
         page (or page (some-> (:db/id option) db/entity))
         config (assoc config
@@ -654,7 +665,7 @@
          (if (and whiteboard-page? (not sidebar?))
            [:div ((state/get-component :whiteboard/tldraw-preview) (:block/uuid page))] ;; FIXME: this is not reactive
            [:div.relative.grid.gap-4.sm:gap-8.page-inner.mb-16
-            (when-not (or block? sidebar?)
+            (when-not (or block? sidebar? mobile-page?)
               [:div.flex.flex-row.space-between
                (when (and (or (mobile-util/native-platform?) (util/mobile?)) (not db-based?))
                  [:div.flex.flex-row.pr-2

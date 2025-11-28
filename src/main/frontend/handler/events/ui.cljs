@@ -41,7 +41,6 @@
             [goog.dom :as gdom]
             [logseq.common.util :as common-util]
             [logseq.shui.ui :as shui]
-            [mobile.state :as mobile-state]
             [promesa.core :as p]))
 
 (defmethod events/handle :go/search [_]
@@ -92,7 +91,7 @@
 (defmethod events/handle :redirect-to-home [_]
   (page-handler/create-today-journal!)
   (when (util/capacitor?)
-    (mobile-state/redirect-to-tab! "home")))
+    (state/pub-event! [:mobile/set-tab "home"])))
 
 (defmethod events/handle :page/show-delete-dialog [[_ selected-rows ok-handler]]
   (shui/dialog-open!

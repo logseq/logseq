@@ -37,7 +37,8 @@
         (let [ids (map (fn [id] (:db/id (db/entity [:block/uuid id]))) deleted-block-uuids)]
           (state/sidebar-remove-deleted-block! ids))
         (when-let [block-id (state/get-current-page)]
-          (when (contains? (set (map str deleted-block-uuids)) block-id)
+          (when (and (contains? (set (map str deleted-block-uuids)) block-id)
+                     (not (util/mobile?)))
             (let [parent (:block/parent (ldb/get-page (db/get-db) block-id))]
               (if parent
                 (route-handler/redirect-to-page! (:block/uuid parent))
@@ -86,13 +87,8 @@
 
             (when-not (:graph/importing @state/state)
 
-              (let [edit-block-f @(:editor/edit-block-fn @state/state)
-                    delete-blocks? (and (= (:outliner-op tx-meta) :delete-blocks)
-                                        (:local-tx? tx-meta)
-                                        (not (:mobile-action-bar? tx-meta)))]
+              (let [edit-block-f @(:editor/edit-block-fn @state/state)]
                 (state/set-state! :editor/edit-block-fn nil)
-                (when delete-blocks?
-                  (util/mobile-keep-keyboard-open))
                 (when-not (:skip-refresh? tx-meta)
                   (react/refresh! repo affected-keys))
                 (when edit-block-f

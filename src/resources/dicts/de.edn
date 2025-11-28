@@ -77,7 +77,6 @@
  :asset/confirm-delete "{1} wirklich löschen?"
  :asset/copy "Bild kopieren"
  :asset/delete "Bild löschen"
- :asset/edit-block "Block bearbeiten"
  :asset/maximize "Bild maximieren"
  :asset/open-in-browser "Bild im Browser öffnen"
  :asset/physical-delete "Datei ebenfalls entfernen (Achtung: die Datei kann nicht wiederhergestellt werden)"

@@ -880,10 +880,10 @@
          [(when-not in-system-window?
             (rum/with-key (pdf-resizer viewer) "pdf-resizer"))
           (rum/with-key
-           (pdf-toolbar viewer
-            {:on-external-window! #(open-external-win! (state/get-current-pdf))
-             :pdf-current pdf-current})
-           "pdf-toolbar")])])))
+            (pdf-toolbar viewer
+                         {:on-external-window! #(open-external-win! (state/get-current-pdf))
+                          :pdf-current pdf-current})
+            "pdf-toolbar")])])))
 
 (rum/defcs pdf-password-input <
   (rum/local "" ::password)
