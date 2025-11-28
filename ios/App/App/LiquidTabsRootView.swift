@@ -217,6 +217,8 @@ struct LiquidTabsRootView: View {
                         .foregroundColor: dimmed
                     ]
 
+                    appearance.stackedLayoutAppearance.normal.iconColor = UIColor.label.withAlphaComponent(0.9)
+
                     // Apply the appearance
                     let tabBar = UITabBar.appearance()
                     tabBar.tintColor = .label
@@ -276,9 +278,16 @@ struct LiquidTabsRootView: View {
             ZStack {
                 Color.logseqBackground.ignoresSafeArea()
 
-                TabView(selection: Binding(
-                    get: { store.selectedId ?? firstTab?.id },
-                    set: { newValue in
+                if store.tabs.isEmpty {
+                    // 🔑 Bootstrapping path: attach the shared webview
+                    // so JS can run and configure tabs.
+                    NativeNavHost(navController: navController)
+                      .ignoresSafeArea()
+                      .background(Color.logseqBackground)
+                } else {
+                    TabView(selection: Binding(
+                              get: { store.selectedId ?? firstTab?.id },
+                              set: { newValue in
                         guard let id = newValue else { return }
 
                         // Fallback Re-Tap Logic
@@ -290,19 +299,20 @@ struct LiquidTabsRootView: View {
                             LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
                         }
                     }
-                )) {
-                    ForEach(store.tabs) { tab in
-                        NativeNavHost(navController: navController)
-                            .ignoresSafeArea()
-                            .background(Color.logseqBackground)
-                            .tabItem {
-                                Label(tab.title, systemImage: tab.systemImage)
-                            }
-                            .tag(tab.id as String?)
+                            )) {
+                        ForEach(store.tabs) { tab in
+                            NativeNavHost(navController: navController)
+                              .ignoresSafeArea()
+                              .background(Color.logseqBackground)
+                              .tabItem {
+                                  Label(tab.title, systemImage: tab.systemImage)
+                              }
+                              .tag(tab.id as String?)
+                        }
                     }
+                      .background(Color.logseqBackground)
+                      .toolbarBackground(Color.logseqBackground, for: .tabBar)
                 }
-                .background(Color.logseqBackground)
-                .toolbarBackground(Color.logseqBackground, for: .tabBar)
             }
         }
     }
