@@ -204,17 +204,17 @@
                                       (string/starts-with? text-str %))
                                    (:new-item-patterns config)))
             new-text (when pattern (extract-new-item-text item pattern))
-            display-pattern (string/replace pattern #":$" "")]
+            display-pattern (string/replace pattern #":+$" "")] ; Remove one or more trailing colons
         (if (= pattern "Convert")
-          ;; Special styling for "Convert \"text\" to property" - use whitespace-nowrap to prevent awkward breaks
-          [:div {:class (str "flex flex-row items-center " gap-class " whitespace-nowrap")}
-           [:span.text-gray-12 "Convert "]
+          ;; Special styling for "Convert \"text\" to property" - use gap instead of space
+          [:div {:class "flex flex-row items-center whitespace-nowrap gap-1"}
+           [:span.text-gray-12 "Convert"]
            (when new-text
              [:span.text-gray-11 (str "\"" new-text "\"")])
-           [:span.text-gray-12 " to property"]]
-          ;; Regular "New option:" or "New page:" style
-          [:div {:class (str "flex flex-row items-center " gap-class)}
-           [:span.text-gray-12 display-pattern ":"]
+           [:span.text-gray-12 "to property"]]
+          ;; Regular "New option:" or "New page:" style - use gap instead of space
+          [:div {:class "flex flex-row items-center whitespace-nowrap gap-1"}
+           [:span.text-gray-12 (str display-pattern ":")]
            (when new-text
              [:span.text-gray-11 (str "\"" new-text "\"")])]))
       ;; Regular content with optional highlighting and embeds

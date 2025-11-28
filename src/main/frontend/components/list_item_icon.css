@@ -2,19 +2,29 @@
   flex-shrink: 0;
 }
 
-/* Default variant - Dark gray background */
+/* Default variant - Gray background that adapts to light/dark mode */
 .list-item-icon--default {
-  background-color: #2B2F31;
+  background-color: var(--lx-gray-05, var(--rx-gray-05));
   padding: 4px;
   border-radius: 4px;
 }
 
+/* Ensure icon color has good contrast in default variant */
+.list-item-icon--default .ui__icon {
+  color: var(--lx-gray-12, var(--rx-gray-12));
+}
+
 /* Create variant - Blue background with border */
 .list-item-icon--create {
-  background-color: rgba(5, 126, 255, 0.6);
-  border: 1px solid #369EFF;
+  background-color: var(--lx-accent-08-alpha, rgba(5, 126, 255, 0.6));
+  border: 1px solid var(--lx-accent-10, #369EFF);
   padding: 4px;
   border-radius: 4px;
+}
+
+/* Ensure icon color has good contrast in create variant - use accent color */
+.list-item-icon--create .ui__icon {
+  color: var(--lx-accent-12, var(--rx-accent-12, #ffffff));
 }
 
 /* Raw variant - No visible background, icon with opacity */
@@ -24,6 +34,7 @@
 
 .list-item-icon--raw .ui__icon {
   opacity: 0.5;
+  color: var(--lx-gray-12, var(--rx-gray-12));
 }
 
 /* Checkbox variant - Container for checkbox */

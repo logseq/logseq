@@ -157,6 +157,12 @@
   color: var(--lx-gray-12, var(--rx-gray-12)) !important;
 }
 
+/* Don't override icon color in create variant list-item-icon - use accent color */
+.ui__dropdown-menu-content .cp__select-main .item-results-wrap .menu-link.chosen .list-item-icon--create .ui__icon,
+.ui__dropdown-menu-content .ui__combobox .item-results-wrap .menu-link.chosen .list-item-icon--create .ui__icon {
+  color: var(--lx-accent-12, var(--rx-accent-12)) !important;
+}
+
 /* Exception: Preserve gray-11 for quoted text in "New option" */
 .ui__dropdown-menu-content .cp__select-main .item-results-wrap .menu-link .text-gray-11,
 .ui__dropdown-menu-content .ui__combobox .item-results-wrap .menu-link .text-gray-11 {
