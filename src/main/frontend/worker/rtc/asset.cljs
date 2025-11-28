@@ -146,7 +146,6 @@
        (->> (fn [[asset-uuid url]]
               (m/sp
                 (let [[asset-type checksum] (get asset-uuid->asset-metadata asset-uuid)
-                      _ (prn :xxx exported-aes-key)
                       r (c.m/<?
                          (worker-state/<invoke-main-thread :thread-api/rtc-upload-asset
                                                            repo exported-aes-key (str asset-uuid)
