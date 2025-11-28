@@ -161,6 +161,7 @@ interface PluginLocalOptions {
   settings?: PluginSettings
   effect?: boolean
   theme?: boolean
+  allow?: string
 
   [key: string]: any
 }

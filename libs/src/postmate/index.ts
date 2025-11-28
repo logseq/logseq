@@ -288,7 +288,8 @@ export type PostMateOptions = {
   id?: string
   classListArray?: Array<string>
   name?: string
-  model?: any
+  model?: any,
+  allow?: string
 }
 
 /**
@@ -315,6 +316,7 @@ export class Postmate {
     this.frame = document.createElement('iframe')
     if (opts.id) this.frame.id = opts.id
     if (opts.name) this.frame.name = opts.name
+    if (opts.allow) this.frame.allow = opts.allow
     this.frame.classList.add.apply(
       this.frame.classList,
       opts.classListArray || []
