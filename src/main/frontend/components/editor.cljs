@@ -60,57 +60,69 @@
         *matched (::matched-commands s)
         _ (when (state/get-editor-action)
             (reset! *matched matched'))
-        page? (db/page? (db/entity (:db/id (state/get-edit-block))))
+        page?   (db/page? (db/entity (:db/id (state/get-edit-block))))
         matched (or (filter-commands page? @*matched) no-matched-commands)
         filtered? (not= matched @commands/*initial-commands)]
     (combobox/combobox
      matched
      (cond->
-      {:show-search-input? false
-       :item-render
-       (fn [item]
-         (let [command-name (first item)
-               command-doc (get item 2)
-               plugin-id (get-in item [1 1 1 :pid])
-               doc (when (state/show-command-doc?) command-doc)
-               options (some-> item (get 3))
-               icon-name (some-> (if (map? options) (:icon options) options) (name))
-               command-name (if icon-name
-                              [:span.flex.items-center.gap-1
-                               (list-item-icon/root {:variant :raw :icon icon-name})
-                               [:strong.font-normal command-name]]
-                              command-name)]
-           (cond
-             (or plugin-id (vector? doc))
-             [:div.has-help
-              {:title plugin-id}
-              command-name
-              (when doc (ui/tooltip [:small (svg/help-circle)] doc))]
+       {:show-search-input? false
+        :item-renderer-config
+        {:icon-fn (fn [item]
+                    (let [options (get item 3)
+                          icon    (if (map? options) (:icon options) options)]
+                      (some-> icon name)))
+         :icon-variant :raw
+         :text-fn (fn [item]
+                    (let [command-name (first item)]
+                      [:strong.font-normal command-name]))
+         :gap-size 1
+         :class "has-help"}
+        :item-render
+        ;; Custom renderer for tooltip support (backward compat)
+        (fn [item]
+          (let [command-name (first item)
+                command-doc (get item 2)
+                plugin-id (get-in item [1 1 1 :pid])
+                doc (when (state/show-command-doc?) command-doc)
+                options (some-> item (get 3))
+                icon-name (some-> (if (map? options) (:icon options) options) name)
+                command-name (if icon-name
+                               [:span.flex.items-center.gap-1
+                                (list-item-icon/root {:variant :raw :icon icon-name})
+                                [:strong.font-normal command-name]]
+                               command-name)]
+            (cond
+              (or plugin-id (vector? doc))
+              [:div.has-help
+               {:title plugin-id}
+               command-name
+               (when doc (ui/tooltip [:small (svg/help-circle)] doc))]
 
-             (string? doc)
-             [:div {:title doc}
-              command-name]
+              (string? doc)
+              [:div {:title doc}
+               command-name]
 
-             :else
-             [:div command-name])))
+              :else
+              [:div command-name])))
 
-       :on-chosen
-       (fn [chosen-item]
-         (let [command (first chosen-item)]
-           (reset! commands/*current-command command)
-           (let [command-steps (get (into {} matched) command)
-                 restore-slash? (or
-                                 (contains? #{"Today" "Yesterday" "Tomorrow" "Current time"} command)
-                                 (and
-                                  (not (fn? command-steps))
-                                  (not (contains? (set (map first command-steps)) :editor/input))
-                                  (not (contains? #{"Date picker" "Template" "Deadline" "Scheduled" "Upload an image"} command))))]
-             (editor-handler/insert-command! id command-steps
-                                             format
-                                             {:restore? restore-slash?
-                                              :command command}))))
-       :class
-       "cp__commands-slash"}
+        :on-chosen
+        (fn [chosen-item]
+          (let [command (first chosen-item)]
+            (reset! commands/*current-command command)
+            (let [command-steps (get (into {} matched) command)
+                  restore-slash? (or
+                                  (contains? #{"Today" "Yesterday" "Tomorrow" "Current time"} command)
+                                  (and
+                                   (not (fn? command-steps))
+                                   (not (contains? (set (map first command-steps)) :editor/input))
+                                   (not (contains? #{"Date picker" "Template" "Deadline" "Scheduled" "Upload an image"} command))))]
+              (editor-handler/insert-command! id command-steps
+                                              format
+                                              {:restore? restore-slash?
+                                               :command command}))))
+        :class
+        "cp__commands-slash"}
        (not filtered?)
        (assoc :get-group-name
               (fn [item]
@@ -202,54 +214,78 @@
          :on-chosen   (page-on-chosen-handler embed? input id q pos format)
          :on-enter    (fn []
                         (page-handler/page-not-exists-handler input id q current-pos))
-         :item-render
-        (fn [block _chosen?]
-          (let [block' (if-let [id (:block/uuid block)]
-                        (if-let [e (db/entity [:block/uuid id])]
-                          (assoc e
-                                  :block/title (:block/title block)
-                                  :alias (:alias block))
-                          block)
-                        block)]
-            [:div.flex.flex-col
-            (when (and (:block/uuid block')
-                        (or (:block/parent block')
-                            (not (:page? block))))
-              (when-let [breadcrumb (state/get-component :block/breadcrumb)]
-                [:div.text-xs.opacity-70.mb-1 {:style {:margin-left 3}}
-                  (breadcrumb {:search? true}
-                              (state/get-current-repo)
-                              (:block/uuid block')
-                              {})]))
-            [:div.flex.flex-row.items-start.gap-3
-              (when-not (or db-tag? (not db-based?))
-                (let [is-new? (or (string/starts-with? (str (:block/title block'))
-                                                      (t :new-tag))
-                                  (string/starts-with? (str (:block/title block'))
-                                                      (t :new-page)))
-                      icon-name (cond
-                                  (:nlp-date? block') "calendar"
-                                  (ldb/class? block') "hash"
-                                  (ldb/property? block') "letter-p"
-                                  (db-model/whiteboard-page? block') "writing"
-                                  (or (ldb/page? block') (:page? block)) "file"
-                                  is-new? "plus"
-                                  :else "letter-n")
-                      variant (if is-new? :create :default)]
-                  (list-item-icon/root {:variant variant
-                                        :icon icon-name})))
-              (let [title (let [alias (get-in block' [:alias :block/title])
-                                title (if (and db-based?
-                                              (not (ldb/built-in? block')))
-                                        (block-handler/block-unique-title block')
-                                        (:block/title block'))]
-                            (if alias
-                              (str title " -> alias: " alias)
-                              title))]
-                (if (or (string/starts-with? title (t :new-tag))
-                        (string/starts-with? title (t :new-page)))
-                  title
-                  (search-handler/highlight-exact-query title q)))]]))
+         :item-renderer-config
+         (let [new-tag-pattern (str (t :new-tag) ":")
+               new-page-pattern (str (t :new-page) ":")]
+           {:icon-fn (fn [block]
+                      (let [block' (if-let [id (:block/uuid block)]
+                                    (if-let [e (db/entity [:block/uuid id])]
+                                      (assoc e
+                                             :block/title (:block/title block)
+                                             :alias (:alias block))
+                                      block)
+                                    block)]
+                        (cond
+                          (:nlp-date? block') "calendar"
+                          (ldb/class? block') "hash"
+                          (ldb/property? block') "letter-p"
+                          (db-model/whiteboard-page? block') "writing"
+                          (or (ldb/page? block') (:page? block)) "file"
+                          (or (string/starts-with? (str (:block/title block')) new-tag-pattern)
+                              (string/starts-with? (str (:block/title block')) new-page-pattern)) "plus"
+                          :else "letter-n")))
+            :icon-variant-fn (fn [block]
+                              (let [block' (if-let [id (:block/uuid block)]
+                                            (if-let [e (db/entity [:block/uuid id])]
+                                              (assoc e
+                                                     :block/title (:block/title block)
+                                                     :alias (:alias block))
+                                              block)
+                                            block)
+                                    title (str (:block/title block'))]
+                                (if (or (string/starts-with? title new-tag-pattern)
+                                        (string/starts-with? title new-page-pattern))
+                                  :create
+                                  :default)))
+            :show-breadcrumbs? true
+            :breadcrumb-fn (fn [block]
+                            (let [block' (if-let [id (:block/uuid block)]
+                                          (if-let [e (db/entity [:block/uuid id])]
+                                            (assoc e
+                                                   :block/title (:block/title block)
+                                                   :alias (:alias block))
+                                            block)
+                                          block)]
+                              (when (and (:block/uuid block')
+                                        (or (:block/parent block')
+                                            (not (:page? block))))
+                                (when-let [breadcrumb (state/get-component :block/breadcrumb)]
+                                  (breadcrumb {:search? true}
+                                             (state/get-current-repo)
+                                             (:block/uuid block')
+                                             {})))))
+            :new-item-patterns [new-tag-pattern new-page-pattern]
+            :highlight-query? true
+            :query-fn (fn [] q)
+            :highlight-fn (fn [query text]
+                           (search-handler/highlight-exact-query text query))
+            :text-fn (fn [block]
+                      (let [block' (if-let [id (:block/uuid block)]
+                                    (if-let [e (db/entity [:block/uuid id])]
+                                      (assoc e
+                                             :block/title (:block/title block)
+                                             :alias (:alias block))
+                                      block)
+                                    block)
+                            alias (get-in block' [:alias :block/title])
+                            title (if (and db-based?
+                                          (not (ldb/built-in? block')))
+                                    (block-handler/block-unique-title block')
+                                    (:block/title block'))]
+                        (if alias
+                          (str title " -> alias: " alias)
+                          title)))
+            :gap-size 3})
 
          :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
                                                                     "Search for a tag"

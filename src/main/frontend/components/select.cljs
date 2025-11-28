@@ -21,41 +21,18 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
 
-(rum/defc render-item < rum/reactive
-  [result chosen? multiple-choices? *selected-choices]
-  (let [value (if (map? result) (or (:label result)
-                                    (:value result)) result)
-        header (:header result)
-        selected-choices (rum/react *selected-choices)
-        is-new-option? (and (string? value) (string/starts-with? value "New option:"))
-        value-content (if is-new-option?
-                       (let [parts (string/split value #"New option: " 2)
-                             input-text (second parts)]
-                         [:div.flex.flex-row.items-center.gap-3
-                          (list-item-icon/root {:variant :create
-                                                :icon "plus"})
-                          [:span.text-gray-12 "New option:"]
-                          (when input-text
-                            [:span.text-gray-11 (str "\"" input-text "\"")])])
-                       value)
-        row [:div.flex.flex-row.justify-between.w-full
-             {:class (when chosen? "chosen")
-              :on-pointer-down util/stop-propagation}
-             [:div.flex.flex-row.items-center.gap-1
-              (when multiple-choices?
-                (ui/checkbox {:checked (boolean (selected-choices (:value result)))
-                              :on-click (fn [e]
-                                          (.preventDefault e))
-                              :disabled (:disabled? result)}))
-              value-content]
-             (when (and (map? result) (:id result))
-               [:div.tip.flex
-                [:code.opacity-20.bg-transparent (:id result)]])]]
-    (if header
-      [:div.flex.flex-col.gap-1
-       header
-       row]
-      row)))
+(defn- create-item-renderer-config
+  "Create unified item renderer config for select component."
+  [multiple-choices? *selected-choices extract-value-fn]
+  {:multi-select? multiple-choices?
+   :selected-choices *selected-choices
+   :extract-value-fn extract-value-fn
+   :icon-key :icon  ; Extract icon from :icon key in item
+   :new-item-patterns ["New option:"]
+   :show-breadcrumbs? true
+   :breadcrumb-fn (fn [item] (:header item))  ; Use :header as breadcrumb
+   :on-pointer-down util/stop-propagation
+   :gap-size 3})
 
 (rum/defc search-input
   [*input {:keys [prompt-key input-default-placeholder input-opts on-input]}]
@@ -183,8 +160,9 @@
                                   {:show-search-input? true
                                    :show-separator? false
                                    :grouped? grouped?
-                                   :item-render       (or item-cp (fn [result chosen?]
-                                                                     (render-item result chosen? multiple-choices? *selected-choices)))
+                                   :item-render item-cp  ; Custom renderer takes precedence
+                                   :item-renderer-config (when (not item-cp)
+                                                          (create-item-renderer-config multiple-choices? *selected-choices extract-chosen-fn))
                                    :on-chosen         (fn [raw-chosen e]
                                                         (when clear-input-on-chosen?
                                                           (reset! *input ""))

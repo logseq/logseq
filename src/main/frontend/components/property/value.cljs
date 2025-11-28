@@ -739,29 +739,28 @@
                                     (assoc (:value node) :block/title (:label node))
                                     node)
                              id (:db/id node)
-                             [header label] (if (integer? id)
-                                              (let [node-title (if (seq (:logseq.property/classes property))
-                                                                 (db-content/recur-replace-uuid-in-block-title node)
-                                                                 (block-handler/block-unique-title node))
-                                                    title (subs node-title 0 256)
-                                                    node (or (db/entity id) node)
-                                                    icon (get-node-icon node)
-                                                    header (when-not (db/page? node)
-                                                             (when-let [breadcrumb (state/get-component :block/breadcrumb)]
-                                                               [:div.text-xs.opacity-70
-                                                                (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid node) {})]))
-                                                    label [:div.flex.flex-row.items-center.gap-3
-                                                           (when-not (or (:logseq.property/classes property)
-                                                                         (contains? #{:class :property} (:logseq.property/type property)))
-                                                             (list-item-icon/root {:variant :default
-                                                                                   :icon icon}))
-                                                           [:div title]]]
-                                                [header label])
-                                              [nil (:block/title node)])]
+                             [header label icon] (if (integer? id)
+                                                  (let [node-title (if (seq (:logseq.property/classes property))
+                                                                     (db-content/recur-replace-uuid-in-block-title node)
+                                                                     (block-handler/block-unique-title node))
+                                                        title (subs node-title 0 256)
+                                                        node (or (db/entity id) node)
+                                                        icon (get-node-icon node)
+                                                        header (when-not (db/page? node)
+                                                                 (when-let [breadcrumb (state/get-component :block/breadcrumb)]
+                                                                   [:div.text-xs.opacity-70
+                                                                    (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid node) {})]))
+                                                        label title]
+                                                    [header label icon])
+                                                  [nil (:block/title node) nil])]
                          (assoc node
                                 :header header
                                 :label-value (:block/title node)
                                 :label label
+                                :icon (when (and icon
+                                                (not (or (:logseq.property/classes property)
+                                                         (contains? #{:class :property} (:logseq.property/type property)))))
+                                       icon)
                                 :value id
                                 :disabled? (and tags? (contains?
                                                        (set/union #{:logseq.class/Journal :logseq.class/Whiteboard} ldb/internal-tags)
