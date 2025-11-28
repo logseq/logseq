@@ -295,7 +295,7 @@ div[data-radix-popper-content-wrapper] {
 
 .shui-shortcut-combo kbd.shui-shortcut-key {
   @apply flex flex-col items-center justify-center px-1 py-0.5 relative shrink-0;
-  min-width: fit-content;
+  min-width: 20px;
   background: transparent;
   border: none;
 }
@@ -319,7 +319,7 @@ div[data-radix-popper-content-wrapper] {
   background-color: rgba(223, 239, 254, 0.14);
   border: 1px solid rgba(0, 0, 0, 0.1);
   box-sizing: border-box;
-  min-width: fit-content;
+  min-width: 20px;
 }
 
 /* Compact Keys - minimal text-only style */

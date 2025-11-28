@@ -218,8 +218,7 @@
         {:key (str "separate-key-" index)
          :aria-hidden (if aria-label "true" "false")
          :tab-index (if interactive? 0 -1)
-         :role (when interactive? "button")
-         :style {:min-width "fit-content"}}
+         :role (when interactive? "button")}
         key-text])]))
 
 (rum/defc compact-keys
