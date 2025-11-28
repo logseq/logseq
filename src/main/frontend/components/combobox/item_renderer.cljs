@@ -3,9 +3,14 @@
    Handles icons, breadcrumbs, new items, query highlighting, multi-select,
    right-side checkboxes, shortcuts, and embeds."
   (:require
+   [cljs.core.match :refer [match]]
    [clojure.string :as string]
    [frontend.components.list-item-icon :as list-item-icon]
+   [frontend.extensions.video.youtube :as youtube]
    [frontend.ui :as ui]
+   [frontend.util :as util]
+   [frontend.util.text :as text-util]
+   [logseq.common.util :as common-util]
    [logseq.shui.ui :as shui]))
 
 (defn- extract-icon
@@ -34,17 +39,22 @@
   "Check if item is a 'new' item based on patterns."
   [item {:keys [new-item-patterns]}]
   (when (seq new-item-patterns)
-    (let [text (if (map? item) (or (:label item) (:value item) (:text item)) (str item))]
+    (let [text (if (map? item) (or (:label item) (:value item) (:text item) (:block/title item)) (str item))]
       (and (string? text)
            (some #(string/starts-with? text %) new-item-patterns)))))
 
 (defn- extract-new-item-text
-  "Extract the text after 'New option:' or similar pattern."
+  "Extract the text after 'New option:' or similar pattern, or quoted text from 'Convert \"text\" to property'."
   [item pattern]
-  (let [text (if (map? item) (or (:label item) (:value item) (:text item)) (str item))]
+  (let [text (if (map? item) (or (:label item) (:value item) (:text item) (:block/title item)) (str item))]
     (when (and (string? text) (string/starts-with? text pattern))
-      (let [parts (string/split text (re-pattern (str pattern " ")) 2)]
-        (second parts)))))
+      (if (= pattern "Convert")
+        ;; Extract quoted text from "Convert \"text\" to property"
+        (when-let [match (re-find #"Convert\s+\"([^\"]+)\"\s+to\s+property" text)]
+          (second match))
+        ;; Extract text after pattern like "New option: "
+        (let [parts (string/split text (re-pattern (str pattern " ")) 2)]
+          (second parts))))))
 
 (defn- highlight-query
   "Highlight query terms in text."
@@ -60,10 +70,10 @@
     (let [value (if extract-value-fn (extract-value-fn item) (:value item))
           checked? (boolean (and selected-choices (contains? @selected-choices value)))]
       (shui/checkbox {:checked checked?
-                     :on-click (fn [e]
-                                 (.preventDefault e))
-                     :disabled (:disabled? item)
-                     :class "mr-1"}))))
+                      :on-click (fn [e]
+                                  (.preventDefault e))
+                      :disabled (:disabled? item)
+                      :class "mr-1"}))))
 
 (defn- render-right-checkbox
   "Render checkbox on the right side."
@@ -72,16 +82,16 @@
     (let [checkbox-data (right-checkbox-fn item)]
       (when checkbox-data
         (shui/checkbox (merge {:class "ml-auto"}
-                             checkbox-data))))))
+                              checkbox-data))))))
 
 (defn- render-right-shortcut
   "Render keyboard shortcut on the right side.
    Hover state is handled via CSS :hover pseudo-class."
   [item chosen? _hover? {:keys [shortcut-fn shortcut-key]}]
   (when-let [shortcut (cond
-                       shortcut-fn (shortcut-fn item)
-                       shortcut-key (get item shortcut-key)
-                       :else nil)]
+                        shortcut-fn (shortcut-fn item)
+                        shortcut-key (get item shortcut-key)
+                        :else nil)]
     [:div {:class "flex gap-1 shui-shortcut-row items-center ml-auto"
            :style {:opacity (if chosen? 1 0.9)
                    :min-height "20px"
@@ -89,13 +99,99 @@
      (shui/shortcut shortcut {:interactive? false
                               :aria-hidden? true})]))
 
+(defn- render-video-embed
+  "Render video embed from URL. Uses youtube component for YouTube (same as macro-video-cp)."
+  [url]
+  (if (common-util/url? url)
+    (let [results (text-util/get-matched-video url)
+          src (match results
+                [_ _ _ (:or "youtube.com" "youtu.be" "y2u.be") _ id _]
+                (if (= (count id) 11)
+                  ["youtube-player" id]
+                  ;; Fallback: construct embed URL even if ID length is unexpected
+                  (str "https://www.youtube.com/embed/" id))
+
+                [_ _ _ "youtube-nocookie.com" _ id _]
+                (str "https://www.youtube-nocookie.com/embed/" id)
+
+                [_ _ _ "loom.com" _ id _]
+                (str "https://www.loom.com/embed/" id)
+
+                [_ _ _ (_ :guard #(string/ends-with? % "vimeo.com")) _ id _]
+                (str "https://player.vimeo.com/video/" id)
+
+                [_ _ _ "bilibili.com" _ id & query]
+                (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1&autoplay=0"
+                     (when-let [page (second query)]
+                       (str "&page=" page)))
+
+                :else
+                url)]
+      (if (and (coll? src)
+               (= (first src) "youtube-player"))
+        ;; For YouTube, use youtube.com with enablejsapi=1 exactly as breadcrumbs do
+        ;; This matches the working breadcrumb implementation
+        (let [video-id (last src)
+              t (re-find #"&t=(\d+)" url)
+              width (min (- (util/get-width) 96) 560) ; Same as youtube component
+              height (int (* width (/ 315 560)))
+              embed-url (str "https://www.youtube.com/embed/" video-id "?enablejsapi=1"
+                             (when (seq t) (str "&start=" (nth t 1))))]
+          [:iframe.aspect-video
+           {:key (str "youtube-embed-" video-id) ; Stable key prevents recreation
+            :id (str "youtube-player-" video-id)
+            :allow-full-screen "allowfullscreen"
+            :allow "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            :frame-border "0"
+            :src embed-url
+            :height height
+            :width width}])
+        (when src
+          (let [width (min (- (util/get-width) 96) 400) ; Smaller width for combobox
+                height (int (* width (/ (if (string/includes? src "player.bilibili.com")
+                                          360 315)
+                                        560)))]
+            [:iframe
+             {:allow-full-screen "allowfullscreen"
+              :allow "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              :frame-border "0"
+              :src src
+              :width width
+              :height height}]))))
+    nil))
+
+(defn- parse-embed-macro
+  "Parse embed macro from text like {{video ...}} or {{tweet ...}}.
+   Returns [embed-hiccup remaining-text] or [nil text] if no embed found."
+  [text]
+  (when (string? text)
+    (if-let [match (re-find #"^\{\{(video|tweet|twitter)\s+([^}]+)\}\}(.*)$" text)]
+      (let [[_ macro-name url remaining] match
+            embed-hiccup (cond
+                           (= macro-name "video")
+                           (render-video-embed url)
+
+                           (contains? #{"tweet" "twitter"} macro-name)
+                           (let [id-regex #"/status/(\d+)"]
+                             (when-let [id (cond
+                                             (<= (count url) 15) url
+                                             :else
+                                             (last (re-find id-regex url)))]
+                               (ui/tweet-embed id)))
+
+                           :else nil)]
+        (if embed-hiccup
+          [embed-hiccup (string/trim remaining)]
+          [nil text]))
+      [nil text])))
+
 (defn- render-content
-  "Render the main content area (text, highlighting, etc.)."
+  "Render the main content area (text, highlighting, embeds, etc.)."
   [item chosen? {:keys [text-fn highlight-query? query-fn highlight-fn gap-size] :as config}]
   (let [text (cond
-              text-fn (text-fn item)
-              (map? item) (or (:label item) (:text item) (:value item) (:block/title item))
-              :else (str item))
+               text-fn (text-fn item)
+               (map? item) (or (:label item) (:text item) (:value item) (:block/title item))
+               :else (str item))
         query (when highlight-query? (query-fn))
         gap-class (case gap-size
                     1 "gap-1"
@@ -103,20 +199,35 @@
                     3 "gap-3"
                     "gap-3")]
     (if (is-new-item? item config)
-      ;; Render "New option:" or "New page:" style
+      ;; Render "New option:", "New page:", or "Convert" style
       (let [pattern (first (filter #(let [text-str (if (string? text) text (str text))]
                                       (string/starts-with? text-str %))
                                    (:new-item-patterns config)))
             new-text (when pattern (extract-new-item-text item pattern))
             display-pattern (string/replace pattern #":$" "")]
-        [:div {:class (str "flex flex-row items-center " gap-class)}
-         [:span.text-gray-12 display-pattern ":"]
-         (when new-text
-           [:span.text-gray-11 (str "\"" new-text "\"")])])
-      ;; Regular content with optional highlighting
+        (if (= pattern "Convert")
+          ;; Special styling for "Convert \"text\" to property" - use whitespace-nowrap to prevent awkward breaks
+          [:div {:class (str "flex flex-row items-center " gap-class " whitespace-nowrap")}
+           [:span.text-gray-12 "Convert "]
+           (when new-text
+             [:span.text-gray-11 (str "\"" new-text "\"")])
+           [:span.text-gray-12 " to property"]]
+          ;; Regular "New option:" or "New page:" style
+          [:div {:class (str "flex flex-row items-center " gap-class)}
+           [:span.text-gray-12 display-pattern ":"]
+           (when new-text
+             [:span.text-gray-11 (str "\"" new-text "\"")])]))
+      ;; Regular content with optional highlighting and embeds
       (if (vector? text)
-        text  ; Already hiccup
-        (highlight-query text query highlight-fn)))))
+        text ; Already hiccup
+        (let [[embed-hiccup remaining-text] (parse-embed-macro text)
+              highlighted-text (highlight-query remaining-text query highlight-fn)]
+          (if embed-hiccup
+            [:div.flex.flex-col.gap-1
+             embed-hiccup
+             (when (and remaining-text (not (string/blank? remaining-text)))
+               highlighted-text)]
+            highlighted-text))))))
 
 (defn render-item
   "Unified item renderer for combobox components.
@@ -148,11 +259,11 @@
         header-fn-result (when (:header-fn config) ((:header-fn config) item))
         ;; If show-breadcrumbs? is true, use :header as breadcrumb, otherwise as header
         breadcrumb (when (:show-breadcrumbs? config)
-                    (or item-header  ; Use :header as breadcrumb if available
-                        (when (:breadcrumb-fn config)
-                          ((:breadcrumb-fn config) item))))
+                     (or item-header ; Use :header as breadcrumb if available
+                         (when (:breadcrumb-fn config)
+                           ((:breadcrumb-fn config) item))))
         header (when (not (:show-breadcrumbs? config))
-                (or item-header header-fn-result))
+                 (or item-header header-fn-result))
         gap-size (or (:gap-size config) 3)
         gap-class (case gap-size
                     1 "gap-1"
@@ -170,7 +281,7 @@
                                               :icon icon-name}))
                       (render-content item chosen? (assoc config :gap-size gap-size))]
                      ;; Right side: shortcut or checkbox (hover handled via CSS)
-                     (or (render-right-shortcut item chosen? false config)  ; Use false for hover, CSS will handle it
+                     (or (render-right-shortcut item chosen? false config) ; Use false for hover, CSS will handle it
                          (render-right-checkbox item chosen? config))]]
     (if (or header breadcrumb)
       [:div.flex.flex-col.gap-1

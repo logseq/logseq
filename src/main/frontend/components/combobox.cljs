@@ -48,6 +48,7 @@
   (let [base-class "ui__combobox"
         width-class (case width
                      :wide "w-96"
+                     :default "min-w-[14rem] w-[14rem]"  ; Fixed width matching input min-width
                      :auto "w-auto"
                      (string? width) width
                      nil)
@@ -67,21 +68,24 @@
                       :class :header :grouped? :width :container-class)]
     (if show-search-input?
       ;; With search input: wrap results in item-results-wrap container and optionally add separator
-      [:div {:class combined-class}
-       (when (not= show-separator? false)
-         (shui/select-separator))
-       [:div.item-results-wrap
-        (ui/auto-complete
-         items
-         (merge {:on-chosen on-chosen
-                 :on-shift-chosen on-shift-chosen
-                 :get-group-name get-group-name
-                 :empty-placeholder empty-placeholder
-                 :item-render final-item-render
-                 :header header
-                 :grouped? grouped?
-                 :class "cp__select-results"}
-                opts'))]]
+      ;; Only show separator if explicitly enabled AND there are items to display
+      (let [has-items? (seq items)]
+        [:div {:class combined-class}
+         (when (and (not= show-separator? false)
+                    has-items?)  ; Only show separator if there are items
+           (shui/select-separator))
+         [:div.item-results-wrap
+          (ui/auto-complete
+           items
+           (merge {:on-chosen on-chosen
+                   :on-shift-chosen on-shift-chosen
+                   :get-group-name get-group-name
+                   :empty-placeholder empty-placeholder
+                   :item-render final-item-render
+                   :header header
+                   :grouped? grouped?
+                   :class "cp__select-results"}
+                  opts'))]])
       ;; Without search input: simple wrapper around auto-complete
       ;; Ensure ui__combobox class is always applied, then add custom class if provided
       (let [final-class (if class

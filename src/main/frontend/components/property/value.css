@@ -63,7 +63,7 @@
 
 .ui__dropdown-menu-content .cp__select-main .item-results-wrap,
 .ui__dropdown-menu-content .ui__combobox .item-results-wrap {
-  padding: 0 4px !important;
+  padding: 0 4px !important; /* Remove bottom padding from scrollable container */
   overflow-x: hidden !important;
   overflow-y: auto !important;
   max-height: 300px;
@@ -109,12 +109,15 @@
   box-sizing: border-box;
 }
 
-/* Add breathing room to first and last items (scrolls away naturally) */
-/* Apply padding to #ui__ac-inner instead of margins on items to avoid gaps between all items */
+/* Add breathing room to first and last items */
+/* Match page search approach: padding on #ui__ac-inner */
+/* Disable overflow on #ui__ac-inner when inside item-results-wrap since item-results-wrap is the scrollable container */
 .ui__dropdown-menu-content .cp__select-main .item-results-wrap #ui__ac #ui__ac-inner,
 .ui__dropdown-menu-content .ui__combobox .item-results-wrap #ui__ac #ui__ac-inner {
   padding-top: 4px !important;
-  padding-bottom: 8px !important;
+  padding-bottom: 4px !important;
+  overflow-y: visible !important; /* Disable scrolling - item-results-wrap handles it */
+  overflow-x: hidden !important;
 }
 
 /* Dropdown combobox menu-link styles for cp__select-main and ui__combobox */

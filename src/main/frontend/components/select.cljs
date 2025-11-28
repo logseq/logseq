@@ -27,10 +27,26 @@
   {:multi-select? multiple-choices?
    :selected-choices *selected-choices
    :extract-value-fn extract-value-fn
-   :icon-key :icon  ; Extract icon from :icon key in item
-   :new-item-patterns ["New option:"]
+   :icon-fn (fn [item]
+              ;; Return icon based on item type
+              (or (:icon item)
+                  (let [label (if (string? (:label item)) (:label item) "")]
+                    (cond
+                      (string/starts-with? label "New option:")
+                      "plus"
+                      (string/starts-with? label "Convert")
+                      "file" ; Page icon for convert items (they're pages being converted to properties)
+                      :else
+                      "letter-p")))) ; Default to property icon for all other items
+   :icon-variant-fn (fn [item]
+                      ;; Use :create variant only for "New option:" items
+                      (let [label (if (string? (:label item)) (:label item) "")]
+                        (if (string/starts-with? label "New option:")
+                          :create
+                          :default)))
+   :new-item-patterns ["New option:" "Convert"]
    :show-breadcrumbs? true
-   :breadcrumb-fn (fn [item] (:header item))  ; Use :header as breadcrumb
+   :breadcrumb-fn (fn [item] (:header item)) ; Use :header as breadcrumb
    :on-pointer-down util/stop-propagation
    :gap-size 3})
 
@@ -52,14 +68,14 @@
     [:div.input-wrap
      {:style {:margin-bottom "-2px"}}
      [:input.cp__select-input.w-full
-      (merge {:type        "text"
+      (merge {:type "text"
               :class "!p-1.5"
               :placeholder (or input-default-placeholder (t prompt-key))
-              :auto-focus  true
-              :value       input
-              :on-change   (fn [e]
-                             (let [v (util/evalue e)]
-                               (set-input! v)))}
+              :auto-focus true
+              :value input
+              :on-change (fn [e]
+                           (let [v (util/evalue e)]
+                             (set-input! v)))}
              input-opts)]]))
 
 ;; TODO: rewrite using hooks
@@ -160,26 +176,27 @@
                                   {:show-search-input? true
                                    :show-separator? false
                                    :grouped? grouped?
-                                   :item-render item-cp  ; Custom renderer takes precedence
+                                   :width :default ; Fixed width to prevent jumping
+                                   :item-render item-cp ; Custom renderer takes precedence
                                    :item-renderer-config (when (not item-cp)
-                                                          (create-item-renderer-config multiple-choices? *selected-choices extract-chosen-fn))
-                                   :on-chosen         (fn [raw-chosen e]
-                                                        (when clear-input-on-chosen?
-                                                          (reset! *input ""))
-                                                        (let [chosen (extract-chosen-fn raw-chosen)]
-                                                          (if multiple-choices?
-                                                            (if (selected-choices chosen)
-                                                              (do
-                                                                (swap! *selected-choices disj chosen)
-                                                                (when on-chosen (on-chosen chosen false @*selected-choices e)))
-                                                              (do
-                                                                (swap! *selected-choices conj chosen)
-                                                                (when on-chosen (on-chosen chosen true @*selected-choices e))))
-                                                            (do
-                                                              (when (and close-modal? (not multiple-choices?))
-                                                                (state/close-modal!))
-                                                              (when on-chosen
-                                                                (on-chosen chosen true @*selected-choices e))))))
+                                                           (create-item-renderer-config multiple-choices? *selected-choices extract-chosen-fn))
+                                   :on-chosen (fn [raw-chosen e]
+                                                (when clear-input-on-chosen?
+                                                  (reset! *input ""))
+                                                (let [chosen (extract-chosen-fn raw-chosen)]
+                                                  (if multiple-choices?
+                                                    (if (selected-choices chosen)
+                                                      (do
+                                                        (swap! *selected-choices disj chosen)
+                                                        (when on-chosen (on-chosen chosen false @*selected-choices e)))
+                                                      (do
+                                                        (swap! *selected-choices conj chosen)
+                                                        (when on-chosen (on-chosen chosen true @*selected-choices e))))
+                                                    (do
+                                                      (when (and close-modal? (not multiple-choices?))
+                                                        (state/close-modal!))
+                                                      (when on-chosen
+                                                        (on-chosen chosen true @*selected-choices e))))))
                                    :empty-placeholder (empty-placeholder t)})
 
                                  (when (and multiple-choices? (fn? on-apply))
@@ -204,7 +221,8 @@
          :*toggle-fn *toggle})
        [:<>
         (if (fn? input-container) (input-container) input-container)
-        (shui/select-separator)
+        (when (seq search-result) ; Only show separator if there are results
+          (shui/select-separator))
         (results-container-f)])]))
 
 (defn select-config
@@ -278,6 +296,6 @@
                     (select-keys [:on-chosen :empty-placeholder :prompt-key])
                     (assoc :items ((:items-fn select-type-config)))))
        {:id :ls-select-modal
-        :close-btn?  false
+        :close-btn? false
         :align :top
         :content-props {:class "ls-dialog-select"}}))))

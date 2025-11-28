@@ -197,7 +197,7 @@
 .ui__popover-content[data-editor-popup-ref="page-search-hashtag"] #ui__ac.black,
 .ui__popover-content[data-editor-popup-ref="block-search"] #ui__ac.ac-block-search {
   #ui__ac-inner {
-    padding: 0 4px !important;
+    padding: 4px 4px !important;
   }
 
   /* Match the beautiful "Add property" dropdown styling exactly */

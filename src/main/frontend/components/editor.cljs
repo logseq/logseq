@@ -2,6 +2,7 @@
   (:require [clojure.string :as string]
             [dommy.core :as dom]
             [frontend.commands :as commands :refer [*matched-commands]]
+            [frontend.components.block :as block]
             [frontend.components.combobox :as combobox]
             [frontend.components.file-based.datetime :as datetime-comp]
             [frontend.components.list-item-icon :as list-item-icon]
@@ -163,9 +164,9 @@
        ;; Don't show 'New tag' for an internal page because it already shows 'Convert ...'
        (when-not (let [entity (db/get-page q)]
                    (and (ldb/internal-page? entity) (= (:block/title entity) q)))
-         [{:block/title (str (t :new-tag) " " q)}])
+         [{:block/title (str (t :new-tag) ": " q)}])
        partial-matched-pages)
-      (cons {:block/title (str (t :new-page) " " q)}
+      (cons {:block/title (str (t :new-page) ": " q)}
             partial-matched-pages))))
 
 (defn- search-pages
@@ -211,6 +212,7 @@
        (combobox/combobox
         matched-pages'
         {:show-search-input? false
+         :width :wide  ; Wider width for page search to show more content
          :on-chosen   (page-on-chosen-handler embed? input id q pos format)
          :on-enter    (fn []
                         (page-handler/page-not-exists-handler input id q current-pos))
@@ -371,17 +373,37 @@
     (combobox/combobox
      result
      {:show-search-input? false
+      :width :wide  ; Wider width for block/node search to show more content
       :on-chosen   chosen-handler
       :on-enter    non-exist-block-handler
       :empty-placeholder   [:div.text-gray-500.text-sm.px-4.py-2 (t :editor/block-search)]
-      :item-render (fn [{:block/keys [page uuid]}]  ;; content returned from search engine is normalized
+      :item-renderer-config
+      (let [repo (state/sub :git/current-repo)]
+        {:show-breadcrumbs? true
+         :breadcrumb-fn (fn [{:block/keys [page uuid]}]
+                         (when (and page uuid)
+                           (let [page-entity (db/entity [:block/uuid page])
+                                 format (get page-entity :block/format :markdown)]
+                             (block/breadcrumb {:id "block-search-block-parent"
+                                               :block? true
+                                               :search? true}
+                                              repo
+                                              uuid
+                                              {:indent? false}))))
+         :text-fn (fn [{:block/keys [page uuid]}]
+                   (when (and page uuid)
                      (let [page-entity (db/entity [:block/uuid page])
-                           repo (state/sub :git/current-repo)
                            format (get page-entity :block/format :markdown)
                            block (db-model/query-block-by-uuid uuid)
-                           content (:block/title block)]
+                           ;; Use raw-title to preserve original case (important for YouTube video IDs)
+                           content (or (:block/raw-title block) (:block/title block))]
                        (when-not (string/blank? content)
-                         [:.py-2 (search/block-search-result-item repo uuid format content q :block)])))
+                         (search-handler/sanity-search-content format content)))))
+         :highlight-query? true
+         :query-fn (fn [] q)
+         :highlight-fn (fn [query text]
+                        (search-handler/highlight-exact-query text query))
+         :gap-size 3})
       :class       "ac-block-search"})))
 
 (rum/defcs block-search < rum/reactive

@@ -239,6 +239,12 @@ input.simple-input:focus {
   .cp__select-main {
     width: fit-content;
     margin: 0;
+    
+    /* Fixed width to prevent jumping - use min-width of input as base */
+    &:not(.w-96):not(.w-auto):not([class*="w-["]) {
+      min-width: 14rem;
+      width: 14rem;
+    }
 
     .ui__dropdown-trigger {
       position: absolute;
