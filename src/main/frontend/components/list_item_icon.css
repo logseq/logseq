@@ -1,0 +1,34 @@
+.list-item-icon {
+  flex-shrink: 0;
+}
+
+/* Default variant - Dark gray background */
+.list-item-icon--default {
+  background-color: #2B2F31;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+/* Create variant - Blue background with border */
+.list-item-icon--create {
+  background-color: rgba(5, 126, 255, 0.6);
+  border: 1px solid #369EFF;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+/* Raw variant - No visible background, icon with opacity */
+.list-item-icon--raw {
+  /* Container is 20px (w-5 h-5), icon is 16px with opacity-50 */
+}
+
+.list-item-icon--raw .ui__icon {
+  opacity: 0.5;
+}
+
+/* Checkbox variant - Container for checkbox */
+.list-item-icon--checkbox {
+  /* Container is 20px (w-5 h-5), checkbox is 16px (w-4 h-4) */
+  /* The checkbox component from shui handles its own styling */
+}
+

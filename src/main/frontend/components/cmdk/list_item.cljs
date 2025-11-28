@@ -3,6 +3,7 @@
    ["remove-accents" :as remove-accents]
    [clojure.string :as string]
    [goog.string :as gstring]
+   [frontend.components.list-item-icon :as list-item-icon]
    [logseq.shui.hooks :as hooks]
    [logseq.shui.ui :as shui]
    [rum.core :as rum]))
@@ -50,12 +51,22 @@
 
 (rum/defc root [{:keys [group icon icon-theme query text info shortcut value-label value
                         title highlighted on-highlight on-highlight-dep header on-click hls-page?
-                        hoverable compact rounded on-mouse-enter component-opts source-page] :as _props
+                        hoverable compact rounded on-mouse-enter component-opts source-page source-create] :as _props
                  :or {hoverable true rounded true}}
                 {:keys [app-config]}]
   (let [ref (hooks/create-ref)
         highlight-query (partial highlight-query* app-config query)
-        [hover? set-hover?] (rum/use-state false)]
+        [hover? set-hover?] (rum/use-state false)
+        ;; Determine icon variant
+        icon-variant (cond
+                      source-create :create
+                      (#{:gradient} icon-theme) :default  ;; gradient handled with inline styles
+                      (#{:gray :color} icon-theme) :default
+                      :else :default)
+        ;; For gradient, we need to keep inline styles
+        gradient-style (when (#{:gradient} icon-theme)
+                         {:background "linear-gradient(-65deg, #8AE8FF, #5373E7, #369EFF, #00B1CC)"
+                          :box-shadow "inset 0 0 0 1px rgba(255,255,255,0.3)"})]
     (hooks/use-effect!
      (fn []
        (when (and highlighted on-highlight)
@@ -83,16 +94,14 @@
         (highlight-query header)])
      ;; main row
      [:div.flex.items-start.gap-3
-      [:div.w-5.h-5.rounded.flex.items-center.justify-center
-       {:style {:background (when (#{:gradient} icon-theme) "linear-gradient(-65deg, #8AE8FF, #5373E7, #369EFF, #00B1CC)")
-                :box-shadow (when (#{:gradient} icon-theme) "inset 0 0 0 1px rgba(255,255,255,0.3) ")}
-        :class (cond-> "w-5 h-5 rounded flex items-center justify-center"
-                 (= icon-theme :color) (str
-                                        " "
-                                        (if highlighted "bg-accent-07-alpha" "bg-gray-05")
-                                        " dark:text-white")
-                 (= icon-theme :gray) (str " bg-gray-05 dark:text-white"))}
-       (shui/tabler-icon icon {:size "14" :class ""})]
+      (if gradient-style
+        ;; Special handling for gradient theme with inline styles
+        [:div.w-5.h-5.rounded.flex.items-center.justify-center
+         {:style gradient-style}
+         (shui/tabler-icon icon {:size "14" :class ""})]
+        ;; Use new list-item-icon component for all other cases
+        (list-item-icon/root {:variant icon-variant
+                              :icon icon}))
       [:div.flex.flex-1.flex-col
        (when title
          [:div.text-sm.pb-2.font-bold.text-gray-11 (highlight-query title)])

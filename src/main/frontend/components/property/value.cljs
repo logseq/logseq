@@ -6,6 +6,7 @@
             [clojure.string :as string]
             [dommy.core :as d]
             [frontend.components.icon :as icon-component]
+            [frontend.components.list-item-icon :as list-item-icon]
             [frontend.components.select :as select]
             [frontend.config :as config]
             [frontend.date :as date]
@@ -749,10 +750,11 @@
                                                              (when-let [breadcrumb (state/get-component :block/breadcrumb)]
                                                                [:div.text-xs.opacity-70
                                                                 (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid node) {})]))
-                                                    label [:div.flex.flex-row.items-center.gap-1
+                                                    label [:div.flex.flex-row.items-center.gap-3
                                                            (when-not (or (:logseq.property/classes property)
                                                                          (contains? #{:class :property} (:logseq.property/type property)))
-                                                             (ui/icon icon {:size 14}))
+                                                             (list-item-icon/root {:variant :default
+                                                                                   :icon icon}))
                                                            [:div title]]]
                                                 [header label])
                                               [nil (:block/title node)])]

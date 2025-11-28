@@ -5,6 +5,7 @@
   select-type. See the :graph/open command for a full example."
   (:require [clojure.string :as string]
             [frontend.components.combobox :as combobox]
+            [frontend.components.list-item-icon :as list-item-icon]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.handler.common.developer :as dev-common-handler]
@@ -30,15 +31,9 @@
         value-content (if is-new-option?
                        (let [parts (string/split value #"New option: " 2)
                              input-text (second parts)]
-                         [:div.flex.flex-row.items-center.gap-2
-                          [:span.inline-flex.items-center.justify-center
-                           {:style {:width "16px"
-                                    :height "16px"
-                                    :background-color "#057EFF"
-                                    :border "1px solid #369EFF"
-                                    :border-radius "4px"
-                                    :flex-shrink 0}}
-                           (ui/icon "plus" {:size 12 :style {:color "white"}})]
+                         [:div.flex.flex-row.items-center.gap-3
+                          (list-item-icon/root {:variant :create
+                                                :icon "plus"})
                           [:span.text-gray-12 "New option:"]
                           (when input-text
                             [:span.text-gray-11 (str "\"" input-text "\"")])])
