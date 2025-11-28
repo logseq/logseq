@@ -282,7 +282,7 @@
                  result  []]
             (let [[b-cut hl-cut e-cut] (text-util/cut-by content "$pfts_2lqh>$" "$<pfts_2lqh$")
                   hiccups-add [[:span b-cut]
-                               [:mark.p-0.rounded-none hl-cut]]
+                               [:span {:class "ui__list-item-highlighted-span"} hl-cut]]
                   hiccups-add (remove nil? hiccups-add)
                   new-result (concat result hiccups-add)]
               (if-not (string/blank? e-cut)

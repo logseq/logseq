@@ -135,7 +135,7 @@
             [:div
              (when-not (string/blank? before)
                [:span before])
-             [:mark.p-0.rounded-none (subs content i (+ i (count q)))]
+             [:span {:class "ui__list-item-highlighted-span"} (subs content i (+ i (count q)))]
              (when-not (string/blank? after)
                [:span after])])
           (let [elements (loop [words q-words
@@ -151,7 +151,7 @@
                                         (vec
                                          (concat result
                                                  [[:span (subs content 0 i)]
-                                                  [:mark.p-0.rounded-none (subs content i (+ i (count word)))]])))
+                                                  [:span {:class "ui__list-item-highlighted-span"} (subs content i (+ i (count word)))]])))
                                  (recur nil
                                         content
                                         result)))
