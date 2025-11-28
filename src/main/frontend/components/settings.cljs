@@ -11,6 +11,7 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.dicts :as dicts]
+            [frontend.handler.command-palette :as palette-handler]
             [frontend.handler.config :as config-handler]
             [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.handler.file-sync :as file-sync-handler]
@@ -38,6 +39,35 @@
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
+
+;; Register onboarding debug commands for command palette
+(defn register-onboarding-commands! []
+  (palette-handler/register
+   {:id :onboarding/show-md-update-popup
+    :action (fn []
+              (js/console.log "[Onboarding] Triggering MD update popup")
+              (state/set-onboarding-entry-point! "md_update_popup")
+              (state/set-onboarding-status! "in_progress")
+              (state/set-onboarding-current-step! 0))})
+
+  (palette-handler/register
+   {:id :onboarding/show-db-first-run
+    :action (fn []
+              (js/console.log "[Onboarding] Triggering DB first run")
+              (state/set-onboarding-entry-point! "db_first_run")
+              (state/set-onboarding-status! "in_progress")
+              (state/set-onboarding-current-step! 0))})
+
+  (palette-handler/register
+   {:id :onboarding/show-replay-tour
+    :action (fn []
+              (js/console.log "[Onboarding] Triggering replay tour")
+              (state/set-onboarding-entry-point! "db_replay_tour")
+              (state/set-onboarding-status! "in_progress")
+              (state/set-onboarding-current-step! 1))}))
+
+;; Register commands when namespace loads
+(register-onboarding-commands!)
 
 (defn toggle
   [label-for name state on-toggle & [detail-text]]
@@ -638,7 +668,12 @@
                    (state/set-onboarding-entry-point! "md_update_popup")
                    (state/set-onboarding-status! "in_progress")
                    (state/set-onboarding-current-step! 0))}
-      (t :settings-page/trigger-md-update))
+      [:div.flex.flex-row.items-center.gap-2
+       [:span (t :settings-page/trigger-md-update)]
+       (when-not (util/sm-breakpoint?)
+         (let [shortcut-seq (shortcut-helper/gen-shortcut-seq :onboarding/show-md-update-popup)]
+           (when (seq shortcut-seq)
+             (ui/render-keyboard-shortcut shortcut-seq))))])
 
      (shui/button
       {:size :sm
@@ -648,7 +683,12 @@
                    (state/set-onboarding-entry-point! "db_first_run")
                    (state/set-onboarding-status! "in_progress")
                    (state/set-onboarding-current-step! 0))}
-      (t :settings-page/trigger-db-first-run))
+      [:div.flex.flex-row.items-center.gap-2
+       [:span (t :settings-page/trigger-db-first-run)]
+       (when-not (util/sm-breakpoint?)
+         (let [shortcut-seq (shortcut-helper/gen-shortcut-seq :onboarding/show-db-first-run)]
+           (when (seq shortcut-seq)
+             (ui/render-keyboard-shortcut shortcut-seq))))])
 
      (shui/button
       {:size :sm
@@ -658,7 +698,12 @@
                    (state/set-onboarding-entry-point! "db_replay_tour")
                    (state/set-onboarding-status! "in_progress")
                    (state/set-onboarding-current-step! 1))}
-      (t :settings-page/trigger-replay-tour))]]])
+      [:div.flex.flex-row.items-center.gap-2
+       [:span (t :settings-page/trigger-replay-tour)]
+       (when-not (util/sm-breakpoint?)
+         (let [shortcut-seq (shortcut-helper/gen-shortcut-seq :onboarding/show-replay-tour)]
+           (when (seq shortcut-seq)
+             (ui/render-keyboard-shortcut shortcut-seq))))])]]])
 
 (rum/defc plugin-enabled-switcher
   [t]

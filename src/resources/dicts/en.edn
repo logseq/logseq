@@ -797,4 +797,7 @@
   :dev/gc-graph "(Dev) Garbage collect graph (remove unused data in SQLite)"
   :dev/rtc-stop "(Dev) RTC Stop"
   :dev/rtc-start "(Dev) RTC Start"
+  :onboarding/show-md-update-popup "Show MD Update Popup"
+  :onboarding/show-db-first-run "Show DB First Run"
+  :onboarding/show-replay-tour "Show Replay Tour"
   :window/close "Close window"}}

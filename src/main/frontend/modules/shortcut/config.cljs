@@ -539,6 +539,27 @@
    :command/toggle-favorite                 {:binding "mod+shift+f"
                                              :fn      page-handler/toggle-favorite!}
 
+   :onboarding/show-md-update-popup         {:binding "mod+alt+shift+2"
+                                             :fn      (fn [_state _e]
+                                                        (js/console.log "[Onboarding] Triggering MD update popup")
+                                                        (state/set-onboarding-entry-point! "md_update_popup")
+                                                        (state/set-onboarding-status! "in_progress")
+                                                        (state/set-onboarding-current-step! 0))}
+
+   :onboarding/show-db-first-run            {:binding "mod+alt+shift+3"
+                                             :fn      (fn [_state _e]
+                                                        (js/console.log "[Onboarding] Triggering DB first run")
+                                                        (state/set-onboarding-entry-point! "db_first_run")
+                                                        (state/set-onboarding-status! "in_progress")
+                                                        (state/set-onboarding-current-step! 0))}
+
+   :onboarding/show-replay-tour             {:binding "mod+alt+shift+4"
+                                             :fn      (fn [_state _e]
+                                                        (js/console.log "[Onboarding] Triggering replay tour")
+                                                        (state/set-onboarding-entry-point! "db_replay_tour")
+                                                        (state/set-onboarding-status! "in_progress")
+                                                        (state/set-onboarding-current-step! 1))}
+
    :editor/jump                             {:binding "mod+j"
                                              :fn      jump-handler/jump-to}
    :editor/open-file-in-default-app         {:binding  "mod+d mod+a"
@@ -883,7 +904,10 @@
           :dev/gc-graph
           :dev/rtc-stop
           :dev/rtc-start
-          :ui/customize-appearance])
+          :ui/customize-appearance
+          :onboarding/show-md-update-popup
+          :onboarding/show-db-first-run
+          :onboarding/show-replay-tour])
         (with-meta {:before m/enable-when-not-editing-mode!}))
 
     :shortcut.handler/misc
