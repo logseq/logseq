@@ -514,7 +514,9 @@
                                                           :message "transacting graph data to local db"
                                                           :graph-uuid graph-uuid})
             (let [all-blocks (ldb/read-transit-str body)
-                  blocks* (m/? (task--decrypt-blocks graph-uuid (:blocks all-blocks)))
+                  blocks (:blocks all-blocks)
+                  e2ee-graph? (boolean (some (fn [block] (= :logseq.kv/graph-rtc-e2ee? (:db/ident block))) blocks))
+                  blocks* (if e2ee-graph? (m/? (task--decrypt-blocks graph-uuid blocks)) blocks)
                   all-blocks* (assoc all-blocks :blocks blocks*)]
               (worker-state/set-rtc-downloading-graph! true)
               (m/? (new-task--transact-remote-all-blocks! all-blocks* repo graph-uuid))
