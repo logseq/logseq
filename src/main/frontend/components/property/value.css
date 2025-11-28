@@ -67,6 +67,26 @@
   overflow-x: hidden !important;
   overflow-y: auto !important;
   max-height: 300px;
+  width: 100%; /* Ensure full width to prevent scrollbar layout issues */
+  box-sizing: border-box;
+}
+
+/* Ensure ui__combobox takes full width of its parent (py-1) */
+.ui__dropdown-menu-content .ui__combobox {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Ensure #ui__ac inside item-results-wrap takes full width and has no padding */
+.ui__dropdown-menu-content .ui__combobox .item-results-wrap #ui__ac {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Ensure menu-link-wrap items have no margin between them (0 gap like / command dropdown) */
+.ui__dropdown-menu-content .ui__combobox .item-results-wrap #ui__ac #ui__ac-inner .menu-link-wrap {
+  margin: 0 !important;
+  margin-bottom: 0 !important;
 }
 
 /* Remove vertical padding from scroll viewport for clean cutoff */
@@ -78,24 +98,23 @@
   padding-bottom: 0 !important;
 }
 
-/* Remove py-1 padding from results wrapper */
+/* Remove py-1 padding from results wrapper and ensure full width */
 .ui__dropdown-menu-content .cp__select-main > div[class*="py-1"],
 .ui__dropdown-menu-content .cp__select-main > div[class*="py-"],
 .ui__dropdown-menu-content .ui__combobox > div[class*="py-1"],
 .ui__dropdown-menu-content .ui__combobox > div[class*="py-"] {
   padding-top: 0 !important;
   padding-bottom: 0 !important;
+  width: 100%; /* Ensure py-1 wrapper takes full width */
+  box-sizing: border-box;
 }
 
 /* Add breathing room to first and last items (scrolls away naturally) */
-.ui__dropdown-menu-content .cp__select-main .item-results-wrap .menu-link:first-child,
-.ui__dropdown-menu-content .ui__combobox .item-results-wrap .menu-link:first-child {
-  margin-top: 4px;
-}
-
-.ui__dropdown-menu-content .cp__select-main .item-results-wrap .menu-link:last-child,
-.ui__dropdown-menu-content .ui__combobox .item-results-wrap .menu-link:last-child {
-  margin-bottom: 4px;
+/* Apply padding to #ui__ac-inner instead of margins on items to avoid gaps between all items */
+.ui__dropdown-menu-content .cp__select-main .item-results-wrap #ui__ac #ui__ac-inner,
+.ui__dropdown-menu-content .ui__combobox .item-results-wrap #ui__ac #ui__ac-inner {
+  padding-top: 4px !important;
+  padding-bottom: 8px !important;
 }
 
 /* Dropdown combobox menu-link styles for cp__select-main and ui__combobox */
