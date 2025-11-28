@@ -1,7 +1,7 @@
 (ns frontend.components.onboarding
   (:require [frontend.context.i18n :refer [t]]
-            [frontend.ui :as ui]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [frontend.ui :as ui]))
 
 (defn help
   []
@@ -26,7 +26,7 @@
                       [discourse-with-icon "https://discuss.logseq.com"]]}
 
           {:title (t :help/title-development)
-           :children [[(t :help/roadmap) "https://trello.com/b/8txSM12G/roadmap"]
+           :children [[(t :help/roadmap) "https://discuss.logseq.com/t/logseq-product-roadmap/34267"]
                       [(t :help/bug) "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"]
                       [(t :help/feature) "https://discuss.logseq.com/c/feedback/feature-requests/"]
                       [(t :help/changelog) "https://docs.logseq.com/#/page/changelog"]]}
@@ -38,8 +38,6 @@
            :children [[(t :help/privacy) "https://blog.logseq.com/privacy-policy/"]
                       [(t :help/terms) "https://blog.logseq.com/terms/"]]}]]
 
-
-
      (map (fn [sublist]
             [[:p.mt-4.mb-1 [:b (:title sublist)]]
              [:ul
@@ -48,5 +46,5 @@
                       (if href
                         [:a {:href href :target "_blank"} title]
                         title)])
-                (:children sublist))]])
-       list))])
+                   (:children sublist))]])
+          list))])
