@@ -644,19 +644,24 @@
                              "border-b border-gray-06 pb-1 last:border-b-0")
             :on-mouse-move #(reset! *mouse-active? true)}
       (when-not (= title "Create")
-        [:div {:class "text-xs py-1.5 px-3 flex justify-between items-center gap-2 text-gray-11 bg-gray-02 h-8"}
-         [:div {:class "font-bold text-gray-11 pl-0.5 cursor-pointer select-none"
+        [:div {:class "text-xs py-1.5 px-3 flex justify-between items-center gap-2 bg-gray-02 h-8"}
+         [:div {:class (str "flex items-center gap-1 select-none"
+                            (when (or can-show-more? can-show-less?) " cursor-pointer"))
+                :style {:color "var(--lx-gray-11)"}
                 :on-click (fn [_e]
                           ;; change :less to :more or :more to :less
                             (swap! (::results state) update-in [group :show] {:more :less
                                                                               :less :more}))}
-          title]
-         (when (not= group :create)
-           [:div {:class "pl-1.5 text-gray-12 rounded-full"
-                  :style {:font-size "0.7rem"}}
-            (if (<= 100 (count items))
-              (str "99+")
-              (count items))])
+          [:span {:class "font-bold"} title]
+          (when (not= group :create)
+            [:<>
+             [:span "·"]
+             [:span {:style {:font-size "0.7rem"}}
+              (if (<= 100 (count items))
+                (str "99+")
+                (count items))]
+             (when (or can-show-more? can-show-less?)
+               (ui/icon (if (= show :more) "chevron-down" "chevron-right") {:size 14}))])]
 
          [:div {:class "flex-1"}]
 
@@ -932,8 +937,8 @@
      ;; shortcut
     (when (not-empty shortcut)
       (shui/shortcut shortcut {:style :separate
-                                :interactive? false
-                                :aria-hidden? true}))]))
+                               :interactive? false
+                               :aria-hidden? true}))]))
 
 (rum/defc hints
   [state]
