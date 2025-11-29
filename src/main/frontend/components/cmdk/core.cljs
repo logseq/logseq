@@ -908,7 +908,7 @@
      (shui/shortcut "/")
      [:div "to filter search results"]]
     [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
-     (shui/shortcut ["mod" "enter"])
+     (shui/shortcut ["mod" "enter"] {:style :combo})
      [:div "to open search in the sidebar"]]]))
 
 (rum/defcs tip <
@@ -936,9 +936,16 @@
    [[:span.opacity-60 text]
      ;; shortcut
     (when (not-empty shortcut)
-      (shui/shortcut shortcut {:style :separate
-                               :interactive? false
-                               :aria-hidden? true}))]))
+      (let [has-modifier? (and (coll? shortcut)
+                               (some #(#{"shift" "ctrl" "alt" "cmd" "mod" "⌘" "⌥" "⌃"}
+                                       (string/lower-case (str %)))
+                                     shortcut))
+            style (if (and (> (count shortcut) 1) has-modifier?)
+                    :combo
+                    :auto)]
+        (shui/shortcut shortcut {:style style
+                                 :interactive? false
+                                 :aria-hidden? true})))]))
 
 (rum/defc hints
   [state]
