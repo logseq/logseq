@@ -77,3 +77,19 @@
            (transform-query-result config {} result)))
     (is (= result @(:query-result config))
         "Result is set in config for downstream use e.g. query table fn")))
+
+(deftest group-collapsed-parameter-does-not-affect-transformation
+  (let [result (mapv
+                #(assoc % :block/page {:db/id 1} :block/parent {:db/id 2})
+                [{:block/uuid (random-uuid) :block/scheduled 20230418}
+                 {:block/uuid (random-uuid) :block/scheduled 20230415}])]
+    (testing ":group-collapsed? parameter is ignored during transformation"
+      (is (= {{:db/id 1} result}
+             (transform-query-result {:table? false} {:group-by-page? true :group-collapsed? true} result))
+          "Grouping works correctly when :group-collapsed? is true")
+      (is (= {{:db/id 1} result}
+             (transform-query-result {:table? false} {:group-by-page? true :group-collapsed? false} result))
+          "Grouping works correctly when :group-collapsed? is false")
+      (is (= result
+             (transform-query-result {:table? false} {:group-by-page? false :group-collapsed? true} result))
+          ":group-collapsed? is ignored when :group-by-page? is false"))))
