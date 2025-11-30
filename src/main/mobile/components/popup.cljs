@@ -9,7 +9,7 @@
             [mobile.state :as mobile-state]
             [rum.core :as rum]))
 
-(defonce *last-popup-modal? (atom nil))
+(defonce *last-popup? (atom nil))
 (defonce *last-popup-data (atom nil))
 
 (defn- popup-min-height
@@ -84,7 +84,7 @@
         (assoc-in [:content-props :side] side))))
 
 (defn popup-show!
-  [event content-fn {:keys [id] :as opts}]
+  [event content-fn {:keys [id dropdown-menu?] :as opts}]
   (cond
     (and (keyword? id) (= "editor.commands" (namespace id)))
     (let [opts (wrap-calc-commands-popup-side event opts)
@@ -93,11 +93,17 @@
           _ (when max-h (js/document.documentElement.style.setProperty
                          (str "--" side "-popup-content-max-height") (str max-h "px")))
           pid (shui-popup/show! event content-fn opts)]
-      (reset! *last-popup-modal? false) pid)
+      (reset! *last-popup? false)
+      pid)
+
+    dropdown-menu?
+    (let [pid (shui-popup/show! event content-fn opts)]
+      (reset! *last-popup? false)
+      pid)
 
     :else
     (when content-fn
-      (reset! *last-popup-modal? true)
+      (reset! *last-popup? true)
       (when (mobile-util/native-ios?)
         (let [data {:open? true
                     :content-fn content-fn
@@ -114,7 +120,7 @@
       (mobile-state/set-tab! "home"))
 
     :else
-    (if (and @*last-popup-modal? (not (= (first args) :editor.commands/commands)))
+    (if (and @*last-popup? (not (= (first args) :editor.commands/commands)))
       (dismiss-native-sheet!)
       (apply shui-popup/hide! args))))
 
