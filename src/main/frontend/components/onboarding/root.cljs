@@ -6,6 +6,7 @@
             [frontend.rum :as frum]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [frontend.util :as util]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [rum.core :as rum]))
@@ -42,6 +43,24 @@
               (set-is-transitioning! false))
             500))))
      [current-step])
+    
+    ;; Handle Enter key to advance to next slide
+    (hooks/use-effect!
+     (fn []
+       (let [handle-keydown (fn [e]
+                              (when (and (= (.-key e) "Enter")
+                                         (not (util/input? (.-target e))))
+                                (if is-last?
+                                  (do
+                                    (shui/dialog-close!)
+                                    (state/set-onboarding-current-step! 6))
+                                  (state/set-onboarding-current-step! (inc slide-id)))
+                                (.preventDefault e)
+                                (.stopPropagation e)))]
+         (.addEventListener js/window "keydown" handle-keydown)
+         (fn []
+           (.removeEventListener js/window "keydown" handle-keydown))))
+     [slide-id is-last?])
     
     [:div.cp__onboarding-carousel
      {:style {:width "100%"
@@ -134,9 +153,9 @@
                :padding-right "1.5rem"}}
       (if is-first?
         [:div]
-        ;; Secondary button for Previous on slides 2-5
+        ;; Secondary button for Back on slides 2-5
         (ui/button
-         "Previous"
+         "Back"
          :variant :secondary
          :on-click (fn []
                      (state/set-onboarding-current-step! (dec slide-id)))))
@@ -158,9 +177,11 @@
           :on-click (fn []
                       (shui/dialog-close!)
                       (state/set-onboarding-current-step! 6)))]
-        ;; Primary button for Next on slides 1-4
+        ;; Primary button for Next on slides 1-4 with Enter shortcut
         (ui/button
-         "Next"
+         [:span.flex.items-center.gap-2
+          "Next"
+          (shui/shortcut "Enter" {:size :xs :interactive? false})]
          :on-click (fn []
                      (state/set-onboarding-current-step! (inc slide-id)))))]
 
