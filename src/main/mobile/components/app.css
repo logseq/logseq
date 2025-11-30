@@ -308,3 +308,8 @@ body, #root {
         display: initial;
     }
 }
+
+div[data-radix-menu-content] {
+  @apply overflow-y-auto;
+  padding-bottom: 80px;
+}
