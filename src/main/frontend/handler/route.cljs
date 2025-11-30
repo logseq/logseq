@@ -20,18 +20,13 @@
             [logseq.shui.ui :as shui]
             [reitit.frontend.easy :as rfe]))
 
-(defonce *previous-route (atom nil))
 (defn redirect!
   "If `push` is truthy, previous page will be left in history."
   [{:keys [to path-params query-params push]
-    :or {push true}
-    :as route}]
-  ;; avoid repeat routes
-  (when-not (= route @*previous-route)
-    (reset! *previous-route route)
-    (shui/popup-hide!)
-    (let [route-fn (if push rfe/push-state rfe/replace-state)]
-      (route-fn to path-params query-params)))
+    :or {push true}}]
+  (shui/popup-hide!)
+  (let [route-fn (if push rfe/push-state rfe/replace-state)]
+    (route-fn to path-params query-params))
 
   ;; force return nil for usage in render phase of React
   nil)
