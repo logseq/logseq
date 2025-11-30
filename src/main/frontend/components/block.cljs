@@ -2793,49 +2793,54 @@
                     (if private-tag? "!px-1" "!pl-0")))
       :on-mouse-over #(reset! *hover-container? true)
       :on-mouse-out #(reset! *hover-container? false)}
-     [:div.flex.items-center
-      {:on-mouse-over #(reset! *hover? true)
-       :on-mouse-out #(reset! *hover? false)
-       :on-context-menu
-       (fn [e]
-         (util/stop e)
-         (shui/popup-show! e
-                           (fn []
-                             [:<>
-                              (shui/dropdown-menu-item
-                               {:key "Go to tag"
-                                :on-click #(route-handler/redirect-to-page! (:block/uuid tag))}
-                               (str "Go to #" (:block/title tag))
-                               (shui/dropdown-menu-shortcut (shortcut-utils/decorate-binding "mod+click")))
-                              (shui/dropdown-menu-item
-                               {:key "Open tag in sidebar"
-                                :on-click #(state/sidebar-add-block! (state/get-current-repo) (:db/id tag) :page)}
-                               "Open in sidebar"
-                               (shui/dropdown-menu-shortcut (shortcut-utils/decorate-binding "shift+click")))
-                              (when-not (ldb/private-tags (:db/ident tag))
+     (if (util/mobile?)
+       (page-cp (assoc config
+                       :disable-preview? true
+                       :tag? true)
+                tag)
+       [:div.flex.items-center
+        {:on-mouse-over #(reset! *hover? true)
+         :on-mouse-out #(reset! *hover? false)
+         :on-context-menu
+         (fn [e]
+           (util/stop e)
+           (shui/popup-show! e
+                             (fn []
+                               [:<>
                                 (shui/dropdown-menu-item
-                                 {:key "Remove tag"
-                                  :on-click #(db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag))}
-                                 "Remove tag"))])
-                           popup-opts))}
-      (if (and @*hover? (not private-tag?) (not config/publishing?))
-        [:a.inline-flex.text-muted-foreground
-         {:title "Remove this tag"
-          :style {:margin-top 1
-                  :padding-left 2
-                  :margin-right 2}
-          :on-pointer-down
-          (fn [e]
-            (util/stop e)
-            (db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag)))}
-         (ui/icon "x" {:size 13})]
-        [:a.hash-symbol.select-none.flex
-         "#"])
-      (page-cp (assoc config
-                      :disable-preview? true
-                      :tag? true
-                      :hide-tag-symbol? true)
-               tag)]]))
+                                 {:key "Go to tag"
+                                  :on-click #(route-handler/redirect-to-page! (:block/uuid tag))}
+                                 (str "Go to #" (:block/title tag))
+                                 (shui/dropdown-menu-shortcut (shortcut-utils/decorate-binding "mod+click")))
+                                (shui/dropdown-menu-item
+                                 {:key "Open tag in sidebar"
+                                  :on-click #(state/sidebar-add-block! (state/get-current-repo) (:db/id tag) :page)}
+                                 "Open in sidebar"
+                                 (shui/dropdown-menu-shortcut (shortcut-utils/decorate-binding "shift+click")))
+                                (when-not (ldb/private-tags (:db/ident tag))
+                                  (shui/dropdown-menu-item
+                                   {:key "Remove tag"
+                                    :on-click #(db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag))}
+                                   "Remove tag"))])
+                             popup-opts))}
+        (if (and @*hover? (not private-tag?) (not config/publishing?))
+          [:a.inline-flex.text-muted-foreground
+           {:title "Remove this tag"
+            :style {:margin-top 1
+                    :padding-left 2
+                    :margin-right 2}
+            :on-pointer-down
+            (fn [e]
+              (util/stop e)
+              (db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag)))}
+           (ui/icon "x" {:size 13})]
+          [:a.hash-symbol.select-none.flex
+           "#"])
+        (page-cp (assoc config
+                        :disable-preview? true
+                        :tag? true
+                        :hide-tag-symbol? true)
+                 tag)])]))
 
 (rum/defc tags-cp
   "Tags without inline or hidden tags"
