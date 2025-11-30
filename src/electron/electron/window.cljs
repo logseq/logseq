@@ -62,7 +62,7 @@
                              (let [requestHeaders (.-requestHeaders details)
                                    headers (-> (bean/->clj requestHeaders)
                                                (dissoc :Cookie :cookie)
-                                               (assoc :Referrer-Policy "strict-origin-when-cross-origin'"
+                                               (assoc :Referrer-Policy "strict-origin-when-cross-origin"
                                                       :referer "https://logseq.com"))]
                                (callback (bean/->js
                                           {:cancel         false
