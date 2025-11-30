@@ -175,3 +175,129 @@
 .carousel-demo-window .option-card:hover {
   transform: translateY(-2px);
 }
+
+/* ============================================================================
+   Carousel Slide Animations
+   ============================================================================ */
+
+/* Remove default padding from carousel modal and constrain width */
+.ui__dialog-content:has(.cp__onboarding-carousel) {
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+.ui__dialog-main-content:has(.cp__onboarding-carousel) {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.cp__onboarding-carousel {
+  padding: 0 !important;
+  overflow: hidden;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box;
+}
+
+.carousel-content-wrapper {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.carousel-track {
+  will-change: transform;
+}
+
+.carousel-slide-content {
+  will-change: opacity, transform;
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.carousel-slide-inner {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Default states */
+.carousel-slide-active {
+  opacity: 1;
+}
+
+.carousel-slide-inactive {
+  opacity: 0;
+}
+
+/* Leaving slide animations - fade out while track moves */
+.carousel-slide-leaving-forward {
+  opacity: 1;
+  animation: fade-out-left 0.5s ease-in-out forwards;
+}
+
+.carousel-slide-leaving-backward {
+  opacity: 1;
+  animation: fade-out-right 0.5s ease-in-out forwards;
+}
+
+/* Entering slide animations - fade in as track brings it to center */
+.carousel-slide-entering-forward {
+  opacity: 0;
+  animation: fade-in-from-right 0.5s ease-in-out forwards;
+}
+
+.carousel-slide-entering-backward {
+  opacity: 0;
+  animation: fade-in-from-left 0.5s ease-in-out forwards;
+}
+
+/* Keyframe animations */
+@keyframes fade-out-left {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-20%);
+  }
+}
+
+@keyframes fade-out-right {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(20%);
+  }
+}
+
+@keyframes fade-in-from-right {
+  from {
+    opacity: 0;
+    transform: translateX(20%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes fade-in-from-left {
+  from {
+    opacity: 0;
+    transform: translateX(-20%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}

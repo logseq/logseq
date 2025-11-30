@@ -10,13 +10,175 @@
             [logseq.shui.ui :as shui]
             [rum.core :as rum]))
 
+;; Reactive carousel content component that reads current-step from state
+(rum/defc carousel-content-component
+  [{:keys [entry-point]}]
+  (let [[current-step _] (frum/use-atom-in state/state [:onboarding/current-step])
+        [prev-step set-prev-step!] (hooks/use-state current-step)
+        [direction set-direction!] (hooks/use-state :forward)
+        [is-transitioning set-is-transitioning!] (hooks/use-state false)
+        slide-id (if (< current-step 1) 1 current-step)
+        prev-slide-id (if (< prev-step 1) 1 prev-step)
+        total-slides (shared/get-total-slides)
+        is-first? (shared/is-first-slide? slide-id)
+        is-last? (shared/is-last-slide? slide-id)]
+    
+    ;; Track direction and previous step when current-step changes
+    (hooks/use-effect!
+     (fn []
+       (if (= current-step prev-step)
+         ;; Initial mount - no direction change
+         (do
+           (set-direction! :forward)
+           (set-is-transitioning! false))
+         ;; Calculate direction based on step change
+         (let [new-direction (if (> current-step prev-step) :forward :backward)]
+           (set-direction! new-direction)
+           (set-is-transitioning! true)
+           ;; After animation completes, update prev-step
+           (js/setTimeout
+            (fn []
+              (set-prev-step! current-step)
+              (set-is-transitioning! false))
+            500))))
+     [current-step])
+    
+    [:div.cp__onboarding-carousel
+     {:style {:width "100%"
+              :padding "0"
+              :overflow "hidden"
+              :box-sizing "border-box"}}
+
+     ;; Progress indicator (dots) - fixed position (with padding)
+     [:div.flex.justify-center.gap-2.mb-6
+      {:style {:padding-top "1.5rem"
+               :padding-left "1.5rem"
+               :padding-right "1.5rem"}}
+      (for [i (range 1 (inc total-slides))]
+        [:div.w-2.h-2.rounded-full
+         {:key i
+          :class (if (= i slide-id) "bg-primary" "bg-gray-300 dark:bg-gray-700")
+          :style {:cursor "pointer"}
+          :on-click (fn []
+                      (state/set-onboarding-current-step! i))}])]
+
+     ;; Animated slide content area - carousel track with all slides
+     [:div.carousel-content-wrapper
+      {:style {:position "relative"
+               :overflow "hidden"
+               :min-height "400px"
+               :background-color "rgba(255, 0, 0, 0.1)"}}  ;; DEBUG: Red tint for wrapper
+      [:div.carousel-track
+       {:class (str "carousel-track-" (name direction))
+        :style {:display "flex"
+                :width (str (* 100 total-slides) "%")
+                :transform (str "translateX(" (* -1 (dec slide-id) (/ 100 total-slides)) "%)")
+                :transition "transform 0.5s ease-in-out"
+                :background-color "rgba(0, 255, 0, 0.1)"}}  ;; DEBUG: Green tint for track
+       (for [i (range 1 (inc total-slides))]
+         (let [slide-data (shared/get-slide-by-id i)
+               is-active? (= i slide-id)
+               is-leaving? (and is-transitioning (= i prev-slide-id))
+               is-entering? (and is-transitioning (= i slide-id))]
+           [:div.carousel-slide-content
+            {:key i
+             :class (cond
+                      is-leaving? (str "carousel-slide-leaving-" (name direction))
+                      is-entering? (str "carousel-slide-entering-" (name direction))
+                      is-active? "carousel-slide-active"
+                      :else "carousel-slide-inactive")
+             :style {:width (str (/ 100 total-slides) "%")
+                     :flex-shrink 0
+                     :padding "1.5rem"
+                     :box-sizing "border-box"
+                     :max-width "100%"
+                     :background-color (cond
+                                         is-active? "rgba(0, 0, 255, 0.1)"  ;; DEBUG: Blue for active
+                                         is-leaving? "rgba(255, 165, 0, 0.2)"  ;; DEBUG: Orange for leaving
+                                         is-entering? "rgba(255, 0, 255, 0.2)"  ;; DEBUG: Magenta for entering
+                                         :else "rgba(128, 128, 128, 0.05)")}}  ;; DEBUG: Gray for inactive
+            (when slide-data
+              [:div.carousel-slide-inner
+               [:h2.text-2xl.font-bold.mb-4.flex.items-center.gap-2
+                (:title slide-data)
+                (when (:has-pro-pill? slide-data)
+                  [:span.inline-flex.items-center.px-2.py-0.5.rounded-full.text-xs.font-medium
+                   {:style {:background-color "var(--lx-gray-03, var(--rx-gray-03))"
+                            :color "var(--lx-gray-11, var(--rx-gray-11))"}}
+                   "Pro"])]
+
+               ;; Render description as multiple paragraphs (split by newlines)
+               [:div.text-base.opacity-70.mb-6
+                (for [para (string/split (:description slide-data) #"\n\n")]
+                  [:p.mb-3 {:key para} para])]
+
+               [:div.mb-6
+                (demo/carousel-demo-window {:slide i})]
+
+               (when (:secondary-cta slide-data)
+                 [:div.mb-4.flex.justify-center
+                  (ui/button
+                   (:secondary-cta slide-data)
+                   :variant :secondary
+                   :on-click (fn [] ;; No-op for now
+                              nil))])
+
+               [:p.text-sm.opacity-60.mb-8
+                (:example-text slide-data)]])]))]]
+
+     ;; Fixed navigation buttons at bottom (with padding)
+     [:div.flex.justify-between.items-center.mt-6
+      {:style {:position "relative"
+               :padding-bottom "1.5rem"
+               :padding-left "1.5rem"
+               :padding-right "1.5rem"}}
+      (if is-first?
+        [:div]
+        ;; Secondary button for Previous on slides 2-5
+        (ui/button
+         "Previous"
+         :variant :secondary
+         :on-click (fn []
+                     (state/set-onboarding-current-step! (dec slide-id)))))
+
+      (if is-last?
+        [:div.flex.gap-3.items-center
+         ;; Secondary button for Skip
+         (ui/button
+          "Skip for now"
+          :variant :secondary
+          :on-click (fn []
+                      (shui/dialog-close!)
+                      (state/set-onboarding-status! "skipped")
+                      (state/reset-onboarding-state!)))
+
+         ;; Primary button for Set up
+         (ui/button
+          "Set up my DB graph"
+          :on-click (fn []
+                      (shui/dialog-close!)
+                      (state/set-onboarding-current-step! 6)))]
+        ;; Primary button for Next on slides 1-4
+        (ui/button
+         "Next"
+         :on-click (fn []
+                     (state/set-onboarding-current-step! (inc slide-id)))))]
+
+     ;; Footer note for replay tour (with padding)
+     (when (= entry-point "db_replay_tour")
+       [:div.mt-4.text-center.text-sm.opacity-50
+        {:style {:padding-left "1.5rem"
+                 :padding-right "1.5rem"
+                 :padding-bottom "1.5rem"}}
+        "You can also open the setup wizard to configure your graph."])]))
+
 (rum/defc onboarding-root
   []
   (let [[entry-point _] (frum/use-atom-in state/state [:onboarding/entry-point])
         [status _] (frum/use-atom-in state/state [:onboarding/status])
         [current-step _] (frum/use-atom-in state/state [:onboarding/current-step])]
 
-    ;; Single use-effect to handle all onboarding flows
+    ;; Separate effect for opening modals (doesn't depend on current-step)
     (hooks/use-effect!
      (fn []
        (when (and entry-point
@@ -103,88 +265,15 @@
                            (state/reset-onboarding-state!))})
 
              (and (> current-step 0) (< current-step 6))
-             (let [slide-id current-step
-                   slide (shared/get-slide-by-id slide-id)
-                   total-slides (shared/get-total-slides)
-                   is-first? (shared/is-first-slide? slide-id)
-                   is-last? (shared/is-last-slide? slide-id)]
+             ;; Open carousel modal once - it will stay open and content will update reactively
+             (when-not (shui/dialog-get :carousel)
                (shui/dialog-open!
                 (fn []
-                  [:div.cp__onboarding-carousel.p-6
-                   {:style {:max-width "800px"}}
-
-                   [:div.flex.justify-center.gap-2.mb-6
-                    (for [i (range 1 (inc total-slides))]
-                      [:div.w-2.h-2.rounded-full
-                       {:key i
-                        :class (if (= i slide-id) "bg-primary" "bg-gray-300 dark:bg-gray-700")
-                        :style {:cursor "pointer"}
-                        :on-click (fn []
-                                    (state/set-onboarding-current-step! i))}])]
-
-                   (when slide
-                     [:div.carousel-slide
-                      [:h2.text-2xl.font-bold.mb-4.flex.items-center.gap-2
-                       (:title slide)
-                       (when (:has-pro-pill? slide)
-                         [:span.inline-flex.items-center.px-2.py-0.5.rounded-full.text-xs.font-medium
-                          {:style {:background-color "var(--lx-gray-03, var(--rx-gray-03))"
-                                   :color "var(--lx-gray-11, var(--rx-gray-11))"}}
-                          "Pro"])]
-
-                      ;; Render description as multiple paragraphs (split by newlines)
-                      [:div.text-base.opacity-70.mb-6
-                       (for [para (string/split (:description slide) #"\n\n")]
-                         [:p.mb-3 {:key para} para])]
-
-                      [:div.mb-6
-                       (demo/carousel-demo-window {:slide slide-id})]
-
-                      (when (:secondary-cta slide)
-                        [:div.mb-4.flex.justify-center
-                         (ui/button
-                          (:secondary-cta slide)
-                          :variant :secondary
-                          :on-click (fn [] ;; No-op for now
-                                     nil))])
-
-                      [:p.text-sm.opacity-60.mb-8
-                       (:example-text slide)]])
-
-                   [:div.flex.justify-between.items-center
-                    (if is-first?
-                      [:div]
-                      ;; Secondary button for Previous on slides 2-4
-                      (ui/button
-                       "Previous"
-                       :variant :secondary
-                       :on-click (fn []
-                                   (state/set-onboarding-current-step! (dec slide-id)))))
-
-                    (if is-last?
-                      [:div.flex.gap-3.items-center
-                       ;; Secondary button for Skip
-                       (ui/button
-                        "Skip for now"
-                        :variant :secondary
-                        :on-click (fn []
-                                    (shui/dialog-close!)
-                                    (state/set-onboarding-status! "skipped")
-                                    (state/reset-onboarding-state!)))
-
-                       ;; Primary button for Set up
-                       (ui/button
-                        "Set up my DB graph"
-                        :on-click (fn []
-                                    (shui/dialog-close!)
-                                    (state/set-onboarding-current-step! 6)))]
-                      ;; Primary button for Next on slides 1-4
-                      (ui/button
-                       "Next"
-                       :on-click (fn []
-                                   (state/set-onboarding-current-step! (inc slide-id)))))]])
+                  (carousel-content-component {:entry-point entry-point}))
                 {:id :carousel
                  :close-btn? true
+                 :content-props {:class "!p-0"
+                                 :style {:padding "0"}}
                  :on-close (fn []
                              (state/reset-onboarding-state!))}))
 
@@ -213,94 +302,18 @@
                            (state/reset-onboarding-state!))}))
 
            "db_replay_tour"
+           ;; Open carousel modal once - it will stay open and content will update reactively
            (when (and (> current-step 0) (< current-step 6))
-             (let [slide-id current-step
-                   slide (shared/get-slide-by-id slide-id)
-                   total-slides (shared/get-total-slides)
-                   is-first? (shared/is-first-slide? slide-id)
-                   is-last? (shared/is-last-slide? slide-id)]
+             (when-not (shui/dialog-get :carousel)
                (shui/dialog-open!
                 (fn []
-                  [:div.cp__onboarding-carousel.p-6
-                   {:style {:max-width "800px"}}
-
-                   [:div.flex.justify-center.gap-2.mb-6
-                    (for [i (range 1 (inc total-slides))]
-                      [:div.w-2.h-2.rounded-full
-                       {:key i
-                        :class (if (= i slide-id) "bg-primary" "bg-gray-300 dark:bg-gray-700")
-                        :style {:cursor "pointer"}
-                        :on-click (fn []
-                                    (state/set-onboarding-current-step! i))}])]
-
-                   (when slide
-                     [:div.carousel-slide
-                      [:h2.text-2xl.font-bold.mb-4.flex.items-center.gap-2
-                       (:title slide)
-                       (when (:has-pro-pill? slide)
-                         [:span.inline-flex.items-center.px-2.py-0.5.rounded-full.text-xs.font-medium
-                          {:style {:background-color "var(--lx-gray-03, var(--rx-gray-03))"
-                                   :color "var(--lx-gray-11, var(--rx-gray-11))"}}
-                          "Pro"])]
-
-                      ;; Render description as multiple paragraphs (split by newlines)
-                      [:div.text-base.opacity-70.mb-6
-                       (for [para (string/split (:description slide) #"\n\n")]
-                         [:p.mb-3 {:key para} para])]
-
-                      [:div.mb-6
-                       (demo/carousel-demo-window {:slide slide-id})]
-
-                      (when (:secondary-cta slide)
-                        [:div.mb-4.flex.justify-center
-                         (ui/button
-                          (:secondary-cta slide)
-                          :variant :secondary
-                          :on-click (fn [] ;; No-op for now
-                                     nil))])
-
-                      [:p.text-sm.opacity-60.mb-8
-                       (:example-text slide)]])
-
-                   [:div.flex.justify-between.items-center
-                    (if is-first?
-                      [:div]
-                      ;; Secondary button for Previous on slides 2-4
-                      (ui/button
-                       "Previous"
-                       :variant :secondary
-                       :on-click (fn []
-                                   (state/set-onboarding-current-step! (dec slide-id)))))
-
-                    (if is-last?
-                      [:div.flex.gap-3.items-center
-                       ;; Secondary button for Skip
-                       (ui/button
-                        "Skip for now"
-                        :variant :secondary
-                        :on-click (fn []
-                                    (shui/dialog-close!)
-                                    (state/set-onboarding-status! "skipped")
-                                    (state/reset-onboarding-state!)))
-
-                       ;; Primary button for Set up
-                       (ui/button
-                        "Set up my DB graph"
-                        :on-click (fn []
-                                    (shui/dialog-close!)
-                                    (state/set-onboarding-current-step! 6)))]
-                      ;; Primary button for Next on slides 1-4
-                      (ui/button
-                       "Next"
-                       :on-click (fn []
-                                   (state/set-onboarding-current-step! (inc slide-id)))))]
-
-                   [:div.mt-4.text-center.text-sm.opacity-50
-                    "You can also open the setup wizard to configure your graph."]])
+                  (carousel-content-component {:entry-point entry-point}))
                 {:id :carousel
                  :close-btn? true
+                 :content-props {:class "!p-0"
+                                 :style {:padding "0"}}
                  :on-close (fn []
                              (state/reset-onboarding-state!))}))))))
-     [entry-point status current-step])
+     [entry-point status])
 
     [:div {:style {:display "none"}}]))
