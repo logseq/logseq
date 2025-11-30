@@ -22,7 +22,7 @@
      (fn []
        (when (and (not= entry-point-state "none")
                   (> current-step 0)
-                  (< current-step 5))
+                  (< current-step 6))
          (shui/dialog-open!
           (fn []
          [:div.cp__onboarding-carousel.p-6
@@ -85,7 +85,7 @@
                "Set up my DB graph"
                :on-click (fn []
                           (shui/dialog-close!)
-                          (state/set-onboarding-current-step! 5)))]
+                          (state/set-onboarding-current-step! 6)))]
              (ui/button
               "Next"
               :on-click (fn []

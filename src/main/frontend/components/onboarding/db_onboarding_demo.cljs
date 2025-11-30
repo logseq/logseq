@@ -180,7 +180,72 @@
             ["Dune" "F. Herbert" "Queue"]]})])
 
 (defn- slide-4-content
-  "Slide 4: Options overlay"
+  "Slide 4: Sync across devices with collaboration"
+  []
+  [:div.relative.h-full.p-4.flex.items-center.justify-center
+   {:style {:background-color "var(--lx-gray-01, var(--rx-gray-01))"}}
+   
+   ;; Left device (desktop)
+   [:div.flex-1.flex.flex-col.items-center
+    {:style {:max-width "45%"}}
+    [:div.rounded-lg.p-3
+     {:style {:width "100%"
+              :background-color "var(--lx-gray-01, var(--rx-gray-01))"
+              :border "1px solid var(--lx-gray-04, var(--rx-gray-04))"}}
+     (mini-block
+      {:content "Team meeting notes"
+       :tag {:name "Meeting"}
+       :properties [{:property-name "Date" :value "Today" :empty? false}
+                    {:property-name "Participants" :value "3" :empty? false}]})]]
+   
+   ;; Sync indicator in the middle
+   [:div.flex.flex-col.items-center.justify-center
+    {:style {:width "10%"
+             :position "relative"}}
+    [:div.rounded-full.p-2
+     {:style {:background-color "var(--lx-gray-03, var(--rx-gray-03))"
+              :width "32px"
+              :height "32px"
+              :display "flex"
+              :align-items "center"
+              :justify-content "center"}}
+     [:span.text-xs "↻"]]
+    [:div.text-xs.opacity-50.mt-1 "Synced"]]
+   
+   ;; Right device (mobile, smaller/offset)
+   [:div.flex-1.flex.flex-col.items-center
+    {:style {:max-width "45%"
+             :transform "translateY(8px)"
+             :opacity "0.95"}}
+    [:div.rounded-lg.p-2
+     {:style {:width "80%"
+              :background-color "var(--lx-gray-01, var(--rx-gray-01))"
+              :border "1px solid var(--lx-gray-04, var(--rx-gray-04))"}}
+     (mini-block
+      {:content "Team meeting notes"
+       :tag {:name "Meeting"}
+       :properties [{:property-name "Date" :value "Today" :empty? false}
+                    {:property-name "Participants" :value "3" :empty? false}]})]]
+   
+   ;; Collaboration avatars in corner
+   [:div.absolute
+    {:style {:top "8px"
+             :right "8px"
+             :display "flex"
+             :gap "-4px"}}
+    (for [i (range 3)]
+      ^{:key i}
+      [:div.rounded-full
+       {:style {:width "20px"
+                :height "20px"
+                :border "2px solid var(--lx-gray-01, var(--rx-gray-01))"
+                :background-color (nth ["var(--lx-blue-09, var(--rx-blue-09))"
+                                        "var(--lx-green-09, var(--rx-green-09))"
+                                        "var(--lx-purple-09, var(--rx-purple-09))"] i)
+                :margin-left (if (zero? i) "0" "-8px")}}])]])
+
+(defn- slide-5-content
+  "Slide 5: Options overlay"
   []
   [:div.relative.h-full.p-4
    ;; Dimmed tag page in background
@@ -231,4 +296,5 @@
       2 (slide-2-content)
       3 (slide-3-content)
       4 (slide-4-content)
+      5 (slide-5-content)
       (slide-1-content))]])

@@ -19,7 +19,9 @@
     ;; Single use-effect to handle all onboarding flows
     (hooks/use-effect!
      (fn []
-       (when (and (not= entry-point "none")
+       (when (and entry-point
+                  status
+                  (not= entry-point "none")
                   (not= status "completed"))
          (case entry-point
 
@@ -100,7 +102,7 @@
                :on-close (fn []
                            (state/reset-onboarding-state!))})
 
-             (and (> current-step 0) (< current-step 5))
+             (and (> current-step 0) (< current-step 6))
              (let [slide-id current-step
                    slide (shared/get-slide-by-id slide-id)
                    total-slides (shared/get-total-slides)
@@ -122,8 +124,13 @@
 
                    (when slide
                      [:div.carousel-slide
-                      [:h2.text-2xl.font-bold.mb-4
-                       (:title slide)]
+                      [:h2.text-2xl.font-bold.mb-4.flex.items-center.gap-2
+                       (:title slide)
+                       (when (:has-pro-pill? slide)
+                         [:span.inline-flex.items-center.px-2.py-0.5.rounded-full.text-xs.font-medium
+                          {:style {:background-color "var(--lx-gray-03, var(--rx-gray-03))"
+                                   :color "var(--lx-gray-11, var(--rx-gray-11))"}}
+                          "Pro"])]
 
                       ;; Render description as multiple paragraphs (split by newlines)
                       [:div.text-base.opacity-70.mb-6
@@ -133,13 +140,21 @@
                       [:div.mb-6
                        (demo/carousel-demo-window {:slide slide-id})]
 
+                      (when (:secondary-cta slide)
+                        [:div.mb-4.flex.justify-center
+                         (ui/button
+                          (:secondary-cta slide)
+                          :variant :secondary
+                          :on-click (fn [] ;; No-op for now
+                                     nil))])
+
                       [:p.text-sm.opacity-60.mb-8
                        (:example-text slide)]])
 
                    [:div.flex.justify-between.items-center
                     (if is-first?
                       [:div]
-                      ;; Secondary button for Previous on slides 2-3
+                      ;; Secondary button for Previous on slides 2-4
                       (ui/button
                        "Previous"
                        :variant :secondary
@@ -148,13 +163,6 @@
 
                     (if is-last?
                       [:div.flex.gap-3.items-center
-                       ;; Tertiary button for Previous on slide 4 (left side)
-                       (ui/button
-                        "Previous"
-                        :variant :ghost
-                        :on-click (fn []
-                                    (state/set-onboarding-current-step! (dec slide-id))))
-
                        ;; Secondary button for Skip
                        (ui/button
                         "Skip for now"
@@ -169,8 +177,8 @@
                         "Set up my DB graph"
                         :on-click (fn []
                                     (shui/dialog-close!)
-                                    (state/set-onboarding-current-step! 5)))]
-                      ;; Primary button for Next on slides 1-3
+                                    (state/set-onboarding-current-step! 6)))]
+                      ;; Primary button for Next on slides 1-4
                       (ui/button
                        "Next"
                        :on-click (fn []
@@ -180,7 +188,7 @@
                  :on-close (fn []
                              (state/reset-onboarding-state!))}))
 
-             (>= current-step 5)
+             (>= current-step 6)
              (shui/dialog-open!
               (fn []
                 [:div.cp__onboarding-setup-wizard.p-6
@@ -205,7 +213,7 @@
                            (state/reset-onboarding-state!))}))
 
            "db_replay_tour"
-           (when (and (> current-step 0) (< current-step 5))
+           (when (and (> current-step 0) (< current-step 6))
              (let [slide-id current-step
                    slide (shared/get-slide-by-id slide-id)
                    total-slides (shared/get-total-slides)
@@ -227,8 +235,13 @@
 
                    (when slide
                      [:div.carousel-slide
-                      [:h2.text-2xl.font-bold.mb-4
-                       (:title slide)]
+                      [:h2.text-2xl.font-bold.mb-4.flex.items-center.gap-2
+                       (:title slide)
+                       (when (:has-pro-pill? slide)
+                         [:span.inline-flex.items-center.px-2.py-0.5.rounded-full.text-xs.font-medium
+                          {:style {:background-color "var(--lx-gray-03, var(--rx-gray-03))"
+                                   :color "var(--lx-gray-11, var(--rx-gray-11))"}}
+                          "Pro"])]
 
                       ;; Render description as multiple paragraphs (split by newlines)
                       [:div.text-base.opacity-70.mb-6
@@ -238,13 +251,21 @@
                       [:div.mb-6
                        (demo/carousel-demo-window {:slide slide-id})]
 
+                      (when (:secondary-cta slide)
+                        [:div.mb-4.flex.justify-center
+                         (ui/button
+                          (:secondary-cta slide)
+                          :variant :secondary
+                          :on-click (fn [] ;; No-op for now
+                                     nil))])
+
                       [:p.text-sm.opacity-60.mb-8
                        (:example-text slide)]])
 
                    [:div.flex.justify-between.items-center
                     (if is-first?
                       [:div]
-                      ;; Secondary button for Previous on slides 2-3
+                      ;; Secondary button for Previous on slides 2-4
                       (ui/button
                        "Previous"
                        :variant :secondary
@@ -253,13 +274,6 @@
 
                     (if is-last?
                       [:div.flex.gap-3.items-center
-                       ;; Tertiary button for Previous on slide 4 (left side)
-                       (ui/button
-                        "Previous"
-                        :variant :ghost
-                        :on-click (fn []
-                                    (state/set-onboarding-current-step! (dec slide-id))))
-
                        ;; Secondary button for Skip
                        (ui/button
                         "Skip for now"
@@ -274,8 +288,8 @@
                         "Set up my DB graph"
                         :on-click (fn []
                                     (shui/dialog-close!)
-                                    (state/set-onboarding-current-step! 5)))]
-                      ;; Primary button for Next on slides 1-3
+                                    (state/set-onboarding-current-step! 6)))]
+                      ;; Primary button for Next on slides 1-4
                       (ui/button
                        "Next"
                        :on-click (fn []

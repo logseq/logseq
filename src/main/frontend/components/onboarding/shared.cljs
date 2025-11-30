@@ -35,9 +35,15 @@
     :description "Each tag gets its own page with a list of all notes that use it.\n\nIt's like an automatic index: add a new #Book or #Meeting, and it appears in the list instantly."
     :example-text "Visit the #Book page to see all your books, with their metadata, in one view."}
    {:id 4
+    :title "Stay in sync across devices"
+    :has-pro-pill? true
+    :description "Logseq DB can sync your graph in real time across desktop and mobile, so your notes stay up to date everywhere you work.\n\nWith Logseq Pro, you also get live collaboration – see updates as they happen and work together in the same graph.*"
+    :example-text "* Real-time sync and collaboration are Pro features. You can still use Logseq DB fully offline with local graphs."
+    :secondary-cta "Sign in or upgrade"}
+   {:id 5
     :title "Keep your Markdown, add structure"
-    :description "You don't have to start over. You can import your existing Markdown graph into Logseq DB, or create a new graph from scratch.\n\nYour daily notes, pages, and links keep working – they just gain smarter tags and fields."
-    :example-text "You can run the setup wizard now or come back to it later from Settings."}])
+    :description "You don't have to start over. You can keep opening your existing Markdown graphs – they'll continue to save plain .md files locally, just like before.\n\nWhen you're ready, you can create a DB graph and import those notes to unlock smart tags, collections, calendar, and (with Pro) instant sync across devices."
+    :example-text "You can always stay on Markdown. To use DB features like templates, collections, calendar, and Pro sync, you'll need to create a DB graph and optionally import your existing notes."}])
 
 ;; Default tag templates for setup wizard
 (def default-tag-templates

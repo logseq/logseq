@@ -24,7 +24,7 @@
     
     (hooks/use-effect!
      (fn []
-       (when (and (>= current-step 5)
+       (when (and (>= current-step 6)
                   (not= entry-point "none"))
          (shui/dialog-open!
           (fn []
