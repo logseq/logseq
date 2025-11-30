@@ -2790,7 +2790,7 @@
       :else
       nil)))
 
-(defn- delete-and-update [^js input start end]
+(defn delete-and-update [^js input start end]
   (util/safe-set-range-text! input "" start end)
   (state/set-edit-content! (state/get-edit-input-id) (.-value input)))
 

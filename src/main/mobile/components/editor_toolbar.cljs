@@ -39,6 +39,26 @@
                   text)]
       (commands/simple-insert! parent-id text' opts))))
 
+(defn- insert-page-ref!
+  []
+  (let [{:keys [block]} (editor-handler/get-state)]
+    (when block
+      (let [input (state/get-input)]
+        (state/clear-editor-action!)
+        (let [selection (editor-handler/get-selection-and-format)
+              {:keys [selection-start selection-end selection]} selection]
+          (if selection
+            (do
+              (editor-handler/delete-and-update input selection-start selection-end)
+              (editor-handler/insert (page-ref/->page-ref selection)))
+            (insert-text page-ref/left-and-right-brackets
+                         {:backward-pos 2
+                          :check-fn (fn [_ _ _]
+                                      (let [input (state/get-input)
+                                            new-pos (cursor/get-caret-pos input)]
+                                        (state/set-editor-action-data! {:pos new-pos})
+                                        (commands/handle-step [:editor/search-page])))})))))))
+
 (defn- indent-outdent-action
   [indent?]
   {:id (if indent? "indent" "outdent")
@@ -77,13 +97,7 @@
    :system-icon "parentheses"
    :icon "brackets"
    :event? true
-   :handler #(insert-text page-ref/left-and-right-brackets
-                          {:backward-pos 2
-                           :check-fn (fn [_ _ _]
-                                       (let [input (state/get-input)
-                                             new-pos (cursor/get-caret-pos input)]
-                                         (state/set-editor-action-data! {:pos new-pos})
-                                         (commands/handle-step [:editor/search-page])))})})
+   :handler insert-page-ref!})
 
 (defn- slash-action
   []
