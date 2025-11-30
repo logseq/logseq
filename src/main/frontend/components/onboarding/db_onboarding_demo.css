@@ -1,0 +1,177 @@
+/* DB Onboarding Demo Visuals - Styling */
+
+/* ============================================================================
+   Floating Animations
+   ============================================================================ */
+
+/* Floating animation - moderate 20px movement */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-20px);
+  }
+}
+
+.cp__onboarding-demo .animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.cp__onboarding-demo .animate-float-delayed {
+  animation: float 3s ease-in-out infinite;
+  animation-delay: 1s;
+}
+
+.cp__onboarding-demo .animate-float-delayed-2 {
+  animation: float 3s ease-in-out infinite;
+  animation-delay: 2s;
+}
+
+/* ============================================================================
+   Mini Tag Component
+   ============================================================================ */
+
+/* Mini tag - uses accent color like real tags */
+.cp__onboarding-demo .mini-tag {
+  @apply inline-flex items-center gap-0.5 px-1;
+}
+
+.cp__onboarding-demo .mini-tag .hash-symbol {
+  @apply text-xs;
+  color: var(--lx-accent-09, var(--ls-link-text-color, var(--rx-accent-09)));
+}
+
+.cp__onboarding-demo .mini-tag span {
+  @apply text-xs;
+  color: var(--lx-accent-09, var(--ls-link-text-color, var(--rx-accent-09)));
+}
+
+/* ============================================================================
+   Mini Block Component
+   ============================================================================ */
+
+.cp__onboarding-demo .mini-block {
+  @apply flex gap-2 items-start;
+}
+
+.cp__onboarding-demo .mini-block-bullet {
+  @apply w-1 h-1 rounded-full mt-2 flex-shrink-0;
+  background-color: var(--lx-gray-08, var(--ls-block-bullet-color, var(--rx-gray-08)));
+}
+
+.cp__onboarding-demo .mini-block-content {
+  @apply flex-1;
+}
+
+/* ============================================================================
+   Mini Property Row Component
+   ============================================================================ */
+
+.cp__onboarding-demo .mini-property-row {
+  @apply flex items-center gap-2;
+  min-height: 28px;
+}
+
+/* ============================================================================
+   Mini Collection Table Component
+   ============================================================================ */
+
+.cp__onboarding-demo .mini-collection-table {
+  @apply rounded overflow-hidden text-xs;
+  border: 1px solid var(--lx-gray-04, var(--ls-border-color, var(--rx-gray-04)));
+}
+
+.cp__onboarding-demo .mini-collection-table table {
+  @apply w-full;
+}
+
+.cp__onboarding-demo .mini-collection-table thead tr {
+  background-color: var(--lx-gray-08, var(--ls-tertiary-background-color, var(--rx-gray-08)));
+}
+
+.cp__onboarding-demo .mini-collection-table th {
+  @apply font-medium p-1 text-left;
+}
+
+.cp__onboarding-demo .mini-collection-table td {
+  @apply p-1;
+  height: 24px;
+}
+
+.cp__onboarding-demo .mini-collection-table tbody tr:nth-child(even) {
+  background-color: var(--lx-gray-02, var(--ls-secondary-background-color, var(--rx-gray-02)));
+}
+
+/* ============================================================================
+   MD Update Visual
+   ============================================================================ */
+
+.md-update-visual {
+  @apply flex rounded-lg overflow-hidden;
+}
+
+.md-update-visual .benefit-item {
+  @apply flex items-start gap-2;
+}
+
+.md-update-visual .benefit-item .check-icon {
+  @apply text-xs;
+  color: var(--lx-green-09, var(--ls-success-color, var(--rx-green-09)));
+}
+
+/* ============================================================================
+   Welcome Visual
+   ============================================================================ */
+
+.welcome-visual {
+  @apply relative flex items-center justify-center;
+}
+
+.welcome-visual .central-page {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.welcome-visual .orbiting-chip {
+  transition: transform 0.3s ease;
+}
+
+.welcome-visual .orbiting-chip:hover {
+  transform: scale(1.05);
+}
+
+.welcome-visual .collection-chip {
+  @apply px-2 py-1 rounded text-xs opacity-70;
+}
+
+/* ============================================================================
+   Carousel Demo Window
+   ============================================================================ */
+
+.carousel-demo-window {
+  background-color: var(--lx-gray-01, var(--ls-primary-background-color, var(--rx-gray-01)));
+  border: 1px solid var(--lx-gray-04, var(--ls-border-color, var(--rx-gray-04)));
+}
+
+.carousel-demo-window .window-header {
+  @apply px-3 py-2;
+  background-color: var(--lx-gray-02, var(--ls-secondary-background-color, var(--rx-gray-02)));
+  border-bottom: 1px solid var(--lx-gray-04, var(--ls-border-color, var(--rx-gray-04)));
+}
+
+.carousel-demo-window .window-dots {
+  @apply flex gap-1;
+}
+
+.carousel-demo-window .window-content {
+  @apply relative;
+}
+
+.carousel-demo-window .option-card {
+  background-color: var(--lx-gray-01, var(--ls-primary-background-color, var(--rx-gray-01)));
+  transition: transform 0.2s ease;
+}
+
+.carousel-demo-window .option-card:hover {
+  transform: translateY(-2px);
+}

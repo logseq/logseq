@@ -1,9 +1,10 @@
 (ns frontend.components.onboarding.root
   "Central controller for DB onboarding flows"
   (:require [clojure.string :as string]
+            [frontend.components.onboarding.db-onboarding-demo :as demo]
             [frontend.components.onboarding.shared :as shared]
-            [frontend.state :as state]
             [frontend.rum :as frum]
+            [frontend.state :as state]
             [frontend.ui :as ui]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
@@ -14,34 +15,29 @@
   (let [[entry-point _] (frum/use-atom-in state/state [:onboarding/entry-point])
         [status _] (frum/use-atom-in state/state [:onboarding/status])
         [current-step _] (frum/use-atom-in state/state [:onboarding/current-step])]
-    
+
     ;; Single use-effect to handle all onboarding flows
     (hooks/use-effect!
      (fn []
        (when (and (not= entry-point "none")
                   (not= status "completed"))
          (case entry-point
-           
+
            "md_update_popup"
            (shui/dialog-open!
             (fn []
               [:div.cp__onboarding-md-update-popup.p-6
                {:style {:max-width "600px"}}
-               
+
                [:h2.text-2xl.font-bold.mb-2
                 "Logseq DB is here"]
-               
+
                [:p.text-base.opacity-70.mb-6
                 "Turn your notes into a flexible database – without changing how you write."]
-               
-               [:div.mb-6.rounded-lg.bg-gray-100.dark:bg-gray-800
-                {:style {:width "100%"
-                         :height "200px"
-                         :display "flex"
-                         :align-items "center"
-                         :justify-content "center"}}
-                [:span.text-sm.opacity-50 "Image / video placeholder"]]
-               
+
+               [:div.mb-6
+                (demo/md-update-visual)]
+
                [:ul.space-y-3.mb-8
                 [:li.flex.items-start
                  [:span.mr-3 "•"]
@@ -52,29 +48,29 @@
                 [:li.flex.items-start
                  [:span.mr-3 "•"]
                  [:span "See all your books, people, or meetings in tidy lists that stay up to date."]]]
-               
+
                [:div.flex.gap-3.justify-end
                 ;; Secondary button - quiet style
                 (ui/button
                  "Not now"
                  :variant :secondary
                  :on-click (fn []
-                            (state/reset-onboarding-state!)
-                            (shui/dialog-close!)))
-                
+                             (state/reset-onboarding-state!)
+                             (shui/dialog-close!)))
+
                 ;; Primary button - blue
                 (ui/button
                  "Get Logseq DB"
                  :on-click (fn []
-                            (shui/dialog-close!)
-                            (state/set-onboarding-entry-point! "db_first_run")
-                            (state/set-onboarding-status! "in_progress")
-                            (state/set-onboarding-current-step! 0)))]])
+                             (shui/dialog-close!)
+                             (state/set-onboarding-entry-point! "db_first_run")
+                             (state/set-onboarding-status! "in_progress")
+                             (state/set-onboarding-current-step! 0)))]])
             {:id :md-update-popup
              :close-btn? true
              :on-close (fn []
-                        (state/reset-onboarding-state!))})
-           
+                         (state/reset-onboarding-state!))})
+
            "db_first_run"
            (cond
              (= current-step 0)
@@ -82,34 +78,28 @@
               (fn []
                 [:div.cp__onboarding-welcome.p-8
                  {:style {:max-width "700px" :text-align "center"}}
-                 
+
                  [:h1.text-3xl.font-bold.mb-4
                   "Welcome to Logseq DB"]
-                 
+
                  [:p.text-lg.opacity-70.mb-8
                   "Your writing stays the same. Your graph gets smarter."]
-                 
-                 [:div.mb-8.rounded-lg.bg-gray-100.dark:bg-gray-800
-                  {:style {:width "100%"
-                           :height "300px"
-                           :display "flex"
-                           :align-items "center"
-                           :justify-content "center"
-                           :margin "0 auto"}}
-                  [:span.text-sm.opacity-50 "Image / video placeholder"]]
-                 
+
+                 [:div.mb-8
+                  (demo/welcome-visual)]
+
                  [:div.flex.justify-center
                   (ui/button
                    "See what's new"
                    :size "lg"
                    :on-click (fn []
-                              (shui/dialog-close!)
-                              (state/set-onboarding-current-step! 1)))]])
+                               (shui/dialog-close!)
+                               (state/set-onboarding-current-step! 1)))]])
               {:id :welcome-screen
                :close-btn? false
                :on-close (fn []
-                          (state/reset-onboarding-state!))})
-             
+                           (state/reset-onboarding-state!))})
+
              (and (> current-step 0) (< current-step 5))
              (let [slide-id current-step
                    slide (shared/get-slide-by-id slide-id)
@@ -120,7 +110,7 @@
                 (fn []
                   [:div.cp__onboarding-carousel.p-6
                    {:style {:max-width "800px"}}
-                   
+
                    [:div.flex.justify-center.gap-2.mb-6
                     (for [i (range 1 (inc total-slides))]
                       [:div.w-2.h-2.rounded-full
@@ -128,29 +118,24 @@
                         :class (if (= i slide-id) "bg-primary" "bg-gray-300 dark:bg-gray-700")
                         :style {:cursor "pointer"}
                         :on-click (fn []
-                                   (state/set-onboarding-current-step! i))}])]
-                   
+                                    (state/set-onboarding-current-step! i))}])]
+
                    (when slide
                      [:div.carousel-slide
                       [:h2.text-2xl.font-bold.mb-4
                        (:title slide)]
-                      
+
                       ;; Render description as multiple paragraphs (split by newlines)
                       [:div.text-base.opacity-70.mb-6
                        (for [para (string/split (:description slide) #"\n\n")]
                          [:p.mb-3 {:key para} para])]
-                      
-                      [:div.mb-6.rounded-lg.bg-gray-100.dark:bg-gray-800
-                       {:style {:width "100%"
-                                :height "250px"
-                                :display "flex"
-                                :align-items "center"
-                                :justify-content "center"}}
-                       [:span.text-sm.opacity-50 "Slide visual placeholder"]]
-                      
+
+                      [:div.mb-6
+                       (demo/carousel-demo-window {:slide slide-id})]
+
                       [:p.text-sm.opacity-60.mb-8
                        (:example-text slide)]])
-                   
+
                    [:div.flex.justify-between.items-center
                     (if is-first?
                       [:div]
@@ -159,8 +144,8 @@
                        "Previous"
                        :variant :secondary
                        :on-click (fn []
-                                  (state/set-onboarding-current-step! (dec slide-id)))))
-                    
+                                   (state/set-onboarding-current-step! (dec slide-id)))))
+
                     (if is-last?
                       [:div.flex.gap-3.items-center
                        ;; Tertiary button for Previous on slide 4 (left side)
@@ -168,57 +153,57 @@
                         "Previous"
                         :variant :ghost
                         :on-click (fn []
-                                   (state/set-onboarding-current-step! (dec slide-id))))
-                       
+                                    (state/set-onboarding-current-step! (dec slide-id))))
+
                        ;; Secondary button for Skip
                        (ui/button
                         "Skip for now"
                         :variant :secondary
                         :on-click (fn []
-                                   (shui/dialog-close!)
-                                   (state/set-onboarding-status! "skipped")
-                                   (state/reset-onboarding-state!)))
-                       
+                                    (shui/dialog-close!)
+                                    (state/set-onboarding-status! "skipped")
+                                    (state/reset-onboarding-state!)))
+
                        ;; Primary button for Set up
                        (ui/button
                         "Set up my DB graph"
                         :on-click (fn []
-                                   (shui/dialog-close!)
-                                   (state/set-onboarding-current-step! 5)))]
+                                    (shui/dialog-close!)
+                                    (state/set-onboarding-current-step! 5)))]
                       ;; Primary button for Next on slides 1-3
                       (ui/button
                        "Next"
                        :on-click (fn []
-                                  (state/set-onboarding-current-step! (inc slide-id)))))]])
+                                   (state/set-onboarding-current-step! (inc slide-id)))))]])
                 {:id :carousel
                  :close-btn? true
                  :on-close (fn []
-                            (state/reset-onboarding-state!))}))
-             
+                             (state/reset-onboarding-state!))}))
+
              (>= current-step 5)
              (shui/dialog-open!
               (fn []
                 [:div.cp__onboarding-setup-wizard.p-6
                  {:style {:max-width "600px"}}
-                 
+
                  [:h2.text-2xl.font-bold.mb-4
                   "Setup Wizard"]
-                 
+
                  [:p.text-base.opacity-70.mb-6
                   "The full setup wizard will be implemented here."]
-                 
+
                  [:div.flex.justify-end
                   (ui/button
                    "Close"
                    :on-click (fn []
-                              (state/set-onboarding-status! "completed")
-                              (state/reset-onboarding-state!)
-                              (shui/dialog-close!)))]])
+                               (state/set-onboarding-status! "completed")
+                               (state/reset-onboarding-state!)
+                               (shui/dialog-close!)))]])
               {:id :setup-wizard
                :close-btn? true
                :on-close (fn []
-                          (state/reset-onboarding-state!))}))
-           
+                           (state/reset-onboarding-state!))}))
+
            "db_replay_tour"
            (when (and (> current-step 0) (< current-step 5))
              (let [slide-id current-step
@@ -230,7 +215,7 @@
                 (fn []
                   [:div.cp__onboarding-carousel.p-6
                    {:style {:max-width "800px"}}
-                   
+
                    [:div.flex.justify-center.gap-2.mb-6
                     (for [i (range 1 (inc total-slides))]
                       [:div.w-2.h-2.rounded-full
@@ -238,29 +223,24 @@
                         :class (if (= i slide-id) "bg-primary" "bg-gray-300 dark:bg-gray-700")
                         :style {:cursor "pointer"}
                         :on-click (fn []
-                                   (state/set-onboarding-current-step! i))}])]
-                   
+                                    (state/set-onboarding-current-step! i))}])]
+
                    (when slide
                      [:div.carousel-slide
                       [:h2.text-2xl.font-bold.mb-4
                        (:title slide)]
-                      
+
                       ;; Render description as multiple paragraphs (split by newlines)
                       [:div.text-base.opacity-70.mb-6
                        (for [para (string/split (:description slide) #"\n\n")]
                          [:p.mb-3 {:key para} para])]
-                      
-                      [:div.mb-6.rounded-lg.bg-gray-100.dark:bg-gray-800
-                       {:style {:width "100%"
-                                :height "250px"
-                                :display "flex"
-                                :align-items "center"
-                                :justify-content "center"}}
-                       [:span.text-sm.opacity-50 "Slide visual placeholder"]]
-                      
+
+                      [:div.mb-6
+                       (demo/carousel-demo-window {:slide slide-id})]
+
                       [:p.text-sm.opacity-60.mb-8
                        (:example-text slide)]])
-                   
+
                    [:div.flex.justify-between.items-center
                     (if is-first?
                       [:div]
@@ -269,8 +249,8 @@
                        "Previous"
                        :variant :secondary
                        :on-click (fn []
-                                  (state/set-onboarding-current-step! (dec slide-id)))))
-                    
+                                   (state/set-onboarding-current-step! (dec slide-id)))))
+
                     (if is-last?
                       [:div.flex.gap-3.items-center
                        ;; Tertiary button for Previous on slide 4 (left side)
@@ -278,35 +258,35 @@
                         "Previous"
                         :variant :ghost
                         :on-click (fn []
-                                   (state/set-onboarding-current-step! (dec slide-id))))
-                       
+                                    (state/set-onboarding-current-step! (dec slide-id))))
+
                        ;; Secondary button for Skip
                        (ui/button
                         "Skip for now"
                         :variant :secondary
                         :on-click (fn []
-                                   (shui/dialog-close!)
-                                   (state/set-onboarding-status! "skipped")
-                                   (state/reset-onboarding-state!)))
-                       
+                                    (shui/dialog-close!)
+                                    (state/set-onboarding-status! "skipped")
+                                    (state/reset-onboarding-state!)))
+
                        ;; Primary button for Set up
                        (ui/button
                         "Set up my DB graph"
                         :on-click (fn []
-                                   (shui/dialog-close!)
-                                   (state/set-onboarding-current-step! 5)))]
+                                    (shui/dialog-close!)
+                                    (state/set-onboarding-current-step! 5)))]
                       ;; Primary button for Next on slides 1-3
                       (ui/button
                        "Next"
                        :on-click (fn []
-                                  (state/set-onboarding-current-step! (inc slide-id)))))]
-                   
+                                   (state/set-onboarding-current-step! (inc slide-id)))))]
+
                    [:div.mt-4.text-center.text-sm.opacity-50
                     "You can also open the setup wizard to configure your graph."]])
                 {:id :carousel
                  :close-btn? true
                  :on-close (fn []
-                            (state/reset-onboarding-state!))}))))))
+                             (state/reset-onboarding-state!))}))))))
      [entry-point status current-step])
-    
+
     [:div {:style {:display "none"}}]))
