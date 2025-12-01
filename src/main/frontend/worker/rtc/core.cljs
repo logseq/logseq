@@ -374,7 +374,7 @@
                                  (reset! *last-stop-exception e)
                                  (log/info :rtc-loop-task e)
                                  (when-not (or (instance? Cancelled e) (= "missionary.Cancelled" (ex-message e)))
-                                   (println (.-stack e)))
+                                   (log/info :rtc-loop-task-ex-stack (.-stack e)))
                                  (when (= :rtc.exception/ws-timeout (some-> e ex-data :type))
                                    ;; if fail reason is websocket-timeout, try to restart rtc
                                    (worker-state/<invoke-main-thread :thread-api/rtc-start-request repo))))
@@ -430,8 +430,7 @@
 (defn rtc-stop
   []
   (when-let [canceler (:canceler @*rtc-loop-metadata)]
-    (canceler)
-    (reset! *rtc-loop-metadata empty-rtc-loop-metadata)))
+    (canceler)))
 
 (defn rtc-toggle-auto-push
   []
@@ -519,7 +518,8 @@
                     *online-users *last-stop-exception]}
             (m/?< rtc-loop-metadata-flow)]
         (try
-          (when (and repo rtc-state-flow *rtc-auto-push? *rtc-lock')
+          (if-not (and repo rtc-state-flow *rtc-auto-push? *rtc-lock')
+            (m/amb)
             (m/?<
              (m/latest
               (fn [rtc-state rtc-auto-push? rtc-remote-profile?
@@ -546,7 +546,7 @@
               (client-op/create-pending-asset-ops-count-flow repo)
               (rtc-log-and-state/create-local&remote-t-flow graph-uuid)
               (m/watch *last-stop-exception))))
-          (catch Cancelled _))))))
+          (catch Cancelled _ (m/amb)))))))
 
 (def ^:private create-get-state-flow (c.m/throttle 300 create-get-state-flow*))
 
