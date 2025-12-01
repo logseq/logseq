@@ -55,7 +55,7 @@
   (let [width  (or width (min (- (util/get-width) 96)
                               560))
         height (or height (int (* width (/ 315 560))))
-        url (str "https://logseq.com/youtube.html?v=" id "?enablejsapi=1")
+        url (str "https://logseq.com/youtube.html?v=" id "&enablejsapi=1")
         url (if start
               (str url "&start=" start)
               url)]
