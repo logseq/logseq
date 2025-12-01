@@ -41,7 +41,7 @@
        (when-not (string/blank? input)
          (let [*timeout (atom nil)]
            (p/let [result (search-blocks input)]
-             (set-search-result! result)
+             (set-search-result! (or result []))
              (when (seq result)
                (reset! *timeout
                        (js/setTimeout
@@ -94,6 +94,7 @@
                (when (and page? icon) (ui/icon icon {:size 15
                                                      :class "text-muted-foreground mt-1"}))
                [:div text]]]]))]
-       (when-not (string/blank? input)
-         [:div.font-medium.text-muted-foreground
-          "No results"]))]))
+       (when (= result [])
+         (when-not (string/blank? input)
+           [:div.font-medium.text-muted-foreground
+            "No results"])))]))
