@@ -1093,7 +1093,7 @@
                            (.setHours date h m 0))
                          (default-on-select date)))
                      default-on-select)]
-    [:div.flex.flex-col.gap-2.relative
+    [:div.ls-nlp-calendar
      (single-calendar (assoc opts :on-select on-select'))
      (when (:datetime? opts)
        (time-picker (cond->
