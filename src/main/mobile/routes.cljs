@@ -9,7 +9,7 @@
    ["/page/:name"
     {:name :page
      :view (fn [route-match]
-             [:div.mt-6
+             [:div.ls-mobile-page.mt-6
               (page/page-cp (assoc route-match :mobile-page? true))])}]
    ["/import"
     {:name :import

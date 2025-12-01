@@ -164,12 +164,6 @@ ul {
   }
 }
 
-@container ls-block (max-width: 430px) {
-  .block-modal-page .ls-properties-area {
-    display: initial;
-  }
-}
-
 .property-key {
   min-width: 0;
 }
@@ -303,4 +297,19 @@ body, #root {
     position: absolute;
     inset: 0;          /* top: 0; right: 0; bottom: 0; left: 0; */
     overflow-y: auto;
+}
+
+.ls-page-title .block-tags {
+    margin-top: 0px;
+}
+
+@container ls-block (max-width: 430px) {
+    .ls-mobile-page .ls-properties-area {
+        display: initial;
+    }
+}
+
+div[data-radix-menu-content] {
+  @apply overflow-y-auto;
+  padding-bottom: 80px;
 }
