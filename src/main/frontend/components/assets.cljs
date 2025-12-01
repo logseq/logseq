@@ -10,6 +10,7 @@
    [frontend.handler.notification :as notification]
    [frontend.handler.editor :as editor-handler]
    [frontend.handler.route :as route-handler]
+   [frontend.handler.db-based.property :as db-property-handler]
    [frontend.state :as state]
    [frontend.ui :as ui]
    [frontend.util :as util]
@@ -234,19 +235,27 @@
                    (let [^js form-data (js/FormData. (.-currentTarget e))
                          repo (state/get-current-repo)
                          title (.get form-data "title")
-                         src (.get form-data "src")]
+                         src (.get form-data "src")
+                         err-handle (fn [^js e]
+                                      (js/console.error e)
+                                      (notification/show! (str e)))]
                      (if create?
                        (-> (do (set-saving? true)
                                (editor-handler/db-based-save-assets! repo [{:title title :src src}]))
                            (p/then (fn [res]
                                      (when-let [asset-block (some-> (seq res) (first))]
                                        (when on-saved (on-saved asset-block)))))
-                           (p/catch (fn [^js e]
-                                      (js/console.error e)
-                                      (notification/show! (str e))))
+                           (p/catch err-handle)
                            (p/finally #(set-saving? false)))
                        ;; update asset block
-                       (notification/show! (str "TODO: update asset block:" (pr-str asset-block)))
+                       (-> (do (set-saving? true)
+                               (p/all
+                                [(editor-handler/save-block-if-changed! asset-block title)
+                                 (db-property-handler/set-block-property!
+                                  (:block/id asset-block) :logseq.property.asset/external-src src)]))
+                           (p/then #())
+                           (p/catch err-handle)
+                           (p/finally #(set-saving? false)))
                        )))}
      [:label [:span.block.pb-2.text-sm.opacity-60 "Asset title:"]
       (shui/input {:small true :default-value title :name "title"})]
@@ -259,14 +268,15 @@
   [asset-block pdf-current]
   [:div.edit-external-src-content
    (let [on-saved! (fn [asset-block]
-                     (when-let [uuid' (:block/uuid asset-block)]
+                     (when-let [uuid' (and pdf-current (:block/uuid asset-block))]
                        (when pdf-current (state/set-current-pdf! nil))
-                       (shui/dialog-close!)
-                       (route-handler/redirect-to-page! uuid')))]
+                       (route-handler/redirect-to-page! uuid'))
+                     (shui/dialog-close!))]
      (if asset-block
-       [:div.py-2
-        [:strong "TODO: Edit external asset source block:"]
-        [:pre (pr-str asset-block)]]
+       [:div.pb-2.-mt-2
+        (let [url (:logseq.property.asset/external-src asset-block)
+              title (:block/title asset-block)]
+          (edit-external-src-form asset-block {:url url :title title :on-saved on-saved!}))]
 
        (when-let [url (:url pdf-current)]
          [:div.pb-2

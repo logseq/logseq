@@ -314,7 +314,7 @@
   (shui/dialog-open!
    (assets/edit-external-src-content asset-block pdf-current)
    {:id :edit-external-asset-source-dialog
-    :title (str (if asset-block "Edit" "Create" ) " internal asset ref block")
+    :title (str (if asset-block "Edit" "Create" ) " Asset ref block")
     :center? true}))
 
 (defn- enable-beta-features!

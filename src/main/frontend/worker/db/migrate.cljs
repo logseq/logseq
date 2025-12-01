@@ -432,7 +432,9 @@
    ["65.11" {:fix remove-block-path-refs}]
    ["65.12" {:fix remove-position-property-from-url-properties}]
    ["65.13" {:properties [:logseq.property.asset/width
-                          :logseq.property.asset/height]}]])
+                          :logseq.property.asset/height]}]
+   ["65.14" {:properties [:logseq.property.asset/external-src
+                          ]}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]
