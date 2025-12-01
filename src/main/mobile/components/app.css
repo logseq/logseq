@@ -309,6 +309,10 @@ body, #root {
     }
 }
 
+.ls-mobile-page .ls-page-title .ls-properties-area {
+    @apply mt-4 block ml-2;
+}
+
 div[data-radix-menu-content] {
   @apply overflow-y-auto;
   padding-bottom: 80px;
