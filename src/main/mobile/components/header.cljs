@@ -118,6 +118,7 @@
       (ui/menu-link {:on-click (fn []
                                  (shui/popup-show! nil (fn [] (log)) {}))}
                     [:span.text-lg.flex.gap-2.items-center
+                     (shui/tabler-icon "square-letter-l" {:class "opacity-70" :size 22})
                      "Check log"])])
    {:title "Actions"
     :default-height false}))
