@@ -2855,7 +2855,7 @@
   (let [^js input (state/get-input)
         current-pos (cursor/pos input)]
     (when (zero? current-pos)
-      (when e (.preventDefault e))
+      (util/stop e)
       (let [repo (state/get-current-repo)
             block* (state/get-edit-block)
             block (db/entity (:db/id block*))
