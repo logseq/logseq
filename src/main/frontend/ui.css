@@ -351,3 +351,7 @@ input[type='range'] {
 .ls-foldable-title-control {
   margin-left: -27px;
 }
+
+.ls-nlp-calendar {
+  @apply flex flex-col gap-2 relative;
+}

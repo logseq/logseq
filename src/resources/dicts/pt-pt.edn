@@ -195,7 +195,6 @@
  :remove-heading "Remover título"
  :heading "Título {1}"
  :auto-heading "Título automático"
- :open-a-directory "Abrir uma pasta local"
 
  :help/shortcut-page-title "Atalhos de teclado"
 

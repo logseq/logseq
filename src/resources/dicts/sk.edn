@@ -446,7 +446,6 @@
  :remove-heading                                   "Odstrániť nadpis"
  :heading                                          "Nadpis {1}"
  :auto-heading                                     "Automatický nadpis"
- :open-a-directory                                 "Otvoriť lokálny adresár"
  :toggle-theme                                     "Prepnúť motív"
 
  :help/shortcut-page-title                         "Klávesové skratky"

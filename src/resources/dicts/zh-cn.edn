@@ -241,7 +241,6 @@
  :remove-background "去除背景"
  :remove-heading "移除 heading"
  :auto-heading "自动转为 heading"
- :open-a-directory "打开本地文件夹"
  :all-whiteboards "所有白板"
 
  :plugin/installed "已安装"

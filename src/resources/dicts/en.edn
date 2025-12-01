@@ -443,6 +443,7 @@
  :graph/all-graphs "All graphs"
  :graph/local-graphs "Local graphs:"
  :graph/remote-graphs "Remote graphs:"
+ :graph/shared-graphs "Shared graphs:"
  :export "Export"
  :export-graph "Export graph"
  :export-page "Export page"
@@ -488,7 +489,6 @@
  :remove-heading "Remove heading"
  :heading "Heading {1}"
  :auto-heading "Auto heading"
- :open-a-directory "Open a local directory"
  :toggle-theme      "Toggle theme"
 
  :help/shortcut-page-title "Keyboard shortcuts"

@@ -70,7 +70,7 @@
         (sort-repos-with-metadata-local repos)
         :let [db-based? (config/db-based-graph? url)
               graph-name (if db-based? (config/db-graph-name url) GraphName)]]
-    [:div.flex.justify-between.mb-4.items-center.group {:key (or url GraphUUID)
+    [:div.flex.justify-between.mb-2.items-center.group {:key (or url GraphUUID)
                                                         "data-testid" url}
      [:div
       [:span.flex.items-center.gap-1
@@ -179,7 +179,25 @@
                                                (state/delete-remote-graph! repo)
                                                (state/set-state! [:file-sync/remote-graphs :loading] false)
                                                (rtc-handler/<get-remote-graphs)))))))))}
-              "Delete from server")))))]]]))
+              "Delete from server"))
+
+           (when (and remote? db-based? (not manager?))
+             (shui/dropdown-menu-item
+              {:key "leave-shared-graph"
+               :class "leave-shared-graph-menu-item"
+               :on-click (fn []
+                           (notification/show!
+                            "Please ask this graph's manager to rovoke your access."
+                            :info
+                            false)
+                           ;; (let [prompt-str "Are you sure you want to leave this graph?"]
+                           ;;   (-> (shui/dialog-confirm!
+                           ;;        [:p.font-medium.-my-4 prompt-str])
+                           ;;       (p/then
+                           ;;        (fn []
+                           ;;          ))))
+                           )}
+              "Leave this graph")))))]]]))
 
 (rum/defc repos-cp < rum/reactive
   {:will-mount (fn [state]
@@ -202,50 +220,53 @@
                 (util/mobile?)
                 (filter (fn [item]
                           (config/db-based-graph? (:url item)))))
-        {remote-graphs true local-graphs false} (group-by (comp boolean :remote?) repos)]
+        {remote-graphs true local-graphs false} (group-by (comp boolean :remote?) repos)
+        {own-graphs true shared-graphs false}
+        (group-by (fn [graph] (= "manager" (:graph<->user-user-type graph))) remote-graphs)]
     [:div#graphs
      (when-not (util/capacitor?)
        [:h1.title (t :graph/all-graphs)])
 
-     [:div.pl-1.content.mt-3
+     [:div.pl-1.content.mt-8
+      [:div.flex.flex-row.my-8
+       [:div.mr-8
+        (ui/button
+         "Create a new graph"
+         :on-click #(state/pub-event! [:graph/new-db-graph]))]]
 
       [:div
-       [:h2.text-lg.font-medium.my-4 (t :graph/local-graphs)]
+       [:h2.text-lg.font-medium.mb-4 (t :graph/local-graphs)]
        (when (seq local-graphs)
-         (repos-inner local-graphs))
-
-       (when-not (util/capacitor?)
-         [:div.flex.flex-row.my-4
-          (if util/web-platform?
-            [:div.mr-8
-             (ui/button
-              "Create a new graph"
-              :on-click #(state/pub-event! [:graph/new-db-graph]))]
-            (when (or (nfs-handler/supported?)
-                      (mobile-util/native-platform?))
-              [:div.mr-8
-               (ui/button
-                (t :open-a-directory)
-                :on-click #(state/pub-event! [:graph/setup-a-repo]))]))])]
+         (repos-inner local-graphs))]
 
       (when (and (or (file-sync/enable-sync?)
                      (user-handler/rtc-group?))
+                 (seq remote-graphs)
                  login?)
-        [:div
-         [:hr]
-         [:div.flex.align-items.justify-between
-          [:h2.text-lg.font-medium.my-4 (t :graph/remote-graphs)]
-          [:div
-           (ui/button
-            [:span.flex.items-center "Refresh"
-             (when remotes-loading? [:small.pl-2 (ui/loading nil)])]
-            :background "gray"
-            :disabled remotes-loading?
-            :on-click (fn []
-                        (when-not (util/capacitor?)
-                          (file-sync/load-session-graphs))
-                        (rtc-handler/<get-remote-graphs)))]]
-         (repos-inner remote-graphs)])]]))
+        [:<>
+         (when (seq own-graphs)
+           [:div
+            [:hr.mt-8]
+            [:div.flex.align-items.justify-between
+             [:h2.text-lg.font-medium.mb-4 (t :graph/remote-graphs)]
+             [:div
+              (ui/button
+               [:span.flex.items-center "Refresh"
+                (when remotes-loading? [:small.pl-2 (ui/loading nil)])]
+               :background "gray"
+               :disabled remotes-loading?
+               :on-click (fn []
+                           (when-not (util/capacitor?)
+                             (file-sync/load-session-graphs))
+                           (rtc-handler/<get-remote-graphs)))]]
+            (repos-inner own-graphs)])
+
+         (when (seq shared-graphs)
+           [:div
+            [:hr.mt-8]
+            [:div.flex.align-items.justify-between
+             [:h2.text-lg.font-medium.mb-4 (t :graph/shared-graphs)]]
+            (repos-inner shared-graphs)])])]]))
 
 (defn- repos-dropdown-links [repos current-repo downloading-graph-id & {:as opts}]
   (let [switch-repos (if-not (nil? current-repo)
@@ -457,14 +478,25 @@
 (rum/defc new-db-graph
   []
   (let [[creating-db? set-creating-db?] (hooks/use-state false)
-        [cloud? set-cloud?] (hooks/use-state false)
+        rtc-group? (user-handler/rtc-group?)
+        [cloud? set-cloud?] (hooks/use-state rtc-group?)
         [e2ee-rsa-key-ensured? set-e2ee-rsa-key-ensured?] (hooks/use-state nil)
-        input-ref (hooks/create-ref)]
+        input-ref (hooks/create-ref)
+        [input-value set-input-value!] (hooks/use-state "")]
+
     (hooks/use-effect!
      (fn []
-       (when-let [^js input (hooks/deref input-ref)]
-         (js/setTimeout #(.focus input) 32)))
+       (let [token (state/get-auth-id-token)
+             user-uuid (user-handler/user-uuid)]
+         (when (and rtc-group? cloud? (not e2ee-rsa-key-ensured?))
+           (when (and token user-uuid)
+             (-> (p/let [rsa-key-pair (state/<invoke-db-worker :thread-api/get-user-rsa-key-pair token user-uuid)]
+                   (set-e2ee-rsa-key-ensured? (some? rsa-key-pair)))
+                 (p/catch (fn [e]
+                            (log/error :get-user-rsa-key-pair e)
+                            e)))))))
      [])
+
     (letfn [(new-db-f [graph-name]
               (when-not (or (string/blank? graph-name)
                             creating-db?)
@@ -494,28 +526,22 @@
        (shui/input
         {:disabled creating-db?
          :ref input-ref
-         :placeholder "your graph name"
+         :auto-focus true
+         :placeholder "Graph name"
          :on-key-down submit!
+         :on-change (fn [e] (set-input-value! (util/evalue e)))
+         :value input-value
          :autoComplete "off"})
        (when (user-handler/rtc-group?)
          [:div.flex.flex-col
           [:div.flex.flex-row.items-center.gap-1
            (shui/checkbox
             {:id "rtc-sync"
-             :value cloud?
+             :checked cloud?
              :on-checked-change
              (fn []
-               (let [v (boolean (not cloud?))
-                     token (state/get-auth-id-token)
-                     user-uuid (user-handler/user-uuid)]
-                 (set-cloud? v)
-                 (when (and (true? v) (not e2ee-rsa-key-ensured?))
-                   (when (and token user-uuid)
-                     (-> (p/let [rsa-key-pair (state/<invoke-db-worker :thread-api/get-user-rsa-key-pair token user-uuid)]
-                           (set-e2ee-rsa-key-ensured? (some? rsa-key-pair)))
-                         (p/catch (fn [e]
-                                    (log/error :get-user-rsa-key-pair e)
-                                    e)))))))})
+               (let [v (boolean (not cloud?))]
+                 (set-cloud? v)))})
            [:label.opacity-70.text-sm
             {:for "rtc-sync"}
             "Use Logseq Sync?"]]
@@ -524,7 +550,8 @@
              {:for "rtc-sync"}
              "Need to init E2EE settings first, Settings > Encryption"])])
        (shui/button
-        {:disabled (and cloud? (not e2ee-rsa-key-ensured?))
+        {:disabled (or (and cloud? (not e2ee-rsa-key-ensured?))
+                       (string/blank? input-value))
          :on-click #(submit! % true)
          :on-key-down submit!}
         (if creating-db?

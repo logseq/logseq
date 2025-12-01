@@ -202,7 +202,6 @@
  :remove-heading "移除標頭"
  :heading "標頭 {1}"
  :auto-heading "自動寫入標頭"
- :open-a-directory "於本地開啟資料夾"
 
  :help/shortcut-page-title "鍵盤快捷鍵"
 
