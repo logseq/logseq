@@ -375,9 +375,11 @@
                                  (log/info :rtc-loop-task e)
                                  (when-not (or (instance? Cancelled e) (= "missionary.Cancelled" (ex-message e)))
                                    (println (.-stack e)))
-                                 (when (= :rtc.exception/ws-timeout (some-> e ex-data :type))
-                                   ;; if fail reason is websocket-timeout, try to restart rtc
-                                   (worker-state/<invoke-main-thread :thread-api/rtc-start-request repo))))
+                                 (let [t (some-> e ex-data :type)]
+                                   (when (or (= :rtc.exception/ws-timeout t)
+                                             (instance? js/CloseEvent e))
+                                     ;; if fail reason is websocket/connection related, try to restart rtc
+                                     (worker-state/<invoke-main-thread :thread-api/rtc-start-request repo)))))
               start-ex (m/? onstarted-task)]
           (if (instance? ExceptionInfo start-ex)
             (do
@@ -407,10 +409,19 @@
       (if-not (and repo
                    (sqlite-util/db-based-graph? repo)
                    conn token)
-        (log/info :skip-new-task--rtc-start
-                  {:repo repo
-                   :some?-conn (some? conn)
-                   :some?-token (some? token)})
+        (do
+          (log/info :skip-new-task--rtc-start
+                    {:repo repo
+                     :some?-conn (some? conn)
+                     :some?-token (some? token)})
+          ;; If the db isn't ready yet but we already have a token, schedule a retry.
+          (when (and repo
+                     (sqlite-util/db-based-graph? repo)
+                     (nil? conn)
+                     token)
+            (js/setTimeout
+             (fn [] (worker-state/<invoke-main-thread :thread-api/rtc-start-request repo))
+             2000)))
         (do
           (when stop-before-start? (rtc-stop))
           (let [ex (m/? (new-task--rtc-start* repo token))]
@@ -429,9 +440,16 @@
 
 (defn rtc-stop
   []
-  (when-let [canceler (:canceler @*rtc-loop-metadata)]
-    (canceler)
-    (reset! *rtc-loop-metadata empty-rtc-loop-metadata)))
+  (let [{:keys [canceler] :as metadata} @*rtc-loop-metadata]
+    (when canceler (canceler))
+    ;; ensure rtc-lock flips to false so downstream consumers see a stopped state
+    (reset! *rtc-lock nil)
+    (when-let [lse (:*last-stop-exception metadata)]
+      (reset! lse nil))
+    (if (:repo metadata)
+      ;; broadcast one more state with rtc-lock=false
+      (reset! *rtc-loop-metadata (assoc metadata :canceler nil))
+      (reset! *rtc-loop-metadata (assoc empty-rtc-loop-metadata :*rtc-lock *rtc-lock)))))
 
 (defn rtc-toggle-auto-push
   []
