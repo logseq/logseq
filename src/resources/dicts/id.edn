@@ -443,7 +443,6 @@
  :remove-heading "Hapus judul"
  :heading "Judul {1}"
  :auto-heading "Judul otomatis"
- :open-a-directory "Buka direktori lokal"
  :toggle-theme "Alihkan tema"
 
  :help/shortcut-page-title "Pintasan Papan Ketik"

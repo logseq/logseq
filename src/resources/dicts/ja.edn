@@ -465,7 +465,6 @@
  :remove-heading "見出しを消去"
  :heading "見出し {1}"
  :auto-heading "自動見出し"
- :open-a-directory "ローカルディレクトリを開く"
  :toggle-theme "テーマを切り替える"
 
  :help/shortcut-page-title "キーボードショートカット"

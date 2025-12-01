@@ -133,7 +133,6 @@
  :download "Scarica"
  :language "Lingua"
  :remove-background "Rimuovi lo sfondo"
- :open-a-directory "Apri una cartella locale"
  :help/shortcut-page-title "Scorciatoie da tastiera"
  :plugin/installed "Installati"
  :plugin/not-installed "Non installati"

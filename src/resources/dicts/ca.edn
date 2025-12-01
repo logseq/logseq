@@ -38,7 +38,6 @@
  :logout                                            "Tancar sessió"
  :new-graph                                         "Afegir nou graf"
  :new-page                                          "Nova pàgina:"
- :open-a-directory                                  "Obrir un directori local"
  :parsing-files                                     "Analitzant arxius"
  :plugins                                           "Extensions"
  :port                                              "Port"

@@ -87,7 +87,6 @@
     :login "Connexion"
     :logout "Déconnexion"
     :new-graph "Ajouter un nouveau graphe"
-    :open-a-directory "Ouvrir un dossier local"
     :plugins "Extensions"
     :port "Port"
     :re-index-detail "Reconstruire le graphe"

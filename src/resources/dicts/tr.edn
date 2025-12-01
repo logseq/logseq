@@ -458,7 +458,6 @@
  :remove-heading "Başlığı kaldır"
  :heading "Başlık {1}"
  :auto-heading "Otomatik başlık"
- :open-a-directory "Yerel bir dizin aç"
  :toggle-theme "Temayı değiştir"
 
  :help/shortcut-page-title "Klavye kısayolları"
