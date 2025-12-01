@@ -546,8 +546,17 @@
 }
 
 @container (max-width: 600px) {
-    .time-spent, .positioned-properties.block-right, .view-actions {
+    .time-spent, .positioned-properties.block-right {
         display: none;
+    }
+
+    .view-actions > * {
+        display: none;
+    }
+
+    .view-actions > .view-action-search,
+    .view-actions > .view-action-type {
+        display: inline-flex;
     }
 
     .block-row {
