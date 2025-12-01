@@ -478,7 +478,8 @@
 (rum/defc new-db-graph
   []
   (let [[creating-db? set-creating-db?] (hooks/use-state false)
-        [cloud? set-cloud?] (hooks/use-state true)
+        rtc-group? (user-handler/rtc-group?)
+        [cloud? set-cloud?] (hooks/use-state rtc-group?)
         [e2ee-rsa-key-ensured? set-e2ee-rsa-key-ensured?] (hooks/use-state nil)
         input-ref (hooks/create-ref)
         [input-value set-input-value!] (hooks/use-state "")]
@@ -487,7 +488,7 @@
      (fn []
        (let [token (state/get-auth-id-token)
              user-uuid (user-handler/user-uuid)]
-         (when (and cloud? (not e2ee-rsa-key-ensured?))
+         (when (and rtc-group? cloud? (not e2ee-rsa-key-ensured?))
            (when (and token user-uuid)
              (-> (p/let [rsa-key-pair (state/<invoke-db-worker :thread-api/get-user-rsa-key-pair token user-uuid)]
                    (set-e2ee-rsa-key-ensured? (some? rsa-key-pair)))
