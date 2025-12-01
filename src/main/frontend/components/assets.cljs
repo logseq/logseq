@@ -251,9 +251,13 @@
                        (-> (do (set-saving? true)
                                (p/all
                                 [(editor-handler/save-block-if-changed! asset-block title)
-                                 (db-property-handler/set-block-property!
-                                  (:block/id asset-block) :logseq.property.asset/external-src src)]))
-                           (p/then #())
+                                 (p/let [src (util/trim-safe src)
+                                         checksum (assets-handler/get-file-checksum src)]
+                                   (db-property-handler/set-block-properties!
+                                    (:db/id asset-block)
+                                    {:logseq.property.asset/external-src src
+                                     :logseq.property.asset/checksum checksum}))]))
+                           (p/then #(when on-saved (on-saved asset-block false)))
                            (p/catch err-handle)
                            (p/finally #(set-saving? false)))
                        )))}
@@ -267,10 +271,10 @@
 (rum/defc edit-external-src-content
   [asset-block pdf-current]
   [:div.edit-external-src-content
-   (let [on-saved! (fn [asset-block]
+   (let [on-saved! (fn [asset-block update?]
                      (when-let [uuid' (and pdf-current (:block/uuid asset-block))]
                        (when pdf-current (state/set-current-pdf! nil))
-                       (route-handler/redirect-to-page! uuid'))
+                       (when (not update?) (route-handler/redirect-to-page! uuid')))
                      (shui/dialog-close!))]
      (if asset-block
        [:div.pb-2.-mt-2
