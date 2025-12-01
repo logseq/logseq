@@ -243,7 +243,7 @@
 
 (rum/defc ^:large-vars/cleanup-todo block-title < rum/static
   "Used on table view"
-  [block* {:keys [create-new-block width row property property-ident]}]
+  [block* {:keys [create-new-block width row property]}]
   (let [*ref (hooks/use-ref nil)
         [opacity set-opacity!] (hooks/use-state 0)
         [focus-timeout set-focus-timeout!] (hooks/use-state nil)
