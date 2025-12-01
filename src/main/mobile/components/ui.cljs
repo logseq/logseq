@@ -23,8 +23,8 @@
   ([t]
    [:input.absolute.top-4.left-0.w-1.h-1.opacity-0
     {:id (str "keep-keyboard-open-input" t)
-     :auto-capitalize "off"
-     :auto-correct "false"}]))
+     :auto-capitalize "sentences"
+     :auto-correct "true"}]))
 
 (rum/defc notification-clear-all
   []
