@@ -10,8 +10,27 @@ import UIKit
 struct KeyboardHackField: UIViewRepresentable {
     @Binding var shouldShow: Bool
 
+    // Capture Backspace/Enter on the hidden field and forward to JS.
+    class KeyboardHackTextField: UITextField {
+        var onKeyPress: ((String) -> Void)?
+
+        override func deleteBackward() {
+            super.deleteBackward()
+            onKeyPress?("backspace")
+            text = ""
+        }
+
+        override func insertText(_ text: String) {
+            super.insertText(text)
+            if text == "\n" {
+                onKeyPress?("enter")
+            }
+            self.text = ""
+        }
+    }
+
     class Coordinator {
-        let textField = UITextField()
+        let textField = KeyboardHackTextField()
     }
 
     func makeCoordinator() -> Coordinator {
@@ -23,6 +42,9 @@ struct KeyboardHackField: UIViewRepresentable {
         let tf = context.coordinator.textField
         tf.isHidden = true
         tf.keyboardType = .default
+        tf.onKeyPress = { key in
+            LiquidTabsPlugin.shared?.notifyKeyboardHackKey(key: key)
+        }
         container.addSubview(tf)
         return container
     }
