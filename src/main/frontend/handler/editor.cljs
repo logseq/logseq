@@ -2848,6 +2848,32 @@
         (delete-and-update
          input current-pos (util/safe-inc-current-pos-from-start (.-value input) current-pos))))))
 
+(defn- delete-block-when-zero-pos
+  [^js e]
+  (let [^js input (state/get-input)
+        current-pos (cursor/pos input)]
+    (when (zero? current-pos)
+      (.preventDefault e)
+      (let [repo (state/get-current-repo)
+            block* (state/get-edit-block)
+            block (db/entity (:db/id block*))
+            value (gobj/get input "value")
+            editor-state (get-state)
+            custom-query? (get-in editor-state [:config :custom-query?])
+            top-block? (= (:db/id (or (ldb/get-left-sibling block) (:block/parent block)))
+                          (:db/id (:block/page block)))
+            single-block? (inside-of-single-block (.-target e))
+            root-block? (= (:block.temp/container block) (str (:block/uuid block)))]
+        (when (and (not (and top-block? (not (string/blank? value))))
+                   (not root-block?)
+                   (not single-block?)
+                   (not custom-query?))
+          (if (own-order-number-list? block)
+            (p/do!
+             (save-current-block!)
+             (remove-block-own-order-list-type! block))
+            (delete-block! repo)))))))
+
 (defn keydown-backspace-handler
   [cut? e]
   (let [^js input (state/get-input)
@@ -2860,13 +2886,7 @@
                          (util/nth-safe value (dec current-pos)))
             selected-start (util/get-selection-start input)
             selected-end (util/get-selection-end input)
-            block (state/get-edit-block)
-            block (db/entity (:db/id block))
-            repo (state/get-current-repo)
-            top-block? (= (:db/id (or (ldb/get-left-sibling block) (:block/parent block)))
-                          (:db/id (:block/page block)))
-            single-block? (inside-of-single-block (.-target e))
-            root-block? (= (:block.temp/container block) (str (:block/uuid block)))]
+            repo (state/get-current-repo)]
         (block-handler/mark-last-input-time! repo)
         (cond
           (not= selected-start selected-end)
@@ -2877,18 +2897,7 @@
             (delete-and-update input selected-start selected-end))
 
           (zero? current-pos)
-          (let [editor-state (get-state)
-                custom-query? (get-in editor-state [:config :custom-query?])]
-            (util/stop e)
-            (when (and (not (and top-block? (not (string/blank? value))))
-                       (not root-block?)
-                       (not single-block?)
-                       (not custom-query?))
-              (if (own-order-number-list? block)
-                (p/do!
-                 (save-current-block!)
-                 (remove-block-own-order-list-type! block))
-                (delete-block! repo))))
+          (delete-block-when-zero-pos e)
 
           (and (> current-pos 0)
                (contains? #{commands/command-trigger commands/command-ask}
