@@ -443,6 +443,7 @@
  :graph/all-graphs "All graphs"
  :graph/local-graphs "Local graphs:"
  :graph/remote-graphs "Remote graphs:"
+ :graph/shared-graphs "Shared graphs:"
  :export "Export"
  :export-graph "Export graph"
  :export-page "Export page"
