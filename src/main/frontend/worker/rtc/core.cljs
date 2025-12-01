@@ -523,7 +523,8 @@
             (m/?<
              (m/latest
               (fn [rtc-state rtc-auto-push? rtc-remote-profile?
-                   rtc-lock online-users pending-local-ops-count pending-asset-ops-count [local-tx remote-tx]]
+                   rtc-lock online-users pending-local-ops-count pending-asset-ops-count
+                   [local-tx remote-tx] last-stop-ex]
                 {:graph-uuid graph-uuid
                  :local-graph-schema-version (db-schema/schema-version->string local-graph-schema-version)
                  :remote-graph-schema-version (db-schema/schema-version->string remote-graph-schema-version)
@@ -537,13 +538,14 @@
                  :auto-push? rtc-auto-push?
                  :remote-profile? rtc-remote-profile?
                  :online-users online-users
-                 :last-stop-exception-ex-data (some-> *last-stop-exception deref ex-data)})
+                 :last-stop-exception-ex-data (some-> last-stop-ex ex-data)})
               rtc-state-flow
               (m/watch *rtc-auto-push?) (m/watch *rtc-remote-profile?)
               (m/watch *rtc-lock') (m/watch *online-users)
               (client-op/create-pending-block-ops-count-flow repo)
               (client-op/create-pending-asset-ops-count-flow repo)
-              (rtc-log-and-state/create-local&remote-t-flow graph-uuid))))
+              (rtc-log-and-state/create-local&remote-t-flow graph-uuid)
+              (m/watch *last-stop-exception))))
           (catch Cancelled _))))))
 
 (def ^:private create-get-state-flow (c.m/throttle 300 create-get-state-flow*))
