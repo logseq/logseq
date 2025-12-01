@@ -317,3 +317,7 @@ div[data-radix-menu-content] {
   @apply overflow-y-auto;
   padding-bottom: 80px;
 }
+
+.ls-nlp-calendar {
+    @apply flex-1;
+}
