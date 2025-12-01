@@ -817,7 +817,8 @@
                                       (when (= (util/ekey e) "Escape")
                                         (editor-on-hide state :esc e))))
                :auto-focus true
-               :auto-capitalize "off"
+               :auto-capitalize (if (util/mobile?) "sentences" "off")
+               :auto-correct (if (util/mobile?) "true" "false")
                :class heading-class}
                (some? parent-block)
                (assoc :parentblockid (str (:block/uuid parent-block)))
