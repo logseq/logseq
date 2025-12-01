@@ -489,7 +489,6 @@
  :remove-heading "Remove heading"
  :heading "Heading {1}"
  :auto-heading "Auto heading"
- :open-a-directory "Open a local directory"
  :toggle-theme      "Toggle theme"
 
  :help/shortcut-page-title "Keyboard shortcuts"

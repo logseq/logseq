@@ -25,7 +25,6 @@
  :login "Inloggen"
  :logout "Uitloggen"
  :new-graph "Nieuwe grafiek toevoegen"
- :open-a-directory "Open een lokale map"
  :parsing-files "Bestanden analyseren"
  :plugins "Plugins"
  :port "Poort"

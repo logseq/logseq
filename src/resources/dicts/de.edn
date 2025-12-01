@@ -44,7 +44,6 @@
  :new-graph "Neuen Graphen hinzufügen"
  :new-page "Neue Seite:"
  :new-tag "Neuer Tag:"
- :open-a-directory "Öffne ein lokales Verzeichnis"
  :parsing-files "Dateien analysieren"
  :plugins "Plugins"
  :port "Port"
