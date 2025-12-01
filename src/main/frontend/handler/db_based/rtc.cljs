@@ -144,22 +144,27 @@
 
 (defn <get-remote-graphs
   []
-  (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
-          token (state/get-auth-id-token)
-          graphs (state/<invoke-db-worker :thread-api/rtc-get-graphs token)
-          result (->> graphs
-                      (remove (fn [graph] (= (:graph-status graph) "deleting")))
-                      (mapv (fn [graph]
-                              (merge
-                               (let [url (str config/db-version-prefix (:graph-name graph))]
-                                 {:url url
-                                  :GraphName (:graph-name graph)
-                                  :GraphSchemaVersion (:graph-schema-version graph)
-                                  :GraphUUID (:graph-uuid graph)
-                                  :rtc-graph? true})
-                               (dissoc graph :graph-uuid :graph-name)))))]
-    (state/set-state! :rtc/graphs result)
-    (repo-handler/refresh-repos!)))
+  (->
+   (p/let [_ (state/set-state! [:file-sync/remote-graphs :loading] true)
+           _ (js/Promise. user-handler/task--ensure-id&access-token)
+           token (state/get-auth-id-token)
+           graphs (state/<invoke-db-worker :thread-api/rtc-get-graphs token)
+           result (->> graphs
+                       (remove (fn [graph] (= (:graph-status graph) "deleting")))
+                       (mapv (fn [graph]
+                               (merge
+                                (let [url (str config/db-version-prefix (:graph-name graph))]
+                                  {:url url
+                                   :GraphName (:graph-name graph)
+                                   :GraphSchemaVersion (:graph-schema-version graph)
+                                   :GraphUUID (:graph-uuid graph)
+                                   :rtc-graph? true})
+                                (dissoc graph :graph-uuid :graph-name)))))]
+     (state/set-state! :rtc/graphs result)
+     (repo-handler/refresh-repos!))
+   (p/finally
+     (fn []
+       (state/set-state! [:file-sync/remote-graphs :loading] false)))))
 
 (defn <rtc-invite-email
   [graph-uuid email]
