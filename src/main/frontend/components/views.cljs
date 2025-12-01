@@ -1988,12 +1988,13 @@
 
       (when db-based? (filter-properties view-entity columns table option))
 
-      (search input {:on-change set-input!
-                     :set-input! set-input!})
+      [:div.view-action-search
+       (search input {:on-change set-input!
+                      :set-input! set-input!})]
 
       (when db-based?
-        [:div.text-muted-foreground.text-sm
-         (pv/property-value view-entity (db/entity :logseq.property.view/type) {})])
+        [:div.view-action-type.text-muted-foreground.text-sm
+         (pv/property-value view-entity (db/entity :logseq.property.view/type) {:icon? true})])
 
       (when db-based? (more-actions view-entity columns table option))
 
