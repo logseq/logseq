@@ -150,7 +150,6 @@
  :download "Ściągnij"
  :language "Język"
  :remove-background "Usuń tło"
- :open-a-directory "Otwórz lokalny katalog"
  :help/shortcut-page-title "Skróty klawiszowe"
  :plugin/installed "Zainstalowany"
  :plugin/not-installed "Nie zainstalowany"

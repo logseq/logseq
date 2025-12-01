@@ -478,14 +478,24 @@
 (rum/defc new-db-graph
   []
   (let [[creating-db? set-creating-db?] (hooks/use-state false)
-        [cloud? set-cloud?] (hooks/use-state false)
+        [cloud? set-cloud?] (hooks/use-state true)
         [e2ee-rsa-key-ensured? set-e2ee-rsa-key-ensured?] (hooks/use-state nil)
-        input-ref (hooks/create-ref)]
+        input-ref (hooks/create-ref)
+        [input-value set-input-value!] (hooks/use-state "")]
+
     (hooks/use-effect!
      (fn []
-       (when-let [^js input (hooks/deref input-ref)]
-         (js/setTimeout #(.focus input) 32)))
+       (let [token (state/get-auth-id-token)
+             user-uuid (user-handler/user-uuid)]
+         (when (and cloud? (not e2ee-rsa-key-ensured?))
+           (when (and token user-uuid)
+             (-> (p/let [rsa-key-pair (state/<invoke-db-worker :thread-api/get-user-rsa-key-pair token user-uuid)]
+                   (set-e2ee-rsa-key-ensured? (some? rsa-key-pair)))
+                 (p/catch (fn [e]
+                            (log/error :get-user-rsa-key-pair e)
+                            e)))))))
      [])
+
     (letfn [(new-db-f [graph-name]
               (when-not (or (string/blank? graph-name)
                             creating-db?)
@@ -515,28 +525,22 @@
        (shui/input
         {:disabled creating-db?
          :ref input-ref
-         :placeholder "your graph name"
+         :auto-focus true
+         :placeholder "Graph name"
          :on-key-down submit!
+         :on-change (fn [e] (set-input-value! (util/evalue e)))
+         :value input-value
          :autoComplete "off"})
        (when (user-handler/rtc-group?)
          [:div.flex.flex-col
           [:div.flex.flex-row.items-center.gap-1
            (shui/checkbox
             {:id "rtc-sync"
-             :value cloud?
+             :checked cloud?
              :on-checked-change
              (fn []
-               (let [v (boolean (not cloud?))
-                     token (state/get-auth-id-token)
-                     user-uuid (user-handler/user-uuid)]
-                 (set-cloud? v)
-                 (when (and (true? v) (not e2ee-rsa-key-ensured?))
-                   (when (and token user-uuid)
-                     (-> (p/let [rsa-key-pair (state/<invoke-db-worker :thread-api/get-user-rsa-key-pair token user-uuid)]
-                           (set-e2ee-rsa-key-ensured? (some? rsa-key-pair)))
-                         (p/catch (fn [e]
-                                    (log/error :get-user-rsa-key-pair e)
-                                    e)))))))})
+               (let [v (boolean (not cloud?))]
+                 (set-cloud? v)))})
            [:label.opacity-70.text-sm
             {:for "rtc-sync"}
             "Use Logseq Sync?"]]
@@ -545,7 +549,8 @@
              {:for "rtc-sync"}
              "Need to init E2EE settings first, Settings > Encryption"])])
        (shui/button
-        {:disabled (and cloud? (not e2ee-rsa-key-ensured?))
+        {:disabled (or (and cloud? (not e2ee-rsa-key-ensured?))
+                       (string/blank? input-value))
          :on-click #(submit! % true)
          :on-key-down submit!}
         (if creating-db?

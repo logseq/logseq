@@ -445,7 +445,6 @@
  :remove-heading "Remover cabeçalho"
  :heading "Cabeçalho {1}"
  :auto-heading "Cabeçalho automático"
- :open-a-directory "Abrir um diretório local"
  :toggle-theme "Alternar tema"
 
  :help/shortcut-page-title "Atalhos de teclado"

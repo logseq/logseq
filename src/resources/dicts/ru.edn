@@ -327,7 +327,6 @@
  :remove-heading                                       "Удалить заголовок"
  :heading                                              "Заголовок {1}"
  :auto-heading                                         "Автоматический заголовок"
- :open-a-directory                                     "Открыть локальный каталог"
  :toggle-theme                                         "Переключить тему"
 
  :help/shortcut-page-title                             "Сочетания клавиш"
