@@ -197,15 +197,11 @@
   [{:keys [hls-file]}]
   (when hls-file
     (let [repo (state/get-current-repo)
-          repo-dir (config/get-repo-dir repo)
-          db-base? (config/db-based-graph? repo)]
+          repo-dir (config/get-repo-dir repo)]
       (p/let [_    (fs/create-if-not-exists repo repo-dir hls-file "{:highlights []}")
               res  (fs/read-file repo-dir hls-file)
               data (if res (reader/read-string res) {})]
-        (if db-base?
-          (p/let [hls-page (file-based-ensure-ref-page! (state/get-current-pdf))]
-            (construct-highlights-from-hls-page hls-page))
-          data)))))
+        data))))
 
 (defn file-based-persist-hls-data$
   [{:keys [hls-file]} highlights extra]
@@ -220,6 +216,17 @@
   ;; TODO: fuzzy match
   (when-let [hls-file (and target-key (str common-config/local-assets-dir "/" target-key ".edn"))]
     (file-based-load-hls-data$ {:hls-file hls-file})))
+
+(defn db-based-load-hls-data$
+  [{:keys [block]}]
+  (p/let [ref-id (:db/id block)
+          data (db-async/<q (state/get-current-repo) {:transact-db? false}
+                            '[:find (pull ?e [*])
+                              :in $ ?ref-id
+                              :where [?e :logseq.property/asset ?ref-id]]
+                            ref-id)]
+    (let [highlights (some->> data (flatten) (map #(:logseq.property.pdf/hl-value %)) (vec))]
+      {:highlights highlights})))
 
 (defn area-highlight?
   [hl]

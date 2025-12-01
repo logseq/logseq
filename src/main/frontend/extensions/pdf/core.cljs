@@ -977,23 +977,22 @@
 
     (hooks/use-effect!
      (fn []
-       (if file-based?
-         (-> (p/let [data (pdf-assets/file-based-load-hls-data$ pdf-current)
-                     {:keys [highlights extra]} data]
-               (set-initial-page! (or (when-let [page (:page extra)]
-                                        (util/safe-parse-int page)) 1))
-               (set-initial-scale! (or (:scale extra) "auto"))
-               (set-hls-state! {:initial-hls highlights :latest-hls highlights :extra extra :loaded true}))
-             (p/catch
-              (fn [^js e]
-                (js/console.error "[load hls error]" e)
-                (let [msg (str (util/format "Error: failed to load the highlights file: \"%s\". \n"
-                                            (:hls-file pdf-current))
-                               e)]
-                  (notification/show! msg :error)
-                  (set-hls-state! {:loaded true :error e})))))
-         ;; for db-based, just mark loaded
-         (set-hls-state! {:loaded true}))
+       (-> (p/let [data (if db-based?
+                          (pdf-assets/db-based-load-hls-data$ pdf-current)
+                          (pdf-assets/file-based-load-hls-data$ pdf-current))
+                   {:keys [highlights extra]} data]
+             (set-initial-page! (or (when-let [page (:page extra)]
+                                      (util/safe-parse-int page)) 1))
+             (set-initial-scale! (or (:scale extra) "auto"))
+             (set-hls-state! {:initial-hls highlights :latest-hls highlights :extra extra :loaded true}))
+           (p/catch
+            (fn [^js e]
+              (js/console.error "[load hls error]" e)
+              (let [msg (str (util/format "Error: failed to load the highlights file: \"%s\". \n"
+                                          (:hls-file pdf-current))
+                             e)]
+                (notification/show! msg :error)
+                (set-hls-state! {:loaded true :error e})))))
        #())
      [hls-file pdf-current])
 
