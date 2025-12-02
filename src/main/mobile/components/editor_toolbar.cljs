@@ -3,6 +3,7 @@
   (:require [frontend.colors :as colors]
             [frontend.commands :as commands]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.history :as history]
             [frontend.mobile.camera :as mobile-camera]
             [frontend.mobile.haptics :as haptics]
             [frontend.mobile.util :as mobile-util]
@@ -66,6 +67,26 @@
    :handler (fn []
               (blur-if-compositing)
               (editor-handler/indent-outdent indent?))})
+
+(defn- undo-action
+  []
+  {:id "undo"
+   :title "Undo"
+   :system-icon "arrow.uturn.backward"
+   :event? true
+   :handler (fn []
+              (blur-if-compositing)
+              (history/undo!))})
+
+(defn- redo-action
+  []
+  {:id "redo"
+   :title "Redo"
+   :system-icon "arrow.uturn.forward"
+   :event? true
+   :handler (fn []
+              (blur-if-compositing)
+              (history/redo!))})
 
 (defn- todo-action
   []
@@ -143,20 +164,24 @@
   (let [audio (audio-action)
         keyboard (keyboard-action)
         main-actions (if quick-add?
-                       [(todo-action)
+                       [(undo-action)
+                        (todo-action)
                         audio
                         (camera-action)
                         (tag-action)
                         (page-ref-action)
                         (indent-outdent-action false)
-                        (indent-outdent-action true)]
-                       [(todo-action)
+                        (indent-outdent-action true)
+                        (redo-action)]
+                       [(undo-action)
+                        (todo-action)
                         (indent-outdent-action false)
                         (indent-outdent-action true)
                         (tag-action)
                         (camera-action)
                         (page-ref-action)
-                        (slash-action)])]
+                        (slash-action)
+                        (redo-action)])]
     {:main main-actions
      :trailing (if quick-add? (capture-action) keyboard)}))
 
