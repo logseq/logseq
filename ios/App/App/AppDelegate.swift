@@ -134,6 +134,22 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
     // MARK: Navigation operations
     // ---------------------------------------------------------
 
+    private func emptyNavStack(path: String) {
+        let path = normalizedPath(path)
+        guard let nav = navController else { return }
+
+        ignoreRoutePopCount = 0
+        popSnapshotView?.removeFromSuperview()
+        popSnapshotView = nil
+
+        let vc = NativePageViewController(path: path, push: false)
+        pathStack = [path]
+
+        nav.setViewControllers([vc], animated: false)
+        SharedWebViewController.instance.clearPlaceholder()
+        SharedWebViewController.instance.attach(to: vc)
+    }
+
     private func pushIfNeeded(path: String, animated: Bool) {
         let path = normalizedPath(path)
         guard let nav = navController else { return }
@@ -317,6 +333,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
             let navigationType = (notification.userInfo?["navigationType"] as? String) ?? "push"
 
             switch navigationType {
+            case "reset":
+                self.emptyNavStack(path: path)
+
             case "replace":
                 self.replaceTop(path: path)
 
