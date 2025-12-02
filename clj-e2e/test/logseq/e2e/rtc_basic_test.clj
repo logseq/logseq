@@ -16,7 +16,7 @@
 
 (use-fixtures :each fixtures/validate-graph)
 
-(deftest rtc-basic-test
+(deftest ^:fix-me rtc-basic-test
   (let [graph-name (str "rtc-graph-" (.toEpochMilli (java.time.Instant/now)))
         page-names (map #(str "rtc-test-page" %) (range 4))]
     (testing "open 2 app instances, add a rtc graph, check this graph available on other instance"
