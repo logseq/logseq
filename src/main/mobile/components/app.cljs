@@ -87,15 +87,17 @@
 
 (rum/defc other-page
   [view tab route-match]
-  [:div#main-content-container.px-5.ls-layer
-   (if view
-     (view route-match)
-     (case (keyword tab)
-       :home nil
-       :favorites (favorites/favorites)
+  (let [tab' (keyword tab)]
+    [:div#main-content-container.px-5.ls-layer
+     (case tab'
        :settings (settings/page)
-       :search (search/search)
-       nil))])
+       (if view
+         (view route-match)
+         (case tab'
+           :home nil
+           :favorites (favorites/favorites)
+           :search (search/search)
+           nil)))]))
 
 (rum/defc main-content < rum/static
   [tab route-match]
