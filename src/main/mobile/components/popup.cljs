@@ -52,15 +52,16 @@
         (editor-handler/quick-add-open-last-block!))
 
       dismissing?
-      (do
-        (when (mobile-state/quick-add-open?)
-          (when-let [tab @mobile-state/*tab]
-            (mobile-state/set-tab! tab)))
+      (let [capture? (mobile-state/quick-add-open?)]
         (when (some? @mobile-state/*popup-data)
           (p/do!
            (mobile-state/set-popup! nil)
            (reset! *last-popup-data nil)
-           (state/pub-event! [:mobile/clear-edit]))))
+           (.dismiss ^js mobile-util/native-editor-toolbar)
+           (state/pub-event! [:mobile/clear-edit])
+           (when capture?
+             (when-let [tab @mobile-state/*tab]
+               (mobile-state/set-tab! tab))))))
 
       :else
       nil)))
