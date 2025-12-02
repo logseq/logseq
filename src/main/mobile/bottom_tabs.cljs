@@ -84,10 +84,12 @@
   (do
     (add-tab-selected-listener!
      (fn [tab]
-       (let [exit-quick-add? (= @*previous-tab "quick-add")]
+       (let [exit-quick-add? (= @*previous-tab "quick-add")
+             search? (= "search" tab)]
          (reset! mobile-state/*search-input "")
-         (when-not (contains? #{"quick-add"} tab)
-           (when-not exit-quick-add?
+         (when-not (or (contains? #{"quick-add"} tab)
+                       (= tab @*previous-tab))
+           (when-not (or exit-quick-add? search?)
              (mobile-nav/reset-route!))
            (mobile-state/set-tab! tab))
 
@@ -114,7 +116,7 @@
        (js/console.log "Native search query" q)
        (reset! mobile-state/*search-input q)
        (reset! mobile-state/*search-last-input-at (common-util/time-ms))
-       (when (= :page (get-in (state/get-route-match) [:data :name]))
+       (when (= :page (state/get-current-route))
          (mobile-nav/reset-route!))))
     (add-keyboard-hack-listener!)))
 
