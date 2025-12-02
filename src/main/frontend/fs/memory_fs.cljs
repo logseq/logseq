@@ -30,7 +30,6 @@
                        (p/recur result (concat (rest dirs) dir-content)))))]
     result))
 
-
 (defn- <ensure-dir!
   "dir is path, without memory:// prefix for simplicity"
   [dir]
@@ -72,6 +71,15 @@
         (p/do! (js/window.pfs.mkdir (first remains))
                (p/recur (rest remains)))))))
 
+(defn- read-file-aux
+  [dir path {:keys [text?]
+             :as options}]
+  (p/let [fpath (path/url-to-path (path/path-join dir path))
+          result (js/window.pfs.readFile fpath (clj->js options))]
+    (if text?
+      (.toString ^js result)
+      result)))
+
 (defrecord MemoryFs []
   protocol/Fs
   (mkdir! [_this dir]
@@ -106,8 +114,9 @@
     (let [fpath (path/url-to-path dir)]
       (js/window.workerThread.rimraf fpath)))
   (read-file [_this dir path options]
-    (let [fpath (path/url-to-path (path/path-join dir path))]
-      (js/window.pfs.readFile fpath (clj->js options))))
+    (read-file-aux dir path (assoc options :text? true)))
+  (read-file-raw [_this dir path options]
+    (read-file-aux dir path options))
   (write-file! [_this _repo dir rpath content _opts]
     (p/let [fpath (path/url-to-path (path/path-join dir rpath))
             containing-dir (path/parent fpath)

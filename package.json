@@ -4,7 +4,7 @@
     "private": true,
     "main": "static/electron.js",
     "engines": {
-        "node": ">=20.19.1"
+        "node": ">=22.20.0"
     },
     "devDependencies": {
         "@axe-core/playwright": "=4.4.4",
@@ -105,17 +105,19 @@
         "tldraw:build": "yarn --cwd packages/tldraw install",
         "amplify:build": "yarn --cwd packages/amplify install",
         "ui:build": "yarn --cwd packages/ui install",
-        "postinstall": "yarn tldraw:build && yarn amplify:build && yarn ui:build"
+        "postinstall": "yarn tldraw:build && yarn ui:build"
     },
     "dependencies": {
+        "@aparajita/capacitor-secure-storage": "^7.1.6",
         "@capacitor-community/safe-area": "7.0.0-alpha.1",
         "@capacitor/action-sheet": "7.0.1",
         "@capacitor/android": "7.2.0",
         "@capacitor/app": "7.0.1",
         "@capacitor/camera": "7.0.1",
-        "@capacitor/clipboard": "7.0.1",
+        "@capacitor/clipboard": "^7.0.2",
         "@capacitor/core": "7.2.0",
         "@capacitor/device": "^7.0.2",
+        "@capacitor/dialog": "^7.0.2",
         "@capacitor/filesystem": "7.0.1",
         "@capacitor/haptics": "7.0.1",
         "@capacitor/ios": "7.2.0",

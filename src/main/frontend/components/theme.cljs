@@ -1,5 +1,6 @@
 (ns frontend.components.theme
-  (:require [electron.ipc :as ipc]
+  (:require [clojure.string :as string]
+            [electron.ipc :as ipc]
             [frontend.components.settings :as settings]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -62,13 +63,18 @@
      [accent-color])
 
     (hooks/use-effect!
-     #(some-> js/document.documentElement
-              (.setAttribute "data-font" (or editor-font "default")))
-     [editor-font])
+      (fn []
+        (when-let [{:keys [type global]} editor-font]
+          (doto js/document.documentElement
+            (.setAttribute "data-font" (or type "default"))
+            (.setAttribute "data-font-global" (boolean global)))))
+      [editor-font])
 
     (hooks/use-effect!
      #(let [doc js/document.documentElement]
-        (.setAttribute doc "lang" preferred-language)))
+        (.setAttribute doc "lang" preferred-language)
+        (some-> preferred-language (string/lower-case) (js/LSI18N.setLocale)))
+     [preferred-language])
 
     (hooks/use-effect!
      #(js/setTimeout

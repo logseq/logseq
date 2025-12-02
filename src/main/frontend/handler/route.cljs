@@ -27,6 +27,7 @@
   (shui/popup-hide!)
   (let [route-fn (if push rfe/push-state rfe/replace-state)]
     (route-fn to path-params query-params))
+
   ;; force return nil for usage in render phase of React
   nil)
 

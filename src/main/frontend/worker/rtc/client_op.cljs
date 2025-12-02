@@ -5,6 +5,7 @@
             [frontend.worker.rtc.malli-schema :as rtc-schema]
             [frontend.worker.state :as worker-state]
             [lambdaisland.glogi :as log]
+            [logseq.db :as ldb]
             [logseq.db.sqlite.util :as sqlite-util]
             [malli.core :as ma]
             [malli.transform :as mt]
@@ -89,19 +90,13 @@
    :db-ident {:db/unique :db.unique/identity}
    :db-ident-or-block-uuid {:db/unique :db.unique/identity}
    :local-tx {:db/index true}
-   :graph-uuid {:db/index true}
-   :aes-key-jwk {:db/index true}
-
-   ;; device
-   :device/uuid {:db/unique :db.unique/identity}
-   :device/public-key-jwk {}
-   :device/private-key-jwk {}})
+   :graph-uuid {:db/index true}})
 
 (defn update-graph-uuid
   [repo graph-uuid]
   {:pre [(some? graph-uuid)]}
   (when-let [conn (worker-state/get-client-ops-conn repo)]
-    (d/transact! conn [[:db/add "e" :graph-uuid graph-uuid]])))
+    (ldb/transact! conn [[:db/add "e" :graph-uuid graph-uuid]])))
 
 (defn get-graph-uuid
   [repo]
@@ -117,13 +112,13 @@
           (if-let [datom (first (d/datoms @conn :avet :local-tx))]
             [:db/add (:e datom) :local-tx t]
             [:db/add "e" :local-tx t])]
-      (d/transact! conn [tx-data]))))
+      (ldb/transact! conn [tx-data]))))
 
 (defn remove-local-tx
   [repo]
   (when-let [conn (worker-state/get-client-ops-conn repo)]
     (when-let [datom (first (d/datoms @conn :avet :local-tx))]
-      (d/transact! conn [[:db/retract (:e datom) :local-tx]]))))
+      (ldb/transact! conn [[:db/retract (:e datom) :local-tx]]))))
 
 (defn get-local-tx
   [repo]
@@ -291,7 +286,7 @@
           tx-data2 (when (seq update-kv-value-ops) (generate-ident-kv-ops-tx-data @conn update-kv-value-ops))
           tx-data3 (when (seq rename-db-ident-ops) (generate-rename-db-ident-ops-tx-data rename-db-ident-ops))]
       (when-let [tx-data (not-empty (concat tx-data1 tx-data2 tx-data3))]
-        (d/transact! conn tx-data)))))
+        (ldb/transact! conn tx-data)))))
 
 (defn- get-all-block-ops*
   "Return e->op-map"
@@ -352,7 +347,7 @@
   (let [e->op-map (get-all-block-ops* @conn)
         retract-all-tx-data (mapcat (fn [e] (map (fn [a] [:db.fn/retractAttribute e a]) block-op-types))
                                     (keys e->op-map))]
-    (d/transact! conn retract-all-tx-data)
+    (ldb/transact! conn retract-all-tx-data)
     (vals e->op-map)))
 
 (defn- get&remove-all-update-kv-value-ops*
@@ -360,7 +355,7 @@
   (let [e->op-map (get-all-update-kv-value-ops* @conn)
         retract-all-tx-data (mapcat (fn [e] (map (fn [a] [:db.fn/retractAttribute e a]) update-kv-value-op-types))
                                     (keys e->op-map))]
-    (d/transact! conn retract-all-tx-data)
+    (ldb/transact! conn retract-all-tx-data)
     (vals e->op-map)))
 
 (defn- get&remove-all-rename-db-ident-ops*
@@ -368,7 +363,7 @@
   (let [e->op-map (get-all-rename-db-ident-ops* @conn)
         retract-all-tx-data (mapcat (fn [e] (map (fn [a] [:db.fn/retractAttribute e a]) db-ident-rename-op-types))
                                     (keys e->op-map))]
-    (d/transact! conn retract-all-tx-data)
+    (ldb/transact! conn retract-all-tx-data)
     (vals e->op-map)))
 
 (defn get-all-block-ops
@@ -468,7 +463,7 @@
                             (cond-> [{:block/uuid block-uuid
                                       :remove-asset op}]
                               update-asset-op (conj [:db.fn/retractAttribute e :update-asset]))))))]
-            (d/transact! conn tx-data)))))))
+            (ldb/transact! conn tx-data)))))))
 
 (defn add-all-exists-asset-as-ops
   [repo]
@@ -516,7 +511,7 @@
   (when-let [conn (worker-state/get-client-ops-conn repo)]
     (let [ent (d/entity @conn [:block/uuid asset-uuid])]
       (when-let [e (:db/id ent)]
-        (d/transact! conn (map (fn [a] [:db.fn/retractAttribute e a]) asset-op-types))))))
+        (ldb/transact! conn (map (fn [a] [:db.fn/retractAttribute e a]) asset-op-types))))))
 
 (defn create-pending-asset-ops-count-flow
   [repo]

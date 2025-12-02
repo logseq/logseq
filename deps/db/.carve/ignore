@@ -17,6 +17,8 @@ logseq.db.frontend.class/build-new-class
 ;; API
 logseq.db.frontend.class/logseq-class?
 ;; API
+logseq.db.frontend.class/disallowed-inline-tags
+;; API
 logseq.db.frontend.db-ident/ensure-unique-db-ident
 ;; API
 logseq.db.frontend.db-ident/replace-db-ident-random-suffix
@@ -46,5 +48,7 @@ logseq.db.sqlite.gc/gc-kvs-table!
 logseq.db.sqlite.gc/gc-kvs-table-node-version!
 ;; API
 logseq.db.sqlite.gc/ensure-no-garbage
+;; API
+logseq.db.common.entity-util/entity->map
 ;; documenting keywords
 logseq.db.frontend.kv-entity/kv-entities

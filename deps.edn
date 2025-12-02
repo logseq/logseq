@@ -5,7 +5,8 @@
                                          :sha     "5d672bf84ed944414b9f61eeb83808ead7be9127"}
 
   datascript/datascript                 {:git/url "https://github.com/logseq/datascript" ;; fork
-                                         :sha     "45f6721bf2038c24eb9fe3afb422322ab3f473b5"}
+                                         :sha     "3971e2d43bd93d89f42191dc7b4b092989e0cc61"}
+  ;; datascript/datascript                 {:local/root "../../datascript"}
 
   datascript-transit/datascript-transit {:mvn/version "0.3.0"}
   borkdude/rewrite-edn                  {:mvn/version "0.4.9"}
@@ -27,7 +28,8 @@
   org.clojure/core.async                {:mvn/version "1.6.673"}
   thheller/shadow-cljs                  {:mvn/version "2.28.23"}
   expound/expound                       {:mvn/version "0.8.6"}
-  com.lambdaisland/glogi                {:mvn/version "1.1.144"}
+  com.lambdaisland/glogi                {:git/url "https://github.com/lambdaisland/glogi"
+                                         :git/sha "30328a045141717aadbbb693465aed55f0904976"}
   binaryage/devtools                    {:mvn/version "1.0.5"}
   camel-snake-kebab/camel-snake-kebab   {:mvn/version "0.4.3"}
   instaparse/instaparse                 {:mvn/version "1.4.10"}
@@ -41,7 +43,7 @@
   logseq/shui                           {:local/root "deps/shui"}
   metosin/malli                         {:mvn/version "0.16.1"}
   com.cognitect/transit-cljs            {:mvn/version "0.8.280"}
-  missionary/missionary                 {:mvn/version "b.44"}
+  missionary/missionary                 {:mvn/version "b.46"}
   meander/epsilon                       {:mvn/version "0.0.650"}
 
   io.github.open-spaced-repetition/cljc-fsrs {:git/sha "eeef3520df664e51c3d0ba2031ec2ba071635442"

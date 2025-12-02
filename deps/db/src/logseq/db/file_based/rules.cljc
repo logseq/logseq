@@ -88,6 +88,5 @@
          [(contains? ?v ?str-val)])]
 
    :page-ref
-   '[(page-ref ?b ?page-name)
-     [?br :block/name ?page-name]
-     (has-ref ?b ?br)]})
+   '[(page-ref ?b ?ref)
+     (has-ref ?b ?ref)]})

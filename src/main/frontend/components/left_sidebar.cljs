@@ -12,7 +12,6 @@
             [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as db-model]
             [frontend.extensions.fsrs :as fsrs]
-            [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.handler.block :as block-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.recent :as recent-handler]
@@ -26,8 +25,6 @@
             [frontend.util :as util]
             [frontend.util.page :as page-util]
             [goog.object :as gobj]
-            [logseq.common.config :as common-config]
-            [logseq.common.util.namespace :as ns-util]
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
@@ -119,21 +116,12 @@
            (assoc :title (block-handler/block-unique-title page))))
        [:span.page-icon {:key "page-icon"} icon]
        [:span.page-title {:key "title"
-                          :class (when untitled? "opacity-50")
-                          :style {:display "ruby"}}
+                          :class (when untitled? "opacity-50")}
         (cond
           (not (db/page? page))
           (block/inline-text :markdown (string/replace (apply str (take 64 (:block/title page))) "\n" " "))
           untitled? (t :untitled)
-          :else (let [title' (pdf-utils/fix-local-asset-pagename title)
-                      parent (:block/parent page)]
-                  (if (and parent
-                           (not (or (ldb/class? page)
-                                    (and (:logseq.property/built-in? parent)
-                                         (= (:block/title parent)
-                                            common-config/library-page-name)))))
-                    (str (:block/title parent) ns-util/parent-char title')
-                    title')))]
+          :else (block-handler/block-unique-title page))]
 
      ;; dots trigger
        (shui/button

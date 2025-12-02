@@ -210,7 +210,7 @@
                  :url "link"
                  :property "letter-p"
                  :page "page"
-                 :node "letter-n"
+                 :node "point-filled"
                  "letter-t"))]
     (ui/icon icon {:class "opacity-50"
                    :size 15})))
@@ -370,6 +370,7 @@
         property-key (rum/react *property-key)
         batch? (pv/batch-operation?)
         hide-property-key? (or (contains? #{:date :datetime} (:logseq.property/type property))
+                               (= (:db/ident property) :logseq.property/icon)
                                (pv/select-type? block property)
                                (and
                                 batch?
@@ -506,7 +507,7 @@
                 (pv/property-value block property opts))]]])]))))
 
 (rum/defc ordered-properties
-  [block properties* opts]
+  [block properties* sorted-property-entities opts]
   (let [[properties set-properties!] (hooks/use-state properties*)
         [properties-order set-properties-order!] (hooks/use-state (mapv first properties))
         m (zipmap (map first properties*) (map second properties*))
@@ -530,15 +531,21 @@
                {:sort-by-inner-element? true
                 :on-drag-end (fn [properties-order {:keys [active-id over-id direction]}]
                                (set-properties-order! properties-order)
-                               (let [move-down? (= direction :down)
-                                     over (db/entity (keyword over-id))
-                                     active (db/entity (keyword active-id))
-                                     over-order (:block/order over)
-                                     new-order (if move-down?
-                                                 (let [next-order (db-order/get-next-order (db/get-db) nil (:db/id over))]
-                                                   (db-order/gen-key over-order next-order))
-                                                 (let [prev-order (db-order/get-prev-order (db/get-db) nil (:db/id over))]
-                                                   (db-order/gen-key prev-order over-order)))]
+                               (p/let [;; Before reordering properties,
+                                       ;; check if the :block/order of these properties is reasonable.
+                                       normalize-tx-data (db-property/normalize-sorted-entities-block-order
+                                                          sorted-property-entities)
+                                       _ (when (seq normalize-tx-data)
+                                           (db/transact! (state/get-current-repo) normalize-tx-data))
+                                       move-down? (= direction :down)
+                                       over (db/entity (keyword over-id))
+                                       active (db/entity (keyword active-id))
+                                       over-order (:block/order over)
+                                       new-order (if move-down?
+                                                   (let [next-order (db-order/get-next-order (db/get-db) nil (:db/id over))]
+                                                     (db-order/gen-key over-order next-order))
+                                                   (let [prev-order (db-order/get-prev-order (db/get-db) nil (:db/id over))]
+                                                     (db-order/gen-key prev-order over-order)))]
                                  (db/transact! (state/get-current-repo)
                                                [{:db/id (:db/id active)
                                                  :block/order new-order}
@@ -549,12 +556,10 @@
 (rum/defc properties-section < rum/static
   [block properties opts]
   (when (seq properties)
-      ;; Sort properties by :block/order
-    (let [properties' (sort-by (fn [[k _v]]
-                                 (if (= k :logseq.property.class/properties)
-                                   "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
-                                   (:block/order (db/entity k)))) properties)]
-      (ordered-properties block properties' opts))))
+    (let [sorted-prop-entities (db-property/sort-properties (map (comp db/entity first) properties))
+          prop-kv-map (reduce (fn [m [p v]] (assoc m p v)) {} properties)
+          properties' (keep (fn [ent] (find prop-kv-map (:db/ident ent))) sorted-prop-entities)]
+      (ordered-properties block properties' sorted-prop-entities opts))))
 
 (rum/defc hidden-properties-cp
   [block hidden-properties {:keys [root-block? sidebar-properties?] :as opts}]

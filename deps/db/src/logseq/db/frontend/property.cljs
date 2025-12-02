@@ -6,6 +6,7 @@
             [flatland.ordered.map :refer [ordered-map]]
             [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.common.uuid :as common-uuid]
+            [logseq.db.common.order :as db-order]
             [logseq.db.frontend.db-ident :as db-ident]
             [logseq.db.frontend.property.type :as db-property-type]))
 
@@ -491,6 +492,16 @@
                                            :hide? true
                                            :public? false}
                                   :queryable? true}
+     :logseq.property.asset/width {:title "Image width"
+                                   :schema {:type :raw-number
+                                            :hide? true
+                                            :public? false}
+                                   :queryable? true}
+     :logseq.property.asset/height {:title "Image height"
+                                    :schema {:type :raw-number
+                                             :hide? true
+                                             :public? false}
+                                    :queryable? true}
      :logseq.property.asset/checksum {:title "File checksum"
                                       :schema {:type :string
                                                :hide? true
@@ -682,7 +693,8 @@
   [db property-id]
   (when db
     (when-let [property (d/entity db property-id)]
-      (:property/closed-values property))))
+      (some->> (:block/_closed-value-property property)
+               (sort-by :block/order)))))
 
 (defn closed-value-content
   "Gets content/value of a given closed value ent/map. Works for all closed value types"
@@ -715,10 +727,52 @@
   ([property-name user-namespace]
    (db-ident/create-db-ident-from-name user-namespace property-name)))
 
+(defn normalize-sorted-entities-block-order
+  "Return tx-data.
+  Generate appropriate :block/order values for sorted-blocks with :block/order value = nil or duplicated"
+  [sorted-entities]
+  (let [parts (partition-by :block/order sorted-entities)
+        [_ tx-data]
+        (reduce (fn [[start-order tx-data] ents]
+                  (let [n (count ents)]
+                    (if (> n 1)
+                      (let [orders (db-order/gen-n-keys n start-order (:block/order (first ents)))
+                            tx-data* (apply conj tx-data (map
+                                                          (fn [order ent]
+                                                            {:db/id (:db/id ent)
+                                                             :block/order order})
+                                                          orders ents))]
+                        [(last orders) tx-data*])
+                      [(:block/order (first ents)) tx-data])))
+                [nil []] parts)]
+    tx-data))
+
+(defn sort-properties
+  "Sort by :block/order and :block/uuid.
+  - nil is greater than non-nil
+  - When block/order is equal, sort by block/uuid"
+  [prop-entities]
+  (sort
+   (fn [a b]
+     (let [order-a (:block/order a)
+           order-b (:block/order b)]
+       (cond
+         (and (nil? order-a) (nil? order-b))
+         (compare (:block/uuid a) (:block/uuid b))
+
+         (nil? order-a) 1
+         (nil? order-b) -1
+
+         (= order-a order-b)
+         (compare (:block/uuid a) (:block/uuid b))
+
+         :else
+         (compare order-a order-b))))
+   prop-entities))
+
 (defn get-class-ordered-properties
   [class-entity]
-  (->> (:logseq.property.class/properties class-entity)
-       (sort-by :block/order)))
+  (sort-properties (:logseq.property.class/properties class-entity)))
 
 (defn property-created-block?
   "`block` has been created in a property and it's not a closed value."

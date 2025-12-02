@@ -32,7 +32,7 @@
 (defonce *profile-state (volatile! {}))
 
 (defonce *db-worker (atom nil))
-(defonce *db-worker-client-id (atom nil))
+(defonce *db-worker-client-id (atom (storage/get :db-worker-client-id)))
 (defonce *editor-info (atom nil))
 (defonce app-ready-promise (p/deferred))
 
@@ -85,7 +85,6 @@
       ;; TODO: how to detect the network reliably?
       ;; NOTE: prefer to use flows/network-online-event-flow
       :network/online?         true
-      :indexeddb/support?      true
       :me                      nil
       :git/current-repo        current-graph
       :draw?                   false
@@ -287,7 +286,7 @@
       :reactive/query-dbs                    {}
 
       ;; login, userinfo, token, ...
-      :auth/refresh-token                    (storage/get "refresh-token")
+      :auth/refresh-token                    (some-> (storage/get "refresh-token") str)
       :auth/access-token                     nil
       :auth/id-token                         nil
 
@@ -624,11 +623,11 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-ref-open-blocks-level
   []
-  (or
-   (when-let [value (:ref/default-open-blocks-level (get-config))]
-     (when (pos-int? value)
-       (min value 9)))
-   2))
+  (if-let [value (:ref/default-open-blocks-level (get-config))]
+    (if (and (int? value) (>= value 0))
+      (min value 9)
+      2)
+    2))
 
 (defn get-export-bullet-indentation
   []
@@ -1541,10 +1540,6 @@ Similar to re-frame subscriptions"
   [value]
   (set-state! :db/restoring? value))
 
-(defn set-indexedb-support!
-  [value]
-  (set-state! :indexeddb/support? value))
-
 (defn modal-opened?
   []
   (shui-dialog/has-modal?))
@@ -2292,10 +2287,11 @@ Similar to re-frame subscriptions"
   (swap! state assoc :ui/radix-color color)
   (storage/set :ui/radix-color color))
 
-(defn set-editor-font! [font]
-  (let [font (if (keyword? font) (name font) (str font))]
-    (swap! state assoc :ui/editor-font font)
-    (storage/set :ui/editor-font font)))
+(defn set-editor-font! [config]
+  (let [config' (:ui/editor-font @state)
+        config (if (map? config') (merge config' config) {})]
+    (swap! state assoc :ui/editor-font config)
+    (storage/set :ui/editor-font config)))
 
 (defn handbook-open?
   []
@@ -2360,3 +2356,9 @@ Similar to re-frame subscriptions"
   [days]
   (reset! (:ui/highlight-recent-days @state) days)
   (storage/set :ui/highlight-recent-days days))
+
+(defn set-db-worker-client-id!
+  [new-id]
+  (when new-id
+    (reset! *db-worker-client-id new-id)
+    (storage/set :db-worker-client-id new-id)))

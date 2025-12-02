@@ -22,6 +22,7 @@
             [promesa.core :as p]))
 
 (def tx-queue (atom cljs.core/PersistentQueue.EMPTY))
+;; This is a lower-level dev hook to inspect txs and shouldn't hook into ldb/transact!
 (def original-transact! d/transact!)
 (defn dev-transact! [conn tx-data tx-meta]
   (swap! tx-queue (fn [queue]
@@ -49,26 +50,31 @@
   (p/let [s (fsp/readFile (:path file))]
     (str s)))
 
-(defn- <read-asset-file [file assets]
-  (p/let [buffer (fs/readFileSync (:path file))
-          checksum (db-asset/<get-file-array-buffer-checksum buffer)]
-    (swap! assets assoc
-           (gp-exporter/asset-path->name (:path file))
-           {:size (.-length buffer)
-            :checksum checksum
-            :type (db-asset/asset-path->type (:path file))
-            :path (:path file)})
-    buffer))
+(defn- exceed-limit-size?
+  "Asset size no more than 100M"
+  [^js buffer]
+  (> (.-length buffer) (* 100 1024 1024)))
 
-(defn- <copy-asset-file [asset-m db-graph-dir]
-  (p/let [parent-dir (node-path/join db-graph-dir common-config/local-assets-dir)
-          _ (fsp/mkdir parent-dir #js {:recursive true})]
-    (if (:block/uuid asset-m)
-      (fsp/copyFile (:path asset-m) (node-path/join parent-dir (str (:block/uuid asset-m) "." (:type asset-m))))
-      (when-not (:pdf-annotation? asset-m)
-        (println "[INFO]" "Copied asset" (pr-str (node-path/basename (:path asset-m)))
-                 "by its name since it was unused.")
-        (fsp/copyFile (:path asset-m) (node-path/join parent-dir (node-path/basename (:path asset-m))))))))
+(defn- <read-and-copy-asset [db-graph-dir file assets buffer-handler]
+  (p/let [buffer (fs/readFileSync (:path file))
+          checksum (db-asset/<get-file-array-buffer-checksum buffer)
+          asset-id (d/squuid)
+          asset-name (gp-exporter/asset-path->name (:path file))
+          asset-type (db-asset/asset-path->type (:path file))]
+    (if (exceed-limit-size? buffer)
+      (js/console.log (str "Skipped copying asset " (pr-str (:path file)) " because it is larger than the 100M max."))
+      (p/let [parent-dir (node-path/join db-graph-dir common-config/local-assets-dir)
+              {:keys [with-edn-content pdf-annotation?]} (buffer-handler buffer)]
+        (fsp/mkdir parent-dir #js {:recursive true})
+        (swap! assets assoc asset-name
+               (with-edn-content
+                 {:size (.-length buffer)
+                  :type asset-type
+                  :path (:path file)
+                  :checksum checksum
+                  :asset-id asset-id}))
+        (when-not pdf-annotation?
+          (fsp/copyFile (:path file) (node-path/join parent-dir (str asset-id "." asset-type))))))))
 
 (defn- notify-user [{:keys [continue debug]} m]
   (println (:msg m))
@@ -89,8 +95,7 @@
       (println (some-> (get-in m [:ex-data :error]) .-stack)))
     (when debug
       (when-let [matching-tx (seq (filter #(and (get-in m [:ex-data :path])
-                                                (or (= (get-in % [:tx-meta ::gp-exporter/path]) (get-in m [:ex-data :path]))
-                                                    (= (get-in % [:tx-meta ::outliner-pipeline/original-tx-meta ::gp-exporter/path]) (get-in m [:ex-data :path]))))
+                                                (= (get-in % [:tx-meta ::gp-exporter/path]) (get-in m [:ex-data :path])))
                                           @tx-queue))]
         (println (str "\n" (count matching-tx)) "Tx Maps for failing path:")
         (pprint/pprint matching-tx))))
@@ -119,9 +124,7 @@
         options (merge options
                        (default-export-options options)
                         ;; asset file options
-                       {:<copy-asset (fn copy-asset [file]
-                                       (<copy-asset-file file db-graph-dir))
-                        :<read-asset <read-asset-file})]
+                       {:<read-and-copy-asset #(<read-and-copy-asset db-graph-dir %1 %2 %3)})]
     (p/with-redefs [d/transact! dev-transact!]
       (gp-exporter/export-file-graph conn conn config-file *files options))))
 

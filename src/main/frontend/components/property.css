@@ -177,7 +177,7 @@
 }
 
 .ui__button.empty-btn, .empty-text-btn {
-  @apply !h-6 !px-0 font-normal opacity-50;
+  @apply !h-6 !px-0 !text-base opacity-50 font-normal;
 }
 
 .ui__button.empty-btn:hover, .empty-text-btn:hover {
@@ -362,9 +362,6 @@ a.control-link {
 
 .ls-property-dropdown {
   @apply w-[260px] p-1.5;
-
-  .ui__dropdown-menu-item, .ui__dropdown-menu-sub-trigger {
-  }
 
   [role=separator] {
     @apply my-2;

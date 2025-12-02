@@ -174,24 +174,44 @@
 (defn- send&recv*
   "Return a task: send message wait to recv its response and return it.
   Throw if timeout"
-  [mws message & {:keys [timeout-ms] :or {timeout-ms 10000}}]
+  [mws message & {:keys [timeout-ms s3-get-timeout-ms]
+                  :or {timeout-ms 10000 s3-get-timeout-ms 10000}}]
   {:pre [(pos-int? timeout-ms)
          (some? (:req-id message))]}
   (m/sp
     (m/? (send mws message))
     (let [req-id (:req-id message)
-          result (m/?
-                  (m/timeout
-                   (m/reduce
-                    (fn [_ v]
-                      (when (= req-id (:req-id v))
-                        (reduced v)))
-                    (recv-flow mws))
-                   timeout-ms))]
-      (when-not result
-        (throw (ex-info (str "recv timeout (" timeout-ms "ms)") {:missionary/retry true
-                                                                 :type :rtc.exception/ws-timeout
-                                                                 :message message})))
+          ws-message-result
+          (m/?
+           (m/timeout
+            (m/reduce
+             (fn [_ v]
+               (when (= req-id (:req-id v))
+                 (reduced v)))
+             (recv-flow* mws))
+            timeout-ms
+            (ex-info (str "recv ws message timeout (" timeout-ms "ms)") {})))
+          result (if-let [s3-presign-url (:s3-presign-url ws-message-result)]
+                   (let [{:keys [status body] :as r}
+                         (m/? (m/timeout
+                               (http/get s3-presign-url {:with-credentials? false})
+                               s3-get-timeout-ms
+                               (ex-info (str "recv s3 message timeout (" s3-get-timeout-ms "ms)") {})))]
+                     (cond
+                       (instance? ExceptionInfo r) r
+
+                       (http/unexceptional-status? status)
+                       (rtc-schema/data-from-ws-coercer (js->clj (js/JSON.parse body) :keywordize-keys true))
+
+                       :else
+                       {:req-id (:req-id ws-message-result)
+                        :ex-message "get s3 object failed"
+                        :ex-data {:type :rtc.exception/get-s3-object-failed :status status :body body}}))
+                   ws-message-result)]
+      (when (instance? ExceptionInfo result)
+        (throw (ex-info (ex-message result) {:missionary/retry true
+                                             :type :rtc.exception/ws-timeout
+                                             :message message})))
       result)))
 
 (defn send&recv
@@ -202,3 +222,10 @@
     (let [req-id (str (random-uuid))
           message (assoc message :req-id req-id)]
       (m/? (send&recv* mws message :timeout-ms timeout-ms)))))
+
+(comment
+  (defn- inject-fake-message-to-recv
+    "Debug fn.
+  use `queryObjects(WebSocket)` to fetch all websocket objs under db-worker.js context"
+    [ws fake-message-to-recv]
+    (.dispatchEvent ws (js/MessageEvent. "message" #js {:data fake-message-to-recv}))))

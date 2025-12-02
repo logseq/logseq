@@ -3,7 +3,7 @@
             [dommy.core :as dom]
             [frontend.commands :as commands :refer [*matched-commands]]
             [frontend.components.file-based.datetime :as datetime-comp]
-            [frontend.components.search :as search]
+            [frontend.components.icon :as icon-component]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -50,6 +50,45 @@
                (when (= (count item) 5)
                  (contains? #{"TASK STATUS" "TASK DATE" "PRIORITY"} (last item))))) commands)
     commands))
+
+(defn node-render
+  [block q {:keys [db-tag? db-based?]}]
+  (let [block' (if-let [id (:block/uuid block)]
+                 (if-let [e (db/entity [:block/uuid id])]
+                   (assoc e
+                          :block/title (or (:friendly-title block) (:block/title block) (:block/title e))
+                          :alias (:alias block))
+                   block)
+                 block)]
+    (when-not (string/blank? (:block/title block'))
+      [:div.flex.flex-col
+       (when (and (:block/uuid block') (or (:block/parent block') (not (:page? block))))
+         (when-let [breadcrumb (state/get-component :block/breadcrumb)]
+           [:div.text-xs.opacity-70.mb-1 {:style {:margin-left 3}}
+            (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid block')
+                        {:disabled? true})]))
+       [:div.flex.flex-row.items-start
+        (when-not (or db-tag? (not db-based?))
+          [:div.flex.items-center.h-5.mr-1.opacity-50
+           (cond
+             (:nlp-date? block')
+             (ui/icon "calendar" {:size 14})
+
+             (or (string/starts-with? (str (:block/title block')) (t :new-tag))
+                 (string/starts-with? (str (:block/title block')) (t :new-page)))
+             (ui/icon "plus" {:size 14})
+
+             :else
+             (icon-component/get-node-icon-cp block' {:ignore-current-icon? true}))])
+
+        (let [title (let [alias (get-in block' [:alias :block/title])]
+                      (block-handler/block-unique-title block' {:alias alias}))]
+          (if (or (string/starts-with? title (t :new-tag))
+                  (string/starts-with? title (t :new-page)))
+            title
+            (block-handler/block-title-with-icon block'
+                                                 (search-handler/highlight-exact-query title q)
+                                                 icon-component/icon)))]])))
 
 (rum/defcs commands < rum/reactive
   (rum/local [] ::matched-commands)
@@ -161,11 +200,13 @@
             result (if db-tag?
                      (let [classes (editor-handler/get-matched-classes q)]
                        (if (and (ldb/internal-page? block)
-                                (= (:block/title block) q))
-                         (cons {:block/title (util/format "Convert \"%s\" to tag" q)
+                                (= (:block/title block) q)
+                                (not (ldb/built-in? block)))
+                         (cons {:block/title q
                                 :db/id (:db/id block)
                                 :block/uuid (:block/uuid block)
-                                :convert-page-to-tag? true} classes)
+                                :convert-page-to-tag? true
+                                :friendly-title (util/format "Convert \"%s\" to tag" q)} classes)
                          classes))
                      (editor-handler/<get-matched-blocks q {:nlp-pages? true
                                                             :page-only? (not db-based?)}))]
@@ -200,55 +241,8 @@
          :on-enter    (fn []
                         (page-handler/page-not-exists-handler input id q current-pos))
          :item-render (fn [block _chosen?]
-                        (let [block' (if-let [id (:block/uuid block)]
-                                       (if-let [e (db/entity [:block/uuid id])]
-                                         (assoc e
-                                                :block/title (or (:block/title e) (:block/title block))
-                                                :alias (:alias block))
-                                         block)
-                                       block)]
-                          [:div.flex.flex-col
-                           (when (and (:block/uuid block') (or (:block/parent block') (not (:page? block))))
-                             (when-let [breadcrumb (state/get-component :block/breadcrumb)]
-                               [:div.text-xs.opacity-70.mb-1 {:style {:margin-left 3}}
-                                (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid block') {})]))
-                           [:div.flex.flex-row.items-start
-                            (when-not (or db-tag? (not db-based?))
-                              [:div.flex.items-center.h-5.mr-1.opacity-50
-                               (cond
-                                 (:nlp-date? block')
-                                 (ui/icon "calendar" {:size 14})
-
-                                 (ldb/class? block')
-                                 (ui/icon "hash" {:size 14})
-
-                                 (ldb/property? block')
-                                 (ui/icon "letter-p" {:size 14})
-
-                                 (db-model/whiteboard-page? block')
-                                 (ui/icon "writing" {:size 14})
-
-                                 (or (ldb/page? block') (:page? block))
-                                 (ui/icon "file" {:size 14})
-
-                                 (or (string/starts-with? (str (:block/title block')) (t :new-tag))
-                                     (string/starts-with? (str (:block/title block')) (t :new-page)))
-                                 (ui/icon "plus" {:size 14})
-
-                                 :else
-                                 (ui/icon "letter-n" {:size 14}))])
-
-                            (let [title (let [alias (get-in block' [:alias :block/title])
-                                              title (if (and db-based? (not (ldb/built-in? block')))
-                                                      (block-handler/block-unique-title block')
-                                                      (:block/title block'))]
-                                          (if alias
-                                            (str title " -> alias: " alias)
-                                            title))]
-                              (if (or (string/starts-with? title (t :new-tag))
-                                      (string/starts-with? title (t :new-page)))
-                                title
-                                (search-handler/highlight-exact-query title q)))]]))
+                        (node-render block q {:db-tag? db-tag?
+                                              :db-based? db-based?}))
          :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
                                                                     "Search for a tag"
                                                                     "Search for a node")]
@@ -326,8 +320,7 @@
                  state)}
   [state _edit-block input id q format selected-text]
   (let [result (->> (rum/react (get state ::result))
-                    (remove (fn [b] (or (nil? (:block/uuid b))
-                                        (string/blank? (:block/title (db-model/query-block-by-uuid (:block/uuid b))))))))
+                    (remove (fn [b] (nil? (:block/uuid b)))))
         db? (config/db-based-graph? (state/get-current-repo))
         embed? (and db? (= @commands/*current-command "Block embed"))
         chosen-handler (block-on-chosen-handler embed? input id q format selected-text)
@@ -337,14 +330,9 @@
      {:on-chosen   chosen-handler
       :on-enter    non-exist-block-handler
       :empty-placeholder   [:div.text-gray-500.text-sm.px-4.py-2 (t :editor/block-search)]
-      :item-render (fn [{:block/keys [page uuid]}]  ;; content returned from search engine is normalized
-                     (let [page-entity (db/entity [:block/uuid page])
-                           repo (state/sub :git/current-repo)
-                           format (get page-entity :block/format :markdown)
-                           block (db-model/query-block-by-uuid uuid)
-                           content (:block/title block)]
-                       (when-not (string/blank? content)
-                         [:.py-2 (search/block-search-result-item repo uuid format content q :block)])))
+      :item-render (fn [block]
+                     (node-render block q {:db-tag? false
+                                           :db-based? db?}))
       :class       "ac-block-search"})))
 
 (rum/defcs block-search < rum/reactive
@@ -829,7 +817,8 @@
                                       (when (= (util/ekey e) "Escape")
                                         (editor-on-hide state :esc e))))
                :auto-focus true
-               :auto-capitalize "off"
+               :auto-capitalize (if (util/mobile?) "sentences" "off")
+               :auto-correct (if (util/mobile?) "true" "false")
                :class heading-class}
                (some? parent-block)
                (assoc :parentblockid (str (:block/uuid parent-block)))

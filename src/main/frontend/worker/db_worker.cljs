@@ -25,6 +25,7 @@
             [frontend.worker.file.reset :as file-reset]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.handler.page.file-based.rename :as file-worker-page-rename]
+            [frontend.worker.pipeline :as worker-pipeline]
             [frontend.worker.rtc.asset-db-listener]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.core :as rtc.core]
@@ -37,13 +38,17 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [lambdaisland.glogi.console :as glogi-console]
+            [logseq.cli.common.mcp.tools :as cli-common-mcp-tools]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.common.initial-data :as common-initial-data]
             [logseq.db.common.order :as db-order]
+            [logseq.db.common.reference :as db-reference]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.common.view :as db-view]
+            [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.export :as sqlite-export]
@@ -83,8 +88,8 @@
   (when-not @*sqlite
     (p/let [href (.. js/location -href)
             publishing? (string/includes? href "publishing=true")
-            sqlite (sqlite3InitModule (clj->js {:print js/console.log
-                                                :printErr js/console.error}))]
+            sqlite (sqlite3InitModule (clj->js {:print #(log/info :init-sqlite-module! %)
+                                                :printErr #(log/error :init-sqlite-module! %)}))]
       (reset! *publishing? publishing?)
       (reset! *sqlite sqlite)
       nil)))
@@ -252,10 +257,10 @@
       (doseq [db (if @*publishing? [sqlite-db] [sqlite-db client-ops-db])]
         (sqlite-gc/gc-kvs-table! db {:full-gc? full-gc?})
         (.exec db "VACUUM"))
-      (d/transact! datascript-conn [{:db/ident :logseq.kv/graph-last-gc-at
-                                     :kv/value (common-util/time-ms)}]))))
+      (ldb/transact! datascript-conn [{:db/ident :logseq.kv/graph-last-gc-at
+                                       :kv/value (common-util/time-ms)}]))))
 
-(defn- create-or-open-db!
+(defn- <create-or-open-db!
   [repo {:keys [config datoms] :as opts}]
   (when-not (worker-state/get-sqlite-conn repo)
     (p/let [[db search-db client-ops-db :as dbs] (get-dbs repo)
@@ -271,6 +276,9 @@
       (common-sqlite/create-kvs-table! db)
       (when-not @*publishing? (common-sqlite/create-kvs-table! client-ops-db))
       (search/create-tables-and-triggers! search-db)
+      (ldb/register-transact-pipeline-fn!
+       (fn [tx-report]
+         (worker-pipeline/transact-pipeline repo tx-report)))
       (let [schema (ldb/get-schema repo)
             conn (common-sqlite/get-storage-conn storage schema)
             _ (db-fix/check-and-fix-schema! repo conn)
@@ -292,7 +300,7 @@
           (let [config (or config "")
                 initial-data (sqlite-create-graph/build-db-initial-data
                               config (select-keys opts [:import-type :graph-git-sha]))]
-            (d/transact! conn initial-data {:initial-db? true})))
+            (ldb/transact! conn initial-data {:initial-db? true})))
 
         (gc-sqlite-dbs! db client-ops-db conn {})
 
@@ -406,7 +414,7 @@
    (when close-other-db?
      (close-other-dbs! repo))
    (when @shared-service/*master-client?
-     (create-or-open-db! repo (dissoc opts :close-other-db?)))
+     (<create-or-open-db! repo (dissoc opts :close-other-db?)))
    nil))
 
 (def-thread-api :thread-api/create-or-open-db
@@ -461,7 +469,9 @@
 (def-thread-api :thread-api/get-block-refs
   [repo id]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (ldb/get-block-refs @conn id)))
+    (->> (db-reference/get-linked-references @conn id)
+         :ref-blocks
+         (map (fn [b] (assoc (into {} b) :db/id (:db/id b)))))))
 
 (def-thread-api :thread-api/get-block-refs-count
   [repo id]
@@ -544,9 +554,12 @@
         (throw e)))))
 
 (def-thread-api :thread-api/get-initial-data
-  [repo]
+  [repo opts]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (common-initial-data/get-initial-data @conn)))
+    (if (:file-graph-import? opts)
+      {:schema (:schema @conn)
+       :initial-data (vec (d/datoms @conn :eavt))}
+      (common-initial-data/get-initial-data @conn))))
 
 (def-thread-api :thread-api/reset-db
   [repo db-transit]
@@ -627,7 +640,9 @@
               {:keys [type payload]} (when (map? data) data)]
           (case type
             :notification
-            (shared-service/broadcast-to-clients! :notification [(:message payload) (:type payload)])
+            (do
+              (log/error ::apply-outliner-ops-failed e)
+              (shared-service/broadcast-to-clients! :notification [(:message payload) (:type payload) (:clear? payload) (:uid payload) (:timeout payload)]))
             (throw e)))))))
 
 (def-thread-api :thread-api/file-writes-finished?
@@ -679,6 +694,8 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (worker-db-validate/validate-db conn)))
 
+;; Returns an export-edn map for given repo. When there's an unexpected error, a map
+;; with key :export-edn-error is returned
 (def-thread-api :thread-api/export-edn
   [repo options]
   (let [conn (worker-state/get-datascript-conn repo)]
@@ -690,12 +707,18 @@
         (worker-util/post-message :notification
                                   ["An unexpected error occurred during export. See the javascript console for details."
                                    :error])
-        :export-edn-error))))
+        {:export-edn-error (.-message e)}))))
 
 (def-thread-api :thread-api/get-view-data
   [repo view-id option]
   (let [db @(worker-state/get-datascript-conn repo)]
     (db-view/get-view-data db view-id option)))
+
+(def-thread-api :thread-api/get-class-objects
+  [repo class-id]
+  (let [db @(worker-state/get-datascript-conn repo)]
+    (->> (db-class/get-class-objects db class-id)
+         (map common-entity-util/entity->map))))
 
 (def-thread-api :thread-api/get-property-values
   [repo {:keys [property-ident] :as option}]
@@ -782,6 +805,31 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (ldb/get-graph-rtc-uuid @conn)))
 
+(def-thread-api :thread-api/api-get-page-data
+  [repo page-title]
+  (let [conn (worker-state/get-datascript-conn repo)]
+    (cli-common-mcp-tools/get-page-data @conn page-title)))
+
+(def-thread-api :thread-api/api-list-properties
+  [repo options]
+  (let [conn (worker-state/get-datascript-conn repo)]
+    (cli-common-mcp-tools/list-properties @conn options)))
+
+(def-thread-api :thread-api/api-list-tags
+  [repo options]
+  (let [conn (worker-state/get-datascript-conn repo)]
+    (cli-common-mcp-tools/list-tags @conn options)))
+
+(def-thread-api :thread-api/api-list-pages
+  [repo options]
+  (let [conn (worker-state/get-datascript-conn repo)]
+    (cli-common-mcp-tools/list-pages @conn options)))
+
+(def-thread-api :thread-api/api-build-upsert-nodes-edn
+  [repo ops]
+  (let [conn (worker-state/get-datascript-conn repo)]
+    (cli-common-mcp-tools/build-upsert-nodes-edn @conn ops)))
+
 (comment
   (def-thread-api :general/dangerousRemoveAllDbs
     []
@@ -807,7 +855,11 @@
 (defn- create-page!
   [repo conn title options]
   (let [config (worker-state/get-config repo)]
-    (worker-page/create! repo conn config title options)))
+    (try
+      (worker-page/create! repo conn config title options)
+      (catch :default e
+        (js/console.error e)
+        (throw e)))))
 
 (defn- outliner-register-op-handlers!
   []
@@ -870,9 +922,22 @@
           (reset! *service [graph service])
           service)))))
 
+(defn- notify-invalid-data
+  [{:keys [tx-meta]} errors]
+  ;; don't notify on production when undo/redo failed
+  (when-not (and (or (:undo? tx-meta) (:redo? tx-meta))
+                 (not worker-util/dev?))
+    (shared-service/broadcast-to-clients! :notification
+                                          [["Invalid DB!"] :error])
+    (worker-util/post-message :capture-error
+                              {:error (ex-info "Invalid DB" {})
+                               :payload {:errors (str errors)}})))
+
 (defn init
   "web worker entry"
   []
+  (ldb/register-transact-invalid-callback-fn! notify-invalid-data)
+
   (let [proxy-object (->>
                       fns
                       (map

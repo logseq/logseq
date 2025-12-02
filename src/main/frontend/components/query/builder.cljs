@@ -218,12 +218,15 @@
        (let [result (db-model/get-all-readable-classes repo {:except-root-class? true})]
          (set-values! result)))
      [])
-    (let [items (->> values
-                     (map :block/title)
-                     sort)]
+    (let [items (->> (sort-by :block/title values)
+                     (map (fn [block]
+                            {:label (:block/title block)
+                             :value (:block/uuid block)})))]
       (select items
-              (fn [{:keys [value]}]
-                (append-tree! *tree opts loc [(if db-based? :tags :page-tags) value]))))))
+              (fn [{:keys [value label]}]
+                (append-tree! *tree opts loc [(if db-based? :tags :page-tags)
+                                              (if db-based? (str value) label)]))
+              {:extract-fn :label}))))
 
 (rum/defc page-search
   [on-chosen]

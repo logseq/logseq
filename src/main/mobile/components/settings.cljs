@@ -15,6 +15,7 @@
       :class "text-1xl flex flex-1 w-full my-8"
       :on-click #(shui/dialog-open! login/page-impl
                                     {:close-btn? false
+                                     :label "user-login"
                                      :align :top
                                      :content-props {:class "app-login-modal"}})}
      "Login")

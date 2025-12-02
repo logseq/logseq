@@ -92,3 +92,13 @@ jobs:
           name: e2e-screenshots
           path: clj-e2e/e2e-dump/*
           retention-days: 1
+
+      - name: Mark success
+        if: ${{ success() }}
+        run: echo "E2E OK" > e2e-success.txt
+
+      - name: Upload success artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-success
+          path: e2e-success.txt

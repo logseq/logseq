@@ -34,8 +34,7 @@
                                                       :block-id [:block/uuid (:block/uuid export-block)]})
             (sqlite-export/build-import @import-conn {:current-block import-block}))
         ;; _ (cljs.pprint/pprint _txs)
-        _ (d/transact! import-conn init-tx)
-        _ (d/transact! import-conn block-props-tx)]
+        _ (d/transact! import-conn (concat init-tx block-props-tx))]
     (validate-db @import-conn)
     (sqlite-export/build-export @import-conn {:export-type :block
                                               :block-id (:db/id import-block)})))
@@ -50,8 +49,7 @@
             ;; ((fn [x] (cljs.pprint/pprint {:export x}) x))
             (sqlite-export/build-import @import-conn {}))
         ;; _ (cljs.pprint/pprint _txs)
-        _ (d/transact! import-conn init-tx)
-        _ (d/transact! import-conn block-props-tx)
+        _ (d/transact! import-conn (concat init-tx block-props-tx))
         _ (validate-db @import-conn)
         page2 (db-test/find-page-by-title @import-conn page-title)]
     (sqlite-export/build-export @import-conn {:export-type :page :page-id (:db/id page2)})))
@@ -85,9 +83,7 @@
         (-> (sqlite-export/build-export @export-conn {:export-type :graph :graph-options export-options})
             (sqlite-export/build-import @import-conn {}))
         ;; _ (cljs.pprint/pprint _txs)
-        _ (d/transact! import-conn init-tx)
-        _ (d/transact! import-conn block-props-tx)
-        _ (d/transact! import-conn misc-tx)
+        _ (d/transact! import-conn (concat init-tx block-props-tx misc-tx))
         _ (validate-db @import-conn)
         imported-graph (sqlite-export/build-export @import-conn {:export-type :graph :graph-options export-options})]
     imported-graph))
@@ -419,6 +415,28 @@
 
     (import-second-time-assertions conn conn2 journal-title original-data {:build-journal 20250210})))
 
+(deftest import-class-page
+  (let [class-uuid (random-uuid)
+        original-data
+        {:classes {:user.class/C0 {}
+                   :user.class/C1 {:build/class-extends [:user.class/C0]
+                                   :build/class-properties [:user.property/p1]
+                                   :block/uuid class-uuid
+                                   :build/keep-uuid? true}}
+         :properties {:user.property/p1 {:logseq.property/type :default}}
+         :pages-and-blocks [{:page {:block/uuid class-uuid}
+                             :blocks [{:block/title "class block"}]}]}
+        conn (db-test/create-conn-with-blocks (assoc original-data :build-existing-tx? true))
+        conn2 (db-test/create-conn)
+        imported-page (export-page-and-import-to-another-graph conn conn2 "C1")]
+
+    (is (= (expand-classes (:classes original-data)) (:classes imported-page))
+        "Class page is imported")
+    (is (= (expand-properties (:properties original-data)) (:properties imported-page))
+        "Class page's properties are imported")
+    (is (= (:pages-and-blocks original-data) (:pages-and-blocks imported-page))
+        "Page's blocks are imported")))
+
 (deftest import-page-with-different-property-types
   (let [block-object-uuid (random-uuid)
         original-data
@@ -497,8 +515,7 @@
         (-> (sqlite-export/build-export @conn {:export-type :graph-ontology})
             (sqlite-export/build-import @conn2 {}))
         ;; _ (cljs.pprint/pprint _txs)
-        _ (d/transact! conn2 init-tx)
-        _ (d/transact! conn2 block-props-tx)
+        _ (d/transact! conn2 (concat init-tx block-props-tx))
         _ (validate-db @conn2)
         imported-ontology (sqlite-export/build-export @conn2 {:export-type :graph-ontology})]
 
@@ -530,8 +547,7 @@
         (-> (sqlite-export/build-export @conn {:export-type :view-nodes :rows (get-node-ids @conn)})
             (sqlite-export/build-import @conn2 {}))
         ;; _ (cljs.pprint/pprint _txs)
-        _ (d/transact! conn2 init-tx)
-        _ (d/transact! conn2 block-props-tx)
+        _ (d/transact! conn2 (concat init-tx block-props-tx))
         _ (validate-db @conn2)
         imported-nodes (sqlite-export/build-export @conn2 {:export-type :view-nodes
                                                            :rows (get-node-ids @conn2)})]
@@ -566,8 +582,7 @@
         (-> (sqlite-export/build-export @conn {:export-type :selected-nodes :node-ids (get-node-ids @conn)})
             (sqlite-export/build-import @conn2 {}))
         ;; _ (cljs.pprint/pprint _txs)
-        _ (d/transact! conn2 init-tx)
-        _ (d/transact! conn2 block-props-tx)
+        _ (d/transact! conn2 (concat init-tx block-props-tx))
         _ (validate-db @conn2)
         imported-nodes (sqlite-export/build-export @conn2 {:export-type :selected-nodes :node-ids (get-node-ids @conn2)})]
 
@@ -832,8 +847,7 @@
         {:keys [init-tx block-props-tx] :as _txs}
         (sqlite-export/build-import import-data @conn {})
         ;; _ (cljs.pprint/pprint _txs)
-        _ (d/transact! conn init-tx)
-        _ (d/transact! conn block-props-tx)
+        _ (d/transact! conn (concat init-tx block-props-tx))
         _ (validate-db @conn)
         expected-pages-and-blocks
         [{:block/uuid page-uuid

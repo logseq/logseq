@@ -45,13 +45,13 @@
       item)))
 
 (defn get-node-icon
-  [node-entity]
-  (or (get node-entity (pu/get-pid :logseq.property/icon))
+  [node-entity {:keys [ignore-current-icon?]
+                :or {ignore-current-icon? false}}]
+  (or (when-not ignore-current-icon?
+        (get node-entity (pu/get-pid :logseq.property/icon)))
       (let [asset-type (:logseq.property.asset/type node-entity)
             first-tag-icon (some :logseq.property/icon (sort-by :db/id (:block/tags node-entity)))]
         (cond
-          (some? first-tag-icon)
-          first-tag-icon
           (ldb/class? node-entity)
           "hash"
           (ldb/property? node-entity)
@@ -62,21 +62,23 @@
           "file"
           (= asset-type "pdf")
           "book"
+          (some? first-tag-icon)
+          first-tag-icon
           :else
-          "letter-n"))))
+          "point-filled"))))
 
 (defn get-node-icon-cp
   [node-entity opts]
   (let [opts' (merge {:size 14} opts)
         node-icon* (if (:link? opts)
                      "arrow-narrow-right"
-                     (get-node-icon node-entity))
+                     (get-node-icon node-entity opts))
         node-icon (if (config/db-based-graph?)
                     node-icon*
                     (or (when-let [icon' (get-in node-entity [:block/properties :icon])]
                           [:span icon'])
                         node-icon*))]
-    (when-not (or (string/blank? node-icon) (and (contains? #{"letter-n" "letter-p" "hash" "file"} node-icon) (:not-text-or-page? opts)))
+    (when-not (or (string/blank? node-icon) (and (contains? #{"point-filled" "letter-p" "hash" "file"} node-icon) (:not-text-or-page? opts)))
       [:div.icon-cp-container.flex.items-center
        (merge {:style {:color (or (:color node-icon) "inherit")}}
               (select-keys opts [:class]))

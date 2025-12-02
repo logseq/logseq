@@ -20,6 +20,10 @@ html:not(.is-native-android) {
   serif, Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol !important;
 }
 
+:root {
+  text-autospace: normal;
+}
+
 /* region Reset top elements */
 html {
   overflow: hidden;

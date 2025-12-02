@@ -267,10 +267,11 @@
         (let [{:keys [tx-data tx-meta] :as data} (some #(when (= ::db-transact (first %))
                                                           (second %)) op)]
           (when (seq tx-data)
-            (let [reversed-tx-data (get-reversed-datoms conn undo? data tx-meta)
+            (let [reversed-tx-data (cond-> (get-reversed-datoms conn undo? data tx-meta)
+                                     undo?
+                                     reverse)
                   tx-meta' (-> tx-meta
-                               (dissoc :pipeline-replace?
-                                       :batch-tx/batch-tx-mode?)
+                               (dissoc :batch-tx/batch-tx-mode?)
                                (assoc
                                 :gen-undo-ops? false
                                 :undo? undo?

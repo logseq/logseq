@@ -13,9 +13,7 @@
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [logseq.shui.dialog.core :as shui-dialog]
-            [mobile.components.ui :as cc-ui]
             [mobile.deeplink :as deeplink]
-            [mobile.state :as mobile-state]
             [promesa.core :as p]))
 
 ;; FIXME: `appUrlOpen` are fired twice when receiving a same intent.
@@ -45,18 +43,8 @@
                            (shui-dialog/has-modal?)
                            (shui-dialog/close!)
 
-                           (not-empty @mobile-state/*popup-data)
-                           (mobile-state/set-popup! nil)
-
                            (not-empty (state/get-selection-blocks))
                            (editor-handler/clear-selection!)
-
-                           (seq @mobile-state/*modal-blocks)
-                           (mobile-state/close-block-modal!)
-
-                           ;; TODO: move ui-related code to mobile events
-                           (not-empty (cc-ui/get-modal))
-                           (cc-ui/close-modal!)
 
                            (state/editing?)
                            (editor-handler/escape-editing)

@@ -164,11 +164,14 @@
              frontend.worker.state worker-state
              frontend.worker.util worker-util
              lambdaisland.glogi log
+             logseq.api.db-based db-based-api
              logseq.cli.common.graph cli-common-graph
-             logseq.cli.text-util cli-text-util
              logseq.cli.common.export.common cli-export-common
              logseq.cli.common.export.text cli-export-text
              logseq.cli.common.file common-file
+             logseq.cli.common.mcp.server cli-common-mcp-server
+             logseq.cli.common.mcp.tools cli-common-mcp-tools
+             logseq.cli.text-util cli-text-util
              logseq.common.config common-config
              logseq.common.date-time-util date-time-util
              logseq.common.graph common-graph
@@ -219,6 +222,7 @@
              logseq.outliner.op outliner-op
              logseq.outliner.page outliner-page
              logseq.outliner.pipeline outliner-pipeline
+             logseq.outliner.tree otree
              logseq.outliner.validate outliner-validate
              logseq.shui.popup.core shui-popup
              logseq.shui.ui shui

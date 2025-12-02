@@ -48,23 +48,13 @@
   [repo]
   (get-in @*vector-search-state [:repo->index-info repo :indexing?]))
 
-(defn- hidden-entity?
-  [entity]
-  (or (ldb/hidden? entity)
-      (let [page (:block/page entity)]
-        (and (ldb/hidden? page)
-             (not= (:block/title page) common-config/quick-add-page-name)))))
-
 (defn- stale-block-filter-preds
   "When `reset?`, ignore :logseq.property.embedding/hnsw-label-updated-at in block"
   [reset?]
   (let [preds (cond->> (list (fn [b]
-                               (let [db-ident (:db/ident b)
-                                     title (:block/title b)]
-                                 (and (or (nil? db-ident)
-                                          (not (string/starts-with? (namespace db-ident) "logseq.")))
-                                      (not (string/blank? title))
-                                      (not (hidden-entity? b))
+                               (let [title (:block/title b)]
+                                 (and (not (string/blank? title))
+                                      (not (ldb/hidden? b))
                                       (nil? (:logseq.property/view-for b))
                                       (not (keyword-identical?
                                             :logseq.property/description
@@ -179,7 +169,7 @@
                         (into-array (map :db/id stale-block-chunk))
                         false))
                     tx-data (labels-update-tx-data @conn e+updated-at-coll)]
-                (d/transact! conn tx-data {:skip-refresh? true})
+                (ldb/transact! conn tx-data {:skip-refresh? true})
                 (m/? (task--update-index-info!* repo infer-worker true))
                 (c.m/<? (.write-index! infer-worker repo))))
             (m/? (task--update-index-info!* repo infer-worker false))))))))
@@ -207,7 +197,7 @@
                                         (d/datoms @conn :avet :block/title)
                                         (map (fn [d]
                                                [:db/add (:e d) :logseq.property.embedding/hnsw-label-updated-at 0])))]
-            (d/transact! conn mark-embedding-tx-data {:skip-refresh? true})))
+            (ldb/transact! conn mark-embedding-tx-data {:skip-refresh? true})))
 
         (embedding-stale-blocks! repo reset-embedding?)))))
 
@@ -236,7 +226,7 @@
     (when-let [^js infer-worker @worker-state/*infer-worker]
       (let [conn (worker-state/get-datascript-conn repo)]
         (when (c.m/<? (.load-model infer-worker model-name))
-          (d/transact! conn [(ldb/kv :logseq.kv/graph-text-embedding-model-name model-name)])
+          (ldb/transact! conn [(ldb/kv :logseq.kv/graph-text-embedding-model-name model-name)])
           (log/info :loaded-model model-name))))))
 
 (defn task--search
@@ -252,7 +242,9 @@
                  (keep (fn [[distance label]]
                          ;; (prn :debug :semantic-search-result
                          ;;      :block (:block/title (d/entity @conn label))
-                         ;;      :distance distance)
+                         ;;      :page? (ldb/page? (d/entity @conn label))
+                         ;;      :distance distance
+                         ;;      :label label)
                          (when-not (or (js/isNaN distance) (>= distance 0.6)
                                        (> label 2147483647))
                            (when-let [block (d/entity @conn label)]

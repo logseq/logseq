@@ -72,7 +72,7 @@
             [logseq.outliner.property :as outliner-property]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.popup.core :as shui-popup]
-            [mobile.state :as mobile-state]
+            [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -326,7 +326,7 @@
 (declare save-current-block!)
 (defn outliner-insert-block!
   [config current-block new-block {:keys [sibling? keep-uuid? ordered-list?
-                                          replace-empty-target?]}]
+                                          replace-empty-target? outliner-op]}]
   (let [ref-query-top-block? (and (or (:ref? config)
                                       (:custom-query? config))
                                   (not (:ref-query-child? config)))
@@ -359,7 +359,8 @@
      (outliner-op/insert-blocks! [new-block'] current-block {:sibling? sibling?
                                                              :keep-uuid? keep-uuid?
                                                              :ordered-list? ordered-list?
-                                                             :replace-empty-target? replace-empty-target?}))))
+                                                             :replace-empty-target? replace-empty-target?
+                                                             :outliner-op outliner-op}))))
 
 (defn- block-self-alone-when-insert?
   [config uuid]
@@ -556,8 +557,11 @@
                  (state/set-state! :editor/async-unsaved-chars nil))))))
 
 (defn api-insert-new-block!
-  [content {:keys [page block-uuid sibling? before? properties
-                   custom-uuid replace-empty-target? edit-block? ordered-list? other-attrs]
+  [content {:keys [page block-uuid
+                   sibling? before? start? end?
+                   properties
+                   custom-uuid replace-empty-target? edit-block? ordered-list? other-attrs
+                   outliner-op]
             :or {sibling? false
                  before? false
                  edit-block? true}
@@ -598,6 +602,7 @@
                             (wrap-parse-block)
                             (assoc :block/uuid (or custom-uuid (db/new-block-id))))
               new-block (merge new-block other-attrs)
+              block' (db/entity (:db/id block))
               [target-block sibling?] (cond
                                         before?
                                         (let [left-or-parent (or (ldb/get-left-sibling block)
@@ -607,28 +612,38 @@
                                           [left-or-parent sibling?])
 
                                         sibling?
-                                        [(db/entity (:db/id block)) sibling?]
+                                        [block' sibling?]
+
+                                        start?
+                                        [block' false]
+
+                                        end?
+                                        (if last-block
+                                          [block' false]
+                                          [last-block true])
 
                                         last-block
                                         [last-block true]
 
                                         block
-                                        [(db/entity (:db/id block)) sibling?]
+                                        [block' sibling?]
 
                                         ;; FIXME: assert
                                         :else
                                         nil)]
           (when target-block
             (p/do!
-             (ui-outliner-tx/transact!
-              {:outliner-op :insert-blocks}
-              (outliner-insert-block! config target-block new-block
-                                      {:sibling? sibling?
-                                       :keep-uuid? true
-                                       :ordered-list? ordered-list?
-                                       :replace-empty-target? replace-empty-target?})
-              (when (and db-based? (seq properties))
-                (property-handler/set-block-properties! repo (:block/uuid new-block) properties)))
+             (let [new-block' (if (and db-based? (seq properties))
+                                (into new-block properties)
+                                new-block)]
+               (ui-outliner-tx/transact!
+                {:outliner-op :insert-blocks}
+                (outliner-insert-block! config target-block new-block'
+                                        {:sibling? sibling?
+                                         :keep-uuid? true
+                                         :ordered-list? ordered-list?
+                                         :outliner-op outliner-op
+                                         :replace-empty-target? replace-empty-target?})))
              (when edit-block?
                (if (and replace-empty-target?
                         (string/blank? (:block/title last-block)))
@@ -932,7 +947,7 @@
           block-parent (get uuid->dom-block (:block/uuid block))
           sibling-block (when block-parent (util/get-prev-block-non-collapsed-non-embed block-parent))
           blocks' (block-handler/get-top-level-blocks blocks)
-          mobile? (util/capacitor-new?)]
+          mobile? (util/capacitor?)]
       (p/do!
        (when (and sibling-block (not mobile?))
          (let [{:keys [edit-block-f]} (move-to-prev-block repo sibling-block
@@ -1056,8 +1071,8 @@
                                       (assoc :db/id (:db/id b)))))))]
         (common-handler/copy-to-clipboard-without-id-property! repo (get block :block/format :markdown) content (when html? html) copied-blocks))
       (state/set-block-op-type! :copy)
-      (when-not (util/capacitor-new?)
-        (notification/show! "Copied!" :success)))))
+      ;; (notification/show! "Copied!" :success)
+      )))
 
 (defn copy-block-refs
   []
@@ -1471,6 +1486,7 @@
                           (string/trim value)))
                (save-block-aux! db-block value opts))))
          (catch :default error
+           (js/console.error error)
            (log/error :save-block-failed error)))))))
 
 (defn- clean-content!
@@ -1516,87 +1532,95 @@
         ;; actually, writing binary using memory fs
         (fs/write-plain-text-file! repo dir file-rpath content nil)))))
 
+(defn- new-asset-block
+  [repo ^js file repo-dir asset-dir-rpath]
+  ;; WARN file name maybe fully qualified path when paste file
+  (p/let [file-name (node-path/basename (.-name file))
+          file-name-without-ext* (db-asset/asset-name->title file-name)
+          file-name-without-ext (if (= file-name-without-ext* "image")
+                                  (date/get-date-time-string-2)
+                                  file-name-without-ext*)
+          checksum (assets-handler/get-file-checksum file)
+          existing-asset (db-async/<get-asset-with-checksum repo checksum)]
+    (if existing-asset
+      (do
+        (notification/show! (str "Asset exists already, title: " (:block/title existing-asset)
+                                 ", node reference: [[" (:block/uuid existing-asset) "]]")
+                            :warning
+                            false)
+        nil)
+      (p/let [block-id (ldb/new-block-id)
+              ext (when file-name (db-asset/asset-path->type file-name))
+              _ (when (string/blank? ext)
+                  (throw (ex-info "File doesn't have a valid ext."
+                                  {:file-name file-name})))
+              file-path   (str block-id "." ext)
+              file-rpath  (str asset-dir-rpath "/" file-path)
+              dir repo-dir
+              asset (db/entity :logseq.class/Asset)]
+
+        (if (assets-handler/exceed-limit-size? file)
+          (do
+            (notification/show! "Asset size shouldn't be larger than 100M"
+                                :warning
+                                false)
+            (throw (ex-info "Asset size shouldn't be larger than 100M" {:file-name file-name})))
+          (p/do!
+           (db-based-save-asset! repo dir file file-rpath)
+           {:block/title file-name-without-ext
+            :block/uuid block-id
+            :logseq.property.asset/type ext
+            :logseq.property.asset/size (.-size file)
+            :logseq.property.asset/checksum checksum
+            :block/tags #{(:db/id asset)}}))))))
+
 (defn db-based-save-assets!
   "Save incoming(pasted) assets to assets directory.
 
-   Returns: asset entity"
+   Returns: asset entities"
   [repo files & {:keys [pdf-area? last-edit-block]}]
-  (p/let [[repo-dir asset-dir-rpath] (assets-handler/ensure-assets-dir! repo)]
-    (p/all
-     (for [[_index ^js file] (map-indexed vector files)]
-      ;; WARN file name maybe fully qualified path when paste file
-       (p/let [file-name (node-path/basename (.-name file))
-               file-name-without-ext* (db-asset/asset-name->title file-name)
-               file-name-without-ext (if (= file-name-without-ext* "image")
-                                       (date/get-date-time-string-2)
-                                       file-name-without-ext*)
-               checksum (assets-handler/get-file-checksum file)
-               existing-asset (db-async/<get-asset-with-checksum repo checksum)]
-         (if existing-asset
-           existing-asset
-           (p/let [block-id (ldb/new-block-id)
-                   ext (when file-name (db-asset/asset-path->type file-name))
-                   _ (when (string/blank? ext)
-                       (throw (ex-info "File doesn't have a valid ext."
-                                       {:file-name file-name})))
-                   file-path   (str block-id "." ext)
-                   file-rpath  (str asset-dir-rpath "/" file-path)
-                   dir repo-dir
-                   asset (db/entity :logseq.class/Asset)]
-
-             (if (> (.-size file) (* 100 1024 1024)) ; 100m
-               (do
-                 (notification/show! [:div "Asset size shouldn't be larger than 100M"]
-                                     :error
-                                     false)
-                 (throw (ex-info "Asset size shouldn't be larger than 100M" {:file-name file-name})))
-               (p/let [properties {:logseq.property.asset/type ext
-                                   :logseq.property.asset/size (.-size file)
-                                   :logseq.property.asset/checksum checksum
-                                   :block/tags (:db/id asset)}
-                       insert-opts {:custom-uuid block-id
-                                    :edit-block? false
-                                    :properties properties}
-                       _ (db-based-save-asset! repo dir file file-rpath)
-                       edit-block (or (state/get-edit-block) last-edit-block)
-                       today-page-name (date/today)
-                       today-page-e (db-model/get-journal-page today-page-name)
-                       today-page (if (nil? today-page-e)
-                                    (state/pub-event! [:page/create today-page-name])
-                                    today-page-e)
-                       insert-to-current-block-page? (and (:block/uuid edit-block) (not pdf-area?))
-                       insert-opts' (if insert-to-current-block-page?
-                                      (assoc insert-opts
-                                             :block-uuid (:block/uuid edit-block)
-                                             :replace-empty-target? true
-                                             :sibling? true)
-                                      (assoc insert-opts :page (:block/uuid today-page)))
-                       new-block (api-insert-new-block! file-name-without-ext insert-opts')]
-                 (when insert-to-current-block-page?
-                   (state/clear-edit!))
-                 (or new-block
-                     (throw (ex-info "Can't save asset" {:files files}))))))))))))
+  (p/let [[repo-dir asset-dir-rpath] (assets-handler/ensure-assets-dir! repo)
+          today-page-name (date/today)
+          today-page-e (db-model/get-journal-page today-page-name)
+          today-page (if (nil? today-page-e)
+                       (state/pub-event! [:page/create today-page-name])
+                       today-page-e)
+          blocks* (p/all
+                   (for [^js file files]
+                     (new-asset-block repo file repo-dir asset-dir-rpath)))
+          blocks (remove nil? blocks*)
+          edit-block (or (state/get-edit-block) last-edit-block)
+          insert-to-current-block-page? (and (:block/uuid edit-block) (not pdf-area?))
+          target (if insert-to-current-block-page?
+                   edit-block
+                   today-page)]
+    (when-not target
+      (throw (ex-info "invalid target" {:files files
+                                        :today-page today-page
+                                        :edit-block edit-block})))
+    (when (seq blocks)
+      (p/do!
+       (ui-outliner-tx/transact!
+        {:outliner-op :insert-blocks}
+        (outliner-op/insert-blocks! blocks target {:keep-uuid? true
+                                                   :sibling? (= edit-block target)
+                                                   :replace-empty-target? true}))
+       (map (fn [b] (db/entity [:block/uuid (:block/uuid b)])) blocks)))))
 
 (def insert-command! editor-common-handler/insert-command!)
 
 (defn db-upload-assets!
   "Paste asset for db graph and insert link to current editing block"
   [repo id ^js files format uploading? drop-or-paste?]
-  (when (or (config/local-file-based-graph? repo)
-            (config/db-based-graph? repo))
+  (when (config/db-based-graph? repo)
+    (insert-command!
+     id
+     ""
+     format
+     {:last-pattern (if drop-or-paste? "" commands/command-trigger)
+      :restore?     true
+      :command      :insert-asset})
     (-> (db-based-save-assets! repo (js->clj files))
-          ;; FIXME: only the first asset is handled
-        (p/then
-         (fn [entities]
-           (let [entity (first entities)]
-             (insert-command!
-              id
-              (ref/->page-ref (:block/uuid entity))
-              format
-              {:last-pattern (if drop-or-paste? "" commands/command-trigger)
-               :restore?     true
-               :command      :insert-asset})
-             entities)))
         (p/catch (fn [e]
                    (js/console.error e)))
         (p/finally
@@ -2064,12 +2088,11 @@
                                               (when-not keep-uuid? [:id])
                                               [:custom_id :custom-id]
                                               exclude-properties))
-                    :block/format format)
-             (not db-based?)
-             (assoc :block/properties-text-values (apply dissoc (:block/properties-text-values block)
+                    :block/properties-text-values (apply dissoc (:block/properties-text-values block)
                                                          (concat
                                                           (when-not keep-uuid? [:id])
-                                                          exclude-properties)))))))
+                                                          exclude-properties))
+                    :block/format format)))))
 
 (defn- edit-last-block-after-inserted!
   [result]
@@ -2179,17 +2202,15 @@
    A block element: {:content :properties :children [block-1, block-2, ...]}"
   [tree-vec format {:keys [target-block keep-uuid?] :as opts}]
   (let [repo (state/get-current-repo)
-        page-id (:db/id (:block/page target-block))
+        page-id (or (:db/id (:block/page target-block))
+                    (when (ldb/page? target-block)
+                      (:db/id target-block)))
         page-name (some-> page-id (db/entity) :block/name)
         blocks (block-tree->blocks repo tree-vec format keep-uuid? page-name)
-        blocks (gp-block/with-parent-and-order page-id blocks)
-        block-refs (->> (mapcat :block/refs blocks)
-                        (set)
-                        (filter (fn [ref] (and (vector? ref) (= :block/uuid (first ref))))))]
+        blocks (gp-block/with-parent-and-order page-id blocks)]
+
     (ui-outliner-tx/transact!
      {:outliner-op :paste-blocks}
-     (when (seq block-refs)
-       (db/transact! (map (fn [[_ id]] {:block/uuid id}) block-refs)))
      (paste-blocks blocks (merge opts {:ops-only? true})))))
 
 (defn insert-block-tree-after-target
@@ -2280,8 +2301,7 @@
 
                  (catch :default ^js/Error e
                    (notification/show!
-                    [:p.content
-                     (util/format "Template insert error: %s" (.-message e))]
+                    (util/format "Template insert error: %s" (.-message e))
                     :error)))))))))))
 
 (defn template-on-chosen-handler
@@ -2398,8 +2418,7 @@
                 ;; cursor in other positions of :ke|y: or ke|y::, move to line end for inserting value.
                 (if (property-file/property-key-exist?-when-file-based format content property-key)
                   (notification/show!
-                   [:p.content
-                    (util/format "Property key \"%s\" already exists!" property-key)]
+                   (util/format "Property key \"%s\" already exists!" property-key)
                    :error)
                   (cursor/move-cursor-to-line-end input)))
 
@@ -2545,12 +2564,14 @@
   (some? (dom/closest el ".block-editor")))
 
 (defn keydown-new-block-handler [^js e]
-  (let [state (get-state)]
-    (when (or (nil? (.-target e)) (inside-of-editor-block (.-target e)))
+  (let [state (get-state)
+        target (when e (.-target e))]
+    (when (or (nil? target)
+              (inside-of-editor-block target))
       (if (or (state/doc-mode-enter-for-new-line?) (inside-of-single-block (rum/dom-node state)))
         (keydown-new-line)
         (do
-          (.preventDefault e)
+          (when e (.preventDefault e))
           (keydown-new-block state))))))
 
 (defn keydown-new-line-handler [e]
@@ -2771,7 +2792,7 @@
       :else
       nil)))
 
-(defn- delete-and-update [^js input start end]
+(defn delete-and-update [^js input start end]
   (util/safe-set-range-text! input "" start end)
   (state/set-edit-content! (state/get-edit-input-id) (.-value input)))
 
@@ -2829,6 +2850,32 @@
         (delete-and-update
          input current-pos (util/safe-inc-current-pos-from-start (.-value input) current-pos))))))
 
+(defn delete-block-when-zero-pos!
+  [^js e]
+  (let [^js input (state/get-input)
+        current-pos (cursor/pos input)]
+    (when (zero? current-pos)
+      (util/stop e)
+      (let [repo (state/get-current-repo)
+            block* (state/get-edit-block)
+            block (db/entity (:db/id block*))
+            value (gobj/get input "value")
+            editor-state (get-state)
+            custom-query? (get-in editor-state [:config :custom-query?])
+            top-block? (= (:db/id (or (ldb/get-left-sibling block) (:block/parent block)))
+                          (:db/id (:block/page block)))
+            single-block? (if e (inside-of-single-block (.-target e)) false)
+            root-block? (= (:block.temp/container block) (str (:block/uuid block)))]
+        (when (and (not (and top-block? (not (string/blank? value))))
+                   (not root-block?)
+                   (not single-block?)
+                   (not custom-query?))
+          (if (own-order-number-list? block)
+            (p/do!
+             (save-current-block!)
+             (remove-block-own-order-list-type! block))
+            (delete-block! repo)))))))
+
 (defn keydown-backspace-handler
   [cut? e]
   (let [^js input (state/get-input)
@@ -2841,13 +2888,7 @@
                          (util/nth-safe value (dec current-pos)))
             selected-start (util/get-selection-start input)
             selected-end (util/get-selection-end input)
-            block (state/get-edit-block)
-            block (db/entity (:db/id block))
-            repo (state/get-current-repo)
-            top-block? (= (:db/id (or (ldb/get-left-sibling block) (:block/parent block)))
-                          (:db/id (:block/page block)))
-            single-block? (inside-of-single-block (.-target e))
-            root-block? (= (:block.temp/container block) (str (:block/uuid block)))]
+            repo (state/get-current-repo)]
         (block-handler/mark-last-input-time! repo)
         (cond
           (not= selected-start selected-end)
@@ -2858,18 +2899,9 @@
             (delete-and-update input selected-start selected-end))
 
           (zero? current-pos)
-          (let [editor-state (get-state)
-                custom-query? (get-in editor-state [:config :custom-query?])]
-            (util/stop e)
-            (when (and (not (and top-block? (not (string/blank? value))))
-                       (not root-block?)
-                       (not single-block?)
-                       (not custom-query?))
-              (if (own-order-number-list? block)
-                (p/do!
-                 (save-current-block!)
-                 (remove-block-own-order-list-type! block))
-                (delete-block! repo))))
+          (when-not (mobile-util/native-ios?)
+            ;; native iOS handled by `mobile.bottom-tabs/add-keyboard-hack-listener!`
+            (delete-block-when-zero-pos! e))
 
           (and (> current-pos 0)
                (contains? #{commands/command-trigger commands/command-ask}
@@ -3613,13 +3645,10 @@
       (save-current-block!) ;; Save the input contents before collapsing
       (ui-outliner-tx/transact! ;; Save the new collapsed state as an undo transaction (if it changed)
        {:outliner-op :collapse-expand-blocks}
-       (doseq [block-id block-ids]
-         (when-let [block (db/entity [:block/uuid block-id])]
-           (let [current-value (boolean (:block/collapsed? block))]
-             (when-not (= current-value value)
-               (let [block {:block/uuid block-id
-                            :block/collapsed? value}]
-                 (outliner-save-block! block {:outliner-op :collapse-expand-blocks})))))))
+       (let [tx-data (map (fn [block-id]
+                            {:block/uuid block-id
+                             :block/collapsed? value}) block-ids)]
+         (outliner-op/transact! tx-data {})))
       (doseq [block-id block-ids]
         (state/set-collapsed-block! block-id value)))))
 
@@ -4049,7 +4078,7 @@
              (move-blocks! children today-last-child {:sibling? true})
              (move-blocks! children today {:sibling? false})))
          (state/close-modal!)
-         (mobile-state/set-popup! nil)
+         (shui/popup-hide!)
          (when (seq children)
            (notification/show! "Blocks added to today!" :success)))))))
 
@@ -4062,8 +4091,6 @@
 (defn quick-add-open-last-block!
   []
   (when-let [add-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)]
-    (prn :debug :add-page add-page
-         :children (:block/_parent add-page))
     (when (:block/_parent add-page)
       (let [block (last (ldb/sort-by-order (:block/_parent add-page)))]
         (edit-block! block :max {:container-id :unknown-container})))))

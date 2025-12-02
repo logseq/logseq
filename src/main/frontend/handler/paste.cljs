@@ -213,6 +213,7 @@
                     (editor-handler/api-insert-new-block! ""
                                                           {:block-uuid (:block/uuid current-block)
                                                            :sibling? true
+                                                           :outliner-op :paste
                                                            :replace-empty-target? true
                                                            :other-attrs {:block/link (:db/id (db/entity [:block/uuid block-id]))}})
                     (state/clear-edit!)))))
@@ -257,13 +258,9 @@
   (when id
     (let [clipboard-data (gobj/get e "clipboardData")
           files (.-files clipboard-data)]
-      (loop [files files]
-        (when-let [file (first files)]
-          (when-let [block (state/get-edit-block)]
-            (editor-handler/upload-asset! id #js[file]
-                                          (get block :block/format :markdown)
-                                          editor-handler/*asset-uploading? true))
-          (recur (rest files))))
+      (editor-handler/upload-asset! id files
+                                    (get (state/get-edit-block) :block/format :markdown)
+                                    editor-handler/*asset-uploading? true)
       (util/stop e))))
 
 (defn editor-on-paste!
@@ -283,19 +280,8 @@
           html (.getData clipboard-data "text/html")
           text (.getData clipboard-data "text")
           has-files? (seq (.-files clipboard-data))]
-      (cond
-        (and (string/blank? text) (string/blank? html))
-        ;; When both text and html are blank, paste file if exists.
-        ;; NOTE: util/stop is not called here if no file is provided,
-        ;; so the default paste behavior of the native platform will be used.
-        (when has-files?
-          (paste-file-if-exists id e))
-
-        ;; both file attachment and text/html exist
-        (and has-files? (state/preferred-pasting-file?))
+      (if has-files?
         (paste-file-if-exists id e)
-
-        :else
         (paste-text-or-blocks-aux (state/get-input) e text html)))))
 
 (defn editor-on-paste-raw!

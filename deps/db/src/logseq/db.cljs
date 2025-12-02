@@ -5,6 +5,7 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
+            [datascript.conn :as dc]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.common.config :as common-config]
@@ -20,6 +21,7 @@
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.util :as sqlite-util])
   (:refer-clojure :exclude [object?]))
 
@@ -32,9 +34,18 @@
 (def build-favorite-tx db-db/build-favorite-tx)
 
 (defonce *transact-fn (atom nil))
+(defonce *transact-invalid-callback (atom nil))
+(defonce *transact-pipeline-fn (atom nil))
+
 (defn register-transact-fn!
   [f]
   (when f (reset! *transact-fn f)))
+(defn register-transact-invalid-callback-fn!
+  [f]
+  (when f (reset! *transact-invalid-callback f)))
+(defn register-transact-pipeline-fn!
+  [f]
+  (when f (reset! *transact-pipeline-fn f)))
 
 (defn- remove-temp-block-data
   [tx-data]
@@ -46,9 +57,10 @@
               (map? data)
               (cond->
                (remove-block-temp-f data)
-                (and (seq (:block/refs data))
-                     (every? map? (:block/refs data)))
-                (update :block/refs (fn [refs] (map remove-block-temp-f refs))))
+                (seq (:block/refs data))
+                (update :block/refs (fn [refs]
+                                      (map (fn [ref]
+                                             (if (map? ref) (remove-block-temp-f ref) ref)) refs))))
               (and (vector? data)
                    (contains? #{:db/add :db/retract} (first data))
                    (> (count data) 2)
@@ -59,44 +71,104 @@
               data))
           tx-data)))
 
-(defn assert-no-entities
+(defn entity->db-id
   [tx-data]
   (walk/prewalk
    (fn [f]
      (if (de/entity? f)
-       (throw (ex-info "ldb/transact! doesn't support Entity"
-                       {:entity f
-                        :tx-data tx-data}))
+       (if-let [id (:db/id f)]
+         id
+         (throw (ex-info "ldb/transact! doesn't support Entity"
+                         {:entity f
+                          :tx-data tx-data})))
        f))
    tx-data))
+
+(comment
+  (defn- skip-db-validate?
+    [datoms]
+    (every?
+     (fn [d]
+       (contains? #{:logseq.property/created-by-ref :block/refs :block/tx-id}
+                  (:a d)))
+     datoms)))
+
+(defn- throw-if-page-has-block-parent!
+  [db tx-data]
+  (when (some (fn [d] (and (:added d)
+                           (= :block/parent (:a d))
+                           (entity-util/page? (d/entity db (:e d)))
+                           (not (entity-util/page? (d/entity db (:v d)))))) tx-data)
+    (throw (ex-info "Page can't have block as parent"
+                    {:tx-data tx-data}))))
+
+(defn- transact-sync
+  [repo-or-conn tx-data tx-meta]
+  (try
+    (let [conn repo-or-conn
+          db @conn
+          db-based? (entity-plus/db-based-graph? db)]
+      (if (and db-based?
+               (not (:reset-conn! tx-meta))
+               (not (:initial-db? tx-meta))
+               (not (:rtc-download-graph? tx-meta))
+               (not (:skip-validate-db? tx-meta false))
+               (not (:logseq.graph-parser.exporter/new-graph? tx-meta)))
+        (let [tx-report* (d/with db tx-data tx-meta)
+              pipeline-f @*transact-pipeline-fn
+              tx-report (if-let [f pipeline-f] (f tx-report*) tx-report*)
+              _ (throw-if-page-has-block-parent! (:db-after tx-report) (:tx-data tx-report))
+              [validate-result errors] (db-validate/validate-tx-report tx-report nil)]
+          (cond
+            validate-result
+            (when (and tx-report (seq (:tx-data tx-report)))
+              ;; perf enhancement: avoid repeated call on `d/with`
+              (reset! conn (:db-after tx-report))
+              (dc/store-after-transact! conn tx-report)
+              (dc/run-callbacks conn tx-report))
+
+            :else
+            (do
+              ;; notify ui
+              (when-let [f @*transact-invalid-callback]
+                (f tx-report errors))
+              (throw (ex-info "DB write failed with invalid data" {:tx-data tx-data
+                                                                   :pipeline-tx-data (:tx-data tx-report)}))))
+          tx-report)
+        (d/transact! conn tx-data tx-meta)))
+    (catch :default e
+      (prn :debug :transact-failed :tx-meta tx-meta :tx-data tx-data)
+      (throw e))))
 
 (defn transact!
   "`repo-or-conn`: repo for UI thread and conn for worker/node"
   ([repo-or-conn tx-data]
    (transact! repo-or-conn tx-data nil))
   ([repo-or-conn tx-data tx-meta]
-   (when (or (exists? js/process)
-             (and (exists? js/goog) js/goog.DEBUG))
-     (assert-no-entities tx-data))
-   (let [tx-data (map (fn [m]
-                        (if (map? m)
-                          (cond->
-                           (dissoc m :block/children :block/meta :block/top? :block/bottom? :block/anchor
-                                   :block/level :block/container :db/other-tx
-                                   :block/unordered)
-                            (not @*transact-fn)
-                            (dissoc :block.temp/load-status))
-                          m)) tx-data)
-         tx-data (->> (remove-temp-block-data tx-data)
+   (let [tx-data (->> tx-data
+                      entity->db-id
+                      (map (fn [m]
+                             (if (map? m)
+                               (cond->
+                                (dissoc m :block/children :block/meta :block/top? :block/bottom? :block/anchor
+                                        :block/level :block/container :db/other-tx
+                                        :block/unordered)
+                                 (not @*transact-fn)
+                                 (dissoc :block.temp/load-status))
+                               m)))
+                      (remove-temp-block-data)
+                      (remove (fn [m] (and (map? m) (= (:db/ident m) :block/path-refs))))
                       (common-util/fast-remove-nils)
-                      (remove empty?))
+                      (remove (fn [m] (or ;; db/id
+                                       (integer? m)
+                                       (empty? m)))))
          delete-blocks-tx (when-not (string? repo-or-conn)
                             (delete-blocks/update-refs-history-and-macros @repo-or-conn tx-data tx-meta))
-         tx-data (concat tx-data delete-blocks-tx)]
+         tx-data (distinct (concat tx-data delete-blocks-tx))]
 
      ;; Ensure worker can handle the request sequentially (one by one)
      ;; Because UI assumes that the in-memory db has all the data except the last one transaction
-     (when (or (seq tx-data) (:db-persist? tx-meta))
+     (when (seq tx-data)
 
        ;; (prn :debug :transact :sync? (= d/transact! (or @*transact-fn d/transact!)) :tx-meta tx-meta)
        ;; (cljs.pprint/pprint tx-data)
@@ -104,12 +176,7 @@
 
        (if-let [transact-fn @*transact-fn]
          (transact-fn repo-or-conn tx-data tx-meta)
-         (try
-           (d/transact! repo-or-conn tx-data tx-meta)
-           (catch :default e
-             (js/console.trace)
-             (prn :debug :transact-failed :tx-meta tx-meta :tx-data tx-data)
-             (throw e))))))))
+         (transact-sync repo-or-conn tx-data tx-meta))))))
 
 (def page? common-entity-util/page?)
 (def internal-page? entity-util/internal-page?)
@@ -125,6 +192,7 @@
 (def get-entity-types entity-util/get-entity-types)
 (def internal-tags db-class/internal-tags)
 (def private-tags db-class/private-tags)
+(def extends-hidden-tags db-class/extends-hidden-tags)
 (def hidden-tags db-class/hidden-tags)
 
 (defn sort-by-order
@@ -137,7 +205,9 @@
              :as opts}]
   (if-let [children (sort-by-order
                      (if include-property-block?
-                       (entity-plus/lookup-kv-then-entity entity :block/_raw-parent)
+                       (let [children (entity-plus/lookup-kv-then-entity entity :block/_raw-parent)]
+                         (concat children
+                                 (keep (fn [c] (:logseq.property/query c)) children)))
                        (entity-plus/lookup-kv-then-entity entity :block/_parent)))]
     (cons entity (mapcat #(get-block-and-children-aux % opts) children))
     [entity]))
@@ -167,7 +237,7 @@
         closed-property (:block/closed-value-property block)]
     (sort-by-order (cond
                      closed-property
-                     (:property/closed-values closed-property)
+                     (:block/_closed-value-property closed-property)
 
                      from-property
                      (filter (fn [e]
@@ -467,31 +537,6 @@
    (set)
    (set/union #{page-id})))
 
-(defn get-block-refs
-  [db id]
-  (let [entity (d/entity db id)
-        db-based? (db-based-graph? db)
-        alias (->> (get-block-alias db id)
-                   (cons id)
-                   distinct)
-        ref-ids (->> (mapcat (fn [id]
-                               (cond->> (:block/_refs (d/entity db id))
-                                 db-based?
-                                 (remove (fn [ref]
-                                           ;; remove refs that have the block as either tag or property
-                                           (or (and
-                                                (class? entity)
-                                                (d/datom db :eavt (:db/id ref) :block/tags (:db/id entity)))
-                                               (and
-                                                (property? entity)
-                                                (d/datom db :eavt (:db/id ref) (:db/ident entity))))))
-                                 true
-                                 (map :db/id)))
-                             alias)
-                     distinct)]
-    (when (seq ref-ids)
-      (d/pull-many db '[*] ref-ids))))
-
 (def get-block-refs-count common-initial-data/get-block-refs-count)
 
 (defn hidden-or-internal-tag?
@@ -509,6 +554,7 @@
 
 (defn get-key-value
   [db key-ident]
+  (assert (= "logseq.kv" (namespace key-ident)) key-ident)
   (:kv/value (d/entity db key-ident)))
 
 (def kv sqlite-util/kv)
@@ -526,6 +572,10 @@
 (defn get-graph-remote-schema-version
   [db]
   (when db (get-key-value db :logseq.kv/remote-schema-version)))
+
+(defn get-graph-rtc-e2ee?
+  [db]
+  (when db (get-key-value db :logseq.kv/graph-rtc-e2ee?)))
 
 (def get-all-properties db-db/get-all-properties)
 (def get-class-extends db-class/get-class-extends)

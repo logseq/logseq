@@ -101,46 +101,64 @@
     (set! (.-pfs js/window) pfs)
     (set! (.-workerThread js/window) worker-thread)))
 
+(defn- reload-app-if-old-db-worker-exists
+  []
+  (when (util/capacitor?)
+    (log/info ::reload-app {:client-id @state/*db-worker-client-id})
+    (when-let [client-id @state/*db-worker-client-id]
+      (js/navigator.locks.request client-id #js {:mode "exclusive"
+                                                 :ifAvailable true}
+                                  (fn [lock]
+                                    (log/info ::reload-app-lock {:acquired? (some? lock)})
+                                    (when-not lock
+                                      (js/window.location.reload)))))))
+
 (defn start-db-worker!
   []
   (when-not util/node-test?
-    (let [worker-url (if config/publishing? "static/js/db-worker.js" "js/db-worker.js")
-          worker (js/Worker. (str worker-url "?electron=" (util/electron?) "&publishing=" config/publishing?))
-          _ (set-worker-fs worker)
-          wrapped-worker* (Comlink/wrap worker)
-          wrapped-worker (fn [qkw direct-pass? & args]
-                           (p/let [result (.remoteInvoke ^js wrapped-worker*
-                                                         (str (namespace qkw) "/" (name qkw))
-                                                         direct-pass?
-                                                         (cond
-                                                           (= qkw :thread-api/set-infer-worker-proxy)
-                                                           (first args)
-                                                           direct-pass?
-                                                           (into-array args)
-                                                           :else
-                                                           (ldb/write-transit-str args)))]
-                             (if direct-pass?
-                               result
-                               (ldb/read-transit-str result))))
-          t1 (util/time-ms)]
-      (Comlink/expose #js{"remoteInvoke" thread-api/remote-function} worker)
-      (worker-handler/handle-message! worker wrapped-worker)
-      (reset! state/*db-worker wrapped-worker)
-      (-> (p/let [_ (state/<invoke-db-worker :thread-api/init config/RTC-WS-URL)
-                  _ (sync-app-state!)
-                  _ (log/debug "init worker spent" (str (- (util/time-ms) t1) "ms"))
-                  _ (sync-ui-state!)
-                  _ (ask-persist-permission!)
-                  _ (state/pub-event! [:graph/sync-context])]
-            (ldb/register-transact-fn!
-             (fn worker-transact!
-               [repo tx-data tx-meta]
-               (db-transact/transact transact!
-                                     (if (string? repo) repo (state/get-current-repo))
-                                     tx-data
-                                     (assoc tx-meta :client-id (:client-id @state/state))))))
-          (p/catch (fn [error]
-                     (log/error :init-sqlite-wasm-error ["Can't init SQLite wasm" error])))))))
+    (p/do!
+     (reload-app-if-old-db-worker-exists)
+     (let [worker-url (if config/publishing? "static/js/db-worker.js" "js/db-worker.js")
+           worker (js/Worker.
+                   (str worker-url
+                        "?electron=" (util/electron?)
+                        "&capacitor=" (util/capacitor?)
+                        "&publishing=" config/publishing?))
+           _ (set-worker-fs worker)
+           wrapped-worker* (Comlink/wrap worker)
+           wrapped-worker (fn [qkw direct-pass? & args]
+                            (p/let [result (.remoteInvoke ^js wrapped-worker*
+                                                          (str (namespace qkw) "/" (name qkw))
+                                                          direct-pass?
+                                                          (cond
+                                                            (= qkw :thread-api/set-infer-worker-proxy)
+                                                            (first args)
+                                                            direct-pass?
+                                                            (into-array args)
+                                                            :else
+                                                            (ldb/write-transit-str args)))]
+                              (if direct-pass?
+                                result
+                                (ldb/read-transit-str result))))
+           t1 (util/time-ms)]
+       (Comlink/expose #js{"remoteInvoke" thread-api/remote-function} worker)
+       (worker-handler/handle-message! worker wrapped-worker)
+       (reset! state/*db-worker wrapped-worker)
+       (-> (p/let [_ (state/<invoke-db-worker :thread-api/init config/RTC-WS-URL)
+                   _ (sync-app-state!)
+                   _ (log/info "init worker spent" (str (- (util/time-ms) t1) "ms"))
+                   _ (sync-ui-state!)
+                   _ (ask-persist-permission!)
+                   _ (state/pub-event! [:graph/sync-context])]
+             (ldb/register-transact-fn!
+              (fn worker-transact!
+                [repo tx-data tx-meta]
+                (db-transact/transact transact!
+                                      (if (string? repo) repo (state/get-current-repo))
+                                      tx-data
+                                      (assoc tx-meta :client-id (:client-id @state/state))))))
+           (p/catch (fn [error]
+                      (log/error :init-sqlite-wasm-error ["Can't init SQLite wasm" error]))))))))
 
 (defn <check-webgpu-available?
   []
@@ -152,7 +170,11 @@
   []
   (when-not util/node-test?
     (let [worker-url "js/inference-worker.js"
-          ^js worker (js/SharedWorker. (str worker-url "?electron=" (util/electron?) "&publishing=" config/publishing?))
+          ^js worker (js/SharedWorker.
+                      (str worker-url
+                           "?electron=" (util/electron?)
+                           "&capacitor=" (util/capacitor?)
+                           "&publishing=" config/publishing?))
           ^js port (.-port worker)
           wrapped-worker (Comlink/wrap port)
           t1 (util/time-ms)]
@@ -182,7 +204,7 @@
     (js/window.location.reload)
     (do
       (log/error :sqlite-error error)
-      (notification/show! [:div (str "SQLiteDB error: " error)] :error))))
+      (notification/show! (str "SQLiteDB error: " error) :error))))
 
 (defrecord InBrowser []
   protocol/PersistentDB
@@ -205,7 +227,7 @@
                 _ (when disk-db-data
                     (state/<invoke-db-worker-direct-pass :thread-api/import-db repo disk-db-data))
                 _ (state/<invoke-db-worker :thread-api/create-or-open-db repo opts)]
-          (state/<invoke-db-worker :thread-api/get-initial-data repo))
+          (state/<invoke-db-worker :thread-api/get-initial-data repo opts))
         (p/catch sqlite-error-handler)))
 
   (<export-db [_this repo opts]
@@ -216,10 +238,10 @@
               (<export-db! repo data))))
         (p/catch (fn [error]
                    (log/error :export-db-error repo error "SQLiteDB save error")
-                   (notification/show! [:div (str "SQLiteDB save error: " error)] :error) {}))))
+                   (notification/show! (str "SQLiteDB save error: " error) :error) {}))))
 
   (<import-db [_this repo data]
     (-> (state/<invoke-db-worker-direct-pass :thread-api/import-db repo data)
         (p/catch (fn [error]
                    (log/error :import-db-error repo error "SQLiteDB import error")
-                   (notification/show! [:div (str "SQLiteDB import error: " error)] :error) {})))))
+                   (notification/show! (str "SQLiteDB import error: " error) :error) {})))))

@@ -7,7 +7,7 @@
   ([]
    (haptics :light))
   ([impact-style]
-   (when (util/capacitor-new?)
+   (when (util/capacitor?)
      (let [style (cond
                    (= impact-style :light)
                    {:style (.-Light ImpactStyle)}

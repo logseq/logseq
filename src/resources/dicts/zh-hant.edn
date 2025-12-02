@@ -82,7 +82,6 @@
  :asset/copy "複製圖片"
  :asset/maximize "圖片最大化"
  :asset/ref-block "資源塊引用"
- :asset/edit-block "編輯區塊"
 
  :asset/confirm-delete "你確定要刪除 {1} 嗎？"
  :asset/physical-delete "同時刪除原檔案（將無法還原）"
@@ -203,7 +202,6 @@
  :remove-heading "移除標頭"
  :heading "標頭 {1}"
  :auto-heading "自動寫入標頭"
- :open-a-directory "於本地開啟資料夾"
 
  :help/shortcut-page-title "鍵盤快捷鍵"
 

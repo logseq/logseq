@@ -33,9 +33,8 @@
       [?e2 :block/alias ?e3]]]
 
    :self-ref
-   '[(self-ref ?b ?page-name)
-     [?br :block/name ?page-name]
-     [?b :block/refs ?br]]
+   '[(self-ref ?b ?ref)
+     [?b :block/refs ?ref]]
 
    :has-ref
    '[[(has-ref ?b ?r)
@@ -230,10 +229,9 @@
 
     :tags
     '[(tags ?b ?tags)
-      [?b :block/tags ?t]
-      [?t :block/name ?tag]
-      [(missing? $ ?b :block/link)]
-      [(contains? ?tags ?tag)]]
+      [?b :block/tags ?tag]
+      [(contains? ?tags ?tag)]
+      [(missing? $ ?b :block/link)]]
 
     :task
     '[(task ?b ?statuses)

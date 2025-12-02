@@ -40,7 +40,6 @@
             [goog.dom :as gdom]
             [logseq.common.util :as common-util]
             [logseq.shui.ui :as shui]
-            [mobile.state :as mobile-state]
             [promesa.core :as p]))
 
 (defmethod events/handle :go/search [_]
@@ -90,8 +89,8 @@
 
 (defmethod events/handle :redirect-to-home [_]
   (page-handler/create-today-journal!)
-  (when (util/capacitor-new?)
-    (mobile-state/redirect-to-tab! "home")))
+  (when (util/capacitor?)
+    (state/pub-event! [:mobile/set-tab "home"])))
 
 (defmethod events/handle :page/show-delete-dialog [[_ selected-rows ok-handler]]
   (shui/dialog-open!
@@ -182,7 +181,7 @@
                   (shui/dialog-close!)
                   (nfs-handler/refresh! (state/get-current-repo) refresh-cb)))]]))
 
-(defn- editor-new-property [block target {:keys [selected-blocks] :as opts}]
+(defn- editor-new-property [block target {:keys [selected-blocks popup-id] :as opts}]
   (let [editing-block (state/get-edit-block)
         pos (state/get-edit-pos)
         edit-block-or-selected (cond
@@ -234,7 +233,9 @@
         (if target'
           (shui/popup-show! target'
                             #(property-dialog/dialog blocks opts')
-                            {:align "start"})
+                            (cond-> {:align "start"}
+                              popup-id
+                              (assoc :id popup-id)))
           (shui/dialog-open! #(property-dialog/dialog blocks opts')
                              {:id :property-dialog
                               :align "start"}))))))

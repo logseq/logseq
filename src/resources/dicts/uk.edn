@@ -218,7 +218,6 @@
  :remove-heading "Видалити заголовок"
  :heading "Заголовок {1}"
  :auto-heading "Авто заголовок"
- :open-a-directory "Відкрити локальку директорію"
 
  :help/shortcut-page-title "Кобмінації клавіш"
 

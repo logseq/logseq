@@ -283,7 +283,7 @@
                       :on-click #(do (reset! *export-block-type :edn)
                                      (p/let [result (<export-edn-helper top-level-uuids export-type)
                                              pull-data (with-out-str (pprint/pprint result))]
-                                       (when-not (= :export-edn-error result)
+                                       (when-not (:export-edn-error result)
                                          (reset! *content pull-data))))))])
       (if (= :png tp)
         [:div.flex.items-center.justify-center.relative

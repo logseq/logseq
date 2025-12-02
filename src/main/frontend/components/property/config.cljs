@@ -172,8 +172,15 @@
                                    :popup-opts {:align "start"}
                                    :del-btn? (boolean (:icon form-data))
                                    :empty-label "?"})
-      (shui/input {:ref *input-ref :size "sm" :default-value title :placeholder "name"
-                   :disabled disabled? :on-change (fn [^js e] (set-form-data! (assoc form-data :title (util/trim-safe (util/evalue e)))))})]
+      (shui/input {:ref *input-ref
+                   :size "sm"
+                   :default-value title
+                   :placeholder "name"
+                   :disabled disabled?
+                   :on-key-down (fn [e]
+                                  (when (contains? #{"ArrowLeft" "ArrowRight"} (util/ekey e))
+                                    (util/stop-propagation e)))
+                   :on-change (fn [^js e] (set-form-data! (assoc form-data :title (util/trim-safe (util/evalue e)))))})]
      [:div.pt-2 (shui/textarea {:placeholder "description" :default-value description
                                 :disabled disabled? :on-change (fn [^js e] (set-form-data! (assoc form-data :description (util/trim-safe (util/evalue e)))))})]
 

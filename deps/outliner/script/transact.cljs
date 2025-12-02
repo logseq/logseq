@@ -2,6 +2,7 @@
   "This script generically runs transactions against the queried blocks"
   (:require [clojure.edn :as edn]
             [datascript.core :as d]
+            [logseq.db :as ldb]
             [logseq.db.common.sqlite-cli :as sqlite-cli]
             [logseq.db.frontend.rules :as rules]
             [logseq.outliner.db-pipeline :as db-pipeline]
@@ -30,7 +31,7 @@
           (prn (map #(select-keys (d/entity @conn %) [:block/name :block/title]) blocks-to-update)))
       (do
         (db-pipeline/add-listener conn)
-        (d/transact! conn update-tx)
+        (ldb/transact! conn update-tx)
         (println "Updated" (count update-tx) "block(s) for graph" (str db-name "!"))))))
 
 (when (= nbb/*file* (nbb/invoked-file))

@@ -294,7 +294,7 @@
   (let [refs-count? (and (coll? sorting) (some (fn [m] (= (:id m) :block.temp/refs-count)) sorting))
         exclude-ids (when db-based? (get-exclude-page-ids db))]
     (keep (fn [d]
-            (let [e (d/entity db (:e d))]
+            (let [e (entity-plus/unsafe->Entity db (:e d))]
               (when-not (if db-based?
                           (exclude-ids (:db/id e))
                           (or (ldb/hidden-or-internal-tag? e)
@@ -318,11 +318,7 @@
       (get-entities-for-all-pages db sorting property-ident {:db-based? db-based?})
 
       :class-objects
-      (let [class-id view-for-id
-            class-children (db-class/get-structured-children db class-id)
-            class-ids (distinct (conj class-children class-id))
-            datoms (mapcat (fn [id] (d/datoms db :avet :block/tags id)) class-ids)]
-        (keep (fn [d] (non-hidden-e (:e d))) datoms))
+      (db-class/get-class-objects db view-for-id)
 
       :property-objects
       (->>
@@ -425,11 +421,17 @@
      (common-util/distinct-by :label))))
 
 (defn- get-query-properties
-  [entities]
-  (distinct (mapcat keys entities)))
+  [query entities]
+  (let [properties (when (and (coll? query) (= :find (first query)))
+                     (let [expr (second query)]
+                       (when (= 'pull (first expr))
+                         (last expr))))]
+    (if (and (seq properties) (not= properties ['*]))
+      properties
+      (distinct (mapcat keys entities)))))
 
 (defn ^:api ^:large-vars/cleanup-todo get-view-data
-  [db view-id {:keys [journals? _view-for-id view-feature-type group-by-property-ident input query-entity-ids filters sorting]
+  [db view-id {:keys [journals? _view-for-id view-feature-type group-by-property-ident input query-entity-ids query filters sorting]
                :as opts}]
   ;; TODO: create a view for journals maybe?
   (cond
@@ -541,4 +543,4 @@
         (= feat-type :linked-references)
         (merge (select-keys entities-result [:ref-pages-count :ref-matched-children-ids]))
         query?
-        (assoc :properties (get-query-properties entities-result))))))
+        (assoc :properties (get-query-properties query entities-result))))))

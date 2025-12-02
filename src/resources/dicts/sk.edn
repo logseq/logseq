@@ -381,7 +381,7 @@
  :whiteboard/snap-to-grid                          "Zarovnať do mriežky"
  :whiteboard/toggle-pen-mode                       "Prepnúť na režim pera"
  :flashcards/modal-welcome-title                   "Čas vytvoriť kartu!"
- :flashcards/modal-welcome-desc-1                  "Môžete pridať \"#card\" k akémukoľvek bloku, aby ste ho zmenili na kartu alebo spustili \"/cloze\" pre pridanie niektorých clozes."
+ :flashcards/modal-welcome-desc-1                  "Môžete pridať \"{1}\" k akémukoľvek bloku, aby ste ho zmenili na kartu alebo spustili \"/cloze\" pre pridanie niektorých clozes."
  :flashcards/modal-welcome-desc-2                  "Môžete "
  :flashcards/modal-welcome-desc-3                  "kliknúť na tento odkaz"
  :flashcards/modal-welcome-desc-4                  " na prečítanie dokumentácie."
@@ -446,7 +446,6 @@
  :remove-heading                                   "Odstrániť nadpis"
  :heading                                          "Nadpis {1}"
  :auto-heading                                     "Automatický nadpis"
- :open-a-directory                                 "Otvoriť lokálny adresár"
  :toggle-theme                                     "Prepnúť motív"
 
  :help/shortcut-page-title                         "Klávesové skratky"

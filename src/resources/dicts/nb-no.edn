@@ -131,7 +131,6 @@
  :download "Last ned"
  :language "Språk"
  :remove-background "Fjern bakgrunn"
- :open-a-directory "Åpne en lokal mappe"
 
  :help/shortcut-page-title "Tastatursnarveier"
 
@@ -582,7 +581,7 @@
  :flashcards/modal-select-switch "Bytt til"
  :flashcards/modal-toggle-preview-mode "Veksle forhåndsvisningsmodus"
  :flashcards/modal-toggle-random-mode "Veksle tilfeldig modus"
- :flashcards/modal-welcome-desc-1 "Du kan legge til \"#card\" til en hvilkensomhelst blokk for å gjøre den opp til et kort, eller skrive \"/cloze\" for å legge til clozes."
+ :flashcards/modal-welcome-desc-1 "Du kan legge til \"{1}\" til en hvilkensomhelst blokk for å gjøre den opp til et kort, eller skrive \"/cloze\" for å legge til clozes."
  :flashcards/modal-welcome-desc-2 "Du kan "
  :flashcards/modal-welcome-desc-3 "klikk på denne lenken"
  :flashcards/modal-welcome-desc-4 " for å sjekke ut dokumentasjonen."

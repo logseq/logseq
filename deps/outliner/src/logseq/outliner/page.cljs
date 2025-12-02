@@ -26,15 +26,16 @@
         id-ref->page #(db-content/content-id-ref->page % [page-entity])]
     (when (seq refs)
       (let [tx-data (mapcat (fn [{:block/keys [raw-title] :as ref}]
-                                ;; block content
-                              (let [content' (id-ref->page raw-title)
-                                    content-tx (when (not= raw-title content')
-                                                 {:db/id (:db/id ref)
-                                                  :block/title content'})
-                                    tx content-tx]
-                                (concat
-                                 [[:db/retract (:db/id ref) :block/refs (:db/id page-entity)]]
-                                 (when tx [tx])))) refs)]
+                              ;; block content
+                              (when raw-title
+                                (let [content' (id-ref->page raw-title)
+                                      content-tx (when (not= raw-title content')
+                                                   {:db/id (:db/id ref)
+                                                    :block/title content'})
+                                      tx content-tx]
+                                  (concat
+                                   [[:db/retract (:db/id ref) :block/refs (:db/id page-entity)]]
+                                   (when tx [tx]))))) refs)]
         tx-data))))
 
 (defn delete!
@@ -81,7 +82,7 @@
                              (assoc :real-outliner-op :rename-page)))
             true))))))
 
-(defn- build-page-tx [db properties page {:keys [whiteboard? class? tags]}]
+(defn- build-page-tx [db properties page {:keys [whiteboard? class? tags class-ident-namespace]}]
   (when (:block/uuid page)
     (let [type-tag (cond class? :logseq.class/Tag
                          whiteboard? :logseq.class/Whiteboard
@@ -116,7 +117,7 @@
                           [k v])))
                 (into {})))]
       (cond-> (if class?
-                [(merge (db-class/build-new-class db page')
+                [(merge (db-class/build-new-class db page' {:ident-namespace class-ident-namespace})
                         ;; FIXME: new pages shouldn't have db/ident but converting property to tag still relies on this
                         (select-keys page' [:db/ident]))
                  [:db/retract [:block/uuid (:block/uuid page)] :block/tags :logseq.class/Page]]
@@ -228,12 +229,12 @@
        [page])
      (remove nil?))))
 
-(defn- ^:large-vars/cleanup-todo create
+(defn ^:large-vars/cleanup-todo ^:api create
   "Pure function without side effects"
   [db title*
    {uuid' :uuid
     :keys [tags properties persist-op? whiteboard?
-           class? today-journal? split-namespace?]
+           class? today-journal? split-namespace? class-ident-namespace]
     :or   {properties               nil
            persist-op?              true}
     :as options}]
@@ -260,9 +261,12 @@
                      :outliner-op :save-block}]
         (when (and class?
                    (not (ldb/class? existing-page))
-                   (or (ldb/property? existing-page) (ldb/internal-page? existing-page)))
-          ;; Convert existing user property or page to class
-          (let [tx-data [(merge (db-class/build-new-class db (select-keys existing-page [:block/title :block/uuid :block/created-at]))
+                   (ldb/internal-page? existing-page))
+          ;; Convert existing page to class
+          (let [tx-data [(merge (db-class/build-new-class db
+                                                          (select-keys existing-page [:block/title :block/uuid :block/created-at])
+                                                          (when (and class? class-ident-namespace (string? class-ident-namespace))
+                                                            {:ident-namespace class-ident-namespace}))
                                 (select-keys existing-page [:db/ident]))
                          [:db/retract [:block/uuid (:block/uuid existing-page)] :block/tags :logseq.class/Page]]]
             {:tx-meta tx-meta
@@ -288,7 +292,7 @@
               (outliner-validate/validate-page-title-characters (str (:block/title parent)) {:node parent})))
 
           (let [page-uuid (:block/uuid page)
-                page-txs  (build-page-tx db properties page (select-keys options [:whiteboard? :class? :tags]))
+                page-txs  (build-page-tx db properties page (select-keys options [:whiteboard? :class? :tags :class-ident-namespace]))
                 txs      (concat
                           ;; transact doesn't support entities
                           (remove de/entity? parents')
@@ -305,7 +309,7 @@
 
 (defn create!
   [conn title opts]
-  (let [{:keys [tx-meta tx-data title page-uuid]} (create @conn title opts)]
+  (let [{:keys [tx-meta tx-data title' page-uuid]} (create @conn title opts)]
     (when (seq tx-data)
-      (d/transact! conn tx-data tx-meta)
-      [title page-uuid])))
+      (ldb/transact! conn tx-data tx-meta)
+      [title' page-uuid])))

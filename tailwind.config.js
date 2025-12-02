@@ -129,7 +129,8 @@ module.exports = {
     './resources/**/*.html',
     './deps/shui/src/**/*.cljs',
     './deps/shui/src/**/*.cljc',
-    './packages/ui/@/components/**/*.{ts,tsx}'
+    './packages/ui/@/components/**/*.{ts,tsx}',
+    './packages/ui/src/amplify/**/*.{ts,tsx}'
   ],
   safelist: [
     'bg-black', 'bg-white', 'capitalize-first',

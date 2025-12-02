@@ -396,14 +396,15 @@
             :block/name (common-util/page-name-sanity-lc (:block/title page))})))
      pages)))
 
-(defn remove-block-path-refs-datoms
+(defn remove-block-path-refs
   [db]
   (when (d/entity db :block/path-refs)
-    (->> (d/datoms db :avet :block/path-refs)
-         (map :e)
-         (distinct)
-         (map (fn [id]
-                [:db/retract id :block/path-refs])))))
+    (let [remove-datoms (->> (d/datoms db :avet :block/path-refs)
+                             (map :e)
+                             (distinct)
+                             (mapv (fn [id]
+                                     [:db/retract id :block/path-refs])))]
+      (conj remove-datoms [:db/retractEntity :block/path-refs]))))
 
 (defn- remove-position-property-from-url-properties
   [db]
@@ -428,8 +429,10 @@
    ["65.8" {:fix add-missing-page-name}]
    ["65.9" {:properties [:logseq.property.embedding/hnsw-label-updated-at]}]
    ["65.10" {:properties [:block/journal-day :logseq.property.view/sort-groups-by-property :logseq.property.view/sort-groups-desc?]}]
-   ["65.11" {:fix remove-block-path-refs-datoms}]
-   ["65.12" {:fix remove-position-property-from-url-properties}]])
+   ["65.11" {:fix remove-block-path-refs}]
+   ["65.12" {:fix remove-position-property-from-url-properties}]
+   ["65.13" {:properties [:logseq.property.asset/width
+                          :logseq.property.asset/height]}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]
@@ -444,57 +447,69 @@
   "Return tx-data"
   [conn]
   (let [*uuids (atom {})
-        data (->> (sqlite-create-graph/build-db-initial-data "")
+        initial-data (sqlite-create-graph/build-db-initial-data "")
+        data (->> initial-data
                   (keep (fn [data]
-                          (if (map? data)
-                            (cond
-                              ;; Already created db-idents like :logseq.kv/graph-initial-schema-version should not be overwritten
-                              (= "logseq.kv" (some-> (:db/ident data) namespace))
-                              nil
+                          (cond
+                            ;; Already created db-idents like :logseq.kv/graph-initial-schema-version should not be overwritten
+                            (= "logseq.kv" (some-> (:db/ident data) namespace))
+                            nil
 
-                              (= (:block/title data) "Contents")
-                              nil
+                            (= (:block/title data) "Contents")
+                            nil
 
-                              (:file/path data)
-                              (if-let [block (d/entity @conn [:file/path (:file/path data)])]
-                                (let [existing-data (assoc (into {} block) :db/id (:db/id block))]
-                                  (merge data existing-data))
-                                data)
-
-                              (:block/uuid data)
-                              (if-let [block (d/entity @conn [:block/uuid (:block/uuid data)])]
-                                (do
-                                  (swap! *uuids assoc (:block/uuid data) (:block/uuid block))
-                                  (let [existing-data (assoc (into {} block) :db/id (:db/id block))]
-                                    (reduce
-                                     (fn [data [k existing-value]]
-                                       (update data k
-                                               (fn [v]
-                                                 (cond
-                                                   (and (vector? v) (= :block/uuid (first v)))
-                                                   v
-                                                   (and (coll? v) (not (map? v)))
-                                                   (concat v (if (coll? existing-value) existing-value [existing-value]))
-                                                   :else
-                                                   (if (some? existing-value) existing-value v)))))
-                                     data
-                                     existing-data)))
-                                data)
-
-                              :else
+                            (:file/path data)
+                            (if-let [block (d/entity @conn [:file/path (:file/path data)])]
+                              (let [existing-data (assoc (into {} block) :db/id (:db/id block))]
+                                (merge data existing-data))
                               data)
-                            data))))
+
+                            (= [:block/uuid :logseq.property/built-in?] (keys data))
+                            data
+
+                            (:block/uuid data)
+                            (if-let [block (d/entity @conn [:block/uuid (:block/uuid data)])]
+                              (do
+                                (swap! *uuids assoc (:block/uuid data) (:block/uuid block))
+                                (let [existing-data (assoc (into {} block) :db/id (:db/id block))]
+                                  (reduce
+                                   (fn [data [k existing-value]]
+                                     (update data k
+                                             (fn [v]
+                                               (cond
+                                                 (= k :logseq.property/built-in?)
+                                                 true
+                                                 (= k :logseq.property/type)
+                                                 v
+                                                 (coll? v)
+                                                 v
+
+                                                 :else
+                                                 (let [existing-value (if (and (coll? existing-value) (not (map? existing-value)))
+                                                                        (remove nil? existing-value)
+                                                                        existing-value)]
+                                                   (if (some? existing-value) existing-value v))))))
+                                   data
+                                   existing-data)))
+                              data)
+
+                            :else
+                            data)))
+                  common-util/fast-remove-nils)
         ;; using existing page's uuid
-        data' (walk/prewalk
-               (fn [f]
-                 (cond
-                   (and (de/entity? f) (:block/uuid f))
-                   (or (:db/ident f) [:block/uuid (:block/uuid f)])
-                   (and (vector? f) (= :block/uuid (first f)) (@*uuids (second f)))
-                   [:block/uuid (@*uuids (second f))]
-                   :else
-                   f))
-               data)
+        data' (->>
+               (walk/prewalk
+                (fn [f]
+                  (cond
+                    (and (de/entity? f) (:block/uuid f))
+                    (or (:db/ident f) [:block/uuid (:block/uuid f)])
+                    (and (vector? f) (= :block/uuid (first f)) (@*uuids (second f)))
+                    [:block/uuid (@*uuids (second f))]
+                    :else
+                    f))
+                data)
+               (map (fn [m] (dissoc m :db/id))))
+
         r (d/transact! conn data' {:fix-db? true
                                    :db-migrate? true})]
     (assoc r :migrate-updates
@@ -536,7 +551,8 @@
         tx-data' (concat
                   [(sqlite-util/kv :logseq.kv/schema-version version)]
                   tx-data)
-        r (ldb/transact! conn tx-data' {:db-migrate? true})
+        r (ldb/transact! conn tx-data' {:db-migrate? true
+                                        :skip-validate-db? true})
         migrate-updates (cond-> migrate-updates
                           rename-db-idents (assoc :rename-db-idents rename-db-idents-coll))]
     (println "DB schema migrated to" version)

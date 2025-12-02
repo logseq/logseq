@@ -173,12 +173,17 @@
                                     (date/journal-title->int (date/today))))
                        (state/pub-event! [:journal/insert-template page-name]))))
                  state)}
-  [state block* {:keys [sidebar? whiteboard? hide-add-button?] :as config}]
+  [state block* {:keys [sidebar? whiteboard? hide-add-button? journals?] :as config}]
   (when-let [id (:db/id block*)]
     (let [block (db/sub-block id)
           block-id (:block/uuid block)
           block? (not (db/page? block))
-          children (:block/_parent block)
+          full-children (->> (:block/_parent block)
+                             ldb/sort-by-order)
+          mobile-length-limit 50
+          [children more?] (if (and (> (count full-children) mobile-length-limit) (util/mobile?) journals?)
+                             [(take mobile-length-limit full-children) true]
+                             [full-children false])
           quick-add-page-id (:db/id (db-db/get-built-in-page (db/get-db) common-config/quick-add-page-name))
           children (cond
                      (and (= id quick-add-page-id)
@@ -222,8 +227,14 @@
               blocks (if block? [block] (db/sort-by-order children block))]
           [:div.relative
            (page-blocks-inner block blocks config sidebar? whiteboard? block-id)
-           (when-not hide-add-button?
-             (add-button block config))])))))
+           (when more?
+             (shui/button {:variant :ghost
+                           :class "text-muted-foreground w-full"
+                           :on-click (fn [] (route-handler/redirect-to-page! (:block/uuid block)))}
+                          "Load more"))
+           (when-not more?
+             (when-not hide-add-button?
+               (add-button block config)))])))))
 
 (rum/defc today-queries < rum/reactive
   [repo today? sidebar?]
@@ -239,10 +250,10 @@
                (ui/catch-error
                 (ui/component-error "Failed default query:" {:content (pr-str query')})
                 (query/custom-query (component-block/wrap-query-components
-                                     {:attr {:class "mt-10"}
-                                      :editor-box editor/box
+                                     {:editor-box editor/box
                                       :page page-cp
-                                      :built-in-query? true})
+                                      :built-in-query? true
+                                      :today-query? true})
                                     query'))
                (str repo "-custom-query-" (:query query')))))]))))
 
@@ -615,21 +626,15 @@
   (rum/local false ::all-collapsed?)
   (rum/local false ::control-show?)
   (rum/local nil   ::current-page)
-  (rum/local false ::objects-ready?)
-  [state {:keys [repo page preview? sidebar? tag-dialog? linked-refs? unlinked-refs? config] :as option}]
+  [state {:keys [repo page preview? sidebar? tag-dialog? linked-refs? unlinked-refs? config journals?] :as option}]
   (let [current-repo (state/sub :git/current-repo)
-        *objects-ready? (::objects-ready? state)
         page (or page (some-> (:db/id option) db/entity))
         config (assoc config
-                      :*objects-ready? *objects-ready?
                       :id (str (:block/uuid page)))
         repo (or repo current-repo)
         block? (some? (:block/page page))
         class-page? (ldb/class? page)
         property-page? (ldb/property? page)
-        objects-ready? (if (or class-page? property-page?)
-                         (rum/react *objects-ready?)
-                         true)
         title (:block/title page)
         journal? (db/journal-page? title)
         db-based? (config/db-based-graph? repo)
@@ -693,18 +698,18 @@
                (sidebar-page-properties config page)])
 
             (when show-tabs?
-              (tabs page {:current-page? option :sidebar? sidebar? :*objects-ready? *objects-ready?}))
+              (tabs page {:current-page? option :sidebar? sidebar?}))
 
             (when (not tag-dialog?)
               [:div.ls-page-blocks
                {:style {:margin-left (if (or whiteboard? (util/mobile?)) 0 -20)}
-                :class (when-not (or sidebar? (util/capacitor-new?))
+                :class (when-not (or sidebar? (util/capacitor?))
                          "mt-4")}
                (page-blocks-cp page (merge option {:sidebar? sidebar?
                                                    :container-id (:container-id state)
                                                    :whiteboard? whiteboard?}))])])
 
-         (when (and (not preview?) (or (not show-tabs?) objects-ready?))
+         (when-not preview?
            [:div.ml-1.flex.flex-col.gap-8
             (when today?
               (today-queries repo today? sidebar?))
@@ -720,9 +725,11 @@
 
             ;; referenced blocks
             (when-not (or whiteboard? tag-dialog? linked-refs? (and block? (not db-based?)))
-              [:div {:key "page-references"}
+              [:div.fade-in.delay {:key "page-references"}
                (rum/with-key
-                 (reference/references page {:sidebar? sidebar?})
+                 (reference/references page {:sidebar? sidebar?
+                                             :journals? journals?
+                                             :refs-count (:refs-count option)})
                  (str title "-refs"))])
 
             (when-not block-or-whiteboard?
@@ -735,7 +742,7 @@
                           home?
                           (or class-page? property-page?)
                           (and block? (not db-based?)))
-              [:div {:key "page-unlinked-references"}
+              [:div.fade-in.delay {:key "page-unlinked-references"}
                (reference/unlinked-references page {:sidebar? sidebar?})])])])
       [:div.opacity-75 "Page not found"])))
 
@@ -750,11 +757,17 @@
                  page-uuid? (when page-name (util/uuid-string? page-name))
                  *loading? (atom true)
                  page (db/get-page page-id-uuid-or-name)
-                 *page (atom page)]
+                 *page (atom page)
+                 *refs-count (atom nil)
+                 repo (state/get-current-repo)]
              (when (:block.temp/load-status page) (reset! *loading? false))
-             (p/let [page-block (db-async/<get-block (state/get-current-repo) page-id-uuid-or-name)]
+             (p/let [page-block (db-async/<get-block repo page-id-uuid-or-name)
+                     page-id (:db/id page-block)
+                     refs-count (when-not (or (ldb/class? page-block) (ldb/property? page-block))
+                                  (db-async/<get-block-refs-count repo page-id))]
                (reset! *loading? false)
                (reset! *page (db/entity (:db/id page-block)))
+               (reset! *refs-count refs-count)
                (when page-block
                  (when-not (or preview-or-sidebar? (:tag-dialog? option))
                    (if-let [page-uuid (and (not (:db/id page*))
@@ -764,15 +777,19 @@
                      (route-handler/update-page-title-and-label! (state/get-route-match))))))
              (assoc state
                     ::loading? *loading?
-                    ::*page *page)))
+                    ::*page *page
+                    ::*refs-count *refs-count)))
    :will-unmount (fn [state]
                    (state/set-state! :editor/virtualized-scroll-fn nil)
                    state)}
   [state option]
   (let [loading? (rum/react (::loading? state))
-        page (rum/react (::*page state))]
+        page (rum/react (::*page state))
+        refs-count (rum/react (::*refs-count state))]
     (when (and page (not loading?))
-      (page-inner (assoc option :page page)))))
+      (page-inner (assoc option
+                         :page page
+                         :refs-count refs-count)))))
 
 (rum/defcs page-cp
   [state option]

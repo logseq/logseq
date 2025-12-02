@@ -132,6 +132,7 @@
   [:map
    [:t :int]
    [:t-before :int]
+   [:t-query-end {:optional true} :int] ;TODO: remove 'optional' later, be compatible with old-clients for now
    [:affected-blocks
     [:map-of :uuid
      [:multi {:dispatch :op :decode/string #(update % :op keyword)}
@@ -243,6 +244,27 @@
                       [:graph<->user/user-type :keyword]
                       [:user/online? :boolean]]]]]]
      ["inject-users-info" [:map]]
+
+     ;; keys manage
+     ["fetch-user-rsa-key-pair"
+      [:map
+       [:public-key [:maybe :string]]
+       [:encrypted-private-key [:maybe :string]]]]
+     ["fetch-graph-encrypted-aes-key"
+      [:map
+       [:encrypted-aes-key [:maybe :string]]]]
+     ["fetch-user-rsa-public-key"
+      [:map
+       [:public-key [:maybe :string]]]]
+     ["upload-user-rsa-key-pair"
+      [:map
+       [:public-key :string]
+       [:encrypted-private-key :string]]]
+     ["reset-user-rsa-key-pair"
+      [:map
+       [:public-key :string]
+       [:encrypted-private-key :string]]]
+
      [nil data-from-ws-schema-fallback]]))
 
 (def data-from-ws-coercer (m/coercer data-from-ws-schema mt/string-transformer nil
@@ -261,6 +283,7 @@
       ["init-request"
        [:map
         [:graph-uuid :uuid]
+        [:api-version :string]
         [:schema-version db-schema/major-schema-version-string-schema]
         [:t-before :int]
         [:get-graph-skeleton :boolean]]]
@@ -273,6 +296,7 @@
         [:map
          [:req-id :string]
          [:action :string]
+         [:api-version :string]
          [:profile {:optional true} :boolean]
          [:graph-uuid :uuid]
          [:schema-version db-schema/major-schema-version-string-schema]
@@ -280,7 +304,6 @@
          [:t-before :int]]
         [:map
          [:req-id :string]
-         [:schema-version db-schema/major-schema-version-string-schema]
          [:action :string]
          [:profile {:optional true} :boolean]
          [:s3-key :string]]]]
@@ -290,7 +313,8 @@
        [:map
         [:s3-key :string]
         [:graph-name :string]
-        [:schema-version db-schema/major-schema-version-string-schema]]]
+        [:schema-version db-schema/major-schema-version-string-schema]
+        [:encrypted-aes-key {:optional true} :string]]]
       ["branch-graph"
        [:map
         [:s3-key :string]
@@ -307,8 +331,11 @@
       ["grant-access"
        [:map
         [:graph-uuid :uuid]
-        [:target-user-uuids {:optional true} [:sequential :uuid]]
-        [:target-user-emails {:optional true} [:sequential :string]]]]
+        [:target-user-email+encrypted-aes-key-coll
+         [:sequential
+          [:map
+           [:user/email :string]
+           [:encrypted-aes-key [:maybe :string]]]]]]]
       ["get-users-info"
        [:map
         [:graph-uuid :uuid]]]
@@ -350,31 +377,27 @@
         [:graph-uuid :uuid]
         [:schema-version db-schema/major-schema-version-string-schema]
         [:asset-uuids [:sequential :uuid]]]]
-      ["get-user-devices"
-       [:map]]
-      ["add-user-device"
+      ;; ================================================================
+      ["upload-user-rsa-key-pair"
        [:map
-        [:device-name :string]]]
-      ["remove-user-device"
+        [:user-uuid :uuid]
+        [:public-key {:optional true} :string]
+        [:encrypted-private-key :string]
+        [:reset-private-key {:optional true} :boolean]]]
+      ["reset-user-rsa-key-pair"
        [:map
-        [:device-uuid :uuid]]]
-      ["update-user-device-name"
+        [:user-uuid :uuid]
+        [:public-key :string]
+        [:encrypted-private-key :string]]]
+      ["fetch-user-rsa-key-pair"
        [:map
-        [:device-uuid :uuid]
-        [:device-name :string]]]
-      ["add-device-public-key"
+        [:user-uuid :uuid]]]
+      ["fetch-graph-encrypted-aes-key"
        [:map
-        [:device-uuid :uuid]
-        [:key-name :string]
-        [:public-key :string]]]
-      ["remove-device-public-key"
+        [:graph-uuid :uuid]]]
+      ["fetch-user-rsa-public-key"
        [:map
-        [:device-uuid :uuid]
-        [:key-name :string]]]
-      ["sync-encrypted-aes-key"
-       [:map
-        [:device-uuid->encrypted-aes-key [:map-of :uuid :string]]
-        [:graph-uuid :uuid]]]])))
+        [:user/email :string]]]])))
 
 (def data-to-ws-encoder (m/encoder data-to-ws-schema (mt/transformer
                                                       mt/string-transformer

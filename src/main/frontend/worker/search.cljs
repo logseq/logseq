@@ -192,12 +192,12 @@ DROP TRIGGER IF EXISTS blocks_au;
                              :rowMode "array"}))
           blocks (bean/->clj result)]
       (keep (fn [block]
-              (let [[id page title rank snippet] (if enable-snippet?
-                                                   (update block 4 get-snippet-result)
-                                                   block)]
+              (let [[id page title _rank snippet] (if enable-snippet?
+                                                    (update block 4 get-snippet-result)
+                                                    block)]
                 (when title
                   {:id id
-                   :keyword-score (+ (fuzzy/score q title) (js/Math.abs rank))
+                   :keyword-score (fuzzy/score q title)
                    :page page
                    :title title
                    :snippet snippet}))) blocks))
@@ -423,9 +423,8 @@ DROP TRIGGER IF EXISTS blocks_au;
                                                     (ldb/class? block))))
                                         {:db/id (:db/id block)
                                          :block/uuid (:block/uuid block)
-                                         :block/title (if (ldb/page? block)
-                                                        (ldb/get-title-with-parents block)
-                                                        (or snippet title))
+                                         :block/title (or snippet title)
+                                         :block.temp/original-title (:block/title block)
                                          :block/page (or
                                                       (:block/uuid (:block/page block))
                                                       (when page
@@ -434,6 +433,7 @@ DROP TRIGGER IF EXISTS blocks_au;
                                                           nil)))
                                          :block/parent (:db/id (:block/parent block))
                                          :block/tags (seq (map :db/id (:block/tags block)))
+                                         :logseq.property/icon (:logseq.property/icon block)
                                          :page? (ldb/page? block)
                                          :alias (some-> (first (:block/_alias block))
                                                         (select-keys [:block/uuid :block/title]))})))))))]

@@ -1,6 +1,6 @@
 {
   "name": "@logseq/libs",
-  "version": "0.2.1",
+  "version": "0.2.8",
   "description": "Logseq SDK libraries",
   "main": "dist/lsplugin.user.js",
   "typings": "index.d.ts",
@@ -10,6 +10,7 @@
     "dev:user": "npm run build:user -- --mode development --watch",
     "build:core": "webpack --config webpack.config.core.js --mode production",
     "dev:core": "npm run build:core -- --mode development --watch",
+    "generate:schema": "node scripts/extract-sdk-schema.js",
     "build": "tsc && rm dist/*.js && npm run build:user",
     "lint": "prettier --check \"src/**/*.{ts, js}\"",
     "fix": "prettier --write \"src/**/*.{ts, js}\"",
@@ -27,6 +28,7 @@
     "snake-case": "3.0.4"
   },
   "devDependencies": {
+    "ts-morph": "^22.0.0",
     "@babel/core": "^7.20.2",
     "@babel/preset-env": "^7.20.2",
     "@types/debug": "^4.1.5",

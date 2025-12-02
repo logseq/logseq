@@ -393,7 +393,7 @@
  :whiteboard/snap-to-grid "Kılavuzlara daya"
  :whiteboard/toggle-pen-mode "Kalem modunu aç/kapat"
  :flashcards/modal-welcome-title "Bir kart oluşturma zamanı!"
- :flashcards/modal-welcome-desc-1 "Herhangi bir bloğu karta dönüştürmek için \"#card\" etiketini ekleyebilir veya cümle tamamlama eklemek için \"/cloze\" komutunu kullanabilirsiniz."
+ :flashcards/modal-welcome-desc-1 "Herhangi bir bloğu karta dönüştürmek için \"{1}\" etiketini ekleyebilir veya cümle tamamlama eklemek için \"/cloze\" komutunu kullanabilirsiniz."
  :flashcards/modal-welcome-desc-2 "Belgeleri kontrol etmek için "
  :flashcards/modal-welcome-desc-3 "bu bağlantıya"
  :flashcards/modal-welcome-desc-4 " basabilirsiniz."
@@ -458,7 +458,6 @@
  :remove-heading "Başlığı kaldır"
  :heading "Başlık {1}"
  :auto-heading "Otomatik başlık"
- :open-a-directory "Yerel bir dizin aç"
  :toggle-theme "Temayı değiştir"
 
  :help/shortcut-page-title "Klavye kısayolları"

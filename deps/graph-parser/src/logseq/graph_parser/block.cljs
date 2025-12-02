@@ -52,7 +52,7 @@
                   (and
                    (= url-type "Page_ref")
                    (and (string? value)
-                        (not (or (common-config/local-asset? value)
+                        (not (or (common-config/local-relative-asset? value)
                                  (common-config/draw? value))))
                    value)
 
@@ -63,7 +63,7 @@
 
                   (and (= url-type "Search")
                        (= format :org)
-                       (not (common-config/local-asset? value))
+                       (not (common-config/local-relative-asset? value))
                        value)
 
                   (and
@@ -316,7 +316,9 @@
                         (text/namespace-page? original-page-name'))
         page-entity (when (and db (not skip-existing-page-check?))
                       (if class?
-                        (ldb/get-case-page db original-page-name')
+                        (some->> (ldb/page-exists? db original-page-name' #{:logseq.class/Tag})
+                                 first
+                                 (d/entity db))
                         (ldb/get-page db original-page-name')))
         original-page-name' (or from-page (:block/title page-entity) original-page-name')
         page (merge
@@ -410,26 +412,30 @@
        (not (common-date/valid-journal-title-with-slash? page))))
 
 (defn- ref->map
-  [db *col {:keys [date-formatter db-based? *name->id tag?]}]
-  (let [col (remove string/blank? @*col)
-        children-pages (when-not db-based?
-                         (->> (mapcat (fn [p]
-                                        (let [p (if (map? p)
-                                                  (:block/title p)
-                                                  p)]
-                                          (when (string? p)
-                                            (let [p (or (text/get-nested-page-name p) p)]
-                                              (when (text/namespace-page? p)
-                                                (common-util/split-namespace-pages p))))))
-                                      col)
-                              (remove string/blank?)
-                              (distinct)))
+  [db *col {:keys [date-formatter *name->id tag? db-based? structured-tags]}]
+  (let [col (distinct (remove string/blank? @*col))
+        children-pages (->> (mapcat (fn [p]
+                                      (let [p (if (map? p)
+                                                (:block/title p)
+                                                p)]
+                                        (when (string? p)
+                                          (let [p (or (text/get-nested-page-name p) p)]
+                                            (if (and (text/namespace-page? p) (not tag?))
+                                              (common-util/split-namespace-pages p)
+                                              [p])))))
+                                    col)
+                            (remove string/blank?)
+                            (distinct))
         col (->> (distinct (concat col children-pages))
-                 (remove nil?))]
+                 (remove nil?))
+        export-to-db-graph? @*export-to-db-graph?]
     (map
      (fn [item]
        (let [macro? (and (map? item)
-                         (= "macro" (:type item)))]
+                         (= "macro" (:type item)))
+             tag? (if export-to-db-graph?
+                    tag?
+                    (or (contains? structured-tags item) tag?))]
          (when-not macro?
            (let [m (page-name->map item db true date-formatter {:class? tag?})
                  result (cond->> m
@@ -441,13 +447,16 @@
                (swap! *name->id assoc page-name (:block/uuid result)))
              ;; Changing a :block/uuid should be done cautiously here as it can break
              ;; the identity of built-in concepts in db graphs
-             (if id
+             (if (and id
+                      (or (when-let [ident (:db/ident result)]
+                            (nil? (d/entity db ident)))
+                          export-to-db-graph?))
                (assoc result :block/uuid id)
                result))))) col)))
 
 (defn- with-page-refs-and-tags
-  [{:keys [title body tags refs marker priority] :as block} db date-formatter parse-block]
-  (let [db-based? (and (ldb/db-based-graph? db) (not *export-to-db-graph?))
+  [{:keys [title body tags refs marker priority] :as block} db date-formatter]
+  (let [db-based? (and (ldb/db-based-graph? db) (not @*export-to-db-graph?))
         refs (->> (concat tags refs (when-not db-based? [marker priority]))
                   (remove string/blank?)
                   (distinct))
@@ -476,18 +485,14 @@
     (let [*name->id (atom {})
           ref->map-options {:db-based? db-based?
                             :date-formatter date-formatter
-                            :*name->id *name->id}
+                            :*name->id *name->id
+                            :structured-tags (set @*structured-tags)}
           refs (->> (ref->map db *refs ref->map-options)
                     (remove nil?)
                     (map (fn [ref]
-                           (let [ref' (if-let [entity (ldb/get-case-page db (:block/title ref))]
-                                        (if (= (:db/id parse-block) (:db/id entity))
-                                          ref
-                                          (select-keys entity [:block/uuid :block/title :block/name]))
-                                        ref)]
-                             (cond-> ref'
-                               (:block.temp/original-page-name ref)
-                               (assoc :block.temp/original-page-name (:block.temp/original-page-name ref)))))))
+                           (cond-> ref
+                             (:block.temp/original-page-name ref)
+                             (assoc :block.temp/original-page-name (:block.temp/original-page-name ref))))))
           tags (ref->map db *structured-tags (assoc ref->map-options :tag? true))]
       (assoc block
              :refs refs
@@ -551,9 +556,9 @@
     (map (fn [page] (page-name->map page db true date-formatter)) page-refs)))
 
 (defn- with-page-block-refs
-  [block db date-formatter & {:keys [parse-block]}]
+  [block db date-formatter]
   (some-> block
-          (with-page-refs-and-tags db date-formatter parse-block)
+          (with-page-refs-and-tags db date-formatter)
           with-block-refs
           (update :refs (fn [col] (remove nil? col)))))
 
@@ -625,7 +630,7 @@
     properties))
 
 (defn- construct-block
-  [block properties timestamps body encoded-content format pos-meta {:keys [block-pattern db date-formatter parse-block remove-properties? db-graph-mode? export-to-db-graph?]}]
+  [block properties timestamps body encoded-content format pos-meta {:keys [block-pattern db date-formatter remove-properties? db-graph-mode? export-to-db-graph?]}]
   (let [id (get-custom-id-or-new-id properties)
         ref-pages-in-properties (->> (:page-refs properties)
                                      (remove string/blank?))
@@ -666,7 +671,7 @@
         db-based? (or db-graph-mode? export-to-db-graph?)
         block (-> block
                   (assoc :body body)
-                  (with-page-block-refs db date-formatter {:parse-block parse-block}))
+                  (with-page-block-refs db date-formatter))
         block (if db-based? block
                   (-> block
                       (update :tags (fn [tags] (map #(assoc % :block/format format) tags)))
@@ -714,7 +719,7 @@
   * `ast`: mldoc ast.
   * `content`: markdown or org-mode text.
   * `format`: content's format, it could be either :markdown or :org-mode.
-  * `options`: Options are :user-config, :block-pattern, :parse-block, :date-formatter, :db and
+  * `options`: Options are :user-config, :block-pattern, :date-formatter, :db and
      * :db-graph-mode? : Set when a db graph in the frontend
      * :export-to-db-graph? : Set when exporting to a db graph"
   [ast content format {:keys [user-config db-graph-mode? export-to-db-graph?] :as options}]

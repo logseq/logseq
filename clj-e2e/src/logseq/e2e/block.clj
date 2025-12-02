@@ -84,6 +84,8 @@
 
 (def copy #(k/press "ControlOrMeta+c" {:delay 100}))
 (def paste #(k/press "ControlOrMeta+v" {:delay 100}))
+(def undo #(k/press "ControlOrMeta+z" {:delay 100}))
+(def redo #(k/press "ControlOrMeta+y" {:delay 100}))
 
 (defn- indent-outdent
   [indent?]
