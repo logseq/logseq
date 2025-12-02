@@ -1,6 +1,7 @@
 (ns mobile.navigation
   "Native navigation bridge for mobile (iOS)."
   (:require [clojure.string :as string]
+            [frontend.handler.route :as route-handler]
             [frontend.mobile.util :as mobile-util]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]))
@@ -26,6 +27,14 @@
       (compare-and-set! initialised? false true) "replace" ;; first load
       :else "push")))
 
+(defn- notify-route-payload!
+  [payload]
+  (-> (.routeDidChange mobile-util/ui-local (clj->js payload))
+      (p/catch (fn [err]
+                 (log/warn :mobile-native-navigation/route-report-failed
+                           {:error err
+                            :payload payload})))))
+
 (defn notify-route-change!
   "Inform native iOS layer of a route change to keep native stack in sync.
    {route {to keyword, path-params map, query-params map}
@@ -35,13 +44,15 @@
   (when (and (mobile-util/native-ios?)
              mobile-util/ui-local)
     (let [nav-type (navigation-type push)
-          payload (clj->js (cond-> {:navigationType nav-type
-                                    :push (not= nav-type "replace")}
-                             route (assoc :route route)
-                             (or path (.-hash js/location))
-                             (assoc :path (strip-fragment (or path (.-hash js/location))))))]
-      (-> (.routeDidChange mobile-util/ui-local payload)
-          (p/catch (fn [err]
-                     (log/warn :mobile-native-navigation/route-report-failed
-                               {:error err
-                                :payload payload})))))))
+          payload (cond-> {:navigationType nav-type
+                           :push (not= nav-type "replace")}
+                    route (assoc :route route)
+                    (or path (.-hash js/location))
+                    (assoc :path (strip-fragment (or path (.-hash js/location)))))]
+      (notify-route-payload! payload))))
+
+(defn reset-route!
+  []
+  (route-handler/redirect-to-home! false)
+  (notify-route-payload!
+   {:navigationType "reset"}))
