@@ -156,7 +156,6 @@
      (when show-action-bar?
        (selection-toolbar/action-bar))
      (shui-popup/install-popups)
-     (ui-component/keep-keyboard-virtual-input)
      (ui-component/install-notifications)
      (shui-toaster/install-toaster)
      (shui-dialog/install-modals)]))
