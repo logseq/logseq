@@ -35,9 +35,9 @@
   [db-restoring?]
   (if db-restoring?
     [:div.space-y-2.mt-8.mx-0.opacity-75
-     (shui/skeleton {:class "h-10 w-full mb-6 bg-gray-200"})
-     (shui/skeleton {:class "h-6 w-full bg-gray-200"})
-     (shui/skeleton {:class "h-6 w-full bg-gray-200"})]
+     (shui/skeleton {:class "h-10 w-full mb-6"})
+     (shui/skeleton {:class "h-6 w-full"})
+     (shui/skeleton {:class "h-6 w-full"})]
     (journals)))
 
 (rum/defc home < rum/reactive rum/static
