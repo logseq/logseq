@@ -34,16 +34,16 @@
       :handler (fn []
                  (editor-handler/copy-selection-blocks false)
                  (close!))}
-     {:id "indent"
-      :label "Indent"
-      :system-icon "arrow.right"
-      :handler (fn []
-                 (editor-handler/on-tab :right))}
      {:id "outdent"
       :label "Outdent"
       :system-icon "arrow.left"
       :handler (fn []
                  (editor-handler/on-tab :left))}
+     {:id "indent"
+      :label "Indent"
+      :system-icon "arrow.right"
+      :handler (fn []
+                 (editor-handler/on-tab :right))}
      {:id "delete"
       :label "Delete"
       :system-icon "trash"
