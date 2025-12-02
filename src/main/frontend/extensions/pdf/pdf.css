@@ -806,13 +806,9 @@ html[data-theme=dark] {
     }
 
     [data-hl-type=area] {
-      .prefix-link {
-        @apply block mt-[1px];
-      }
+      .prefix-link {}
 
       .hl-page {
-        @apply inline-flex justify-between w-[85%];
-
         > label {
           @apply flex-1 cursor-text;
         }

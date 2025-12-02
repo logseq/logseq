@@ -332,13 +332,14 @@
                                                   (let [hl' (assoc hl :position to-sc-pos)
                                                         hl' (assoc-in hl' [:content :image] (js/Date.now))]
 
-                                                    (p/let [result (pdf-assets/persist-hl-area-image$ viewer
-                                                                                                      (:pdf/current @state/state)
-                                                                                                      hl' hl (:bounding to-vw-pos))]
+                                                    (p/let [result (pdf-assets/persist-hl-area-image$
+                                                                    viewer
+                                                                    (:pdf/current @state/state)
+                                                                    hl' hl (:bounding to-vw-pos))]
 
                                                       (js/setTimeout
                                                        #(do
-                                                           ;; reset dom effects
+                                                          ;; reset dom effects
                                                           (set! (.. target -style -transform) "translate(0, 0)")
                                                           (.removeAttribute target "data-x")
                                                           (.removeAttribute target "data-y")
@@ -350,29 +351,29 @@
 
                                                   (js/setTimeout #(rum/set-ref! *dirty false))))
 
-                                       :move  (fn [^js/MouseEvent e]
-                                                (let [^js/HTMLElement target (.-target e)
-                                                      x (.getAttribute target "data-x")
-                                                      y (.getAttribute target "data-y")
-                                                      bx (if-not (nil? x) (js/parseFloat x) 0)
-                                                      by (if-not (nil? y) (js/parseFloat y) 0)]
+                                       :move (fn [^js/MouseEvent e]
+                                               (let [^js/HTMLElement target (.-target e)
+                                                     x (.getAttribute target "data-x")
+                                                     y (.getAttribute target "data-y")
+                                                     bx (if-not (nil? x) (js/parseFloat x) 0)
+                                                     by (if-not (nil? y) (js/parseFloat y) 0)]
 
-                                                  ;; update element style
-                                                  (set! (.. target -style -width) (str (.. e -rect -width) "px"))
-                                                  (set! (.. target -style -height) (str (.. e -rect -height) "px"))
+                                                 ;; update element style
+                                                 (set! (.. target -style -width) (str (.. e -rect -width) "px"))
+                                                 (set! (.. target -style -height) (str (.. e -rect -height) "px"))
 
-                                                  ;; translate when resizing from top or left edges
-                                                  (let [ax (+ bx (.. e -deltaRect -left))
-                                                        ay (+ by (.. e -deltaRect -top))]
+                                                 ;; translate when resizing from top or left edges
+                                                 (let [ax (+ bx (.. e -deltaRect -left))
+                                                       ay (+ by (.. e -deltaRect -top))]
 
-                                                    (set! (.. target -style -transform) (str "translate(" ax "px, " ay "px)"))
+                                                   (set! (.. target -style -transform) (str "translate(" ax "px, " ay "px)"))
 
-                                                    ;; cache pos
-                                                    (.setAttribute target "data-x" ax)
-                                                    (.setAttribute target "data-y" ay))))}
+                                                   ;; cache pos
+                                                   (.setAttribute target "data-x" ax)
+                                                   (.setAttribute target "data-y" ay))))}
                            :modifiers [(js/interact.modifiers.restrict
                                         (bean/->js {:restriction (.closest el ".page")}))]
-                           :inertia   true})))]
+                           :inertia true})))]
          ;; destroy
          #(.unset it)))
      [hl])
@@ -380,13 +381,13 @@
     (when-let [vw-bounding (get-in vw-hl [:position :bounding])]
       (let [{:keys [color]} (:properties hl)]
         [:div.extensions__pdf-hls-area-region
-         {:id              (str "hl_" id)
-          :ref             *el
-          :style           vw-bounding
-          :data-color      color
-          :draggable       "true"
-          :on-drag-start   dragstart-handle!
-          :on-click        open-ctx-menu!
+         {:id (str "hl_" id)
+          :ref *el
+          :style vw-bounding
+          :data-color color
+          :draggable "true"
+          :on-drag-start dragstart-handle!
+          :on-click open-ctx-menu!
           :on-context-menu open-ctx-menu!}]))))
 
 (rum/defc pdf-highlights-region-container
@@ -397,10 +398,10 @@
    (for [hl page-hls]
      (let [vw-hl (update-in hl [:position] #(pdf-utils/scaled-to-vw-pos viewer %))]
        (rum/with-key
-         (if (get-in hl [:content :image])
-           (pdf-highlight-area-region viewer vw-hl hl ops)
-           (pdf-highlights-text-region viewer vw-hl hl ops))
-         (:id hl))))])
+        (if (get-in hl [:content :image])
+          (pdf-highlight-area-region viewer vw-hl hl ops)
+          (pdf-highlights-text-region viewer vw-hl hl ops))
+        (:id hl))))])
 
 (rum/defc ^:large-vars/cleanup-todo pdf-highlight-area-selection
   [^js viewer {:keys [show-ctx-menu!]}]

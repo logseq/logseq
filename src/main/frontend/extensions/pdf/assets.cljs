@@ -159,7 +159,7 @@
           ref-block)
         (let [ref-asset-id (:image content)
               image? (not (nil? ref-asset-id))
-              text (if image? (some->> (db-utils/entity ref-asset-id) (:block/uuid) (util/format "[[%s]]"))
+              text (if image? (.toLocaleString (js/Date.))
                               (:text content))
               colors (:property/closed-values (db/entity :logseq.property.pdf/hl-color))
               color-id (some (fn [color] (when (= (:block/title color) (:color properties))
@@ -167,11 +167,13 @@
           (when color-id
             (let [properties (cond->
                               {:block/tags #{(:db/id (db/entity :logseq.class/Pdf-annotation))}
+                               :block/collapsed? image?
                                :logseq.property/ls-type  :annotation
                                :logseq.property.pdf/hl-color color-id
                                :logseq.property/asset (:db/id pdf-block)
                                :logseq.property.pdf/hl-page  page
                                :logseq.property.pdf/hl-value hl}
+
                                image?
                                (assoc :logseq.property.pdf/hl-type :area
                                       :logseq.property.pdf/hl-image ref-asset-id))]
@@ -186,7 +188,14 @@
 (defn ensure-ref-block!
   [pdf-current hl insert-opts]
   (if (config/db-based-graph? (state/get-current-repo))
-    (db-based-ensure-ref-block! pdf-current hl insert-opts)
+    (p/chain
+     (db-based-ensure-ref-block! pdf-current hl insert-opts)
+     (fn []
+       ;; try to move the asset block to the ref block
+       (let [ref-block (db-model/query-block-by-uuid (:id hl))
+             asset-block (:logseq.property.pdf/hl-image ref-block)]
+         (when asset-block
+           (editor-handler/move-blocks! [asset-block] ref-block {:sibling? false})))))
     (file-based-ensure-ref-block! pdf-current hl insert-opts)))
 
 (defn construct-highlights-from-hls-page
