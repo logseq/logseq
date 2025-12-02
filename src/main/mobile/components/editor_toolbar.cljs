@@ -2,7 +2,6 @@
   "Mobile editor toolbar"
   (:require [frontend.colors :as colors]
             [frontend.commands :as commands]
-            [frontend.components.svg :as svg]
             [frontend.handler.editor :as editor-handler]
             [frontend.mobile.camera :as mobile-camera]
             [frontend.mobile.haptics :as haptics]
