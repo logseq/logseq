@@ -2385,7 +2385,8 @@
      (let [area? (= :area (keyword (pu/lookup block :logseq.property.pdf/hl-type)))
            hl-ref #(when (not (#{:default :whiteboard-shape} block-type))
                      [:div.prefix-link
-                      {:on-pointer-down
+                      {:class (when (and (not db-based?) area?) "as-block")
+                       :on-pointer-down
                        (fn [^js e]
                          (let [^js target (.-target e)]
                            (case block-type

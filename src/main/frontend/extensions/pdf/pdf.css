@@ -803,6 +803,10 @@ html[data-theme=dark] {
       &:before {
         content: "📌 ";
       }
+
+      &.as-block {
+        @apply inline-block;
+      }
     }
 
     [data-hl-type=area] {

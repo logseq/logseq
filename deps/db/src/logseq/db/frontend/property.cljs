@@ -487,10 +487,10 @@
                                            :hide? true
                                            :public? false}
                                   :queryable? true}
-     :logseq.property.asset/external-src {:title "External Source URL"
+     :logseq.property.asset/external-src {:title "External URL"
                                           :schema {:type :string
-                                                   :hide? true
-                                                   :public? false}
+                                                   :hide? false
+                                                   :public? true}
                                           :queryable? true}
      :logseq.property.asset/size {:title "File Size"
                                   :schema {:type :raw-number
