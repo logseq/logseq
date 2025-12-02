@@ -8,7 +8,6 @@
                :default ["mldoc" :refer [Mldoc]])
             #?(:org.babashka/nbb [logseq.common.log :as log]
                :default [lambdaisland.glogi :as log])
-            #_:clj-kondo/ignore
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [goog.object :as gobj]
