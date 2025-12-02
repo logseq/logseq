@@ -64,7 +64,6 @@
   {:id (if indent? "indent" "outdent")
    :title (if indent? "Indent" "Outdent")
    :system-icon (if indent? "arrow.right" "arrow.left")
-   :icon (if indent? "arrow-right-to-arc" "arrow-left-to-arc")
    :handler (fn []
               (blur-if-compositing)
               (editor-handler/indent-outdent indent?))})
@@ -74,7 +73,6 @@
   {:id "todo"
    :title "Todo"
    :system-icon "checkmark.square"
-   :icon "checkbox"
    :event? true
    :handler (fn []
               (blur-if-compositing)
@@ -85,7 +83,6 @@
   {:id "tag"
    :title "Tag"
    :system-icon "number"
-   :icon "hash"
    :event? true
    :handler #(insert-text "#" {})})
 
@@ -95,7 +92,6 @@
    :title "Reference"
    ;; TODO: create sf symbol for brackets
    :system-icon "parentheses"
-   :icon "brackets"
    :event? true
    :handler insert-page-ref!})
 
@@ -104,7 +100,6 @@
   {:id "slash"
    :title "Slash"
    :system-icon "command"
-   :icon "command"
    :event? true
    :handler #(insert-text "/" {})})
 
@@ -113,7 +108,6 @@
   {:id "camera"
    :title "Photo"
    :system-icon "camera"
-   :icon "camera"
    :event? true
    :handler #(when-let [parent-id (state/get-edit-input-id)]
                (mobile-camera/embed-photo parent-id))})
@@ -123,7 +117,6 @@
   {:id "audio"
    :title "Audio"
    :system-icon "waveform"
-   :icon (svg/audio-lines 20)
    :handler #(recorder/record!)})
 
 (defn- keyboard-action
@@ -131,26 +124,42 @@
   {:id "keyboard"
    :title "Hide"
    :system-icon "keyboard.chevron.compact.down"
-   :icon "keyboard-show"
    :handler #(p/do!
               (editor-handler/save-current-block!)
               (state/clear-edit!)
               (mobile-init/keyboard-hide))})
 
+(defn- capture-action
+  []
+  {:id "capture"
+   :title "Capture"
+   :system-icon "paperplane"
+   :handler (fn []
+              (state/clear-edit!)
+              (mobile-init/keyboard-hide)
+              (editor-handler/quick-add-blocks!))})
+
 (defn- toolbar-actions
   [quick-add?]
   (let [audio (audio-action)
         keyboard (keyboard-action)
-        main-actions (cond-> [(todo-action)
-                              (indent-outdent-action false)
-                              (indent-outdent-action true)
-                              (tag-action)
-                              (camera-action)
-                              (page-ref-action)
-                              (slash-action)]
-                       (not quick-add?) (conj audio))]
+        main-actions (if quick-add?
+                       [(todo-action)
+                        audio
+                        (camera-action)
+                        (tag-action)
+                        (page-ref-action)
+                        (indent-outdent-action false)
+                        (indent-outdent-action true)]
+                       [(todo-action)
+                        (indent-outdent-action false)
+                        (indent-outdent-action true)
+                        (tag-action)
+                        (camera-action)
+                        (page-ref-action)
+                        (slash-action)])]
     {:main main-actions
-     :trailing (if quick-add? audio keyboard)}))
+     :trailing (if quick-add? (capture-action) keyboard)}))
 
 (defn- action->native
   [{:keys [id title system-icon]}]
