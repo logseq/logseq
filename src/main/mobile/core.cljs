@@ -85,7 +85,9 @@
          (if pop?
            (route-handler/set-route-match! route)
            (reset! *route-timeout
-                   (js/setTimeout #(route-handler/set-route-match! route) 200)))))
+                   (js/setTimeout
+                    #(route-handler/set-route-match! route)
+                    200)))))
 
      ;; set to false to enable HistoryAPI
      {:use-fragment true})))

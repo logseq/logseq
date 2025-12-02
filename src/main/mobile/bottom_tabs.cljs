@@ -84,12 +84,12 @@
   (do
     (add-tab-selected-listener!
      (fn [tab]
-       (let [exit-quick-add? (= @*previous-tab "quick-add")
-             search? (= "search" tab)]
+       (let [exit-quick-add? (= "quick-add" @*previous-tab)
+             exit-search? (= "search" @*previous-tab)]
          (reset! mobile-state/*search-input "")
          (when-not (or (contains? #{"quick-add"} tab)
                        (= tab @*previous-tab))
-           (when-not (or exit-quick-add? search?)
+           (when-not (or exit-quick-add? exit-search?)
              (mobile-nav/reset-route!))
            (mobile-state/set-tab! tab))
 
