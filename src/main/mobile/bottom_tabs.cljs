@@ -3,10 +3,10 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.route :as route-handler]
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.common.util :as common-util]
+            [mobile.navigation :as mobile-nav]
             [mobile.state :as mobile-state]))
 
 ;; Capacitor plugin instance:
@@ -79,34 +79,43 @@
                (editor-handler/keydown-new-block-handler nil))))
          nil)))))
 
+(defonce *previous-tab (atom nil))
 (defonce add-tab-listeners!
   (do
     (add-tab-selected-listener!
      (fn [tab]
-       (reset! mobile-state/*search-input "")
-       (when-not (= tab "quick-add")
-         (mobile-state/set-tab! tab))
-       (case tab
-         "home"
-         (do
-           (route-handler/redirect-to-home!)
-           (util/scroll-to-top false))
-         "quick-add"
-         (editor-handler/show-quick-add)
-         ;; TODO: support longPress detection
-         ;; (if (= "longPress" interaction)
-         ;;   (state/pub-event! [:mobile/start-audio-record])
-         ;;   (editor-handler/show-quick-add))
-         nil)))
+       (let [exit-quick-add? (= @*previous-tab "quick-add")]
+         (reset! mobile-state/*search-input "")
+         (when-not (contains? #{"quick-add"} tab)
+           (when-not exit-quick-add?
+             (mobile-nav/reset-route!))
+           (mobile-state/set-tab! tab))
+
+         (case tab
+           "home"
+           (when-not exit-quick-add?
+             (util/scroll-to-top false))
+           "quick-add"
+           (editor-handler/show-quick-add)
+             ;; TODO: support longPress detection
+             ;; (if (= "longPress" interaction)
+             ;;   (state/pub-event! [:mobile/start-audio-record])
+             ;;   (editor-handler/show-quick-add))
+           nil)
+
+         (reset! *previous-tab tab))))
+
     (add-watch mobile-state/*tab ::select-tab
                (fn [_ _ _old new]
                  (when new (select! new))))
     (add-search-listener!
      (fn [q]
-      ;; wire up search handler
+       ;; wire up search handler
        (js/console.log "Native search query" q)
        (reset! mobile-state/*search-input q)
-       (reset! mobile-state/*search-last-input-at (common-util/time-ms))))
+       (reset! mobile-state/*search-last-input-at (common-util/time-ms))
+       (when (= :page (get-in (state/get-route-match) [:data :name]))
+         (mobile-nav/reset-route!))))
     (add-keyboard-hack-listener!)))
 
 (defn configure
