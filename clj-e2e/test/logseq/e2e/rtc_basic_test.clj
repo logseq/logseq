@@ -16,7 +16,7 @@
 
 (use-fixtures :each fixtures/validate-graph)
 
-(deftest ^:fix-me rtc-basic-test
+(deftest rtc-basic-test
   (let [graph-name (str "rtc-graph-" (.toEpochMilli (java.time.Instant/now)))
         page-names (map #(str "rtc-test-page" %) (range 4))]
     (testing "open 2 app instances, add a rtc graph, check this graph available on other instance"
@@ -38,21 +38,7 @@
                   (page/new-page page-name)))]
           (w/with-page @*page2
             (rtc/wait-tx-update-to remote-tx)
-            (util/search-and-click page-name)))
-        (testing "Page reference created"
-          (let [test-page (str "random page " (random-uuid))
-                block-title (format "test ref [[%s]]" test-page)
-                {:keys [_local-tx remote-tx]}
-                (w/with-page @*page1
-                  (rtc/with-wait-tx-updated
-                    (b/new-block block-title)))]
-            (w/with-page @*page2
-              (rtc/wait-tx-update-to remote-tx)
-              (util/search-and-click test-page)
-              (w/wait-for ".references .ls-block")
-             ;; ensure ref exists
-              (let [refs (w/all-text-contents ".references .ls-block .block-title-wrap")]
-                (is (= refs [block-title])))))))
+            (util/search-and-click page-name))))
       (let [*last-remote-tx (atom nil)]
         (doseq [page-name page-names]
           (let [{:keys [_local-tx remote-tx]}
@@ -65,6 +51,29 @@
           (doseq [page-name page-names]
             (util/search page-name)
             (assert/assert-is-hidden (w/get-by-test-id page-name))))))
+    (testing "Page reference created"
+      (let [page-name "test-page-reference"
+            {:keys [_local-tx remote-tx]}
+            (w/with-page @*page1
+              (rtc/with-wait-tx-updated
+                (page/new-page page-name)))]
+        (w/with-page @*page2
+          (rtc/wait-tx-update-to remote-tx)))
+      (let [test-page (str "random page " (random-uuid))
+            block-title (format "test ref [[%s]]" test-page)
+            {:keys [_local-tx remote-tx]}
+            (w/with-page @*page1
+              (rtc/with-wait-tx-updated
+                (b/new-block block-title)
+                (b/new-block "add new-block to ensure last block saved")))]
+        (w/with-page @*page2
+          (rtc/wait-tx-update-to remote-tx)
+          (util/search-and-click test-page)
+          (w/wait-for ".references .ls-block")
+          ;; ensure ref exists
+          (let [refs (w/all-text-contents ".references .ls-block .block-title-wrap")]
+            (is (= refs [block-title]))))))
+
     (testing "cleanup"
       (w/with-page @*page2
         (graph/remove-remote-graph graph-name)))))
