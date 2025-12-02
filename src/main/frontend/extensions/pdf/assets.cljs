@@ -157,10 +157,13 @@
         (do
           (println "[existed ref block]" ref-block)
           ref-block)
-        (let [text       (:text content)
-              colors     (:property/closed-values (db/entity :logseq.property.pdf/hl-color))
-              color-id   (some (fn [color] (when (= (:block/title color) (:color properties))
-                                             (:db/id color))) colors)]
+        (let [ref-asset-id (:image content)
+              image? (not (nil? ref-asset-id))
+              text (if image? (some->> (db-utils/entity ref-asset-id) (:block/uuid) (util/format "[[%s]]"))
+                              (:text content))
+              colors (:property/closed-values (db/entity :logseq.property.pdf/hl-color))
+              color-id (some (fn [color] (when (= (:block/title color) (:color properties))
+                                           (:db/id color))) colors)]
           (when color-id
             (let [properties (cond->
                               {:block/tags #{(:db/id (db/entity :logseq.class/Pdf-annotation))}
@@ -169,9 +172,9 @@
                                :logseq.property/asset (:db/id pdf-block)
                                :logseq.property.pdf/hl-page  page
                                :logseq.property.pdf/hl-value hl}
-                               (:image content)
+                               image?
                                (assoc :logseq.property.pdf/hl-type :area
-                                      :logseq.property.pdf/hl-image (:image content)))]
+                                      :logseq.property.pdf/hl-image ref-asset-id))]
               (when (string? text)
                 (editor-handler/api-insert-new-block!
                  text (merge {:block-uuid (:block/uuid pdf-block)
