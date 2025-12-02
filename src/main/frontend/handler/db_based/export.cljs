@@ -8,7 +8,19 @@
             [frontend.util :as util]
             [frontend.util.page :as page-util]
             [goog.dom :as gdom]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [logseq.db.sqlite.export :as sqlite-export]))
+
+(defn- <export-edn-helper
+  "Gets export-edn and validates export for smaller exports. Copied from component.export/<export-edn-helper"
+  [export-args]
+  (p/let [export-edn (state/<invoke-db-worker :thread-api/export-edn (state/get-current-repo) export-args)]
+    (if-let [error (:error (sqlite-export/validate-export export-edn))]
+      (do
+        (js/console.log "Invalid export EDN:")
+        (pprint/pprint export-edn)
+        {:export-edn-error error})
+      export-edn)))
 
 (defn ^:export export-block-data []
   ;; Use editor state to locate most recent block
@@ -24,27 +36,25 @@
     (notification/show! "No block found" :warning)))
 
 (defn export-view-nodes-data [rows {:keys [group-by?]}]
-  (p/let [result (state/<invoke-db-worker :thread-api/export-edn
-                                          (state/get-current-repo)
-                                          {:export-type :view-nodes
-                                           :rows rows
-                                           :group-by? group-by?})
+  (p/let [result (<export-edn-helper {:export-type :view-nodes
+                                      :rows rows
+                                      :group-by? group-by?})
           pull-data (with-out-str (pprint/pprint result))]
-    (when-not (:export-edn-error result)
-      (.writeText js/navigator.clipboard pull-data)
-      (println pull-data)
-      (notification/show! "Copied view nodes' data!" :success))))
+    (if (:export-edn-error result)
+        (notification/show! (:export-edn-error result) :error)
+        (do (.writeText js/navigator.clipboard pull-data)
+            (println pull-data)
+            (notification/show! "Copied view nodes' data!" :success)))))
 
 (defn ^:export export-page-data []
   (if-let [page-id (page-util/get-current-page-id)]
-    (p/let [result (state/<invoke-db-worker :thread-api/export-edn
-                                            (state/get-current-repo)
-                                            {:export-type :page :page-id page-id})
+    (p/let [result (<export-edn-helper {:export-type :page :page-id page-id})
             pull-data (with-out-str (pprint/pprint result))]
-      (when-not (:export-edn-error result)
-        (.writeText js/navigator.clipboard pull-data)
-        (println pull-data)
-        (notification/show! "Copied page's data!" :success)))
+      (if (:export-edn-error result)
+        (notification/show! (:export-edn-error result) :error)
+        (do (.writeText js/navigator.clipboard pull-data)
+            (println pull-data)
+            (notification/show! "Copied page's data!" :success))))
     (notification/show! "No page found" :warning)))
 
 (defn ^:export export-graph-ontology-data []
