@@ -52,13 +52,9 @@
 
       dismissing?
       (when (some? @mobile-state/*popup-data)
-        (let [quick-add? (mobile-state/quick-add-open?)
-              current-tab @mobile-state/*tab]
-          (state/pub-event! [:mobile/clear-edit])
-          (mobile-state/set-popup! nil)
-          (reset! *last-popup-data nil)
-          (when (and current-tab quick-add?)
-            (mobile-state/set-tab! current-tab))))
+        (state/pub-event! [:mobile/clear-edit])
+        (mobile-state/set-popup! nil)
+        (reset! *last-popup-data nil))
 
       :else
       nil)))

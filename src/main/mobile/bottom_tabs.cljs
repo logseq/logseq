@@ -84,28 +84,23 @@
   (do
     (add-tab-selected-listener!
      (fn [tab]
-       (let [exit-quick-add? (= "quick-add" @*previous-tab)
-             exit-search? (= "search" @*previous-tab)]
-         (reset! mobile-state/*search-input "")
-         (when-not (or (contains? #{"quick-add"} tab)
-                       (= tab @*previous-tab))
-           (when-not (or exit-quick-add? exit-search?)
-             (mobile-nav/reset-route!))
-           (mobile-state/set-tab! tab))
+       (if (= tab "capture")
+         (editor-handler/show-quick-add)
+         (let [exit-search? (= "search" @*previous-tab)]
+           (when-not (= tab @*previous-tab)
+             (when-not exit-search?
+               (mobile-nav/reset-route!))
+             (mobile-state/set-tab! tab))
 
-         (case tab
-           "home"
-           (when-not exit-quick-add?
-             (util/scroll-to-top false))
-           "quick-add"
-           (editor-handler/show-quick-add)
+           (case tab
+             "home"
+             (util/scroll-to-top false)
              ;; TODO: support longPress detection
              ;; (if (= "longPress" interaction)
              ;;   (state/pub-event! [:mobile/start-audio-record])
              ;;   (editor-handler/show-quick-add))
-           nil)
-
-         (reset! *previous-tab tab))))
+             nil)
+           (reset! *previous-tab tab)))))
 
     (add-watch mobile-state/*tab ::select-tab
                (fn [_ _ _old new]
@@ -125,5 +120,5 @@
   (configure-tabs
    [{:id "home"       :title "Home"       :systemImage "house" :role "normal"}
     {:id "favorites"  :title "Favorites"  :systemImage "star"  :role "normal"}
-    {:id "quick-add"  :title "Capture"    :systemImage "tray"  :role "normal"}
+    {:id "capture"    :title "Capture"    :systemImage "tray"  :role "normal"}
     {:id "settings"   :title "Settings"   :systemImage "gear"  :role "normal"}]))
