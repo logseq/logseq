@@ -35,9 +35,9 @@
   [db-restoring?]
   (if db-restoring?
     [:div.space-y-2.mt-8.mx-0.opacity-75
-     (shui/skeleton {:class "h-10 w-full mb-6 bg-gray-200"})
-     (shui/skeleton {:class "h-6 w-full bg-gray-200"})
-     (shui/skeleton {:class "h-6 w-full bg-gray-200"})]
+     (shui/skeleton {:class "h-10 w-full mb-6"})
+     (shui/skeleton {:class "h-6 w-full"})
+     (shui/skeleton {:class "h-6 w-full"})]
     (journals)))
 
 (rum/defc home < rum/reactive rum/static
@@ -87,15 +87,17 @@
 
 (rum/defc other-page
   [view tab route-match]
-  [:div#main-content-container.px-5.ls-layer
-   (if view
-     (view route-match)
-     (case (keyword tab)
-       :home nil
-       :favorites (favorites/favorites)
+  (let [tab' (keyword tab)]
+    [:div#main-content-container.px-5.ls-layer
+     (case tab'
        :settings (settings/page)
-       :search (search/search)
-       nil))])
+       (if view
+         (view route-match)
+         (case tab'
+           :home nil
+           :favorites (favorites/favorites)
+           :search (search/search)
+           nil)))]))
 
 (rum/defc main-content < rum/static
   [tab route-match]

@@ -334,10 +334,10 @@
                (not (:graph/importing @state/state))
                (not (state/loading-files? repo))
                (not config/publishing?))
-      (state/set-today! (date/today))
-      (when (or (config/db-based-graph? repo)
-                (config/local-file-based-graph? repo))
-        (if-let [title (date/today)]
+      (when-let [title (date/today)]
+        (state/set-today! title)
+        (when (or (config/db-based-graph? repo)
+                  (config/local-file-based-graph? repo))
           (let [today-page (util/page-name-sanity-lc title)
                 format (state/get-preferred-format repo)
                 db-based? (config/db-based-graph? repo)
@@ -361,8 +361,7 @@
                                        (fs/read-file repo-dir file-rpath))]
                   (when (or (not file-exists?)
                             (and file-exists? (string/blank? file-content)))
-                    (create-f))))))
-          (notification/show! "Failed to parse date to journal name." :error))))))
+                    (create-f)))))))))))
 
 (defn open-today-in-sidebar
   []

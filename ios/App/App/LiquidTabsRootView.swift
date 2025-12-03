@@ -10,8 +10,27 @@ import UIKit
 struct KeyboardHackField: UIViewRepresentable {
     @Binding var shouldShow: Bool
 
+    // Capture Backspace/Enter on the hidden field and forward to JS.
+    class KeyboardHackTextField: UITextField {
+        var onKeyPress: ((String) -> Void)?
+
+        override func deleteBackward() {
+            super.deleteBackward()
+            onKeyPress?("backspace")
+            text = ""
+        }
+
+        override func insertText(_ text: String) {
+            super.insertText(text)
+            if text == "\n" {
+                onKeyPress?("enter")
+            }
+            self.text = ""
+        }
+    }
+
     class Coordinator {
-        let textField = UITextField()
+        let textField = KeyboardHackTextField()
     }
 
     func makeCoordinator() -> Coordinator {
@@ -23,6 +42,9 @@ struct KeyboardHackField: UIViewRepresentable {
         let tf = context.coordinator.textField
         tf.isHidden = true
         tf.keyboardType = .default
+        tf.onKeyPress = { key in
+            LiquidTabsPlugin.shared?.notifyKeyboardHackKey(key: key)
+        }
         container.addSubview(tf)
         return container
     }
@@ -92,7 +114,6 @@ private struct LiquidTabs26View: View {
     let navController: UINavigationController
 
     @State private var searchText: String = ""
-    @State private var isSearchPresented: Bool = false
     @FocusState private var isSearchFocused: Bool
 
     @State private var hackShowKeyboard: Bool = false
@@ -136,6 +157,13 @@ private struct LiquidTabs26View: View {
         return .search
     }
 
+    private func focusSearchField() {
+        // Drive focus (and keyboard) only through searchFocused.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            isSearchFocused = true
+        }
+    }
+
     var body: some View {
         if store.tabs.isEmpty {
             // bootstrap webview so JS can configure tabs
@@ -165,7 +193,6 @@ private struct LiquidTabs26View: View {
                     Tab(value: .search, role: .search) {
                         SearchTabHost26(
                             navController: navController,
-                            isSearchFocused: $isSearchFocused,
                             selectedTab: $selectedTab,
                             firstTabId: store.tabs.first?.id,
                             store: store
@@ -174,8 +201,7 @@ private struct LiquidTabs26View: View {
                     }
                 }
                 .searchable(
-                    text: $searchText,
-                    isPresented: $isSearchPresented
+                    text: $searchText
                 )
                 .searchFocused($isSearchFocused)
                 .searchToolbarBehavior(.minimize)
@@ -184,16 +210,13 @@ private struct LiquidTabs26View: View {
                 }
                 .background(Color.logseqBackground)
 
-                // Hidden UITextField that pre-invokes keyboard
+                // Hidden UITextField that pre-invokes keyboard (optional)
                 KeyboardHackField(shouldShow: $hackShowKeyboard)
                     .frame(width: 0, height: 0)
             }
             .onAppear {
                 let initial = initialSelection()
                 selectedTab = initial
-                if case .search = initial {
-                    isSearchPresented = true
-                }
 
                 let appearance = UITabBarAppearance()
                 appearance.configureWithTransparentBackground()
@@ -226,23 +249,20 @@ private struct LiquidTabs26View: View {
 
                 switch newValue {
                 case .search:
-                    isSearchPresented = true
-                case .content:
-                    hackShowKeyboard = false
-                    isSearchFocused = false
-                    isSearchPresented = false
-                }
-            }
-            .onChange(of: isSearchPresented) { presented in
-                if presented {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    // Every time we switch to the search tab, re-focus the search
+                    // field so the search bar auto-focuses and keyboard appears.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                         hackShowKeyboard = true
-                        isSearchFocused = true
                     }
+
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
                         hackShowKeyboard = false
                     }
-                } else {
+
+                    focusSearchField()
+
+                case .content:
+                    // Leaving search tab – drop focus and stop hack keyboard.
                     isSearchFocused = false
                     hackShowKeyboard = false
                 }
@@ -262,11 +282,12 @@ private struct LiquidTabs26View: View {
     }
 }
 
-// Search host for 26+ (unchanged)
+// Search host for 26+
+// Only responsible for cancel behaviour and tab switching.
+// It does NOT own the focus anymore.
 @available(iOS 26.0, *)
 private struct SearchTabHost26: View {
     let navController: UINavigationController
-    @FocusState.Binding var isSearchFocused: Bool
     var selectedTab: Binding<LiquidTabsTabSelection>
     let firstTabId: String?
     let store: LiquidTabsStore
@@ -278,14 +299,6 @@ private struct SearchTabHost26: View {
         NavigationStack {
             NativeNavHost(navController: navController)
                 .ignoresSafeArea()
-                .onAppear {
-                    DispatchQueue.main.async {
-                        isSearchFocused = true
-                    }
-                }
-                .onDisappear {
-                    isSearchFocused = false
-                }
                 .onChange(of: isSearching) { searching in
                     if searching {
                         wasSearching = true
@@ -293,7 +306,7 @@ private struct SearchTabHost26: View {
                               case .search = selectedTab.wrappedValue,
                               let firstId = firstTabId {
 
-                        // Cancel logic - Programmatic switch back to first content tab
+                        // User tapped Cancel: switch back to first normal tab.
                         wasSearching = false
                         selectedTab.wrappedValue = .content(0)
                         store.selectedId = firstId
@@ -341,18 +354,6 @@ private struct LiquidTabs16View: View {
                             } else {
                                 store.selectedId = id
                                 LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
-                            }
-
-                            // Basic keyboard hack when selecting Search tab
-                            if id == "search" {
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                                    hackShowKeyboard = true
-                                }
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                                    hackShowKeyboard = false
-                                }
-                            } else {
-                                hackShowKeyboard = false
                             }
                         }
                     )) {

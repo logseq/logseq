@@ -30,28 +30,34 @@
   (let [close! close-selection-bar!]
     [{:id "copy"
       :label "Copy"
-      :icon "copy"
       :system-icon "doc.on.doc"
       :handler (fn []
                  (editor-handler/copy-selection-blocks false)
                  (close!))}
+     {:id "outdent"
+      :label "Outdent"
+      :system-icon "arrow.left"
+      :handler (fn []
+                 (editor-handler/on-tab :left))}
+     {:id "indent"
+      :label "Indent"
+      :system-icon "arrow.right"
+      :handler (fn []
+                 (editor-handler/on-tab :right))}
      {:id "delete"
       :label "Delete"
-      :icon "cut"
       :system-icon "trash"
       :handler (fn []
                  (editor-handler/cut-selection-blocks false {:mobile-action-bar? true})
                  (close!))}
      {:id "copy-ref"
       :label "Copy ref"
-      :icon "registered"
       :system-icon "r.square"
       :handler (fn []
                  (editor-handler/copy-block-refs)
                  (close!))}
      {:id "copy-url"
       :label "Copy url"
-      :icon "link"
       :system-icon "link"
       :handler (fn []
                  (let [current-repo (state/get-current-repo)
@@ -62,7 +68,6 @@
                  (close!))}
      {:id "unselect"
       :label "Unselect"
-      :icon "x"
       :system-icon "xmark"
       :handler (fn []
                  (state/clear-selection!)

@@ -9,8 +9,11 @@ private struct NativeSelectionAction {
     let systemIcon: String?
 
     init?(jsObject: JSObject) {
-        guard let id = jsObject["id"] as? String,
-              let title = jsObject["title"] as? String else { return nil }
+        guard
+            let id = jsObject["id"] as? String,
+            let title = jsObject["title"] as? String
+        else { return nil }
+
         self.id = id
         self.title = title
         self.systemIcon = jsObject["systemIcon"] as? String
@@ -29,23 +32,69 @@ private class NativeSelectionActionBarView: UIView {
         view.translatesAutoresizingMaskIntoConstraints = false
         view.layer.cornerRadius = 16
         view.clipsToBounds = true
-        view.isUserInteractionEnabled = true // ensure the blur container receives touch events
+        view.isUserInteractionEnabled = true
         return view
     }()
 
-    /// Horizontal stack that holds all action buttons.
-    private let stackView: UIStackView = {
+    /// Root horizontal stack that holds scrollable actions on the left and a fixed trailing action on the right.
+    private let rootStack: UIStackView = {
         let stack = UIStackView()
         stack.axis = .horizontal
         stack.alignment = .center
-        stack.distribution = .fillEqually
         stack.spacing = 8
         stack.isLayoutMarginsRelativeArrangement = true
         stack.layoutMargins = UIEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
         stack.translatesAutoresizingMaskIntoConstraints = false
-        stack.isUserInteractionEnabled = true // stack should also pass touches to its subviews
+        stack.isUserInteractionEnabled = true
         return stack
     }()
+
+    /// Scroll view allowing the main actions to overflow horizontally.
+    private let actionsScrollView: UIScrollView = {
+        let view = UIScrollView()
+        view.showsHorizontalScrollIndicator = false
+        view.showsVerticalScrollIndicator = false
+        view.alwaysBounceHorizontal = true
+        view.contentInsetAdjustmentBehavior = .never
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
+    }()
+
+    /// Stack inside the scroll view for the leading actions.
+    private let actionsStack: UIStackView = {
+        let stack = UIStackView()
+        stack.axis = .horizontal
+        stack.alignment = .center
+        stack.distribution = .fillEqually   // equal widths for main actions
+        stack.spacing = 8
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.isLayoutMarginsRelativeArrangement = true
+        stack.layoutMargins = UIEdgeInsets(top: 0, left: 2, bottom: 0, right: 2)
+        return stack
+    }()
+
+    /// Container for the fixed trailing action.
+    private let trailingContainer: UIStackView = {
+        let stack = UIStackView()
+        stack.axis = .horizontal
+        stack.alignment = .center
+        stack.spacing = 8
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.isUserInteractionEnabled = true
+        return stack
+    }()
+
+    private let separator: UIView = {
+        let view = UIView()
+        view.translatesAutoresizingMaskIntoConstraints = false
+        view.backgroundColor = UIColor.label.withAlphaComponent(0.1)
+        view.widthAnchor.constraint(equalToConstant: 1 / UIScreen.main.scale).isActive = true
+        view.heightAnchor.constraint(greaterThanOrEqualToConstant: 20).isActive = true
+        return view
+    }()
+
+    private var trailingButton: UIControl?
+    private var actionsStackWidthConstraint: NSLayoutConstraint?
 
     // MARK: - Init
 
@@ -62,10 +111,12 @@ private class NativeSelectionActionBarView: UIView {
     // MARK: - Public API
 
     /// Present the bar on top of a host view with given actions and colors.
-    func present(on host: UIView,
-                 actions: [NativeSelectionAction],
-                 tintColor: UIColor?,
-                 backgroundColor: UIColor?) {
+    func present(
+        on host: UIView,
+        actions: [NativeSelectionAction],
+        tintColor: UIColor?,
+        backgroundColor: UIColor?
+    ) {
         configure(actions: actions, tintColor: tintColor, backgroundColor: backgroundColor)
         attachIfNeeded(to: host)
         animateInIfNeeded()
@@ -73,18 +124,20 @@ private class NativeSelectionActionBarView: UIView {
 
     /// Dismiss with a small fade/transform animation.
     func dismiss() {
-        UIView.animate(withDuration: 0.15,
-                       delay: 0,
-                       options: [.curveEaseIn],
-                       animations: {
-            self.alpha = 0
-            // Use a small translation for a subtle dismiss effect.
-            self.transform = CGAffineTransform(translationX: 0, y: 8)
-        }, completion: { _ in
-            self.removeFromSuperview()
-            self.transform = .identity
-            self.alpha = 1
-        })
+        UIView.animate(
+            withDuration: 0.15,
+            delay: 0,
+            options: [.curveEaseIn],
+            animations: {
+                self.alpha = 0
+                self.transform = CGAffineTransform(translationX: 0, y: 8)
+            },
+            completion: { _ in
+                self.removeFromSuperview()
+                self.transform = .identity
+                self.alpha = 1
+            }
+        )
     }
 
     // MARK: - Private helpers
@@ -92,9 +145,8 @@ private class NativeSelectionActionBarView: UIView {
     /// Base visual setup: background, shadow, subview hierarchy and constraints.
     private func setupView() {
         backgroundColor = .clear
-        isUserInteractionEnabled = true // container must be interactive
+        isUserInteractionEnabled = true
 
-        // Shadow that appears around the blurred background.
         layer.cornerRadius = 16
         layer.masksToBounds = false
         layer.shadowColor = UIColor.black.cgColor
@@ -110,30 +162,98 @@ private class NativeSelectionActionBarView: UIView {
             blurView.bottomAnchor.constraint(equalTo: bottomAnchor)
         ])
 
-        blurView.contentView.addSubview(stackView)
+        blurView.contentView.addSubview(rootStack)
         NSLayoutConstraint.activate([
-            stackView.leadingAnchor.constraint(equalTo: blurView.contentView.leadingAnchor),
-            stackView.trailingAnchor.constraint(equalTo: blurView.contentView.trailingAnchor),
-            stackView.topAnchor.constraint(equalTo: blurView.contentView.topAnchor),
-            stackView.bottomAnchor.constraint(equalTo: blurView.contentView.bottomAnchor)
+            rootStack.leadingAnchor.constraint(equalTo: blurView.contentView.leadingAnchor),
+            rootStack.trailingAnchor.constraint(equalTo: blurView.contentView.trailingAnchor),
+            rootStack.topAnchor.constraint(equalTo: blurView.contentView.topAnchor),
+            rootStack.bottomAnchor.constraint(equalTo: blurView.contentView.bottomAnchor)
         ])
+
+        actionsScrollView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        actionsScrollView.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        rootStack.addArrangedSubview(actionsScrollView)
+
+        trailingContainer.setContentHuggingPriority(.required, for: .horizontal)
+        trailingContainer.setContentCompressionResistancePriority(.required, for: .horizontal)
+        rootStack.addArrangedSubview(trailingContainer)
+
+        actionsScrollView.addSubview(actionsStack)
+        NSLayoutConstraint.activate([
+            actionsStack.leadingAnchor.constraint(equalTo: actionsScrollView.contentLayoutGuide.leadingAnchor),
+            actionsStack.trailingAnchor.constraint(equalTo: actionsScrollView.contentLayoutGuide.trailingAnchor),
+            actionsStack.topAnchor.constraint(equalTo: actionsScrollView.contentLayoutGuide.topAnchor),
+            actionsStack.bottomAnchor.constraint(equalTo: actionsScrollView.contentLayoutGuide.bottomAnchor),
+            actionsStack.heightAnchor.constraint(equalTo: actionsScrollView.frameLayoutGuide.heightAnchor)
+        ])
+
+        actionsStackWidthConstraint = actionsStack.widthAnchor.constraint(
+            greaterThanOrEqualTo: actionsScrollView.frameLayoutGuide.widthAnchor
+        )
+        actionsStackWidthConstraint?.priority = .defaultHigh
+        actionsStackWidthConstraint?.isActive = true
+
+        trailingContainer.addArrangedSubview(separator)
+        trailingContainer.isHidden = true
     }
 
     /// Rebuilds the stack buttons for the current set of actions.
-    private func configure(actions: [NativeSelectionAction],
-                           tintColor: UIColor?,
-                           backgroundColor: UIColor?) {
-        // Remove old buttons.
-        stackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
-
+    private func configure(
+        actions: [NativeSelectionAction],
+        tintColor: UIColor?,
+        backgroundColor: UIColor?
+    ) {
         let tint = tintColor ?? .label
-        // Background color behind the blur. This helps match the Logseq background.
         blurView.backgroundColor = backgroundColor ?? UIColor.logseqBackground.withAlphaComponent(0.94)
+        blurView.contentView.backgroundColor = .clear
 
-        actions.forEach { action in
-            let button = makeButton(for: action, tintColor: tint)
-            stackView.addArrangedSubview(button)
+        let mainActions = Array(actions.dropLast())
+        let trailingAction = actions.last
+
+        // Clear existing main actions.
+        actionsStack.arrangedSubviews.forEach { sub in
+            actionsStack.removeArrangedSubview(sub)
+            sub.removeFromSuperview()
         }
+        actionsScrollView.isHidden = mainActions.isEmpty
+
+        // Rebuild main actions.
+        mainActions.forEach { action in
+            let button = makeButton(for: action, tintColor: tint)
+            actionsStack.addArrangedSubview(button)
+        }
+
+        configureTrailing(
+            action: trailingAction,
+            tintColor: tint,
+            showSeparator: !mainActions.isEmpty
+        )
+    }
+
+    private func configureTrailing(
+        action: NativeSelectionAction?,
+        tintColor: UIColor,
+        showSeparator: Bool
+    ) {
+        if let existingButton = trailingButton {
+            trailingContainer.removeArrangedSubview(existingButton)
+            existingButton.removeFromSuperview()
+            trailingButton = nil
+        }
+
+        guard let action = action else {
+            trailingContainer.isHidden = true
+            separator.isHidden = true
+            return
+        }
+
+        trailingContainer.isHidden = false
+        separator.isHidden = !showSeparator
+
+        let button = makeButton(for: action, tintColor: tintColor)
+        button.setContentHuggingPriority(.required, for: .horizontal)
+        trailingContainer.addArrangedSubview(button)
+        trailingButton = button
     }
 
     /// Attaches the bar to the given host view, pinned to the bottom with safe area.
@@ -142,7 +262,7 @@ private class NativeSelectionActionBarView: UIView {
         removeFromSuperview()
 
         host.addSubview(self)
-        host.bringSubviewToFront(self) // ensure this bar is above other subviews (e.g. WKWebView)
+        host.bringSubviewToFront(self)
         translatesAutoresizingMaskIntoConstraints = false
 
         NSLayoutConstraint.activate([
@@ -154,18 +274,20 @@ private class NativeSelectionActionBarView: UIView {
 
     /// Simple fade-in animation when the bar appears.
     private func animateInIfNeeded() {
-        // Only animate if we're currently visible and not already animated.
         guard alpha == 1 else { return }
 
         alpha = 0
         transform = CGAffineTransform(translationX: 0, y: 8)
-        UIView.animate(withDuration: 0.2,
-                       delay: 0,
-                       options: [.curveEaseOut, .allowUserInteraction],
-                       animations: {
-            self.alpha = 1
-            self.transform = .identity
-        })
+        UIView.animate(
+            withDuration: 0.2,
+            delay: 0,
+            options: [.curveEaseOut, .allowUserInteraction],
+            animations: {
+                self.alpha = 1
+                self.transform = .identity
+            },
+            completion: nil
+        )
     }
 
     /// Creates a single button for an action (icon + label in a vertical stack).
@@ -175,7 +297,6 @@ private class NativeSelectionActionBarView: UIView {
         control.translatesAutoresizingMaskIntoConstraints = false
         control.isUserInteractionEnabled = true
 
-        // Icon
         let iconView = UIImageView()
         iconView.contentMode = .scaleAspectFit
         iconView.tintColor = tintColor
@@ -184,7 +305,6 @@ private class NativeSelectionActionBarView: UIView {
         iconView.heightAnchor.constraint(equalToConstant: 22).isActive = true
         iconView.widthAnchor.constraint(equalToConstant: 22).isActive = true
 
-        // Title label
         let label = UILabel()
         label.text = action.title
         label.textAlignment = .center
@@ -192,13 +312,12 @@ private class NativeSelectionActionBarView: UIView {
         label.textColor = tintColor
         label.numberOfLines = 1
 
-        // Vertical stack containing icon + label.
         let column = UIStackView(arrangedSubviews: [iconView, label])
         column.axis = .vertical
         column.alignment = .center
         column.spacing = 6
         column.translatesAutoresizingMaskIntoConstraints = false
-        column.isUserInteractionEnabled = false // let the UIControl handle touches instead of the stack
+        column.isUserInteractionEnabled = false
 
         control.addSubview(column)
         NSLayoutConstraint.activate([
@@ -208,7 +327,6 @@ private class NativeSelectionActionBarView: UIView {
             column.bottomAnchor.constraint(equalTo: control.bottomAnchor, constant: -4)
         ])
 
-        // Add targets for tap handling.
         control.addTarget(self, action: #selector(handleTap(_:)), for: .touchUpInside)
 
         return control
@@ -216,7 +334,6 @@ private class NativeSelectionActionBarView: UIView {
 
     // MARK: - Touch handling
 
-    /// Called on touchUpInside, triggers the callback with the action id.
     @objc private func handleTap(_ sender: UIControl) {
         guard let id = sender.accessibilityIdentifier else { return }
         onActionTapped?(id)
@@ -236,7 +353,6 @@ public class NativeSelectionActionBarPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private var actionBar: NativeSelectionActionBarView?
 
-    /// Called from JS to show/update the selection bar.
     @objc func present(_ call: CAPPluginCall) {
         let rawActions = call.getArray("actions", JSObject.self) ?? []
         let actions = rawActions.compactMap(NativeSelectionAction.init(jsObject:))
@@ -251,7 +367,6 @@ public class NativeSelectionActionBarPlugin: CAPPlugin, CAPBridgedPlugin {
                 return
             }
 
-            // If actions are empty, hide the bar instead.
             guard !actions.isEmpty else {
                 self.actionBar?.dismiss()
                 self.actionBar = nil
@@ -264,17 +379,18 @@ public class NativeSelectionActionBarPlugin: CAPPlugin, CAPBridgedPlugin {
                 print("action id", id)
                 self?.notifyListeners("action", data: ["id": id])
             }
-            bar.present(on: host,
-                        actions: actions,
-                        tintColor: tintColor,
-                        backgroundColor: backgroundColor)
+            bar.present(
+                on: host,
+                actions: actions,
+                tintColor: tintColor,
+                backgroundColor: backgroundColor
+            )
             self.actionBar = bar
 
             call.resolve()
         }
     }
 
-    /// Called from JS to hide the selection bar.
     @objc func dismiss(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
             self.actionBar?.dismiss()
@@ -283,7 +399,6 @@ public class NativeSelectionActionBarPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    /// Attempts to find the appropriate host view to attach the bar to.
     private func hostView() -> UIView? {
         if let parent = bridge?.viewController?.parent?.view {
             return parent
@@ -295,7 +410,6 @@ public class NativeSelectionActionBarPlugin: CAPPlugin, CAPBridgedPlugin {
 // MARK: - Helpers
 
 private extension String {
-    /// Converts a hex color string (e.g. "#RRGGBB" or "#RRGGBBAA") to UIColor.
     func toUIColor(defaultColor: UIColor) -> UIColor {
         var hexString = self.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         if hexString.hasPrefix("#") {
@@ -308,19 +422,19 @@ private extension String {
         }
 
         switch hexString.count {
-        case 6: // RRGGBB
+        case 6:
             return UIColor(
-                red: CGFloat((rgbValue & 0xFF0000) >> 16) / 255.0,
-                green: CGFloat((rgbValue & 0x00FF00) >> 8) / 255.0,
-                blue: CGFloat(rgbValue & 0x0000FF) / 255.0,
+                red:   CGFloat((rgbValue & 0xFF0000) >> 16) / 255.0,
+                green: CGFloat((rgbValue & 0x00FF00) >> 8)  / 255.0,
+                blue:  CGFloat(rgbValue & 0x0000FF)         / 255.0,
                 alpha: 1.0
             )
-        case 8: // RRGGBBAA
+        case 8:
             return UIColor(
-                red: CGFloat((rgbValue & 0xFF000000) >> 24) / 255.0,
+                red:   CGFloat((rgbValue & 0xFF000000) >> 24) / 255.0,
                 green: CGFloat((rgbValue & 0x00FF0000) >> 16) / 255.0,
-                blue: CGFloat((rgbValue & 0x0000FF00) >> 8) / 255.0,
-                alpha: CGFloat(rgbValue & 0x000000FF) / 255.0
+                blue:  CGFloat((rgbValue & 0x0000FF00) >> 8)  / 255.0,
+                alpha: CGFloat(rgbValue & 0x000000FF)         / 255.0
             )
         default:
             return defaultColor

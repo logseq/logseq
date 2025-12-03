@@ -20,7 +20,8 @@
             [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [logseq.db.sqlite.export :as sqlite-export]))
 
 (rum/defcs auto-backup < rum/reactive
   {:init (fn [state]
@@ -177,9 +178,18 @@
                       :selected-nodes
                       {:node-ids (mapv #(vector :block/uuid %) root-block-uuids-or-page-uuid)}
                       {})]
-    (state/<invoke-db-worker :thread-api/export-edn
-                             (state/get-current-repo)
-                             (merge {:export-type export-type} export-args))))
+    (p/let [export-edn (state/<invoke-db-worker :thread-api/export-edn
+                                                (state/get-current-repo)
+                                                (merge {:export-type export-type} export-args))]
+      ;; Don't validate :block for now b/c it requires more setup
+      (if (#{:page :selected-nodes} export-type)
+        (if-let [error (:error (sqlite-export/validate-export export-edn))]
+          (do
+            (js/console.log "Invalid export EDN:")
+            (pprint/pprint export-edn)
+            {:export-edn-error error})
+          export-edn)
+        export-edn))))
 
 (defn- get-zoom-level
   [page-uuid]
@@ -283,7 +293,8 @@
                       :on-click #(do (reset! *export-block-type :edn)
                                      (p/let [result (<export-edn-helper top-level-uuids export-type)
                                              pull-data (with-out-str (pprint/pprint result))]
-                                       (when-not (:export-edn-error result)
+                                       (if (:export-edn-error result)
+                                         (notification/show! (:export-edn-error result) :error)
                                          (reset! *content pull-data))))))])
       (if (= :png tp)
         [:div.flex.items-center.justify-center.relative

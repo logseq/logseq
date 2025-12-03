@@ -4,6 +4,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [frontend.util :as util]
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.ui :as shui]
             [mobile.state :as mobile-state]
@@ -37,28 +38,27 @@
 (defn- dismiss-native-sheet!
   []
   (when-let [^js plugin mobile-util/native-bottom-sheet]
-    (mobile-state/set-popup! nil)
-    (reset! *last-popup-data nil)
     (.dismiss plugin #js {})))
 
 (defn- handle-native-sheet-state!
   [^js data]
   (let [presenting? (.-presenting data)
+        presented? (.-presented data)
         dismissing? (.-dismissing data)]
     (cond
       presenting?
+      (when (mobile-state/quick-add-open?)
+        (util/mobile-keep-keyboard-open false))
+
+      presented?
       (when (mobile-state/quick-add-open?)
         (editor-handler/quick-add-open-last-block!))
 
       dismissing?
       (when (some? @mobile-state/*popup-data)
-        (let [quick-add? (mobile-state/quick-add-open?)
-              current-tab @mobile-state/*tab]
-          (state/pub-event! [:mobile/clear-edit])
-          (mobile-state/set-popup! nil)
-          (reset! *last-popup-data nil)
-          (when (and current-tab quick-add?)
-            (mobile-state/set-tab! current-tab))))
+        (state/pub-event! [:mobile/clear-edit])
+        (mobile-state/set-popup! nil)
+        (reset! *last-popup-data nil))
 
       :else
       nil)))

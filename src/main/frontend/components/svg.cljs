@@ -392,21 +392,22 @@
    [:svg.icon {:width size :height size :viewBox "0 0 16 16" :fill "currentColor"}
     [:path {:fill-rule "evenodd" :clip-rule "evenodd" :d "M7.116 8l-4.558 4.558.884.884L8 8.884l4.558 4.558.884-.884L8.884 8l4.558-4.558-.884-.884L8 7.116 3.442 2.558l-.884.884L7.116 8z"}]]))
 
-(defn audio-lines
-  ([] (audio-lines 16))
-  ([size]
-   [:svg.icon
-    {:stroke "currentColor",
-     :fill "none",
-     :stroke-linejoin "round",
-     :width size,
-     :height "24"
-     :stroke-linecap "round",
-     :stroke-width "2.5",
-     :viewBox "0 0 24 24"}
-    [:path {:d "M2 10v3"}]
-    [:path {:d "M6 6v11"}]
-    [:path {:d "M10 3v18"}]
-    [:path {:d "M14 8v7"}]
-    [:path {:d "M18 5v13"}]
-    [:path {:d "M22 10v3"}]]))
+(comment
+  (defn audio-lines
+    ([] (audio-lines 16))
+    ([size]
+     [:svg.icon
+      {:stroke "currentColor",
+       :fill "none",
+       :stroke-linejoin "round",
+       :width size,
+       :height "24"
+       :stroke-linecap "round",
+       :stroke-width "2.5",
+       :viewBox "0 0 24 24"}
+      [:path {:d "M2 10v3"}]
+      [:path {:d "M6 6v11"}]
+      [:path {:d "M10 3v18"}]
+      [:path {:d "M14 8v7"}]
+      [:path {:d "M18 5v13"}]
+      [:path {:d "M22 10v3"}]])))

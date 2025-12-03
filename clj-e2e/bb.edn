@@ -13,7 +13,7 @@
   prn {:task (clojure "-X clojure.core/prn" cli-opts)}
 
   test {:doc "run tests (ns'es ending in '-basic-test')"
-        :task (do (clojure "-M:test -r \".*\\-basic\\-test$\"")
+        :task (do (clojure "-M:test -r \".*\\-basic\\-test$\" -e fix-me")
                   (System/exit 0))}
 
   rtc-extra-test {:doc "run rtc-extra-test"

@@ -49,18 +49,19 @@
                          (when-not mobile? (shui/shortcut ["mod" "e"]))
                          "Add to today")]]
         [:div.ls-quick-add.flex.flex-1.flex-col.w-full.gap-4
-         [:div.flex.flex-row.justify-between.gap-4.items-center
-          {:class (if mobile?
-                    "pt-4"
-                    "border-b pb-4")}
-          [:div.font-medium
-           "Quick add"]
-          (when mobile? add-button)]
+         (when-not (util/mobile?)
+           [:div.flex.flex-row.justify-between.gap-4.items-center
+            {:class (if mobile?
+                      "pt-4"
+                      "border-b pb-4")}
+            [:div.font-medium
+             "Quick add"]
+            add-button])
          (if mobile?
            [:main#app-container-wrapper.ls-fold-button-on-right
             [:div#app-container.pt-2
              [:div#main-container.flex.flex-1
-              [:div.w-full
+              [:div.w-full.mt-4
                (page-blocks add-page)]]]]
            [:div.content {:class "block -ml-6"}
             (page-blocks add-page)])
