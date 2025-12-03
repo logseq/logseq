@@ -89,15 +89,14 @@
   [view tab route-match]
   (let [tab' (keyword tab)]
     [:div#main-content-container.px-5.ls-layer
-     (case tab'
-       :graphs (graphs/page)
-       (if view
-         (view route-match)
-         (case tab'
-           :home nil
-           :favorites (favorites/favorites)
-           :search (search/search)
-           nil)))]))
+     (if view
+       (view route-match)
+       (case tab'
+         :home nil
+         :graphs (graphs/page)
+         :favorites (favorites/favorites)
+         :search (search/search)
+         nil))]))
 
 (rum/defc main-content < rum/static
   [tab route-match]
@@ -159,4 +158,9 @@
      ;; (ui-component/keep-keyboard-virtual-input)
      (ui-component/install-notifications)
      (shui-toaster/install-toaster)
-     (shui-dialog/install-modals)]))
+     (shui-dialog/install-modals)
+     [:div.download
+      [:a#download.hidden]
+      [:a#download-as-transit-debug.hidden]
+      [:a#download-as-sqlite-db.hidden]
+      [:a#download-as-zip.hidden]]]))
