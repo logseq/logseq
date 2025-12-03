@@ -180,6 +180,7 @@
                         (tag-action)
                         (camera-action)
                         (page-ref-action)
+                        audio
                         (slash-action)
                         (redo-action)])]
     {:main main-actions
