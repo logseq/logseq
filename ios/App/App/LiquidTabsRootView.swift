@@ -121,19 +121,6 @@ private struct LiquidTabs26View: View {
 
     private let maxMainTabs = 6
 
-    private func tab(for selection: LiquidTabsTabSelection) -> LiquidTab? {
-        guard let id = store.tabId(for: selection) else { return nil }
-        return store.tab(for: id)
-    }
-
-    @discardableResult
-    private func handleActionIfNeeded(selection: LiquidTabsTabSelection) -> Bool {
-        guard let tab = tab(for: selection), tab.isActionButton else { return false }
-
-        LiquidTabsPlugin.shared?.notifyTabSelected(id: tab.id)
-        return true
-    }
-
     // Proxy binding to intercept re-taps
     private var tabSelectionProxy: Binding<LiquidTabsTabSelection> {
         Binding(
@@ -141,7 +128,7 @@ private struct LiquidTabs26View: View {
             set: { newValue in
                 if newValue == selectedTab {
                     handleRetap(on: newValue)
-                } else if !handleActionIfNeeded(selection: newValue) {
+                } else {
                     selectedTab = newValue
                 }
             }
@@ -159,26 +146,23 @@ private struct LiquidTabs26View: View {
 
     private func initialSelection() -> LiquidTabsTabSelection {
         if let id = store.selectedId,
-           let tab = store.tab(for: id),
-           !tab.isActionButton,
            let sel = store.selection(forId: id) {
             return sel
         }
 
-        if let firstIndex = store.tabs.prefix(maxMainTabs).firstIndex(where: { !$0.isActionButton }) {
-            return .content(firstIndex)
+        if !store.tabs.isEmpty {
+            return .content(0)
         }
 
         return .search
     }
 
     private func focusSearchField() {
+        // Drive focus (and keyboard) only through searchFocused.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             isSearchFocused = true
         }
     }
-
-    // MARK: - Body
 
     var body: some View {
         if store.tabs.isEmpty {
@@ -191,46 +175,29 @@ private struct LiquidTabs26View: View {
                 Color.logseqBackground.ignoresSafeArea()
 
                 TabView(selection: tabSelectionProxy) {
-                    // Dynamic main tabs – all use Tab(...)
+                    // Dynamic main tabs using Tab(...) API
                     ForEach(Array(store.tabs.prefix(maxMainTabs).enumerated()),
                             id: \.element.id) { index, tab in
                         Tab(
-                          tab.title,
-                          systemImage: tab.systemImage,
-                          value: LiquidTabsTabSelection.content(index)
+                            tab.title,
+                            systemImage: tab.systemImage,
+                            value: LiquidTabsTabSelection.content(index)
                         ) {
-                            if tab.isActionButton {
-                                // Capture / action tab: no real content, acts like a plain button
-                                NavigationStack {
-                                    VStack(spacing: 20) {
-                                        Text("Capture")
-                                          .font(.largeTitle)
-                                          .fontWeight(.bold)
-                                          .padding(.top, 120)
-
-                                        Spacer()
-                                    }
-                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                    .background(Color.logseqBackground)
-                                    .ignoresSafeArea()
-                                }
-                            } else {
-                                NativeNavHost(navController: navController)
-                                  .ignoresSafeArea()
-                                  .background(Color.logseqBackground)
-                            }
+                            NativeNavHost(navController: navController)
+                                .ignoresSafeArea()
+                                .background(Color.logseqBackground)
                         }
                     }
 
                     // Search Tab
                     Tab(value: .search, role: .search) {
                         SearchTabHost26(
-                          navController: navController,
-                          selectedTab: $selectedTab,
-                          firstTabId: store.tabs.first?.id,
-                          store: store
+                            navController: navController,
+                            selectedTab: $selectedTab,
+                            firstTabId: store.tabs.first?.id,
+                            store: store
                         )
-                          .ignoresSafeArea()
+                        .ignoresSafeArea()
                     }
                 }
                 .searchable(
@@ -282,6 +249,8 @@ private struct LiquidTabs26View: View {
 
                 switch newValue {
                 case .search:
+                    // Every time we switch to the search tab, re-focus the search
+                    // field so the search bar auto-focuses and keyboard appears.
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                         hackShowKeyboard = true
                     }
@@ -293,14 +262,13 @@ private struct LiquidTabs26View: View {
                     focusSearchField()
 
                 case .content:
+                    // Leaving search tab – drop focus and stop hack keyboard.
                     isSearchFocused = false
                     hackShowKeyboard = false
                 }
             }
             .onChange(of: store.selectedId) { newId in
                 guard let id = newId,
-                      let tab = store.tab(for: id),
-                      !tab.isActionButton,
                       let newSelection = store.selection(forId: id) else {
                     return
                 }
@@ -313,7 +281,6 @@ private struct LiquidTabs26View: View {
         }
     }
 }
-
 
 // Search host for 26+
 // Only responsible for cancel behaviour and tab switching.
@@ -375,15 +342,10 @@ private struct LiquidTabs16View: View {
 
                     TabView(selection: Binding<String?>(
                         get: {
-                            store.selectedId ?? store.tabs.first(where: { !$0.isActionButton })?.id ?? store.firstTab?.id
+                            store.selectedId ?? store.firstTab?.id
                         },
                         set: { newValue in
                             guard let id = newValue else { return }
-
-                            if let tab = store.tab(for: id), tab.isActionButton {
-                                LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
-                                return
-                            }
 
                             // Re-tap: pop to root
                             if id == store.selectedId {
@@ -424,8 +386,7 @@ private struct LiquidTabs16View: View {
                 }
                 .onAppear {
                     if store.selectedId == nil {
-                        store.selectedId = store.tabs.first(where: { !$0.isActionButton })?.id
-                            ?? store.tabs.first?.id
+                        store.selectedId = store.tabs.first?.id
                     }
 
                     let appearance = UITabBarAppearance()
