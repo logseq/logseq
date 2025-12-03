@@ -228,11 +228,12 @@
        [:h1.title (t :graph/all-graphs)])
 
      [:div.pl-1.content.mt-8
-      [:div.flex.flex-row.my-8
-       [:div.mr-8
-        (ui/button
-         "Create a new graph"
-         :on-click #(state/pub-event! [:graph/new-db-graph]))]]
+      (when-not (util/mobile?)
+        [:div.flex.flex-row.my-8
+         [:div.mr-8
+          (ui/button
+           "Create a new graph"
+           :on-click #(state/pub-event! [:graph/new-db-graph]))]])
 
       [:div
        [:h2.text-lg.font-medium.mb-4 (t :graph/local-graphs)]
