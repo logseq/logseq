@@ -1434,10 +1434,11 @@ Similar to re-frame subscriptions"
 
 (defn sync-system-theme!
   []
-  (let [system-dark? (.-matches (js/window.matchMedia "(prefers-color-scheme: dark)"))]
-    (set-theme-mode! (if system-dark? "dark" "light"))
-    (set-state! :ui/system-theme? true)
-    (storage/set :ui/system-theme? true)))
+  (when (= (:ui/theme @state) "system")
+    (let [system-dark? (.-matches (js/window.matchMedia "(prefers-color-scheme: dark)"))]
+      (set-theme-mode! (if system-dark? "dark" "light"))
+      (set-state! :ui/system-theme? true)
+      (storage/set :ui/system-theme? true))))
 
 (defn use-theme-mode!
   [theme-mode]
