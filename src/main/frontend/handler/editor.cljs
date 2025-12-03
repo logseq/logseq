@@ -4070,17 +4070,19 @@
   []
   (let [today (db/get-page (date/today))
         add-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)]
-    (when (and today add-page)
-      (let [children (:block/_parent (db/entity (:db/id add-page)))]
-        (p/do!
-         (when (seq children)
-           (if-let [today-last-child (last (ldb/sort-by-order (:block/_parent today)))]
-             (move-blocks! children today-last-child {:sibling? true})
-             (move-blocks! children today {:sibling? false})))
-         (state/close-modal!)
-         (shui/popup-hide!)
-         (when (seq children)
-           (notification/show! "Blocks added to today!" :success)))))))
+    (p/do!
+     (save-current-block!)
+     (when (and today add-page)
+       (let [children (:block/_parent (db/entity (:db/id add-page)))]
+         (p/do!
+          (when (seq children)
+            (if-let [today-last-child (last (ldb/sort-by-order (:block/_parent today)))]
+              (move-blocks! children today-last-child {:sibling? true})
+              (move-blocks! children today {:sibling? false})))
+          (state/close-modal!)
+          (shui/popup-hide!)
+          (when (seq children)
+            (notification/show! "Blocks added to today!" :success))))))))
 
 (defn quick-add
   []
