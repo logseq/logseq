@@ -1,7 +1,8 @@
 (ns logseq.db.sqlite.export
   "Builds sqlite.build EDN to represent nodes in a graph-agnostic way.
    Useful for exporting and importing across DB graphs"
-  (:require [clojure.set :as set]
+  (:require [cljs.pprint :as pprint]
+            [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
@@ -15,11 +16,10 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.frontend.schema :as db-schema]
-            [logseq.db.sqlite.build :as sqlite-build]
-            [medley.core :as medley]
-            [logseq.db.test.helper :as db-test]
             [logseq.db.frontend.validate :as db-validate]
-            [cljs.pprint :as pprint]))
+            [logseq.db.sqlite.build :as sqlite-build]
+            [logseq.db.test.helper :as db-test]
+            [medley.core :as medley]))
 
 ;; Export fns
 ;; ==========
@@ -480,15 +480,31 @@
        (map :e)
        (map #(d/entity db %))))
 
+(defn- remove-uuid-if-not-ref-given-uuids
+  [ref-uuids m]
+  (if (contains? ref-uuids (:block/uuid m))
+    m
+    (dissoc m :block/uuid :build/keep-uuid?)))
+
 (defn- build-page-export*
-  [db eid page-blocks* options]
+  "When given the :handle-block-uuids option, handle references between blocks"
+  [db eid page-blocks* {:keys [handle-block-uuids?] :as options}]
   (let [page-entity (d/entity db eid)
         page-blocks (->> page-blocks*
                          (sort-by :block/order)
                          ;; Remove property value blocks as they are exported in a block's :build/properties
                          (remove :logseq.property/created-from-property))
-        {:keys [pvalue-uuids] :as blocks-export}
-        (build-blocks-export db page-blocks options)
+        {:keys [pvalue-uuids] :as blocks-export*}
+        (build-blocks-export db page-blocks (cond-> options
+                                              handle-block-uuids?
+                                              (assoc :include-uuid-fn (constantly true))))
+        blocks-export (if handle-block-uuids?
+                        (let [remove-uuid-if-not-ref
+                              (partial remove-uuid-if-not-ref-given-uuids
+                                       (set/union (set pvalue-uuids)
+                                                  (when (set? (:include-uuid-fn options)) (:include-uuid-fn options))))]
+                          (update blocks-export* :blocks #(sqlite-build/update-each-block % remove-uuid-if-not-ref)))
+                        blocks-export*)
         ontology-page-export
         (when (and (not (:ontology-page? options))
                    (or (entity-util/class? page-entity) (entity-util/property? page-entity)))
@@ -520,6 +536,7 @@
         {:keys [content-ref-ents] :as content-ref-export} (build-content-ref-export db page-blocks*)
         {:keys [pvalue-uuids] :as page-export*}
         (build-page-export* db eid page-blocks* {:include-uuid-fn (:content-ref-uuids content-ref-export)
+                                                 :handle-block-uuids? true
                                                  :include-alias? true})
         page-entity (d/entity db eid)
         uuid-block-export (build-uuid-block-export db pvalue-uuids content-ref-ents {:page-entity page-entity})
@@ -708,9 +725,7 @@
        vec))
 
 (defn remove-uuids-if-not-ref [export-map all-ref-uuids]
-  (let [remove-uuid-if-not-ref (fn [m] (if (contains? all-ref-uuids (:block/uuid m))
-                                         m
-                                         (dissoc m :block/uuid :build/keep-uuid?)))]
+  (let [remove-uuid-if-not-ref (partial remove-uuid-if-not-ref-given-uuids all-ref-uuids)]
     (-> export-map
         (update :classes update-vals remove-uuid-if-not-ref)
         (update :properties update-vals remove-uuid-if-not-ref)
@@ -867,9 +882,10 @@
            e))
        m))))
 
-(defn- ensure-export-is-valid
+(defn- basic-validate-export
   "Checks that export map is usable by sqlite.build including checking that
-   all referenced properties and classes are defined. Checks related to properties and
+   all referenced properties and classes are defined. This validation is not as robust
+   as validate-export. Checks related to properties and
    classes are disabled when :exclude-namespaces is set because those checks can't be done"
   [db export-map* {:keys [graph-options]}]
   (let [export-map (remove-namespaced-keys export-map*)]
@@ -905,10 +921,10 @@
         export-map (patch-invalid-keywords export-map*)]
     (if (get-in options [:graph-options :catch-validation-errors?])
       (try
-        (ensure-export-is-valid db export-map options)
+        (basic-validate-export db export-map options)
         (catch ExceptionInfo e
           (println "Caught error:" e)))
-      (ensure-export-is-valid db export-map options))
+      (basic-validate-export db export-map options))
     (assoc export-map ::export-type export-type)))
 
 ;; Import fns
