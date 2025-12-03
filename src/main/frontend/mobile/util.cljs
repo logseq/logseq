@@ -38,6 +38,13 @@
 (defn hide-splash []
   (.hide SplashScreen))
 
+(defn set-ios-interface-style!
+  [mode system?]
+  (when (native-ios?)
+    (p/do!
+     (.setInterfaceStyle ^js ios-utils (clj->js {:mode mode
+                                                 :system system?})))))
+
 (defn get-idevice-model
   []
   (when (native-ios?)
