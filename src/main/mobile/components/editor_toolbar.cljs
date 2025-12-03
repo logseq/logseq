@@ -8,7 +8,6 @@
             [frontend.mobile.haptics :as haptics]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
-            [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
             [logseq.common.util.page-ref :as page-ref]
@@ -239,11 +238,8 @@
   (let [editing? (state/sub :editor/editing?)
         code-block? (state/sub :editor/code-block-context)
         quick-add? (mobile-state/quick-add-open?)
-        keep-open? (= "app-keep-keyboard-open-input"
-                      (some-> js/document.activeElement (.-id)))
-        show? (and (util/mobile?)
-                   (not code-block?)
-                   (or editing? keep-open?))
+        show? (and (not code-block?)
+                   editing?)
         actions (toolbar-actions quick-add?)]
     (when (mobile-util/native-ios?)
       (native-toolbar show? actions))))
