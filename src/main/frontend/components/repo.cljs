@@ -29,7 +29,7 @@
             [rum.core :as rum]))
 
 (rum/defc normalized-graph-label
-  [{:keys [url remote? GraphName GraphUUID] :as graph} on-click]
+  [{:keys [url remote? graph-e2ee? GraphName GraphUUID] :as graph} on-click]
   (let [db-based? (config/db-based-graph? url)]
     (when graph
       [:span.flex.items-center
@@ -40,7 +40,7 @@
            [:a.flex.items-center {:title local-dir
                                   :on-click #(on-click graph)}
             [:span graph-name (when (and GraphName (not db-based?)) [:strong.pl-1 "(" GraphName ")"])]
-            (when remote? [:strong.px-1.flex.items-center (ui/icon "cloud")])])
+            (when remote? [:strong.px-1.flex.items-center (ui/icon (if graph-e2ee? "lock" "cloud"))])])
          [:a.flex.items-center {:title GraphUUID
                                 :on-click #(on-click graph)}
           (db/get-repo-path (or url GraphName))
@@ -272,7 +272,7 @@
   (let [switch-repos (if-not (nil? current-repo)
                        (remove (fn [repo] (= current-repo (:url repo))) repos) repos) ; exclude current repo
         repo-links (mapv
-                    (fn [{:keys [url remote? rtc-graph? GraphName GraphSchemaVersion GraphUUID] :as graph}]
+                    (fn [{:keys [url remote? graph-e2ee? rtc-graph? GraphName GraphSchemaVersion GraphUUID] :as graph}]
                       (let [local? (config/local-file-based-graph? url)
                             db-only? (config/db-based-graph? url)
                             repo-url (cond
@@ -287,7 +287,7 @@
                           {:title [:span.flex.items-center.title-wrap short-repo-name
                                    (when remote? [:span.pl-1.flex.items-center
                                                   {:title (str "<" GraphName "> #" GraphUUID)}
-                                                  (ui/icon "cloud" {:size 18})
+                                                  (ui/icon (if graph-e2ee? "lock" "cloud") {:size 18})
                                                   (when downloading?
                                                     [:span.opacity.text-sm.pl-1 "downloading"])])]
                            :hover-detail repo-url ;; show full path on hover
