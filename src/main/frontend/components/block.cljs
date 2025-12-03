@@ -2680,8 +2680,6 @@
                                           first
                                           util/caret-range)
                 mobile-range (when mobile? (get-cursor-range))]
-            (when-not forbidden-edit?
-              (util/mobile-keep-keyboard-open false))
             (when (and (not forbidden-edit?) (contains? #{1 0} button))
               (cond
                 (and meta? shift?)

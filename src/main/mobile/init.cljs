@@ -130,5 +130,6 @@
 
 (comment
   (defn keyboard-show
+    "Notice, iOS is not supported"
     []
     (.show Keyboard)))
