@@ -238,9 +238,11 @@
   (let [editing? (state/sub :editor/editing?)
         code-block? (state/sub :editor/code-block-context)
         quick-add? (mobile-state/quick-add-open?)
+        keep-open? (= "app-keep-keyboard-open-input"
+                      (some-> js/document.activeElement (.-id)))
         show? (and (util/mobile?)
                    (not code-block?)
-                   editing?)
+                   (or editing? keep-open?))
         actions (toolbar-actions quick-add?)]
     (when (mobile-util/native-ios?)
       (native-toolbar show? actions))))
