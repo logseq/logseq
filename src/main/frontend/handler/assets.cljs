@@ -62,28 +62,16 @@
                         (string/replace rpath #"^[.\/\\]+" ""))]
     (if config/publishing?
       (str "./" rpath)
-      (let [ret (let [rpath          (if-not (string/starts-with? rpath common-config/local-assets-dir)
-                                       (path/path-join common-config/local-assets-dir rpath)
-                                       rpath)
+      (let [ret (let [rpath (if-not (string/starts-with? rpath common-config/local-assets-dir)
+                              (path/path-join common-config/local-assets-dir rpath)
+                              rpath)
                       encoded-chars? (boolean (re-find #"(?i)%[0-9a-f]{2}" rpath))
-                      rpath          (if encoded-chars? (js/decodeURI rpath) rpath)
-                      graph-root     (config/get-repo-dir repo)
-                      has-schema?    (string/starts-with? graph-root "file:")]
-
-                  (if-let [[rpath' alias]
-                           (and (alias-enabled?)
-                                (let [rpath' (string/replace rpath (re-pattern (str "^" common-config/local-assets-dir "[\\/\\\\]+")) "")]
-                                  (and
-                                   (string/starts-with? rpath' "@")
-                                   (some->> (and (seq (get-alias-dirs))
-                                                 (second (get-alias-by-name (second (re-find #"^@([^\/]+)" rpath')))))
-                                            (vector rpath')))))]
-
-                    (str "assets://" (string/replace rpath' (str "@" (:name alias)) (:dir alias)))
-
-                    (if has-schema?
-                      (path/path-join graph-root rpath)
-                      (path/prepend-protocol "file:" (path/path-join graph-root rpath)))))]
+                      rpath (if encoded-chars? (js/decodeURI rpath) rpath)
+                      graph-root (config/get-repo-dir repo)
+                      has-schema? (string/starts-with? graph-root "file:")]
+                  (if has-schema?
+                    (path/path-join graph-root rpath)
+                    (path/prepend-protocol "file:" (path/path-join graph-root rpath))))]
         ret))))
 
 (defn normalize-asset-resource-url
@@ -102,7 +90,8 @@
         (path/path-join "file://" path))
 
       :else ;; relative path or alias path
-      (resolve-asset-real-path-url (state/get-current-repo) path))))
+      (some-> (resolve-asset-real-path-url (state/get-current-repo) path)
+              (common-util/safe-decode-uri-component)))))
 
 (defn get-matched-alias-by-ext
   [ext]

@@ -595,10 +595,6 @@
         del-hl! (fn [hl] (when-let [id (:id hl)]
                            (set-highlights! (into [] (remove #(= id (:id %)) highlights)))))]
 
-    (hooks/use-effect!
-     (fn [])
-     [ctx-menu-state])
-
     ;; consume dirtied
     (hooks/use-effect!
      (fn []

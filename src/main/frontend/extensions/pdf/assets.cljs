@@ -348,7 +348,7 @@
   (let [id (:block/uuid block)
         page (db/entity (:db/id (:block/page block)))
         page-name (:block/title page)
-        file-path (get-in block [:block/properties :file-path])
+        file-path (:file-path (:block/properties page))
         hl-page (pu/get-block-property-value block :logseq.property.pdf/hl-page)
         hl-value (pu/get-block-property-value block :logseq.property.pdf/hl-value)]
     (when-let [target-key (and page-name (subs page-name 5))]
