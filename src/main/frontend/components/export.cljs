@@ -18,10 +18,10 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.db :as ldb]
+            [logseq.db.sqlite.export :as sqlite-export]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [logseq.db.sqlite.export :as sqlite-export]))
+            [rum.core :as rum]))
 
 (rum/defcs auto-backup < rum/reactive
   {:init (fn [state]
@@ -108,7 +108,7 @@
            [:a.font-medium {:on-click #(export/export-repo-as-zip! current-repo)}
             (t :export-zip)]])
 
-        (when db-based?
+        (when (and db-based? (not (util/mobile?)))
           [:div
            [:a.font-medium {:on-click #(db-export-handler/export-repo-as-db-edn! current-repo)}
             (t :export-db-edn)]])
@@ -137,7 +137,8 @@
             "Export debug transit file"]
            [:p.text-sm.opacity-70.mb-0 "Any sensitive data will be removed in the exported transit file, you can send it to us for debugging."]])
 
-        (when (and db-based? util/web-platform?)
+        (when (and db-based? util/web-platform?
+                   (not (util/mobile?)))
           [:div
            [:hr]
            (auto-backup)])]])))

@@ -1,6 +1,7 @@
 (ns mobile.routes
   "Routes used in mobile app"
-  (:require [frontend.components.imports :as imports]
+  (:require [frontend.components.export :as export]
+            [frontend.components.imports :as imports]
             [frontend.components.page :as page]))
 
 (def routes
@@ -14,4 +15,9 @@
    ["/import"
     {:name :import
      :view (fn []
-             (imports/importer {}))}]])
+             (imports/importer {}))}]
+   ["/export"
+    {:name :export
+     :view (fn []
+             [:div.mt-8
+              (export/export)])}]])
