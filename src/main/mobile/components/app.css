@@ -321,3 +321,7 @@ div[data-radix-menu-content] {
 .ls-nlp-calendar {
     @apply flex-1;
 }
+
+.mobile-setting-item {
+    @apply rounded-2xl px-3 py-3 shadow-sm flex items-center justify-between bg-gray-03;
+}
