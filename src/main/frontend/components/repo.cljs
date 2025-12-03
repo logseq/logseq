@@ -360,7 +360,7 @@
      (shui/button {:size :sm :variant :ghost
                    :on-click (fn []
                                (if (util/mobile?)
-                                 (state/pub-event! [:mobile/set-tab "settings"])
+                                 (state/pub-event! [:mobile/set-tab "graphs"])
                                  (route-handler/redirect-to-all-graphs)))}
                   (shui/tabler-icon "layout-2") [:span (t :all-graphs)]))])
 
