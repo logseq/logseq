@@ -768,6 +768,8 @@
       ;; exit editing mode
       :else
       (let [select? (= type :esc)]
+        (when (.closest (.-target e) ".block-content")
+          (util/mobile-keep-keyboard-open))
         (when-let [container (gdom/getElement "app-container")]
           (dom/remove-class! container "blocks-selection-mode"))
         (p/do!
