@@ -7,7 +7,6 @@
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.ui :as shui]
             [mobile.state :as mobile-state]
-            [promesa.core :as p]
             [rum.core :as rum]))
 
 (defonce *last-popup? (atom nil))
@@ -50,16 +49,10 @@
         (editor-handler/quick-add-open-last-block!))
 
       dismissing?
-      (let [capture? (mobile-state/quick-add-open?)]
-        (when (some? @mobile-state/*popup-data)
-          (p/do!
-           (mobile-state/set-popup! nil)
-           (reset! *last-popup-data nil)
-           (.dismiss ^js mobile-util/native-editor-toolbar)
-           (state/pub-event! [:mobile/clear-edit])
-           (when capture?
-             (when-let [tab @mobile-state/*tab]
-               (mobile-state/set-tab! tab))))))
+      (when (some? @mobile-state/*popup-data)
+        (state/pub-event! [:mobile/clear-edit])
+        (mobile-state/set-popup! nil)
+        (reset! *last-popup-data nil))
 
       :else
       nil)))

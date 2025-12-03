@@ -10,20 +10,6 @@ struct LiquidTab: Identifiable, Equatable {
     enum Role {
         case normal
         case search
-        case action
-    }
-}
-
-extension LiquidTab {
-    /// Tabs that should behave like plain buttons instead of driving selection.
-    /// Defaults to the existing capture tab unless explicitly marked as an action.
-    var isActionButton: Bool {
-        switch role {
-        case .action:
-            return true
-        default:
-            return id == "capture"
-        }
     }
 }
 

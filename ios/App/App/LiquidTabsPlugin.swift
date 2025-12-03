@@ -44,23 +44,14 @@ public class LiquidTabsPlugin: CAPPlugin, CAPBridgedPlugin {
 
             let systemImage = dict["systemImage"] as? String ?? "square"
             let roleStr = dict["role"] as? String ?? "normal"
-            let role: LiquidTab.Role
-
-            switch roleStr {
-            case "search":
-                role = .search
-            case "action":
-                role = .action
-            default:
-                role = .normal
-            }
+            let role: LiquidTab.Role = (roleStr == "search") ? .search : .normal
 
             return LiquidTab(id: id, title: title, systemImage: systemImage, role: role)
         }
 
         DispatchQueue.main.async {
             self.store.tabs = tabs
-            if let firstId = tabs.first(where: { !$0.isActionButton })?.id ?? tabs.first?.id {
+            if let firstId = tabs.first?.id {
                 self.store.selectedId = firstId
             }
         }
@@ -77,11 +68,6 @@ public class LiquidTabsPlugin: CAPPlugin, CAPBridgedPlugin {
         }
 
         DispatchQueue.main.async {
-            if let tab = self.store.tab(for: id), tab.isActionButton {
-                LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
-                return
-            }
-
             self.store.selectedId = id
         }
 
