@@ -16,11 +16,11 @@
             [mobile.bottom-tabs :as bottom-tabs]
             [mobile.components.editor-toolbar :as editor-toolbar]
             [mobile.components.favorites :as favorites]
+            [mobile.components.graphs :as graphs]
             [mobile.components.header :as mobile-header]
             [mobile.components.popup :as popup]
             [mobile.components.search :as search]
             [mobile.components.selection-toolbar :as selection-toolbar]
-            [mobile.components.settings :as settings]
             [mobile.components.ui :as ui-component]
             [mobile.state :as mobile-state]
             [rum.core :as rum]))
@@ -90,7 +90,7 @@
   (let [tab' (keyword tab)]
     [:div#main-content-container.px-5.ls-layer
      (case tab'
-       :settings (settings/page)
+       :graphs (graphs/page)
        (if view
          (view route-match)
          (case tab'
