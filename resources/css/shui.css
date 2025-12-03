@@ -279,7 +279,7 @@ div[data-radix-popper-content-wrapper] {
 /* Combo Keys - simultaneous key combinations with separator */
 .shui-shortcut-combo {
   @apply flex items-start relative rounded;
-  background-color: rgba(223, 239, 254, 0.14);
+  background-color: var(--lx-gray-06-alpha);
   border: 1px solid rgba(0, 0, 0, 0.1);
   box-sizing: border-box;
   white-space: nowrap;
@@ -306,7 +306,7 @@ div[data-radix-popper-content-wrapper] {
 }
 
 .shui-shortcut-separator {
-  background-color: rgba(224, 243, 255, 0.18);
+  background-color: var(--lx-gray-07-alpha);
   align-self: stretch;
   flex-shrink: 0;
   width: 1px;
@@ -321,7 +321,7 @@ div[data-radix-popper-content-wrapper] {
 
 .shui-shortcut-separate kbd.shui-shortcut-key {
   @apply flex flex-col items-center justify-center px-1 py-0.5 relative rounded shrink-0;
-  background-color: rgba(223, 239, 254, 0.14);
+  background-color: var(--lx-gray-06-alpha);
   border: 1px solid rgba(0, 0, 0, 0.1);
   box-sizing: border-box;
   min-width: 20px;
@@ -334,7 +334,7 @@ div[data-radix-popper-content-wrapper] {
   font-weight: normal;
   line-height: 16px;
   font-style: normal;
-  color: #ecedee;
+  color: var(--lx-gray-12);
   font-size: 12px;
   text-align: center;
   letter-spacing: -0.5px;
@@ -347,7 +347,7 @@ kbd.shui-shortcut-key,
 .shui-shortcut-key {
   @apply text-xs font-normal h-5 flex items-center justify-center;
   font-family: 'Inter', sans-serif;
-  color: #ecedee;
+  color: var(--lx-gray-12);
   font-size: 12px;
   text-align: center;
   letter-spacing: -0.5px;
@@ -361,7 +361,7 @@ kbd.shui-shortcut-key,
 /* Keys in separate containers get their own styling */
 .shui-shortcut-separate kbd.shui-shortcut-key {
   @apply rounded;
-  background-color: rgba(223, 239, 254, 0.14);
+  background-color: var(--lx-gray-06-alpha);
   border: 1px solid rgba(0, 0, 0, 0.1);
   box-sizing: border-box;
 }
