@@ -850,7 +850,8 @@
        (when-let [^js viewer (:viewer state)]
          (let [fn-textlayer-ready
                (fn [^js p]
-                 (set-ano-state! {:loaded-pages (conj (:loaded-pages ano-state) (int (.-pageNumber p)))}))]
+                 (set-ano-state!
+                  (fn [s] (assoc s :loaded-pages (conj (:loaded-pages s) (dec (js/parseInt (.-pageNumber p))))))))]
 
            (doto (.-eventBus viewer)
              (.on "textlayerrendered" fn-textlayer-ready))
@@ -859,8 +860,7 @@
               (doto (.-eventBus viewer)
                 (.off "textlayerrendered" fn-textlayer-ready))))))
 
-     [(:viewer state)
-      (:loaded-pages ano-state)])
+     [(:viewer state)])
 
     (let [^js viewer        (:viewer state)
           in-system-window? (some-> viewer (.-$inSystemWindow))]
