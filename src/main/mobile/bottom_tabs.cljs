@@ -119,6 +119,6 @@
   []
   (configure-tabs
    [{:id "home"       :title "Home"       :systemImage "house" :role "normal"}
-    {:id "favorites"  :title "Favorites"  :systemImage "star"  :role "normal"}
+    {:id "graphs"     :title "Graphs"     :systemImage "app.background.dotted"  :role "normal"}
     {:id "capture"    :title "Capture"    :systemImage "tray"  :role "normal"}
-    {:id "settings"   :title "Settings"   :systemImage "gear"  :role "normal"}]))
+    {:id "favorites"  :title "Favorites"  :systemImage "star"  :role "normal"}]))
