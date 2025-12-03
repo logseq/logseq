@@ -37,6 +37,8 @@ public class Utils: CAPPlugin {
   @objc func setInterfaceStyle(_ call: CAPPluginCall) {
     let mode = call.getString("mode")?.lowercased() ?? "system"
     let followSystem = call.getBool("system") ?? (mode == "system")
+    UserDefaults.standard.set(mode, forKey: "logseqTheme")
+    UserDefaults.standard.synchronize()
 
     let style: UIUserInterfaceStyle
     if followSystem {
