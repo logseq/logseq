@@ -21,6 +21,10 @@ private class NativeEditorToolbarView: UIView {
     /// Used to prevent an old dismiss animation from removing a newly-presented bar.
     private var dismissGeneration: Int = 0
 
+    /// Store actions so we can reconfigure when theme (light/dark) changes.
+    private var storedActions: [NativeEditorAction] = []
+    private var storedTrailingAction: NativeEditorAction?
+
     private let blurView: UIVisualEffectView = {
         let effect = UIBlurEffect(style: .systemChromeMaterial)
         let view = UIVisualEffectView(effect: effect)
@@ -113,7 +117,11 @@ private class NativeEditorToolbarView: UIView {
         dismissGeneration += 1
         layer.removeAllAnimations()
 
-        // We ignore tintColor/backgroundColor – they’re now driven by theme.
+        // Store actions so we can re-apply them when theme changes
+        storedActions = actions
+        storedTrailingAction = trailingAction
+
+        // We ignore tintColor/backgroundColor – they’re driven by theme.
         configure(actions: actions,
                   trailingAction: trailingAction)
         attachIfNeeded(to: host)
@@ -147,6 +155,24 @@ private class NativeEditorToolbarView: UIView {
                 self.alpha = 1
             }
         })
+    }
+
+    // MARK: - Theme / trait changes
+
+    /// Returns the theme-appropriate tint (light: black, dark: white).
+    private func currentTintColor() -> UIColor {
+        return traitCollection.userInterfaceStyle == .dark ? .white : .black
+    }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+
+        guard previousTraitCollection?.userInterfaceStyle != traitCollection.userInterfaceStyle else {
+            return
+        }
+
+        // Reconfigure with new tint when light/dark changes
+        configure(actions: storedActions, trailingAction: storedTrailingAction)
     }
 
     // MARK: - Private helpers
@@ -203,15 +229,6 @@ private class NativeEditorToolbarView: UIView {
         trailingContainer.addArrangedSubview(trailingButton)
 
         trailingButton.addTarget(self, action: #selector(handleTrailingTap(_:)), for: .touchUpInside)
-    }
-
-    /// Returns the theme-appropriate tint (light: black, dark: white).
-    private func currentTintColor() -> UIColor {
-        if #available(iOS 12.0, *) {
-            return traitCollection.userInterfaceStyle == .dark ? .white : .black
-        } else {
-            return .black
-        }
     }
 
     private func configure(actions: [NativeEditorAction],
@@ -308,7 +325,7 @@ private class NativeEditorToolbarView: UIView {
         config.title = nil
         config.contentInsets = NSDirectionalEdgeInsets(top: 4, leading: 6, bottom: 4, trailing: 6)
         config.preferredSymbolConfigurationForImage =
-          UIImage.SymbolConfiguration(pointSize: 17, weight: .regular)
+            UIImage.SymbolConfiguration(pointSize: 17, weight: .regular)
         config.background = .clear()
 
         let button = UIButton(configuration: config, primaryAction: nil)
@@ -316,11 +333,11 @@ private class NativeEditorToolbarView: UIView {
 
         let symbolName = action.systemIcon ?? "circle"
 
-        // 🔑 Try custom SF Symbol as systemName first, then fall back to asset by name.
+        // Try custom SF Symbol as systemName first, then fall back to asset by name.
         let image =
-          UIImage(systemName: symbolName) ??
-          UIImage(named: symbolName) ??
-          UIImage(systemName: "circle")
+            UIImage(systemName: symbolName) ??
+            UIImage(named: symbolName) ??
+            UIImage(systemName: "circle")
 
         button.setImage(image, for: .normal)
 

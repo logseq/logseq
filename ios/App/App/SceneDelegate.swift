@@ -40,6 +40,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // 2) Wrap in SwiftUI root (LiquidTabsRootView)
         let rootView = LiquidTabsRootView(navController: nav)
         let hosting = UIHostingController(rootView: rootView)
+        hosting.view.backgroundColor = UIColor.logseqBackground
 
         // 3) Standard UIWindowScene setup
         let window = UIWindow(windowScene: windowScene)
