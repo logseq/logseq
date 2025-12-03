@@ -173,20 +173,23 @@
                            :dune
 
                            ;; colors
-                           (let [properties {:color action}]
-                             (if-not id
-                               ;; add highlight
-                               (let [highlight (merge highlight
-                                                      {:id (pdf-utils/gen-uuid)
-                                                       :properties properties})]
-                                 (p/let [highlight' (add-hl! highlight)]
-                                   (pdf-utils/clear-all-selection owner-win)
-                                   (pdf-assets/copy-hl-ref! highlight' viewer)))
+                           (let [pdf-current (state/get-current-pdf)]
+                             (if (and (config/db-based-graph?) (not (:block pdf-current)))
+                               (state/pub-event! [:asset/dialog-edit-external-src nil pdf-current])
+                               (let [properties {:color action}]
+                                 (if-not id
+                                   ;; add highlight
+                                   (let [highlight (merge highlight
+                                                          {:id (pdf-utils/gen-uuid)
+                                                           :properties properties})]
+                                     (p/let [highlight' (add-hl! highlight)]
+                                       (pdf-utils/clear-all-selection owner-win)
+                                       (pdf-assets/copy-hl-ref! highlight' viewer)))
 
-                               ;; update highlight
-                               (upd-hl! (assoc highlight :properties properties)))
+                                   ;; update highlight
+                                   (upd-hl! (assoc highlight :properties properties)))
 
-                             (reset! *highlight-last-color (keyword action)))))
+                                 (reset! *highlight-last-color (keyword action)))))))
 
                        (and clear? (js/setTimeout #(clear-ctx-menu!) 68))))]
 
@@ -591,6 +594,10 @@
 
         del-hl! (fn [hl] (when-let [id (:id hl)]
                            (set-highlights! (into [] (remove #(= id (:id %)) highlights)))))]
+
+    (hooks/use-effect!
+     (fn [])
+     [ctx-menu-state])
 
     ;; consume dirtied
     (hooks/use-effect!
