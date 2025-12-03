@@ -366,6 +366,19 @@ kbd.shui-shortcut-key,
   box-sizing: border-box;
 }
 
+/* Override shortcut text color inside primary buttons for better contrast */
+.bg-primary kbd.shui-shortcut-key,
+.bg-primary .shui-shortcut-key,
+.bg-primary .shui-shortcut-compact,
+.bg-primary\/90 kbd.shui-shortcut-key,
+.bg-primary\/90 .shui-shortcut-key,
+.bg-primary\/90 .shui-shortcut-compact,
+.bg-primary\/100 kbd.shui-shortcut-key,
+.bg-primary\/100 .shui-shortcut-key,
+.bg-primary\/100 .shui-shortcut-compact {
+  color: hsl(var(--primary-foreground));
+}
+
 /* Key press animation */
 kbd.shui-shortcut-key-pressed,
 .shui-shortcut-key-pressed {
