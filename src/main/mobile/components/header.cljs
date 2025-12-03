@@ -2,7 +2,6 @@
   "App top header"
   (:require ["@capacitor/dialog" :refer [Dialog]]
             [clojure.string :as string]
-            [frontend.components.repo :as repo]
             [frontend.components.rtc.indicator :as rtc-indicator]
             [frontend.date :as date]
             [frontend.db :as db]
@@ -40,11 +39,29 @@
     (-> (.showDatePicker mobile-util/ui-local)
         (p/then (fn [^js e] (some-> e (.-value) (apply-date!)))))))
 
-(defn- open-settings-actions! []
+(defn- open-home-settings-actions! []
   (ui-component/open-popup!
    (fn []
      (mobile-settings/page))
    {}))
+
+(defn- open-graph-settings-actions! []
+  (ui-component/open-popup!
+   (fn []
+     [:div.-mx-2
+      ;; TODO: support export
+      ;; (ui/menu-link
+      ;;  {:on-click (fn [] (route-handler/redirect! {:to :export}))}
+      ;;  [:span.text-lg.flex.gap-2.items-center
+      ;;   (shui/tabler-icon "database-export" {:class "opacity-80" :size 22})
+      ;;   "Export"])
+
+      (ui/menu-link
+       {:on-click (fn [] (route-handler/redirect! {:to :import}))}
+       [:span.text-lg.flex.gap-2.items-center
+        (shui/tabler-icon "file-upload" {:class "opacity-80" :size 22})
+        "Import"])])
+   {:default-height false}))
 
 (defn open-page-settings
   [block]
@@ -52,12 +69,6 @@
    nil
    (fn []
      [:div.-mx-2
-      (ui/menu-link
-       {:on-click shui/popup-hide!}
-       [:span.text-lg.flex.gap-2.items-center
-        (shui/tabler-icon "copy" {:class "opacity-80" :size 22})
-        "Copy"])
-
       (ui/menu-link
        {:on-click
         (fn []
@@ -86,23 +97,16 @@
    {:title "Actions"
     :default-height false}))
 
-(defn- open-graph-switcher! []
-  (ui-component/open-popup!
-   (fn []
-     [:div.px-1
-      (repo/repos-dropdown-content {})])
-   {:default-height false}))
-
 (defn- register-native-top-bar-events! []
   (when (and (mobile-util/native-ios?)
              (not @native-top-bar-listener?))
     (.addListener ^js mobile-util/native-top-bar "buttonTapped"
                   (fn [^js e]
                     (case (.-id e)
-                      "title" (open-graph-switcher!)
                       "calendar" (open-journal-calendar!)
                       "add-graph" (state/pub-event! [:graph/new-db-graph])
-                      "home-setting" (open-settings-actions!)
+                      "home-setting" (open-home-settings-actions!)
+                      "graph-setting" (open-graph-settings-actions!)
                       "sync" (shui/popup-show! nil
                                                (rtc-indicator/details)
                                                {})
@@ -149,13 +153,13 @@
                                    {:id "favorite" :systemIcon (if favorited? "star.fill" "star")}]))
 
                           (= tab "graphs")
-                          [{:id "add-graph" :systemIcon "plus"}]
+                          [{:id "graph-setting" :systemIcon "ellipsis"}
+                           {:id "add-graph" :systemIcon "plus"}]
 
                           :else nil)
           header (cond-> base
                    left-buttons (assoc :leftButtons left-buttons)
-                   right-buttons (assoc :rightButtons right-buttons)
-                   (and (= tab "home") (not route-view)) (assoc :titleClickable true))]
+                   right-buttons (assoc :rightButtons right-buttons))]
       (.configure ^js mobile-util/native-top-bar
                   (clj->js header)))))
 
