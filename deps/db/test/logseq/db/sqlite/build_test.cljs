@@ -100,9 +100,17 @@
                        {:block/title "block 2"}]}]})
         block (db-test/find-block-by-content @conn "block 1")
         block2 (db-test/find-block-by-content @conn "block 2")
+        page1 (db-test/find-page-by-title @conn "page1")
+        built-in-page (db-test/find-page-by-title @conn "Quick add")
         {:keys [init-tx block-props-tx]}
         (sqlite-build/build-blocks-tx
-         {:pages-and-blocks [{:page (select-keys (:block/page block) [:block/uuid])
+         {:pages-and-blocks [{:page
+                              {:block/uuid (:block/uuid built-in-page)
+                               :build/keep-uuid? true
+                               :build/properties {:logseq.property/description "foo"}
+                               :block/title "Quick add"}
+                              :blocks []}
+                             {:page (select-keys (:block/page block) [:block/uuid])
                               :blocks [(merge {:block/title "imported task" :block/uuid (:block/uuid block)}
                                               {:build/properties {:logseq.property/status :logseq.property/status.todo}
                                                :build/tags [:logseq.class/Task]})]}]
@@ -123,9 +131,18 @@
         _ (d/transact! conn block-props-tx2)
         updated-block2 (d/entity @conn [:block/uuid (:block/uuid block2)])]
 ;;     (cljs.pprint/pprint _tx)
+    (testing "existing page cases"
+      (is (= (:block/updated-at page1)
+             (:block/updated-at (db-test/find-page-by-title @conn "page1")))
+          "Existing page with no property changes didn't get updated")
+      (is (not= (:block/updated-at built-in-page)
+                (:block/updated-at (db-test/find-page-by-title @conn "Quick add")))
+          "Existing page with property changes does get updated"))
+
     (testing "block with built-in properties and tags"
       (is (= []
-             (filter #(or (:db/id %) (:db/ident %))
+             (filter #(and (not= (:block/uuid %) (:block/uuid built-in-page))
+                           (or (:db/id %) (:db/ident %)))
                      (concat init-tx block-props-tx)))
           "Tx doesn't try to create new blocks or modify existing idents")
       (is (= "imported task" (:block/title updated-block)))
