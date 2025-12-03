@@ -105,14 +105,19 @@
 (rum/defc page < rum/reactive
   []
   (let [login? (and (state/sub :auth/id-token)
-                    (user-handler/logged-in?))]
+                    (user-handler/logged-in?))
+        theme (state/sub :ui/theme)
+        system-theme? (state/sub :ui/system-theme?)
+        theme-value (if system-theme?
+                      "system"
+                      (or theme "system"))]
     [:div.app-index-settings.min-h-full.py-4.space-y-4
      (user-profile login?)
      [:div.space-y-4
       [:div.mobile-setting-item
        [:span.text-base "Theme"]
        [:div.flex.items-center
-        (theme-select {:value (state/sub :ui/theme)
+        (theme-select {:value theme-value
                        :on-change state/use-theme-mode!})]]
 
       [:div.mobile-setting-item
