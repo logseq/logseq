@@ -47,7 +47,7 @@
    {:value     (name value)
     :class     "text-sm bg-transparent rounded border-none focus:outline-none"
     :on-change (fn [e]
-                 (let [new-value (keyword (.. e -target -value))]
+                 (let [new-value (.. e -target -value)]
                    (on-change new-value)))}
    [:option {:value "system"} "System"]
    [:option {:value "light"}  "Light"]
