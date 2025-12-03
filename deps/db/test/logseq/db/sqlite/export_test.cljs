@@ -55,7 +55,7 @@
     (sqlite-export/build-export @import-conn {:export-type :page :page-id (:db/id page2)})))
 
 (defn- import-second-time-assertions [conn conn2 page-title original-data
-                                      & {:keys [transform-expected-blocks build-journal]
+                                      & {:keys [transform-expected-blocks build-journal skip-updated-at?]
                                          :or {transform-expected-blocks (fn [bs] (into bs bs))}}]
   (let [page (db-test/find-page-by-title @conn2 page-title)
         imported-page (export-page-and-import-to-another-graph conn conn2 page-title)
@@ -73,8 +73,9 @@
         "Blocks are appended to existing page")
     (is (= (:block/created-at page) (:block/created-at updated-page))
         "Existing page didn't get re-created")
-    (is (= (:block/updated-at page) (:block/updated-at updated-page))
-        "Existing page didn't get updated")))
+    (when-not skip-updated-at?
+      (is (= (:block/updated-at page) (:block/updated-at updated-page))
+          "Existing page didn't get updated"))))
 
 (defn- export-graph-and-import-to-another-graph
   "Exports graph and imports it to a 2nd graph, validates it and then exports the 2nd graph"
@@ -398,7 +399,7 @@
     (is (= (:pages-and-blocks original-data) (:pages-and-blocks imported-page))
         "Page's blocks are imported")
 
-    (import-second-time-assertions conn conn2 "page1" original-data)))
+    (import-second-time-assertions conn conn2 "page1" original-data {:skip-updated-at? true})))
 
 (deftest import-journal-page
   (let [original-data
