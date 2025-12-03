@@ -17,6 +17,7 @@ import UIKit
         bridge?.registerPluginInstance(NativeBottomSheetPlugin())
         bridge?.registerPluginInstance(NativeEditorToolbarPlugin())
         bridge?.registerPluginInstance(NativeSelectionActionBarPlugin())
+        bridge?.registerPluginInstance(Utils())
     }
 
     public override func viewDidLoad() {
