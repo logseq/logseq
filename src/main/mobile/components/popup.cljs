@@ -38,8 +38,6 @@
 (defn- dismiss-native-sheet!
   []
   (when-let [^js plugin mobile-util/native-bottom-sheet]
-    (mobile-state/set-popup! nil)
-    (reset! *last-popup-data nil)
     (.dismiss plugin #js {})))
 
 (defn- handle-native-sheet-state!
