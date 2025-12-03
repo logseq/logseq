@@ -4,6 +4,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [frontend.util :as util]
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.ui :as shui]
             [mobile.state :as mobile-state]
@@ -42,9 +43,14 @@
 (defn- handle-native-sheet-state!
   [^js data]
   (let [presenting? (.-presenting data)
+        presented? (.-presented data)
         dismissing? (.-dismissing data)]
     (cond
       presenting?
+      (when (mobile-state/quick-add-open?)
+        (util/mobile-keep-keyboard-open false))
+
+      presented?
       (when (mobile-state/quick-add-open?)
         (editor-handler/quick-add-open-last-block!))
 
