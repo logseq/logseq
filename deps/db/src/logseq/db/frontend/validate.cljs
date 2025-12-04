@@ -114,3 +114,29 @@
      ;; Objects that aren't classes or properties
      :objects (- (count (d/datoms db :avet :block/tags)) classes-count properties-count)
      :property-pairs (count (mapcat #(-> % db-property/properties (dissoc :block/tags)) entities))}))
+
+(defn validate-local-db!
+  "Validates a local (non-RTC) DB like validate-db! but with default behavior,
+  options and logging specific to a local DB. Used by CLI and tests"
+  [db & {:keys [db-name open-schema verbose]}]
+  (let [datoms (d/datoms db :eavt)
+        ent-maps (db-malli-schema/datoms->entities datoms)
+        _ (when verbose
+            (println "Read graph" (str db-name " with counts: "
+                                       (pr-str (assoc (graph-counts db ent-maps)
+                                                      :datoms (count datoms))))))
+        ent-maps (db-malli-schema/update-properties-in-ents db ent-maps)
+        explainer (get-schema-explainer (not open-schema))]
+    (when-let [explanation (binding [db-malli-schema/*db-for-validate-fns* db
+                                     db-malli-schema/*closed-values-validate?* true]
+                             (->> (map (fn [e] (dissoc e :db/id)) ent-maps) explainer not-empty))]
+      (let [ent-errors
+            (->> (group-errors-by-entity db ent-maps (:errors explanation))
+                 (map #(update % :errors
+                               (fn [errs]
+                                 ;; errs looks like: {178 {:logseq.property/hide? ["disallowed key"]}}
+                                 ;; map is indexed by :in which is unused since all errors are for the same map
+                                 (->> (me/humanize {:errors errs})
+                                      vals
+                                      (apply merge-with into))))))]
+        {:errors ent-errors}))))

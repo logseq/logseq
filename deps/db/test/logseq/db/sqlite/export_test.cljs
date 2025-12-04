@@ -19,7 +19,7 @@
 (defn- validate-db
   "Validate db, usually after transacting an import"
   [db]
-  (let [validation (db-validate/validate-db! db)]
+  (let [validation (db-validate/validate-local-db! db)]
     (when (seq (:errors validation)) (cljs.pprint/pprint {:validate (:errors validation)}))
     (is (empty? (map :entity (:errors validation))) "Imported graph has no validation errors")))
 
