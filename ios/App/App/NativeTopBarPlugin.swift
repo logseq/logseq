@@ -101,8 +101,19 @@ public class NativeTopBarPlugin: CAPPlugin, CAPBridgedPlugin {
                     button.titleLabel?.font = UIFont.systemFont(ofSize: 17, weight: .semibold)
                     button.addTarget(self, action: #selector(self.titleTapped(_:)), for: .touchUpInside)
                     topVC.navigationItem.titleView = button
+                    button.alpha = 0.8
                 } else {
-                    topVC.navigationItem.title = title
+                    let label = UILabel()
+                    label.text = title
+                    label.textAlignment = .center
+                    label.font = UIFont.systemFont(ofSize: 17, weight: .semibold)
+
+                    let baseColor = nav.navigationBar.tintColor
+                    label.textColor = baseColor?.withAlphaComponent(0.8)
+
+                    topVC.navigationItem.titleView = label
+                    topVC.navigationItem.title = nil
+
                 }
 
                 topVC.navigationItem.leftBarButtonItems = self.buildButtons(from: leftButtons)
@@ -141,6 +152,12 @@ public class NativeTopBarPlugin: CAPPlugin, CAPBridgedPlugin {
             container.addSubview(button)
 
             let item = UIBarButtonItem(customView: container)
+
+            // iOS 26+ Liquid Glass: remove the pill/glass background
+            if #available(iOS 26.0, *) {
+                button.alpha = 0.8
+            }
+
             return item
         }
     }

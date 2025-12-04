@@ -232,12 +232,9 @@ private struct LiquidTabs26View: View {
                     .foregroundColor: dimmed
                 ]
 
-                // Unselected icon color (90%)
-                appearance.stackedLayoutAppearance.normal.iconColor =
-                    UIColor.label.withAlphaComponent(0.9)
-
                 let tabBar = UITabBar.appearance()
                 tabBar.tintColor = .label
+                tabBar.unselectedItemTintColor = dimmed
                 tabBar.standardAppearance = appearance
                 tabBar.scrollEdgeAppearance = appearance
             }
