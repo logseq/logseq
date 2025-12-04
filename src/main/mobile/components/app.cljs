@@ -135,6 +135,11 @@
      (mobile-header/header current-repo tab)
      (main-content tab route-match)]))
 
+(defonce hidden-input
+  [:input
+   {:id mobile-util/mobile-keyboard-anchor-id
+    :type "text"}])
+
 (rum/defc main < rum/reactive
   []
   (let [current-repo (state/sub :git/current-repo)
@@ -155,7 +160,6 @@
      (when show-action-bar?
        (selection-toolbar/action-bar))
      (shui-popup/install-popups)
-     ;; (ui-component/keep-keyboard-virtual-input)
      (ui-component/install-notifications)
      (shui-toaster/install-toaster)
      (shui-dialog/install-modals)
@@ -163,4 +167,5 @@
       [:a#download.hidden]
       [:a#download-as-transit-debug.hidden]
       [:a#download-as-sqlite-db.hidden]
-      [:a#download-as-zip.hidden]]]))
+      [:a#download-as-zip.hidden]]
+     hidden-input]))
