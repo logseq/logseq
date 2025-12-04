@@ -330,16 +330,14 @@
                    [:dt.m-0 [:strong (str k)]]
                    [:dd {:class "text-warning"} v]])))]
      :warning false))
-  (let [{:keys [errors datom-count entities]} (db-validate/validate-db! db)]
+  (let [{:keys [errors]} (db-validate/validate-local-db! db {:verbose true})]
     (if errors
       (do
-        (log/error :import-errors {:msg (str "Import detected " (count errors) " invalid block(s):")
-                                   :counts (assoc (db-validate/graph-counts db entities) :datoms datom-count)})
+        (log/error :import-errors {:msg (str "Import detected " (count errors) " invalid block(s):")})
         (pprint/pprint errors)
         (notification/show! (str "Import detected " (count errors) " invalid block(s). These blocks may be buggy when you interact with them. See the javascript console for more.")
                             :warning false))
-      (log/info :import-valid {:msg "Valid import!"
-                               :counts (assoc (db-validate/graph-counts db entities) :datoms datom-count)}))))
+      (log/info :import-valid {:msg "Valid import!"}))))
 
 (defn- show-notification [{:keys [msg level ex-data]}]
   (if (= :error level)
