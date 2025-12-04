@@ -19,23 +19,36 @@
     (= :graph (:export-type options))
     (assoc :graph-options (dissoc options :file :export-type :graph))))
 
-(defn- local-export [{{:keys [graph] :as options} :opts}]
+(defn- validate-export
+  [export-map {:keys [catch-validation-errors?]}]
+  (println "Validating export which can take awhile on large graphs ...")
+  (if-let [error (:error (sqlite-export/validate-export export-map))]
+    (if catch-validation-errors?
+      (js/console.error error)
+      (cli-util/error error))
+    (println "Valid export!")))
+
+(defn- local-export [{{:keys [graph validate] :as options} :opts}]
   (when-not graph
     (cli-util/error "Command missing required option 'graph'"))
   (if (fs/existsSync (cli-util/get-graph-path graph))
     (let [conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))
           _ (cli-util/ensure-db-graph-for-command @conn)
           export-map (sqlite-export/build-export @conn (build-export-options options))]
+      (when validate
+        (validate-export export-map options))
       (write-export-edn-map export-map options))
     (cli-util/error "Graph" (pr-str graph) "does not exist")))
 
 (defn- api-export
-  [{{:keys [api-server-token] :as options} :opts}]
+  [{{:keys [api-server-token validate] :as options} :opts}]
   (let [opts (build-export-options options)]
     (-> (p/let [resp (cli-util/api-fetch api-server-token "logseq.cli.export_edn" [(clj->js opts)])]
           (if (= 200 (.-status resp))
             (p/let [body (.json resp)
                     export-map (sqlite-util/transit-read (aget body "export-body"))]
+              (when validate
+                (validate-export export-map options))
               (write-export-edn-map export-map (assoc options :graph (.-graph body))))
             (cli-util/api-handle-error-response resp)))
         (p/catch cli-util/command-catch-handler))))
