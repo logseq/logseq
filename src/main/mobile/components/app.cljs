@@ -108,7 +108,7 @@
     ;; Both are absolutely positioned and stacked; we toggle visibility.
     [:div.h-full.relative
      ;; Journals scroll container (keep-alive)
-     [:div#app-main-home.px-5.absolute.inset-0.overflow-y-auto
+     [:div#app-main-home.px-5.absolute.inset-0
       {:class (when-not home? "invisible pointer-events-none")}
       (home)]
 
