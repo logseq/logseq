@@ -745,7 +745,7 @@
 (defn- editor-on-hide
   [state type e editing-another-block?]
   (let [action (state/get-editor-action)
-        [opts _id config] (:rum/args state)]
+        [_opts _id config] (:rum/args state)]
     (cond
       (and (= type :esc) (editor-handler/editor-commands-popup-exists?))
       nil
