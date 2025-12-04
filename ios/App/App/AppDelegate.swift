@@ -12,13 +12,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
     private var ignoreRoutePopCount = 0
     private var popSnapshotView: UIView?
 
-    private lazy var navigationSwipeGesture: UISwipeGestureRecognizer = {
-        let gesture = UISwipeGestureRecognizer(target: self, action: #selector(handleNavigationSwipe(_:)))
-        gesture.direction = .right
-        gesture.cancelsTouchesInView = false
-        return gesture
-    }()
-
     private func normalizedPath(_ raw: String?) -> String {
         guard let raw = raw, !raw.isEmpty else { return "/" }
         return raw
@@ -302,7 +295,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
             SharedWebViewController.instance.attach(to: current)
         }
 
-        attachNavigationSwipeGesture()
     }
 
     func navigationController(
@@ -313,31 +305,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
     ) -> UIViewControllerAnimatedTransitioning? {
         // Sidebar animator removed → always return nil
         return nil
-    }
-
-    // ---------------------------------------------------------
-    // MARK: Gestures
-    // ---------------------------------------------------------
-
-    private func attachNavigationSwipeGesture() {
-        guard let nav = navController else { return }
-
-        if let edgePan = nav.interactivePopGestureRecognizer {
-            navigationSwipeGesture.require(toFail: edgePan)
-        }
-        if navigationSwipeGesture.view !== nav.view {
-            nav.view.addGestureRecognizer(navigationSwipeGesture)
-        }
-    }
-
-    @objc private func handleNavigationSwipe(_ gesture: UISwipeGestureRecognizer) {
-        guard gesture.state == .ended else { return }
-        guard let nav = navController else { return }
-
-        if nav.viewControllers.count > 1 {
-            nav.popViewController(animated: true)
-            return
-        }
     }
 
     // ---------------------------------------------------------
