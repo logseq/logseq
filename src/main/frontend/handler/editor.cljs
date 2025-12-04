@@ -843,7 +843,6 @@
                                           (let [block (db/entity [:block/uuid block-id])]
                                             (seq (:block/_parent block)))))]
             (when-not (and has-children? left-has-children?)
-              (mobile-util/mobile-focus-hidden-input)
               (let [block-parent block-container
                     sibling-or-parent-block
                     (if (:embed? config)
