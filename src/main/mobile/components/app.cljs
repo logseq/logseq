@@ -28,7 +28,7 @@
 (rum/defc journals
   []
   (ui-component/classic-app-container-wrap
-   [:div.pt-3
+   [:div.pt-6
     (journal/all-journals)]))
 
 (rum/defc home-inner < rum/static
