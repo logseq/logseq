@@ -843,6 +843,7 @@
                                           (let [block (db/entity [:block/uuid block-id])]
                                             (seq (:block/_parent block)))))]
             (when-not (and has-children? left-has-children?)
+              (mobile-util/mobile-focus-hidden-input)
               (let [block-parent block-container
                     sibling-or-parent-block
                     (if (:embed? config)
@@ -3909,16 +3910,15 @@
             (select-all-blocks! {})))))))
 
 (defn escape-editing
-  [& {:keys [select? save-block?]
+  [& {:keys [select? save-block? editing-another-block?]
       :or {save-block? true}}]
-  (let [edit-block (state/get-edit-block)]
-    (p/do!
-     (when save-block? (save-current-block!))
-     (if select?
-       (when-let [node (some-> (state/get-input) (util/rec-get-node "ls-block"))]
-         (state/exit-editing-and-set-selected-blocks! [node]))
-       (when (= (:db/id edit-block) (:db/id (state/get-edit-block)))
-         (state/clear-edit!))))))
+  (p/do!
+   (when save-block? (save-current-block!))
+   (if select?
+     (when-let [node (some-> (state/get-input) (util/rec-get-node "ls-block"))]
+       (state/exit-editing-and-set-selected-blocks! [node]))
+     (when-not editing-another-block?
+       (state/clear-edit!)))))
 
 (defn replace-block-reference-with-content-at-point
   []

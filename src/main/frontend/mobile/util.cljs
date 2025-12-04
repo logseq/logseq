@@ -2,6 +2,7 @@
   (:require ["@capacitor/core" :refer [Capacitor registerPlugin]]
             ["@capacitor/splash-screen" :refer [SplashScreen]]
             [clojure.string :as string]
+            [goog.dom :as gdom]
             [promesa.core :as p]))
 
 (defn platform []
@@ -139,6 +140,17 @@
   (if (native-ios?)
     (.hideAlert ^js ui-local)
     (p/resolved nil)))
+
+(def mobile-keyboard-anchor-id "ls-mobile-kb-anchor")
+(defonce *hidden-input-timeout (atom nil))
+(defn mobile-focus-hidden-input
+  []
+  (when-let [t @*hidden-input-timeout]
+    (js/clearTimeout t))
+  (when (native-platform?)
+    (when-let [^js anchor (gdom/getElement mobile-keyboard-anchor-id)]
+      (reset! *hidden-input-timeout (js/setTimeout #(.blur anchor) 200))
+      (.focus anchor))))
 
 (comment
   (defn app-active?
