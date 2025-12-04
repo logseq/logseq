@@ -39,13 +39,14 @@
    `f` receives the tab id string.
    Returns the Capacitor listener handle; call `(.remove handle)` to unsubscribe."
   [f]
-  (.addListener
-   liquid-tabs
-   "tabSelected"
-   (fn [data]
+  (when (and (util/capacitor?) liquid-tabs)
+    (.addListener
+     liquid-tabs
+     "tabSelected"
+     (fn [data]
       ;; data is like { id: string }
-     (when-let [id (.-id data)]
-       (f id)))))
+       (when-let [id (.-id data)]
+         (f id))))))
 
 (defn add-search-listener!
   "Listen to native search query changes from the SwiftUI search tab.

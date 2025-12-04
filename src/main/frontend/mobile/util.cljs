@@ -36,6 +36,31 @@
   (set! native-selection-action-bar (registerPlugin "NativeSelectionActionBarPlugin"))
   (set! ios-utils (registerPlugin "Utils")))
 
+(defonce ios-content-size-listener nil)
+
+(defn- set-ios-font-scale!
+  [scale]
+  (let [^js style (.-style js/document.documentElement)
+        scale (or scale 1)]
+    (.setProperty style "--ls-mobile-font-scale" (str scale))))
+
+(defn sync-ios-content-size!
+  "Fetch the current iOS Dynamic Type scale and sync it to CSS variables.
+   Also attaches a listener to keep it in sync when the user changes the setting."
+  []
+  (when (native-ios?)
+    (let [apply-scale! (fn [payload]
+                         (let [payload (js->clj payload :keywordize-keys true)]
+                           (set-ios-font-scale! (:scale payload))))]
+      (p/let [payload (p/chain (.getContentSize ^js ios-utils)
+                               #(js->clj % :keywordize-keys true))]
+        (set-ios-font-scale! (:scale payload)))
+      (when (nil? ios-content-size-listener)
+        (set! ios-content-size-listener
+              (.addListener ^js ios-utils "contentSizeCategoryChanged"
+                            (fn [^js payload]
+                              (apply-scale! payload))))))))
+
 (defn hide-splash []
   (.hide SplashScreen))
 

@@ -58,15 +58,23 @@
   @apply inline;
 
   .icon-emoji-wrap {
-    @apply relative top-[2px] pl-[1px];
+    position: relative;
+    top: 0.08em;
+    padding-left: 1px;
 
     &.as-emoji {
-      @apply top-0 pr-[1px];
+      top: 0.02em;
+      padding-right: 1px;
     }
   }
 
   .icon-cp-container {
     @apply inline-flex items-center pr-0.5;
+  }
+
+  .icon-emoji-wrap em-emoji,
+  .icon-cp-container .ui__icon {
+    vertical-align: middle;
   }
 
   .block-title-wrap.as-heading {
@@ -208,7 +216,8 @@
 
       &.bullet-closed {
         .ls-icon-color-wrap em-emoji {
-          @apply relative -top-[1px];
+          position: relative;
+          top: -0.08em;
         }
       }
     }
@@ -747,23 +756,32 @@
 }
 
 .bullet-container {
-  display: flex;
-  height: 16px;
-  width: 16px;
+  display: inline-flex;
+  height: 1em;
+  width: 1em;
+  min-width: 1em;
+  flex-shrink: 0;
+  align-self: center;
   border-radius: 50%;
   justify-content: center;
   align-items: center;
+  line-height: 1;
+  vertical-align: middle;
 
   .bullet-heading {
     background-color: var(--ls-block-bullet-color, #8fbc8f);
   }
 
   &.as-order-list {
-    @apply w-[22px] whitespace-nowrap justify-center pl-[3px];
+    width: 1.4em;
+    min-width: 1.4em;
+    @apply whitespace-nowrap justify-center pl-[3px];
   }
 
   .bullet {
-    @apply rounded-full w-[6px] h-[6px] text-[15px] opacity-80;
+    @apply rounded-full opacity-80;
+    width: 0.4em;
+    height: 0.4em;
 
     > * {
       @apply cursor-pointer;
@@ -792,6 +810,9 @@
 }
 
 .bullet-link-wrap {
+  @apply inline-flex items-center;
+  line-height: 1;
+  vertical-align: middle;
   color: var(--ls-primary-text-color);
 
   .ui__icon {
