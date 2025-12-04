@@ -1,5 +1,6 @@
 (ns frontend.components.assets
   (:require
+   [cljs-bean.core :as bean]
    [clojure.set :refer [difference]]
    [clojure.string :as string]
    [electron.ipc :as ipc]
@@ -264,7 +265,20 @@
      [:label [:span.block.pb-2.text-sm.opacity-60 "Asset title:"]
       (shui/input {:small true :default-value title :name "title"})]
      [:label [:span.block.pb-2.text-sm.opacity-60 "Asset src:"]
-      (shui/input {:small true :default-value url :name "src"})]
+      [:span.flex.items-center.gap-2
+       (shui/input {:small true :default-value url :name "src"})
+       (when (util/electron?)
+         (shui/button
+          {:size "sm" :variant :secondary :class "h-8"
+           :on-click (fn [^js e]
+                       (.preventDefault e)
+                       (p/let [^js ret (ipc/ipc :showOpenDialog {:properties ["openFile"]
+                                                                 :title "Select Asset File"})]
+                         (let [file-path (some-> ret (bean/->clj) :filePaths (first))]
+                           (when (not (string/blank? file-path))
+                             (let [^js input (-> (.-target e) (.closest "form") (.querySelector "input[name='src']"))]
+                               (set! (.-value input) file-path))))))}
+          "Select from local"))]]
      [:div.flex.justify-end.pt-3
       (ui/button (if create? "Create" "Save") {:disabled saving?})]]))
 
