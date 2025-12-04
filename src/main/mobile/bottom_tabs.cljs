@@ -79,18 +79,14 @@
                (editor-handler/keydown-new-block-handler nil))))
          nil)))))
 
-(defonce *previous-tab (atom nil))
 (defonce add-tab-listeners!
   (do
     (add-tab-selected-listener!
      (fn [tab]
        (if (= tab "capture")
          (editor-handler/show-quick-add)
-         (let [exit-search? (= "search" @*previous-tab)]
-           (when-not (= tab @*previous-tab)
-             (when-not exit-search?
-               (mobile-nav/reset-route!))
-             (mobile-state/set-tab! tab))
+         (do
+           (mobile-state/set-tab! tab)
 
            (case tab
              "home"
@@ -99,8 +95,7 @@
              ;; (if (= "longPress" interaction)
              ;;   (state/pub-event! [:mobile/start-audio-record])
              ;;   (editor-handler/show-quick-add))
-             nil)
-           (reset! *previous-tab tab)))))
+             nil)))))
 
     (add-watch mobile-state/*tab ::select-tab
                (fn [_ _ _old new]
