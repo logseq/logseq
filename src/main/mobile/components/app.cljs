@@ -85,18 +85,19 @@
        #(.removeEventListener js/window "orientationchange" handle-size!)))
    []))
 
-(rum/defc other-page
-  [view tab route-match]
-  (let [tab' (keyword tab)]
-    [:div#main-content-container.px-5.ls-layer
-     (if view
-       (view route-match)
-       (case tab'
-         :home nil
-         :graphs (graphs/page)
-         :favorites (favorites/favorites)
-         :search (search/search)
-         nil))]))
+(rum/defc other-page < rum/static
+  [route-view tab route-match]
+  (let [page-view? (= (get-in route-match [:data :name]) :page)
+        tab' (keyword tab)]
+    [:div#main-content-container.pl-3.ls-layer
+     {:class (if page-view? "pr-2" "pr-3")}
+     (if route-view
+       (route-view route-match)
+       ;; NOTE: `case` caused IllegalArgumentException: Duplicate case test constant
+       (cond
+         (= tab' :graphs) (graphs/page)
+         (= tab' :favorites) (favorites/favorites)
+         (= tab' :search) (search/search)))]))
 
 (rum/defc main-content < rum/static
   [tab route-match]
@@ -108,7 +109,7 @@
     ;; Both are absolutely positioned and stacked; we toggle visibility.
     [:div.h-full.relative
      ;; Journals scroll container (keep-alive)
-     [:div#app-main-home.px-5.absolute.inset-0
+     [:div#app-main-home.pl-3.pr-2.absolute.inset-0
       {:class (when-not home? "invisible pointer-events-none")}
       (home)]
 

@@ -5,7 +5,7 @@
 
 :root {
   --ls-mobile-font-scale: 1;
-  --ls-page-title-size: calc(24px * var(--ls-mobile-font-scale, 1));
+  --ls-page-title-size: calc(26px * var(--ls-mobile-font-scale, 1));
   --safe-area-inset-top: 40px;
   --safe-area-inset-bottom: 16px;
   --ls-mobile-font-size: 16px;
@@ -207,7 +207,7 @@ ul {
 }
 
 .ls-page-title {
-  margin-left: -8px;
+  margin-left: -3px;
 }
 
 .ls-block[draggable="true"] {
