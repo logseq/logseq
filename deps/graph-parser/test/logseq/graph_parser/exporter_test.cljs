@@ -182,7 +182,7 @@
       (is (< (-> end-time (- start-time) (/ 1000)) max-time)
           (str "Importing large graph takes less than " max-time "s")))
 
-    (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Created graph has no validation errors")
     (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")
     (is (= 0 (count @(:ignored-assets import-state))) "No ignored assets")
@@ -205,7 +205,7 @@
 
     (testing "whole graph"
 
-      (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+      (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
           "Created graph has no validation errors")
 
       ;; Counts
@@ -617,7 +617,7 @@
           {:keys [import-state]}
           (import-file-graph-to-db file-graph-dir conn {:convert-all-tags? false})]
 
-    (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Created graph has no validation errors")
     (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")
     (is (= 0 (->> @conn
@@ -672,7 +672,7 @@
           files (mapv #(node-path/join file-graph-dir %) ["journals/2024_02_07.md" "pages/Interstellar.md"])
           conn (db-test/create-conn)
           _ (import-files-to-db files conn {:tag-classes ["movie"]})]
-    (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Created graph has no validation errors")
 
     (let [block (db-test/find-block-by-content @conn #"Inception")
@@ -703,7 +703,7 @@
           _ (import-files-to-db files conn {:property-classes ["type"]})
           _ (@#'gp-exporter/export-class-properties conn conn)]
 
-    (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Created graph has no validation errors")
 
     (is (= #{:user.class/Property :user.class/Movie :user.class/Class :user.class/Tool}
@@ -746,7 +746,7 @@
           conn (db-test/create-conn)
           _ (import-files-to-db files conn {:remove-inline-tags? false :convert-all-tags? true})]
 
-    (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Created graph has no validation errors")
     (is (string/starts-with? (:block/title (db-test/find-block-by-content @conn #"Inception"))
                              "Inception #Movie")
@@ -772,7 +772,7 @@
                                             ;; Also add this option to trigger some edge cases with namespace pages
                                             :property-classes ["type"]})]
 
-    (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Created graph has no validation errors")
 
     (is (= #{:user.class/Movie :user.class/CreativeWork :user.class/Thing :user.class/Feature
@@ -796,7 +796,7 @@
           _ (import-files-to-db files conn {:user-config {:property-pages/enabled? false
                                                           :property-pages/excludelist #{:prop-string}}})]
 
-    (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Created graph has no validation errors")))
 
 (deftest-async export-config-file-sets-title-format

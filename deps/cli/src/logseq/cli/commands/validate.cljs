@@ -7,9 +7,10 @@
             [logseq.db.frontend.validate :as db-validate]))
 
 (defn- validate-db [db db-name options]
-  (if-let [errors (:errors (db-validate/validate-local-db!
-                            db
-                            (merge options {:db-name db-name :verbose true})))]
+  (if-let [errors (:errors
+                   (db-validate/validate-local-db!
+                    db
+                    (merge options {:db-name db-name :verbose true})))]
     (do
       (println "Found" (count errors)
                (if (= 1 (count errors)) "entity" "entities")
