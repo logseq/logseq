@@ -365,7 +365,8 @@
                   (shui/tabler-icon "layout-2") [:span (t :all-graphs)]))])
 
 (rum/defcs repos-dropdown-content < rum/reactive
-  [_state & {:keys [contentid] :as opts}]
+  [_state & {:keys [contentid footer?] :as opts
+             :or {footer? true}}]
   (let [multiple-windows? false
         current-repo (state/sub :git/current-repo)
         login? (boolean (state/sub :auth/id-token))
@@ -381,7 +382,7 @@
                  (repo-handler/combine-local-&-remote-graphs repos (concat remotes rtc-graphs)) repos))
         items-fn #(repos-dropdown-links repos current-repo downloading-graph-id opts)
         header-fn #(when (> (count repos) 1) ; show switch to if there are multiple repos
-                     [:div.font-medium.md:text-sm.md:opacity-50.px-1.py-1.flex.flex-row.justify-between.items-center
+                     [:div.font-medium.md:text-sm.md:opacity-50.p-2.flex.flex-row.justify-between.items-center
                       [:h4.pb-1 (t :left-side-bar/switch)]
 
                       (when (and (file-sync/enable-sync?) login?)
@@ -423,7 +424,8 @@
                      :style {:color "inherit"}} title]
                    [:span.flex.items-center.gap-1.w-full
                     icon [:div title]]))))))]
-     (repos-footer multiple-windows? db-based?)]))
+     (when footer?
+       (repos-footer multiple-windows? db-based?))]))
 
 (rum/defcs graphs-selector < rum/reactive
   [_state]
