@@ -44,7 +44,7 @@ html.has-mobile-keyboard {
     @apply overflow-hidden
   }
 
-  .app-popup, #main-content-container {
+  .app-popup, #main-content-container, #app-main-home {
     padding-bottom: calc(var(--ls-native-kb-height, 0px) + 160px);
   }
 }
