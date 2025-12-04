@@ -120,12 +120,15 @@
   options and logging specific to a local DB. Used by CLI, importer and tests"
   [db & {:keys [db-name open-schema verbose]}]
   (let [datoms (d/datoms db :eavt)
-        ent-maps (db-malli-schema/datoms->entities datoms)
+        ent-maps* (db-malli-schema/datoms->entities datoms)
         _ (when verbose
             (println "Read graph" (str db-name " with counts: "
-                                       (pr-str (assoc (graph-counts db ent-maps)
+                                       (pr-str (assoc (graph-counts db ent-maps*)
                                                       :datoms (count datoms))))))
-        ent-maps (db-malli-schema/update-properties-in-ents db ent-maps)
+        ent-maps (mapv
+                  ;; Remove some UI interactions adding this e.g. import
+                  #(dissoc % :block.temp/load-status :block.temp/has-children?)
+                  (db-malli-schema/update-properties-in-ents db ent-maps*))
         explainer (get-schema-explainer (not open-schema))]
     (when-let [explanation (binding [db-malli-schema/*db-for-validate-fns* db
                                      db-malli-schema/*closed-values-validate?* true]
