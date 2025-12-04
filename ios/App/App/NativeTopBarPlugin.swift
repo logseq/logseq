@@ -97,11 +97,20 @@ public class NativeTopBarPlugin: CAPPlugin, CAPBridgedPlugin {
                     let button = NativeTopBarButton(type: .system)
                     button.buttonId = "title"
                     button.setTitle(title, for: .normal)
-                    button.setTitleColor(nav.navigationBar.tintColor, for: .normal)
                     button.titleLabel?.font = UIFont.systemFont(ofSize: 17, weight: .semibold)
                     button.addTarget(self, action: #selector(self.titleTapped(_:)), for: .touchUpInside)
+
+                    let baseColor = nav.navigationBar.tintColor ?? UIColor.label
+
+                    // Use color with alpha instead of button.alpha
+                    button.setTitleColor(baseColor.withAlphaComponent(0.8), for: .normal)
+                    button.setTitleColor(baseColor.withAlphaComponent(1.0), for: .highlighted)
+                    button.setTitleColor(baseColor.withAlphaComponent(0.6), for: .disabled)
+
+                    button.backgroundColor = .clear
+
                     topVC.navigationItem.titleView = button
-                    button.alpha = 0.8
+                    topVC.navigationItem.title = nil
                 } else {
                     let label = UILabel()
                     label.text = title
