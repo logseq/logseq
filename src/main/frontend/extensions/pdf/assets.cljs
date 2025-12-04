@@ -198,13 +198,6 @@
            (editor-handler/move-blocks! [asset-block] ref-block {:sibling? false})))))
     (file-based-ensure-ref-block! pdf-current hl insert-opts)))
 
-(defn construct-highlights-from-hls-page
-  [hls-page]
-  (p/let [result (db-async/<get-block (state/get-current-repo)
-                                      (:block/uuid hls-page)
-                                      {:children? true})]
-    {:highlights (keep :logseq.property.pdf/hl-value result)}))
-
 (defn file-based-load-hls-data$
   [{:keys [hls-file]}]
   (when hls-file
