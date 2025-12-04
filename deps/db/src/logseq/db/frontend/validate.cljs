@@ -62,7 +62,7 @@
                 [false errors]))
             [true nil]))))))
 
-(defn group-errors-by-entity
+(defn- group-errors-by-entity
   "Groups malli errors by entities. db is used for providing more debugging info"
   [db ent-maps errors]
   (assert (vector? ent-maps) "Must be a vec for grouping to work")
@@ -117,7 +117,7 @@
 
 (defn validate-local-db!
   "Validates a local (non-RTC) DB like validate-db! but with default behavior,
-  options and logging specific to a local DB. Used by CLI and tests"
+  options and logging specific to a local DB. Used by CLI, importer and tests"
   [db & {:keys [db-name open-schema verbose]}]
   (let [datoms (d/datoms db :eavt)
         ent-maps (db-malli-schema/datoms->entities datoms)
