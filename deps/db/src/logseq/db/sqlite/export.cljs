@@ -1072,9 +1072,9 @@
           _ (d/transact! import-conn (concat init-tx block-props-tx misc-tx))
           validation (db-validate/validate-local-db! @import-conn)]
       (when-let [errors (seq (:errors validation))]
-        (js/console.error "Exported edn has the following invalid errors when imported into a new graph:")
+        (js/console.error "Exported EDN has the following invalid errors when imported into a new graph:")
         (pprint/pprint errors)
-        {:error (str "The exported EDN has " (count errors) " error(s). See the javascript console for more details.")}))
+        {:error (str "The exported EDN has " (count errors) " validation error(s)")}))
     (catch :default e
       (js/console.error "Unexpected export-edn validation error:" e)
       {:error (str "The exported EDN is unexpectedly invalid: " (pr-str (ex-message e)))})))
