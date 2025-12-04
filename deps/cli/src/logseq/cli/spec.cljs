@@ -17,6 +17,8 @@
                          :desc "Include timestamps in export"}
    :file {:alias :f
           :desc "File to save export"}
+   :validate {:alias :v
+              :desc "Validates export by importing into a temp graph and validating it"}
    :catch-validation-errors? {:alias :c
                               :desc "Catch validation errors for dev"}
    :exclude-namespaces {:alias :e
