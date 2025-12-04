@@ -2,6 +2,7 @@
   "App top header"
   (:require ["@capacitor/dialog" :refer [Dialog]]
             [clojure.string :as string]
+            [frontend.components.repo :as repo]
             [frontend.components.rtc.indicator :as rtc-indicator]
             [frontend.date :as date]
             [frontend.db :as db]
@@ -97,12 +98,21 @@
    {:title "Actions"
     :default-height false}))
 
+(defn- open-graph-switch!
+  []
+  (ui-component/open-popup!
+   (fn []
+     [:div.px-1
+      (repo/repos-dropdown-content {:footer? false})])
+   {:default-height false}))
+
 (defn- register-native-top-bar-events! []
   (when (and (mobile-util/native-ios?)
              (not @native-top-bar-listener?))
     (.addListener ^js mobile-util/native-top-bar "buttonTapped"
                   (fn [^js e]
                     (case (.-id e)
+                      "title" (open-graph-switch!)
                       "calendar" (open-journal-calendar!)
                       "add-graph" (state/pub-event! [:graph/new-db-graph])
                       "home-setting" (open-home-settings-actions!)
@@ -159,7 +169,8 @@
                           :else nil)
           header (cond-> base
                    left-buttons (assoc :leftButtons left-buttons)
-                   right-buttons (assoc :rightButtons right-buttons))]
+                   right-buttons (assoc :rightButtons right-buttons)
+                   (and (= tab "home") (not route-view)) (assoc :titleClickable true))]
       (.configure ^js mobile-util/native-top-bar
                   (clj->js header)))))
 
