@@ -4,14 +4,39 @@
 }
 
 :root {
-  --ls-page-title-size: 26px;
+  --ls-mobile-font-scale: 1;
+  --ls-page-title-size: calc(24px * var(--ls-mobile-font-scale, 1));
   --safe-area-inset-top: 40px;
   --safe-area-inset-bottom: 16px;
+  --ls-mobile-font-size: 16px;
 }
 
 html.is-native-ios {
   --safe-area-inset-top: 58px;
   --safe-area-inset-bottom: 24px;
+}
+
+html.is-native-ios,
+html.is-ios {
+  font-size: calc(var(--ls-mobile-font-size) * var(--ls-mobile-font-scale, 1));
+}
+
+html.is-native-ios body,
+html.is-native-ios textarea,
+html.is-native-ios input,
+html.is-native-ios select,
+html.is-native-ios .block-content,
+html.is-ios body,
+html.is-ios textarea,
+html.is-ios input,
+html.is-ios select,
+html.is-ios .block-content {
+  font-size: inherit;
+}
+
+html.is-native-ios .block-content,
+html.is-ios .block-content {
+  line-height: 1.6;
 }
 
 html.has-mobile-keyboard {
@@ -330,4 +355,9 @@ div[data-radix-menu-content] {
     opacity:0;
     position:fixed;
     top:-9999px;
+}
+
+.bullet {
+    width: 0.45em;
+    height: 0.45em;
 }
