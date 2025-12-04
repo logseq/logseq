@@ -12,6 +12,38 @@ import UIKit
 @objc(Utils)
 public class Utils: CAPPlugin {
   private var currentInterfaceStyle: UIUserInterfaceStyle = .unspecified
+  private var contentSizeObserver: NSObjectProtocol?
+
+  public override func load() {
+    super.load()
+
+    contentSizeObserver = NotificationCenter.default.addObserver(
+      forName: UIContentSizeCategory.didChangeNotification,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      guard let self = self else { return }
+      self.notifyListeners("contentSizeCategoryChanged", data: self.contentSizePayload())
+    }
+  }
+
+  deinit {
+    if let observer = contentSizeObserver {
+      NotificationCenter.default.removeObserver(observer)
+    }
+  }
+
+  private func contentSizePayload() -> [String: Any] {
+    let category = UIApplication.shared.preferredContentSizeCategory
+    let base: CGFloat = 17.0
+    let scaled = UIFontMetrics(forTextStyle: .body).scaledValue(for: base)
+    let scale = scaled / base
+
+    return [
+      "category": category.rawValue,
+      "scale": scale
+    ]
+  }
 
   @objc func isZoomed(_ call: CAPPluginCall) {
 
@@ -20,6 +52,10 @@ public class Utils: CAPPlugin {
     }
 
     call.resolve(["isZoomed": isZoomed])
+  }
+
+  @objc func getContentSize(_ call: CAPPluginCall) {
+    call.resolve(contentSizePayload())
   }
 
   @objc func getDocumentRoot(_ call: CAPPluginCall) {
