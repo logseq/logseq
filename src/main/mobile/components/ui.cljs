@@ -16,7 +16,7 @@
   [:main#app-container-wrapper.ls-fold-button-on-right
    [:div#app-container.pt-2
     [:div#main-container.flex.flex-1
-     [:div.w-full content]]]])
+     [:div.w-full.overflow-x-hidden content]]]])
 
 (rum/defc notification-clear-all
   []
