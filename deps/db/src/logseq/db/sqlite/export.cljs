@@ -1070,7 +1070,7 @@
     (let [import-conn (db-test/create-conn)
           {:keys [init-tx block-props-tx misc-tx] :as _txs} (build-import export-edn @import-conn {})
           _ (d/transact! import-conn (concat init-tx block-props-tx misc-tx))
-          validation (db-validate/validate-db! @import-conn)]
+          validation (db-validate/validate-local-db! @import-conn)]
       (when-let [errors (seq (:errors validation))]
         (js/console.error "Exported edn has the following invalid errors when imported into a new graph:")
         (pprint/pprint errors)
