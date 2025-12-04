@@ -109,5 +109,4 @@
     (doseq [file-graph file-graphs]
       (let [db-graph (fs/path parent-graph-dir (fs/file-name file-graph))]
         (println "Importing" (str db-graph) "...")
-        (apply shell "bb" "dev:db-import" file-graph db-graph import-options)
-        (shell "bb" "dev:validate-db" db-graph "-gHc")))))
+        (apply shell "bb" "dev:db-import" file-graph db-graph (concat import-options ["--validate"]))))))
