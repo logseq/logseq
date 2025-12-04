@@ -2710,6 +2710,7 @@
 
                 :else
                 (let [block (or (db/entity [:block/uuid (:block/uuid block)]) block)]
+                  (mobile-util/mobile-focus-hidden-input)
                   (editor-handler/clear-selection!)
                   (editor-handler/unhighlight-blocks!)
                   (p/do!
