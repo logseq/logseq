@@ -179,13 +179,16 @@ private struct LiquidTabs26View: View {
                     ForEach(Array(store.tabs.prefix(maxMainTabs).enumerated()),
                             id: \.element.id) { index, tab in
                         Tab(
-                            tab.title,
-                            systemImage: tab.systemImage,
                             value: LiquidTabsTabSelection.content(index)
                         ) {
                             NativeNavHost(navController: navController)
                                 .ignoresSafeArea()
                                 .background(Color.logseqBackground)
+                        }
+                        label: {
+                            let isSelected = selectedTab == .content(index)
+                            Label(tab.title, systemImage: tab.systemImage)
+                              .environment(\.symbolVariants, isSelected ? .fill : .none)
                         }
                     }
 
