@@ -87,17 +87,16 @@
 
 (rum/defc other-page < rum/static
   [route-view tab route-match]
-  (let [page-view? (= (get-in route-match [:data :name]) :page)
-        tab' (keyword tab)]
+  (let [page-view? (= (get-in route-match [:data :name]) :page)]
     [:div#main-content-container.pl-3.ls-layer
      {:class (if page-view? "pr-2" "pr-3")}
      (if route-view
        (route-view route-match)
        ;; NOTE: `case` caused IllegalArgumentException: Duplicate case test constant
        (cond
-         (= tab' :graphs) (graphs/page)
-         (= tab' :favorites) (favorites/favorites)
-         (= tab' :search) (search/search)))]))
+         (= tab "graphs") (graphs/page)
+         (= tab "quick access") (favorites/favorites)
+         (= tab "search") (search/search)))]))
 
 (rum/defc main-content < rum/static
   [tab route-match]
