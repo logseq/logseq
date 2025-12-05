@@ -1,11 +1,14 @@
 (ns mobile.state
   "Mobile state"
   (:require [frontend.rum :as r]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [mobile.navigation :as mobile-nav]))
 
 (defonce *tab (atom "home"))
 (defn set-tab! [tab]
-  (reset! *tab tab))
+  (reset! *tab tab)
+  (when tab
+    (mobile-nav/switch-stack! tab)))
 (defn use-tab [] (r/use-atom *tab))
 (defonce *search-input (atom ""))
 (defn use-search-input []
