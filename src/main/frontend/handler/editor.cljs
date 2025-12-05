@@ -2089,7 +2089,7 @@
                                               (when-not keep-uuid? [:id])
                                               [:custom_id :custom-id]
                                               exclude-properties))
-                    :block/properties-text-values (apply dissoc (:block/properties-text-values block)
+                    :block/properties-text-values (apply dissoc (not-empty (:block/properties-text-values block))
                                                          (concat
                                                           (when-not keep-uuid? [:id])
                                                           exclude-properties))
