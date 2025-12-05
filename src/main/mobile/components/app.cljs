@@ -31,8 +31,7 @@
 (rum/defc journals
   []
   (ui-component/classic-app-container-wrap
-   [:div.pt-6
-    (journal/all-journals)]))
+   (journal/all-journals)))
 
 (rum/defc home-inner < rum/static
   [db-restoring?]
@@ -92,8 +91,7 @@
   {:did-mount (fn [state]
                 (p/do!
                  (editor-handler/quick-add-ensure-new-block-exists!)
-                 ;; (editor-handler/quick-add-open-last-block!)
-                 )
+                 (editor-handler/quick-add-open-last-block!))
                 state)}
   []
   (quick-add/quick-add))
@@ -143,9 +141,7 @@
        (when-let [element (util/app-scroll-container-node)]
          (common-handler/listen-to-scroll! element)))
      [])
-    [:div.h-full {:class (if (contains? #{"search"} tab)
-                           "mt-20"
-                           "mt-24")}
+    [:div.h-full
      (mobile-header/header current-repo tab)
      (main-content tab route-match)]))
 
@@ -162,7 +158,7 @@
         show-popup? (and open? content-fn)
         fold-button-on-right? (state/enable-fold-button-right?)
         route-match (state/sub :route-match)]
-    [:main.w-full.h-full
+    [:div#app-main.w-full.h-full
      {:class (util/classnames
               [{:ls-fold-button-on-right fold-button-on-right?}])}
      [:div.w-full.h-full {:class (when show-popup? "invisible")}
