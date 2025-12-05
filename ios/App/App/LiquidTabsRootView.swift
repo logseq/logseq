@@ -137,13 +137,11 @@ private struct LiquidTabs26View: View {
 
     private func handleRetap(on selection: LiquidTabsTabSelection) {
         print("User re-tapped tab: \(selection)")
-        guard let id = store.tabId(for: selection) else { return }
+        navController.popToRootViewController(animated: true)
 
-        if id != "capture" {
-            navController.popToRootViewController(animated: true)
+        if let id = store.tabId(for: selection) {
+            LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
         }
-
-        LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
     }
 
     private func initialSelection() -> LiquidTabsTabSelection {
@@ -160,10 +158,59 @@ private struct LiquidTabs26View: View {
     }
 
     private func focusSearchField() {
-        // Drive focus (and keyboard) only through searchFocused.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             isSearchFocused = true
         }
+    }
+
+    // MARK: - Helpers to keep the TabView expression simple
+
+    struct CapturePlaceholderView: View {
+        @State private var appear = false
+
+        var body: some View {
+            VStack {
+                Spacer()
+
+                Image(systemName: "tray.fill")
+                  .font(.system(size: 90))
+                  .foregroundColor(.primary)
+                  .opacity(appear ? 0.1 : 0.0)
+                  .onAppear {
+                      appear = false
+                      DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                          appear = true
+                      }
+                  }
+
+                Spacer()
+            }
+              .frame(maxWidth: .infinity, maxHeight: .infinity)
+              .background(Color.logseqBackground)
+              .ignoresSafeArea()
+        }
+    }
+
+    @ViewBuilder
+    private func mainTabContent(index: Int, tab: LiquidTab) -> some View {
+        // Special "capture" tab → shows a plain Capture screen
+        if tab.id == "capture" {
+            NavigationStack {
+                CapturePlaceholderView()
+            }
+        } else {
+            // Normal content tab → shared webview
+            NativeNavHost(navController: navController)
+                .ignoresSafeArea()
+                .background(Color.logseqBackground)
+        }
+    }
+
+    @ViewBuilder
+    private func mainTabLabel(index: Int, tab: LiquidTab) -> some View {
+        let isSelected = (selectedTab == .content(index))
+        Label(tab.title, systemImage: tab.systemImage)
+            .environment(\.symbolVariants, isSelected ? .fill : .none)
     }
 
     var body: some View {
@@ -177,25 +224,27 @@ private struct LiquidTabs26View: View {
                 Color.logseqBackground.ignoresSafeArea()
 
                 TabView(selection: tabSelectionProxy) {
-                    // Dynamic main tabs using Tab(...) API
-                    ForEach(Array(store.tabs.prefix(maxMainTabs).enumerated()),
-                            id: \.element.id) { index, tab in
+                    // Dynamic main tabs
+                    ForEach(
+                        Array(store.tabs.prefix(maxMainTabs).enumerated()),
+                        id: \.element.id
+                    ) { index, tab in
                         Tab(
                             value: LiquidTabsTabSelection.content(index)
                         ) {
-                            NativeNavHost(navController: navController)
-                                .ignoresSafeArea()
-                                .background(Color.logseqBackground)
-                        }
-                        label: {
-                            let isSelected = selectedTab == .content(index)
-                            Label(tab.title, systemImage: tab.systemImage)
-                              .environment(\.symbolVariants, isSelected ? .fill : .none)
+                            mainTabContent(index: index, tab: tab)
+                        } label: {
+                            mainTabLabel(index: index, tab: tab)
                         }
                     }
 
-                    // Search Tab
-                    Tab(value: .search, role: .search) {
+                    // Search Tab (system search role)
+                    Tab(
+                        "Search",
+                        systemImage: "magnifyingglass",
+                        value: .search,
+                        role: .search
+                    ) {
                         SearchTabHost26(
                             navController: navController,
                             selectedTab: $selectedTab,
@@ -205,9 +254,7 @@ private struct LiquidTabs26View: View {
                         .ignoresSafeArea()
                     }
                 }
-                .searchable(
-                    text: $searchText
-                )
+                .searchable(text: $searchText)
                 .searchFocused($isSearchFocused)
                 .searchToolbarBehavior(.minimize)
                 .onChange(of: searchText) { query in
@@ -251,20 +298,15 @@ private struct LiquidTabs26View: View {
 
                 switch newValue {
                 case .search:
-                    // Every time we switch to the search tab, re-focus the search
-                    // field so the search bar auto-focuses and keyboard appears.
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                         hackShowKeyboard = true
                     }
-
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
                         hackShowKeyboard = false
                     }
-
                     focusSearchField()
 
                 case .content:
-                    // Leaving search tab – drop focus and stop hack keyboard.
                     isSearchFocused = false
                     hackShowKeyboard = false
                 }
@@ -283,6 +325,7 @@ private struct LiquidTabs26View: View {
         }
     }
 }
+
 
 // Search host for 26+
 // Only responsible for cancel behaviour and tab switching.
@@ -348,13 +391,10 @@ private struct LiquidTabs16View: View {
                         },
                         set: { newValue in
                             guard let id = newValue else { return }
-                            let isCaptureTab = store.tab(for: id)?.id == "capture"
 
-                            // Re-tap: pop to root for normal tabs
+                            // Re-tap: pop to root
                             if id == store.selectedId {
-                                if !isCaptureTab {
-                                    navController.popToRootViewController(animated: true)
-                                }
+                                navController.popToRootViewController(animated: true)
                                 LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
                             } else {
                                 store.selectedId = id

@@ -51,7 +51,8 @@
 
       dismissing?
       (when (some? @mobile-state/*popup-data)
-        (let [capture? (mobile-state/quick-add-open?)
+        (let [capture-or-audio? (or (mobile-state/quick-add-open?)
+                                    (mobile-state/audio-record-open?))
               current-tab @mobile-state/*tab]
           (p/do!
            (state/pub-event! [:mobile/clear-edit])
@@ -60,7 +61,7 @@
            (when (mobile-util/native-ios?)
              (let [plugin ^js mobile-util/native-editor-toolbar]
                (.dismiss plugin)))
-           (when (and current-tab capture?)
+           (when (and current-tab capture-or-audio?)
              (mobile-state/set-tab! current-tab)))))
 
       :else
