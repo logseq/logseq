@@ -137,11 +137,13 @@ private struct LiquidTabs26View: View {
 
     private func handleRetap(on selection: LiquidTabsTabSelection) {
         print("User re-tapped tab: \(selection)")
-        navController.popToRootViewController(animated: true)
+        guard let id = store.tabId(for: selection) else { return }
 
-        if let id = store.tabId(for: selection) {
-            LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
+        if id != "capture" {
+            navController.popToRootViewController(animated: true)
         }
+
+        LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
     }
 
     private func initialSelection() -> LiquidTabsTabSelection {
@@ -346,10 +348,13 @@ private struct LiquidTabs16View: View {
                         },
                         set: { newValue in
                             guard let id = newValue else { return }
+                            let isCaptureTab = store.tab(for: id)?.id == "capture"
 
-                            // Re-tap: pop to root
+                            // Re-tap: pop to root for normal tabs
                             if id == store.selectedId {
-                                navController.popToRootViewController(animated: true)
+                                if !isCaptureTab {
+                                    navController.popToRootViewController(animated: true)
+                                }
                                 LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
                             } else {
                                 store.selectedId = id
