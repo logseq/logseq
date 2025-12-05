@@ -810,7 +810,6 @@ html[data-theme=dark] {
     }
 
     [data-hl-type=area] {
-      .prefix-link {}
 
       .hl-page {
         > label {
