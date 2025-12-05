@@ -180,7 +180,7 @@
 (defn record!
   [& {:keys [save-to-today?]}]
   (let [editing-id (state/get-edit-input-id)
-        quick-add? (mobile-state/quick-add-open?)]
+        quick-add? (= "capture" @mobile-state/*tab)]
     (set-last-edit-block! nil)
     (if-not (string/blank? editing-id)
       (p/do!

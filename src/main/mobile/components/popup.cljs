@@ -1,7 +1,6 @@
 (ns mobile.components.popup
   "Mobile popup"
-  (:require [frontend.handler.editor :as editor-handler]
-            [frontend.mobile.util :as mobile-util]
+  (:require [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [logseq.shui.popup.core :as shui-popup]
@@ -42,28 +41,18 @@
 
 (defn- handle-native-sheet-state!
   [^js data]
-  (let [presenting? (.-presenting data)
+  (let [;; presenting? (.-presenting data)
         dismissing? (.-dismissing data)]
     (cond
-      presenting?
-      (when (mobile-state/quick-add-open?)
-        (mobile-util/mobile-focus-hidden-input)
-        (editor-handler/quick-add-open-last-block!))
-
       dismissing?
       (when (some? @mobile-state/*popup-data)
-        (let [capture-or-audio? (or (mobile-state/quick-add-open?)
-                                    (mobile-state/audio-record-open?))
-              current-tab @mobile-state/*tab]
-          (p/do!
-           (state/pub-event! [:mobile/clear-edit])
-           (mobile-state/set-popup! nil)
-           (reset! *last-popup-data nil)
-           (when (mobile-util/native-ios?)
-             (let [plugin ^js mobile-util/native-editor-toolbar]
-               (.dismiss plugin)))
-           (when (and current-tab capture-or-audio?)
-             (mobile-state/set-tab! current-tab)))))
+        (p/do!
+         (state/pub-event! [:mobile/clear-edit])
+         (mobile-state/set-popup! nil)
+         (reset! *last-popup-data nil)
+         (when (mobile-util/native-ios?)
+           (let [plugin ^js mobile-util/native-editor-toolbar]
+             (.dismiss plugin)))))
 
       :else
       nil)))
