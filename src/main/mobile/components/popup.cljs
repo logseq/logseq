@@ -51,13 +51,17 @@
 
       dismissing?
       (when (some? @mobile-state/*popup-data)
-        (p/do!
-         (state/pub-event! [:mobile/clear-edit])
-         (mobile-state/set-popup! nil)
-         (reset! *last-popup-data nil)
-         (when (mobile-util/native-ios?)
-           (let [plugin ^js mobile-util/native-editor-toolbar]
-             (.dismiss plugin)))))
+        (let [capture? (mobile-state/quick-add-open?)
+              current-tab @mobile-state/*tab]
+          (p/do!
+           (state/pub-event! [:mobile/clear-edit])
+           (mobile-state/set-popup! nil)
+           (reset! *last-popup-data nil)
+           (when (mobile-util/native-ios?)
+             (let [plugin ^js mobile-util/native-editor-toolbar]
+               (.dismiss plugin)))
+           (when (and current-tab capture?)
+             (mobile-state/set-tab! current-tab)))))
 
       :else
       nil)))
