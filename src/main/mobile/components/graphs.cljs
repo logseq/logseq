@@ -6,5 +6,4 @@
 (rum/defc page < rum/reactive
   []
   [:div.app-index-graphs
-   [:div.mt-8
-    (repo/repos-cp)]])
+   (repo/repos-cp)])
