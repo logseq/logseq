@@ -95,7 +95,7 @@
        ;; NOTE: `case` caused IllegalArgumentException: Duplicate case test constant
        (cond
          (= tab "graphs") (graphs/page)
-         (= tab "quick access") (favorites/favorites)
+         (= tab "go to") (favorites/favorites)
          (= tab "search") (search/search)))]))
 
 (rum/defc main-content < rum/static
