@@ -19,7 +19,7 @@
                       (quick-add/quick-add))
                     {:id :ls-quick-add
                      ;; large height to avoid layout shift
-                     :default-height 1200}))
+                     :default-height 740}))
 
 (defmethod events/handle :mobile/start-audio-record [_]
   (recorder/record! {:save-to-today? true}))
