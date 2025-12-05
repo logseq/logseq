@@ -1,6 +1,7 @@
 (ns frontend.components.rtc.indicator
   "RTC state indicator"
   (:require [clojure.pprint :as pprint]
+            [clojure.string :as string]
             [frontend.common.missionary :as c.m]
             [frontend.config :as config]
             [frontend.db :as db]
@@ -213,9 +214,9 @@
   (let [download-logs-flow (accumulated-logs-flow *accumulated-download-logs)
         download-logs (hooks/use-flow-state download-logs-flow)]
     (when (seq download-logs)
-      [:div.capitalize.flex.flex-col.gap-1
+      [:div.flex.flex-col.gap-1
        (for [log download-logs]
-         [:div (:message log)])])))
+         [:div (string/capitalize (:message log))])])))
 
 (rum/defc uploading-logs
   []
