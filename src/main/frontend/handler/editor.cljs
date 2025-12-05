@@ -897,6 +897,7 @@
                   concat-prev-block?
                   (let [children (:block/_parent (db/entity (:db/id block)))]
                     (p/do!
+                     (mobile-util/mobile-focus-hidden-input)
                      (state/set-state! :editor/edit-block-fn edit-block-f)
                      (ui-outliner-tx/transact!
                       transact-opts
