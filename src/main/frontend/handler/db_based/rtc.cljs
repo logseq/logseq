@@ -111,36 +111,38 @@
   (p/let [graph-uuid (state/<invoke-db-worker :thread-api/get-rtc-graph-uuid repo)]
     (if-not graph-uuid
       (log/info :skip-<rtc-start! ["graph-uuid not found" repo])
-      (p/do!
-       (js/Promise. user-handler/task--ensure-id&access-token)
-       (p/let [start-ex (state/<invoke-db-worker :thread-api/rtc-start stop-before-start?)
-               ex-data* (ex-data start-ex)
-               _ (case (:type ex-data*)
-                   (:rtc.exception/not-rtc-graph
-                    :rtc.exception/not-found-db-conn)
-                   (notification/show! (ex-message start-ex) :error)
+      (->
+       (p/do!
+        (js/Promise. user-handler/task--ensure-id&access-token)
+        (state/<invoke-db-worker :thread-api/rtc-start stop-before-start?))
+       (p/catch
+        (fn [ex]
+          (let [ex-data* (ex-data ex)]
+            (case (:type ex-data*)
+              (:rtc.exception/not-rtc-graph
+               :rtc.exception/not-found-db-conn)
+              (notification/show! (ex-message ex) :error)
 
-                   :rtc.exception/major-schema-version-mismatched
-                   (case (:sub-type ex-data*)
-                     :download
-                     (notification-download-higher-schema-graph! repo graph-uuid (:remote ex-data*))
-                     :create-branch
-                     (notification-upload-higher-schema-graph! repo)
+              :rtc.exception/major-schema-version-mismatched
+              (case (:sub-type ex-data*)
+                :download
+                (notification-download-higher-schema-graph! repo graph-uuid (:remote ex-data*))
+                :create-branch
+                (notification-upload-higher-schema-graph! repo)
+                        ;; else
+                (do (log/info :start-ex ex)
+                    (notification/show! [:div
+                                         [:div (ex-message ex)]
+                                         [:div (-> ex-data*
+                                                   (select-keys [:app :local :remote])
+                                                   pp/pprint
+                                                   with-out-str)]]
+                                        :error)))
+
+              :rtc.exception/lock-failed nil
+
                       ;; else
-                     (do (log/info :start-ex start-ex)
-                         (notification/show! [:div
-                                              [:div (ex-message start-ex)]
-                                              [:div (-> ex-data*
-                                                        (select-keys [:app :local :remote])
-                                                        pp/pprint
-                                                        with-out-str)]]
-                                             :error)))
-
-                   :rtc.exception/lock-failed nil
-
-                    ;; else
-                   nil)]
-         nil)))))
+              nil))))))))
 
 (defn <get-remote-graphs
   []
