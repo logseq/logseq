@@ -76,7 +76,9 @@
           {:route {:to route-name
                    :path-params (:path-params route)
                    :query-params (:query-params route)}
-           :path path})
+           :route-match route
+           :path path
+           :stack (mobile-nav/current-stack)})
          (route-handler/set-route-match! route)))
 
      ;; set to false to enable HistoryAPI
