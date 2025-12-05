@@ -163,47 +163,12 @@ private struct LiquidTabs26View: View {
         }
     }
 
-    // MARK: - Helpers to keep the TabView expression simple
-
-    struct CapturePlaceholderView: View {
-        @State private var appear = false
-
-        var body: some View {
-            VStack {
-                Spacer()
-
-                Image(systemName: "tray.fill")
-                  .font(.system(size: 90))
-                  .foregroundColor(.primary)
-                  .opacity(appear ? 0.1 : 0.0)
-                  .onAppear {
-                      appear = false
-                      DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                          appear = true
-                      }
-                  }
-
-                Spacer()
-            }
-              .frame(maxWidth: .infinity, maxHeight: .infinity)
-              .background(Color.logseqBackground)
-              .ignoresSafeArea()
-        }
-    }
-
     @ViewBuilder
     private func mainTabContent(index: Int, tab: LiquidTab) -> some View {
-        // Special "capture" tab → shows a plain Capture screen
-        if tab.id == "capture" {
-            NavigationStack {
-                CapturePlaceholderView()
-            }
-        } else {
-            // Normal content tab → shared webview
-            NativeNavHost(navController: navController)
-                .ignoresSafeArea()
-                .background(Color.logseqBackground)
-        }
+        // Normal content tab → shared webview
+        NativeNavHost(navController: navController)
+          .ignoresSafeArea()
+          .background(Color.logseqBackground)
     }
 
     @ViewBuilder

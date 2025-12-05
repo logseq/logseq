@@ -794,7 +794,11 @@
       {:node @(::ref state)
        :on-hide (fn [_state e type]
                   (when-not (= type :esc)
-                    (let [editing-another-block? (.closest (.-target e) ".ls-block")]
+                    (let [target (.-target e)
+                          block-container (.closest target ".ls-block")
+                          editing-another-block? (and block-container
+                                                      (not (dom/has-class? block-container "block-add-button"))
+                                                      (gdom/contains block-container target))]
                       (editor-on-hide state type e editing-another-block?))))})))
   (mixins/event-mixin setup-key-listener!)
   lifecycle/lifecycle
