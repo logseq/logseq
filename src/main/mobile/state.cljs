@@ -25,6 +25,10 @@
   []
   (= :ls-quick-add (get-in @*popup-data [:opts :id])))
 
+(defn audio-record-open?
+  []
+  (= :ls-audio-record (get-in @*popup-data [:opts :id])))
+
 (defonce *log (atom []))
 (defn log-append!
   [record]
