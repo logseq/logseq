@@ -98,8 +98,9 @@
        (js/console.log "Native search query" q)
        (reset! mobile-state/*search-input q)
        (reset! mobile-state/*search-last-input-at (common-util/time-ms))
-       (when (= :page (state/get-current-route))
-         (mobile-nav/reset-route!))))
+       (comment
+         (when (= :page (state/get-current-route))
+           (mobile-nav/reset-route!)))))
     (add-keyboard-hack-listener!)))
 
 (defn configure
