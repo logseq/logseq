@@ -149,16 +149,17 @@
           left-buttons (when (and (= tab "home") (nil? route-view))
                          [(conj {:id "calendar" :systemIcon "calendar"})])
           right-buttons (cond
+                          page?
+                          (into [{:id "page-setting" :systemIcon "ellipsis"}
+                                 {:id "favorite" :systemIcon (if favorited? "star.fill" "star")}])
+
                           (= tab "home")
                           (cond-> []
                             (nil? route-view)
                             (conj {:id "home-setting" :systemIcon "ellipsis"})
                             (and rtc-indicator? (not page?))
                             (conj {:id "sync" :systemIcon "circle.fill" :color sync-color
-                                   :size "small"})
-                            page?
-                            (into [{:id "page-setting" :systemIcon "ellipsis"}
-                                   {:id "favorite" :systemIcon (if favorited? "star.fill" "star")}]))
+                                   :size "small"}))
 
                           (= tab "graphs")
                           [{:id "graph-setting" :systemIcon "ellipsis"}
