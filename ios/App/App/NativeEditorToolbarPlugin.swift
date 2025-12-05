@@ -1,6 +1,8 @@
 import Capacitor
 import UIKit
 
+// MARK: - Model
+
 private struct NativeEditorAction {
     let id: String
     let title: String
@@ -14,6 +16,8 @@ private struct NativeEditorAction {
     }
 }
 
+// MARK: - Toolbar View
+
 private class NativeEditorToolbarView: UIView {
     /// Callback when any action is tapped.
     var onActionTapped: ((String) -> Void)?
@@ -24,6 +28,9 @@ private class NativeEditorToolbarView: UIView {
     /// Store actions so we can reconfigure when theme (light/dark) changes.
     private var storedActions: [NativeEditorAction] = []
     private var storedTrailingAction: NativeEditorAction?
+
+    /// Bottom constraint we adjust when the keyboard moves.
+    private var bottomConstraint: NSLayoutConstraint?
 
     private let blurView: UIVisualEffectView = {
         let effect = UIBlurEffect(style: .systemChromeMaterial)
@@ -96,6 +103,8 @@ private class NativeEditorToolbarView: UIView {
 
     private var trailingActionId: String?
 
+    // MARK: - Init
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         setupView()
@@ -112,10 +121,15 @@ private class NativeEditorToolbarView: UIView {
                  actions: [NativeEditorAction],
                  trailingAction: NativeEditorAction?,
                  tintColor: UIColor?,
-                 backgroundColor: UIColor?) {
+                 backgroundColor: UIColor?,
+                 initialKeyboardOverlap: CGFloat) {
         // Bump generation to invalidate any previous dismiss completion
         dismissGeneration += 1
         layer.removeAllAnimations()
+
+        // reset visual state in case a previous animation left us mid-way
+        alpha = 1
+        transform = .identity
 
         // Store actions so we can re-apply them when theme changes
         storedActions = actions
@@ -125,6 +139,10 @@ private class NativeEditorToolbarView: UIView {
         configure(actions: actions,
                   trailingAction: trailingAction)
         attachIfNeeded(to: host)
+
+        // Apply current keyboard overlap immediately, so we are in the right spot
+        updateBottomInset(extra: initialKeyboardOverlap)
+
         animateIn()
     }
 
@@ -135,6 +153,7 @@ private class NativeEditorToolbarView: UIView {
         layer.removeAllAnimations()
 
         guard animated else {
+            guard currentGen == self.dismissGeneration else { return }
             removeFromSuperview()
             transform = .identity
             alpha = 1
@@ -144,17 +163,23 @@ private class NativeEditorToolbarView: UIView {
         UIView.animate(withDuration: 0.16,
                        delay: 0,
                        options: [.curveEaseIn, .allowUserInteraction],
-                       animations: {
+                       animations: { [weak self] in
+            guard let self = self, currentGen == self.dismissGeneration else { return }
             self.alpha = 0
             self.transform = CGAffineTransform(translationX: 0, y: 8)
-        }, completion: { _ in
-            // Only remove if no newer present/dismiss has happened.
-            if currentGen == self.dismissGeneration {
-                self.removeFromSuperview()
-                self.transform = .identity
-                self.alpha = 1
-            }
+        }, completion: { [weak self] _ in
+            guard let self = self, currentGen == self.dismissGeneration else { return }
+            self.removeFromSuperview()
+            self.transform = .identity
+            self.alpha = 1
         })
+    }
+
+    /// Called by the plugin when the keyboard frame changes.
+    func updateBottomInset(extra: CGFloat) {
+        let bottomGap: CGFloat = 8  // same as above
+        bottomConstraint?.constant = -bottomGap - extra
+        superview?.layoutIfNeeded()
     }
 
     // MARK: - Theme / trait changes
@@ -237,6 +262,8 @@ private class NativeEditorToolbarView: UIView {
         // Always use Logseq background (theme-aware)
         let bgBase = UIColor.logseqBackground
 
+        // For debugging, you can temporarily color this aggressively:
+        // blurView.backgroundColor = UIColor.systemPink.withAlphaComponent(0.9)
         blurView.backgroundColor = bgBase.withAlphaComponent(0.9)
         blurView.contentView.backgroundColor = .clear
 
@@ -294,14 +321,18 @@ private class NativeEditorToolbarView: UIView {
 
             let leading = leadingAnchor.constraint(equalTo: host.leadingAnchor, constant: 16)
             let trailing = trailingAnchor.constraint(equalTo: host.trailingAnchor, constant: -16)
-            let bottom: NSLayoutConstraint
-            if #available(iOS 15.0, *) {
-                bottom = bottomAnchor.constraint(equalTo: host.keyboardLayoutGuide.topAnchor, constant: -10)
-            } else {
-                bottom = bottomAnchor.constraint(equalTo: host.safeAreaLayoutGuide.bottomAnchor, constant: -16)
-            }
+            let bottomGap: CGFloat = 8  // tweak to taste
 
+            let bottom = bottomAnchor.constraint(
+              equalTo: host.bottomAnchor,
+              constant: -bottomGap
+            )
+            bottomConstraint = bottom
             NSLayoutConstraint.activate([leading, trailing, bottom])
+
+            #if DEBUG
+            print("[NativeEditorToolbar] attachIfNeeded host=\(type(of: host)) frame=\(host.bounds)")
+            #endif
         }
     }
 
@@ -370,6 +401,8 @@ private class NativeEditorToolbarView: UIView {
     }
 }
 
+// MARK: - Plugin
+
 @objc(NativeEditorToolbarPlugin)
 public class NativeEditorToolbarPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "NativeEditorToolbarPlugin"
@@ -380,6 +413,41 @@ public class NativeEditorToolbarPlugin: CAPPlugin, CAPBridgedPlugin {
     ]
 
     private var toolbar: NativeEditorToolbarView?
+    private var keyboardObservers: [NSObjectProtocol] = []
+    private var lastKeyboardOverlap: CGFloat = 0
+
+    // MARK: - Lifecycle
+
+    public override func load() {
+        super.load()
+
+        let center = NotificationCenter.default
+
+        let willChange = center.addObserver(
+            forName: UIResponder.keyboardWillChangeFrameNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            self?.handleKeyboard(notification: note)
+        }
+
+        let willHide = center.addObserver(
+            forName: UIResponder.keyboardWillHideNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            self?.handleKeyboard(notification: note)
+        }
+
+        keyboardObservers = [willChange, willHide]
+    }
+
+    deinit {
+        let center = NotificationCenter.default
+        keyboardObservers.forEach { center.removeObserver($0) }
+    }
+
+    // MARK: - Public API
 
     @objc func present(_ call: CAPPluginCall) {
         let rawActions = call.getArray("actions", JSObject.self) ?? []
@@ -399,7 +467,7 @@ public class NativeEditorToolbarPlugin: CAPPlugin, CAPBridgedPlugin {
 
             // If there are no actions and no trailing action, dismiss and clear toolbar
             guard !actions.isEmpty || trailingAction != nil else {
-                self.toolbar?.dismiss(animated: true)
+                self.toolbar?.dismiss(animated: false)
                 self.toolbar = nil
                 call.resolve()
                 return
@@ -415,7 +483,8 @@ public class NativeEditorToolbarPlugin: CAPPlugin, CAPBridgedPlugin {
                         actions: actions,
                         trailingAction: trailingAction,
                         tintColor: nil,
-                        backgroundColor: nil)
+                        backgroundColor: nil,
+                        initialKeyboardOverlap: self.lastKeyboardOverlap)
 
             self.toolbar = bar
             call.resolve()
@@ -424,17 +493,55 @@ public class NativeEditorToolbarPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func dismiss(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
-            self.toolbar?.dismiss(animated: true)
+            // JS-driven dismisses can be non-animated to avoid timing glitches
+            self.toolbar?.dismiss(animated: false)
             self.toolbar = nil
             call.resolve()
         }
     }
 
+    // MARK: - Keyboard handling
+
+    private func handleKeyboard(notification: Notification) {
+        guard let host = hostView() else { return }
+
+        guard
+            let userInfo = notification.userInfo,
+            let frameValue = userInfo[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue
+        else { return }
+
+        let keyboardFrameInScreen = frameValue.cgRectValue
+        let keyboardFrameInHost = host.convert(keyboardFrameInScreen, from: nil)
+
+        let overlap = max(0, host.bounds.maxY - keyboardFrameInHost.minY)
+        lastKeyboardOverlap = overlap
+
+        guard let toolbar = self.toolbar else { return }
+
+        let duration = (userInfo[UIResponder.keyboardAnimationDurationUserInfoKey] as? NSNumber)?.doubleValue ?? 0.25
+        let curveRaw = (userInfo[UIResponder.keyboardAnimationCurveUserInfoKey] as? NSNumber)?.intValue ?? UIView.AnimationCurve.easeInOut.rawValue
+        let curve = UIView.AnimationCurve(rawValue: curveRaw) ?? .easeInOut
+        let options = UIView.AnimationOptions(rawValue: UInt(curve.rawValue << 16))
+
+        UIView.animate(withDuration: duration,
+                       delay: 0,
+                       options: [options, .allowUserInteraction],
+                       animations: {
+            toolbar.updateBottomInset(extra: overlap)
+        }, completion: nil)
+    }
+
+    // MARK: - Host view resolution
+
     private func hostView() -> UIView? {
-        if let parent = bridge?.viewController?.parent?.view {
-            return parent
+        // Root view that owns the webview for both Home & Capture
+        if let vcView = bridge?.viewController?.view {
+            return vcView
         }
-        return bridge?.viewController?.view
+        if let parentView = bridge?.viewController?.parent?.view {
+            return parentView
+        }
+        return nil
     }
 }
 
