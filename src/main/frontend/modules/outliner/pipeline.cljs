@@ -1,15 +1,12 @@
 (ns frontend.modules.outliner.pipeline
   (:require [clojure.string :as string]
             [datascript.core :as d]
-            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.react :as react]
-            [frontend.fs :as fs]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.common.path :as path]
             [logseq.db :as ldb]))
 
 (defn- update-editing-block-title-if-changed!
@@ -79,9 +76,9 @@
             (when-not (= (:client-id tx-meta) (:client-id @state/state))
               (update-editing-block-title-if-changed! tx-data))
 
-            (when (seq deleted-assets)
-              (doseq [asset deleted-assets]
-                (fs/unlink! repo (path/path-join (config/get-current-repo-assets-root) (str (:block/uuid asset) "." (:ext asset))) {})))
+            ;; (when (seq deleted-assets)
+            ;;   (doseq [asset deleted-assets]
+            ;;     (fs/unlink! repo (path/path-join (config/get-current-repo-assets-root) (str (:block/uuid asset) "." (:ext asset))) {})))
 
             (state/set-state! :editor/start-pos nil)
 
