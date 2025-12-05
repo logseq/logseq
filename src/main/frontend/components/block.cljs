@@ -2406,7 +2406,8 @@
                              (or (pu/lookup block :logseq.property.pdf/hl-page)
                                  "?"))]]
 
-                      (when (and area? (get-in block [:block/properties :hl-stamp]))
+                      (when (and area? (or (get-in block [:block/properties :hl-stamp])
+                                           (:logseq.property.pdf/hl-image block)))
                         (pdf-assets/area-display block))])]
        (remove-nils
         (concat
