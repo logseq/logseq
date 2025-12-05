@@ -816,7 +816,11 @@
            (.on (name :scaleChanging)
                 #(when-let [data (bean/->clj %)]
                    (set! (. viewer -currentScaleValue) (:scale data))
-                   (apply (:set-hls-extra! ops) [data]))))
+                   (apply (:set-hls-extra! ops) [data])))
+           (.on (name :textlayerrendered)
+                #(when-let [page (.-pageNumber ^js %)]
+                   (set-ano-state!
+                    (fn [s] (assoc s :loaded-pages (conj (:loaded-pages s) page)))))))
 
          (p/then (. viewer setDocument pdf-document)
                  #(set-state! {:viewer viewer :bus event-bus :link link-service :el el}))
@@ -842,24 +846,6 @@
          (when (pdf-windows/check-viewer-in-system-win? viewer)
            (some-> (pdf-windows/resolve-own-document viewer)
                    (set! -title filename)))))
-     [(:viewer state)])
-
-    ;; interaction events
-    (hooks/use-effect!
-     (fn []
-       (when-let [^js viewer (:viewer state)]
-         (let [fn-textlayer-ready
-               (fn [^js p]
-                 (set-ano-state!
-                  (fn [s] (assoc s :loaded-pages (conj (:loaded-pages s) (dec (js/parseInt (.-pageNumber p))))))))]
-
-           (doto (.-eventBus viewer)
-             (.on "textlayerrendered" fn-textlayer-ready))
-
-           #(do
-              (doto (.-eventBus viewer)
-                (.off "textlayerrendered" fn-textlayer-ready))))))
-
      [(:viewer state)])
 
     (let [^js viewer        (:viewer state)
