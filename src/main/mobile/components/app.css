@@ -267,17 +267,17 @@ ul {
     @apply text-gray-12 dark:text-gray-11;
 
     .page-title {
-      @apply text-base opacity-80;
+      @apply text-base opacity-100;
       display: flex !important;
     }
   }
 
   .cp__sidebar-left-layout a, .wrap-th, .more {
-    @apply !opacity-80;
+    @apply !opacity-100;
   }
 
   .hd .wrap-th > strong {
-    @apply !text-lg;
+    @apply !text-base;
   }
 }
 
