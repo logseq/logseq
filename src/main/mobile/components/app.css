@@ -26,17 +26,21 @@ html.is-native-ios textarea,
 html.is-native-ios input,
 html.is-native-ios select,
 html.is-native-ios .block-content,
+html.is-native-ios .editor-inner,
 html.is-ios body,
 html.is-ios textarea,
 html.is-ios input,
 html.is-ios select,
-html.is-ios .block-content {
+html.is-ios .block-content,
+html.is-ios .editor-inner,
+{
   font-size: inherit;
 }
 
-html.is-native-ios .block-content,
-html.is-ios .block-content {
-  line-height: 1.6;
+html.is-native-ios, html.is-ios {
+    .block-content, .editor-inner, textarea {
+        line-height: 1.6;
+    }
 }
 
 html.has-mobile-keyboard {
