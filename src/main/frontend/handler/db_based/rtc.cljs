@@ -63,10 +63,8 @@
 (defn <rtc-branch-graph!
   [repo]
   (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
-          token (state/get-auth-id-token)
-          start-ex (state/<invoke-db-worker :thread-api/rtc-async-branch-graph repo token)]
-    (when (instance? ExceptionInfo start-ex)
-      (throw start-ex))))
+          token (state/get-auth-id-token)]
+    (state/<invoke-db-worker :thread-api/rtc-async-branch-graph repo token)))
 
 (defn notification-download-higher-schema-graph!
   [graph-name graph-uuid schema-version]
