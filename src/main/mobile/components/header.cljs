@@ -9,6 +9,7 @@
             [frontend.db.async :as db-async]
             [frontend.db.conn :as db-conn]
             [frontend.flows :as flows]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
@@ -114,6 +115,10 @@
                     (case (.-id e)
                       "title" (open-graph-switch!)
                       "calendar" (open-journal-calendar!)
+                      "capture" (do
+                                  (state/clear-edit!)
+                                  (editor-handler/quick-add-blocks!))
+                      "audio-record" (state/pub-event! [:mobile/start-audio-record])
                       "add-graph" (state/pub-event! [:graph/new-db-graph])
                       "home-setting" (open-home-settings-actions!)
                       "graph-setting" (open-graph-settings-actions!)
@@ -146,8 +151,11 @@
           base {:title title
                 :hidden (boolean hidden?)}
           page? (= route-name :page)
-          left-buttons (when (and (= tab "home") (nil? route-view))
-                         [(conj {:id "calendar" :systemIcon "calendar"})])
+          left-buttons (cond
+                         (and (= tab "home") (nil? route-view))
+                         [(conj {:id "calendar" :systemIcon "calendar"})]
+                         (and (= tab "capture") (nil? route-view))
+                         [(conj {:id "audio-record" :systemIcon "waveform"})])
           right-buttons (cond
                           page?
                           (into [{:id "page-setting" :systemIcon "ellipsis"}
@@ -164,6 +172,9 @@
                           (= tab "graphs")
                           [{:id "graph-setting" :systemIcon "ellipsis"}
                            {:id "add-graph" :systemIcon "plus"}]
+
+                          (= tab "capture")
+                          [{:id "capture" :systemIcon "paperplane"}]
 
                           :else nil)
           header (cond-> base
