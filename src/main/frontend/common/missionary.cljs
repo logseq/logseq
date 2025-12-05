@@ -150,7 +150,7 @@
     (canceler)
     (vswap! *background-task-cancelers assoc key' nil))
   (prn :run-background-task key')
-  (let [canceler (run-task key' task)]
+  (let [canceler (run-task key' task :fail (fn [e] (log/error :background-task-stopped {:k key' :e e})))]
     (vswap! *background-task-cancelers assoc key' canceler)
     nil))
 
