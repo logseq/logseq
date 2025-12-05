@@ -47,6 +47,7 @@
     (cond
       presenting?
       (when (mobile-state/quick-add-open?)
+        (mobile-util/mobile-focus-hidden-input)
         (editor-handler/quick-add-open-last-block!))
 
       dismissing?
