@@ -6,19 +6,17 @@
 :root {
   --ls-mobile-font-scale: 1;
   --ls-page-title-size: calc(26px * var(--ls-mobile-font-scale, 1));
-  --safe-area-inset-top: 40px;
-  --safe-area-inset-bottom: 16px;
   --ls-mobile-font-size: 16px;
-}
-
-html.is-native-ios {
-  --safe-area-inset-top: 58px;
-  --safe-area-inset-bottom: 24px;
 }
 
 html.is-native-ios,
 html.is-ios {
   font-size: calc(var(--ls-mobile-font-size) * var(--ls-mobile-font-scale, 1));
+}
+
+#app-main {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
 }
 
 html.is-native-ios body,
@@ -49,7 +47,7 @@ html.has-mobile-keyboard {
   }
 
   .app-popup, #main-content-container, #app-main-home {
-    padding-bottom: calc(var(--ls-native-kb-height, 0px) + 160px);
+    padding-bottom: calc(var(--ls-native-kb-height, 0px) + 32px);
   }
 }
 
@@ -311,7 +309,8 @@ body, #root {
     height: 100%;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    padding-bottom: 160px;
+    padding-top: 0px;
+    padding-bottom: 64px;
 }
 
 .cp__select-main, .cp__emoji-icon-picker, .ls-property-key {

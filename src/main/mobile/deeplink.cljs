@@ -3,7 +3,6 @@
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db.async :as db-async]
-            [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
             [frontend.mobile.intent :as intent]
