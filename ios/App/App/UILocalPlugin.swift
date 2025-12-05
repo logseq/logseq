@@ -644,26 +644,30 @@ private func scoreTranscript(_ text: String, locale: Locale) -> Int {
     }
 
     @objc func routeDidChange(_ call: CAPPluginCall) {
-        let route = call.getObject("route") as? [String: Any]
-        let path = call.getString("path")
-        let push = call.getBool("push") ?? true
-        let navigationType = call.getString("navigationType") ?? (push ? "push" : "replace")
+        let navigationType = call.getString("navigationType") ?? "push"
+        let push = call.getBool("push") ?? (navigationType == "push")
+        let path = call.getString("path") ?? "/"
 
-        var entry: [String: Any] = [:]
-        if let path = path {
-            entry["path"] = path
-        }
-        if let route = route {
-            entry["route"] = route
-        }
-        entry["push"] = push
-        entry["navigationType"] = navigationType
+        // ✅ read stack from JS, default to "home" only if missing
+        let stack = call.getString("stack") ?? "home"
 
-        NotificationCenter.default.post(
-            name: UILocalPlugin.routeChangeNotification,
-            object: nil,
-            userInfo: entry
-        )
+        #if DEBUG
+        print("📬 UILocal.routeDidChange call from JS")
+        print("   navigationType=\(navigationType) push=\(push) stack=\(stack) path=\(path)")
+        #endif
+
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(
+              name: UILocalPlugin.routeChangeNotification,
+              object: nil,
+              userInfo: [
+                "navigationType": navigationType,
+                "push": push,
+                "stack": stack,     // 👈 forward it
+                "path": path
+              ]
+            )
+        }
 
         call.resolve()
     }

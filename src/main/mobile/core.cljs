@@ -90,6 +90,7 @@
   ;; so it is available even in :advanced release builds
   (prn "[Mobile] init!")
   (log/add-handler mobile-state/log-append!)
+  (mobile-nav/install-native-bridge!)
   (set-router!)
   (init/init!)
   (fhandler/start! render!))
