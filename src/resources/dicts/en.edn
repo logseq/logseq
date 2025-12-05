@@ -223,6 +223,8 @@
  :settings-page/git-commit-on-close "Git commit on window close"
  :settings-page/git-switcher-label "Enable Git auto commit"
  :settings-page/git-commit-delay "Git auto commit seconds"
+ :settings-page/git-path "Git root location"
+ :settings-page/git-path-hint "Specify the location of the root directory of Git (e.g., /usr/local, C:\\Program Files\\Git). Leave empty to use the embedded Git instead."
  :settings-page/edit-config-edn "Edit config.edn"
  :settings-page/edit-global-config-edn "Edit global config.edn"
  :settings-page/edit-custom-css "Edit custom.css"
