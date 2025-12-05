@@ -62,6 +62,7 @@
 
 (defn set-router!
   []
+  (mobile-nav/install-navigation-hooks!)
   (let [router (rf/router routes nil)]
     (rfe/start!
      router
