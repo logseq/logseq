@@ -227,7 +227,8 @@
      (when-not (util/capacitor?)
        [:h1.title (t :graph/all-graphs)])
 
-     [:div.pl-1.content.mt-8
+     [:div.pl-1.content
+      {:class (when-not (util/mobile?) "mt-8")}
       (when-not (util/mobile?)
         [:div.flex.flex-row.my-8
          [:div.mr-8
