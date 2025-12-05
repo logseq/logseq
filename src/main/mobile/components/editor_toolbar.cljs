@@ -200,12 +200,11 @@
     (hooks/use-effect!
      (fn []
        (when (mobile-util/native-ios?)
-         (if should-show?
+         (when should-show?
            (.present plugin (clj->js {:actions native-actions
                                       :trailingAction trailing-native
-                                      :tintColor (colors/get-accent-color)}))
-           (.dismiss plugin)))
-       #(when (mobile-util/native-ios?)
+                                      :tintColor (colors/get-accent-color)}))))
+       #(when (and (mobile-util/native-ios?) should-show?)
           (.dismiss plugin)))
      [should-show? native-actions trailing-native])
 
