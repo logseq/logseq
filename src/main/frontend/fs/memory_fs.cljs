@@ -74,11 +74,14 @@
 (defn- read-file-aux
   [dir path {:keys [text?]
              :as options}]
-  (p/let [fpath (path/url-to-path (path/path-join dir path))
-          result (js/window.pfs.readFile fpath (clj->js options))]
-    (if text?
-      (.toString ^js result)
-      result)))
+  (-> (p/let [fpath (path/url-to-path (path/path-join dir path))
+              result (js/window.pfs.readFile fpath (clj->js options))]
+        (if text?
+          (.toString ^js result)
+          result))
+      (p/catch
+          ;; ensure throw ex-info both on web & electron, not string or js/Error
+          (fn [e] (ex-info (str e) {})))))
 
 (defrecord MemoryFs []
   protocol/Fs
@@ -101,7 +104,7 @@
                       (mapv #(path/path-join "memory://" %) rpaths)))
             (p/catch (fn [error]
                        (println "(memory-fs)Readdir error: " error)
-                       (p/rejected error)))))))
+                       (p/rejected (ex-info (str error) {} error))))))))
 
   (unlink! [_this _repo path opts]
     (when js/window.pfs
