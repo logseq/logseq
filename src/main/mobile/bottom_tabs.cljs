@@ -80,26 +80,14 @@
                (editor-handler/keydown-new-block-handler nil))))
          nil)))))
 
-(defonce *previous-tab (atom nil))
 (defonce add-tab-listeners!
   (do
     (add-tab-selected-listener!
      (fn [tab]
-       (if (= tab "capture")
-         (editor-handler/show-quick-add)
-         (do
-           (mobile-state/set-tab! tab)
+       (mobile-state/set-tab! tab)
 
-           (case tab
-             "home"
-             (when-not (= @*previous-tab "capture")
-               (util/scroll-to-top false))
-             ;; TODO: support longPress detection
-             ;; (if (= "longPress" interaction)
-             ;;   (state/pub-event! [:mobile/start-audio-record])
-             ;;   (editor-handler/show-quick-add))
-             nil)))
-       (reset! *previous-tab tab)))
+       (when (= "home" tab)
+         (util/scroll-to-top false))))
 
     (add-watch mobile-state/*tab ::select-tab
                (fn [_ _ _old new]

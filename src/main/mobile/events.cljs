@@ -1,9 +1,7 @@
 (ns mobile.events
   "Mobile events"
-  (:require [frontend.components.quick-add :as quick-add]
-            [frontend.handler.events :as events]
+  (:require [frontend.handler.events :as events]
             [frontend.state :as state]
-            [logseq.shui.ui :as shui]
             [mobile.components.recorder :as recorder]
             [mobile.init :as init]
             [mobile.state :as mobile-state]
@@ -12,14 +10,6 @@
 (defmethod events/handle :mobile/clear-edit [_]
   (state/clear-edit!)
   (init/keyboard-hide))
-
-(defmethod events/handle :dialog/mobile-quick-add [_]
-  (shui/popup-show! nil
-                    (fn []
-                      (quick-add/quick-add))
-                    {:id :ls-quick-add
-                     ;; large height to avoid layout shift
-                     :default-height 750}))
 
 (defmethod events/handle :mobile/start-audio-record [_]
   (recorder/record! {:save-to-today? true}))

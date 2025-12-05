@@ -2004,7 +2004,7 @@ Similar to re-frame subscriptions"
             (when (and move-cursor? (not (block-component-editing?)))
               (cursor/move-cursor-to input pos))
 
-            (when (or (util/mobile?) (mobile-util/native-platform?))
+            (when (mobile-util/native-platform?)
               (set-state! :mobile/show-action-bar? false))))))))
 
 (defn get-git-auto-commit-enabled?

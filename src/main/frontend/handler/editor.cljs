@@ -4044,7 +4044,7 @@
            (when query-block
              (save-block-inner! query-block current-query {})))))))))
 
-(defn show-quick-add
+(defn quick-add-ensure-new-block-exists!
   []
   (let [graph (state/get-current-repo)]
     (p/do!
@@ -4061,10 +4061,13 @@
        (when (empty? children')
          (api-insert-new-block! "" {:page (:block/uuid add-page)
                                     :container-id :unknown-container
-                                    :replace-empty-target? false})))
-     (state/pub-event! [(if (util/mobile?)
-                          :dialog/mobile-quick-add
-                          :dialog/quick-add)]))))
+                                    :replace-empty-target? false}))))))
+
+(defn show-quick-add
+  []
+  (p/do!
+   (quick-add-ensure-new-block-exists!)
+   (state/pub-event! [:dialog/quick-add])))
 
 (defn quick-add-blocks!
   []

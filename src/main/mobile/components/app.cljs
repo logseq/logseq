@@ -2,7 +2,9 @@
   "App root"
   (:require ["../externals.js"]
             [frontend.components.journal :as journal]
+            [frontend.components.quick-add :as quick-add]
             [frontend.handler.common :as common-handler]
+            [frontend.handler.editor :as editor-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.rum :as frum]
             [frontend.state :as state]
@@ -23,6 +25,7 @@
             [mobile.components.selection-toolbar :as selection-toolbar]
             [mobile.components.ui :as ui-component]
             [mobile.state :as mobile-state]
+            [promesa.core :as p]
             [rum.core :as rum]))
 
 (rum/defc journals
@@ -85,6 +88,16 @@
        #(.removeEventListener js/window "orientationchange" handle-size!)))
    []))
 
+(rum/defc capture <
+  {:did-mount (fn [state]
+                (p/do!
+                 (editor-handler/quick-add-ensure-new-block-exists!)
+                 ;; (editor-handler/quick-add-open-last-block!)
+                 )
+                state)}
+  []
+  (quick-add/quick-add))
+
 (rum/defc other-page < rum/static
   [route-view tab route-match]
   (let [page-view? (= (get-in route-match [:data :name]) :page)]
@@ -96,7 +109,8 @@
        (cond
          (= tab "graphs") (graphs/page)
          (= tab "go to") (favorites/favorites)
-         (= tab "search") (search/search)))]))
+         (= tab "search") (search/search)
+         (= tab "capture") (capture)))]))
 
 (rum/defc main-content < rum/static
   [tab route-match]
