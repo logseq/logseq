@@ -157,21 +157,26 @@
         (do
           (println "[existed ref block]" ref-block)
           ref-block)
-        (let [text       (:text content)
-              colors     (:property/closed-values (db/entity :logseq.property.pdf/hl-color))
-              color-id   (some (fn [color] (when (= (:block/title color) (:color properties))
-                                             (:db/id color))) colors)]
+        (let [ref-asset-id (:image content)
+              image? (not (nil? ref-asset-id))
+              text (if image? (.toLocaleString (js/Date.))
+                              (:text content))
+              colors (:property/closed-values (db/entity :logseq.property.pdf/hl-color))
+              color-id (some (fn [color] (when (= (:block/title color) (:color properties))
+                                           (:db/id color))) colors)]
           (when color-id
             (let [properties (cond->
                               {:block/tags #{(:db/id (db/entity :logseq.class/Pdf-annotation))}
+                               :block/collapsed? image?
                                :logseq.property/ls-type  :annotation
                                :logseq.property.pdf/hl-color color-id
                                :logseq.property/asset (:db/id pdf-block)
                                :logseq.property.pdf/hl-page  page
                                :logseq.property.pdf/hl-value hl}
-                               (:image content)
+
+                               image?
                                (assoc :logseq.property.pdf/hl-type :area
-                                      :logseq.property.pdf/hl-image (:image content)))]
+                                      :logseq.property.pdf/hl-image ref-asset-id))]
               (when (string? text)
                 (editor-handler/api-insert-new-block!
                  text (merge {:block-uuid (:block/uuid pdf-block)
@@ -183,29 +188,25 @@
 (defn ensure-ref-block!
   [pdf-current hl insert-opts]
   (if (config/db-based-graph? (state/get-current-repo))
-    (db-based-ensure-ref-block! pdf-current hl insert-opts)
+    (p/chain
+     (db-based-ensure-ref-block! pdf-current hl insert-opts)
+     (fn []
+       ;; try to move the asset block to the ref block
+       (let [ref-block (db-model/query-block-by-uuid (:id hl))
+             asset-block (:logseq.property.pdf/hl-image ref-block)]
+         (when asset-block
+           (editor-handler/move-blocks! [asset-block] ref-block {:sibling? false})))))
     (file-based-ensure-ref-block! pdf-current hl insert-opts)))
-
-(defn construct-highlights-from-hls-page
-  [hls-page]
-  (p/let [result (db-async/<get-block (state/get-current-repo)
-                                      (:block/uuid hls-page)
-                                      {:children? true})]
-    {:highlights (keep :logseq.property.pdf/hl-value result)}))
 
 (defn file-based-load-hls-data$
   [{:keys [hls-file]}]
   (when hls-file
     (let [repo (state/get-current-repo)
-          repo-dir (config/get-repo-dir repo)
-          db-base? (config/db-based-graph? repo)]
+          repo-dir (config/get-repo-dir repo)]
       (p/let [_    (fs/create-if-not-exists repo repo-dir hls-file "{:highlights []}")
               res  (fs/read-file repo-dir hls-file)
               data (if res (reader/read-string res) {})]
-        (if db-base?
-          (p/let [hls-page (file-based-ensure-ref-page! (state/get-current-pdf))]
-            (construct-highlights-from-hls-page hls-page))
-          data)))))
+        data))))
 
 (defn file-based-persist-hls-data$
   [{:keys [hls-file]} highlights extra]
@@ -220,6 +221,17 @@
   ;; TODO: fuzzy match
   (when-let [hls-file (and target-key (str common-config/local-assets-dir "/" target-key ".edn"))]
     (file-based-load-hls-data$ {:hls-file hls-file})))
+
+(defn db-based-load-hls-data$
+  [{:keys [block]}]
+  (p/let [ref-id (:db/id block)
+          data (db-async/<q (state/get-current-repo) {:transact-db? false}
+                            '[:find (pull ?e [*])
+                              :in $ ?ref-id
+                              :where [?e :logseq.property/asset ?ref-id]]
+                            ref-id)]
+    (let [highlights (some->> data (flatten) (map #(:logseq.property.pdf/hl-value %)) (vec))]
+      {:highlights highlights})))
 
 (defn area-highlight?
   [hl]
@@ -329,7 +341,7 @@
   (let [id (:block/uuid block)
         page (db/entity (:db/id (:block/page block)))
         page-name (:block/title page)
-        file-path (get-in block [:block/properties :file-path])
+        file-path (:file-path (:block/properties page))
         hl-page (pu/get-block-property-value block :logseq.property.pdf/hl-page)
         hl-value (pu/get-block-property-value block :logseq.property.pdf/hl-value)]
     (when-let [target-key (and page-name (subs page-name 5))]
@@ -349,12 +361,13 @@
   [block]
   (let [hl-value (:logseq.property.pdf/hl-value block)
         asset (:logseq.property/asset block)
-        file-path (str "../assets/" (:block/uuid asset) ".pdf")]
+        external-src (:logseq.property.asset/external-src asset)
+        file-path (or external-src (str "../assets/" (:block/uuid asset) ".pdf"))]
     (if asset
       (->
        (p/let [href (assets-handler/<make-asset-url file-path)]
          (state/set-state! :pdf/ref-highlight hl-value)
-        ;; open pdf viewer
+         ;; open pdf viewer
          (state/set-current-pdf! (inflate-asset file-path {:href href :block asset})))
        (p/catch (fn [error]
                   (js/console.error error))))

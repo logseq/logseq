@@ -32,14 +32,14 @@
 
 (defn vw-to-scaled-pos
   [^js viewer {:keys [page bounding rects]}]
-  (when-let [^js viewport (.. viewer (getPageView (dec page)) -viewport)]
+  (when-let [^js viewport (some-> viewer (.getPageView (dec page)) (.-viewport))]
     {:bounding (viewport-to-scaled bounding viewport)
      :rects    (for [rect rects] (viewport-to-scaled rect viewport))
      :page     page}))
 
 (defn scaled-to-vw-pos
   [^js viewer {:keys [page bounding rects]}]
-  (when-let [^js viewport (.. viewer (getPageView (dec page)) -viewport)]
+  (when-let [^js viewport (some-> viewer (.getPageView (dec page)) (.-viewport))]
     {:bounding (scaled-to-viewport bounding viewport)
      :rects    (for [rect rects] (scaled-to-viewport rect viewport))
      :page     page}))
@@ -51,7 +51,7 @@
 
 (defn resolve-hls-layer!
   [^js viewer page]
-  (when-let [^js text-layer (.. viewer (getPageView (dec page)) -textLayer)]
+  (when-let [^js text-layer (some-> viewer (.getPageView (dec page)) (.-textLayer))]
     (let [cnt (.-div text-layer)
           cls "extensions__pdf-hls-layer"
           doc js/document

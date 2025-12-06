@@ -10,11 +10,13 @@
       (join "")))
 
 (defn <get-file-array-buffer-checksum
-  "Given a file's ArrayBuffer, returns its checksum in a promise"
-  [file-array-buffer]
-  (-> (js/crypto.subtle.digest "SHA-256" file-array-buffer)
-      (.then (fn [dig] (js/Uint8Array. dig)))
-      (.then decode-digest)))
+  "Given a file's ArrayBuffer or String, returns its checksum in a promise"
+  [s]
+  (let [array-buffer (if (string? s)
+                       (.encode (js/TextEncoder.) s) s)]
+    (-> (js/crypto.subtle.digest "SHA-256" array-buffer)
+        (.then (fn [dig] (js/Uint8Array. dig)))
+        (.then decode-digest))))
 
 (defn asset-path->type
   "Create asset type given asset path"

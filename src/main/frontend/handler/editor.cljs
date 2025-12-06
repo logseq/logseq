@@ -1522,7 +1522,7 @@
                                (path/resolve-relative-path block-file-rpath href)))]
             (fs/unlink! repo asset-fpath nil)))))))
 
-(defn db-based-save-asset!
+(defn db-based-write-asset!
   [repo dir file file-rpath]
   (p/let [buffer (.arrayBuffer file)]
     (if (util/electron?)
@@ -1534,15 +1534,18 @@
         (fs/write-plain-text-file! repo dir file-rpath content nil)))))
 
 (defn- new-asset-block
-  [repo ^js file repo-dir asset-dir-rpath]
+  [repo ^js file {:keys [repo-dir asset-dir-rpath external-src]}]
   ;; WARN file name maybe fully qualified path when paste file
-  (p/let [file-name (node-path/basename (.-name file))
+  (p/let [[file title] (if (map? file) [(:src file) (:title file)] [file nil])
+          [file external-src] (if (string? file) [nil file] [file external-src])
+          file-name (node-path/basename (or (some-> file (.-name)) (str external-src)))
           file-name-without-ext* (db-asset/asset-name->title file-name)
           file-name-without-ext (if (= file-name-without-ext* "image")
                                   (date/get-date-time-string-2)
                                   file-name-without-ext*)
-          checksum (assets-handler/get-file-checksum file)
-          existing-asset (db-async/<get-asset-with-checksum repo checksum)]
+          checksum (some-> (or file external-src) (assets-handler/get-file-checksum))
+          size (or (some-> file (.-size)) 0)
+          existing-asset (some->> checksum (db-async/<get-asset-with-checksum repo))]
     (if existing-asset
       (do
         (notification/show! (str "Asset exists already, title: " (:block/title existing-asset)
@@ -1550,30 +1553,31 @@
                             :warning
                             false)
         nil)
-      (p/let [block-id (ldb/new-block-id)
-              ext (when file-name (db-asset/asset-path->type file-name))
-              _ (when (string/blank? ext)
-                  (throw (ex-info "File doesn't have a valid ext."
-                                  {:file-name file-name})))
-              file-path   (str block-id "." ext)
-              file-rpath  (str asset-dir-rpath "/" file-path)
-              dir repo-dir
-              asset (db/entity :logseq.class/Asset)]
-
-        (if (assets-handler/exceed-limit-size? file)
-          (do
-            (notification/show! "Asset size shouldn't be larger than 100M"
-                                :warning
-                                false)
-            (throw (ex-info "Asset size shouldn't be larger than 100M" {:file-name file-name})))
-          (p/do!
-           (db-based-save-asset! repo dir file file-rpath)
-           {:block/title file-name-without-ext
-            :block/uuid block-id
-            :logseq.property.asset/type ext
-            :logseq.property.asset/size (.-size file)
-            :logseq.property.asset/checksum checksum
-            :block/tags #{(:db/id asset)}}))))))
+      ;; new asset block
+      (let [block-id (ldb/new-block-id)
+            ext (when file-name (db-asset/asset-path->type file-name))
+            _ (when (string/blank? ext)
+                (throw (ex-info "File doesn't have a valid ext."
+                                {:file-name file-name})))
+            _ (when (some-> file (assets-handler/exceed-limit-size?))
+                (notification/show! [:div "Asset size shouldn't be larger than 100M"]
+                                    :warning
+                                    false)
+                (throw (ex-info "Asset size shouldn't be larger than 100M" {:file-name file-name})))
+            asset (db/entity :logseq.class/Asset)]
+        (p/do!
+         (when file
+           (let [file-path (str block-id "." ext)
+                 file-rpath (str asset-dir-rpath "/" file-path)
+                 dir repo-dir]
+             (db-based-write-asset! repo dir file file-rpath)))
+         {:block/title (or title file-name-without-ext)
+          :block/uuid block-id
+          :logseq.property.asset/type ext
+          :logseq.property.asset/external-src external-src
+          :logseq.property.asset/size size
+          :logseq.property.asset/checksum checksum
+          :block/tags #{(:db/id asset)}})))))
 
 (defn db-based-save-assets!
   "Save incoming(pasted) assets to assets directory.
@@ -1588,7 +1592,9 @@
                        today-page-e)
           blocks* (p/all
                    (for [^js file files]
-                     (new-asset-block repo file repo-dir asset-dir-rpath)))
+                     (new-asset-block repo file
+                                      {:repo-dir repo-dir
+                                       :asset-dir-rpath asset-dir-rpath})))
           blocks (remove nil? blocks*)
           edit-block (or (state/get-edit-block) last-edit-block)
           insert-to-current-block-page? (and (:block/uuid edit-block) (not pdf-area?))

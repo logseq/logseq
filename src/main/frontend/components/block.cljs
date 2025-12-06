@@ -479,31 +479,32 @@
 
 (defn- open-pdf-file
   [e block href]
-  (when-let [s (or href (some-> (.-target e) (.-dataset) (.-href)))]
-    (let [load$ (fn []
-                  (p/let [href (or href
-                                   (if (or (mobile-util/native-platform?) (util/electron?))
-                                     s
-                                     (assets-handler/<make-asset-url s)))]
-                    (when-let [current (pdf-assets/inflate-asset s {:block block
-                                                                    :href href})]
-                      (state/set-current-pdf! current)
-                      (util/stop e))))]
-      (-> (load$)
-          (p/catch
-           (fn [^js _e]
-             ;; load pdf asset to indexed db
-             (p/let [[handle] (js/window.showOpenFilePicker
-                               (bean/->js {:multiple false :startIn "documents" :types [{:accept {"application/pdf" [".pdf"]}}]}))
-                     file (.getFile handle)
-                     buffer (.arrayBuffer file)]
-               (when-let [content (some-> buffer (js/Uint8Array.))]
-                 (let [repo (state/get-current-repo)
-                       file-rpath (string/replace s #"^[.\/\\]*assets[\/\\]+" "assets/")
-                       dir (config/get-repo-dir repo)]
-                   (-> (fs/write-plain-text-file! repo dir file-rpath content nil)
-                       (p/then load$)))))
-             (js/console.error _e)))))))
+  (let [href (or (:logseq.property.asset/external-src block) href)]
+    (when-let [s (or href (some-> (.-target e) (.-dataset) (.-href)))]
+      (let [load$ (fn []
+                    (p/let [href (or href
+                                     (if (or (mobile-util/native-platform?) (util/electron?))
+                                       s
+                                       (assets-handler/<make-asset-url s)))]
+                      (when-let [current (pdf-assets/inflate-asset s {:block block
+                                                                      :href href})]
+                        (state/set-current-pdf! current)
+                        (util/stop e))))]
+        (-> (load$)
+            (p/catch
+             (fn [^js _e]
+               ;; load pdf asset to indexed db
+               (p/let [[handle] (js/window.showOpenFilePicker
+                                 (bean/->js {:multiple false :startIn "documents" :types [{:accept {"application/pdf" [".pdf"]}}]}))
+                       file (.getFile handle)
+                       buffer (.arrayBuffer file)]
+                 (when-let [content (some-> buffer (js/Uint8Array.))]
+                   (let [repo (state/get-current-repo)
+                         file-rpath (string/replace s #"^[.\/\\]*assets[\/\\]+" "assets/")
+                         dir (config/get-repo-dir repo)]
+                     (-> (fs/write-plain-text-file! repo dir file-rpath content nil)
+                         (p/then load$)))))
+               (js/console.error _e))))))))
 
 (rum/defcs asset-link < rum/reactive
   (rum/local nil ::src)
@@ -517,8 +518,10 @@
         db-based? (config/db-based-graph? repo)]
 
     (when (nil? @src)
-      (p/then (assets-handler/<make-asset-url href js-url)
-              #(reset! src (common-util/safe-decode-uri-component %))))
+      (-> (assets-handler/<make-asset-url href js-url)
+          (p/then (fn [url]
+                    (reset! src (common-util/safe-decode-uri-component url))))
+          (p/catch #(js/console.log "Failed to load asset:" %))))
     (:image-placeholder config)
     (if-not @src
       (:image-placeholder config)
@@ -1072,8 +1075,9 @@
   {:will-mount (fn [state]
                  (let [block (last (:rum/args state))
                        asset-type (:logseq.property.asset/type block)
+                       external-src? (not (string/blank? (:logseq.property.asset/external-src block)))
                        path (path/path-join common-config/local-assets-dir (str (:block/uuid block) "." asset-type))]
-                   (p/let [result (if config/publishing?
+                   (p/let [result (if (or external-src? config/publishing?)
                                                         ;; publishing doesn't have window.pfs defined
                                     true
                                     (fs/file-exists? (config/get-repo-dir (state/get-current-repo)) path))]
@@ -2368,87 +2372,80 @@
                (keyword (str "h" heading ".block-title-wrap.as-heading"
                              (when block-ref? ".as-inline")))
                :span.block-title-wrap)]
-    (when (seq block-ast-title)
-      (->elem
-       elem
-       (merge
-        {:data-hl-type (pu/lookup block :logseq.property.pdf/hl-type)}
-        (when (and marker
-                   (not (string/blank? marker))
-                   (not= "nil" marker))
-          {:data-marker (str (string/lower-case marker))}))
+    (->elem
+     elem
+     (merge
+      {:data-hl-type (pu/lookup block :logseq.property.pdf/hl-type)}
+      (when (and marker
+                 (not (string/blank? marker))
+                 (not= "nil" marker))
+        {:data-marker (str (string/lower-case marker))}))
 
-       ;; children
-       (let [area? (= :area (keyword (pu/lookup block :logseq.property.pdf/hl-type)))
-             hl-ref #(when (not (#{:default :whiteboard-shape} block-type))
-                       [:div.prefix-link
-                        {:on-pointer-down
-                         (fn [^js e]
-                           (let [^js target (.-target e)]
-                             (case block-type
-                               ;; pdf annotation
-                               :annotation
-                               (if (and area? (.contains (.-classList target) "blank"))
-                                 :actions
-                                 (do
-                                   (pdf-assets/open-block-ref! block)
-                                   (util/stop e)))
+     ;; children
+     (let [area? (= :area (keyword (pu/lookup block :logseq.property.pdf/hl-type)))
+           hl-ref #(when (not (#{:default :whiteboard-shape} block-type))
+                     [:div.prefix-link
+                      {:class (when (and (not db-based?) area?) "as-block")
+                       :on-pointer-down
+                       (fn [^js e]
+                         (let [^js target (.-target e)]
+                           (case block-type
+                             ;; pdf annotation
+                             :annotation
+                             (if (and area? (.contains (.-classList target) "blank"))
+                               :actions
+                               (do
+                                 (pdf-assets/open-block-ref! block)
+                                 (util/stop e)))
 
-                               :dune)))}
+                             :dune)))}
 
-                        [:span.hl-page
-                         [:strong.forbid-edit
-                          (str "P"
-                               (or (pu/lookup block :logseq.property.pdf/hl-page)
-                                   "?"))]]
+                      [:span.hl-page
+                       [:strong.forbid-edit
+                        (str "P"
+                             (or (pu/lookup block :logseq.property.pdf/hl-page)
+                                 "?"))]]
 
-                        (when (and area?
-                                   (or
-                                    ;; db graphs
-                                    (:logseq.property.pdf/hl-image block)
-                                    ;; file graphs
-                                    (get-in block [:block/properties :hl-stamp])))
-                          (pdf-assets/area-display block))])]
-         (remove-nils
-          (concat
-           (when (config/local-file-based-graph? (state/get-current-repo))
-             [(when (and (not pre-block?)
-                         (not html-export?))
-                (file-block/block-checkbox block (str "mr-1 cursor")))
-              (when (and (not pre-block?)
-                         (not html-export?))
-                (file-block/marker-switch block))
-              (file-block/marker-cp block)
-              (file-block/priority-cp block)])
+                      (when (and area? (or (get-in block [:block/properties :hl-stamp])
+                                           (:logseq.property.pdf/hl-image block)))
+                        (pdf-assets/area-display block))])]
+       (remove-nils
+        (concat
+         (when (config/local-file-based-graph? (state/get-current-repo))
+           [(when (and (not pre-block?)
+                       (not html-export?))
+              (file-block/block-checkbox block (str "mr-1 cursor")))
+            (when (and (not pre-block?)
+                       (not html-export?))
+              (file-block/marker-switch block))
+            (file-block/marker-cp block)
+            (file-block/priority-cp block)])
 
-           ;; highlight ref block (inline)
-           (when-not area? [(hl-ref)])
+         ;; highlight ref block (inline)
+         [(hl-ref)]
 
-           (let [config' (cond-> config
-                           (and (:page-ref? config)
-                                (= 1 (count block-ast-title))
-                                (= "Link" (ffirst block-ast-title)))
-                           (assoc :node-ref-link-only? true))]
-             (conj
-              (map-inline config' block-ast-title)
-              (when (= block-type :whiteboard-shape) [:span.mr-1 (ui/icon "whiteboard-element" {:extension? true})])))
+         (let [config' (cond-> config
+                               (and (:page-ref? config)
+                                    (= 1 (count block-ast-title))
+                                    (= "Link" (ffirst block-ast-title)))
+                               (assoc :node-ref-link-only? true))]
+           (conj
+            (map-inline config' block-ast-title)
+            (when (= block-type :whiteboard-shape) [:span.mr-1 (ui/icon "whiteboard-element" {:extension? true})])))
 
-           ;; highlight ref block (area)
-           (when area? [(hl-ref)])
-
-           (when (and (seq block-ast-title) (ldb/class-instance?
-                                             (entity-plus/entity-memoized (db/get-db) :logseq.class/Cards)
-                                             block))
-             [(ui/tooltip
-               (shui/button
-                {:variant :ghost
-                 :size :sm
-                 :class "ml-2 !px-1 !h-5 text-xs text-muted-foreground"
-                 :on-click (fn [e]
-                             (util/stop e)
-                             (state/pub-event! [:modal/show-cards (:db/id block)]))}
-                "Practice")
-               [:div "Practice cards"])]))))))))
+         (when (and (seq block-ast-title) (ldb/class-instance?
+                                           (entity-plus/entity-memoized (db/get-db) :logseq.class/Cards)
+                                           block))
+           [(ui/tooltip
+             (shui/button
+              {:variant :ghost
+               :size :sm
+               :class "ml-2 !px-1 !h-5 text-xs text-muted-foreground"
+               :on-click (fn [e]
+                           (util/stop e)
+                           (state/pub-event! [:modal/show-cards (:db/id block)]))}
+              "Practice")
+             [:div "Practice cards"])])))))))
 
 (rum/defc block-title-aux
   [config block {:keys [query? *show-query?]}]

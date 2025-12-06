@@ -173,20 +173,23 @@
                            :dune
 
                            ;; colors
-                           (let [properties {:color action}]
-                             (if-not id
-                               ;; add highlight
-                               (let [highlight (merge highlight
-                                                      {:id (pdf-utils/gen-uuid)
-                                                       :properties properties})]
-                                 (p/let [highlight' (add-hl! highlight)]
-                                   (pdf-utils/clear-all-selection owner-win)
-                                   (pdf-assets/copy-hl-ref! highlight' viewer)))
+                           (let [pdf-current (state/get-current-pdf)]
+                             (if (and (config/db-based-graph?) (not (:block pdf-current)))
+                               (state/pub-event! [:asset/dialog-edit-external-src nil pdf-current])
+                               (let [properties {:color action}]
+                                 (if-not id
+                                   ;; add highlight
+                                   (let [highlight (merge highlight
+                                                          {:id (pdf-utils/gen-uuid)
+                                                           :properties properties})]
+                                     (p/let [highlight' (add-hl! highlight)]
+                                       (pdf-utils/clear-all-selection owner-win)
+                                       (pdf-assets/copy-hl-ref! highlight' viewer)))
 
-                               ;; update highlight
-                               (upd-hl! (assoc highlight :properties properties)))
+                                   ;; update highlight
+                                   (upd-hl! (assoc highlight :properties properties)))
 
-                             (reset! *highlight-last-color (keyword action)))))
+                                 (reset! *highlight-last-color (keyword action)))))))
 
                        (and clear? (js/setTimeout #(clear-ctx-menu!) 68))))]
 
@@ -332,13 +335,14 @@
                                                   (let [hl' (assoc hl :position to-sc-pos)
                                                         hl' (assoc-in hl' [:content :image] (js/Date.now))]
 
-                                                    (p/let [result (pdf-assets/persist-hl-area-image$ viewer
-                                                                                                      (:pdf/current @state/state)
-                                                                                                      hl' hl (:bounding to-vw-pos))]
+                                                    (p/let [result (pdf-assets/persist-hl-area-image$
+                                                                    viewer
+                                                                    (:pdf/current @state/state)
+                                                                    hl' hl (:bounding to-vw-pos))]
 
                                                       (js/setTimeout
                                                        #(do
-                                                           ;; reset dom effects
+                                                          ;; reset dom effects
                                                           (set! (.. target -style -transform) "translate(0, 0)")
                                                           (.removeAttribute target "data-x")
                                                           (.removeAttribute target "data-y")
@@ -350,29 +354,29 @@
 
                                                   (js/setTimeout #(rum/set-ref! *dirty false))))
 
-                                       :move  (fn [^js/MouseEvent e]
-                                                (let [^js/HTMLElement target (.-target e)
-                                                      x (.getAttribute target "data-x")
-                                                      y (.getAttribute target "data-y")
-                                                      bx (if-not (nil? x) (js/parseFloat x) 0)
-                                                      by (if-not (nil? y) (js/parseFloat y) 0)]
+                                       :move (fn [^js/MouseEvent e]
+                                               (let [^js/HTMLElement target (.-target e)
+                                                     x (.getAttribute target "data-x")
+                                                     y (.getAttribute target "data-y")
+                                                     bx (if-not (nil? x) (js/parseFloat x) 0)
+                                                     by (if-not (nil? y) (js/parseFloat y) 0)]
 
-                                                  ;; update element style
-                                                  (set! (.. target -style -width) (str (.. e -rect -width) "px"))
-                                                  (set! (.. target -style -height) (str (.. e -rect -height) "px"))
+                                                 ;; update element style
+                                                 (set! (.. target -style -width) (str (.. e -rect -width) "px"))
+                                                 (set! (.. target -style -height) (str (.. e -rect -height) "px"))
 
-                                                  ;; translate when resizing from top or left edges
-                                                  (let [ax (+ bx (.. e -deltaRect -left))
-                                                        ay (+ by (.. e -deltaRect -top))]
+                                                 ;; translate when resizing from top or left edges
+                                                 (let [ax (+ bx (.. e -deltaRect -left))
+                                                       ay (+ by (.. e -deltaRect -top))]
 
-                                                    (set! (.. target -style -transform) (str "translate(" ax "px, " ay "px)"))
+                                                   (set! (.. target -style -transform) (str "translate(" ax "px, " ay "px)"))
 
-                                                    ;; cache pos
-                                                    (.setAttribute target "data-x" ax)
-                                                    (.setAttribute target "data-y" ay))))}
+                                                   ;; cache pos
+                                                   (.setAttribute target "data-x" ax)
+                                                   (.setAttribute target "data-y" ay))))}
                            :modifiers [(js/interact.modifiers.restrict
                                         (bean/->js {:restriction (.closest el ".page")}))]
-                           :inertia   true})))]
+                           :inertia true})))]
          ;; destroy
          #(.unset it)))
      [hl])
@@ -380,13 +384,13 @@
     (when-let [vw-bounding (get-in vw-hl [:position :bounding])]
       (let [{:keys [color]} (:properties hl)]
         [:div.extensions__pdf-hls-area-region
-         {:id              (str "hl_" id)
-          :ref             *el
-          :style           vw-bounding
-          :data-color      color
-          :draggable       "true"
-          :on-drag-start   dragstart-handle!
-          :on-click        open-ctx-menu!
+         {:id (str "hl_" id)
+          :ref *el
+          :style vw-bounding
+          :data-color color
+          :draggable "true"
+          :on-drag-start dragstart-handle!
+          :on-click open-ctx-menu!
           :on-context-menu open-ctx-menu!}]))))
 
 (rum/defc pdf-highlights-region-container
@@ -397,10 +401,10 @@
    (for [hl page-hls]
      (let [vw-hl (update-in hl [:position] #(pdf-utils/scaled-to-vw-pos viewer %))]
        (rum/with-key
-         (if (get-in hl [:content :image])
-           (pdf-highlight-area-region viewer vw-hl hl ops)
-           (pdf-highlights-text-region viewer vw-hl hl ops))
-         (:id hl))))])
+        (if (get-in hl [:content :image])
+          (pdf-highlight-area-region viewer vw-hl hl ops)
+          (pdf-highlights-text-region viewer vw-hl hl ops))
+        (:id hl))))])
 
 (rum/defc ^:large-vars/cleanup-todo pdf-highlight-area-selection
   [^js viewer {:keys [show-ctx-menu!]}]
@@ -812,7 +816,11 @@
            (.on (name :scaleChanging)
                 #(when-let [data (bean/->clj %)]
                    (set! (. viewer -currentScaleValue) (:scale data))
-                   (apply (:set-hls-extra! ops) [data]))))
+                   (apply (:set-hls-extra! ops) [data])))
+           (.on (name :textlayerrendered)
+                #(when-let [page (.-pageNumber ^js %)]
+                   (set-ano-state!
+                    (fn [s] (assoc s :loaded-pages (conj (:loaded-pages s) page)))))))
 
          (p/then (. viewer setDocument pdf-document)
                  #(set-state! {:viewer viewer :bus event-bus :link link-service :el el}))
@@ -839,24 +847,6 @@
            (some-> (pdf-windows/resolve-own-document viewer)
                    (set! -title filename)))))
      [(:viewer state)])
-
-    ;; interaction events
-    (hooks/use-effect!
-     (fn []
-       (when-let [^js viewer (:viewer state)]
-         (let [fn-textlayer-ready
-               (fn [^js p]
-                 (set-ano-state! {:loaded-pages (conj (:loaded-pages ano-state) (int (.-pageNumber p)))}))]
-
-           (doto (.-eventBus viewer)
-             (.on "textlayerrendered" fn-textlayer-ready))
-
-           #(do
-              (doto (.-eventBus viewer)
-                (.off "textlayerrendered" fn-textlayer-ready))))))
-
-     [(:viewer state)
-      (:loaded-pages ano-state)])
 
     (let [^js viewer        (:viewer state)
           in-system-window? (some-> viewer (.-$inSystemWindow))]
@@ -977,23 +967,22 @@
 
     (hooks/use-effect!
      (fn []
-       (if file-based?
-         (-> (p/let [data (pdf-assets/file-based-load-hls-data$ pdf-current)
-                     {:keys [highlights extra]} data]
-               (set-initial-page! (or (when-let [page (:page extra)]
-                                        (util/safe-parse-int page)) 1))
-               (set-initial-scale! (or (:scale extra) "auto"))
-               (set-hls-state! {:initial-hls highlights :latest-hls highlights :extra extra :loaded true}))
-             (p/catch
-              (fn [^js e]
-                (js/console.error "[load hls error]" e)
-                (let [msg (str (util/format "Error: failed to load the highlights file: \"%s\". \n"
-                                            (:hls-file pdf-current))
-                               e)]
-                  (notification/show! msg :error)
-                  (set-hls-state! {:loaded true :error e})))))
-         ;; for db-based, just mark loaded
-         (set-hls-state! {:loaded true}))
+       (-> (p/let [data (if db-based?
+                          (pdf-assets/db-based-load-hls-data$ pdf-current)
+                          (pdf-assets/file-based-load-hls-data$ pdf-current))
+                   {:keys [highlights extra]} data]
+             (set-initial-page! (or (when-let [page (:page extra)]
+                                      (util/safe-parse-int page)) 1))
+             (set-initial-scale! (or (:scale extra) "auto"))
+             (set-hls-state! {:initial-hls highlights :latest-hls highlights :extra extra :loaded true}))
+           (p/catch
+            (fn [^js e]
+              (js/console.error "[load hls error]" e)
+              (let [msg (str (util/format "Error: failed to load the highlights file: \"%s\". \n"
+                                          (:hls-file pdf-current))
+                             e)]
+                (notification/show! msg :error)
+                (set-hls-state! {:loaded true :error e})))))
        #())
      [hls-file pdf-current])
 
