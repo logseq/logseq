@@ -5,11 +5,12 @@
             [logseq.e2e.keyboard :as k]
             [logseq.e2e.locator :as loc]
             [logseq.e2e.util :as util]
-            [wally.main :as w]))
+            [wally.main :as w]
+            [wally.repl :as repl]))
 
 (defn open-last-block
   "Open the last existing block or pressing add button to create a new block"
-  [& {:keys [retry?]}]
+  [& {:keys [in-retry?]}]
   (util/double-esc)
   (assert/assert-in-normal-mode?)
 
@@ -19,12 +20,12 @@
                          (w/query ".ls-page-blocks .page-blocks-inner .ls-block .block-content"))
                        (last))]
     (w/click last-block)
-    (if retry?
+    (if in-retry?
       (assert/assert-editor-mode)
       (try
         (assert/assert-editor-mode)
         (catch Error _e
-          (open-last-block {:retry? true}))))))
+          (open-last-block {:in-retry? true}))))))
 
 (defn save-block
   [text]
@@ -34,19 +35,29 @@
   (assert/assert-is-visible (loc/filter util/editor-q :has-text text)))
 
 (defn new-block
-  [title]
+  [title & [in-retry?]]
   (let [editor (util/get-editor)]
     (when-not editor (open-last-block))
     (let [last-id (.getAttribute (w/-query ".editor-wrapper textarea") "id")]
       (is (some? last-id))
       (k/press "Control+e")
       (k/enter)
-      (assert/assert-is-visible
-       (loc/filter ".editor-wrapper"
-                   :has "textarea"
-                   :has-not (str "#" last-id)))
-      (assert/assert-editor-mode)
-      (save-block title))))
+      (try
+        (assert/assert-is-visible
+         (loc/filter ".editor-wrapper"
+                     :has "textarea"
+                     :has-not (str "#" last-id)))
+        (assert/assert-editor-mode)
+        (save-block title)
+        (catch Throwable e
+          (if in-retry?
+            (throw (ex-info
+                    "new-block exception"
+                    {:current-id (.getAttribute (w/-query ".editor-wrapper textarea") "id")
+                     :last-id last-id}
+                    e))
+            (do (prn :retry-new-block title)
+                (new-block title true))))))))
 
 ;; TODO: support tree
 (defn new-blocks
