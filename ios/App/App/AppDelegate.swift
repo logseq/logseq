@@ -406,6 +406,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
             let path = self.normalizedPath(rawPath)
             let navigationType = (notification.userInfo?["navigationType"] as? String) ?? "push"
             let stackId = (notification.userInfo?["stack"] as? String) ?? "home"
+            let previousStackId = self.activeStackId
 
             #if DEBUG
             print("📡 routeDidChange from JS → native")
@@ -417,8 +418,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
             // 1️⃣ Stack switch: home ↔ capture ↔ goto ...
             // ============================================
             if stackId != self.activeStackId {
-                // Save current native stack paths
-                self.setPaths(self.pathStack, for: self.activeStackId)
+                // Save current native stack paths; drop stale search stack when leaving it.
+                if previousStackId == "search", stackId != "search" {
+                    self.setPaths(["/__stack__/search"], for: "search")
+                } else {
+                    self.setPaths(self.pathStack, for: previousStackId)
+                }
 
                 // Load (or create) new stack's paths
                 var newPaths = self.paths(for: stackId)
