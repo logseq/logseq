@@ -19,5 +19,4 @@
    ["/export"
     {:name :export
      :view (fn []
-             [:div.mt-8
-              (export/export)])}]])
+             (export/export))}]])
