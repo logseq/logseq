@@ -58,11 +58,8 @@
              "Quick add"]
             add-button])
          (if mobile?
-           [:main#app-container-wrapper.ls-fold-button-on-right
-            [:div#app-container.pt-2
-             [:div#main-container.flex.flex-1
-              [:div.w-full.mt-4
-               (page-blocks add-page)]]]]
+           [:div.w-full.mt-4
+            (page-blocks add-page)]
            [:div.content {:class "block -ml-6"}
             (page-blocks add-page)])
          (when-not mobile? add-button)]))))
