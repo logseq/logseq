@@ -31,6 +31,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
     /// Temporary snapshot image for smooth pop transitions.
     private var popSnapshotView: UIView?
 
+    // Each stack has its own native VC stack, just like paths.
+    private var stackViewControllerStacks: [String: [UIViewController]] = [:]
+
     // ---------------------------------------------------------
     // MARK: Helpers
     // ---------------------------------------------------------
@@ -38,14 +41,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
     private func normalizedPath(_ raw: String?) -> String {
         guard let raw = raw, !raw.isEmpty else { return "/" }
         return raw
-    }
-
-    private func debugLogStacks(_ label: String) {
-        #if DEBUG
-        print("🧭 [\(label)] activeStackId=\(activeStackId)")
-        print("   pathStack=\(pathStack)")
-        print("   stackPathStacks=\(stackPathStacks)")
-        #endif
     }
 
     /// Returns the current native path stack for a given logical stack id,
@@ -70,6 +65,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
         if stackId == activeStackId {
             pathStack = paths
         }
+    }
+
+    private func setViewControllers(_ vcs: [UIViewController], for stackId: String) {
+        stackViewControllerStacks[stackId] = vcs
+    }
+
+    private func viewControllers(for stackId: String) -> [UIViewController] {
+        stackViewControllerStacks[stackId] ?? []
     }
 
     // ---------------------------------------------------------
@@ -198,7 +201,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
         SharedWebViewController.instance.clearPlaceholder()
         SharedWebViewController.instance.attach(to: vc)
 
-        debugLogStacks("emptyNavStack")
     }
 
     private func pushIfNeeded(path: String, animated: Bool) {
@@ -216,7 +218,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
 
         nav.pushViewController(vc, animated: animated)
 
-        debugLogStacks("pushIfNeeded")
     }
 
     private func replaceTop(path: String) {
@@ -236,7 +237,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
         }
         nav.setViewControllers(stack, animated: false)
 
-        debugLogStacks("replaceTop")
     }
 
     private func popIfNeeded(animated: Bool) {
@@ -246,8 +246,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
             _ = pathStack.popLast()
             setPaths(pathStack, for: activeStackId)
             nav.popViewController(animated: animated)
-
-            debugLogStacks("popIfNeeded")
         }
     }
 
@@ -273,12 +271,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
         } else {
             vcs.count < pathStack.count
         }
-
-        #if DEBUG
-        print("🧭 willShow — isPop=\(isPop)")
-        print("   toVC=\(toVC.targetPath) fromVC=\(String(describing: fromVC?.targetPath))")
-        debugLogStacks("willShow")
-        #endif
 
         if isPop {
             // -----------------------------
@@ -322,10 +314,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
                 // 🔑 DO NOT call webView.goBack().
                 // Tell JS explicitly that native popped.
                 self.ignoreRoutePopCount += 1
-                #if DEBUG
-                print("⬅️ Native POP completed, notifying JS via onNativePop(), ignoreRoutePopCount=\(self.ignoreRoutePopCount)")
-                debugLogStacks("after native-pop pathStack update")
-                #endif
 
                 if let bridge = SharedWebViewController.instance.bridgeController.bridge {
                     let js = "window.LogseqNative && window.LogseqNative.onNativePop && window.LogseqNative.onNativePop();"
@@ -395,9 +383,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
 
     private func observeRouteChanges() {
         NotificationCenter.default.addObserver(
-            forName: UILocalPlugin.routeChangeNotification,
-            object: nil,
-            queue: .main
+          forName: UILocalPlugin.routeChangeNotification,
+          object: nil,
+          queue: .main
         ) { [weak self] notification in
             guard let self else { return }
             guard let nav = self.navController else { return }
@@ -408,40 +396,57 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
             let stackId = (notification.userInfo?["stack"] as? String) ?? "home"
             let previousStackId = self.activeStackId
 
-            #if DEBUG
-            print("📡 routeDidChange from JS → native")
-            print("   stackId=\(stackId) navigationType=\(navigationType) path=\(path)")
-            debugLogStacks("before observeRouteChanges")
-            #endif
+            // 🚫 Fast-path: ignore duplicate replace for same stack/path
+            if stackId == self.activeStackId,
+               navigationType == "replace",
+               path == self.pathStack.last {
+                return
+            }
+
+            // ⚡️ Fast-path: cancel search → home root.
+            // We do NOT rebuild nav stack and we do NOT reattach the WebView.
+            // JS will just navigate the existing shared WKWebView to "/".
+            if previousStackId == "search",
+               stackId == "home"{
+
+                // Just update bookkeeping so future home pushes/pop work correctly.
+                self.activeStackId = "home"
+                self.setPaths(["/"], for: "home")
+                self.setPaths(["/__stack__/search"], for: "search")
+
+                nav.setViewControllers([], animated: false)
+                self.setViewControllers([], for: "home")
+
+                // 👈 Do NOTHING to nav.viewControllers or SharedWebViewController here.
+                return
+            }
 
             // ============================================
-            // 1️⃣ Stack switch: home ↔ capture ↔ goto ...
+            // 1️⃣ Stack switch: home ↔ search ↔ capture...
             // ============================================
             if stackId != self.activeStackId {
-                // Save current native stack paths; drop stale search stack when leaving it.
-                if previousStackId == "search", stackId != "search" {
-                    self.setPaths(["/__stack__/search"], for: "search")
-                } else {
-                    self.setPaths(self.pathStack, for: previousStackId)
-                }
+                self.setPaths(self.pathStack, for: previousStackId)
 
-                // Load (or create) new stack's paths
+                // Load saved paths for target stack
                 var newPaths = self.paths(for: stackId)
 
-                // Ensure the top of the stack matches the path sent by JS
-                if let last = newPaths.last, last != path {
-                    if newPaths.isEmpty {
-                        newPaths = [path]
-                    } else {
-                        newPaths[newPaths.count - 1] = path
-                    }
+                // 🔑 Special rules for shaping the new stack
+                if stackId == "home", path == "/" {
+                    // 👉 ALWAYS reset home to a single root VC.
+                    newPaths = ["/"]
+                } else if newPaths.isEmpty {
+                    // First time visiting this stack
+                    newPaths = [path]
+                } else if let last = newPaths.last, last != path {
+                    // Same history, but different top path → align the top.
+                    newPaths[newPaths.count - 1] = path
                 }
 
                 self.activeStackId = stackId
                 self.pathStack = newPaths
                 self.setPaths(newPaths, for: stackId)
 
-                // Rebuild the UINavigationController's stack from these paths
+                // Rebuild native stack for these paths
                 var vcs: [UIViewController] = []
                 for (idx, p) in newPaths.enumerated() {
                     let vc = NativePageViewController(path: p, push: idx > 0)
@@ -449,24 +454,26 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
                 }
 
                 nav.setViewControllers(vcs, animated: false)
+                self.setViewControllers(vcs, for: stackId)
 
                 if let lastVC = vcs.last as? NativePageViewController {
-                    SharedWebViewController.instance.attach(to: lastVC)
-                    SharedWebViewController.instance.clearPlaceholder()
+                    // Defer & avoid redundant attach.
+                    DispatchQueue.main.async {
+                        if let bridge = SharedWebViewController.instance.bridgeController.bridge,
+                           let webView = bridge.webView,
+                           webView.isDescendant(of: lastVC.view) {
+                        } else {
+                            SharedWebViewController.instance.attach(to: lastVC)
+                        }
+                        SharedWebViewController.instance.clearPlaceholder()
+                    }
                 }
 
-                #if DEBUG
-                print("🔀 STACK SWITCH to \(stackId)")
-                debugLogStacks("after stack switch")
-                #endif
-
-                // For stacks like "capture", default paths are ["__/stack__/capture"],
-                // so they get a single VC and no back button.
                 return
             }
 
             // ============================================
-            // 2️⃣ Navigation *within* the active stack
+            // 2️⃣ Navigation *within* active stack
             // ============================================
             switch navigationType {
             case "reset":
@@ -478,10 +485,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
             case "pop":
                 if self.ignoreRoutePopCount > 0 {
                     self.ignoreRoutePopCount -= 1
-                    #if DEBUG
-                    print("🙈 ignoring JS pop (ignoreRoutePopCount→\(self.ignoreRoutePopCount))")
-                    debugLogStacks("after ignore JS pop")
-                    #endif
                     return
                 }
                 if self.pathStack.count > 1 {
@@ -491,12 +494,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
             default:
                 self.pushIfNeeded(path: path, animated: true)
             }
-
-            #if DEBUG
-            debugLogStacks("after observeRouteChanges switch")
-            #endif
         }
     }
+
 }
 
 // ---------------------------------------------------------

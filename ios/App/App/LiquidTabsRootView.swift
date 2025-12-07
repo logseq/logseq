@@ -320,7 +320,6 @@ private struct SearchTabHost26: View {
                         wasSearching = false
                         selectedTab.wrappedValue = .content(0)
                         store.selectedId = firstId
-                        LiquidTabsPlugin.shared?.notifyTabSelected(id: firstId)
                     }
                 }
         }
