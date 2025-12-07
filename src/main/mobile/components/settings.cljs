@@ -26,11 +26,12 @@
        (shui/button
         {:variant :default
          :class "text-1xl flex flex-1 w-full my-8"
-         :on-click #(shui/dialog-open! login/page-impl
-                                       {:close-btn? false
-                                        :label "user-login"
-                                        :align :top
-                                        :content-props {:class "app-login-modal"}})}
+         :on-click #(shui/popup-show!
+                     nil
+                     (fn []
+                       [:div.w-full.h-full
+                        (login/page-impl)])
+                     {:id :login})}
         "Login")
        ;; Logged in: account cell
        [:div.mobile-setting-item
