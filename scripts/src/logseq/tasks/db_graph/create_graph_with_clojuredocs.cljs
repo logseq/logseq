@@ -4,6 +4,7 @@
             [babashka.cli :as cli]
             [cljs.pprint :as pp]
             [clojure.edn :as edn]
+            [clojure.string :as string]
             [datascript.core :as d]
             [logseq.db.common.sqlite-cli :as sqlite-cli]
             [logseq.outliner.cli :as outliner-cli]
@@ -37,13 +38,16 @@
     {:user.property/library-url-ip8W5T7M library-url
      :user.property/type-Un-Aypix
      [:block/uuid (type->block-uuid type)]},
-    :block/title (str name " (" ns ")")}
+    :block/title (str "`" name "` (" ns ")")}
    :blocks
    [{:block/title "Doc",
      :build/properties {:logseq.property/heading 3},
      :build/children
-     [{:block/title (or doc "")
-       :build/properties {}}]}
+     (mapv
+      (fn [line]
+        {:block/title line
+         :build/properties {}})
+      (string/split-lines doc))}
     {:block/title "Examples",
      :build/properties {:logseq.property/heading 3},
      :build/children
@@ -51,10 +55,16 @@
     {:block/title "Notes",
      :build/properties {:logseq.property/heading 3}
      :build/children
-     [{:block/title (with-out-str (pp/pprint notes)),
-       :build/tags [:logseq.class/Code-block]
-       :build/properties {:logseq.property.node/display-type :code
-                          :logseq.property.code/lang "Clojure"}}]}
+     (mapv
+      (fn [note]
+        (let [body (or (:body note) "")
+              author (or (:login (:author note)) "???")]
+          {:block/title author
+           :build/children
+           [{:block/title body
+             :build/tags [:logseq.class/Quote-block]
+             :build/properties {:logseq.property.node/display-type :quote}}]}))
+      notes)}
     {:block/title "Arglists",
      :build/properties {:logseq.property/heading 3}
      :build/children
@@ -115,7 +125,6 @@
   (fs/writeFileSync "cljdocs.edn" (with-out-str (pp/pprint result))))
 
 (defn -main [args]
-  (prn :xxx args)
   (let [[graph-dir] args
         options (cli/parse-opts args {:spec spec})
         _ (when (or (nil? graph-dir) (:help options))
@@ -132,14 +141,15 @@
         clj-vars (:vars clojuredocs-json)
         result-edn (convert clj-vars)]
     (println "Generating" (count (:pages-and-blocks result-edn)) "pages")
-    (when (:export options)
-      (println "Generating clojuredocs.edn ...")
-      (fs/writeFileSync "clojuredocs.edn" (with-out-str (pp/pprint result-edn))))
-    (let [{:keys [init-tx block-props-tx]} (outliner-cli/build-blocks-tx result-edn)]
-      (d/transact! conn init-tx)
-      (d/transact! conn block-props-tx)
-      (println "Transacted" (count (d/datoms @conn :eavt)) "datoms")
-      (println "Created graph " (str "'" db-name "'") "!"))))
+    (if (:export options)
+      (do (println "Generating clojuredocs.edn ...")
+          (fs/writeFileSync "clojuredocs.edn" (with-out-str (pp/pprint result-edn))))
+      (do (println "Transacting to graph ...")
+          (let [{:keys [init-tx block-props-tx]} (outliner-cli/build-blocks-tx result-edn)]
+            (d/transact! conn init-tx)
+            (d/transact! conn block-props-tx)
+            (println "Transacted" (count (d/datoms @conn :eavt)) "datoms")
+            (println "Created graph " (str "'" db-name "'") "!"))))))
 
 (when (= nbb/*file* (nbb/invoked-file))
   (-main *command-line-args*))
