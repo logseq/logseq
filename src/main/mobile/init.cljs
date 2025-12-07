@@ -22,6 +22,21 @@
 (def *last-shared-url (atom nil))
 (def *last-shared-seconds (atom 0))
 
+(defn- handle-incoming-url!
+  [url]
+  (p/then
+   state/app-ready-promise
+   (fn []
+     (when (and url
+                (or
+                 (string/starts-with? url "https://logseq.com/mobile/")
+                 (string/starts-with? url "logseq://mobile/")
+                 (not (and (= @*last-shared-url url)
+                           (<= (- (.getSeconds (js/Date.)) @*last-shared-seconds) 1)))))
+       (reset! *last-shared-url url)
+       (reset! *last-shared-seconds (.getSeconds (js/Date.)))
+       (deeplink/deeplink url)))))
+
 (defn- ios-init!
   "Initialize iOS-specified event listeners"
   []
@@ -80,18 +95,14 @@
   (.addListener App "appUrlOpen"
                 (fn [^js data]
                   (log/info ::app-url-open data)
-                  (p/then
-                   state/app-ready-promise
-                   (fn []
-                     (when-let [url (.-url data)]
-                       (when (or
-                              (string/starts-with? url "https://logseq.com/mobile/")
-                              (string/starts-with? url "logseq://mobile/")
-                              (not (and (= @*last-shared-url url)
-                                        (<= (- (.getSeconds (js/Date.)) @*last-shared-seconds) 1))))
-                         (reset! *last-shared-url url)
-                         (reset! *last-shared-seconds (.getSeconds (js/Date.)))
-                         (deeplink/deeplink url)))))))
+                  (when-let [url (.-url data)]
+                    (handle-incoming-url! url))))
+
+  (-> (.getLaunchUrl App)
+      (p/then (fn [^js data]
+                (when-let [url (.-url data)]
+                  (log/info ::launch-url data)
+                  (handle-incoming-url! url)))))
 
   (.addListener Keyboard "keyboardWillShow"
                 (fn [^js info]
