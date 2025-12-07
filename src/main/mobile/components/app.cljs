@@ -158,7 +158,7 @@
         route-match (state/sub :route-match)]
     [:main#app-container-wrapper.ls-fold-button-on-right
      [:div#app-container {:class (when show-popup? "invisible")}
-      [:div#main-container.flex.flex-1.overflow-x-hidden.py-4
+      [:div#main-container.flex.flex-1.overflow-x-hidden
        (app current-repo route-match)]]
      (when show-popup?
        [:div.ls-layer

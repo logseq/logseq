@@ -6,7 +6,6 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.common.util :as common-util]
-            [mobile.navigation :as mobile-nav]
             [mobile.state :as mobile-state]))
 
 ;; Capacitor plugin instance:
