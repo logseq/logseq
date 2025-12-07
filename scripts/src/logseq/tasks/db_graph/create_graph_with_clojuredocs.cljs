@@ -24,15 +24,19 @@
              :desc "Verbose mode"}})
 
 (defn example=>block
-  [example]
+  [author->block-uuid example]
   (when-let [body (:body example)]
-    {:block/title body
-     :build/tags [:logseq.class/Code-block]
-     :build/properties {:logseq.property.node/display-type :code
-                        :logseq.property.code/lang "Clojure"}}))
+    (let [author-block-uuid (author->block-uuid (:login (:author example)))]
+      {:block/title body
+       :build/tags [:logseq.class/Code-block]
+       :build/properties (cond-> {:logseq.property.node/display-type :code
+                                  :logseq.property.code/lang "Clojure"}
+                           author-block-uuid
+                           (assoc :user.property/author-X_lTJqwD [:block/uuid author-block-uuid]))})))
 
 (defn convert-var-to-page
-  [type->block-uuid {:keys [ns name type see-alsos examples notes arglists doc library-url] :as _clj-var}]
+  [type->block-uuid author->block-uuid
+   {:keys [ns name type see-alsos examples notes arglists doc library-url] :as _clj-var}]
   {:page
    {:build/properties
     {:user.property/library-url-ip8W5T7M library-url
@@ -51,19 +55,19 @@
     {:block/title "Examples",
      :build/properties {:logseq.property/heading 3},
      :build/children
-     (vec (keep example=>block examples))}
+     (vec (keep (partial example=>block author->block-uuid) examples))}
     {:block/title "Notes",
      :build/properties {:logseq.property/heading 3}
      :build/children
      (mapv
       (fn [note]
         (let [body (or (:body note) "")
-              author (or (:login (:author note)) "???")]
-          {:block/title author
-           :build/children
-           [{:block/title body
-             :build/tags [:logseq.class/Quote-block]
-             :build/properties {:logseq.property.node/display-type :quote}}]}))
+              author-block-uuid (author->block-uuid (:login (:author note)))]
+          {:block/title body
+           :build/tags [:logseq.class/Quote-block]
+           :build/properties (cond-> {:logseq.property.node/display-type :quote}
+                               author-block-uuid
+                               (assoc :user.property/author-X_lTJqwD [:block/uuid author-block-uuid]))}))
       notes)}
     {:block/title "Arglists",
      :build/properties {:logseq.property/heading 3}
@@ -73,7 +77,17 @@
         [{:block/title arglists-content
           :build/tags [:logseq.class/Code-block]
           :build/properties {:logseq.property.node/display-type :code
-                             :logseq.property.code/lang "Clojure"}}]))}]})
+                             :logseq.property.code/lang "Clojure"}}]))}
+    ;; {:block/title "See also",
+    ;;  :build/properties {:logseq.property/heading 3}
+    ;;  :build/children
+    ;;  (vec
+    ;;   (when-let [arglists-content (with-out-str (pp/pprint see-alsos))]
+    ;;     [{:block/title arglists-content
+    ;;       :build/tags [:logseq.class/Code-block]
+    ;;       :build/properties {:logseq.property.node/display-type :code
+    ;;                          :logseq.property.code/lang "Clojure"}}]))}
+    ]})
 
 (defn convert-type-pages
   "return {:pages ..., :type->block-uuid ...}"
@@ -87,36 +101,67 @@
            {:page
             {:block/uuid block-uuid
              :build/keep-uuid? true
-             :build/properties {},
              :block/title tp},
             :blocks
             []})
          type->block-uuid)]
     {:pages pages :type->block-uuid type->block-uuid}))
 
+(defn convert-author-pages
+  "return {:pages ..., :author->block-uuid ...}"
+  [clj-vars]
+  (let [author-name (comp :login :author)
+        author-names
+        (set
+         (mapcat
+          (fn [clj-var]
+            (set
+             (map
+              author-name
+              (concat (:see-alsos clj-var)
+                      (:examples clj-var)
+                      (:notes clj-var)))))
+          clj-vars))
+        author->block-uuid
+        (into {} (map (fn [author] [author (random-uuid)])) author-names)
+        pages
+        (map
+         (fn [[author block-uuid]]
+           {:page
+            {:block/uuid block-uuid
+             :build/keep-uuid? true
+             :block/title author}
+            :blocks
+            []})
+         author->block-uuid)]
+    {:pages pages :author->block-uuid author->block-uuid}))
+
 (def properties
   {:user.property/type-Un-Aypix
    {:logseq.property/type :node,
-    :build/properties {},
-    :block/collapsed? false,
     :block/title "type",
     :db/cardinality :db.cardinality/one},
    :user.property/library-url-ip8W5T7M
    {:db/cardinality :db.cardinality/one,
     :logseq.property/type :url,
-    :block/title "library-url",
-    :build/properties {}}})
+    :block/title "library-url"}
+   :user.property/author-X_lTJqwD
+   {:logseq.property/type :node
+    :block/title "author"
+    :db/cardinality :db.cardinality/one}})
 
 (defn convert
   [clj-vars]
-  (let [{type-pages :pages type->block-uuid :type->block-uuid} (convert-type-pages clj-vars)]
+  (let [{type-pages :pages type->block-uuid :type->block-uuid} (convert-type-pages clj-vars)
+        {author-pages :pages author->block-uuid :author->block-uuid} (convert-author-pages clj-vars)]
     {:properties properties
      :classes {}
      :pages-and-blocks
      (vec
       (concat
        type-pages
-       (map (partial convert-var-to-page type->block-uuid) clj-vars)))}))
+       author-pages
+       (map (partial convert-var-to-page type->block-uuid author->block-uuid) clj-vars)))}))
 
 (comment
   (def clojuredocs-json (js->clj (js/JSON.parse (fs/readFileSync "resources/clojuredocs-export.json"))
