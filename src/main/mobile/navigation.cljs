@@ -16,30 +16,9 @@
 (defonce ^:private pending-navigation (atom nil))
 (defonce ^:private hooks-installed? (atom false))
 
-;; --- DEBUG toggle ---
-(def ^:private debug-nav? true)
-
-(defn- dbg [tag & args]
-  (when debug-nav?
-    (let [payload (cond
-                    ;; one map argument → use it directly
-                    (and (= 1 (count args))
-                         (map? (first args)))
-                    (first args)
-
-                    ;; even number of args → treat as k/v pairs
-                    (even? (count args))
-                    (apply hash-map args)
-
-                    ;; odd / weird → just log the raw args
-                    :else
-                    {:args args})]
-      (log/info tag payload))))
-
 ;; Track whether the latest change came from a native back gesture / popstate.
 (.addEventListener js/window "popstate" (fn [_]
-                                          (reset! navigation-source :pop)
-                                          (dbg :nav/popstate {:source :popstate})))
+                                          (reset! navigation-source :pop)))
 
 (defn current-stack
   []
@@ -48,7 +27,6 @@
 (defn set-current-stack!
   [stack]
   (when (some? stack)
-    (dbg :nav/set-current-stack {:from @active-stack :to stack})
     (reset! active-stack stack)))
 
 (defn- strip-fragment [href]
@@ -77,7 +55,6 @@
 (defn- record-navigation-intent!
   [{:keys [type stack]}]
   (let [stack (or stack @active-stack primary-stack)]
-    (dbg :nav/record-intent {:type type :stack stack})
     (reset! pending-navigation {:type type
                                 :stack stack})))
 
@@ -91,7 +68,6 @@
   ([k params query]
    (record-navigation-intent! {:type :push
                                :stack @active-stack})
-   (dbg :nav/push-state {:name k :params params :query query :stack @active-stack})
    (orig-push-state k params query)))
 
 (defonce orig-replace-state rfe/replace-state)
@@ -103,7 +79,6 @@
   ([k params query]
    (record-navigation-intent! {:type :replace
                                :stack @active-stack})
-   (dbg :nav/replace-state {:name k :params params :query query :stack @active-stack})
    (orig-replace-state k params query)))
 
 (defn install-navigation-hooks!
@@ -111,7 +86,6 @@
    Also tags navigation with the active stack so native can keep per-stack history."
   []
   (when (compare-and-set! hooks-installed? false true)
-    (dbg :nav/hooks-installed {})
     (set! rfe/push-state push-state)
     (set! rfe/replace-state replace-state)))
 
@@ -131,14 +105,6 @@
 (defn- stack-top
   [stack]
   (-> @stack-history (get stack) :history last))
-
-;; --- DEBUG: watch stack-history changes ---
-(add-watch stack-history ::stack-history-debug
-           (fn [_ _ old new]
-             (when debug-nav?
-               (dbg :nav/stack-history
-                    :old (into {} (for [[k v] old] [k (mapv :path (:history v))]))
-                    :new (into {} (for [[k v] new] [k (mapv :path (:history v))]))))))
 
 (defn- remember-route!
   [stack nav-type route path route-match]
@@ -160,20 +126,13 @@
                          (conj history entry))
                 history)))]
       (when entry
-        (dbg :nav/remember-route
-             :stack stack
-             :nav-type nav-type
-             :path path
-             :route-to (or (get-in route [:to])
-                           (get-in route-match [:data :name])))
-        (swap! stack-history update stack (fn [{:keys [history] :as st}]
+        (swap! stack-history update stack (fn [{:keys [history]}]
                                             {:history (update-history history)}))
         (swap! initialised-stacks assoc stack true)))))
 
 (defn reset-stack-history!
   [stack]
   (when stack
-    (dbg :nav/reset-stack-history {:stack stack})
     (swap! stack-history assoc stack {:history [(stack-defaults stack)]})
     (swap! initialised-stacks dissoc stack)))
 
@@ -193,12 +152,7 @@
                        (true? push) "push"
                        :else "push"))]
     (reset! navigation-source nil)
-    (dbg :nav/next-navigation
-         :src src
-         :intent intent
-         :stack stack
-         :first? first?
-         :nav-type nav-type)
+
     (when first?
       (swap! initialised-stacks assoc stack true))
     {:navigation-type nav-type
@@ -207,7 +161,6 @@
 
 (defn- notify-route-payload!
   [payload]
-  (dbg :nav/notify-native payload)
   (-> (.routeDidChange mobile-util/ui-local (clj->js payload))
       (p/catch (fn [err]
                  (log/warn :mobile-native-navigation/route-report-failed
@@ -222,12 +175,6 @@
                                                                  :stack (or stack (current-stack))})
         stack (or stack (current-stack))
         path (or path (current-path))]
-    (dbg :nav/notify-route-change
-         :stack stack
-         :navigation-type navigation-type
-         :path path
-         :route-to (or (:to route)
-                       (get-in route-match [:data :name])))
     (set-current-stack! stack)
     (remember-route! stack navigation-type route path route-match)
     (when (and (mobile-util/native-ios?)
@@ -254,20 +201,16 @@
   "Activate a stack and restore its last known route."
   [stack]
   (when stack
-    (let [stack (ensure-stack stack)]
-      (dbg :nav/switch-stack {:to stack
-                              :current @active-stack
-                              :stack-top (select-keys (stack-top stack) [:path])})
+    (let [stack (ensure-stack stack)
+          current @active-stack]
       (set-current-stack! stack)
       (when-let [{:keys [path route route-match]} (stack-top stack)]
         (let [route-match (or route-match (:route-match (stack-defaults stack)))
               path        (or path (current-path))]
-          (dbg :nav/switch-stack-apply
-               :stack stack
-               :path path
-               :route-name (or (get-in route [:data :name])
-                               (get-in route-match [:data :name])))
           (route-handler/set-route-match! route-match)
+          (when (= current "search")
+            ;; reset to :home
+            (orig-replace-state :home nil nil))
           (notify-route-change!
            {:route {:to          (or (get-in route [:data :name])
                                      (get-in route-match [:data :name]))
@@ -286,22 +229,13 @@
   (let [stack (current-stack)
         {:keys [history]} (get @stack-history stack)
         history (vec history)]
-    (if (<= (count history) 1)
-      (dbg :nav/pop-stack-root {:stack stack
-                                :history (mapv :path history)})
+    (when (> (count history) 1)
       (let [new-history (subvec history 0 (dec (count history)))
-            {:keys [route route-match path]} (peek new-history)
+            {:keys [route-match]} (peek new-history)
             route-match   (or route-match (:route-match (stack-defaults stack)))
             route-name    (get-in route-match [:data :name])
             path-params   (get-in route-match [:parameters :path])
             query-params  (get-in route-match [:parameters :query])]
-
-        (dbg :nav/pop-stack
-             :stack stack
-             :old-history (mapv :path history)
-             :new-history (mapv :path new-history)
-             :target-path path
-             :route-name route-name)
 
         (swap! stack-history assoc stack {:history new-history})
 
@@ -315,10 +249,6 @@
 
 (defn ^:export install-native-bridge!
   []
-  (dbg :nav/install-native-bridge {})
   (set! (.-LogseqNative js/window)
         (clj->js
-         {:onNativePop (fn []
-                         (dbg :nav/on-native-pop {:stack (current-stack)
-                                                  :path (current-path)})
-                         (pop-stack!))})))
+         {:onNativePop (fn [] (pop-stack!))})))
