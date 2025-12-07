@@ -192,7 +192,7 @@
     (js/console.error "instrument data-map should only contains [:type :payload]"))
   (posthog/capture type payload))
 
-(defmethod handle :capture-error [[_ {:keys [error payload]}]]
+(defmethod handle :capture-error [[_ {:keys [error payload extra]}]]
   (let [[user-uuid graph-uuid tx-id] @sync/graphs-txid
         payload (merge
                  {:schema-version (str db-schema/version)
@@ -204,7 +204,8 @@
                   :db-based (config/db-based-graph? (state/get-current-repo))}
                  payload)]
     (Sentry/captureException error
-                             (bean/->js {:tags payload}))))
+                             (bean/->js {:tags payload
+                                         :extra extra}))))
 
 (defmethod handle :exec-plugin-cmd [[_ {:keys [pid cmd action]}]]
   (commands/exec-plugin-simple-command! pid cmd action))
