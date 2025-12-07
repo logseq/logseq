@@ -11,13 +11,6 @@
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
 
-(rum/defc classic-app-container-wrap
-  [content]
-  [:main#app-container-wrapper.ls-fold-button-on-right
-   [:div#app-container.pt-2
-    [:div#main-container.flex.flex-1.overflow-x-hidden
-     [:div.w-full content]]]])
-
 (rum/defc notification-clear-all
   []
   [:div.ui__notifications-content
