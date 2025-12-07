@@ -45,8 +45,8 @@
      (fn []
        (when session
          (user/login-callback session)
-         (notification/show! (str "Hi, " username " :)") :success)
          (shui/dialog-close!)
+         (shui/popup-hide!)
          (when (= :user-login (state/get-current-route))
            (route-handler/redirect! {:to :home}))))
      [])
