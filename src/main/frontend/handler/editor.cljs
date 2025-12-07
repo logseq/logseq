@@ -1579,7 +1579,7 @@
   "Save incoming(pasted) assets to assets directory.
 
    Returns: asset entities"
-  [repo files & {:keys [pdf-area? last-edit-block]}]
+  [repo files & {:keys [pdf-area? last-edit-block save-to-page]}]
   (p/let [[repo-dir asset-dir-rpath] (assets-handler/ensure-assets-dir! repo)
           today-page-name (date/today)
           today-page-e (db-model/get-journal-page today-page-name)
@@ -1592,8 +1592,12 @@
           blocks (remove nil? blocks*)
           edit-block (or (state/get-edit-block) last-edit-block)
           insert-to-current-block-page? (and (:block/uuid edit-block) (not pdf-area?))
-          target (if insert-to-current-block-page?
+          target (cond
+                   insert-to-current-block-page?
                    edit-block
+                   save-to-page
+                   save-to-page
+                   :else
                    today-page)]
     (when-not target
       (throw (ex-info "invalid target" {:files files
@@ -1604,6 +1608,7 @@
        (ui-outliner-tx/transact!
         {:outliner-op :insert-blocks}
         (outliner-op/insert-blocks! blocks target {:keep-uuid? true
+                                                   :bottom? true
                                                    :sibling? (= edit-block target)
                                                    :replace-empty-target? true}))
        (map (fn [b] (db/entity [:block/uuid (:block/uuid b)])) blocks)))))
