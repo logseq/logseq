@@ -310,6 +310,7 @@ body, #root {
 /* Both layers use their own independent scroll containers. */
 #app-main-home, #main-content-container
 {
+    @apply overflow-x-hidden;
     height: 100%;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
