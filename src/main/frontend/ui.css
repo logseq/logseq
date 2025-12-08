@@ -275,6 +275,27 @@ html.is-mobile {
   display: inline-block;
 }
 
+.ui__icon svg {
+  filter: brightness(1);
+  transition: filter .15s;
+  will-change: filter;
+}
+
+.ui__icon:hover svg {
+  filter: brightness(.8);
+  transition-duration: .15s;
+}
+
+.dark-theme {
+    .ui__icon svg {
+        filter: brightness(.8);
+    }
+
+    .ui__icon:hover svg {
+        filter: brightness(1);
+    }
+}
+
 .type-icon {
   @apply text-base text-center flex items-center justify-center rounded border mr-2 relative;
 
@@ -316,10 +337,6 @@ input[type='range'] {
 .ls-dialog-select {
   @apply w-auto !max-w-fit p-0;
 
-  .cp__select-main {
-    @apply m-0;
-  }
-
   .item-results-wrap {
     @apply px-2;
   }
@@ -333,4 +350,8 @@ input[type='range'] {
 
 .ls-foldable-title-control {
   margin-left: -27px;
+}
+
+.ls-nlp-calendar {
+  @apply flex flex-col gap-2 relative;
 }

@@ -220,15 +220,13 @@
 (defn- extract-pages-and-blocks
   "uri-encoded? - if is true, apply URL decode on the file path
    options -
-     :extracted-block-ids - An atom that contains all block ids that have been extracted in the current page (not yet saved to db)
      :resolve-uuid-fn - Optional fn which is called to resolve uuids of each block. Enables diff-merge
        (2 ways diff) based uuid resolution upon external editing.
        returns a list of the uuids, given the receiving ast, or nil if not able to resolve.
        Implemented in reset-file-handler/diff-merge-uuids-2ways for IoC
        Called in gp-extract/extract as AST is being parsed and properties are extracted there"
-  [format ast properties file content {:keys [date-formatter db filename-format extracted-block-ids resolve-uuid-fn]
-                                       :or {extracted-block-ids (atom #{})
-                                            resolve-uuid-fn (constantly nil)}
+  [format ast properties file content {:keys [date-formatter db filename-format resolve-uuid-fn]
+                                       :or {resolve-uuid-fn (constantly nil)}
                                        :as options}]
   (assert db "Datascript DB is required")
   (try
@@ -237,9 +235,10 @@
           options' (assoc options :page-name page-name)
           ;; In case of diff-merge (2way) triggered, use the uuids to override the ones extracted from the AST
           override-uuids (resolve-uuid-fn format ast content options')
+          *extracted-block-ids (atom #{})
           blocks (->> (gp-block/extract-blocks ast content format options')
                       (attach-block-ids-if-match override-uuids)
-                      (mapv #(gp-block/fix-block-id-if-duplicated! db page-name extracted-block-ids %))
+                      (mapv #(gp-block/fix-block-id-if-duplicated! db page-name *extracted-block-ids %))
                       ;; FIXME: use page uuid
                       (gp-block/with-parent-and-order {:block/name page-name})
                       (vec))

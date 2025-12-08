@@ -25,7 +25,7 @@
   [blocks target-block opts]
   (op-transact!
    (let [id (:db/id target-block)]
-    [:insert-blocks [blocks id opts]])))
+     [:insert-blocks [blocks id opts]])))
 
 (defn delete-blocks!
   [blocks opts]
@@ -35,23 +35,23 @@
        [:delete-blocks [ids opts]]))))
 
 (defn move-blocks!
-  [blocks target-block sibling?]
+  [blocks target-block opts]
   (op-transact!
    (let [ids (map :db/id blocks)
-        target-id (:db/id target-block)]
-    [:move-blocks [ids target-id sibling?]])))
+         target-id (:db/id target-block)]
+     [:move-blocks [ids target-id opts]])))
 
 (defn move-blocks-up-down!
   [blocks up?]
   (op-transact!
    (let [ids (map :db/id blocks)]
-    [:move-blocks-up-down [ids up?]])))
+     [:move-blocks-up-down [ids up?]])))
 
 (defn indent-outdent-blocks!
   [blocks indent? & {:as opts}]
   (op-transact!
    (let [ids (map :db/id blocks)]
-    [:indent-outdent-blocks [ids indent? opts]])))
+     [:indent-outdent-blocks [ids indent? opts]])))
 
 (defn upsert-property!
   [property-id schema property-opts]
@@ -73,15 +73,20 @@
   (op-transact!
    [:delete-property-value [block-eid property-id property-value]]))
 
+(defn batch-delete-property-value!
+  [block-eids property-id property-value]
+  (op-transact!
+   [:batch-delete-property-value [block-eids property-id property-value]]))
+
 (defn create-property-text-block!
   [block-id property-id value opts]
   (op-transact!
    [:create-property-text-block [block-id property-id value opts]]))
 
 (defn batch-set-property!
-  [block-ids property-id value]
+  [block-ids property-id value opts]
   (op-transact!
-   [:batch-set-property [block-ids property-id value]]))
+   [:batch-set-property [block-ids property-id value opts]]))
 
 (defn batch-remove-property!
   [block-ids property-id]
@@ -112,6 +117,11 @@
   [property-id values]
   (op-transact!
    [:add-existing-values-to-closed-values [property-id values]]))
+
+(defn batch-import-edn!
+  [import-edn options]
+  (op-transact!
+   [:batch-import-edn [import-edn options]]))
 
 (defn transact!
   [tx-data tx-meta]

@@ -9,6 +9,7 @@
             [frontend.components.editor :as editor]
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
+            [frontend.components.user.login :as user.login]
             [frontend.components.whiteboard :as whiteboard]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
@@ -16,21 +17,22 @@
             [frontend.db.restore :as db-restore]
             [frontend.error :as error]
             [frontend.handler.command-palette :as command-palette]
+            [frontend.handler.db-based.vector-search-flows :as vector-search-flows]
+            [frontend.handler.e2ee]
             [frontend.handler.events :as events]
+            [frontend.handler.events.rtc]
             [frontend.handler.events.ui]
             [frontend.handler.file-based.events]
             [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.global-config :as global-config-handler]
-            [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.repo-config :as repo-config-handler]
-            [frontend.handler.test :as test]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
             [frontend.idb :as idb]
-            [frontend.mobile.core :as mobile]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.core :as shortcut]
@@ -45,12 +47,10 @@
 
 (defn- set-global-error-notification!
   []
-  (when-not config/dev?
-    (set! js/window.onerror
-          (fn [message, _source, _lineno, _colno, error]
-            (when-not (error/ignored? message)
-              (js/console.error message)
-              (log/error :exception error))))))
+  (set! js/window.onerror
+        (fn [message, _source, _lineno, _colno, error]
+          (when-not (error/ignored? message)
+            (log/error :exception error)))))
 
 (defn- watch-for-date!
   []
@@ -92,8 +92,6 @@
          (fn []
            (js/console.log "db restored, setting up repo hooks")
 
-           (state/pub-event! [:modal/nfs-ask-permission])
-
            (page-handler/init-commands!)
 
            (watch-for-date!)
@@ -105,9 +103,7 @@
 (defn- handle-connection-change
   [e]
   (let [online? (= (gobj/get e "type") "online")]
-    (state/set-online! online?)
-    (state/<invoke-db-worker :thread-api/update-thread-atom
-                             :thread-atom/online-event online?)))
+    (state/set-online! online?)))
 
 (defn set-network-watcher!
   []
@@ -143,55 +139,67 @@
 
 (defn start!
   [render]
+  (let [t1 (util/time-ms)]
+    (p/do!
+     (idb/start)
+     (plugin-handler/setup!)
+     (render))
 
-  (idb/start)
-  (test/setup-test!)
-  (get-system-info)
-  (set-global-error-notification!)
+    (get-system-info)
+    (set-global-error-notification!)
 
-  (register-components-fns!)
-  (user-handler/restore-tokens-from-localstorage)
-  (state/set-db-restoring! true)
-  (when (util/electron?)
-    (el/listen!))
-  (render)
-  (i18n/start)
-  (instrument/init)
-  (state/set-online! js/navigator.onLine)
+    (register-components-fns!)
+    (user-handler/restore-tokens-from-localstorage)
+    (user.login/setup-configure!)
+    (state/set-db-restoring! true)
+    (when (util/electron?)
+      (el/listen!))
 
-  (-> (util/indexeddb-check?)
-      (p/catch (fn [_e]
-                 (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
-                 (state/set-indexedb-support! false))))
+    (i18n/start)
+    (instrument/init)
 
-  (react/run-custom-queries-when-idle!)
+    (react/run-custom-queries-when-idle!)
 
-  (events/run!)
+    (events/run!)
 
-  (p/do!
-   (when (mobile-util/native-platform?)
-     (mobile/mobile-preinit))
-   (-> (p/let [_ (db-browser/start-db-worker!)
-               repos (repo-handler/get-repos)
-               _ (state/set-repos! repos)
-               _ (mobile-util/hide-splash) ;; hide splash as early as ui is stable
-               repo (or (state/get-current-repo) (:url (first repos)))
-               _ (if (empty? repos)
-                   (repo-handler/new-db! config/demo-repo)
-                   (restore-and-setup! repo))]
-         (set-network-watcher!)
-         (when (util/electron?)
-           (persist-db/run-export-periodically!))
-         (when (mobile-util/native-platform?)
-           (state/restore-mobile-theme!)))
-       (p/catch (fn [e]
-                  (js/console.error "Error while restoring repos: " e)))
-       (p/finally (fn []
-                    (state/set-db-restoring! false))))
+    (log/info ::start-web-worker {})
 
-   (util/<app-wake-up-from-sleep-loop (atom false))
+    (p/do!
+     (-> (p/let [t2 (util/time-ms)
+                 _ (db-browser/start-db-worker!)
+                 _ (log/info ::db-worker-spent-time (- (util/time-ms) t2))
+                 repos (repo-handler/get-repos)
+                 _ (state/set-repos! repos)
+                 _ (mobile-util/hide-splash) ;; hide splash as early as ui is stable
+                 repo (or (state/get-current-repo) (:url (first repos)))
+                 _ (if (empty? repos)
+                     (repo-handler/new-db! config/demo-repo)
+                     (restore-and-setup! repo))]
+           (set-network-watcher!)
 
-   (persist-var/load-vars)))
+           (when (util/electron?)
+             (persist-db/run-export-periodically!))
+           (when (mobile-util/native-platform?)
+             (state/restore-mobile-theme!)))
+         (p/catch (fn [e]
+                    (js/console.error "Error while restoring repos: " e)))
+         (p/finally (fn []
+                      (state/set-db-restoring! false)
+                      (p/resolve! state/app-ready-promise true)
+                      (log/info ::app-init-spent-time (- (util/time-ms) t1))
+                      (when-not (util/mobile?)
+                        (p/let [webgpu-available? (db-browser/<check-webgpu-available?)]
+                          (log/info :webgpu-available? webgpu-available?)
+                          (when webgpu-available?
+                            (p/do! (db-browser/start-inference-worker!)
+                                   (db-browser/<connect-db-worker-and-infer-worker!)
+                                   (reset! vector-search-flows/*infer-worker-ready true))))
+                        nil))))
+
+     (util/<app-wake-up-from-sleep-loop (atom false))
+
+     (when-not (util/mobile?)
+       (persist-var/load-vars)))))
 
 (defn stop! []
   (prn "stop!"))

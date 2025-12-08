@@ -3,21 +3,19 @@
   core.async channel to handle them. Any part of the system can dispatch
   one of these events using state/pub-event!"
   (:refer-clojure :exclude [run!])
-  (:require ["@capacitor/filesystem" :refer [Directory Filesystem]]
-            ["@sentry/react" :as Sentry]
+  (:require ["@sentry/react" :as Sentry]
             [cljs-bean.core :as bean]
             [clojure.core.async :as async]
             [clojure.core.async.interop :refer [p->c]]
             [clojure.string :as string]
             [frontend.commands :as commands]
+            [frontend.components.rtc.indicator :as indicator]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.db.conn :as conn]
             [frontend.db.model :as db-model]
-            [frontend.db.persist :as db-persist]
-            [frontend.db.transact :as db-transact]
+            [frontend.db.react :as react]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.fs :as fs]
             [frontend.fs.sync :as sync]
@@ -30,7 +28,6 @@
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.export :as export]
-            [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
@@ -41,7 +38,6 @@
             [frontend.handler.search :as search-handler]
             [frontend.handler.shell :as shell-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.mobile.core :as mobile]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.posthog :as posthog]
             [frontend.modules.outliner.pipeline :as pipeline]
@@ -49,12 +45,13 @@
             [frontend.modules.shortcut.core :as st]
             [frontend.persist-db :as persist-db]
             [frontend.quick-capture :as quick-capture]
-            [frontend.search :as search]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.persist-var :as persist-var]
             [goog.dom :as gdom]
             [lambdaisland.glogi :as log]
+            [logseq.db.frontend.schema :as db-schema]
+            [logseq.shui.ui :as shui]
             [promesa.core :as p]))
 
 ;; TODO: should we move all events here?
@@ -85,29 +82,23 @@
   (when (= (:url repo) current-repo)
     (file-sync-restart!)))
 
-;; FIXME(andelf): awful multi-arty function.
-;; Should use a `-impl` function instead of the awful `skip-ios-check?` param with nested callback.
 (defn- graph-switch
-  ([graph]
-   (graph-switch graph false))
-  ([graph skip-ios-check?]
-   (let [db-based? (config/db-based-graph? graph)]
-     (if (and (mobile-util/native-ios?) (not skip-ios-check?))
-       (state/pub-event! [:validate-appId graph-switch graph])
-       (do
-         (state/set-current-repo! graph)
-         (page-handler/init-commands!)
+  [graph]
+  (react/clear-query-state!)
+  (let [db-based? (config/db-based-graph? graph)]
+    (state/set-current-repo! graph)
+    (page-handler/init-commands!)
          ;; load config
-         (repo-config-handler/restore-repo-config! graph)
-         (when-not (= :draw (state/get-current-route))
-           (route-handler/redirect-to-home!))
-         (when-not db-based?
+    (repo-config-handler/restore-repo-config! graph)
+    (when-not (= :draw (state/get-current-route))
+      (route-handler/redirect-to-home!))
+    (when-not db-based?
            ;; graph-switch will trigger a rtc-start automatically
            ;; (rtc-handler/<rtc-start! graph)
-           (file-sync-restart!))
-         (when-let [dir-name (and (not db-based?) (config/get-repo-dir graph))]
-           (fs/watch-dir! dir-name))
-         (graph-handler/settle-metadata-to-local! {:last-seen-at (js/Date.now)}))))))
+      (file-sync-restart!))
+    (when-let [dir-name (and (not db-based?) (config/get-repo-dir graph))]
+      (fs/watch-dir! dir-name))
+    (graph-handler/settle-metadata-to-local! {:last-seen-at (js/Date.now)})))
 
 ;; Parameters for the `persist-db` function, to show the notification messages
 (defn- graph-switch-on-persisted
@@ -127,15 +118,10 @@
   (state/set-state! :db/async-queries {})
   (st/refresh!)
 
-  (p/let [writes-finished? (state/<invoke-db-worker :thread-api/file-writes-finished? (state/get-current-repo))
-          request-finished? (db-transact/request-finished?)]
+  (p/let [writes-finished? (state/<invoke-db-worker :thread-api/file-writes-finished? (state/get-current-repo))]
     (if (not writes-finished?) ; TODO: test (:sync-graph/init? @state/state)
       (do
-        (log/info :graph/switch (cond->
-                                 {:request-finished? request-finished?
-                                  :file-writes-finished? writes-finished?}
-                                  (false? request-finished?)
-                                  (assoc :unfinished-requests? @db-transact/*unfinished-request-ids)))
+        (log/info :graph/switch {:file-writes-finished? writes-finished?})
         (notification/show!
          "Please wait seconds until all changes are saved for the current graph."
          :warning))
@@ -153,10 +139,12 @@
     (page-handler/<create! page-name opts)))
 
 (defmethod handle :page/deleted [[_ repo page-name file-path tx-meta]]
-  (page-common-handler/after-page-deleted! repo page-name file-path tx-meta))
+  (when-not (util/mobile?)
+    (page-common-handler/after-page-deleted! repo page-name file-path tx-meta)))
 
 (defmethod handle :page/renamed [[_ repo data]]
-  (page-common-handler/after-page-renamed! repo data))
+  (when-not (util/mobile?)
+    (page-common-handler/after-page-renamed! repo data)))
 
 (defmethod handle :page/create-today-journal [[_ _repo]]
   (p/let [_ (page-handler/create-today-journal!)]
@@ -165,6 +153,7 @@
 (defmethod handle :graph/sync-context []
   (let [context {:dev? config/dev?
                  :node-test? util/node-test?
+                 :mobile? (util/mobile?)
                  :validate-db-options (:dev/validate-db-options (state/get-config))
                  :importing? (:graph/importing @state/state)
                  :date-formatter (state/get-date-formatter)
@@ -191,29 +180,32 @@
   (let [db-based? (config/db-based-graph? repo)]
     (p/do!
      (state/pub-event! [:graph/sync-context])
-    ;; re-render-root is async and delegated to rum, so we need to wait for main ui to refresh
-     (when (mobile-util/native-ios?)
-       (js/setTimeout #(mobile/mobile-postinit) 1000))
-    ;; FIXME: an ugly implementation for redirecting to page on new window is restored
+     ;; FIXME: an ugly implementation for redirecting to page on new window is restored
      (repo-handler/graph-ready! repo)
-     (if db-based?
-       (export/auto-db-backup! repo {:backup-now? true})
-       (fs-watcher/load-graph-files! repo)))))
+     (when-not config/publishing?
+       (if db-based?
+         (export/auto-db-backup! repo {:backup-now? true})
+         (fs-watcher/load-graph-files! repo))))))
 
 (defmethod handle :instrument [[_ {:keys [type payload] :as opts}]]
   (when-not (empty? (dissoc opts :type :payload))
     (js/console.error "instrument data-map should only contains [:type :payload]"))
   (posthog/capture type payload))
 
-(defmethod handle :capture-error [[_ {:keys [error payload]}]]
+(defmethod handle :capture-error [[_ {:keys [error payload extra]}]]
   (let [[user-uuid graph-uuid tx-id] @sync/graphs-txid
-        payload (assoc payload
-                       :user-id user-uuid
-                       :graph-id graph-uuid
-                       :tx-id tx-id
-                       :db-based (config/db-based-graph? (state/get-current-repo)))]
+        payload (merge
+                 {:schema-version (str db-schema/version)
+                  :db-schema-version (when-let [db (frontend.db/get-db)]
+                                       (str (:kv/value (frontend.db/entity db :logseq.kv/schema-version))))
+                  :user-id user-uuid
+                  :graph-id graph-uuid
+                  :tx-id tx-id
+                  :db-based (config/db-based-graph? (state/get-current-repo))}
+                 payload)]
     (Sentry/captureException error
-                             (bean/->js {:tags payload}))))
+                             (bean/->js {:tags payload
+                                         :extra extra}))))
 
 (defmethod handle :exec-plugin-cmd [[_ {:keys [pid cmd action]}]]
   (commands/exec-plugin-simple-command! pid cmd action))
@@ -224,105 +216,31 @@
     (st/consume-pending-shortcuts!)))
 
 (defmethod handle :mobile/keyboard-will-show [[_ keyboard-height]]
-  (let [main-node (util/app-scroll-container-node)]
-    (state/set-state! :mobile/show-tabbar? false)
-    (state/set-state! :mobile/show-toolbar? true)
-    (state/set-state! :mobile/show-action-bar? false)
-    (when (= (state/sub :editor/record-status) "RECORDING")
-      (state/set-state! :mobile/show-recording-bar? true))
-    (when (mobile-util/native-ios?)
+  (let [_main-node (util/app-scroll-container-node)]
+    (when-let [^js html (js/document.querySelector ":root")]
+      (.setProperty (.-style html) "--ls-native-kb-height" (str keyboard-height "px"))
+      (.add (.-classList html) "has-mobile-keyboard")
+      (.setProperty (.-style html) "--ls-native-toolbar-opacity" 1))
+    (when (mobile-util/native-platform?)
       (reset! util/keyboard-height keyboard-height)
-      (set! (.. main-node -style -marginBottom) (str keyboard-height "px"))
-      (when-let [^js html (js/document.querySelector ":root")]
-        (.setProperty (.-style html) "--ls-native-kb-height" (str keyboard-height "px"))
-        (.add (.-classList html) "has-mobile-keyboard"))
-      (when-let [left-sidebar-node (gdom/getElement "left-sidebar")]
-        (set! (.. left-sidebar-node -style -bottom) (str keyboard-height "px")))
-      (when-let [right-sidebar-node (gdom/getElementByClass "sidebar-item-list")]
-        (set! (.. right-sidebar-node -style -paddingBottom) (str (+ 150 keyboard-height) "px")))
-      (when-let [card-preview-el (js/document.querySelector ".cards-review")]
-        (set! (.. card-preview-el -style -marginBottom) (str keyboard-height "px")))
-      (when-let [card-preview-el (js/document.querySelector ".encryption-password")]
-        (set! (.. card-preview-el -style -marginBottom) (str keyboard-height "px")))
-      (js/setTimeout (fn []
-                       (when-let [toolbar (.querySelector main-node "#mobile-editor-toolbar")]
-                         (set! (.. toolbar -style -bottom) (str keyboard-height "px"))))
-                     100))))
+      (util/schedule
+       #(some-> (state/get-input)
+                (util/scroll-editor-cursor false))))))
 
 (defmethod handle :mobile/keyboard-will-hide [[_]]
   (let [main-node (util/app-scroll-container-node)]
-    (state/set-state! :mobile/show-toolbar? false)
-    (state/set-state! :mobile/show-tabbar? true)
-    (when (= (state/sub :editor/record-status) "RECORDING")
-      (state/set-state! :mobile/show-recording-bar? false))
+    (when-let [^js html (js/document.querySelector ":root")]
+      (.removeProperty (.-style html) "--ls-native-kb-height")
+      (.setProperty (.-style html) "--ls-native-toolbar-opacity" 0)
+      (.remove (.-classList html) "has-mobile-keyboard"))
     (when (mobile-util/native-ios?)
-      (when-let [^js html (js/document.querySelector ":root")]
-        (.removeProperty (.-style html) "--ls-native-kb-height")
-        (.remove (.-classList html) "has-mobile-keyboard"))
       (when-let [card-preview-el (js/document.querySelector ".cards-review")]
-        (set! (.. card-preview-el -style -marginBottom) "0px"))
-      (when-let [card-preview-el (js/document.querySelector ".encryption-password")]
         (set! (.. card-preview-el -style -marginBottom) "0px"))
       (set! (.. main-node -style -marginBottom) "0px")
       (when-let [left-sidebar-node (gdom/getElement "left-sidebar")]
         (set! (.. left-sidebar-node -style -bottom) "0px"))
       (when-let [right-sidebar-node (gdom/getElementByClass "sidebar-item-list")]
-        (set! (.. right-sidebar-node -style -paddingBottom) "150px"))
-      (when-let [toolbar (.querySelector main-node "#mobile-editor-toolbar")]
-        (set! (.. toolbar -style -bottom) 0)))))
-
-(defn- get-ios-app-id
-  [repo-url]
-  (when repo-url
-    (let [app-id (-> (first (string/split repo-url "/Documents"))
-                     (string/split "/")
-                     last)]
-      app-id)))
-
-(defmethod handle :validate-appId [[_ graph-switch-f graph]]
-  (when-let [deprecated-repo (or graph (state/get-current-repo))]
-    (if (mobile-util/in-iCloud-container-path? deprecated-repo)
-      ;; Installation is not changed for iCloud
-      (when graph-switch-f
-        (graph-switch-f graph true)
-        (state/pub-event! [:graph/ready (state/get-current-repo)]))
-      ;; Installation is changed for App Documents directory
-      (p/let [deprecated-app-id (get-ios-app-id deprecated-repo)
-              current-document-url (.getUri Filesystem #js {:path ""
-                                                            :directory (.-Documents Directory)})
-              current-app-id (-> (js->clj current-document-url :keywordize-keys true)
-                                 get-ios-app-id)]
-        (if (= deprecated-app-id current-app-id)
-          (when graph-switch-f (graph-switch-f graph true))
-          (do
-            (notification/show! [:div "Migrating from previous App installation..."]
-                                :warning
-                                true)
-            (prn ::migrate-app-id :from deprecated-app-id :to current-app-id)
-            (file-sync-stop!)
-            (.unwatch mobile-util/fs-watcher)
-            (let [current-repo (string/replace deprecated-repo deprecated-app-id current-app-id)
-                  current-repo-dir (config/get-repo-dir current-repo)]
-              (try
-                ;; replace app-id part of repo url
-                (reset! conn/conns
-                        (update-keys @conn/conns
-                                     (fn [key]
-                                       (if (string/includes? key deprecated-app-id)
-                                         (string/replace key deprecated-app-id current-app-id)
-                                         key))))
-                (db-persist/rename-graph! deprecated-repo current-repo)
-                (search/remove-db! deprecated-repo)
-                (state/add-repo! {:url current-repo :nfs? true})
-                (state/delete-repo! {:url deprecated-repo})
-                (catch :default e
-                  (js/console.error e)))
-              (state/set-current-repo! current-repo)
-              (repo-config-handler/restore-repo-config! current-repo)
-              (when graph-switch-f (graph-switch-f current-repo true))
-              (.watch mobile-util/fs-watcher #js {:path current-repo-dir})
-              (file-sync-restart!))))
-        (state/pub-event! [:graph/ready (state/get-current-repo)])))))
+        (set! (.. right-sidebar-node -style -paddingBottom) "150px")))))
 
 (defmethod handle :plugin/hook-db-tx [[_ {:keys [blocks tx-data] :as payload}]]
   (when-let [payload (and (seq blocks)
@@ -330,30 +248,11 @@
     (plugin-handler/hook-plugin-db :changed payload)
     (plugin-handler/hook-plugin-block-changes payload)))
 
-(defmethod handle :mobile-file-watcher/changed [[_ ^js event]]
-  (let [type (.-event event)
-        payload (js->clj event :keywordize-keys true)]
-    (fs-watcher/handle-changed! type payload)
-    (when (file-sync-handler/enable-sync?)
-      (sync/file-watch-handler type payload))))
-
 (defmethod handle :rebuild-slash-commands-list [[_]]
   (page-handler/rebuild-slash-commands-list!))
 
 (defmethod handle :shortcut/refresh [[_]]
   (st/refresh!))
-
-(defmethod handle :journal/insert-template [[_ page-name]]
-  (let [page-name (util/page-name-sanity-lc page-name)]
-    (when-let [page (db/get-page page-name)]
-      (p/do!
-       (db-async/<get-block (state/get-current-repo) (:db/id page))
-       (when (db/page-empty? (state/get-current-repo) page-name)
-         (when-let [template (state/get-default-journal-template)]
-           (editor-handler/insert-template!
-            nil
-            template
-            {:target page})))))))
 
 (defmethod handle :editor/set-heading [[_ block heading]]
   (when-let [id (:block/uuid block)]
@@ -361,7 +260,6 @@
 
 (defmethod handle :graph/restored [[_ graph]]
   (when graph (assets-handler/ensure-assets-dir! graph))
-  (mobile/init!)
   (rtc-flows/trigger-rtc-start graph)
   (fsrs/update-due-cards-count)
   (when-not (mobile-util/native-ios?)
@@ -465,19 +363,45 @@
                       (db/entity [:block/uuid (:block/uuid block)])))]
        (js/setTimeout #(editor-handler/edit-block! block :max) 100)))))
 
+(defmethod handle :vector-search/sync-state [[_ state]]
+  (state/set-state! :vector-search/state state))
+
 (defmethod handle :rtc/sync-state [[_ state]]
   (state/update-state! :rtc/state (fn [old] (merge old state))))
 
 (defmethod handle :rtc/log [[_ data]]
   (state/set-state! :rtc/log data))
 
+(defmethod handle :rtc/remote-graph-gone [_]
+  (p/do!
+   (notification/show! "This graph has been removed from Logseq Sync." :warning false)
+   (rtc-handler/<get-remote-graphs)))
+
 (defmethod handle :rtc/download-remote-graph [[_ graph-name graph-uuid graph-schema-version]]
+  (assert (= (:major (db-schema/parse-schema-version db-schema/version))
+             (:major (db-schema/parse-schema-version graph-schema-version)))
+          {:app db-schema/version
+           :remote-graph graph-schema-version})
   (->
    (p/do!
-    (rtc-handler/<rtc-download-graph! graph-name graph-uuid graph-schema-version 60000))
+    (when (util/mobile?)
+      (shui/popup-show!
+       nil
+       (fn []
+         [:div.flex.flex-col.items-center.justify-center.mt-8.gap-4
+          [:div (str "Downloading " graph-name " ...")]
+          (indicator/downloading-logs)])
+       {:id :download-rtc-graph}))
+    (rtc-handler/<rtc-download-graph! graph-name graph-uuid graph-schema-version 60000)
+    (rtc-handler/<get-remote-graphs)
+    (when (util/mobile?)
+      (shui/popup-hide! :download-rtc-graph)))
    (p/catch (fn [e]
               (println "RTC download graph failed, error:")
-              (js/console.error e)))))
+              (log/error :rtc-download-graph-failed e)
+              (shui/popup-hide! :download-rtc-graph)
+              ;; TODO: notify error
+              ))))
 
 ;; db-worker -> UI
 (defmethod handle :db/sync-changes [[_ data]]
@@ -501,8 +425,10 @@
     ;; load all nested children here for copy/export
     (p/all (map (fn [id]
                   (db-async/<get-block (state/get-current-repo) id
-                                       {:nested-children? true
-                                        :skip-refresh? false})) ids))))
+                                       {:skip-refresh? false})) ids))))
+
+(defmethod handle :vector-search/load-model-progress [[_ data]]
+  (state/set-state! :vector-search/load-model-progress data))
 
 (defn run!
   []
@@ -517,6 +443,7 @@
          (p/then (fn [result]
                    (p/resolve! d result)))
          (p/catch (fn [error]
+                    (log/error :event-error error :event (first payload))
                     (let [type :handle-system-events/failed]
                       (state/pub-event! [:capture-error {:error error
                                                          :payload {:type type

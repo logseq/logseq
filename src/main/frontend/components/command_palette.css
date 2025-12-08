@@ -4,14 +4,8 @@
 
   &-main {
     max-height: var(--palettle-container-height);
-    margin: -2rem;
-    overflow: hidden;
-    display: flex;
     flex-direction: column;
-
-    @screen lg {
-      width: var(--ls-main-content-max-width);
-    }
+    width: fit-content;
 
     .menu-link {
       transition: none;
@@ -59,10 +53,6 @@
       overflow-x: hidden;
       overflow-y: auto;
       max-height: calc(var(--palettle-container-height) - var(--palettle-input-height));
-    }
-
-    .input-wrap {
-      height: var(--palettle-input-height);
     }
 
     .cp__palette-input {

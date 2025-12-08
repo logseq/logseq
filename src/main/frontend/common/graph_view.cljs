@@ -5,8 +5,7 @@
             [datascript.core :as d]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [logseq.db.common.property-util :as db-property-util]
-            [logseq.db.frontend.entity-plus :as entity-plus]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.graph-parser.db :as gp-db]))
 
@@ -27,29 +26,31 @@
      pages
      (remove ldb/hidden?)
      (remove nil?)
-     (mapv (fn [p]
-             (let [page-title (:block/title p)
-                   current-page? (= page-title current-page)
-                   color (case [dark? current-page?] ; FIXME: Put it into CSS
-                           [false false] "#999"
-                           [false true]  "#045591"
-                           [true false]  "#93a1a1"
-                           [true true]   "#ffffff")
-                   color (if (contains? tags (:db/id p))
-                           (if dark? "orange" "green")
-                           color)
-                   n (get page-links page-title 1)
-                   size (int (* 8 (max 1.0 (js/Math.cbrt n))))]
-               (cond->
-                {:id (str (:db/id p))
-                 :label page-title
-                 :size size
-                 :color color
-                 :block/created-at (:block/created-at p)}
-                 (contains? page-parents (:db/id p))
-                 (assoc :parent true))))))))
+     (keep (fn [p]
+             (if-let [page-title (:block/title p)]
+               (let [current-page? (= page-title current-page)
+                     color (case [dark? current-page?] ; FIXME: Put it into CSS
+                             [false false] "#999"
+                             [false true]  "#045591"
+                             [true false]  "#93a1a1"
+                             [true true]   "#ffffff")
+                     color (if (contains? tags (:db/id p))
+                             (if dark? "orange" "green")
+                             color)
+                     n (get page-links page-title 1)
+                     size (int (* 8 (max 1.0 (js/Math.cbrt n))))]
+                 (cond->
+                  {:id (str (:db/id p))
+                   :label page-title
+                   :size size
+                   :color color
+                   :block/created-at (:block/created-at p)}
+                   (contains? page-parents (:db/id p))
+                   (assoc :parent true)))
+               (js/console.error (str "Page doesn't have :block/title " p)))))
+     vec)))
 
-                  ;; slow
+;; slow
 (defn- uuid-or-asset?
   [label]
   (or (common-util/uuid-string? label)
@@ -85,7 +86,7 @@
         db-based? (entity-plus/db-based-graph? db)
         created-ats (map :block/created-at full-pages)
 
-            ;; build up nodes
+        ;; build up nodes
         full-pages'
         (cond->> full-pages
           created-at-filter
@@ -94,7 +95,9 @@
           (remove ldb/journal?)
           (not excluded-pages?)
           (remove (fn [p] (true?
-                           (get p (db-property-util/get-pid-2 db :logseq.property/exclude-from-graph-view))))))
+                           (if db-based?
+                             (get p :logseq.property/exclude-from-graph-view)
+                             (get-in p [:block/properties :exclude-from-graph-view]))))))
         links (concat relation tagged-pages namespaces)
         linked (set (mapcat identity links))
         build-in-pages (->> (if db-based? sqlite-create-graph/built-in-pages-names gp-db/built-in-pages-names)

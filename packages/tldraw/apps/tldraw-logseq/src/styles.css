@@ -859,7 +859,8 @@ html[data-theme='dark'] {
 .tl-toolbar-separator {
   background-color: var(--ls-border-color, var(--rx-gray-06));
   width: 1px;
-  opacity: 0.9;
+  height: 24px;
+  opacity: 0.6;
 
   &[data-orientation='horizontal'] {
     height: 1px;

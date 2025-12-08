@@ -2,7 +2,7 @@
   "Main ns for providing test fns for DB graphs"
   (:require [datascript.core :as d]
             [datascript.impl.entity :as de]
-            [logseq.db.frontend.entity-plus :as entity-plus]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.build :as sqlite-build]
@@ -63,7 +63,7 @@
        (mapv (fn [[k v]]
                [k
                 (cond
-                  (= :block/tags k)
+                  (#{:block/tags :logseq.property.class/extends} k)
                   (mapv :db/ident v)
                   (and (set? v) (every? de/entity? v))
                   (set (map db-property/property-value-content v))

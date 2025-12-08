@@ -3,17 +3,16 @@
 (ns frontend.util.fs
   "Misc util fns built on top of frontend.fs"
   (:require ["path" :as node-path]
-            [clojure.string :as string]
-            [frontend.fs :as fs]
-            [frontend.config :as config]
-            [promesa.core :as p]
             [cljs.reader :as reader]
-            [frontend.common.file.util :as wfu]))
+            [clojure.string :as string]
+            [frontend.common.file.util :as wfu]
+            [frontend.config :as config]
+            [frontend.fs :as fs]
+            [promesa.core :as p]))
 
 ;; NOTE: This is not the same ignored-path? as src/electron/electron/utils.cljs.
 ;;       The assets directory is ignored.
 ;;
-;; When in nfs-mode, dir is "", path is relative path to graph dir.
 ;; When in native-mode, dir and path are absolute paths.
 (defn ignored-path?
   "Ignore path for ls-dir-files-with-handler! and reload-dir!"
@@ -51,20 +50,8 @@
                     txid-meta (and txid-str (reader/read-string txid-str))]
               txid-meta)
             (p/catch
-                (fn [^js e]
-                  (js/console.error "[fs read txid data error]" e))))))))
-
-(defn inflate-graphs-info
-  [graphs]
-  (if (seq graphs)
-    (p/all (for [{:keys [root] :as graph} graphs]
-             (p/let [sync-meta (read-graphs-txid-info root)]
-               (if sync-meta
-                 (assoc graph
-                        :sync-meta sync-meta
-                        :GraphUUID (second sync-meta))
-                 graph))))
-    []))
+             (fn [^js e]
+               (js/console.error "[fs read txid data error]" e))))))))
 
 (defn read-repo-file
   [repo-url file-rpath]

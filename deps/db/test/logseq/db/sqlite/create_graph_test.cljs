@@ -84,9 +84,9 @@
     (is (= (count (dissoc db-class/built-in-classes :logseq.class/Root))
            (count (->> (d/datoms @conn :avet :block/tags :logseq.class/Tag)
                        (map #(d/entity @conn (:e %)))
-                       (mapcat :logseq.property/_parent)
+                       (mapcat :logseq.property.class/_extends)
                        set)))
-        "Reverse lookup of :logseq.property/parent correctly fetches number of child classes")))
+        "Reverse lookup of :logseq.property.class/extends correctly fetches number of child classes")))
 
 (deftest new-graph-initializes-default-properties-correctly
   (let [conn (db-test/create-conn)]
@@ -104,30 +104,30 @@
 
     ;; testing :properties config
     (testing "A built-in property that has"
-      (is (= :logseq.task/status.todo
-             (-> (d/entity @conn :logseq.task/status)
+      (is (= :logseq.property/status.todo
+             (-> (d/entity @conn :logseq.property/status)
                  :logseq.property/default-value
                  :db/ident))
           "A property with a :db/ident property value is created correctly")
-      (is (-> (d/entity @conn :logseq.task/deadline)
+      (is (-> (d/entity @conn :logseq.property/deadline)
               :logseq.property/description
               db-property/property-value-content
               str
               (string/includes? "finish something"))
           "A :default property is created correctly")
       (is (= true
-             (-> (d/entity @conn :logseq.task/status)
+             (-> (d/entity @conn :logseq.property/status)
                  :logseq.property/enable-history?))
           "A :checkbox property is created correctly")
       (is (= 1
-             (-> (d/entity @conn :logseq.task/recur-frequency)
+             (-> (d/entity @conn :logseq.property.repeat/recur-frequency)
                  :logseq.property/default-value
                  db-property/property-value-content))
           "A numeric property is created correctly"))))
 
 (deftest new-graph-is-valid
   (let [conn (db-test/create-conn)
-        validation (db-validate/validate-db! @conn)]
+        validation (db-validate/validate-local-db! @conn)]
     ;; For debugging
     ;; (println (count (:errors validation)) "errors of" (count (:entities validation)))
     ;; (cljs.pprint/pprint (:errors validation))
@@ -149,7 +149,7 @@
                    ;; :url macros are used for consistently building urls with the same hostname e.g. docs graph
                    {:block/title "b2" :build/properties {:url "{{docs-base-url test}}"}}]}]})
 
-      (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+      (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
           "Graph with different :url blocks has no validation errors"))))
 
 (deftest build-db-initial-data-test

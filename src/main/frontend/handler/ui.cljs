@@ -98,7 +98,7 @@
             (> (count fragment) 36)
             (subs fragment (- (count fragment) 36)))]
     (if (and id (util/uuid-string? id))
-      (let [elements (array-seq (js/document.getElementsByClassName (str "id" id)))]
+      (let [elements (util/get-blocks-by-id id)]
         (when (first elements)
           (util/scroll-to-element (gobj/get (first elements) "id")))
         (state/exit-editing-and-set-selected-blocks! elements))
@@ -123,6 +123,11 @@
   (when-let [el-style (gdom/getElement "logseq-custom-theme-id")]
     (dom/remove! el-style))
   (add-style-if-exists!))
+
+(defn set-file-graph-flag!
+  [file-graph?]
+  (apply (if file-graph? dom/add-class! dom/remove-class!)
+         [js/document.documentElement "is-file-graph"]))
 
 (def *js-execed (atom #{}))
 
@@ -288,7 +293,7 @@
                         (not show?))}))))
 
 (defn scroll-to-anchor-block
-  [ref blocks gallery?]
+  [^js ref blocks gallery?]
   (when ref
     (let [anchor (get-in (state/get-route-match) [:query-params :anchor])
           anchor-id (when (and anchor (string/starts-with? anchor "ls-block-"))

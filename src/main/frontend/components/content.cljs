@@ -22,12 +22,11 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.ref :as ref]
             [frontend.util.url :as url-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [logseq.common.util :as common-util]
-            [logseq.common.util.block-ref :as block-ref]
-            [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -121,13 +120,17 @@
 
      (shui/dropdown-menu-item
       {:key "Expand all"
-       :on-click editor-handler/expand-all-selection!}
+       :on-pointer-down (fn [e]
+                          (util/stop e)
+                          (editor-handler/expand-all-selection!))}
       (t :editor/expand-block-children)
       (shui/dropdown-menu-shortcut (ui/keyboard-shortcut-from-config :editor/expand-block-children)))
 
      (shui/dropdown-menu-item
       {:key "Collapse all"
-       :on-click editor-handler/collapse-all-selection!}
+       :on-pointer-down (fn [e]
+                          (util/stop e)
+                          (editor-handler/collapse-all-selection!))}
       (t :editor/collapse-block-children)
       (shui/dropdown-menu-shortcut (ui/keyboard-shortcut-from-config :editor/collapse-block-children)))]))
 
@@ -232,18 +235,14 @@
          (shui/dropdown-menu-item
           {:key      "Copy block ref"
            :on-click (fn [_e]
-                       (editor-handler/copy-block-ref! block-id
-                                                       (if db? page-ref/->page-ref block-ref/->block-ref)))}
+                       (editor-handler/copy-block-ref! block-id ref/->block-ref))}
           (t :content/copy-block-ref))
 
          (when-not db?
            (shui/dropdown-menu-item
             {:key      "Copy block embed"
              :on-click (fn [_e]
-                         (editor-handler/copy-block-ref! block-id
-                                                         (if db?
-                                                           block-ref/->block-ref
-                                                           #(util/format "{{embed ((%s))}}" %))))}
+                         (editor-handler/copy-block-ref! block-id #(util/format "{{embed ((%s))}}" %)))}
             (t :content/copy-block-emebed)))
 
          ;; TODO Logseq protocol mobile support

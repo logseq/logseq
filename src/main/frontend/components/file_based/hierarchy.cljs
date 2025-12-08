@@ -2,7 +2,7 @@
   (:require [clojure.string :as string]
             [frontend.components.block :as block]
             [frontend.db :as db]
-            [frontend.db.model :as db-model]
+            [frontend.db.file-based.model :as file-model]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -23,15 +23,15 @@
       (when-let [page (or (first (filter text/namespace-page? all-page-names))
                           (when (:block/_namespace (db/entity [:block/name (util/page-name-sanity-lc page)]))
                             page))]
-        (let [namespace-pages (db/get-namespace-pages repo page)
-              parent-routes (db-model/get-page-namespace-routes repo page)
+        (let [namespace-pages (file-model/get-namespace-pages repo page)
+              parent-routes (file-model/get-page-namespace-routes repo page)
               pages (->> (concat namespace-pages parent-routes)
                          (distinct)
                          (sort-by :block/name)
                          (map (fn [page]
                                 (or (:block/title page) (:block/name page))))
                          (map #(string/split % "/")))
-              page-namespace (db-model/get-page-namespace repo page)
+              page-namespace (file-model/get-page-namespace repo page)
               page-namespace (util/get-page-title page-namespace)]
           (cond
             (seq pages)
@@ -60,10 +60,7 @@
                (when (and (string? page) page)
                  (let [full-page (->> (take (inc idx) namespace)
                                       util/string-join-path)]
-                   (block/page-reference false
-                                         full-page
-                                         {}
-                                         page))))
+                   (block/page-reference {} full-page page))))
              (interpose [:span.mx-2.opacity-30 "/"]))])]
         {:default-collapsed? false
          :title-trigger? true})])))

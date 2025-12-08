@@ -1,11 +1,11 @@
 (ns frontend.db.query-react-test
-  (:require [cljs.test :refer [deftest is use-fixtures]]
-            [cljs-time.core :as t]
+  (:require [cljs-time.core :as t]
+            [cljs.test :refer [deftest is use-fixtures]]
             [clojure.string :as string]
-            [logseq.db.frontend.inputs :as db-inputs]
-            [frontend.test.helper :as test-helper :refer [load-test-files]]
             [frontend.db.query-custom :as query-custom]
-            [goog.string :as gstring]))
+            [frontend.test.helper :as test-helper :refer [load-test-files]]
+            [goog.string :as gstring]
+            [logseq.db.frontend.inputs :as db-inputs]))
 
 (use-fixtures :each {:before test-helper/start-test-db!
                      :after test-helper/destroy-test-db!})
@@ -14,7 +14,7 @@
   "Use custom-query over react-query for testing since it tests react-query and
 adds rules that users often use"
   [query & [opts]]
-  (when-let [result (query-custom/custom-query test-helper/test-db query opts)]
+  (when-let [result (last (query-custom/custom-query test-helper/test-db query opts))]
     (map first (deref result))))
 
 (defn- blocks-created-between-inputs [a b]
@@ -31,17 +31,16 @@ adds rules that users often use"
                                 [(>= ?timestamp ?start)]
                                 [(<= ?timestamp ?end)]]}))))
 
-
 (defn- blocks-with-tag-on-specified-current-page [& {:keys [current-page tag]}]
   (map :block/title (custom-query {:title "Query title"
-                                     :inputs [:current-page tag]
-                                     :query '[:find (pull ?b [*])
-                                              :in $ ?current-page ?tag-name
-                                              :where [?b :block/page ?bp]
-                                              [?bp :block/name ?current-page]
-                                              [?b :block/ref-pages ?t]
-                                              [?t :block/name ?tag-name]]}
-                                    {:current-page-fn (constantly current-page)})))
+                                   :inputs [:current-page tag]
+                                   :query '[:find (pull ?b [*])
+                                            :in $ ?current-page ?tag-name
+                                            :where [?b :block/page ?bp]
+                                            [?bp :block/name ?current-page]
+                                            [?b :block/ref-pages ?t]
+                                            [?t :block/name ?tag-name]]}
+                                  {:current-page-fn (constantly current-page)})))
 
 ;; These tests rely on seeding timestamps with properties. If this ability goes
 ;; away we could still test page-level timestamps

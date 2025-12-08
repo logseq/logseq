@@ -2,12 +2,10 @@
   (:require [cljs.test :refer [use-fixtures deftest is testing]]
             [datascript.core :as d]
             [frontend.db :as db]
-            [frontend.db.conn :as conn]
             [frontend.db.model :as model]
             [frontend.test.helper :as test-helper]
             [logseq.db :as ldb]
-            [logseq.db.frontend.class :as db-class]
-            [logseq.db.test.helper :as db-test]))
+            [logseq.db.frontend.class :as db-class]))
 
 (def repo test-helper/test-db-name-db-version)
 
@@ -24,7 +22,7 @@
 (use-fixtures :each start-and-destroy-db)
 
 (deftest get-all-classes-test
-  (let [opts {:redirect? false :create-first-block? false :class? true}
+  (let [opts {:redirect? false :class? true}
         _ (test-helper/create-page! "class1" opts)
         _ (test-helper/create-page! "class2" opts)]
     (is (= (set
@@ -35,8 +33,10 @@
              ["class1" "class2"]))
            (set (map :block/title (model/get-all-classes repo)))))))
 
+;; TODO: Async test
 (deftest ^:fix-me get-class-objects-test
-  (let [opts {:redirect? false :create-first-block? false :class? true}
+  (let [opts {:class? true
+              :redirect? false}
         _ (test-helper/create-page! "class1" opts)
         class (db/get-case-page "class1")
         _ (test-helper/save-block! repo fbid "Block 1" {:tags ["class1"]})]
@@ -48,33 +48,21 @@
       ;; set class2's parent to class1
       (let [class2 (db/get-case-page "class2")]
         (db/transact! [{:db/id (:db/id class2)
-                        :logseq.property/parent (:db/id class)}]))
+                        :logseq.property.class/extends (:db/id class)}]))
       (test-helper/save-block! repo sbid "Block 2" {:tags ["class2"]})
       (is (= (map :db/id (model/get-class-objects repo (:db/id class)))
              [(:db/id (db/entity [:block/uuid fbid]))
               (:db/id (db/entity [:block/uuid sbid]))])))))
 
-(deftest get-classes-with-property-test
-  (let [conn (db-test/create-conn-with-blocks
-              {:properties {:prop1 {:logseq.property/type :default}}
-               :classes
-               {:Class1 {:build/class-properties [:prop1]}
-                :Class2 {:build/class-properties [:prop1]}}})
-        property (d/entity @conn :user.property/prop1)
-        classes (with-redefs [conn/get-db (constantly @conn)]
-                  (model/get-classes-with-property (:db/ident property)))]
-    (is (= ["Class1" "Class2"]
-           (map :block/title classes)))))
-
 (deftest hidden-page-test
-  (let [opts {:redirect? false :create-first-block? false}
+  (let [opts {:redirect? false}
         _ (test-helper/create-page! "page 1" opts)]
     (is (false? (model/hidden-page? (db/get-page "page 1"))))
     (is (true? (model/hidden-page? "$$$test")))
     (is (true? (model/hidden-page? (str "$$$" (random-uuid)))))))
 
 (deftest get-class-children-test
-  (let [opts {:redirect? false :create-first-block? false :class? true}
+  (let [opts {:redirect? false}
         _ (test-helper/create-page! "class1" opts)
         _ (test-helper/create-page! "class2" opts)
         _ (test-helper/create-page! "class3" opts)
@@ -82,9 +70,9 @@
         class2 (db/get-case-page "class2")
         class3 (db/get-case-page "class3")
         _ (db/transact! [{:db/id (:db/id class2)
-                          :logseq.property/parent (:db/id class1)}
+                          :logseq.property.class/extends (:db/id class1)}
                          {:db/id (:db/id class3)
-                          :logseq.property/parent (:db/id class2)}])]
+                          :logseq.property.class/extends (:db/id class2)}])]
     (is
      (= (model/get-structured-children repo (:db/id (db/get-case-page "class1")))
         [(:db/id class2) (:db/id class3)]))))

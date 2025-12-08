@@ -139,32 +139,8 @@ We have unit, performance and end to end tests.
 ### End to End Tests
 
 Even though we have a nightly release channel, it's hard for testing users (thanks to the brave users!) to notice all issues in a limited time, as Logseq is covering so many features.
-The only solution is automatic end-to-end tests - adding tests for GUI software is always painful but necessary. See https://github.com/logseq/logseq/pulls?q=E2E for e2e test examples.
 
-To run end to end tests
-
-```sh
-yarn electron-watch
-# in another shell
-yarn e2e-test # or npx playwright test
-```
-
-If e2e failed after first running:
-- `rm -rdf ~/.logseq`
-- `rm -rdf ~/.config/Logseq`
-- `rm -rdf <repo dir>/tmp/`
-- Windows: `rmdir /s %APPDATA%/Electron`  (Reference: https://www.electronjs.org/de/docs/latest/api/app#appgetpathname)
-
-There's a `traceAll()` helper function to enable playwright trace file dump for specific test files https://github.com/logseq/logseq/pull/8332
-
-If e2e tests fail in the file, they can be debugged by examining a trace dump with [the
-playwright trace
-viewer](https://playwright.dev/docs/trace-viewer#recording-a-trace).
-
-Locally this will get dumped into e2e-dump/.
-
-On CI the trace file will be under Artifacts at the bottom of a run page e.g.
-https://github.com/logseq/logseq/actions/runs/3574600322.
+To run end to end tests, see [clj-e2e tests](/clj-e2e/README.md).
 
 ### Unit Testing
 
@@ -377,7 +353,7 @@ These tasks are specific to database graphs. For these tasks there is a one time
   ```sh
   $ bb dev:db-query woot '[:find (pull ?b [*]) :where (block-content ?b "Dogma")]'
   DB contains 833 datoms
-  [{:block/tx-id 536870923, :block/link #:db{:id 100065}, :block/uuid #uuid "65565c26-f972-4400-bce4-a15df488784d", :block/updated-at 1700158508564, :block/order "a0", :block/refs [#:db{:id 100064}], :block/created-at 1700158502056, :block/format :markdown, :block/tags [#:db{:id 100064}], :block/title "Dogma #[[65565c2a-b1c5-4dc8-a0f0-81b786bc5c6d]]", :db/id 100090, :block/path-refs [#:db{:id 100051} #:db{:id 100064}], :block/parent #:db{:id 100051}, :block/page #:db{:id 100051}}]
+  [{:block/tx-id 536870923, :block/link #:db{:id 100065}, :block/uuid #uuid "65565c26-f972-4400-bce4-a15df488784d", :block/updated-at 1700158508564, :block/order "a0", :block/refs [#:db{:id 100064}], :block/created-at 1700158502056, :block/format :markdown, :block/tags [#:db{:id 100064}], :block/title "Dogma #[[65565c2a-b1c5-4dc8-a0f0-81b786bc5c6d]]", :db/id 100090, :block/parent #:db{:id 100051}, :block/page #:db{:id 100051}}]
   ```
 
 * `dev:db-transact` - Run a `d/transact!` against the queried results of a DB graph
@@ -448,9 +424,6 @@ These tasks are specific to database graphs. For these tasks there is a one time
     [162 :block/format :markdown 536871037 true]
     [162 :block/page 149 536871037 true]
     [162 :block/parent 149 536871037 true]
-    [162 :block/path-refs 108 536871044 true]
-    [162 :block/path-refs 149 536871044 true]
-    [162 :block/path-refs 160 536871044 true]
     [162
     :block/properties
     {#uuid "21be4275-bba9-48b8-9351-c9ca27883159"
@@ -486,9 +459,6 @@ These tasks are specific to database graphs. For these tasks there is a one time
     [162 :block/order "a0" 536871037 true]
     [162 :block/page 149 536871037 true]
     [162 :block/parent 149 536871037 true]
-    [162 :block/path-refs 108 536871044 true]
-    [162 :block/path-refs 149 536871044 true]
-    [162 :block/path-refs 160 536871044 true]
     [162
     :block/properties
     {#uuid "21be4275-bba9-48b8-9351-c9ca27883159"

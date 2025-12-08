@@ -8,8 +8,8 @@
             [frontend.modules.shortcut.data-helper :as dh]
             [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.state :as state]
-            [frontend.util :as util]
             [frontend.storage :as storage]
+            [frontend.util :as util]
             [goog.events :as events]
             [goog.ui.KeyboardShortcutHandler.EventType :as EventType]
             [lambdaisland.glogi :as log])
@@ -184,9 +184,9 @@
       :will-remount
       (fn [old-state new-state]
         (util/profile "[shortcuts] reinstalled:"
-                      (uninstall-shortcut-handler! (::install-id old-state))
-                      (when-let [install-id (install-shortcut-handler! handler-id {:state new-state})]
-                        (assoc new-state ::install-id install-id))))))))
+          (uninstall-shortcut-handler! (::install-id old-state))
+          (when-let [install-id (install-shortcut-handler! handler-id {:state new-state})]
+            (assoc new-state ::install-id install-id))))))))
 
 (defn mixin*
   "This is an optimized version compared to (mixin).
@@ -219,13 +219,13 @@
    (doseq [{:keys [handler group dispatch-fn]} (vals @*installed-handlers)
            :when (not= group :shortcut.handler/misc)]
      (if dispose?
-       (.dispose handler)
+       (.dispose ^js handler)
        (events/unlisten handler EventType/SHORTCUT_TRIGGERED dispatch-fn)))))
 
 (defn listen-all! []
   (doseq [{:keys [handler group dispatch-fn]} (vals @*installed-handlers)
           :when (not= group :shortcut.handler/misc)]
-    (if (.isDisposed handler)
+    (if (.isDisposed ^js handler)
       (install-shortcut-handler! group {})
       (events/listen handler EventType/SHORTCUT_TRIGGERED dispatch-fn))))
 
@@ -282,15 +282,15 @@
                 (dissoc id)
 
                 (and global?
-                  (or (string? binding)
-                    (vector? binding)
-                    (boolean? binding)))
+                     (or (string? binding)
+                         (vector? binding)
+                         (boolean? binding)))
                 (assoc id binding)))]
       ;; TODO: exclude current graph config shortcuts
       (config-handler/set-config!
-        :shortcuts (into-shortcuts (:shortcuts (state/get-graph-config))))
+       :shortcuts (into-shortcuts (:shortcuts (state/get-graph-config))))
       (if (util/electron?)
         (global-config-handler/set-global-config-kv!
-          :shortcuts (into-shortcuts (:shortcuts (state/get-global-config))))
+         :shortcuts (into-shortcuts (:shortcuts (state/get-global-config))))
         ;; web browser platform
         (storage/set :ls-shortcuts (into-shortcuts (storage/get :ls-shortcuts)))))))

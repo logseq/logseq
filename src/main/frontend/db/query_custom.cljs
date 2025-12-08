@@ -2,7 +2,7 @@
   "Handles executing custom queries a.k.a. advanced queries"
   (:require [clojure.walk :as walk]
             [frontend.config :as config]
-            [frontend.db.model :as model]
+            [frontend.db.file-based.model :as file-model]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.db.query-react :as query-react]
             [frontend.state :as state]
@@ -13,7 +13,7 @@
 ;; FIXME: what if users want to query other attributes than block-attrs?
 (defn- replace-star-with-block-attrs!
   [l]
-  (let [block-attrs (butlast model/file-graph-block-attrs)]
+  (let [block-attrs (butlast file-model/file-graph-block-attrs)]
     (walk/postwalk
      (fn [f]
        (if (and (list? f)
@@ -80,7 +80,7 @@
                         (assoc query-opts :query-string (str query)))]
      (if (or (list? (:query query'))
              (not= :find (first (:query query')))) ; dsl query
-       (query-dsl/custom-query repo query' query-opts)
+       [nil (query-dsl/custom-query repo query' query-opts)]
        (query-react/react-query repo
                                 (add-rules-to-query query' {:db-graph? db-graph?})
                                 query-opts)))))

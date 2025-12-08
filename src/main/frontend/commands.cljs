@@ -18,6 +18,7 @@
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.util.file-based.priority :as priority]
+            [frontend.util.ref :as ref]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [logseq.common.config :as common-config]
@@ -125,7 +126,7 @@
 (defn db-based-statuses
   []
   (map (fn [e] (:block/title e))
-       (db-pu/get-closed-property-values :logseq.task/status)))
+       (db-pu/get-closed-property-values :logseq.property/status)))
 
 (defn db-based-embed-page
   []
@@ -259,8 +260,8 @@
 
 (defn db-based-priorities
   []
-  (map (fn [e] (:block/title e))
-       (db-pu/get-closed-property-values :logseq.task/priority)))
+  (map (fn [e] (str "Priority " (:block/title e)))
+       (db-pu/get-closed-property-values :logseq.property/priority)))
 
 (defn get-priorities
   []
@@ -271,7 +272,8 @@
                   (db-based-priorities)
                   (file-based-priorities))
                 (mapv (fn [item]
-                        (let [command item]
+                        (let [command item
+                              item (string/replace item #"^Priority " "")]
                           [command
                            (->priority item)
                            (str "Set priority to " item)
@@ -357,10 +359,20 @@
 
       ;; task management
       (get-statuses)
-      [["Deadline" [[:editor/clear-current-slash]
-                    [:editor/set-deadline]] "" :icon/calendar-stats]
-       ["Scheduled" [[:editor/clear-current-slash]
-                     [:editor/set-scheduled]] "" :icon/calendar-month]]
+
+      ;; task date
+      [["Deadline"
+        [[:editor/clear-current-slash]
+         [:editor/set-deadline]]
+        ""
+        :icon/calendar-stats
+        "TASK DATE"]
+       ["Scheduled"
+        [[:editor/clear-current-slash]
+         [:editor/set-scheduled]]
+        ""
+        :icon/calendar-month
+        "TASK DATE"]]
 
       ;; priority
       (get-priorities)
@@ -423,16 +435,15 @@
          ["Draw" (fn []
                    (let [file (draw/file-name)
                          path (str common-config/default-draw-directory "/" file)
-                         text (page-ref/->page-ref path)]
+                         text (ref/->page-ref path)]
                      (p/let [_ (draw/create-draw-with-default-content path)]
                        (println "draw file created, " path))
                      text)) "Draw a graph with Excalidraw"])
 
-       (when (util/electron?)
-         ["Upload an asset"
-          [[:editor/click-hidden-file-input :id]]
-          "Upload file types like image, pdf, docx, etc.)"
-          :icon/upload])
+       ["Upload an asset"
+        [[:editor/click-hidden-file-input :id]]
+        "Upload file types like image, pdf, docx, etc.)"
+        :icon/upload]
 
        ["Template" [[:editor/input command-trigger nil]
                     [:editor/search-template]] "Insert a created template here"
@@ -581,16 +592,10 @@
                       (count value)
                       (or forward-pos 0))
                    (or backward-pos 0))]
-    (state/set-edit-content! (state/get-edit-input-id)
-                             (str prefix value))
-    ;; HACK: save scroll-pos of current pos, then add trailing content
-    (let [scroll-container (util/nearest-scrollable-container input)
-          scroll-pos (.-scrollTop scroll-container)]
-      (state/set-block-content-and-last-pos! id new-value new-pos)
-      (cursor/move-cursor-to input new-pos)
-      (set! (.-scrollTop scroll-container) scroll-pos)
-      (when check-fn
-        (check-fn new-value (dec (count prefix)) new-pos)))))
+    (state/set-block-content-and-last-pos! id new-value new-pos)
+    (cursor/move-cursor-to input new-pos)
+    (when check-fn
+      (check-fn new-value (dec (count prefix)) new-pos))))
 
 (defn simple-replace!
   [id value selected
@@ -746,7 +751,7 @@
 (defn- db-based-set-status
   [status]
   (when-let [block (state/get-edit-block)]
-    (db-property-handler/batch-set-property-closed-value! [(:block/uuid block)] :logseq.task/status status)))
+    (db-property-handler/batch-set-property-closed-value! [(:block/uuid block)] :logseq.property/status status)))
 
 (defmethod handle-step :editor/set-status [[_ status] format]
   (if (config/db-based-graph? (state/get-current-repo))
@@ -759,12 +764,13 @@
       (db-property-handler/set-block-property! (:db/id block) property-id value))))
 
 (defmethod handle-step :editor/set-property-on-block-property [[_ block-property-id property-id value]]
-  (when (config/db-based-graph? (state/get-current-repo))
-    (let [updated-block (when-let [block-uuid (:block/uuid (state/get-edit-block))]
-                          (db/entity [:block/uuid block-uuid]))
-          block-property-value (get updated-block block-property-id)]
-      (when block-property-value
-        (db-property-handler/set-block-property! (:db/id block-property-value) property-id value)))))
+  (let [repo (state/get-current-repo)]
+    (when (config/db-based-graph? repo)
+      (let [updated-block (when-let [block-uuid (:block/uuid (state/get-edit-block))]
+                            (db/entity [:block/uuid block-uuid]))
+            block-property-value (get updated-block block-property-id)]
+        (when block-property-value
+          (db-property-handler/set-block-property! (:db/id block-property-value) property-id value))))))
 
 (defmethod handle-step :editor/upsert-type-block [[_ type lang]]
   (when (config/db-based-graph? (state/get-current-repo))
@@ -785,8 +791,8 @@
   [priority]
   (when-let [block (state/get-edit-block)]
     (if (nil? priority)
-      (db-property-handler/remove-block-property! (:block/uuid block) :logseq.task/priority)
-      (db-property-handler/batch-set-property-closed-value! [(:block/uuid block)] :logseq.task/priority priority))))
+      (db-property-handler/set-block-property! (:block/uuid block) :logseq.property/priority :logseq.property/empty-placeholder)
+      (db-property-handler/batch-set-property-closed-value! [(:block/uuid block)] :logseq.property/priority priority))))
 
 (defmethod handle-step :editor/set-priority [[_ priority] _format]
   (if (config/db-based-graph? (state/get-current-repo))
@@ -926,11 +932,8 @@
 
 (defn handle-steps
   [vector' format]
-  (if (config/db-based-graph? (state/get-current-repo))
-    (p/doseq [step vector']
-      (handle-step step format))
-    (doseq [step vector']
-      (handle-step step format))))
+  (p/doseq [step vector']
+    (handle-step step format)))
 
 (defn exec-plugin-simple-command!
   [pid {:keys [block-id] :as cmd} action]

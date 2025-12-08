@@ -7,7 +7,7 @@
             [electron.ipc :as ipc]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.db.model :as db-model]
+            [frontend.db.file-based.model :as file-model]
             [frontend.fs.sync :as sync]
             [frontend.fs.watcher-handler :as watcher-handler]
             [frontend.handler.file-sync :as file-sync-handler]
@@ -95,7 +95,7 @@
                            (notification/show! (str "Open link failed. Block-id `" block-id "` doesn't exist in the graph.") :error false)))
 
                        file
-                       (if-let [db-page-name (db-model/get-file-page file false)]
+                       (if-let [db-page-name (file-model/get-file-page file false)]
                          (route-handler/redirect-to-page! db-page-name)
                          (notification/show! (str "Open link failed. File `" file "` doesn't exist in the graph.") :error false))))))
 
@@ -130,19 +130,22 @@
                          method' (last ns-method)
                          args    (.-args data)
                          ret-fn! #(ipc/invoke (str :electron.server/sync! sync-id) %)
-                         app? (contains? #{"app" "editor"} ns')
+                         app? (contains? #{"app" "editor" "db" "cli"} ns')
                          ^js sdk1 (aget js/window.logseq "api")
                          ^js sdk2 (aget js/window.logseq "sdk")]
 
                      (try
-                       (println "invokeLogseqAPI:" method)
+                       (println "invokeLogseqAPI:" method ", args:" args)
                        (let [^js methodTarget (if app? sdk1 (aget sdk2 ns'))]
                          (when-not methodTarget
                            (throw (js/Error. (str "MethodNotExist: " method))))
                          (-> (p/promise (apply js-invoke methodTarget method' args))
                              (p/then #(ret-fn! %))
-                             (p/catch #(ret-fn! {:error %}))))
-                       (catch js/Error e
+                             (p/catch #(do
+                                         (js/console.error "Unexpected error:" %)
+                                         (ret-fn! {:error (.-message %)})))))
+                       (catch :default e
+                         (js/console.error "Unexpected error:" e)
                          (ret-fn! {:error (.-message e)}))))))
 
   (safe-api-call "syncAPIServerState"

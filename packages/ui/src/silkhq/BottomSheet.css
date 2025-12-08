@@ -1,0 +1,34 @@
+.BottomSheet-view {
+  /* SELF-LAYOUT */
+  z-index: 1;
+  /* Adding 60px to make it fully visible below iOS Safari's bottom UI */
+  height: calc(var(--silk-100-lvh-dvh-pct) + 60px);
+}
+
+.BottomSheet-content {
+  /* SELF-LAYOUT */
+  box-sizing: border-box;
+  height: auto;
+  min-height: 100px;
+}
+
+.BottomSheet-bleedingBackground {
+  /* APPEARANCE */
+  border-radius: 24px;
+  background-color: white;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
+
+.BottomSheet-handle {
+  /* SELF-LAYOUT */
+  width: 50px;
+  height: 6px;
+
+  /* APPEARANCE */
+  border: 0;
+  border-radius: 9999px;
+  background-color: rgb(209, 213, 219);
+
+  /* INTERACTIVITY */
+  cursor: pointer;
+}

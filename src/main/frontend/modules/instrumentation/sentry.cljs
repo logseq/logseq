@@ -16,16 +16,18 @@
                          version)
    :environment (if config/dev? "development" "production")
    :initialScope {:tags
-                  (merge
-                   (when (not-empty config/revision)
-                     {:revision config/revision})
+                  (cond->
                    {:platform (cond
                                 (util/electron?) "electron"
                                 (mobile-util/native-platform?) "mobile"
                                 :else "web")
-                    :publishing config/publishing?})}
+                    :publishing config/publishing?}
+                    (not-empty config/revision)
+                    (assoc :revision config/revision))}
    ;; :integrations [(new posthog/SentryIntegration posthog "logseq" 5311485)
    ;;                (new BrowserTracing)]
+   :ignoreErrors ["ResizeObserver loop limit exceeded"
+                  "ResizeObserver loop completed with undelivered notifications"]
    :debug config/dev?
    :tracesSampleRate 1.0
    :beforeSend (fn [^js event]

@@ -5,9 +5,10 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
+            [frontend.db.async :as db-async]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [logseq.db.common.view :as db-view]
+            [logseq.db.common.reference :as db-reference]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
@@ -15,7 +16,7 @@
 
 (rum/defc references-aux
   [page-entity config]
-  (let [filters (db-view/get-filters (db/get-db) page-entity)
+  (let [filters (db-reference/get-filters (db/get-db) page-entity)
         reference-filter (fn [{:keys [ref-pages-count]}]
                            (shui/button
                             {:title "Page filter"
@@ -43,6 +44,7 @@
     (views/view
      {:view-parent page-entity
       :view-feature-type :linked-references
+      :show-items-count? true
       :additional-actions [reference-filter]
       :columns (views/build-columns config [] {})
       :config config})))
@@ -55,20 +57,21 @@
 (rum/defc references
   [entity config]
   (when-let [id (:db/id entity)]
-    (let [[has-references? set-has-references!] (hooks/use-state nil)]
+    (let [[refs-total-count set-refs-total-count!] (hooks/use-state (:refs-count config))]
       (hooks/use-effect!
        #(c.m/run-task*
          (m/sp
-           (let [result (c.m/<? (state/<invoke-db-worker :thread-api/block-refs-check
-                                                         (state/get-current-repo) id {}))]
-             (set-has-references! result))))
+           (when-not (:refs-count config)
+             (let [result (c.m/<? (db-async/<get-block-refs-count (state/get-current-repo) id))]
+               (set-refs-total-count! result)))))
        [])
-      (when has-references?
+      (when (> refs-total-count 0)
         (ui/catch-error
          (ui/component-error (if (config/db-based-graph? (state/get-current-repo))
                                "Linked References: Unexpected error."
                                "Linked References: Unexpected error. Please re-index your graph first."))
-         (references-cp entity config))))))
+         [:div.references
+          (references-cp entity (assoc config :refs-total-count refs-total-count))])))))
 
 (rum/defc unlinked-references
   [entity config]
@@ -82,9 +85,10 @@
              (set-has-references! result))))
        [])
       (when has-references?
-        (views/view
-         {:view-parent entity
-          :view-feature-type :unlinked-references
-          :columns (views/build-columns config [] {})
-          :foldable-options {:default-collapsed? true}
-          :config config})))))
+        [:div.unlinked-references
+         (views/view
+          {:view-parent entity
+           :view-feature-type :unlinked-references
+           :columns (views/build-columns config [] {})
+           :foldable-options {:default-collapsed? true}
+           :config config})]))))

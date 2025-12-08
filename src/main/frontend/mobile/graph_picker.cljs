@@ -3,7 +3,7 @@
    [clojure.string :as string]
    [frontend.components.svg :as svg]
    [frontend.fs :as fs]
-   [frontend.handler.file-based.nfs :as nfs-handler]
+   [frontend.handler.file-based.native-fs :as nfs-handler]
    [frontend.handler.notification :as notification]
    [frontend.handler.page :as page-handler]
    [frontend.mobile.util :as mobile-util]

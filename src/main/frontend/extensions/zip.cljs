@@ -1,6 +1,5 @@
 (ns frontend.extensions.zip
-  (:require [clojure.string :as string]
-            ["jszip" :as JSZip]
+  (:require [logseq.cli.common.util :as cli-common-util]
             [promesa.core :as p]))
 
 (defn make-file [content file-name args]
@@ -11,12 +10,6 @@
     (js/File. blob-content file-name args)))
 
 (defn make-zip [zip-filename file-name-content _repo]
-  (let [zip (JSZip.)
-        folder (.folder zip zip-filename)]
-    (doseq [[file-name content] file-name-content]
-      (when-not (string/blank? content)
-        (.file folder (-> file-name
-                          (string/replace #"^/+" ""))
-               content)))
+  (let [zip (cli-common-util/make-export-zip zip-filename file-name-content)]
     (p/let [zip-blob (.generateAsync zip #js {:type "blob"})]
       (make-file zip-blob (str zip-filename ".zip") {:type "application/zip"}))))

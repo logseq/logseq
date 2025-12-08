@@ -3,10 +3,10 @@
   (:require ["fs" :as fs]
             ["path" :as path]
             [clojure.edn :as edn]
-            [logseq.common.graph :as common-graph]
             [logseq.common.config :as common-config]
-            [logseq.graph-parser :as graph-parser]
+            [logseq.common.graph :as common-graph]
             [logseq.common.util :as common-util]
+            [logseq.graph-parser :as graph-parser]
             [logseq.graph-parser.db :as gp-db]))
 
 (defn- slurp
@@ -28,10 +28,10 @@
   [dir* config]
   (let [dir (path/resolve dir*)]
     (->> (common-graph/get-files dir)
-        (map #(hash-map :file/path %))
-        graph-parser/filter-files
-        (remove-hidden-files dir config)
-        (mapv #(assoc % :file/content (slurp (:file/path %)))))))
+         (map #(hash-map :file/path %))
+         graph-parser/filter-files
+         (remove-hidden-files dir config)
+         (mapv #(assoc % :file/content (slurp (:file/path %)))))))
 
 (defn- read-config
   "Reads repo-specific config from logseq/config.edn"
@@ -45,8 +45,7 @@
   [conn files {:keys [config] :as options}]
   (let [extract-options (merge {:date-formatter (common-config/get-date-formatter config)
                                 :user-config config
-                                :filename-format (or (:file/name-format config) :legacy)
-                                :extracted-block-ids (atom #{})}
+                                :filename-format (or (:file/name-format config) :legacy)}
                                (select-keys options [:verbose]))]
     (mapv
      (fn [{:file/keys [path content]}]

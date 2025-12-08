@@ -1,17 +1,18 @@
 (ns frontend.db.persist
   "Handles operations to persisting db to disk or indexedDB"
-  (:require [frontend.util :as util]
-            [frontend.idb :as idb]
+  (:require [cljs-bean.core :as bean]
             [electron.ipc :as ipc]
+            [frontend.config :as config]
             [frontend.db.conn :as db-conn]
-            [promesa.core :as p]
+            [frontend.idb :as idb]
             [frontend.persist-db :as persist-db]
-            [cljs-bean.core :as bean]
-            [frontend.config :as config]))
+            [frontend.util :as util]
+            [promesa.core :as p]))
 
 (defn get-all-graphs
   []
-  (p/let [idb-repos (idb/get-nfs-dbs)
+  (p/let [idb-repos (when-not (or util/web-platform? (util/mobile?))
+                      (idb/get-nfs-dbs))
           repos (persist-db/<list-db)
           repos' (map
                   (fn [{:keys [name] :as repo}]
@@ -24,7 +25,7 @@
     (distinct (concat
                repos'
                (map (fn [repo-name] {:name repo-name})
-                 (concat idb-repos (some-> electron-disk-graphs bean/->clj)))))))
+                    (concat idb-repos (some-> electron-disk-graphs bean/->clj)))))))
 
 (defn delete-graph!
   [graph]
@@ -34,13 +35,3 @@
       (if (util/electron?)
         (ipc/ipc "deleteGraph" graph key db-based?)
         (idb/remove-item! key)))))
-
-(defn rename-graph!
-  [old-repo new-repo]
-  (let [old-key (db-conn/get-repo-path old-repo)
-        new-key (db-conn/get-repo-path new-repo)]
-    (if (util/electron?)
-      (do
-        (js/console.error "rename-graph! is not supported in electron")
-        (idb/rename-item! old-key new-key))
-      (idb/rename-item! old-key new-key))))

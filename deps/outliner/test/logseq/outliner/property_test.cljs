@@ -197,7 +197,7 @@
 
 (deftest status-property-setting-classes
   (let [conn (db-test/create-conn-with-blocks
-              {:classes {:Project {:build/class-properties [:logseq.task/status]}}
+              {:classes {:Project {:build/class-properties [:logseq.property/status]}}
                :pages-and-blocks
                [{:page {:block/title "page1"}
                  :blocks [{:block/title ""}
@@ -206,32 +206,44 @@
         [empty-task project]
         (map #(:block/uuid (db-test/find-block-by-content @conn %)) ["" "project task"])]
 
-    (outliner-property/batch-set-property! conn [empty-task] :logseq.task/status :logseq.task/status.doing)
+    (outliner-property/batch-set-property! conn [empty-task] :logseq.property/status :logseq.property/status.doing)
     (is (= [:logseq.class/Task]
            (mapv :db/ident (:block/tags (d/entity @conn [:block/uuid empty-task]))))
         "Adds Task to block when it is not tagged")
 
-    (outliner-property/batch-set-property! conn [page1] :logseq.task/status :logseq.task/status.doing)
+    (outliner-property/batch-set-property! conn [page1] :logseq.property/status :logseq.property/status.doing)
     (is (= #{:logseq.class/Task :logseq.class/Page}
            (set (map :db/ident (:block/tags (d/entity @conn [:block/uuid page1])))))
         "Adds Task to page without tag")
 
-    (outliner-property/batch-set-property! conn [project] :logseq.task/status :logseq.task/status.doing)
+    (outliner-property/batch-set-property! conn [project] :logseq.property/status :logseq.property/status.doing)
     (is (= [:user.class/Project]
            (mapv :db/ident (:block/tags (d/entity @conn [:block/uuid project]))))
         "Doesn't add Task to block when it is already tagged")))
 
 (deftest batch-remove-property!
   (let [conn (db-test/create-conn-with-blocks
-              [{:page {:block/title "page1"}
-                :blocks [{:block/title "item 1" :build/properties {:logseq.property/order-list-type "number"}}
-                         {:block/title "item 2" :build/properties {:logseq.property/order-list-type "number"}}]}])
+              {:classes {:C1 {}}
+               :pages-and-blocks
+               [{:page {:block/title "page1"}
+                 :blocks [{:block/title "item 1" :build/properties {:logseq.property/order-list-type "number"}}
+                          {:block/title "item 2" :build/properties {:logseq.property/order-list-type "number"}}]}]})
         block-ids (map #(-> (db-test/find-block-by-content @conn %) :block/uuid) ["item 1" "item 2"])
         _ (outliner-property/batch-remove-property! conn block-ids :logseq.property/order-list-type)
         updated-blocks (map #(db-test/find-block-by-content @conn %) ["item 1" "item 2"])]
     (is (= [nil nil]
            (map :logseq.property/order-list-type updated-blocks))
-        "Property values are batch removed")))
+        "Property values are batch removed")
+
+    (is (thrown-with-msg?
+         js/Error
+         #"Can't remove private"
+         (outliner-property/batch-remove-property! conn [(:db/id (db-test/find-page-by-title @conn "page1"))] :block/tags)))
+
+    (is (thrown-with-msg?
+         js/Error
+         #"Can't remove required"
+         (outliner-property/batch-remove-property! conn [(:db/id (d/entity @conn :user.class/C1))] :logseq.property.class/extends)))))
 
 (deftest add-existing-values-to-closed-values!
   (let [conn (db-test/create-conn-with-blocks
@@ -289,8 +301,8 @@
                [{:page {:block/title "page1"}
                  :blocks [{:block/title "b1" :user.property/default [:block/uuid used-closed-value-uuid]}]}]})
         _ (assert (:user.property/default (db-test/find-block-by-content @conn "b1")))
-        property-uuid (:block/uuid (d/entity @conn :user.property-default))
-        _ (outliner-property/delete-closed-value! conn property-uuid [:block/uuid closed-value-uuid])]
+        property-id (:db/id (d/entity @conn :user.property/default))
+        _ (outliner-property/delete-closed-value! conn property-id [:block/uuid closed-value-uuid])]
     (is (nil? (d/entity @conn [:block/uuid closed-value-uuid])))))
 
 (deftest class-add-property!
@@ -321,3 +333,38 @@
         block (db-test/find-block-by-content @conn "o1")]
     (is (= [:user.property/p1 :user.property/p2 :user.property/p3]
            (map :db/ident (:classes-properties (outliner-property/get-block-classes-properties @conn (:db/id block))))))))
+
+(deftest extends-cycle
+  (testing "Fail when creating a cycle of extends"
+    (let [conn (db-test/create-conn-with-blocks
+                {:classes {:Class1 {}
+                           :Class2 {}
+                           :Class3 {}}})
+          db @conn
+          class1 (d/entity db :user.class/Class1)
+          class2 (d/entity db :user.class/Class2)
+          class3 (d/entity db :user.class/Class3)]
+      (outliner-property/set-block-property! conn (:db/id class1) :logseq.property.class/extends (:db/id class2))
+      (outliner-property/set-block-property! conn (:db/id class2) :logseq.property.class/extends (:db/id class3))
+      (is (thrown-with-msg?
+           js/Error
+           #"Extends cycle"
+           (outliner-property/set-block-property! conn (:db/id class3) :logseq.property.class/extends (:db/id class1)))
+          "Extends cycle"))))
+
+(deftest delete-property-value!
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:C1 {}
+                         :C2 {}
+                         :C3 {:build/class-extends [:C1 :C2]}}})]
+    (outliner-property/delete-property-value! conn :user.class/C3 :logseq.property.class/extends
+                                              (:db/id (d/entity @conn :user.class/C2)))
+    (is (= [:user.class/C1]
+           (:logseq.property.class/extends (db-test/readable-properties (d/entity @conn :user.class/C3))))
+        "Specific property value is deleted")
+
+    (outliner-property/delete-property-value! conn :user.class/C3 :logseq.property.class/extends
+                                              (:db/id (d/entity @conn :user.class/C1)))
+    (is (= [:logseq.class/Root]
+           (:logseq.property.class/extends (db-test/readable-properties (d/entity @conn :user.class/C3))))
+        "Extends property is restored back to Root")))

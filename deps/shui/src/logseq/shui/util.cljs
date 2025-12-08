@@ -1,13 +1,13 @@
 (ns logseq.shui.util
   (:require
-   [clojure.string :as s]
-   [rum.core :refer [use-state use-effect!] :as rum]
-   [logseq.shui.rum :as shui-rum]
-   [goog.object :refer [getValueByKeys] :as gobj]
-   [clojure.set :refer [rename-keys]]
-   [clojure.walk :as w]
    [cljs-bean.core :as bean]
-   [goog.dom :as gdom]))
+   [clojure.set :refer [rename-keys]]
+   [clojure.string :as s]
+   [clojure.walk :as w]
+   [goog.dom :as gdom]
+   [goog.object :refer [getValueByKeys] :as gobj]
+   [logseq.shui.rum :as shui-rum]
+   [rum.core :refer [use-state use-effect!] :as rum]))
 
 (goog-define NODETEST false)
 
@@ -16,7 +16,7 @@
   [input]
   (let [words (s/split input #"-")
         capitalize (->> (rest words)
-                     (map #(apply str (s/upper-case (first %)) (rest %))))]
+                        (map #(apply str (s/upper-case (first %)) (rest %))))]
     (apply str (first words) capitalize)))
 
 (defn map-keys->camel-case
@@ -28,7 +28,7 @@
   (let [convert-to-camel (fn [[key value]]
                            (let [k (name key)]
                              [(if-not (or (s/starts-with? k "data-")
-                                        (s/starts-with? k "aria-"))
+                                          (s/starts-with? k "aria-"))
                                 (kebab-case->camel-case k) k) value]))]
     (w/postwalk (fn [x]
                   (if (map? x)
@@ -37,7 +37,7 @@
                                     x)]
                       (into {} (map convert-to-camel new-map)))
                     x))
-      data)))
+                data)))
 
 (defn $LSUtils [] (aget js/window "LSUtils"))
 (def dev? (some-> ($LSUtils) (aget "isDev")))
@@ -45,11 +45,11 @@
 (defn uuid-color
   [uuid-str]
   (some-> ($LSUtils) (aget "uniqolor")
-    (apply [uuid-str
-            #js {:saturation #js [55, 70],
-                 :lightness 70,
-                 :differencePoint 60}])
-    (aget "color")))
+          (apply [uuid-str
+                  #js {:saturation #js [55, 70],
+                       :lightness 70,
+                       :differencePoint 60}])
+          (aget "color")))
 
 (defn get-path
   "Returns the component path."
@@ -67,10 +67,10 @@
         ;; we have to make sure to check if the children is sequential
         ;; as a list can be returned, eg: from a (for)
         new-children (if (and (not (nil? children#))
-                           (not (empty? children))
-                           (or (not (array? children#))
+                              (not (empty? children))
+                              (or (not (array? children#))
                              ;; maybe list children
-                             (not (vector? type#))))
+                                  (not (vector? type#))))
                        [children#] children#)
 
         ;; convert any options key value to a React element, if
@@ -83,22 +83,22 @@
         react-class (if dev? (react-class) react-class)]
     (apply js/React.createElement react-class
       ;; sablono html-to-dom-attrs does not work for nested hash-maps
-      (bean/->js (map-keys->camel-case new-options :html-props true))
-      new-children)))
+           (bean/->js (map-keys->camel-case new-options :html-props true))
+           new-children)))
 
 (defn use-atom-fn
   [a getter-fn setter-fn]
   (let [[val set-val] (use-state (getter-fn @a))]
     (use-effect!
-      (fn []
-        (let [id (str (random-uuid))]
-          (add-watch a id (fn [_ _ prev-state next-state]
-                            (let [prev-value (getter-fn prev-state)
-                                  next-value (getter-fn next-state)]
-                              (when-not (= prev-value next-value)
-                                (set-val next-value)))))
-          #(remove-watch a id)))
-      [])
+     (fn []
+       (let [id (str (random-uuid))]
+         (add-watch a id (fn [_ _ prev-state next-state]
+                           (let [prev-value (getter-fn prev-state)
+                                 next-value (getter-fn next-state)]
+                             (when-not (= prev-value next-value)
+                               (set-val next-value)))))
+         #(remove-watch a id)))
+     [])
     [val #(swap! a setter-fn %)]))
 
 (defn use-atom
@@ -110,10 +110,10 @@
   []
   (let [*mounted (rum/use-ref false)]
     (use-effect!
-      (fn []
-        (rum/set-ref! *mounted true)
-        #(rum/set-ref! *mounted false))
-      [])
+     (fn []
+       (rum/set-ref! *mounted true)
+       #(rum/set-ref! *mounted false))
+     [])
     #(rum/deref *mounted)))
 
 (defn react->rum [c static?]
@@ -138,4 +138,4 @@
   [name]
   (if NODETEST
     #js {}
-    (aget js/window.LSUI name)))
+    (some-> js/window.LSUI (aget name))))

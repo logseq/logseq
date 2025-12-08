@@ -1,4 +1,3 @@
-/e2e-dump
 /target
 /classes
 /checkouts
@@ -15,7 +14,6 @@ pom.xml.asc
 
 node_modules/
 static/**
-!static/yarn.lock
 tmp
 cljs-test-runner-out
 
@@ -42,6 +40,7 @@ resources/electron.js
 .clj-kondo/rewrite-clj
 .clj-kondo/taoensso
 .clj-kondo/funcool
+.clj-kondo/com.lambdaisland
 /libs/dist/
 charlie/
 .vscode
@@ -49,6 +48,7 @@ charlie/
 docker
 android/app/src/main/assets/capacitor.plugin.json
 ios/App/App/capacitor.config.json
+ios/App/App/public
 
 startup.png
 
@@ -59,7 +59,7 @@ startup.png
 android/app/src/main/assets/capacitor.config.json
 
 *.sublime-*
-/public/static
+/public
 .yarn/
 .yarnrc.yml
 
@@ -70,4 +70,6 @@ deps/shui/.clj-kondo
 tx-log*
 clj-e2e/.wally
 clj-e2e/resources
+clj-e2e/e2e-dump
 .dir-locals.el
+.projectile

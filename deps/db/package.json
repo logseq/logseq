@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "devDependencies": {
-    "@logseq/nbb-logseq": "logseq/nbb-logseq#feat-db-v20"
+    "@logseq/nbb-logseq": "github:logseq/nbb-logseq#feat-db-v29"
   },
   "dependencies": {
-    "better-sqlite3": "9.3.0"
+    "better-sqlite3": "11.10.0"
   },
   "scripts": {
     "test": "yarn nbb-logseq -cp test -m nextjournal.test-runner",

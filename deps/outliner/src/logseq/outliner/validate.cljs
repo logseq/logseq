@@ -8,7 +8,8 @@
             [logseq.common.util.namespace :as ns-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
-            [logseq.db.frontend.entity-util :as entity-util]))
+            [logseq.db.frontend.entity-util :as entity-util]
+            [logseq.db.frontend.property :as db-property]))
 
 (defn ^:api validate-page-title-characters
   "Validates characters that must not be in a page title"
@@ -36,55 +37,44 @@
                             :payload {:message "Page name can't be blank."
                                       :type :warning}})))))
 
-(defn ^:api validate-built-in-pages
-  "Validates built-in pages shouldn't be modified"
+(defn- find-other-ids-with-title-and-tags
+  "Query that finds other ids given the id to ignore, title to look up and tags to consider"
   [entity]
-  (when (ldb/built-in? entity)
-    (throw (ex-info "Rename built-in pages"
-                    {:type :notification
-                     :payload {:message "Built-in pages can't be edited"
-                               :type :warning}}))))
-
-(defn- validate-unique-by-parent-and-name [db entity new-title]
-  (when-let [_res (seq (d/q '[:find [?b ...]
-                              :in $ ?eid ?type ?title
-                              :where
-                              [?b :block/title ?title]
-                              [?b :logseq.property/parent ?type]
-                              [(not= ?b ?eid)]]
-                            db
-                            (:db/id entity)
-                            (:db/id (:logseq.property/parent entity))
-                            new-title))]
-    (throw (ex-info "Duplicate page by parent"
-                    {:type :notification
-                     :payload {:message (str "Another page named " (pr-str new-title) " already exists for parents "
-                                             (pr-str (->> (ldb/get-page-parents entity)
-                                                          (map :block/title)
-                                                          (string/join ns-util/parent-char))))
-                               :type :warning}}))))
+  (cond
+    (ldb/property? entity)
+    ;; Property names are unique in that they can
+    ;; have the same names as built-in property names
+    '[:find [?b ...]
+      :in $ ?eid ?title [?tag-id ...]
+      :where
+      [?b :block/title ?title]
+      [?b :block/tags ?tag-id]
+      [(missing? $ ?b :logseq.property/built-in?)]
+      [(not= ?b ?eid)]]
+    (:block/parent entity)
+    '[:find [?b ...]
+      :in $ ?eid ?title [?tag-id ...]
+      :where
+      [?b :block/title ?title]
+      [?b :block/tags ?tag-id]
+      [(not= ?b ?eid)]
+      ;; same parent
+      [?b :block/parent ?bp]
+      [?eid :block/parent ?ep]
+      [(= ?bp ?ep)]]
+    :else
+    '[:find [?b ...]
+      :in $ ?eid ?title [?tag-id ...]
+      :where
+      [?b :block/title ?title]
+      [?b :block/tags ?tag-id]
+      [(not= ?b ?eid)]]))
 
 (defn- validate-unique-for-page
   [db new-title {:block/keys [tags] :as entity}]
-  (cond
-    (seq tags)
+  (when (seq tags)
     (when-let [another-id (first
-                           (d/q (if (ldb/property? entity)
-                                  ;; Property names are unique in that they can
-                                  ;; have the same names as built-in property names
-                                  '[:find [?b ...]
-                                    :in $ ?eid ?title [?tag-id ...]
-                                    :where
-                                    [?b :block/title ?title]
-                                    [?b :block/tags ?tag-id]
-                                    [(missing? $ ?b :logseq.property/built-in?)]
-                                    [(not= ?b ?eid)]]
-                                  '[:find [?b ...]
-                                    :in $ ?eid ?title [?tag-id ...]
-                                    :where
-                                    [?b :block/title ?title]
-                                    [?b :block/tags ?tag-id]
-                                    [(not= ?b ?eid)]])
+                           (d/q (find-other-ids-with-title-and-tags entity)
                                 db
                                 (:db/id entity)
                                 new-title
@@ -96,20 +86,30 @@
         (when-not (and (= common-tag-ids #{:logseq.class/Page})
                        (> (count this-tags) 1)
                        (> (count another-tags) 1))
-          (throw (ex-info "Duplicate page"
-                          {:type :notification
-                           :payload {:message (str "Another page named " (pr-str new-title) " already exists for tags: "
-                                                   (string/join ", "
-                                                                (map (fn [id] (str "#" (:block/title (d/entity db id)))) common-tag-ids)))
-                                     :type :warning}})))))
+          (cond
+            (ldb/property? entity)
+            (throw (ex-info "Duplicate property"
+                            {:type :notification
+                             :payload {:message (str "Another property named " (pr-str new-title) " already exists.")
+                                       :type :warning}}))
+            (ldb/class? entity)
+            (throw (ex-info "Duplicate class"
+                            {:type :notification
+                             :payload {:message (str "Another tag named " (pr-str new-title) " already exists.")
+                                       :type :warning}}))
+            :else
+            (throw (ex-info "Duplicate page"
+                            {:type :notification
+                             :payload {:message (str "Another page named " (pr-str new-title) " already exists for tags: "
+                                                     (string/join ", "
+                                                                  (map (fn [id] (str "#" (:block/title (d/entity db id)))) common-tag-ids)))
+                                       :type :warning}}))))))))
 
-    (:logseq.property/parent entity)
-    (validate-unique-by-parent-and-name db entity new-title)))
-
-(defn ^:api validate-unique-by-name-tag-and-block-type
+(defn ^:api validate-unique-by-name-and-tags
   "Validates uniqueness of nodes for the following cases:
    - Page names are unique for a tag e.g. their can be Apple #Company and Apple #Fruit
-   - Page names are unique for a :logseq.property/parent"
+   - Property names are unique with user properties being allowed to have the same name as built-in ones
+   - Class names are unique regardless of their extends or if they're built-in"
   [db new-title entity]
   (when (entity-util/page? entity)
     (validate-unique-for-page db new-title entity)))
@@ -125,38 +125,61 @@
                                :type :warning}}))))
 
 (defn validate-block-title
-  "Validates a block title when it has changed"
+  "Validates a block title when it has changed for a entity-util/page? or tagged node"
   [db new-title existing-block-entity]
-  (validate-built-in-pages existing-block-entity)
-  (validate-unique-by-name-tag-and-block-type db new-title existing-block-entity)
+  (validate-unique-by-name-and-tags db new-title existing-block-entity)
   (validate-disallow-page-with-journal-name new-title existing-block-entity))
 
-(defn- validate-parent-property-have-same-type
-  "Validates whether given parent and children are valid. Allows 'class' and
-  'page' types to have a relationship with their own type. May consider allowing more
-  page types if they don't cause systemic bugs"
+(defn validate-property-title
+  "Validates a property's title when it has changed"
+  ([new-title] (validate-property-title new-title {}))
+  ([new-title meta-m]
+   (when-not (db-property/valid-property-name? new-title)
+     (throw (ex-info "Property name is invalid"
+                     (merge meta-m
+                            {:type :notification
+                             :payload {:message "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['."
+                                       :type :error}}))))))
+
+(defn- validate-extends-property-have-correct-type
+  "Validates whether given parent and children are classes"
   [parent-ent child-ents]
-  (when (or (and (ldb/class? parent-ent) (not (every? ldb/class? child-ents)))
-            (and (ldb/internal-page? parent-ent) (not (every? ldb/internal-page? child-ents)))
-            (not ((some-fn ldb/class? ldb/internal-page?) parent-ent)))
-    (throw (ex-info "Can't set this page as a parent because the child page is a different type"
+  (when (or (not (ldb/class? parent-ent))
+            (not (every? ldb/class? child-ents)))
+    (throw (ex-info "Can't extend this page since either it is not a tag or is extending from a page that is not a tag"
                     {:type :notification
-                     :payload {:message "Can't set this page as a parent because the child page is a different type"
-                               :type :warning}
+                     :payload {:message "Can't extend this page since either it is not a tag or is extending from a page that is not a tag"
+                               :type :error}
                      :blocks (map #(select-keys % [:db/id :block/title]) (remove ldb/class? child-ents))}))))
 
-(defn- disallow-built-in-class-parent-change
+(defn- disallow-built-in-class-extends-change
   [_parent-ent child-ents]
   (when (some #(get db-class/built-in-classes (:db/ident %)) child-ents)
-    (throw (ex-info "Can't change the parent of a built-in tag"
+    (throw (ex-info "Can't change the extends of a built-in tag"
                     {:type :notification
-                     :payload {:message "Can't change the parent of a built-in tag"
-                               :type :warning}}))))
+                     :payload {:message "Can't change the extends of a built-in tag"
+                               :type :error}}))))
 
-(defn validate-parent-property
-  [parent-ent child-ents]
-  (disallow-built-in-class-parent-change parent-ent child-ents)
-  (validate-parent-property-have-same-type parent-ent child-ents))
+(defn- disallow-extends-cycle
+  [db parent-ent child-ents]
+  (doseq [child child-ents]
+    (let [children-ids (set (cons (:db/id child)
+                                  (db-class/get-structured-children db (:db/id child))))]
+      (when (contains? children-ids (:db/id parent-ent))
+        (throw (ex-info "Extends cycle"
+                        {:type :notification
+                         :payload {:message "Tag extends cycle"
+                                   :type :error
+                                   :blocks (map #(select-keys % [:db/id :block/title]) [child])}}))))))
+
+(defn validate-extends-property
+  [db parent-ent* child-ents & {:keys [built-in?] :or {built-in? true}}]
+  (let [parent-ent (if (integer? parent-ent*)
+                     (d/entity db parent-ent*)
+                     parent-ent*)]
+    (when built-in? (disallow-built-in-class-extends-change parent-ent child-ents))
+    (disallow-extends-cycle db parent-ent child-ents)
+    (validate-extends-property-have-correct-type parent-ent child-ents)))
 
 (defn- disallow-node-cant-tag-with-built-in-non-tags
   [db _block-eids v]
@@ -170,30 +193,105 @@
                        :property-value v})))))
 
 (defn- disallow-node-cant-tag-with-private-tags
-  [db block-eids v]
-  (when (and (ldb/private-tags (:db/ident (d/entity db v)))
-             ;; Allow assets to be tagged
-             (not (and
-                   (every? (fn [id] (ldb/asset? (d/entity db id))) block-eids)
-                   (= :logseq.class/Asset (:db/ident (d/entity db v))))))
-    (throw (ex-info (str "Can't set tag with built-in #" (:block/title (d/entity db v)))
+  [db block-eids v & {:keys [delete?]}]
+  ;; Skip #Page as it is validated by later fns
+  (when (and (contains? (disj ldb/private-tags :logseq.class/Page) (:db/ident (d/entity db v)))
+             (not
+               ;; Allow assets to be tagged
+              (and
+               (every? (fn [id] (ldb/asset? (d/entity db id))) block-eids)
+               (= :logseq.class/Asset (:db/ident (d/entity db v))))))
+    (throw (ex-info (str (if delete? "Can't remove tag" "Can't set tag")
+                         " with built-in #" (:block/title (d/entity db v)))
                     {:type :notification
-                     :payload {:message (str "Can't set tag with built-in #" (:block/title (d/entity db v)))
+                     :payload {:message (str (if delete? "Can't remove tag" "Can't set tag")
+                                             " with built-in #" (:block/title (d/entity db v)))
                                :type :error}
                      :property-id :block/tags
                      :property-value v}))))
 
 (defn- disallow-tagging-a-built-in-entity
-  [db block-eids]
+  [db block-eids & {:keys [delete?]}]
   (when-let [built-in-ent (some #(when (:logseq.property/built-in? %) %)
                                 (map #(d/entity db %) block-eids))]
-    (throw (ex-info (str "Can't add tag on built-in " (pr-str (:block/title built-in-ent)))
+    (throw (ex-info (str (if delete? "Can't remove tag" "Can't add tag")
+                         " on built-in " (pr-str (:block/title built-in-ent)))
                     {:type :notification
-                     :payload {:message (str "Can't add tag on built-in " (pr-str (:block/title built-in-ent)))
+                     :payload {:message (str (if delete? "Can't remove tag" "Can't add tag")
+                                             " on built-in " (pr-str (:block/title built-in-ent)))
                                :type :error}}))))
 
+(defn- disallow-removing-page-tag
+  "Disallow page->block when
+  1. this page doesn't have :block/parent
+  2. its parent is Library
+  3. it has page child"
+  [db eids v]
+  (when (= (:db/ident (d/entity db v)) :logseq.class/Page)
+    (let [library-page (ldb/get-library-page db)]
+      (doseq [eid eids]
+        (let [entity (d/entity db eid)]
+          (when (ldb/internal-page? entity)
+            (cond
+              (not (:block/parent entity))
+              (throw (ex-info "This page cannot be converted to a block"
+                              {:type :notification
+                               :payload
+                               {:message (str "Page " (pr-str (:block/title entity)) " cannot be converted to a block")
+                                :type :error
+                                :entity (into {} entity)
+                                :property :block/tags}}))
+              (= (:db/id library-page) (:db/id (:block/parent entity)))
+              (throw (ex-info "This page cannot be converted to a block"
+                              {:type :notification
+                               :payload
+                               {:message (str "Page " (pr-str (:block/title entity)) " cannot be converted to a block, please move it to another page first")
+                                :type :error
+                                :entity (into {} entity)
+                                :property :block/tags}}))
+              (some entity-util/page? (:block/_parent entity))
+              (throw (ex-info "This page cannot be converted to a block"
+                              {:type :notification
+                               :payload
+                               {:message (str "Page " (pr-str (:block/title entity)) " cannot be converted to a block because it has page children")
+                                :type :error
+                                :entity (into {} entity)
+                                :property :block/tags}})))))))))
+
+(defn- validate-block-can-tag-with-page-tag
+  "Validates block can convert to page by adding #Page for allowed scenarios"
+  [db eids v]
+  (when (= (:db/ident (d/entity db v)) :logseq.class/Page)
+    (doseq [eid eids]
+      (let [block (d/entity db eid)]
+        (when (:block/parent block)
+          (validate-page-title (:block/title block) {:node block})
+          (validate-page-title-characters (:block/title block) {:node block})
+
+          ;; Only allow block to be page when its parent is a page to guard against invalid pages
+          ;; in property values or pages being created with blocks as namespace parents
+          (when (or (not (entity-util/page? (:block/parent block)))
+                    (:logseq.property/created-from-property block))
+            (let [message (if (:logseq.property/created-from-property block)
+                            "Can't convert property value to page."
+                            "Can't convert this block to page since its parent is not a page.")]
+              (throw (ex-info message
+                              {:type :notification
+                               :payload {:message message
+                                         :type :error
+                                         :block (into {} block)}})))))))))
+
 (defn validate-tags-property
+  "Validates adding a property value to :block/tags for given blocks"
   [db block-eids v]
   (disallow-tagging-a-built-in-entity db block-eids)
   (disallow-node-cant-tag-with-private-tags db block-eids v)
+  (validate-block-can-tag-with-page-tag db block-eids v)
   (disallow-node-cant-tag-with-built-in-non-tags db block-eids v))
+
+(defn validate-tags-property-deletion
+  "Validates deleting a property value from :block/tags for given blocks"
+  [db block-eids v]
+  (disallow-tagging-a-built-in-entity db block-eids {:delete? true})
+  (disallow-node-cant-tag-with-private-tags db block-eids v {:delete? true})
+  (disallow-removing-page-tag db block-eids v))

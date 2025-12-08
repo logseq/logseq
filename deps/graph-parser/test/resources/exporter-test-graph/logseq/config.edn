@@ -208,7 +208,6 @@
             [?h :block/marker ?marker]
             [(contains? #{"NOW" "DOING"} ?marker)]
             [?h :block/page ?p]
-            [?p :block/journal? true]
             [?p :block/journal-day ?d]
             [(>= ?d ?start)]
             [(<= ?d ?today)]]
@@ -225,7 +224,6 @@
             [?h :block/marker ?marker]
             [(contains? #{"NOW" "LATER" "TODO"} ?marker)]
             [?h :block/page ?p]
-            [?p :block/journal? true]
             [?p :block/journal-day ?d]
             [(> ?d ?start)]
             [(< ?d ?next)]]
@@ -272,10 +270,6 @@
  ;; If the level's value is set to 3, block c will be collapsed.
  ;; Default value: 2
  :ref/default-open-blocks-level 2
-
- ;; Configure the threshold for linked references before collapsing.
- ;; Default value: 100
- :ref/linked-references-collapsed-threshold 50
 
  ;; Graph view configuration.
  ;; Example usage:

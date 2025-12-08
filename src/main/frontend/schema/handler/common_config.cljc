@@ -60,7 +60,6 @@
               [:or :string :keyword]
               :string]]
     [:ref/default-open-blocks-level :int]
-    [:ref/linked-references-collapsed-threshold :int]
     [:graph/settings [:map-of :keyword [:or :boolean :int :nil]]]
     [:graph/forcesettings [:map-of :keyword :int]]
     [:favorites [:vector :string]]

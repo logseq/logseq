@@ -60,16 +60,15 @@
      [(hooks/use-debounced-value @*input 100)])
 
     [:div.input-wrap
-     {:style {:margin-bottom "-2px"}}
      [:input.cp__select-input.w-full
-      (merge {:type        "text"
+      (merge {:type "text"
               :class "!p-1.5"
               :placeholder (or input-default-placeholder (t prompt-key))
-              :auto-focus  true
-              :value       input
-              :on-change   (fn [e]
-                             (let [v (util/evalue e)]
-                               (set-input! v)))}
+              :auto-focus (not (util/mobile?))
+              :value input
+              :on-change (fn [e]
+                           (let [v (util/evalue e)]
+                             (set-input! v)))}
              input-opts)]]))
 
 ;; TODO: rewrite using hooks
@@ -107,7 +106,8 @@
                  item-cp transform-fn tap-*input-val
                  multiple-choices? on-apply new-case-sensitive?
                  dropdown? show-new-when-not-exact-match? exact-match-exclude-items
-                 input-container initial-open? loading?]
+                 input-container initial-open? loading?
+                 clear-input-on-chosen?]
           :or {limit 100
                prompt-key :select/default-prompt
                empty-placeholder (fn [_t] [:div])
@@ -115,44 +115,45 @@
                extract-fn :value
                extract-chosen-fn identity
                exact-match-exclude-items #{}
-               initial-open? true}}]
-  (let [input (::input state)
+               initial-open? true
+               clear-input-on-chosen? true}}]
+  (let [*input (::input state)
         *toggle (::toggle state)
         *selected-choices (::selected-choices state)
         selected-choices (rum/react *selected-choices)
         full-choices (cond->>
                       (remove nil? items)
-                       (seq @input)
+                       (seq @*input)
                        (remove :clear?))
         search-result' (->>
-                        (cond-> (search/fuzzy-search full-choices @input :limit limit :extract-fn extract-fn)
+                        (cond-> (search/fuzzy-search full-choices @*input :limit limit :extract-fn extract-fn)
                           (fn? transform-fn)
-                          (transform-fn @input))
+                          (transform-fn @*input))
                         (remove nil?))
         exact-transform-fn (if new-case-sensitive? identity string/lower-case)
         exact-match? (contains? (set (map (comp exact-transform-fn str extract-fn) search-result'))
-                                (exact-transform-fn @input))
-        search-result' (if (and multiple-choices? (not (string/blank? @input)))
+                                (exact-transform-fn @*input))
+        search-result' (if (and multiple-choices? (not (string/blank? @*input)))
                          (sort-by (fn [item]
                                     (not (contains? selected-choices (:value item))))
                                   search-result')
                          search-result')
         search-result (if (and show-new-when-not-exact-match?
                                (not exact-match?)
-                               (not (string/blank? @input))
-                               (not (exact-match-exclude-items @input)))
+                               (not (string/blank? @*input))
+                               (not (exact-match-exclude-items @*input)))
                         (->>
                          (cons
                           (first search-result')
-                          (cons {:value @input
-                                 :label (str "+ New option: " @input)}
+                          (cons {:value @*input
+                                 :label (str "+ New option: " @*input)}
                                 (rest search-result')))
                          (remove nil?))
                         search-result')
         input-opts' (if (fn? input-opts) (input-opts (empty? search-result)) input-opts)
         input-container (or
                          input-container
-                         (search-input input
+                         (search-input *input
                                        {:prompt-key prompt-key
                                         :input-default-placeholder input-default-placeholder
                                         :input-opts input-opts'
@@ -171,7 +172,9 @@
                                                                      (render-item result chosen? multiple-choices? *selected-choices)))
                                     :class             "cp__select-results"
                                     :on-chosen         (fn [raw-chosen e]
-                                                         (reset! input "")
+                                                         (util/stop-propagation e)
+                                                         (when clear-input-on-chosen?
+                                                           (reset! *input ""))
                                                          (let [chosen (extract-chosen-fn raw-chosen)]
                                                            (if multiple-choices?
                                                              (if (selected-choices chosen)
@@ -197,7 +200,7 @@
                                                                             (on-apply selected-choices)
                                                                             (when close-modal? (state/close-modal!)))})])]))]
     (when (fn? tap-*input-val)
-      (tap-*input-val input))
+      (tap-*input-val *input))
     [:div.cp__select
      (merge {:class "cp__select-main"}
             host-opts)

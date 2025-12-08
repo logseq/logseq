@@ -9,7 +9,8 @@
 (defn detach
   "Detach all event listeners."
   [state]
-  (some-> state ::event-handler .removeAll))
+  (when-let [^EventHandler handler (some-> state ::event-handler)]
+    (.removeAll handler)))
 
 (defn listen
   "Register an event `handler` for events of `type` on `target`."
@@ -133,7 +134,7 @@
   "Notice: the first parameter needs to be a `config` with `id`, optional `sidebar?`, `whiteboard?`"
   {:init (fn [state]
            (let [config (first (:rum/args state))
-                 key (select-keys config [:id :sidebar? :whiteboard? :embed? :custom-query? :query :current-block :table?])
+                 key (select-keys config [:id :sidebar? :whiteboard? :embed? :custom-query? :query :current-block :table? :block? :db/id :page-name])
                  container-id (or (:container-id config) (state/get-container-id key))]
              (assoc state :container-id container-id)))})
 

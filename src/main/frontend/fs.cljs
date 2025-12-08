@@ -2,39 +2,27 @@
   "System-component-like ns that provides common file operations for all
   platforms by delegating to implementations of the fs protocol"
   (:require [cljs-bean.core :as bean]
+            [clojure.string :as string]
+            [electron.ipc :as ipc]
             [frontend.config :as config]
-            [frontend.fs.nfs :as nfs]
-            [frontend.fs.node :as node]
-            [frontend.fs.capacitor-fs :as capacitor-fs]
             [frontend.fs.memory-fs :as memory-fs]
-            [frontend.mobile.util :as mobile-util]
+            [frontend.fs.node :as node]
             [frontend.fs.protocol :as protocol]
+            [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]
             [logseq.common.path :as path]
-            [clojure.string :as string]
-            [frontend.state :as state]
             [logseq.common.util :as common-util]
-            [electron.ipc :as ipc]))
+            [promesa.core :as p]))
 
-(defonce nfs-backend (nfs/->Nfs))
 (defonce memory-backend (memory-fs/->MemoryFs))
 (defonce node-backend (node/->Node))
-(defonce mobile-backend (capacitor-fs/->Capacitorfs))
 
 (defn- get-native-backend
   "Native FS backend of current platform"
   []
-  (cond
-    (util/electron?)
-    node-backend
-
-    (mobile-util/native-platform?)
-    mobile-backend
-
-    :else
-    nfs-backend))
+  (when (util/electron?)
+    node-backend))
 
 (defn get-fs
   [dir & {:keys [repo rpath]}]
@@ -62,11 +50,8 @@
       (and (util/electron?) (not bfs-local?))
       node-backend
 
-      (mobile-util/native-platform?)
-      mobile-backend
-
       :else
-      nfs-backend)))
+      (throw (ex-info "failed to get fs backend" {:dir dir :repo repo :rpath rpath})))))
 
 (defn mkdir!
   [dir]
@@ -99,8 +84,8 @@
     (when (= fs memory-backend)
       (protocol/rmdir! fs dir))))
 
-;; TODO(andelf): distinguish from graph file writing and global file write
-(defn write-file!
+(defn write-plain-text-file!
+  "Use it only for plain-text files, not binary"
   [repo dir rpath content opts]
   (when content
     (let [path (common-util/path-normalize rpath)
@@ -124,6 +109,7 @@
                   ;; (js/alert "Current file can't be saved! Please copy its content to your local file system and click the refresh button.")
                   ))))))
 
+;; read-file should return string on all platforms
 (defn read-file
   ([dir path]
    (let [fs (get-fs dir)
@@ -133,6 +119,11 @@
      (read-file dir path options)))
   ([dir path options]
    (protocol/read-file (get-fs dir) dir path options)))
+
+(defn read-file-raw
+  [dir path & {:as options}]
+  (let [fs (get-fs dir)]
+    (protocol/read-file-raw fs dir path options)))
 
 (defn rename!
   "Rename files, incoming relative path, converted to absolute path"
@@ -174,15 +165,13 @@
 
     :else
     (let [[old-path new-path]
-          (map #(if (or (util/electron?) (mobile-util/native-platform?))
+          (map #(if (util/electron?)
                   %
                   (str (config/get-repo-dir repo) "/" %))
                [old-path new-path])
           new-dir (path/dirname new-path)]
       (p/let [_ (mkdir-if-not-exists new-dir)]
         (protocol/copy! (get-fs old-path) repo old-path new-path)))))
-
-
 
 (defn open-dir
   [dir]
@@ -227,7 +216,7 @@
          true)
        (p/catch
         (fn [_error]
-          (p/let [_ (write-file! repo dir path initial-content nil)]
+          (p/let [_ (write-plain-text-file! repo dir path initial-content nil)]
             false))))))
 
 (defn file-exists?
@@ -256,9 +245,6 @@
     (util/electron?)
     (path/url-to-path path)
 
-    (mobile-util/native-platform?)
-    path
-
     :else
     path))
 
@@ -268,12 +254,5 @@
 
 (defn backup-db-file!
   [repo path db-content disk-content]
-  (cond
-    (util/electron?)
-    (ipc/ipc "backupDbFile" (config/get-local-dir repo) path db-content disk-content)
-
-    (mobile-util/native-platform?)
-    (capacitor-fs/backup-file repo :backup-dir path db-content)
-
-    ;; TODO: nfs
-    ))
+  (when (util/electron?)
+    (ipc/ipc "backupDbFile" (config/get-local-dir repo) path db-content disk-content)))

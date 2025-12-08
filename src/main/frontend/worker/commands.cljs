@@ -3,11 +3,13 @@
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [datascript.core :as d]
-            [frontend.worker.handler.page.db-based.page :as worker-db-page]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.outliner.page :as outliner-page]
             [logseq.outliner.pipeline :as outliner-pipeline]))
 
 ;; TODO: allow users to add command or configure it through #Command (which parent should be #Code)
@@ -15,7 +17,7 @@
   (atom
    [[:repeated-task
      {:title "Repeated task"
-      :entity-conditions [{:property :logseq.task/repeated?
+      :entity-conditions [{:property :logseq.property.repeat/repeated?
                            :value true}]
       :tx-conditions [{:property :status
                        :value :done}]
@@ -32,8 +34,8 @@
   [entity property]
   (if (= property :status)
     (or
-     (:db/ident (:logseq.task/recur-status-property entity))
-     :logseq.task/status)
+     (:db/ident (:logseq.property.repeat/checked-property entity))
+     :logseq.property/status)
     property))
 
 (defn- get-value
@@ -41,7 +43,7 @@
   (cond
     (and (= property :status) (= value :done))
     (or
-     (let [p (:logseq.task/recur-status-property entity)
+     (let [p (:logseq.property.repeat/checked-property entity)
            choices (:property/closed-values p)
            checkbox? (= :checkbox (:logseq.property/type p))]
        (if checkbox?
@@ -49,10 +51,10 @@
          (some (fn [choice]
                  (when (:logseq.property/choice-checkbox-state choice)
                    (:db/id choice))) choices)))
-     :logseq.task/status.done)
+     :logseq.property/status.done)
     (and (= property :status) (= value :todo))
     (or
-     (let [p (:logseq.task/recur-status-property entity)
+     (let [p (:logseq.property.repeat/checked-property entity)
            choices (:property/closed-values p)
            checkbox? (= :checkbox (:logseq.property/type p))]
        (if checkbox?
@@ -60,7 +62,7 @@
          (some (fn [choice]
                  (when (false? (:logseq.property/choice-checkbox-state choice))
                    (:db/id choice))) choices)))
-     :logseq.task/status.todo)
+     :logseq.property/status.todo)
     :else
     value))
 
@@ -108,52 +110,56 @@
 
 (defn- repeat-until-future-timestamp
   [datetime recur-unit frequency period-f keep-week?]
-  (let [now (t/now)]
-    (if (t/after? datetime now)
-      datetime
-      (let [v (period-f (t/interval datetime now))
-            delta (->> (Math/ceil (/ (if (zero? v) 1 v) frequency))
-                       (* frequency)
-                       recur-unit)
-            result (t/plus datetime delta)
-            w1 (t/day-of-week datetime)
-            w2 (t/day-of-week result)]
-        (if (and keep-week? (not= w1 w2))
-          ;; next week
-          (if (> w2 w1)
-            (t/plus result (t/days (- 7 (- w2 w1))))
-            (t/plus result (t/days (- w1 w2))))
-          result)))))
+  (let [now (t/now)
+        v (max
+           1
+           (if (t/after? datetime now)
+             1
+             (period-f (t/interval datetime now))))
+        delta (->> (Math/ceil (/ v frequency))
+                   (* frequency)
+                   recur-unit)
+        result* (t/plus datetime delta)
+        result (if (t/after? result* now)
+                 result*
+                 (t/plus result* (recur-unit frequency)))
+        w1 (t/day-of-week datetime)
+        w2 (t/day-of-week result)]
+    (if (and keep-week? (not= w1 w2))
+      ;; next week
+      (if (> w2 w1)
+        (t/plus result (t/days (- 7 (- w2 w1))))
+        (t/plus result (t/days (- w1 w2))))
+      result)))
 
 (defn- get-next-time
   [current-value unit frequency]
   (let [current-date-time (tc/to-date-time current-value)
-        default-timezone-time (t/to-default-time-zone current-date-time)
         [recur-unit period-f] (case (:db/ident unit)
-                                :logseq.task/recur-unit.minute [t/minutes t/in-minutes]
-                                :logseq.task/recur-unit.hour [t/hours t/in-hours]
-                                :logseq.task/recur-unit.day [t/days t/in-days]
-                                :logseq.task/recur-unit.week [t/weeks t/in-weeks]
-                                :logseq.task/recur-unit.month [t/months t/in-months]
-                                :logseq.task/recur-unit.year [t/years t/in-years]
+                                :logseq.property.repeat/recur-unit.minute [t/minutes t/in-minutes]
+                                :logseq.property.repeat/recur-unit.hour [t/hours t/in-hours]
+                                :logseq.property.repeat/recur-unit.day [t/days t/in-days]
+                                :logseq.property.repeat/recur-unit.week [t/weeks t/in-weeks]
+                                :logseq.property.repeat/recur-unit.month [t/months t/in-months]
+                                :logseq.property.repeat/recur-unit.year [t/years t/in-years]
                                 nil)]
     (when recur-unit
-      (let [delta (recur-unit frequency)
-            next-time (case (:db/ident unit)
-                        :logseq.task/recur-unit.year
-                        (repeat-until-future-timestamp default-timezone-time recur-unit frequency period-f false)
-                        :logseq.task/recur-unit.month
-                        (repeat-until-future-timestamp default-timezone-time recur-unit frequency period-f false)
-                        :logseq.task/recur-unit.week
-                        (repeat-until-future-timestamp default-timezone-time recur-unit frequency period-f true)
-                        (t/plus (t/now) delta))]
+      (let [week? (= (:db/ident unit) :logseq.property.repeat/recur-unit.week)
+            next-time (repeat-until-future-timestamp current-date-time recur-unit frequency period-f week?)]
         (tc/to-long next-time)))))
 
-(defmethod handle-command :reschedule [_ db entity _datoms]
-  (let [property-ident (or (:db/ident (:logseq.task/scheduled-on-property entity))
-                           :logseq.task/scheduled)
-        frequency (db-property/property-value-content (:logseq.task/recur-frequency entity))
-        unit (:logseq.task/recur-unit entity)
+(defn- compute-reschedule-property-tx
+  [db entity property-ident]
+  (let [[frequency default-value-tx-data]
+        (or [(db-property/property-value-content (:logseq.property.repeat/recur-frequency entity))
+             nil]
+            (let [property (d/entity db :logseq.property.repeat/recur-frequency)
+                  default-value-block (db-property-build/build-property-value-block property property 1)
+                  default-value-tx-data [default-value-block
+                                         {:db/id (:db/id property)
+                                          :logseq.property/default-value [:block/uuid (:block/uuid default-value-block)]}]]
+              [1 default-value-tx-data]))
+        unit (:logseq.property.repeat/recur-unit entity)
         property (d/entity db property-ident)
         date? (= :date (:logseq.property/type property))
         current-value (cond->
@@ -167,12 +173,29 @@
                                             {:page-uuid (:block/uuid (d/entity db journal-day))}
                                             (let [formatter (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))
                                                   title (date-time-util/format (t/to-default-time-zone (tc/to-date-time next-time-long)) formatter)]
-                                              (worker-db-page/create db title {:create-first-block? false})))
+                                              (outliner-page/create db title {})))
               value (if date? [:block/uuid page-uuid] next-time-long)]
           (concat
+           default-value-tx-data
            tx-data
            (when value
              [[:db/add (:db/id entity) property-ident value]])))))))
+
+(defmethod handle-command :reschedule [_ db entity _datoms]
+  (let [property-ident (or (:db/ident (:logseq.property.repeat/temporal-property entity))
+                           :logseq.property/scheduled)
+        other-property-idents (cond
+                                (and (= property-ident :logseq.property/scheduled)
+                                     (:logseq.property/deadline entity))
+                                [:logseq.property/deadline]
+
+                                (and (= property-ident :logseq.property/deadline)
+                                     (:logseq.property/scheduled entity))
+                                [:logseq.property/scheduled]
+
+                                :else
+                                (filter (fn [p] (get entity p)) [:logseq.property/deadline :logseq.property/scheduled]))]
+    (mapcat #(compute-reschedule-property-tx db entity %) (distinct (cons property-ident other-property-idents)))))
 
 (defmethod handle-command :set-property [_ _db entity _datoms property value]
   (let [property' (get-property entity property)
@@ -185,17 +208,16 @@
                           (when (and (true? (get property :logseq.property/enable-history?))
                                      (:added d))
                             {:property property
-                             :value (:v d)}))) datoms)
-        created-at (tc/to-long (t/now))]
+                             :value (:v d)}))) datoms)]
     (map
      (fn [{:keys [property value]}]
        (let [ref? (= :db.type/ref (:db/valueType property))
              value-key (if ref? :logseq.property.history/ref-value :logseq.property.history/scalar-value)]
-         {:block/uuid (ldb/new-block-id)
-          value-key value
-          :logseq.property.history/block (:db/id entity)
-          :logseq.property.history/property (:db/id property)
-          :block/created-at created-at}))
+         (sqlite-util/block-with-timestamps
+          {:block/uuid (ldb/new-block-id)
+           value-key value
+           :logseq.property.history/block (:db/id entity)
+           :logseq.property.history/property (:db/id property)})))
      changes)))
 
 (defmethod handle-command :default [command _db entity datoms]
@@ -212,17 +234,16 @@
 
 (defn run-commands
   [{:keys [tx-data db-after]}]
-  (let [db db-after]
-    (mapcat (fn [[e datoms]]
-              (let [entity (d/entity db e)
-                    commands (filter (fn [[_command {:keys [entity-conditions tx-conditions]}]]
-                                       (and
-                                        (if (seq entity-conditions)
-                                          (every? #(satisfy-condition? db entity % nil) entity-conditions)
-                                          true)
-                                        (every? #(satisfy-condition? db entity % datoms) tx-conditions))) @*commands)]
-                (mapcat
-                 (fn [command]
-                   (execute-command db entity datoms command))
-                 commands)))
-            (group-by :e tx-data))))
+  (mapcat (fn [[e datoms]]
+            (let [entity (d/entity db-after e)
+                  commands (filter (fn [[_command {:keys [entity-conditions tx-conditions]}]]
+                                     (and
+                                      (if (seq entity-conditions)
+                                        (every? #(satisfy-condition? db-after entity % nil) entity-conditions)
+                                        true)
+                                      (every? #(satisfy-condition? db-after entity % datoms) tx-conditions))) @*commands)]
+              (mapcat
+               (fn [command]
+                 (execute-command db-after entity datoms command))
+               commands)))
+          (group-by :e tx-data)))

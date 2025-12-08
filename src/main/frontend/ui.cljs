@@ -52,18 +52,26 @@
 (defonce _emoji-init-data ((gobj/get emoji-mart "init") #js {:data emoji-data}))
 ;; (def EmojiPicker (r/adapt-class (gobj/get Picker "default")))
 
-(defonce icon-size (if (mobile-util/native-platform?) 26 20))
+(defonce icon-size (if (mobile-util/native-platform?) 24 20))
 
-(defn shui-popups? [] (some-> (shui-popup/get-popups) (count) (> 0)))
+(defn popup-exists? []
+  (boolean (seq (shui-popup/get-popups))))
+
+(defn dropdown-exists?
+  []
+  (some? (js/document.querySelector "[data-radix-popper-content-wrapper]")))
+
 (defn last-shui-preview-popup?
   []
   (= "ls-preview-popup"
      (some-> (shui-popup/get-last-popup) :content-props :class)))
 (defn hide-popups-until-preview-popup!
   []
-  (while (and (shui-popups?)
-              (not (last-shui-preview-popup?)))
-    (shui/popup-hide!)))
+  (if (util/mobile?)
+    (shui/popup-hide!)
+    (while (and (popup-exists?)
+                (not (last-shui-preview-popup?)))
+      (shui/popup-hide!))))
 
 (def built-in-colors
   ["yellow"
@@ -104,8 +112,6 @@
   {:did-mount (fn [state]
                 (let [^js el (rum/dom-node state)
                       *mouse-point (volatile! nil)]
-                  ;; Passing aria-label as a prop to TextareaAutosize removes the dash
-                  (.setAttribute el "aria-label" "editing block")
                   (doto el
                     (.addEventListener "select"
                                        #(let [start (util/get-selection-start el)
@@ -136,6 +142,7 @@
                                                 (on-change e))
                              (state/set-editor-in-composition! true))))
         props (assoc props
+                     "data-testid" "block editor"
                      :on-change (fn [e] (when-not (state/editor-in-composition?)
                                           (on-change e)))
                      :on-composition-start on-composition
@@ -294,7 +301,8 @@
               (icon "info-circle" {:class "text-indigo-500" :size "20"}))
             status)]
       [:div.ui__notifications-content
-       {:style
+       {:class (str "notification-" (name (or (when (keyword? status) status) :info)))
+        :style
         (when (or (= state "exiting")
                   (= state "exited"))
           {:z-index -1})}
@@ -396,7 +404,7 @@
 
 (defn main-node
   []
-  (gdom/getElement "main-content-container"))
+  (util/app-scroll-container-node))
 
 (defn focus-element
   [element]
@@ -709,14 +717,14 @@
 (rum/defc block-error
   "Well styled error message for blocks"
   [title {:keys [content section-attrs]}]
-  [:section.border.mt-1.p-1.cursor-pointer.block-content-fallback-ui
+  [:section.border.mt-1.p-1.cursor-pointer.block-content-fallback-ui.w-full
    section-attrs
    [:div.flex.justify-between.items-center.px-1
     [:h5.text-error.pb-1 title]
     [:a.text-xs.opacity-50.hover:opacity-80
      {:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"
       :target "_blank"} "report issue"]]
-   (when content [:pre.m-0.text-sm content])])
+   (when content [:pre.m-0.text-sm (str content)])])
 
 (def component-error
   "Well styled error message for higher level components. Currently same as
@@ -809,15 +817,17 @@
       :on-pointer-up #(let [value (util/evalue %)]
                         (on-change value))}]))
 
-(rum/defcs tweet-embed < (rum/local true :loading?)
+(rum/defcs tweet-embed < rum/reactive
+  (rum/local true :loading?)
   [state id]
   (let [*loading? (:loading? state)]
-    [:div [(when @*loading? [:span.flex.items-center [svg/loading " ... loading"]])
-           (ReactTweetEmbed
-            {:id                    id
-             :class                 "contents"
-             :options               {:theme (when (= (state/sub :ui/theme) "dark") "dark")}
-             :on-tweet-load-success #(reset! *loading? false)})]]))
+    [:div
+     (when @*loading? [:span.flex.items-center [svg/loading " loading"]])
+     (ReactTweetEmbed
+      {:id                    id
+       :class                 "contents"
+       :options               {:theme (when (= (state/sub :ui/theme) "dark") "dark")}
+       :on-tweet-load-success #(reset! *loading? false)})]))
 
 (def icon shui.icon.v2/root)
 
@@ -876,8 +886,8 @@
         enabled-tooltip? (state/enable-tooltip?)]
     (if (and enabled-tooltip? shortcut-tooltip?)
       (tooltip content
-        [:div.text-sm.font-medium (keyboard-shortcut-from-config shortcut-key)]
-        {:trigger-props {:as-child true}})
+               [:div.text-sm.font-medium (keyboard-shortcut-from-config shortcut-key)]
+               {:trigger-props {:as-child true}})
       content)))
 
 (rum/defc progress-bar
@@ -931,8 +941,7 @@
                                      :rootMargin (str root-margin "px")
                                      :triggerOnce trigger-once?
                                      :onChange (fn [in-view? _entry]
-                                                 (when-not (= in-view? visible?)
-                                                   (set-visible! in-view?)))})
+                                                 (set-visible! in-view?))})
          ref (.-ref inViewState)]
      (lazy-visible-inner visible? content-fn ref fade-in? placeholder))))
 
@@ -977,12 +986,12 @@
 (rum/defc tooltip
   [trigger tooltip-content & {:keys [portal? root-props trigger-props content-props]}]
   (shui/tooltip-provider
-    (shui/tooltip root-props
-      (shui/tooltip-trigger (merge {:as-child true} trigger-props) trigger)
-      (if (not (false? portal?))
-        (shui/tooltip-portal
-          (shui/tooltip-content content-props tooltip-content))
-        (shui/tooltip-content content-props tooltip-content)))))
+   (shui/tooltip root-props
+                 (shui/tooltip-trigger (merge {:as-child true} trigger-props) trigger)
+                 (if (not (false? portal?))
+                   (shui/tooltip-portal
+                    (shui/tooltip-content content-props tooltip-content))
+                   (shui/tooltip-content content-props tooltip-content)))))
 
 (rum/defc DelDateButton
   [on-delete]
@@ -1078,13 +1087,13 @@
         on-select' (if (:datetime? opts)
                      (fn [date value]
                        (let [value (or (and (string? value) value)
-                                       (.-value (gdom/getElement "time-picker")))]
-                         (let [[h m] (string/split value ":")]
-                           (when (and date selected)
-                             (.setHours date h m 0))
-                           (default-on-select date))))
+                                       (.-value (gdom/getElement "time-picker")))
+                             [h m] (string/split value ":")]
+                         (when (and date selected)
+                           (.setHours date h m 0))
+                         (default-on-select date)))
                      default-on-select)]
-    [:div.flex.flex-col.gap-2.relative
+    [:div.ls-nlp-calendar
      (single-calendar (assoc opts :on-select on-select'))
      (when (:datetime? opts)
        (time-picker (cond->

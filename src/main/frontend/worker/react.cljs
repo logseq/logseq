@@ -15,7 +15,7 @@
 ;; ::refs
 ;; get BLOCKS referencing PAGE or BLOCK
 (s/def ::refs (s/tuple #(= ::refs %) int?))
-;; get class's Objects
+;; get class's objects
 (s/def ::objects (s/tuple #(= ::objects %) int?))
 ;; custom react-query
 (s/def ::custom any?)
@@ -36,7 +36,7 @@
                     (map :v)
                     (distinct))
         refs (->> (filter (fn [datom]
-                            (when (contains? #{:block/refs :block/path-refs} (:a datom))
+                            (when (contains? #{:block/refs} (:a datom))
                               (not= (:v datom)
                                     (:db/id (:block/page (d/entity db-after (:e datom))))))) tx-data)
                   (map :v)
@@ -67,13 +67,13 @@
                                 blocks [(when-let [parent-id (:db/id (:block/parent block))]
                                           [::block parent-id])
                                         [::block (:db/id block)]]
-                                path-refs (:block/path-refs block)
-                                path-refs' (->> (keep (fn [ref]
-                                                        (when-not (= (:db/id ref) page-id)
-                                                          [[::refs (:db/id ref)]
-                                                           [::block (:db/id ref)]])) path-refs)
-                                                (apply concat))]
-                            (concat blocks path-refs')))
+                                block-refs (:block/refs block)
+                                refs (->> (keep (fn [ref]
+                                                  (when-not (= (:db/id ref) page-id)
+                                                    [[::refs (:db/id ref)]
+                                                     [::block (:db/id ref)]])) block-refs)
+                                          (apply concat))]
+                            (concat blocks refs)))
                         block-entities)
 
                        (mapcat

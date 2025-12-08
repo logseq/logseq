@@ -71,10 +71,9 @@
             (d/add-class! target "ls-popup-closed")
             (.focus target)))))))
 
-(defonce *last-show-target (atom nil))
-
 (defn show!
-  [^js event content & {:keys [id as-dropdown? as-content? align root-props content-props
+  [^js event content & {:keys [id as-mask? as-dropdown? as-content?
+                               focus-trigger? align root-props content-props
                                on-before-hide on-after-hide trigger-id] :as opts}]
   (let [id (or id (gen-id))
         *target (volatile! nil)
@@ -97,27 +96,32 @@
                                 :start 0
                                 :end width
                                 (/ width 2)))
-                      (- bottom height)
-                      width height])
+                      (- (- bottom height)
+                        ;; minus default offset
+                         (if as-mask? 6 0))
+                      width (if as-mask? 1 height)])
+                   (and (vector event) (= (count event) 2) (every? integer? event))
+                   event
                    :else [0 0])]
-    (reset! *last-show-target @*target)
-    (js/setTimeout #(reset! *last-show-target nil) 64)
-    (some-> @*target
-            (d/set-attr! "data-popup-active"
-                         (if (keyword? id) (name id) (str id))))
-    (upsert-popup!
-     (merge opts
-            {:id id :target (deref *target)
-             :trigger-id trigger-id
-             :open? true :content content :position position
-             :as-dropdown? as-dropdown?
-             :as-content? as-content?
-             :root-props root-props
-             :on-before-hide on-before-hide
-             :on-after-hide on-after-hide
-             :content-props (cond-> content-props
-                              (not (nil? align))
-                              (assoc :align (name align)))}))))
+    (some-> @*target (d/set-attr! "data-popup-active" (if (keyword? id) (name id) (str id))))
+    (let [on-before-hide (fn []
+                           (some-> on-after-hide (apply nil))
+                           (when-let [^js trigger (and (not (false? focus-trigger?))
+                                                       (some-> @*target (.closest "[tabindex='0']")))]
+                             (js/setTimeout #(.focus trigger) 16)))]
+      (upsert-popup!
+       (merge opts
+              {:id id :target (deref *target)
+               :trigger-id trigger-id
+               :open? true :content content :position position
+               :as-dropdown? as-dropdown?
+               :as-content? as-content?
+               :root-props root-props
+               :on-before-hide on-before-hide
+               :on-after-hide on-after-hide
+               :content-props (cond-> content-props
+                                (not (nil? align))
+                                (assoc :align (name align)))})))))
 
 (defn hide!
   ([] (when-let [id (some-> (get-popups) (last) :id)] (hide! id 0)))
@@ -143,7 +147,7 @@
 
 (rum/defc x-popup
   [{:keys [id open? content position as-dropdown? as-content? force-popover?
-           auto-side? _auto-focus? _target root-props content-props
+           auto-side? as-mask? _auto-focus? _target root-props content-props
            _on-before-hide _on-after-hide]
     :as _props}]
   (when-let [[x y _ height] position]
@@ -159,7 +163,7 @@
                                "top" "bottom"))))
           auto-side? (if (boolean? auto-side?) auto-side? true)
           content-props (cond-> content-props
-                          auto-side? (assoc :side (auto-side-fn)))
+                          (and (not as-mask?) auto-side?) (assoc :side (auto-side-fn)))
           handle-key-escape! (fn [^js e]
                                (when-not (false? (some-> content-props (:onEscapeKeyDown) (apply [e])))
                                  (hide! id 1)))
@@ -179,6 +183,9 @@
                          :left x}} ""))
        (let [content-props (cond-> (merge content-props {:onEscapeKeyDown handle-key-escape!
                                                          :onPointerDownOutside handle-pointer-outside!})
+                             as-mask?
+                             (assoc :data-as-mask true)
+
                              (and (not force-popover?)
                                   (not as-dropdown?))
                              (assoc :on-key-down (fn [^js e]

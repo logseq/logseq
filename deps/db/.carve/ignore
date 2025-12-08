@@ -17,14 +17,40 @@ logseq.db.frontend.class/build-new-class
 ;; API
 logseq.db.frontend.class/logseq-class?
 ;; API
+logseq.db.frontend.class/disallowed-inline-tags
+;; API
 logseq.db.frontend.db-ident/ensure-unique-db-ident
+;; API
+logseq.db.frontend.db-ident/replace-db-ident-random-suffix
 ;; API
 logseq.db.sqlite.build/create-blocks
 ;; API
 logseq.db.sqlite.export/build-export
+;; API
+logseq.db.sqlite.export/validate-export
 ;; API
 logseq.db.sqlite.export/build-import
 ;; API
 logseq.db.common.view/get-property-values
 ;; API
 logseq.db.common.view/get-view-data
+;; API
+logseq.db.common.initial-data/with-parent
+;; API
+logseq.db.common.initial-data/get-block-and-children
+;; API
+logseq.db.common.initial-data/get-initial-data
+;; API
+logseq.db.sqlite.debug/find-missing-addresses
+;; API
+logseq.db.sqlite.debug/find-missing-addresses-node-version
+;; API
+logseq.db.sqlite.gc/gc-kvs-table!
+;; API
+logseq.db.sqlite.gc/gc-kvs-table-node-version!
+;; API
+logseq.db.sqlite.gc/ensure-no-garbage
+;; API
+logseq.db.common.entity-util/entity->map
+;; documenting keywords
+logseq.db.frontend.kv-entity/kv-entities

@@ -1,5 +1,6 @@
 (ns frontend.components.theme
-  (:require [electron.ipc :as ipc]
+  (:require [clojure.string :as string]
+            [electron.ipc :as ipc]
             [frontend.components.settings :as settings]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -36,7 +37,7 @@
 (defonce *once-theme-loaded? (volatile! false))
 
 (rum/defc ^:large-vars/cleanup-todo container < rum/static
-  [{:keys [route theme accent-color editor-font on-click current-repo nfs-granted? db-restoring?
+  [{:keys [route theme accent-color editor-font on-click current-repo db-restoring?
            settings-open? sidebar-open? system-theme? sidebar-blocks-len onboarding-state preferred-language]} child]
   (let [mounted-fn (use-mounted)
         [restored-sidebar? set-restored-sidebar?] (rum/use-state false)]
@@ -62,13 +63,18 @@
      [accent-color])
 
     (hooks/use-effect!
-     #(some-> js/document.documentElement
-              (.setAttribute "data-font" (or editor-font "default")))
-     [editor-font])
+      (fn []
+        (when-let [{:keys [type global]} editor-font]
+          (doto js/document.documentElement
+            (.setAttribute "data-font" (or type "default"))
+            (.setAttribute "data-font-global" (boolean global)))))
+      [editor-font])
 
     (hooks/use-effect!
      #(let [doc js/document.documentElement]
-        (.setAttribute doc "lang" preferred-language)))
+        (.setAttribute doc "lang" preferred-language)
+        (some-> preferred-language (string/lower-case) (js/LSI18N.setLocale)))
+     [preferred-language])
 
     (hooks/use-effect!
      #(js/setTimeout
@@ -95,6 +101,7 @@
     (hooks/use-effect!
      (fn []
        (ui-handler/reset-custom-css!)
+       (ui-handler/set-file-graph-flag! (false? (config/db-based-graph? current-repo)))
        (pdf/reset-current-pdf!)
        (plugin-handler/hook-plugin-app :current-graph-changed {}))
      [current-repo])
@@ -103,9 +110,9 @@
      #(let [db-restored? (false? db-restoring?)]
         (if db-restoring?
           (util/set-title! (t :loading))
-          (when (or nfs-granted? db-restored?)
+          (when db-restored?
             (route-handler/update-page-title! route))))
-     [nfs-granted? db-restoring? route])
+     [db-restoring? route])
 
     (hooks/use-effect!
      (fn []

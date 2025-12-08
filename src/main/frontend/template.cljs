@@ -2,17 +2,17 @@
   "Provides template related functionality"
   (:require [clojure.string :as string]
             [frontend.date :as date]
-            [frontend.state :as state]
+            [frontend.db.conn :as conn]
             [frontend.db.utils :as db-utils]
-            [logseq.common.util.page-ref :as page-ref]
-            [logseq.db :as ldb]
-            [frontend.db.conn :as conn]))
+            [frontend.state :as state]
+            [frontend.util.ref :as ref]
+            [logseq.db :as ldb]))
 
 (defn- variable-rules
   []
-  {"today" (page-ref/->page-ref (date/today))
-   "yesterday" (page-ref/->page-ref (date/yesterday))
-   "tomorrow" (page-ref/->page-ref (date/tomorrow))
+  {"today" (ref/->page-ref (date/today))
+   "yesterday" (ref/->page-ref (date/yesterday))
+   "tomorrow" (ref/->page-ref (date/tomorrow))
    "time" (date/get-current-time)
    "current page" (when-let [current-page (or
                                            (state/get-current-page)
@@ -22,7 +22,7 @@
                                  (db-utils/entity [:block/uuid block-uuid])
                                  (ldb/get-page (conn/get-db) current-page))
                           current-page' (:block/title page)]
-                      (when current-page' (page-ref/->page-ref current-page'))))})
+                      (when current-page' (ref/->page-ref current-page'))))})
 
 (def template-re #"<%([^%].*?)%>")
 
@@ -41,5 +41,5 @@
                         :else
                         (if-let [nld (date/nld-parse match)]
                           (let [date (doto (goog.date.DateTime.) (.setTime (.getTime nld)))]
-                            (page-ref/->page-ref (date/journal-name date)))
+                            (ref/->page-ref (date/journal-name date)))
                           match))))))

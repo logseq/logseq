@@ -7,6 +7,7 @@
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
+            [frontend.db.file-based.model :as file-model]
             [frontend.db.model :as db-model]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.handler.editor :as editor-handler]
@@ -15,6 +16,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.ref :as ref]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
@@ -89,43 +91,38 @@
   {:will-unmount (fn [state]
                    (swap! *between-dates dissoc (first (:rum/args state)))
                    state)}
-  [state id placeholder {:keys [auto-focus on-select]}]
+  [state id placeholder {:keys [on-select]}]
   (let [*input-value (::input-value state)]
-    [:div.ml-4
-     [:input.query-builder-datepicker.form-input.block.sm:text-sm.sm:leading-5
-      {:auto-focus (or auto-focus false)
-       :data-key (name id)
-       :placeholder placeholder
-       :aria-label placeholder
-       :value (some-> @*input-value (first))
-       :on-focus (fn [^js e]
-                   (js/setTimeout
-                    #(shui/popup-show! (.-target e)
-                                       (let [select-handle! (fn [^js d]
-                                                              (let [gd (date/js-date->goog-date d)
-                                                                    journal-date (date/js-date->journal-title gd)]
-                                                                (reset! *input-value [journal-date d])
-                                                                (swap! *between-dates assoc id journal-date))
-                                                              (some-> on-select (apply []))
-                                                              (shui/popup-hide!))]
-                                         (ui/single-calendar
-                                          {:initial-focus true
-                                           :selected (some-> @*input-value (second))
-                                           :on-select select-handle!}))
-                                       {:id :query-datepicker
-                                        :content-props {:class "p-0"}
-                                        :align :start}) 16))}]]))
+    (shui/button
+     {:variant :secondary
+      :size :sm
+      :on-click (fn [^js e]
+                  (shui/popup-show! (.-target e)
+                                    (let [select-handle! (fn [^js d]
+                                                           (let [gd (date/js-date->goog-date d)
+                                                                 journal-date (date/js-date->journal-title gd)]
+                                                             (reset! *input-value [journal-date d])
+                                                             (swap! *between-dates assoc id journal-date))
+                                                           (some-> on-select (apply []))
+                                                           (shui/popup-hide!))]
+                                      (ui/single-calendar
+                                       {:initial-focus false
+                                        :selected (some-> @*input-value (second))
+                                        :on-select select-handle!}))
+                                    {:id :query-datepicker
+                                     :content-props {:class "p-0"}
+                                     :align :start}))}
+     (or (first @*input-value) placeholder))))
 
 (rum/defcs between <
   (rum/local nil ::start)
   (rum/local nil ::end)
   [state {:keys [tree loc] :as opts}]
   [:div.between-date.p-4 {:on-pointer-down (fn [e] (util/stop-propagation e))}
-   [:div.flex.flex-row
-    [:div.font-medium.mt-2 "Between: "]
+   [:div.flex.flex-row.items-center.gap-2
+    [:div.font-medium "Between: "]
     (datepicker :start "Start date"
-                (merge opts {:auto-focus true
-                             :on-select (fn []
+                (merge opts {:on-select (fn []
                                           (when-let [^js end-input (js/document.querySelector ".query-builder-datepicker[data-key=end]")]
                                             (when (string/blank? (.-value end-input))
                                               (.focus end-input))))}))
@@ -174,17 +171,20 @@
   [*property *private-property? *find *tree opts loc values {:keys [db-graph?]}]
   (let [values' (cons {:label "Select all"
                        :value "Select all"}
-                      values)
+                      (map #(hash-map :value (str (:value %))
+                                      ;; Preserve original-value as non-string values like boolean do not display in select
+                                      :original-value (:value %))
+                           values))
         find' (rum/react *find)]
     (select values'
-            (fn [{:keys [value]}]
+            (fn [{:keys [value original-value]}]
               (let [k (cond
                         db-graph? (if @*private-property? :private-property :property)
                         (= find' :page) :page-property
                         :else :property)
                     x (if (= value "Select all")
                         [k @*property]
-                        [k @*property value])]
+                        [k @*property original-value])]
                 (reset! *property nil)
                 (append-tree! *tree opts loc x))))))
 
@@ -196,7 +196,7 @@
      (fn [_property]
        (p/let [result (if db-graph?
                         (p/let [result (db-async/<get-property-values @*property)]
-                          (map (fn [{:keys [label _value]}]
+                          (map (fn [{:keys [label]}]
                                  {:label label
                                   :value label})
                                result))
@@ -218,12 +218,15 @@
        (let [result (db-model/get-all-readable-classes repo {:except-root-class? true})]
          (set-values! result)))
      [])
-    (let [items (->> values
-                     (map :block/title)
-                     sort)]
+    (let [items (->> (sort-by :block/title values)
+                     (map (fn [block]
+                            {:label (:block/title block)
+                             :value (:block/uuid block)})))]
       (select items
-              (fn [{:keys [value]}]
-                (append-tree! *tree opts loc [(if db-based? :tags :page-tags) value]))))))
+              (fn [{:keys [value label]}]
+                (append-tree! *tree opts loc [(if db-based? :tags :page-tags)
+                                              (if db-based? (str value) label)]))
+              {:extract-fn :label}))))
 
 (rum/defc page-search
   [on-chosen]
@@ -261,7 +264,7 @@
        (tags repo *tree opts loc)
 
        "task"
-       (let [items (let [values (:property/closed-values (db/entity :logseq.task/status))]
+       (let [items (let [values (:property/closed-values (db/entity :logseq.property/status))]
                      (mapv db-property/property-value-content values))]
          (select items
                  (constantly nil)
@@ -277,7 +280,7 @@
 
        "priority"
        (select (if (config/db-based-graph? repo)
-                 (let [values (:property/closed-values (db/entity :logseq.task/priority))]
+                 (let [values (:property/closed-values (db/entity :logseq.property/priority))]
                    (mapv db-property/property-value-content values))
                  gp-db/built-in-priorities)
                (constantly nil)
@@ -321,7 +324,7 @@
     [:div
      (case @*mode
        "namespace"
-       (let [items (sort (map :block/title (db-model/get-all-namespace-parents repo)))]
+       (let [items (sort (map :block/title (file-model/get-all-namespace-parents repo)))]
          (select items
                  (fn [{:keys [value]}]
                    (append-tree! *tree opts loc [:namespace value]))))
@@ -342,7 +345,7 @@
 
        "task"
        (select (if (config/db-based-graph? repo)
-                 (let [values (:property/closed-values (db/entity :logseq.task/status))]
+                 (let [values (:property/closed-values (db/entity :logseq.property/status))]
                    (mapv db-property/property-value-content values))
                  gp-db/built-in-markers)
                (constantly nil)
@@ -358,7 +361,7 @@
 
        "priority"
        (select (if (config/db-based-graph? repo)
-                 (let [values (:property/closed-values (db/entity :logseq.task/priority))]
+                 (let [values (:property/closed-values (db/entity :logseq.property/priority))]
                    (mapv db-property/property-value-content values))
                  gp-db/built-in-priorities)
                (constantly nil)
@@ -454,6 +457,12 @@
 
 (declare clauses-group)
 
+(defn- uuid->page-title
+  [s]
+  (if (and (string? s) (common-util/uuid-string? s))
+    (:block/title (db/entity [:block/uuid (uuid s)]))
+    s))
+
 (defn- dsl-human-output
   [clause]
   (let [f (first clause)]
@@ -465,16 +474,16 @@
       (str "Search: " clause)
 
       (= (keyword f) :page-ref)
-      (page-ref/->page-ref (second clause))
+      (ref/->page-ref (uuid->page-title (second clause)))
 
       (contains? #{:tags :page-tags} (keyword f))
       (cond
         (string? (second clause))
-        (str "#" (second clause))
+        (str "#" (uuid->page-title (second clause)))
         (symbol? (second clause))
-        (str "#" (str (second clause)))
+        (str "#" (uuid->page-title  (str (second clause))))
         :else
-        (str "#" (second (second clause))))
+        (str "#" (uuid->page-title (second (second clause)))))
 
       (contains? #{:property :private-property :page-property} (keyword f))
       (str (if (and (config/db-based-graph? (state/get-current-repo))
@@ -482,15 +491,16 @@
              (:block/title (db/entity (second clause)))
              (some-> (second clause) name))
            ": "
-           (cond
-             (and (vector? (last clause)) (= :page-ref (first (last clause))))
-             (second (last clause))
+           (uuid->page-title
+            (cond
+              (and (vector? (last clause)) (= :page-ref (first (last clause))))
+              (second (last clause))
 
-             (= 2 (count clause))
-             "ALL"
+              (= 2 (count clause))
+              "ALL"
 
-             :else
-             (last clause)))
+              :else
+              (last clause))))
 
       ;; between timestamp start (optional end)
       (and (= (keyword f) :between) (query-dsl/get-timestamp-property clause))
@@ -504,9 +514,13 @@
                         (symbol? end))
                   (name end)
                   (second end))]
-        (str (if (= k :block/created-at)
+        (str (cond
+               (= k :block/created-at)
                "Created"
-               "Updated")
+               (= k :block/updated-at)
+               "Updated"
+               :else
+               (or (:block/title (db/entity k)) (name k)))
              " " start
              (when end
                (str " ~ " end))))
@@ -521,7 +535,7 @@
                         (symbol? (last clause)))
                   (name (last  clause))
                   (second (last clause)))]
-        (str "between: " start " ~ " end))
+        (str "between: " (uuid->page-title start) " ~ " (uuid->page-title end)))
 
       (contains? #{:task :priority} (keyword f))
       (str (name f) ": "

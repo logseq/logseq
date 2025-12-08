@@ -74,13 +74,86 @@
 
 (defn use-flow-state
   "Return values from `flow`, default init-value is nil"
-  ([flow] (use-flow-state nil flow))
-  ([init-value flow]
+  ([flow] (use-flow-state nil flow []))
+  ([init-value flow] (use-flow-state init-value flow []))
+  ([init-value flow deps]
    (let [[value set-value!] (use-state init-value)]
      (use-effect!
       #(c.m/run-task*
         (m/reduce
          (constantly nil)
          (m/ap (set-value! (m/?> flow)))))
-      [])
+      deps)
      value)))
+
+(defn- is-touch-event? [e]
+  (exists? (.-touches e)))
+
+(defn- prevent-default [e]
+  (when (and (is-touch-event? e)
+             (< (.-length (.-touches e)) 2)
+             (.-preventDefault e))
+    (.preventDefault e)))
+
+(defn use-long-press
+  [{:keys [on-click on-long-press prevent-default? delay]
+    :or {prevent-default? true
+         delay 300}}]
+  (let [[long-press-triggered set-long-press-triggered] (use-state false)
+        timeout-ref (use-ref nil)
+        target-ref (use-ref nil)
+        start (use-callback
+               (fn [e]
+                 (when (and prevent-default? (.-target e))
+                   (.addEventListener (.-target e) "touchend" prevent-default #js {:passive false})
+                   (set! (.-current target-ref) (.-target e)))
+                 (set! (.-current timeout-ref)
+                       (js/setTimeout
+                        (fn []
+                          (on-long-press e)
+                          (set-long-press-triggered true))
+                        delay)))
+               [on-long-press delay prevent-default?])
+
+        clear (use-callback
+               (fn [_e should-trigger-click]
+                 (when (.-current timeout-ref)
+                   (js/clearTimeout (.-current timeout-ref)))
+                 (when (and (or (nil? should-trigger-click) should-trigger-click)
+                            (not long-press-triggered))
+                   (on-click))
+                 (set-long-press-triggered false)
+                 (when (and prevent-default? (.-current target-ref))
+                   (.removeEventListener (.-current target-ref) "touchend" prevent-default)))
+               [prevent-default? on-click long-press-triggered])]
+
+    {:onMouseDown #(start %)
+     :onTouchStart #(start %)
+     :onMouseUp #(clear % true)
+     :onMouseLeave #(clear % false)
+     :onTouchEnd #(clear % true)}))
+
+(defn- use-atom-fn
+  [a getter-fn setter-fn]
+  (let [[val set-val] (use-state (getter-fn @a))]
+    (use-effect!
+     (fn []
+       (let [id (str (random-uuid))]
+         (add-watch a id (fn [_ _ prev-state next-state]
+                           (let [prev-value (getter-fn prev-state)
+                                 next-value (getter-fn next-state)]
+                             (when-not (= prev-value next-value)
+                               (set-val next-value)))))
+         #(remove-watch a id)))
+     [])
+    [val #(swap! a setter-fn %)]))
+
+(defn use-atom
+  "(use-atom my-atom)"
+  [a]
+  (use-atom-fn a identity (fn [_ v] v)))
+
+(defn use-atom-in
+  [a ks]
+  (let [ks (if (keyword? ks) [ks] ks)]
+    (use-atom-fn a #(get-in % ks) (fn [a' v] (assoc-in a' ks v)))))

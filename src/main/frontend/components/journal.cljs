@@ -6,7 +6,6 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [goog.dom :as gdom]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -15,17 +14,19 @@
   [:div.journal-item.content
    (when last?
      {:class "journal-last-item"})
-   (page/page-cp {:db/id id})])
+   (page/page-cp {:db/id id
+                  :journals? true})])
 
 (defn- sub-journals
   []
-  (-> (react/q (state/get-current-repo)
-               [:frontend.worker.react/journals]
-               {:query-fn (fn [_]
-                            (p/let [{:keys [data]} (views/<load-view-data nil {:journals? true})]
-                              (remove nil? data)))}
-               nil)
-      util/react))
+  (when-let [repo (state/get-current-repo)]
+    (some-> (react/q repo
+                     [:frontend.worker.react/journals]
+                     {:query-fn (fn [_]
+                                  (p/let [{:keys [data]} (views/<load-view-data nil {:journals? true})]
+                                    (remove nil? data)))}
+                     nil)
+            util/react)))
 
 (rum/defc all-journals < rum/reactive db-mixins/query
   []
@@ -33,8 +34,8 @@
     (when (seq data)
       [:div#journals
        (ui/virtualized-list
-        {:custom-scroll-parent (gdom/getElement "main-content-container")
-         :increase-viewport-by {:top 300 :bottom 300}
+        {:custom-scroll-parent (util/app-scroll-container-node)
+         :increase-viewport-by {:top 100 :bottom 100}
          :compute-item-key (fn [idx]
                              (let [id (util/nth-safe data idx)]
                                (str "journal-" id)))

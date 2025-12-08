@@ -82,7 +82,6 @@
  :right-side-bar/page-graph           "گراف برگه"
  :right-side-bar/block-ref            "ارجاعات بلوک"
  :right-side-bar/graph-view           "نمای گراف"
- :right-side-bar/all-pages            "همه برگه‌ها"
  :right-side-bar/whiteboards          "تخته‌سفیدها"
  :right-side-bar/flashcards           "فلش کارت‌ها"
  :right-side-bar/show-journals        "نمایش روزنگارها"
@@ -106,9 +105,6 @@
  :page/logseq-is-having-a-problem "لاگ‌سیک دچار مشکلی شده است. برای بازگرداندن آن به حالت قابل استفاده لطفا گام‌های زیر را به ترتیب انجام دهید:"
  :page/step "گام {1}"
  :page/try "امتحان کنید"
- :page/slide-view "نمایش به صورت اسلاید"
- :page/slide-view-tip-go-fullscreen (fn [] [[:span.opacity-70 "نکته: دکمه "] [:code "f"] [:span.opacity-70 " را برای رفتن به حالت تمام صفحه بفشارید"]])
- :page/delete-confirmation "مطمئنید که می‌خواید این برگه به همراه پرونده‌اش را پاک کنید؟"
  :page/open-in-finder "باز کردن در پوشه"
  :page/open-with-default-app "باز کردن با برنامه پیش‌فرض"
  :page/make-public "عمومی ساختن برای انتشار"
@@ -292,7 +288,6 @@
  :export-copied-to-clipboard "در بریده‌دان رونوشت شد!"
  :export-save-to-file "ذخیره در پرونده"
  :all-graphs "همهٔ گراف‌ها"
- :all-pages "همهٔ برگه‌ها"
  :all-whiteboards "همه تخته‌سفیدها"
  :all-files "همهٔ پرونده‌ها"
  :all-journals "همهٔ روزنگارها"
@@ -312,7 +307,6 @@
  :download "بارگیری"
  :language "زبان"
  :remove-background "حذف پس‌زمینه"
- :open-a-directory "باز کردن یک پوشه محلی"
  :toggle-theme      "تغییر پوسته"
 
  :help/shortcut-page-title "کلیدهای میان‌بر"

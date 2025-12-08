@@ -3,15 +3,12 @@
 
   $ yarn -s nbb-logseq script/query.cljs db-name '[:find (pull ?b [:block/name :block/title]) :where [?b :block/created-at]]'"
   (:require ["child_process" :as child-process]
-            ["os" :as os]
-            ["path" :as node-path]
             [babashka.cli :as cli]
             [clojure.edn :as edn]
             [clojure.pprint :as pprint]
-            [clojure.string :as string]
             [datascript.core :as d]
+            [logseq.db.common.sqlite-cli :as sqlite-cli]
             [logseq.db.frontend.rules :as rules]
-            [logseq.db.sqlite.cli :as sqlite-cli]
             [nbb.core :as nbb]))
 
 (defn- sh
@@ -21,17 +18,6 @@
   (child-process/spawnSync (first cmd)
                            (clj->js (rest cmd))
                            (clj->js (merge {:stdio "inherit"} opts))))
-
-(defn- get-dir-and-db-name
-  "Gets dir and db name for use with open-db! Works for relative and absolute paths and
-   defaults to ~/logseq/graphs/ when no '/' present in name"
-  [graph-dir]
-  (if (string/includes? graph-dir "/")
-    (let [resolve-path' #(if (node-path/isAbsolute %) %
-                             ;; $ORIGINAL_PWD used by bb tasks to correct current dir
-                             (node-path/join (or js/process.env.ORIGINAL_PWD ".") %))]
-      ((juxt node-path/dirname node-path/basename) (resolve-path' graph-dir)))
-    [(node-path/join (os/homedir) "logseq" "graphs") graph-dir]))
 
 (def spec
   "Options spec"
@@ -48,9 +34,8 @@
             :coerce []
             :desc "Lookup entities instead of query"}})
 
-(defn query-graph [graph-dir args'' options]
-  (let [[dir db-name] (get-dir-and-db-name graph-dir)
-        conn (sqlite-cli/open-db! dir db-name)
+(defn query-graph [graph args'' options]
+  (let [conn (apply sqlite-cli/open-db! (sqlite-cli/->open-db-args graph))
         results (if (:entity options)
                   (map #(when-let [ent (d/entity @conn
                                                  (if (string? %) (edn/read-string %) %))]

@@ -101,7 +101,6 @@
  :right-side-bar/page-graph "Grafik halaman"
  :right-side-bar/block-ref "Referensi blok"
  :right-side-bar/graph-view "Tampilan grafik"
- :right-side-bar/all-pages "Semua halaman"
  :right-side-bar/whiteboards "Papan tulis"
  :right-side-bar/flashcards "Kartu flash"
  :right-side-bar/show-journals "Tampilkan Jurnal"
@@ -125,9 +124,6 @@
  :page/logseq-is-having-a-problem "Logseq mengalami masalah. Untuk mencoba mengembalikannya ke keadaan yang berfungsi, silakan coba langkah-langkah aman berikut ini secara berurutan:"
  :page/step "Langkah {1}"
  :page/try "Coba"
- :page/slide-view "Tampilkan sebagai slide"
- :page/slide-view-tip-go-fullscreen (fn [] [[:span.opacity-70 "Tip: tekan "] [:code "f"] [:span.opacity-70 " untuk masuk ke mode layar penuh"]])
- :page/delete-confirmation "Apakah Anda yakin ingin menghapus halaman ini beserta berkasnya?"
  :page/open-in-finder "Buka dalam direktori"
  :page/open-with-default-app "Buka dengan aplikasi default"
  :page/make-public "Buat publik untuk dipublikasikan"
@@ -273,7 +269,6 @@
  :settings-page/update-available "Ditemukan rilis baru "
  :settings-page/update-error-1 "⚠️ Ups, Ada Sesuatu yang Salah!"
  :settings-page/update-error-2 " Silakan cek "
- :settings-permission/start-granting "Berikan"
 
  :yes "Ya"
 
@@ -383,7 +378,7 @@
  :whiteboard/toggle-grid "Alihkan grid"
  :whiteboard/snap-to-grid "Tetapkan ke grid"
  :flashcards/modal-welcome-title "Saatnya membuat kartu!"
- :flashcards/modal-welcome-desc-1 "Anda dapat menambahkan \"#card\" ke blok apa pun untuk mengubahnya menjadi kartu atau memicu \"/cloze\" untuk menambahkan beberapa cloze."
+ :flashcards/modal-welcome-desc-1 "Anda dapat menambahkan \"{1}\" ke blok apa pun untuk mengubahnya menjadi kartu atau memicu \"/cloze\" untuk menambahkan beberapa cloze."
  :flashcards/modal-welcome-desc-2 "Anda dapat "
  :flashcards/modal-welcome-desc-3 "klik tautan ini"
  :flashcards/modal-welcome-desc-4 " untuk memeriksa dokumentasinya."
@@ -426,10 +421,8 @@
  :export-copied-to-clipboard "Disalin ke clipboard!"
  :export-save-to-file "Simpan ke berkas"
  :all-graphs "Semua grafik"
- :all-pages "Semua halaman"
  :all-whiteboards "Semua papan tulis"
  :all-files "Semua berkas"
- :remove-orphaned-pages "Hapus halaman yang tidak terhubung?"
  :all-journals "Semua jurnal"
  :settings "Pengaturan"
  :settings-of-plugins "Pengaya"
@@ -450,7 +443,6 @@
  :remove-heading "Hapus judul"
  :heading "Judul {1}"
  :auto-heading "Judul otomatis"
- :open-a-directory "Buka direktori lokal"
  :toggle-theme "Alihkan tema"
 
  :help/shortcut-page-title "Pintasan Papan Ketik"

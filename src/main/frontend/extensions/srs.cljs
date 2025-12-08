@@ -1,6 +1,6 @@
 (ns frontend.extensions.srs
-  "SRS fns, will be deprecated in db-based version.
-  see also `frontend.extensions.fsrs`"
+  "SRS fns for file based graphs. Will be deprecated in db-based version.
+  See also `frontend.extensions.fsrs`"
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [cljs-time.local :as tl]
@@ -267,13 +267,13 @@
                       (when-let [query' (query-dsl/query-wrapper query*
                                                                  {:blocks? true
                                                                   :block-attrs [:db/id :block/properties]})]
-                        (let [result (query-react/react-query repo
-                                                              {:query (with-meta query' {:cards-query? true})
-                                                               :rules (or rules [])}
-                                                              (merge
-                                                               {:use-cache? use-cache?}
-                                                               (when sort-by
-                                                                 {:transform-fn sort-by})))]
+                        (let [result (last (query-react/react-query repo
+                                                                    {:query (with-meta query' {:cards-query? true})
+                                                                     :rules (or rules [])}
+                                                                    (merge
+                                                                     {:use-cache? use-cache?}
+                                                                     (when sort-by
+                                                                       {:transform-fn sort-by}))))]
                           (when result
                             (flatten (util/react result)))))))]
        (vec result)))))
@@ -489,16 +489,16 @@
 
             (when preview?
               (ui/tooltip
-                (ui/button [:span (t :flashcards/modal-btn-reset)]
-                  :id "card-reset"
-                  :class (util/hiccup->class "opacity-60.hover:opacity-100.card-reset")
-                  :on-click (fn [e]
-                              (util/stop e)
-                              (operation-reset! card)))
+               (ui/button [:span (t :flashcards/modal-btn-reset)]
+                          :id "card-reset"
+                          :class (util/hiccup->class "opacity-60.hover:opacity-100.card-reset")
+                          :on-click (fn [e]
+                                      (util/stop e)
+                                      (operation-reset! card)))
 
-                [:div.text-sm
-                 (t :flashcards/modal-btn-reset-tip)]
-                {:trigger-props {:as-child false}}))]
+               [:div.text-sm
+                (t :flashcards/modal-btn-reset-tip)]
+               {:trigger-props {:as-child false}}))]
            [:div.my-3 (ui/button "Review cards" :small? true)])]))))
 
 (rum/defc view-modal <
@@ -631,17 +631,17 @@
            ;; FIXME: CSS issue
            (if @*preview-mode?
              (ui/tooltip
-               [:div.opacity-60.text-sm.mr-2
-                @*card-index
-                [:span "/"]
-                total]
-               [:div.text-sm (t :flashcards/modal-current-total)])
+              [:div.opacity-60.text-sm.mr-2
+               @*card-index
+               [:span "/"]
+               total]
+              [:div.text-sm (t :flashcards/modal-current-total)])
              (ui/tooltip
-               [:div.opacity-60.text-sm.mr-2
-                (max 0 (- filtered-total @*card-index))
-                [:span "/"]
-                total]
-               [:div.text-sm (t :flashcards/modal-overdue-total)]))
+              [:div.opacity-60.text-sm.mr-2
+               (max 0 (- filtered-total @*card-index))
+               [:span "/"]
+               total]
+              [:div.text-sm (t :flashcards/modal-overdue-total)]))
 
            (ui/tooltip
             (ui/button
@@ -656,8 +656,8 @@
                :small? true}
               (when @*preview-mode?
                 {:icon-props {:style {:color "var(--ls-button-background)"}}})))
-             [:div.text-sm (t :flashcards/modal-toggle-preview-mode)]
-             {:trigger-props {:as-child false}})
+            [:div.text-sm (t :flashcards/modal-toggle-preview-mode)]
+            {:trigger-props {:as-child false}})
 
            (ui/tooltip
             (ui/button
@@ -670,8 +670,8 @@
                :small? true}
               (when @*random-mode?
                 {:icon-props {:style {:color "var(--ls-button-background)"}}})))
-             [:div.text-sm (t :flashcards/modal-toggle-random-mode)]
-             {:trigger-props {:as-child false}})]]
+            [:div.text-sm (t :flashcards/modal-toggle-random-mode)]
+            {:trigger-props {:as-child false}})]]
          [:div.px-1
           (when (and (not modal?) (not @*preview-mode?))
             {:on-click (fn []
@@ -693,7 +693,7 @@
          [:h1.title (t :flashcards/modal-welcome-title)]
 
          [:div
-          [:p (t :flashcards/modal-welcome-desc-1)]
+          [:p (t :flashcards/modal-welcome-desc-1 "#card")]
           [:img.my-4 {:src "https://docs.logseq.com/assets/2021-07-22_22.28.02_1626964258528_0.gif"}]
           [:p (t :flashcards/modal-welcome-desc-2)
            [:a {:href "https://docs.logseq.com/#/page/Flashcards" :target "_blank"}

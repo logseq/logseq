@@ -12,13 +12,13 @@
             [frontend.handler.export.opml :as export-opml]
             [frontend.handler.export.text :as export-text]
             [frontend.handler.notification :as notification]
-            [frontend.idb :as idb]
             [frontend.image :as image]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.db :as ldb]
+            [logseq.db.sqlite.export :as sqlite-export]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -33,51 +33,55 @@
     [:div.flex.flex-col.gap-4
      [:div.font-medium.opacity-50
       "Schedule backup"]
-     (if backup-folder
-       [:div.flex.flex-row.items-center.gap-1.text-sm
-        [:div.opacity-50 (str "Backup folder:")]
-        backup-folder
-        (shui/button
-         {:variant :ghost
-          :class "!px-1 !py-1"
-          :title "Change backup folder"
-          :on-click (fn []
-                      (p/do!
-                       (db/transact! [[:db/retractEntity :logseq.kv/graph-backup-folder]])
-                       (reset! *backup-folder nil)))
-          :size :sm}
-         (ui/icon "edit"))]
-       (shui/button
-        {:variant :default
-         :on-click (fn []
-                     (p/let [result (utils/openDirectory #js {:mode "readwrite"})
-                             handle (first result)
-                             folder-name (.-name handle)]
-                       (idb/set-item!
-                        (str "handle/" (js/btoa repo) "/" folder-name) handle)
-                       (db/transact! [(ldb/kv :logseq.kv/graph-backup-folder folder-name)])
-                       (reset! *backup-folder folder-name)))}
-        "Set backup folder first"))
-     [:div.opacity-50.text-sm
-      "Backup will be created every hour."]
+     (if (utils/nfsSupported)
+       [:<>
+        (if backup-folder
+          [:div.flex.flex-row.items-center.gap-1.text-sm
+           [:div.opacity-50 (str "Backup folder:")]
+           backup-folder
+           (shui/button
+            {:variant :ghost
+             :class "!px-1 !py-1"
+             :title "Change backup folder"
+             :on-click (fn []
+                         (p/do!
+                          (db/transact! [[:db/retractEntity :logseq.kv/graph-backup-folder]])
+                          (reset! *backup-folder nil)))
+             :size :sm}
+            (ui/icon "edit"))]
+          (shui/button
+           {:variant :default
+            :on-click (fn []
+                        (p/let [[folder-name _handle] (export/choose-backup-folder repo)]
+                          (reset! *backup-folder folder-name)))}
+           "Set backup folder first"))
+        [:div.opacity-50.text-sm
+         "Backup will be created every hour."]
 
-     (when backup-folder
-       (shui/button
-        {:variant :default
-         :on-click (fn []
-                     (->
-                      (p/let [result (export/backup-db-graph repo)]
-                        (case result
-                          true
-                          (notification/show! "Backup successful!" :success)
-                          :graph-not-changed
-                          (notification/show! "Graph has not been updated since last export." :success)
-                          nil)
-                        (export/auto-db-backup! repo {:backup-now? false}))
-                      (p/catch (fn [error]
-                                 (println "Failed to backup.")
-                                 (js/console.error error)))))}
-        "Backup now"))]))
+        (when backup-folder
+          (shui/button
+           {:variant :default
+            :on-click (fn []
+                        (->
+                         (p/let [result (export/backup-db-graph repo :set-folder)]
+                           (case result
+                             true
+                             (notification/show! "Backup successful!" :success)
+                             :graph-not-changed
+                             (notification/show! "Graph has not been updated since last export." :success)
+                             nil)
+                           (export/auto-db-backup! repo {:backup-now? false}))
+                         (p/catch (fn [error]
+                                    (println "Failed to backup.")
+                                    (js/console.error error)))))}
+           "Backup now"))]
+       [:div
+        [:span "Your browser doesn't support "]
+        [:a
+         {:href "https://developer.chrome.com/docs/capabilities/web-apis/file-system-access"
+          :target "_blank"}
+         "The File System Access API"]
+        [:span ", please switch to a Chromium-based browser."]])]))
 
 (rum/defc export
   []
@@ -98,17 +102,19 @@
         (when db-based?
           [:div
            [:a.font-medium {:on-click #(export/export-repo-as-sqlite-db! current-repo)}
-            (t :export-sqlite-db)]])
+            (t :export-sqlite-db)]
+           [:p.text-sm.opacity-70.mb-0 "Primary way to backup graph's content to a single .sqlite file."]])
         (when db-based?
           [:div
            [:a.font-medium {:on-click #(export/export-repo-as-zip! current-repo)}
-            (t :export-zip)]])
+            (t :export-zip)]
+           [:p.text-sm.opacity-70.mb-0 "Primary way to backup graph's content and assets to a .zip file."]])
 
-        (when db-based?
+        (when (and db-based? (not (util/mobile?)))
           [:div
            [:a.font-medium {:on-click #(db-export-handler/export-repo-as-db-edn! current-repo)}
-            (t :export-db-edn)]])
-
+            (t :export-db-edn)]
+           [:p.text-sm.opacity-70.mb-0 "Exports to a readable and editable .edn file. Don't rely on this as a primary backup."]])
         (when-not (mobile-util/native-platform?)
           [:div
            [:a.font-medium {:on-click #(export-text/export-repo-as-markdown! current-repo)}
@@ -131,9 +137,10 @@
           [:div
            [:a.font-medium {:on-click #(export/export-repo-as-debug-transit! current-repo)}
             "Export debug transit file"]
-           [:p.text-sm.opacity-70.mb-0 "Any sensitive data will be removed in the exported transit file, you can send it to us for debugging."]])
+           [:p.text-sm.opacity-70.mb-0 "Exports to a .transit file to send to us for debugging. Any sensitive data will be removed in the exported file."]])
 
-        (when (and db-based? util/web-platform? (utils/nfsSupported))
+        (when (and db-based? util/web-platform?
+                   (not (util/mobile?)))
           [:div
            [:hr]
            (auto-backup)])]])))
@@ -174,9 +181,18 @@
                       :selected-nodes
                       {:node-ids (mapv #(vector :block/uuid %) root-block-uuids-or-page-uuid)}
                       {})]
-    (state/<invoke-db-worker :thread-api/export-edn
-                             (state/get-current-repo)
-                             (merge {:export-type export-type} export-args))))
+    (p/let [export-edn (state/<invoke-db-worker :thread-api/export-edn
+                                                (state/get-current-repo)
+                                                (merge {:export-type export-type} export-args))]
+      ;; Don't validate :block for now b/c it requires more setup
+      (if (#{:page :selected-nodes} export-type)
+        (if-let [error (:error (sqlite-export/validate-export export-edn))]
+          (do
+            (js/console.log "Invalid export EDN:")
+            (pprint/pprint export-edn)
+            {:export-edn-error error})
+          export-edn)
+        export-edn))))
 
 (defn- get-zoom-level
   [page-uuid]
@@ -280,7 +296,8 @@
                       :on-click #(do (reset! *export-block-type :edn)
                                      (p/let [result (<export-edn-helper top-level-uuids export-type)
                                              pull-data (with-out-str (pprint/pprint result))]
-                                       (when-not (= :export-edn-error result)
+                                       (if (:export-edn-error result)
+                                         (notification/show! (:export-edn-error result) :error)
                                          (reset! *content pull-data))))))])
       (if (= :png tp)
         [:div.flex.items-center.justify-center.relative

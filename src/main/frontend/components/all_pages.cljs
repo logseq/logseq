@@ -15,7 +15,8 @@
          :name (t :block/name)
          :cell (fn [_table row _column]
                  (component-block/page-cp {:show-non-exists-page? true
-                                           :skip-async-load? true} row))
+                                           :skip-async-load? true
+                                           :with-tags? false} row))
          :type :string}
         (when (not (config/db-based-graph? (state/get-current-repo)))
           {:id :block/type
@@ -27,7 +28,7 @@
         {:id :block.temp/refs-count
          :name (t :page/backlinks)
          :cell (fn [_table row _column]
-                 (:block.temp/refs-count row))
+                 (or (:block.temp/refs-count row) 0))
          :type :number}]
        (remove nil?)
        vec))

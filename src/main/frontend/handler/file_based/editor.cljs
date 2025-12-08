@@ -1,14 +1,18 @@
 (ns frontend.handler.file-based.editor
   "File-based graph implementation"
   (:require [clojure.string :as string]
+            [electron.ipc :as ipc]
             [frontend.commands :as commands]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
+            [frontend.db.file-based.model :as file-model]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
+            [frontend.handler.assets :as assets-handler]
             [frontend.handler.block :as block-handler]
+            [frontend.handler.common.editor :as editor-common-handler]
             [frontend.handler.file-based.property :as file-property-handler]
             [frontend.handler.file-based.property.util :as property-util]
             [frontend.handler.file-based.repeated :as repeated]
@@ -20,10 +24,12 @@
             [frontend.util :as util]
             [frontend.util.file-based.clock :as clock]
             [frontend.util.file-based.drawer :as drawer]
+            [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
             [logseq.db :as ldb]
-            [logseq.db.file-based.schema :as file-schema]))
+            [logseq.db.file-based.schema :as file-schema]
+            [promesa.core :as p]))
 
 (defn- remove-non-existed-refs!
   [refs]
@@ -273,3 +279,93 @@
                                 (date/get-date-time-string-3)))]
       content)
     content))
+
+(defn file-based-save-assets!
+  "Save incoming(pasted) assets to assets directory.
+
+   Returns: [file-rpath file-obj file-fpath matched-alias]"
+  ([repo files]
+   (p/let [[repo-dir assets-dir] (assets-handler/ensure-assets-dir! repo)]
+     (file-based-save-assets! repo repo-dir assets-dir files
+                              (fn [index file-stem]
+                     ;; TODO: maybe there're other chars we need to handle?
+                                (let [file-base (-> file-stem
+                                                    (string/replace " " "_")
+                                                    (string/replace "%" "_")
+                                                    (string/replace "/" "_"))
+                                      file-name (str file-base "_" (.now js/Date) "_" index)]
+                                  (string/replace file-name #"_+" "_"))))))
+  ([repo repo-dir asset-dir-rpath files gen-filename]
+   (p/all
+    (for [[index ^js file] (map-indexed vector files)]
+      ;; WARN file name maybe fully qualified path when paste file
+      (let [file-name (util/node-path.basename (.-name file))
+            [file-stem ext-full ext-base] (if file-name
+                                            (let [ext-base (util/node-path.extname file-name)
+                                                  ext-full (if-not (config/extname-of-supported? ext-base)
+                                                             (util/full-path-extname file-name) ext-base)]
+                                              [(subs file-name 0 (- (count file-name)
+                                                                    (count ext-full))) ext-full ext-base])
+                                            ["" "" ""])
+            filename  (str (gen-filename index file-stem) ext-full)
+            file-rpath  (str asset-dir-rpath "/" filename)
+            matched-alias (assets-handler/get-matched-alias-by-ext ext-base)
+            file-rpath (cond-> file-rpath
+                         (not (nil? matched-alias))
+                         (string/replace #"^[.\/\\]*assets[\/\\]+" ""))
+            dir (or (:dir matched-alias) repo-dir)]
+
+        (p/do! (js/console.debug "Debug: Writing Asset #" dir file-rpath)
+               (p/let [content (.arrayBuffer file)
+                       file-fpath (path/path-join dir file-rpath)]
+                 ;; file based version support electron only
+                 (ipc/ipc "writeFile" repo file-fpath content))
+               [file-rpath file (path/path-join dir file-rpath) matched-alias]))))))
+
+;; assets/journals_2021_02_03_1612350230540_0.png
+(defn resolve-relative-path
+  "Relative path to current file path.
+
+   Requires editing state"
+  [file-path]
+  (if-let [current-file-rpath (or (file-model/get-block-file-path (state/get-edit-block))
+                                  ;; fix dummy file path of page
+                                  (when (config/get-pages-directory)
+                                    (path/path-join (config/get-pages-directory) "_.md"))
+                                  "pages/contents.md")]
+    (let [repo-dir (config/get-repo-dir (state/get-current-repo))
+          current-file-fpath (path/path-join repo-dir current-file-rpath)]
+      (path/get-relative-path current-file-fpath file-path))
+    file-path))
+
+(defn file-upload-assets!
+  "Paste asset for file graph and insert link to current editing block"
+  [repo id ^js files format uploading? *asset-uploading? *asset-uploading-process drop-or-paste?]
+  (-> (file-based-save-assets! repo (js->clj files))
+      ;; FIXME: only the first asset is handled
+      (p/then
+       (fn [res]
+         (when-let [[asset-file-name file-obj asset-file-fpath matched-alias] (first res)]
+           (let [image? (config/ext-of-image? asset-file-name)]
+             (editor-common-handler/insert-command!
+              id
+              (assets-handler/get-asset-file-link format
+                                                  (if matched-alias
+                                                    (str
+                                                     (if image? "../assets/" "")
+                                                     "@" (:name matched-alias) "/" asset-file-name)
+                                                    (resolve-relative-path (or asset-file-fpath asset-file-name)))
+                                                  (if file-obj (.-name file-obj) (if image? "image" "asset"))
+                                                  image?)
+              format
+              {:last-pattern (if drop-or-paste? "" commands/command-trigger)
+               :restore?     true
+               :command      :insert-asset})
+             (recur (rest res))))))
+      (p/catch (fn [e]
+                 (js/console.error e)))
+      (p/finally
+        (fn []
+          (reset! uploading? false)
+          (reset! *asset-uploading? false)
+          (reset! *asset-uploading-process 0)))))

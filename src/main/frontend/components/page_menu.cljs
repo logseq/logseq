@@ -79,7 +79,7 @@
                            (page-handler/<unfavorite-page! page-title)
                            (page-handler/<favorite-page! page-title)))}})
 
-          (when (or (util/electron?) file-sync-graph-uuid)
+          (when (and (or (util/electron?) file-sync-graph-uuid) (not db-based?))
             {:title   (t :page/version-history)
              :options {:on-click
                        (fn []
@@ -105,16 +105,6 @@
                              (:logseq.property/built-in? page)))
             {:title   (t :page/delete)
              :options {:on-click #(delete-page-confirm! page)}})
-
-          (when (and (not (mobile-util/native-platform?))
-                     (not whiteboard?)
-                     (state/get-current-page))
-            {:title (t :page/slide-view)
-             :options {:on-click (fn []
-                                   (state/sidebar-add-block!
-                                    repo
-                                    (:db/id page)
-                                    :page-slide-view))}})
 
           ;; TODO: In the future, we'd like to extract file-related actions
           ;; (such as open-in-finder & open-with-default-app) into a sub-menu of
@@ -158,10 +148,10 @@
                :options {:on-click #(commands/exec-plugin-simple-command!
                                      pid (assoc cmd :page page-name) action)}}))
 
-          (when (and db-based? (ldb/internal-page? page))
+          (when (and db-based? (ldb/internal-page? page) (not (:logseq.property/built-in? page)))
             {:title (t :page/convert-to-tag)
              :options {:on-click (fn []
-                                   (db-page-handler/convert-to-tag! page))}})
+                                   (db-page-handler/convert-page-to-tag! page))}})
 
           (when (and db-based? (ldb/class? page) (not (:logseq.property/built-in? page)))
             {:title (t :page/convert-tag-to-page)

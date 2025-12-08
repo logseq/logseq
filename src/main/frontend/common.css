@@ -20,6 +20,10 @@ html:not(.is-native-android) {
   serif, Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol !important;
 }
 
+:root {
+  text-autospace: normal;
+}
+
 /* region Reset top elements */
 html {
   overflow: hidden;
@@ -112,14 +116,17 @@ body {
   }
 
   blockquote, .block-content-or-editor-wrap[data-node-type='quote'] {
-    display: block;
     text-indent: 0;
-    padding: 8px 20px;
+    padding: 8px 16px;
     border-left: 4px solid;
     background-color: var(--ls-page-blockquote-bg-color, var(--lx-gray-04, hsl(var(--secondary))));
     color: var(--ls-page-blockquote-color, hsl(var(--secondary-foreground)));
     margin: 1rem 0;
     font-size: 1rem;
+
+    &:has(.positioned-properties) {
+      padding-left: 10px;
+    }
   }
 
   html blockquote, .block-content-or-editor-wrap[data-node-type='quote']  {
@@ -139,10 +146,13 @@ body {
     margin: 0.25rem 0;
   }
 
-  img,
-  video {
+  img {
     margin-left: auto;
     margin-right: auto;
+  }
+
+  video {
+    max-height: 557px;
   }
 
   ::selection {
@@ -326,7 +336,8 @@ h1.title, h1.title input, .ls-page-title-container {
 
 .block-highlight,
 .ls-block.selected,
-.ls-dummy-block.selected {
+.ls-table-cell.selected
+{
   transition: background-color 0.2s cubic-bezier(0, 1, 0, 1);
   background-color: var(--ls-block-highlight-color, var(--rx-gray-04));
 }
@@ -514,7 +525,7 @@ svg.tip {
 /* endregion */
 
 hr {
-  margin: 2rem 0;
+  @apply my-4 sm:my-8 mx-0;
   border-color: var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05)));
 }
 

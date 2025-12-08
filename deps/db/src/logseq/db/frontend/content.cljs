@@ -4,6 +4,7 @@
             [datascript.core :as d]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
+            [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.frontend.entity-util :as entity-util]))
 
 ;; [[uuid]]
@@ -40,13 +41,23 @@
 
 (defn id-ref->title-ref
   "Convert id ref backs to page name refs using refs."
-  [content* refs search?]
-  (let [content (str content*)]
-    (if (re-find id-ref-pattern content)
-      (reduce
-       (fn [content ref]
-         (if (:block/title ref)
-           (if (or (entity-util/page? ref) search?)
+  [content* refs* & {:keys [db replace-block-id? replace-pages-with-same-name?]
+                     :or {replace-block-id? false
+                          replace-pages-with-same-name? true}}]
+  (when (string? content*)
+    (let [refs (if replace-block-id?
+                 ;; The caller need to handle situations including
+                 ;; mutual references and circle references.
+                 refs*
+                 (cond->> (filter common-entity-util/page? refs*)
+                   (and db (false? replace-pages-with-same-name?))
+                   (remove (fn [e]
+                             (> (count (entity-util/get-pages-by-name db (:block/title e))) 1)))))
+          content (str content*)]
+      (if (re-find id-ref-pattern content)
+        (reduce
+         (fn [content ref]
+           (if (:block/title ref)
              (let [content' (if (not (string/includes? (:block/title ref) " "))
                               (string/replace content
                                               (str "#" (page-ref/->page-ref (:block/uuid ref)))
@@ -54,11 +65,10 @@
                               content)]
                (string/replace content' (page-ref/->page-ref (:block/uuid ref))
                                (page-ref/->page-ref (:block/title ref))))
-             content)
-           content))
-       content
-       (sort-refs refs))
-      content)))
+             content))
+         content
+         (sort-refs refs))
+        content))))
 
 (defn get-matched-ids
   [content]
@@ -102,19 +112,23 @@
   [title refs & {:keys [replace-tag?]
                  :or {replace-tag? true}}]
   (assert (string? title))
-  (let [refs' (->>
-               (map
-                (fn [ref]
-                  (if (and (vector? ref) (= :block/uuid (first ref)))
-                    {:block/uuid (second ref)
-                     :block/title (str (first ref))}
-                    ref))
-                refs)
-               sort-refs)]
+  (let [refs' (->> refs
+                   (map (fn [ref]
+                          ;; remove uuid references since they're introduced to detect multiple pages
+                          ;; that have the same name
+                          (if (and (map? ref) (some-> (:block.temp/original-page-name ref) common-util/uuid-string?))
+                            (dissoc ref :block.temp/original-page-name)
+                            ref)))
+                   (map
+                    (fn [ref]
+                      (if (and (vector? ref) (= :block/uuid (first ref)))
+                        {:block/uuid (second ref)
+                         :block/title (str (first ref))}
+                        ref)))
+                   sort-refs)]
     (reduce
-     (fn [content {uuid' :block/uuid :block/keys [title] :as block}]
-       (let [title' (or (:block.temp/original-page-name block) title)]
-         (replace-page-ref-with-id content title' uuid' replace-tag?)))
+     (fn [content {uuid' :block/uuid :block/keys [title]}]
+       (replace-page-ref-with-id content title uuid' replace-tag?))
      title
      (filter :block/title refs'))))
 
@@ -123,7 +137,7 @@
   [db item eid]
   (if-let [content (:block/title item)]
     (let [refs (:block/refs (d/entity db eid))]
-      (assoc item :block/title (id-ref->title-ref content refs false)))
+      (assoc item :block/title (id-ref->title-ref content refs)))
     item))
 
 (defn replace-tags-with-id-refs
@@ -162,3 +176,29 @@
     content
     (sort-refs tags))
    (string/trim)))
+
+(defn recur-replace-uuid-in-block-title
+  "Convert id ref (recursively) backs to page name refs, returns replaced title"
+  ([ent]
+   (recur-replace-uuid-in-block-title ent 10))
+  ([ent max-depth]
+   (if (some->> (:block/title ent) (re-find id-ref-pattern))
+     (let [ref-set (loop [result-refs (:block/refs ent)
+                          current-refs (:block/refs ent)
+                          depth 0]
+                     (if (or (>= depth max-depth) (empty? current-refs))
+                       result-refs
+                       (let [next-refs (set (mapcat :block/refs current-refs))
+                             result-refs' (apply conj result-refs next-refs)]
+                         (if (= (count result-refs') (count result-refs))
+                           result-refs
+                           (recur (apply conj result-refs next-refs) next-refs (inc depth))))))
+           opts {:replace-block-id? true}]
+       (loop [result (id-ref->title-ref (:block/title ent) ref-set opts)
+              last-result nil
+              depth 0]
+         (if (or (>= depth max-depth)
+                 (= last-result result))
+           result
+           (recur (id-ref->title-ref result ref-set opts) result (inc depth)))))
+     (:block/title ent))))

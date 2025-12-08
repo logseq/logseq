@@ -1,12 +1,12 @@
 (ns frontend.handler.jump
   "Jump to property key/value"
-  (:require [frontend.state :as state]
+  (:require [clojure.string :as string]
             [dommy.core :as d]
-            [clojure.string :as string]
-            [frontend.util :as util]
-            [frontend.handler.notification :as notification]
+            [frontend.db :as db]
             [frontend.handler.editor :as editor-handler]
-            [frontend.db :as db]))
+            [frontend.handler.notification :as notification]
+            [frontend.state :as state]
+            [frontend.util :as util]))
 
 (defonce *current-keys (atom nil))
 (defonce *jump-data (atom {}))
@@ -88,53 +88,49 @@
 
 (defn jump-to
   []
-  (let [current-block-id (or (:block/uuid (state/get-edit-block))
-                             (first (state/get-selection-block-ids))
-                             (:block/uuid (db/get-page (state/get-current-page))))]
-    (cond
-      current-block-id
-      (when (empty? (d/sel js/document ".jtrigger-id"))
-        (let [current-block (when (uuid? current-block-id)
-                              (db/entity [:block/uuid current-block-id]))
-              collapsed? (or (state/get-block-collapsed current-block-id) (:block/collapsed? current-block))]
-          (when collapsed?
-            (editor-handler/expand-block! current-block-id))
-          (let [f #(let [selected-block-or-page (or (first (state/get-selection-blocks))
-                                   ;; current edited block
-                                                    (some-> (:block-parent-id (first (state/get-editor-args)))
-                                                            js/document.getElementById)
-                                   ;; current page
-                                                    (d/sel1 js/document "#main-content-container .ls-properties-area"))
-                         triggers (d/sel selected-block-or-page ".jtrigger")]
-                     (when (seq triggers)
-                       (reset! *jump-data {:mode :property
-                                           :triggers triggers})
-                       (let [keys (generate-keys (count triggers))
-                             key-down-handler (fn [e]
-                                                (let [k (util/ekey e)]
-                                                  (if (= k "Escape")
-                                                    (exit!)
-                                                    (when (and (contains? full-start-keys k) (seq (:triggers @*jump-data)))
-                                                      (swap! *jump-data update :chords (fn [s] (str s (util/ekey e))))
-                                                      (let [chords (:chords @*jump-data)]
-                                                        (trigger! chords e))))))]
-                         (swap! *jump-data assoc :key-down-handler key-down-handler)
-                         (reset! *current-keys keys)
-                         (doall
-                          (map-indexed
-                           (fn [id dom]
-                             (let [class (if (d/has-class? dom "ui__checkbox")
-                                           "jtrigger-id text-sm border rounded ml-4 px-1 shadow-xs"
-                                           "jtrigger-id text-sm border rounded ml-2 px-1 shadow-xs")
-                                   ^js view (or (.closest dom ".jtrigger-view") dom)]
-                               (d/append! view (-> (d/create-element :div)
-                                                   (d/set-attr! :class class)
-                                                   (d/set-text! (nth keys id))))))
-                           (take (count keys) triggers)))
-                         (.addEventListener js/window "keydown" key-down-handler))))]
-            (if collapsed?
-              (js/setTimeout f 100)
-              (f)))))
-
-      :else                             ; add block jump support
-      nil)))
+  (when (empty? (d/sel js/document ".jtrigger-id"))
+    (let [current-block-id (or (:block/uuid (state/get-edit-block))
+                               (first (state/get-selection-block-ids))
+                               (:block/uuid (db/get-page (state/get-current-page))))
+          current-block (when (uuid? current-block-id)
+                          (db/entity [:block/uuid current-block-id]))
+          collapsed? (or (state/get-block-collapsed current-block-id) (:block/collapsed? current-block))]
+      (when collapsed?
+        (editor-handler/expand-block! current-block-id))
+      (let [f #(let [selected-block-or-editing-block (or (first (state/get-selection-blocks))
+                                                         ;; current editing block
+                                                         (state/get-editor-block-container))
+                     triggers (->> (if selected-block-or-editing-block
+                                     (d/sel selected-block-or-editing-block ".jtrigger")
+                                     (d/sel ".jtrigger"))
+                                   (remove (fn [^js n]
+                                             (some (fn [class] (.closest n class)) #{".positioned-properties" ".view-actions" ".ls-table-cell"}))))]
+                 (when (seq triggers)
+                   (reset! *jump-data {:mode :property
+                                       :triggers triggers})
+                   (let [keys (generate-keys (count triggers))
+                         key-down-handler (fn [e]
+                                            (let [k (util/ekey e)]
+                                              (if (= k "Escape")
+                                                (exit!)
+                                                (when (and (contains? full-start-keys k) (seq (:triggers @*jump-data)))
+                                                  (swap! *jump-data update :chords (fn [s] (str s (util/ekey e))))
+                                                  (let [chords (:chords @*jump-data)]
+                                                    (trigger! chords e))))))]
+                     (swap! *jump-data assoc :key-down-handler key-down-handler)
+                     (reset! *current-keys keys)
+                     (doall
+                      (map-indexed
+                       (fn [id dom]
+                         (let [class (if (d/has-class? dom "ui__checkbox")
+                                       "jtrigger-id text-sm border rounded ml-4 px-1 shadow-xs"
+                                       "jtrigger-id text-sm border rounded ml-2 px-1 shadow-xs")
+                               ^js view (or (.closest dom ".jtrigger-view") dom)]
+                           (d/append! view (-> (d/create-element :div)
+                                               (d/set-attr! :class class)
+                                               (d/set-text! (nth keys id))))))
+                       (take (count keys) triggers)))
+                     (.addEventListener js/window "keydown" key-down-handler))))]
+        (if collapsed?
+          (js/setTimeout f 100)
+          (f))))))

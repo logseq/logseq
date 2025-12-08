@@ -2,6 +2,8 @@
   (:require
    ["remove-accents" :as remove-accents]
    [clojure.string :as string]
+   [frontend.components.icon :as icon-component]
+   [frontend.handler.block :as block-handler]
    [goog.string :as gstring]
    [logseq.shui.hooks :as hooks]
    [logseq.shui.ui :as shui]
@@ -40,7 +42,7 @@
             highlighted-text (string/replace normal-text query-re "<:hlmarker>$1<:hlmarker>")
             segs (string/split highlighted-text #"<:hlmarker>")]
         (if (seq segs)
-          (into [:span {:aria-label text-string}]
+          (into [:span {"data-testid" text-string}]
                 (map-indexed (fn [i seg]
                                (if (even? i)
                                  [:span seg]
@@ -48,9 +50,9 @@
                              segs))
           [:span normal-text])))))
 
-(rum/defc root [{:keys [group icon icon-theme query text info shortcut value-label value
-                        title highlighted on-highlight on-highlight-dep header on-click hls-page?
-                        hoverable compact rounded on-mouse-enter component-opts source-page] :as _props
+(rum/defc root [{:keys [icon icon-theme query text info shortcut value-label value
+                        title highlighted on-highlight on-highlight-dep header on-click
+                        hoverable compact rounded on-mouse-enter component-opts source-block] :as _props
                  :or {hoverable true rounded true}}
                 {:keys [app-config]}]
   (let [ref (hooks/create-ref)
@@ -82,7 +84,7 @@
                                       :style {:color "var(--lx-gray-11)"}}
         (highlight-query header)])
      ;; main row
-     [:div.flex.items-center.gap-3
+     [:div.flex.items-start.gap-3
       [:div.w-5.h-5.rounded.flex.items-center.justify-center
        {:style {:background (when (#{:gradient} icon-theme) "linear-gradient(-65deg, #8AE8FF, #5373E7, #369EFF, #00B1CC)")
                 :box-shadow (when (#{:gradient} icon-theme) "inset 0 0 0 1px rgba(255,255,255,0.3) ")}
@@ -92,18 +94,16 @@
                                         (if highlighted "bg-accent-07-alpha" "bg-gray-05")
                                         " dark:text-white")
                  (= icon-theme :gray) (str " bg-gray-05 dark:text-white"))}
-       (shui/tabler-icon icon {:size "14" :class ""})]
+       (if (string? icon)
+         (shui/tabler-icon icon {:size "14" :class ""})
+         icon)]
       [:div.flex.flex-1.flex-col
        (when title
          [:div.text-sm.pb-2.font-bold.text-gray-11 (highlight-query title)])
        [:div {:class "text-sm font-medium text-gray-12"}
-        (if (and (= group :pages) (not= text source-page))  ;; alias
-          [:div.flex.flex-row.items-center.gap-2
-           (highlight-query text)
-           (if-not hls-page?
-             [:<> [:div.opacity-50.font-normal "alias of"] source-page]
-             [:div.opacity-50.font-normal.text-xs " — Highlights page"])]
-          (highlight-query text))
+        (block-handler/block-title-with-icon source-block
+                                             (highlight-query text)
+                                             icon-component/icon)
         (when info
           [:span.text-xs.text-gray-11 " — " (highlight-query info)])]]
       (when (or value-label value)

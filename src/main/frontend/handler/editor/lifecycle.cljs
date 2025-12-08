@@ -9,18 +9,16 @@
 
 (defn did-mount!
   [state]
-  (let [[{:keys [block-parent-id]} id] (:rum/args state)
+  (let [[_ id] (:rum/args state)
         content (state/get-edit-content)
         input (state/get-input)
         node (util/rec-get-node input "ls-block")
         container-id (when node
                        (when-let [container-id-str (dom/attr node "containerid")]
                          (util/safe-parse-int container-id-str)))]
+    (.focus input)
     (when container-id
       (state/set-state! :editor/container-id container-id))
-
-    (when block-parent-id
-      (state/set-editing-block-dom-id! block-parent-id))
 
     (when content
       (editor-handler/restore-cursor-pos! id content))

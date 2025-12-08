@@ -9,10 +9,6 @@
 
 (def ^:private *rtc-log (atom nil))
 
-(def rtc-log-flow
-  "used by rtc-e2e-test"
-  (m/watch *rtc-log))
-
 (def ^:private rtc-log-type-schema
   (vec
    (concat
@@ -24,6 +20,7 @@
        :rtc.log/download {:doc "rtc log type for upload-graph."}
        :rtc.log/cancelled {:doc "rtc has been cancelled"}
        :rtc.log/apply-remote-update {:doc "apply remote updates to local graph"}
+       :rtc.log/pull-remote-data {:doc "pull remote updates"}
        :rtc.log/push-local-update {:doc "push local updates to remote graph"}
        :rtc.log/higher-remote-schema-version-exists {:doc "remote-graph with larger schema-version exists"}
        :rtc.log/branch-graph {:doc "rtc log type for creating a new graph branch"}
@@ -32,6 +29,7 @@
        :rtc.asset.log/upload-assets {:doc "upload local assets to remote"}
        :rtc.asset.log/download-assets {:doc "download assets from remote"}
        :rtc.asset.log/remove-assets {:doc "remove remote assets"}
+       :rtc.asset.log/asset-too-large {:doc "asset is too large to upload"}
        :rtc.asset.log/initial-download-missing-assets {:doc "download assets if not exists in rtc-asset-sync initial phase"})))))
 
 (def ^:private rtc-log-type-validator (ma/validator rtc-log-type-schema))
@@ -60,30 +58,52 @@
 (defn- ensure-uuid
   [v]
   (cond
-    (uuid? v)   v
+    (uuid? v) v
     (string? v) (uuid v)
-    :else       (throw (ex-info "illegal value" {:data v}))))
+    :else (throw (ex-info "illegal value" {:data v}))))
 
-(defn create-local-t-flow
+(defn- create-local-t-flow
   [graph-uuid]
   (->> (m/watch *graph-uuid->local-t)
        (m/eduction (keep (fn [m] (get m (ensure-uuid graph-uuid)))))
        c.m/continue-flow))
 
-(defn create-remote-t-flow
+(defn- create-remote-t-flow
   [graph-uuid]
-  {:pre [(some? graph-uuid)]}
   (->> (m/watch *graph-uuid->remote-t)
        (m/eduction (keep (fn [m] (get m (ensure-uuid graph-uuid)))))
        c.m/continue-flow))
 
+(defn create-local&remote-t-flow
+  "ensure local-t <= remote-t"
+  [graph-uuid]
+  (assert (some? graph-uuid))
+  (->> (m/latest vector (create-local-t-flow graph-uuid) (create-remote-t-flow graph-uuid))
+       (m/eduction (filter (fn [[local-t remote-t]] (>= remote-t local-t))))))
+
 (defn update-local-t
   [graph-uuid local-t]
-  (swap! *graph-uuid->local-t assoc (ensure-uuid graph-uuid) local-t))
+  (let [graph-uuid (ensure-uuid graph-uuid)
+        current-remote-t (get @*graph-uuid->remote-t graph-uuid)
+        current-local-t (get @*graph-uuid->local-t graph-uuid)]
+    (when (and current-remote-t current-local-t)
+      (assert (and (>= local-t current-local-t) (<= local-t current-remote-t))
+              {:local-t local-t
+               :current-local-t current-local-t
+               :current-remote-t current-remote-t}))
+    (swap! *graph-uuid->local-t assoc graph-uuid local-t)))
 
 (defn update-remote-t
   [graph-uuid remote-t]
-  (swap! *graph-uuid->remote-t assoc (ensure-uuid graph-uuid) remote-t))
+  (let [graph-uuid (ensure-uuid graph-uuid)
+        current-remote-t (get @*graph-uuid->remote-t graph-uuid)
+        current-local-t (get @*graph-uuid->local-t graph-uuid)]
+    (when (and current-remote-t current-local-t)
+      (assert (and remote-t (>= remote-t current-remote-t) (>= remote-t current-local-t))
+              {:remote-t remote-t
+               :current-local-t current-local-t
+               :current-remote-t current-remote-t}))
+    (swap! *graph-uuid->remote-t assoc graph-uuid remote-t)))
 
 ;;; subscribe-logs, push to frontend
 ;;; TODO: refactor by using c.m/run-background-task

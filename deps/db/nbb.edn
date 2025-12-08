@@ -4,8 +4,10 @@
   {:local/root "../common"}
   medley/medley {:mvn/version "1.4.0"}
   metosin/malli {:mvn/version "0.16.1"}
+  ;; Used by db scripts with outliner.cli
+  borkdude/rewrite-edn {:mvn/version "0.4.9"}
   logseq/clj-fractional-indexing        {:git/url "https://github.com/logseq/clj-fractional-indexing"
-                                         :sha     "7182b7878410f78536dc2b6df35ed32ef9cd6b61"}
+                                         :sha     "1087f0fb18aa8e25ee3bbbb0db983b7a29bce270"}
   io.github.nextjournal/nbb-test-runner
-  {:git/sha "60ed57aa04bca8d604f5ba6b28848bd887109347"}
+  {:git/sha "b379325cfa5a3306180649da5de3bf5166414e71"}
   io.github.pez/baldr {:mvn/version "1.0.9"}}}

@@ -2,13 +2,13 @@
 # yarn lockfile v1
 
 
-"@logseq/nbb-logseq@logseq/nbb-logseq#feat-db-v20":
-  version "1.2.173-feat-db-v20"
-  resolved "https://codeload.github.com/logseq/nbb-logseq/tar.gz/7fb63423ab566717cac79e5f76084d89b845fbd6"
+"@logseq/nbb-logseq@github:logseq/nbb-logseq#feat-db-v29":
+  version "1.2.173-feat-db-v29"
+  resolved "https://codeload.github.com/logseq/nbb-logseq/tar.gz/6c4f8eec72a0a5b0c7b96c32cc73f86b045305c5"
   dependencies:
-    import-meta-resolve "^2.1.0"
+    import-meta-resolve "^4.1.0"
 
-import-meta-resolve@^2.1.0:
-  version "2.2.2"
-  resolved "https://registry.yarnpkg.com/import-meta-resolve/-/import-meta-resolve-2.2.2.tgz#75237301e72d1f0fbd74dbc6cca9324b164c2cc9"
-  integrity sha512-f8KcQ1D80V7RnqVm+/lirO9zkOxjGxhaTC1IPrBGd3MEfNgmNG67tSUO9gTi2F3Blr2Az6g1vocaxzkVnWl9MA==
+import-meta-resolve@^4.1.0:
+  version "4.1.0"
+  resolved "https://registry.yarnpkg.com/import-meta-resolve/-/import-meta-resolve-4.1.0.tgz#f9db8bead9fafa61adb811db77a2bf22c5399706"
+  integrity sha512-I6fiaX09Xivtk+THaMfAwnA3MVA5Big1WHF1Dfx9hFuvNIWpXnorlkzhcQf6ehrqQiiZECRt1poOAkPmer3ruw==

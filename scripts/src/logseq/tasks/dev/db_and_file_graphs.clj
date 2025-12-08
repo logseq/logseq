@@ -14,17 +14,22 @@
   "Namespaces or parent namespaces _only_ for DB graphs. Use a '.' at end of a namespace for parent namespaces"
   (mapv escape-shell-regex
         ["logseq.db.sqlite." "logseq.db.frontend."
-         "logseq.outliner.property" "logseq.outliner.validate" "logseq.outliner.cli" "logseq.outliner.db-pipeline"
+         "logseq.outliner.property" "logseq.outliner.validate" "logseq.outliner.page" "logseq.outliner.cli" "logseq.outliner.db-pipeline"
+         "logseq.api.db-based"
+         "logseq.cli"
          "electron.db"
          "frontend.handler.db-based."
-         "frontend.worker.handler.page.db-based"
-         "frontend.components.property" "frontend.components.class"
-         "frontend.components.db-based" "frontend.components.objects" "frontend.components.query.view"]))
+         "frontend.inference-worker"
+         "frontend.components.property" "frontend.components.class" "frontend.components.quick-add" "frontend.components.vector-search"
+         "frontend.components.db-based" "frontend.components.objects" "frontend.components.query.view"
+         "mobile.core" "mobile.events" "mobile.externals" "mobile.init" "mobile.state"
+         "mobile.components"]))
 
 (def file-graph-ns
   "Namespaces or parent namespaces _only_ for file graphs"
   (mapv escape-shell-regex
         ["logseq.graph-parser.db" "logseq.graph-parser.property" "logseq.graph-parser.extract"
+         "logseq.api.file-based"
          "frontend.handler.file-based" "frontend.handler.file-sync"
          "frontend.db.file-based"
          "frontend.util.file-based"
@@ -42,7 +47,7 @@
   ["deps/db/src/logseq/db/frontend"
    "deps/db/src/logseq/db/sqlite"
    "deps/outliner/src/logseq/outliner/property.cljs"
-   "src/main/frontend/worker/handler/page/db_based"])
+   "deps/outliner/src/logseq/outliner/page.cljs"])
 
 (def db-graph-paths
   "Paths _only_ for DB graphs"
@@ -50,18 +55,28 @@
         ["deps/outliner/src/logseq/outliner/cli.cljs"
          "deps/outliner/src/logseq/outliner/db_pipeline.cljs"
          "deps/outliner/src/logseq/outliner/validate.cljs"
+         "deps/outliner/src/logseq/outliner/page.cljs"
+         ;; TODO: change to deps/cli/src when :block/name no longer in other cli namespaces
+         "deps/cli/src/logseq/cli/commands"
          "src/main/frontend/handler/db_based"
          "src/main/frontend/components/class.cljs"
          "src/main/frontend/components/property.cljs"
          "src/main/frontend/components/property"
          "src/main/frontend/components/objects.cljs"
+         "src/main/frontend/components/quick_add.cljs"
+         "src/main/frontend/components/vector_search"
          "src/main/frontend/components/db_based"
          "src/main/frontend/components/query/view.cljs"
-         "src/electron/electron/db.cljs"]))
+         "src/main/frontend/inference_worker"
+         "src/main/logseq/api/db_based.cljs"
+         "src/main/logseq/api/db_based"
+         "src/electron/electron/db.cljs"
+         "src/main/mobile"]))
 
 (def file-graph-paths
   "Paths _only_ for file graphs"
-  ["deps/graph-parser/src/logseq/graph_parser/db.cljs"
+  ["deps/db/src/logseq/db/file_based"
+   "deps/graph-parser/src/logseq/graph_parser/db.cljs"
    "deps/graph-parser/src/logseq/graph_parser/extract.cljc"
    "deps/graph-parser/src/logseq/graph_parser/property.cljs"
    "deps/graph-parser/src/logseq/graph_parser.cljs"
@@ -83,7 +98,9 @@
 (defn- validate-db-ns-not-in-file
   []
   (let [res (grep-many db-graph-ns file-graph-paths)]
-    (when-not (and (= 1 (:exit res)) (= "" (:out res)))
+    (when-not (or (and (= 1 (:exit res)) (= "" (:out res)))
+                  ;; TODO: Refactor logseq.cli.common.file to not have file-based code
+                  (= (:out res) "src/main/frontend/worker/file.cljs:            [logseq.cli.common.file :as common-file]\n"))
       (println "The following db graph namespaces should not be in file graph files:")
       (println (:out res))
       (System/exit 1))))
@@ -98,8 +115,10 @@
 
 (defn- validate-multi-graph-fns-not-in-file-or-db
   []
-  ;; TODO: Lint `(db-based-graph?` when db.frontend.entity-plus is split into separate graph contexts
-  (let [multi-graph-fns ["/db-based-graph\\?"
+  (let [multi-graph-fns ["/db-based-graph\\?" "\\(db-based-graph\\?"
+                         ;; from frontend.handler.property.util
+                         "/get-pid"
+                         "logseq.db.common.property-util"
                          ;; Use file-entity-util and entity-util when in a single graph context
                          "ldb/whiteboard\\?" "ldb/journal\\?" "ldb/page\\?"]
         res (grep-many multi-graph-fns (into file-graph-paths db-graph-paths))]
@@ -120,16 +139,20 @@
                               "block/properties :"
                               ;; anything org mode except for org.babashka or urls like schema.org
                               "[^\\.]org[^\\.]"
+                              "file-based"
                               "#+BEGIN_"
                               "#+END_"
                               "pre-block"]))
         ;; For now use the whole code line. If this is too brittle can make this smaller
         allowed-exceptions #{":block/pre-block? :block/scheduled :block/deadline :block/type :block/name :block/marker"
                              "(dissoc :block/format))]"
-                             ;; The next 3 are from components.property.value
                              "{:block/name page-title})"
-                             "(when-not (db/get-page journal)"
-                             "(let [value (if datetime? (tc/to-long d) (db/get-page journal))]"}
+                             ;; TODO: Mv these 2 file-based ns out of db files
+                             "(:require [logseq.db.file-based.rules :as file-rules]))"
+                             "[logseq.db.file-based.schema :as file-schema]))"
+                             ;; :block/name ones from src/main/mobile
+                             "(if-let [journal (db/get-page page-name)]"
+                             "(p/then #(mobile-state/open-block-modal! (db/get-page page-name)))))))]"}
         res (grep-many file-concepts db-graph-paths)
         invalid-lines (when (= 0 (:exit res))
                         (remove #(some->> (string/split % #":\s+") second string/trim (contains? allowed-exceptions))
@@ -159,7 +182,7 @@
   (let [db-concepts
         ;; from logseq.db.frontend.schema
         ["closed-value" "class/properties" "classes" "property/parent"
-         "logseq.property" "logseq.class"]
+         "logseq.property" "logseq.class" "db-based" "library" "quick-add"]
         res (grep-many db-concepts file-graph-paths)]
     (when-not (and (= 1 (:exit res)) (= "" (:out res)))
       (println "The following files should not have contained db specific concepts:")

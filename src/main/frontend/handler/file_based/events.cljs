@@ -10,12 +10,14 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.fs :as fs]
             [frontend.fs.sync :as sync]
             [frontend.handler.common :as common-handler]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.events :as events]
             [frontend.handler.file-based.file :as file-handler]
-            [frontend.handler.file-based.nfs :as nfs-handler]
+            [frontend.handler.file-based.native-fs :as nfs-handler]
             [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
@@ -201,7 +203,8 @@
    {:id :page-histories :label "modal-page-histories"}))
 
 (defmethod events/handle :file-sync/maybe-onboarding-show [[_ type]]
-  (file-sync/maybe-onboarding-show type))
+  (when-not util/web-platform?
+    (file-sync/maybe-onboarding-show type)))
 
 (defmethod events/handle :file-sync/storage-exceed-limit [[_]]
   (notification/show! "file sync storage exceed limit" :warning false)
@@ -287,11 +290,11 @@
                                  (let [dir (config/get-repo-dir repo)]
                                    (p/let [content (fs/read-file dir file)]
                                      (let [new-content (string/replace content (str id) (str (random-uuid)))]
-                                       (p/let [_ (fs/write-file! repo
-                                                                 dir
-                                                                 file
-                                                                 new-content
-                                                                 {})]
+                                       (p/let [_ (fs/write-plain-text-file! repo
+                                                                            dir
+                                                                            file
+                                                                            new-content
+                                                                            {})]
                                          (reset! resolved? true))))))
                      :class "inline mx-1")
           "it."]])]]))
@@ -353,3 +356,27 @@
                                           :remote? true)
                                    r))
                                (state/get-repos)))))))
+
+(defmethod events/handle :journal/insert-template [[_ page-name]]
+  (let [page-name (util/page-name-sanity-lc page-name)]
+    (when-let [page (db/get-page page-name)]
+      (p/do!
+       (db-async/<get-block (state/get-current-repo) (:db/id page))
+       (when (db/page-empty? (state/get-current-repo) page-name)
+         (when-let [template (state/get-default-journal-template)]
+           (editor-handler/insert-template!
+            nil
+            template
+            {:target page})))))))
+
+(defmethod events/handle :graph/backup-file [[_ repo file-path db-content]]
+  (p/let [disk-content (fs/read-file "" file-path)]
+    (fs/backup-db-file! repo file-path db-content disk-content)))
+
+(defmethod events/handle :graph/notify-existing-file [[_ data]]
+  (let [{:keys [current-file-path file-path]} data
+        error (t :file/validate-existing-file-error current-file-path file-path)]
+    (state/pub-event! [:notification/show
+                       {:content error
+                        :status :error
+                        :clear? false}])))

@@ -37,6 +37,12 @@
    {:outliner-op :delete-property-value}
    (outliner-op/delete-property-value! block-id property-id property-value)))
 
+(defn batch-delete-property-value!
+  [block-ids property-id property-value]
+  (ui-outliner-tx/transact!
+   {:outliner-op :batch-delete-property-value}
+   (outliner-op/batch-delete-property-value! block-ids property-id property-value)))
+
 (defn create-property-text-block!
   [block-id property-id value opts]
   (ui-outliner-tx/transact!
@@ -44,10 +50,10 @@
    (outliner-op/create-property-text-block! block-id property-id value opts)))
 
 (defn batch-set-property!
-  [block-ids property-id value]
+  [block-ids property-id value opts]
   (ui-outliner-tx/transact!
    {:outliner-op :batch-set-property}
-   (outliner-op/batch-set-property! block-ids property-id value)))
+   (outliner-op/batch-set-property! block-ids property-id value opts)))
 
 (defn batch-remove-property!
   [block-ids property-id]
@@ -73,7 +79,8 @@
     (if-let [closed-value-entity (db-property/get-closed-value-entity-by-name db db-ident closed-value)]
       (batch-set-property! block-ids
                            db-ident
-                           (:db/id closed-value-entity))
+                           (:db/id closed-value-entity)
+                           {:entity-id? true})
       (js/console.error (str "No entity found for closed value " (pr-str closed-value))))))
 
 (defn upsert-closed-value!

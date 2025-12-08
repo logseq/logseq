@@ -6,19 +6,19 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
-            [frontend.handler.db-based.page :as db-page-handler]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file-based.repo :as file-repo-handler]
             [frontend.handler.file-based.status :as status]
             [frontend.state :as state]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.pipeline :as worker-pipeline]
+            [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
             [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.graph-parser.text :as text]
-            [logseq.outliner.db-pipeline :as db-pipeline]))
+            [logseq.graph-parser.text :as text]))
 
 (def node? (exists? js/process))
 
@@ -33,9 +33,11 @@
         test-db' (if db-graph? test-db-name-db-version test-db-name)]
     (state/set-current-repo! test-db')
     (conn/start! test-db' opts)
+    (ldb/register-transact-pipeline-fn!
+     (fn [tx-report]
+       (worker-pipeline/transact-pipeline test-db' tx-report)))
     (let [conn (conn/get-db test-db' false)]
       (when db-graph?
-        (db-pipeline/add-listener conn)
         (d/transact! conn (sqlite-create-graph/build-db-initial-data "")))
       (d/listen! conn ::listen-db-changes!
                  (fn [tx-report]
@@ -81,16 +83,16 @@
       (assoc :block/created-at (:created-at props)))))
 
 (def file-to-db-statuses
-  {"TODO" :logseq.task/status.todo
-   "LATER" :logseq.task/status.todo
-   "IN-PROGRESS" :logseq.task/status.doing
-   "NOW" :logseq.task/status.doing
-   "DOING" :logseq.task/status.doing
-   "DONE" :logseq.task/status.done
-   "WAIT" :logseq.task/status.backlog
-   "WAITING" :logseq.task/status.backlog
-   "CANCELED" :logseq.task/status.canceled
-   "CANCELLED" :logseq.task/status.canceled})
+  {"TODO" :logseq.property/status.todo
+   "LATER" :logseq.property/status.todo
+   "IN-PROGRESS" :logseq.property/status.doing
+   "NOW" :logseq.property/status.doing
+   "DOING" :logseq.property/status.doing
+   "DONE" :logseq.property/status.done
+   "WAIT" :logseq.property/status.backlog
+   "WAITING" :logseq.property/status.backlog
+   "CANCELED" :logseq.property/status.canceled
+   "CANCELLED" :logseq.property/status.canceled})
 
 (defn- parse-content
   "Given a file's content as markdown, returns blocks and page attributes for the file
@@ -117,7 +119,7 @@
                                        file-to-db-statuses)]
                  (-> %
                      (assoc :block/tags [{:db/ident :logseq.class/Task}])
-                     (update :build/properties merge {:logseq.task/status status}))
+                     (update :build/properties merge {:logseq.property/status status}))
                  %)
               blocks*)]
     {:blocks (mapv (fn [b] (update b :block/title #(string/replace-first % #"^-\s*" "")))
@@ -187,7 +189,9 @@ This can be called in synchronous contexts as no async fns should be invoked"
      [;; page
       {:block/uuid page-uuid
        :block/name "test"
-       :block/title "Test"}
+       :block/title "Test"
+       ;; :block/tags #{:logseq.class/Page}
+       }
       ;; first block
       {:block/uuid first-block-uuid
        :block/page page-id
@@ -238,7 +242,8 @@ This can be called in synchronous contexts as no async fns should be invoked"
   [repo block-uuid content {:keys [tags]}]
   (editor-handler/save-block! repo block-uuid content)
   (doseq [tag tags]
-    (db-page-handler/add-tag repo block-uuid (db/get-page tag))))
+    (db-property-handler/set-block-property! block-uuid :block/tags
+                                             (db/get-page tag))))
 
 (defn create-page!
   [title & {:as opts}]

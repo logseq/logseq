@@ -6,7 +6,6 @@
             [cljs.reader :as reader]
             [clojure.edn :as edn]
             [clojure.string :as string]
-            [clojure.walk :as walk]
             [goog.string :as gstring]
             [logseq.common.log :as log]))
 
@@ -23,17 +22,6 @@
    Keep capitalization sensitivity"
   [s]
   (.normalize s "NFC"))
-
-(defn remove-nils
-  "remove pairs of key-value that has nil value from a (possibly nested) map or
-  coll of maps."
-  [nm]
-  (walk/postwalk
-   (fn [el]
-     (if (map? el)
-       (into {} (remove (comp nil? second)) el)
-       el))
-   nm))
 
 (defn remove-nils-non-nested
   "remove pairs of key-value that has nil value from a map (nested not supported)."
@@ -113,7 +101,6 @@
       (js->clj :keywordize-keys true)))
 
 (defn zero-pad
-  "Copy of frontend.util/zero-pad. Too basic to couple to main app"
   [n]
   (if (< n 10)
     (str "0" n)
@@ -250,7 +237,7 @@
   {:malli/schema [:=> [:cat :any :string] [:or :nil :string [:vector [:maybe :string]]]]}
   [pattern s]
   (when-not (string? s)
-       ;; TODO: sentry
+    ;; TODO: sentry
     (js/console.trace))
   (when (string? s)
     (re-find pattern s)))
@@ -292,13 +279,13 @@
       (:block/name page)))
 
 (defn string-join-path
-  #_:clj-kondo/ignore
   "Replace all `strings/join` used to construct paths with this function to reduce lint output.
   https://github.com/logseq/logseq/pull/8679"
   [parts]
+  #_:clj-kondo/ignore
   (string/join "/" parts))
 
-(def escape-chars "[]{}().+*?|$")
+(def ^:private escape-chars "\\[]{}().+*?|$^")
 
 (defn escape-regex-chars
   "Escapes characters in string `old-value"
@@ -393,3 +380,19 @@ return: [{:id 3} {:id 2 :depend-on 3} {:id 1 :depend-on 2}]"
       (str nn "/" (name x))
       (name x))
     x))
+
+(defn by-sorting
+  [sorting]
+  (let [get-value+cmp
+        (map
+         (fn [{:keys [get-value asc?]}]
+           [get-value
+            (if asc? compare #(compare %2 %1))])
+         sorting)]
+    (fn [a b]
+      (reduce
+       (fn [order [get-value cmp]]
+         (if (zero? order)
+           (cmp (get-value a) (get-value b))
+           (reduced order)))
+       0 get-value+cmp))))

@@ -33,7 +33,7 @@
 (defn- re-init-commands!
   "Update commands after task status and priority's closed values has been changed"
   [property]
-  (when (contains? #{:logseq.task/status :logseq.task/priority} (:db/ident property))
+  (when (contains? #{:logseq.property/status :logseq.property/priority} (:db/ident property))
     (state/pub-event! [:init/commands])))
 
 (defn- <upsert-closed-value!
@@ -76,8 +76,7 @@
   (when (string? value)
     (let [page-name (string/trim value)]
       (when-not (string/blank? page-name)
-        (p/let [page (db-page-handler/<create-class! page-name {:redirect? false
-                                                                :create-first-block? false})]
+        (p/let [page (db-page-handler/<create-class! page-name {:redirect? false})]
           (:block/uuid page))))))
 
 (rum/defc class-select
@@ -173,8 +172,15 @@
                                    :popup-opts {:align "start"}
                                    :del-btn? (boolean (:icon form-data))
                                    :empty-label "?"})
-      (shui/input {:ref *input-ref :size "sm" :default-value title :placeholder "name"
-                   :disabled disabled? :on-change (fn [^js e] (set-form-data! (assoc form-data :title (util/trim-safe (util/evalue e)))))})]
+      (shui/input {:ref *input-ref
+                   :size "sm"
+                   :default-value title
+                   :placeholder "name"
+                   :disabled disabled?
+                   :on-key-down (fn [e]
+                                  (when (contains? #{"ArrowLeft" "ArrowRight"} (util/ekey e))
+                                    (util/stop-propagation e)))
+                   :on-change (fn [^js e] (set-form-data! (assoc form-data :title (util/trim-safe (util/evalue e)))))})]
      [:div.pt-2 (shui/textarea {:placeholder "description" :default-value description
                                 :disabled disabled? :on-change (fn [^js e] (set-form-data! (assoc form-data :description (util/trim-safe (util/evalue e)))))})]
 
@@ -392,7 +398,7 @@
                            :content (choice-item-content property block opts)}))
                       choices)]
 
-    [:div.ls-property-dropdown-editor.ls-property-choices-sub-pane
+    [:div.ls-property-dropdown.ls-property-choices-sub-pane
      (when (seq choices)
        [:<>
         [:ul.choices-list
@@ -504,7 +510,7 @@
                            (set-sub-open! false)
                            (restore-root-highlight-item! id)))
         item-props {:on-select handle-select!}]
-    [:div.ls-property-dropdown-editor.ls-property-ui-position-sub-pane
+    [:div.ls-property-dropdown.ls-property-ui-position-sub-pane
      (for [[k v] position-labels]
        (let [item-props (assoc item-props :data-value k)]
          (dropdown-editor-menuitem
@@ -554,7 +560,7 @@
                           (map (fn [type]
                                  {:label (property-type-label type)
                                   :value type})))]
-    [:div.ls-property-dropdown-editor.ls-property-type-sub-pane
+    [:div.ls-property-dropdown.ls-property-type-sub-pane
      (for [{:keys [label value]} schema-types]
        (let [option {:id label
                      :title label
@@ -579,9 +585,10 @@
                     :submenu-content (fn [] (pdv/default-value-config property))}))]
     (dropdown-editor-menuitem (assoc option :disabled? config/publishing?))))
 
-(rum/defc ^:large-vars/cleanup-todo dropdown-editor-impl
+(defn ^:large-vars/cleanup-todo property-dropdown-options
   "property: block entity"
-  [property owner-block values {:keys [class-schema? debug?]}]
+  [property owner-block values {:keys [class-schema? debug? with-title? more-options]
+                                :or {with-title? true}}]
   (let [title (:block/title property)
         property-type (:logseq.property/type property)
         property-type-label' (some-> property-type (property-type-label))
@@ -591,165 +598,172 @@
         icon (when icon [:span.float-left.w-4.h-4.overflow-hidden.leading-4.relative
                          (icon-component/icon icon {:size 15})])
         built-in? (ldb/built-in? property)
-        disabled? (or built-in? config/publishing?)]
-    [:<>
-     [:h3.font-medium.px-2.pt-2.pb-2.opacity-90.flex.items-center.gap-1
-      (shui/tabler-icon "adjustments-alt") [:span "Configure property"]]
-     (dropdown-editor-menuitem {:icon :pencil :title "Property name" :desc [:span.flex.items-center.gap-1 icon title]
-                                :submenu-content (fn [ops] (name-edit-pane property (assoc ops :disabled? disabled?)))})
-     (let [disabled?' (or disabled? (and property-type (seq values)))]
-       (dropdown-editor-menuitem {:icon :letter-t
-                                  :title "Property type"
-                                  :desc (if disabled?'
-                                          (ui/tooltip
+        disabled? (or built-in? config/publishing?)
+        class-schema? (and (ldb/class? owner-block) class-schema?)
+        special-built-in-prop? (contains? #{:block/title :block/tags :block/created-at :block/updated-at} (:db/ident property))]
+    (->>
+     [(when with-title?
+        [:h3.font-medium.px-2.py-4.opacity-90.flex.items-center.gap-1
+         "Configure property"])
+      (when-not special-built-in-prop?
+        (dropdown-editor-menuitem {:icon :pencil :title "Property name" :desc [:span.flex.items-center.gap-1 icon title]
+                                   :submenu-content (fn [ops] (name-edit-pane property (assoc ops :disabled? disabled?)))}))
+      (let [disabled?' (or disabled? (and property-type (seq values)))]
+        (dropdown-editor-menuitem {:icon :letter-t
+                                   :title "Property type"
+                                   :desc (if disabled?'
+                                           (ui/tooltip
                                             [:span (str property-type-label')]
                                             [:div.w-96
                                              "The type of this property is locked once you start using it. This is to make sure all your existing information stays correct if the property type is changed later. To unlock, all uses of a property must be deleted."])
-                                          (str property-type-label'))
-                                  :disabled? disabled?'
-                                  :submenu-content (fn [ops]
-                                                     (property-type-sub-pane property ops))}))
+                                           (str property-type-label'))
+                                   :disabled? disabled?'
+                                   :submenu-content (fn [ops]
+                                                      (property-type-sub-pane property ops))}))
 
-     (when (and (= property-type :node)
-             (not (contains? #{:logseq.property/parent} (:db/ident property))))
-       (dropdown-editor-menuitem {:icon :hash
-                                  :disabled? disabled?
-                                  :title "Specify node tags"
-                                  :desc ""
-                                  :submenu-content (fn [_ops]
-                                                     [:div.px-4
-                                                      (class-select property {:default-open? false})])}))
+      (when (and (= property-type :node)
+                 (not (contains? #{:logseq.property.class/extends} (:db/ident property))))
+        (dropdown-editor-menuitem {:icon :hash
+                                   :disabled? disabled?
+                                   :title "Specify node tags"
+                                   :desc ""
+                                   :submenu-content (fn [_ops]
+                                                      [:div.px-4
+                                                       (class-select property {:default-open? false})])}))
 
-     (when (and (contains? db-property-type/default-value-ref-property-types property-type)
-                (not (db-property/many? property))
-                (not (and enable-closed-values?
-                          (seq (:property/closed-values property))))
-                (not= :logseq.property/enable-history? (:db/ident property)))
-       (default-value-subitem property))
+      (when (and (contains? db-property-type/default-value-ref-property-types property-type)
+                 (not (db-property/many? property))
+                 (not (and enable-closed-values?
+                           (seq (:property/closed-values property))))
+                 (not= :logseq.property/enable-history? (:db/ident property)))
+        (default-value-subitem property))
 
-     (when enable-closed-values?
-       (let [values (:property/closed-values property)]
-         (dropdown-editor-menuitem {:icon :list :title "Available choices"
-                                    :desc (when (seq values) (str (count values) " choices"))
-                                    :submenu-content (fn [] (choices-sub-pane property {:disabled? config/publishing?}))})))
+      (when enable-closed-values?
+        (let [values (:property/closed-values property)]
+          (dropdown-editor-menuitem {:icon :list :title "Available choices"
+                                     :desc (when (seq values) (str (count values) " choices"))
+                                     :submenu-content (fn [] (choices-sub-pane property {:disabled? config/publishing?}))})))
 
-     (when enable-closed-values?
-       (let [values (:property/closed-values property)]
-         (when (>= (count values) 2)
-           (dropdown-editor-menuitem
-            {:icon :checkbox
-             :title "Checkbox state mapping"
-             :disabled? config/publishing?
-             :submenu-content (fn []
-                                (checkbox-state-mapping values))}))))
+      (when enable-closed-values?
+        (let [values (:property/closed-values property)]
+          (when (>= (count values) 2)
+            (dropdown-editor-menuitem
+             {:icon :checkbox
+              :title "Checkbox state mapping"
+              :disabled? config/publishing?
+              :submenu-content (fn []
+                                 (checkbox-state-mapping values))}))))
 
-     (when (and (contains? db-property-type/cardinality-property-types property-type) (not disabled?))
-       (let [many? (db-property/many? property)]
-         (dropdown-editor-menuitem {:icon :checks :title "Multiple values"
-                                    :toggle-checked? many?
-                                    :on-toggle-checked-change
-                                    (fn []
-                                      (let [update-cardinality-fn #(db-property-handler/upsert-property! (:db/ident property)
-                                                                                                         {:db/cardinality (if many? :one :many)}
-                                                                                                         {})]
+      (when (and (contains? db-property-type/cardinality-property-types property-type) (not disabled?))
+        (let [many? (db-property/many? property)]
+          (dropdown-editor-menuitem {:icon :checks :title "Multiple values"
+                                     :toggle-checked? many?
+                                     :on-toggle-checked-change
+                                     (fn []
+                                       (let [update-cardinality-fn #(db-property-handler/upsert-property! (:db/ident property)
+                                                                                                          {:db/cardinality (if many? :one :many)}
+                                                                                                          {})]
                                       ;; Only show dialog for existing values as it can be reversed for unused properties
-                                        (if (and (seq values) (not many?))
-                                          (-> (shui/dialog-confirm!
-                                               "This action cannot be undone. Do you want to change this property to have multiple values?")
-                                              (p/then update-cardinality-fn))
-                                          (update-cardinality-fn))))})))
+                                         (if (and (seq values) (not many?))
+                                           (-> (shui/dialog-confirm!
+                                                "This action cannot be undone. Do you want to change this property to have multiple values?")
+                                               (p/then update-cardinality-fn))
+                                           (update-cardinality-fn))))})))
 
-     (when (not= :logseq.property/enable-history? (:db/ident property))
-       (let [property-type (:logseq.property/type property)
-             group' (->> [(when (and (not (contains? #{:logseq.property/parent :logseq.property.class/properties} (:db/ident property)))
-                                     (contains? #{:default :number :date :checkbox :node} property-type)
-                                     (not
-                                      (and (= :default property-type)
-                                           (empty? (:property/closed-values property))
-                                           (contains? #{nil :properties} (:logseq.property/ui-position property)))))
-                            (let [position (:logseq.property/ui-position property)]
-                              (dropdown-editor-menuitem {:icon :float-left :title "UI position" :desc (some->> position (get position-labels) (:title))
-                                                         :item-props {:class "ui__position-trigger-item"}
-                                                         :disabled? config/publishing?
-                                                         :submenu-content (fn [ops] (ui-position-sub-pane property (assoc ops :ui-position position)))})))
+      (when (and (not= :logseq.property/enable-history? (:db/ident property))
+                 (not special-built-in-prop?))
+        (let [property-type (:logseq.property/type property)
+              group' (->> [(when (and (not (contains? #{:logseq.property.class/extends :logseq.property.class/properties} (:db/ident property)))
+                                      (contains? #{:default :number :date :checkbox :node} property-type)
+                                      (not
+                                       (and (= :default property-type)
+                                            (empty? (:property/closed-values property))
+                                            (contains? #{nil :properties} (:logseq.property/ui-position property)))))
+                             (let [position (:logseq.property/ui-position property)]
+                               (dropdown-editor-menuitem {:icon :float-left :title "UI position" :desc (some->> position (get position-labels) (:title))
+                                                          :item-props {:class "ui__position-trigger-item"}
+                                                          :disabled? config/publishing?
+                                                          :submenu-content (fn [ops] (ui-position-sub-pane property (assoc ops :ui-position position)))})))
 
-                          (when (not (contains? #{:logseq.property/parent :logseq.property.class/properties} (:db/ident property)))
-                            (dropdown-editor-menuitem {:icon :eye-off :title "Hide by default" :toggle-checked? (boolean (:logseq.property/hide? property))
-                                                       :disabled? config/publishing?
-                                                       :on-toggle-checked-change #(db-property-handler/set-block-property! (:db/id property)
-                                                                                                                           :logseq.property/hide?
-                                                                                                                           %)}))
-                          (when (not (contains? #{:logseq.property/parent :logseq.property.class/properties} (:db/ident property)))
-                            (dropdown-editor-menuitem
-                             {:icon :eye-off :title "Hide empty value"
-                              :toggle-checked? (boolean (:logseq.property/hide-empty-value property))
-                              :disabled? config/publishing?
-                              :on-toggle-checked-change (fn []
-                                                          (db-property-handler/set-block-property! (:db/id property)
-                                                                                                   :logseq.property/hide-empty-value
-                                                                                                   (not (:logseq.property/hide-empty-value property))))}))]
-                         (remove nil?))]
-         (when (> (count group') 0)
-           (cons (shui/dropdown-menu-separator) group'))))
+                           (when (not (contains? #{:logseq.property.class/extends :logseq.property.class/properties} (:db/ident property)))
+                             (dropdown-editor-menuitem {:icon :eye-off :title "Hide by default" :toggle-checked? (boolean (:logseq.property/hide? property))
+                                                        :disabled? config/publishing?
+                                                        :on-toggle-checked-change #(db-property-handler/set-block-property! (:db/id property)
+                                                                                                                            :logseq.property/hide?
+                                                                                                                            %)}))
+                           (when (not (contains? #{:logseq.property.class/extends :logseq.property.class/properties} (:db/ident property)))
+                             (dropdown-editor-menuitem
+                              {:icon :eye-off :title "Hide empty value"
+                               :toggle-checked? (boolean (:logseq.property/hide-empty-value property))
+                               :disabled? config/publishing?
+                               :on-toggle-checked-change (fn []
+                                                           (db-property-handler/set-block-property! (:db/id property)
+                                                                                                    :logseq.property/hide-empty-value
+                                                                                                    (not (:logseq.property/hide-empty-value property))))}))]
+                          (remove nil?))]
+          (when (> (count group') 0)
+            (cons (shui/dropdown-menu-separator) group'))))
 
-     (when owner-block
-       [:<>
-        (shui/dropdown-menu-separator)
-        (dropdown-editor-menuitem
-         {:icon :share-3 :title "Go to this property" :desc ""
-          :item-props {:class "opacity-90 focus:opacity-100"
-                       :on-select (fn []
-                                    (shui/popup-hide-all!)
-                                    (route-handler/redirect-to-page! (:block/uuid property)))}})])
-     (when (and enable-closed-values? owner-block)
-       (let [values (:property/closed-values property)]
-         (when (>= (count values) 2)
-           (let [checked? (contains?
-                           (set (map :db/id (:logseq.property/checkbox-display-properties owner-block)))
-                           (:db/id property))]
-             (dropdown-editor-menuitem
-              {:icon :checkbox
-               :title (if class-schema? "Show as checkbox on tagged nodes" "Show as checkbox on node")
-               :disabled? config/publishing?
-               :desc (when owner-block
-                       (shui/switch
-                        {:id "show as checkbox" :size "sm"
-                         :checked checked?
-                         :on-click util/stop-propagation
-                         :on-checked-change
-                         (fn [value]
-                           (if value
-                             (db-property-handler/set-block-property! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))
-                             (db-property-handler/delete-property-value! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))))}))})))))
+      (when (and owner-block (not special-built-in-prop?))
+        [:<>
+         (shui/dropdown-menu-separator)
+         (dropdown-editor-menuitem
+          {:icon :share-3 :title "Go to this property" :desc ""
+           :item-props {:class "opacity-90 focus:opacity-100"
+                        :on-select (fn []
+                                     (shui/popup-hide-all!)
+                                     (route-handler/redirect-to-page! (:block/uuid property)))}})])
+      (when (and enable-closed-values? owner-block)
+        (let [values (:property/closed-values property)]
+          (when (>= (count values) 2)
+            (let [checked? (contains?
+                            (set (map :db/id (:logseq.property/checkbox-display-properties owner-block)))
+                            (:db/id property))]
+              (dropdown-editor-menuitem
+               {:icon :checkbox
+                :title (if class-schema? "Show as checkbox on tagged nodes" "Show as checkbox on node")
+                :disabled? config/publishing?
+                :desc (when owner-block
+                        (shui/switch
+                         {:id "show as checkbox" :size "sm"
+                          :checked checked?
+                          :on-click util/stop-propagation
+                          :on-checked-change
+                          (fn [value]
+                            (if value
+                              (db-property-handler/set-block-property! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))
+                              (db-property-handler/delete-property-value! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))))}))})))))
 
-     (when (and owner-block
+      (when (and owner-block
                 ;; Any property should be removable from Tag Properties
-                (or class-schema?
-                    (not (and
-                          (ldb/class? owner-block)
-                          (contains? #{:logseq.property/parent} (:db/ident property))))))
-       (dropdown-editor-menuitem
-        {:id :delete-property :icon :x
-         :title (if class-schema? "Delete property from tag" "Delete property from node")
-         :desc "" :disabled? false
-         :item-props {:class "opacity-60 focus:!text-red-rx-09 focus:opacity-100"
-                      :on-select (fn [^js e]
-                                   (util/stop e)
-                                   (-> (p/do!
-                                        (handle-delete-property! owner-block property {:class-schema? class-schema?})
-                                        (shui/popup-hide-all!))
-                                       (p/catch (fn [] (restore-root-highlight-item! :delete-property)))))}}))
-     (when debug?
-       [:<>
-        (shui/dropdown-menu-separator)
-        (dropdown-editor-menuitem
-         {:icon :bug :title (str (:db/ident property)) :desc "" :disabled? false
-          :item-props {:class "opacity-60 focus:opacity-100 focus:!text-red-rx-08"
-                       :on-select (fn []
-                                    (dev-common-handler/show-entity-data (:db/id property))
-                                    (shui/popup-hide!))}})])]))
+                 (if class-schema?
+                   (contains? (set (map :db/id (:logseq.property.class/properties owner-block))) (:db/id property))
+                   (not (contains? #{:logseq.property.class/extends :logseq.property.class/properties} (:db/ident property)))))
 
-(rum/defcs dropdown-editor < rum/reactive db-mixins/query
+        (dropdown-editor-menuitem
+         {:id :delete-property :icon :x
+          :title (if class-schema? "Delete property from tag" "Delete property from node")
+          :desc "" :disabled? false
+          :item-props {:class "opacity-60 focus:!text-red-rx-09 focus:opacity-100"
+                       :on-select (fn [^js e]
+                                    (util/stop e)
+                                    (-> (p/do!
+                                         (handle-delete-property! owner-block property {:class-schema? class-schema?})
+                                         (shui/popup-hide-all!))
+                                        (p/catch (fn [] (restore-root-highlight-item! :delete-property)))))}}))
+      (when debug?
+        [:<>
+         (shui/dropdown-menu-separator)
+         (dropdown-editor-menuitem
+          {:icon :bug :title (str (:db/ident property)) :desc "" :disabled? false
+           :item-props {:class "opacity-60 focus:opacity-100 focus:!text-red-rx-08"
+                        :on-select (fn []
+                                     (dev-common-handler/show-entity-data (:db/id property))
+                                     (shui/popup-hide!))}})])]
+     (concat more-options)
+     vec)))
+
+(rum/defcs property-dropdown < rum/reactive db-mixins/query
   {:init (fn [state]
            (let [*values (atom :loading)
                  property (first (:rum/args state))
@@ -762,4 +776,4 @@
         owner-block (when (:db/id owner-block) (db/sub-block (:db/id owner-block)))
         values (rum/react (::values state))]
     (when-not (= :loading values)
-      (dropdown-editor-impl property owner-block values opts))))
+      (vec (cons :<> (property-dropdown-options property owner-block values opts))))))

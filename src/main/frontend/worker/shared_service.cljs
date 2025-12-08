@@ -294,16 +294,20 @@
   (.postMessage common-channel #js {:type "master-changed"
                                     :master-client-id master-client-id
                                     :serviceName service-name})
-  (p/do!
-   (on-become-master-handler service-name)
-   (<re-requests-in-flight-on-master! target)
-   (p/resolve! status-ready-deferred-p)))
+  (->
+   (p/do!
+    (on-become-master-handler service-name)
+    (<re-requests-in-flight-on-master! target))
+   (p/finally
+     (fn []
+       (p/resolve! status-ready-deferred-p)))))
 
 (defn <create-service
   "broadcast-data-types - For data matching these types,
                           forward the data broadcast from the master client directly to the UI thread."
-  [service-name target on-become-master-handler broadcast-data-types]
+  [service-name target on-become-master-handler broadcast-data-types {:keys [import?]}]
   (clear-old-service!)
+  (when import? (reset! *master-client? true))
   (p/let [broadcast-data-types (set broadcast-data-types)
           status {:ready (p/deferred)}
           common-channel (ensure-common-channel service-name)
@@ -349,7 +353,8 @@
                                                                              :method method
                                                                              :args args})))))))
                                      (log/error :invalid-invoke-method method)))})
-     :status status}))
+     :status status
+     :client-id client-id}))
 
 (defn broadcast-to-clients!
   [type' data]

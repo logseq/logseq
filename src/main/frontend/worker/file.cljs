@@ -7,10 +7,10 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.common.async-util :as async-util]
-            [frontend.common.file.core :as common-file]
+            [logseq.cli.common.file :as common-file]
             [frontend.common.file.util :as wfu]
+            [frontend.worker-common.util :as worker-util]
             [frontend.worker.state :as worker-state]
-            [frontend.worker.util :as worker-util]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.common.date :as common-date]
@@ -147,7 +147,7 @@
 
 (defn do-write-file!
   [repo conn page-db-id outliner-op context request-id]
-  (let [page-block (d/pull @conn '[*] page-db-id)
+  (let [page-block (d/entity @conn page-db-id)
         page-db-id (:db/id page-block)
         whiteboard? (file-entity-util/whiteboard? page-block)
         blocks-count (ldb/get-page-blocks-count @conn page-db-id)
@@ -157,8 +157,10 @@
       (if (and (or (> blocks-count 500) whiteboard?)
                (not (worker-state/tx-idle? repo {:diff 3000})))
         (async/put! file-writes-chan [repo page-db-id outliner-op (tc/to-long (t/now)) request-id])
-        (let [pull-keys (if whiteboard? whiteboard-blocks-pull-keys-with-persisted-ids '[*])
-              blocks (ldb/get-page-blocks @conn (:db/id page-block) {:pull-keys pull-keys})
+        (let [blocks (if whiteboard?
+                       (ldb/get-page-blocks @conn (:db/id page-block)
+                                            {:pull-keys whiteboard-blocks-pull-keys-with-persisted-ids})
+                       (:block/_page page-block))
               blocks (if whiteboard? (map cleanup-whiteboard-block blocks) blocks)]
           (if (and (= 1 (count blocks))
                    (string/blank? (:block/title (first blocks)))

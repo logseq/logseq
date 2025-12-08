@@ -4,9 +4,13 @@
             [clojure.test :refer [is]]
             [logseq.e2e.assert :as assert]
             [logseq.e2e.keyboard :as k]
+            [logseq.e2e.locator :as loc]
             [wally.main :as w]
-            [wally.selectors :as ws])
-  (:import [com.microsoft.playwright TimeoutError]))
+            [wally.repl :as repl])
+  (:import (com.microsoft.playwright Locator$PressSequentiallyOptions
+                                     Locator$FilterOptions
+                                     Page$GetByTextOptions)
+           (com.microsoft.playwright TimeoutError)))
 
 (defn repeat-until-visible
   [n q repeat-fn]
@@ -31,47 +35,73 @@
   []
   (w/-query "*:focus"))
 
+(def editor-q ".editor-wrapper textarea")
+
 (defn get-editor
   []
-  (let [klass ".editor-wrapper textarea"
-        editor (w/-query klass)]
-    (when (w/visible? klass)
+  (let [editor (w/-query editor-q)]
+    (when (w/visible? editor-q)
+      ;; ensure cursor exists
+      ;; Sometimes when the editor exists, there isn't a blinking cursor,
+      ;; causing subsequent operations (like pressing Enter) to fail.
+      (.focus editor)
       editor)))
 
 (defn get-edit-block-container
   []
-  (first (w/query ".ls-block" {:has (w/-query ".editor-wrapper textarea")})))
+  (assert/assert-have-count editor-q 1)
+  (first (w/query ".ls-block" {:has (w/-query editor-q)})))
 
 (defn input
   "Notice this will replace the existing input value with `text`"
   [text]
   (w/fill "*:focus" text))
 
-(defn type
-  [text]
+(defn press-seq
+  [text & {:keys [delay] :or {delay 0}}]
   (let [input-node (w/-query "*:focus")]
-    (.type input-node text)))
+    (.pressSequentially input-node text
+                        (.setDelay (Locator$PressSequentiallyOptions.) delay))))
+
+(defn exit-edit
+  []
+  (when (get-editor)
+    (k/esc))
+  (assert/assert-non-editor-mode))
 
 (defn double-esc
   "Exits editing mode and ensure there's no action bar"
   []
-  (k/esc)
-  (k/esc))
+  (when (w/visible? "div[data-radix-popper-content-wrapper]")
+    (k/esc))
+  (exit-edit)
+  (when (w/visible? "div[data-radix-popper-content-wrapper]")
+    (k/esc)))
 
 (defn search
   [text]
-  (double-esc)
-  (assert/assert-in-normal-mode?)
-  (w/click :#search-button)
-  (w/fill ".cp__cmdk-search-input" text))
+  (if (w/visible? ".cp__cmdk-search-input")
+    (w/fill ".cp__cmdk-search-input" text)
+    (do
+      (double-esc)
+      (assert/assert-in-normal-mode?)
+      (w/click :#search-button)
+      (w/wait-for ".cp__cmdk-search-input")
+      (w/fill ".cp__cmdk-search-input" text))))
 
-(defn new-page
-  [title]
-  ;; Question: what's the best way to close all the popups?
-  ;; close popup, exit editing
-  ;; (repl/pause)
-  (search title)
-  (w/click [(ws/text "Create page") (ws/nth= "0")])
+(defn search-and-click
+  [search-text]
+  (search search-text)
+  (w/click (.first (w/get-by-test-id search-text))))
+
+(defn wait-editor-gone
+  ([]
+   (wait-editor-gone ".editor-wrapper textarea"))
+  ([editor]
+   (w/wait-for-not-visible editor)))
+
+(defn wait-editor-visible
+  []
   (w/wait-for ".editor-wrapper textarea"))
 
 (defn count-elements
@@ -81,31 +111,11 @@
 (defn blocks-count
   "Blocks count including page title"
   []
-  (count-elements ".ls-block"))
+  (count-elements ".ls-block:not(.block-add-button)"))
 
 (defn page-blocks-count
   []
-  (count-elements ".ls-page-blocks .ls-block"))
-
-(defn new-block
-  [title]
-  (k/enter)
-  (input title))
-
-(defn save-block
-  [text]
-  (input text))
-
-(defn exit-edit
-  []
-  (k/esc))
-
-(defn delete-blocks
-  "Delete the current block if in editing mode, otherwise, delete all the selected blocks."
-  []
-  (let [editor (get-editor)]
-    (when editor (exit-edit))
-    (k/backspace)))
+  (count-elements ".ls-page-blocks .page-blocks-inner .ls-block"))
 
 (defn get-text
   [locator]
@@ -123,51 +133,14 @@
   (let [box (.boundingBox locator)]
     [(.-x box) (.-y box)]))
 
-(defn indent-outdent
-  [indent?]
-  (let [editor (get-editor)
-        [x1 _] (bounding-xy editor)
-        _ (if indent? (k/tab) (k/shift+tab))
-        [x2 _] (bounding-xy editor)]
-    (if indent?
-      (is (< x1 x2))
-      (is (> x1 x2)))))
-
-(defn indent
-  []
-  (indent-outdent true))
-
-(defn outdent
-  []
-  (indent-outdent false))
-
-(defn open-last-block
-  []
-  (double-esc)
-  (assert/assert-in-normal-mode?)
-  (w/click (last (w/query ".ls-page-blocks .ls-block .block-content"))))
-
-;; TODO: support tree
-(defn new-blocks
-  [titles]
-  (open-last-block)
-  (let [value (get-edit-content)]
-    (if (string/blank? value)           ; empty block
-      (do
-        (save-block (first titles))
-        (doseq [title (rest titles)]
-          (new-block title)))
-      (doseq [title titles]
-        (new-block title)))))
-
 (defn repeat-keyboard
   [n shortcut]
   (dotimes [_i n]
-    (k/press shortcut)))
+    (k/press shortcut {:delay 20})))
 
 (defn get-page-blocks-contents
   []
-  (w/all-text-contents ".ls-page-blocks .ls-block .block-title-wrap"))
+  (w/all-text-contents ".ls-page-blocks .ls-block:not(.block-add-button) .block-title-wrap"))
 
 (def mac? (= "Mac OS X" (System/getProperty "os.name")))
 
@@ -183,3 +156,57 @@
   (input password)
   (w/click "button[type=\"submit\"]:text(\"Sign in\")")
   (w/wait-for-not-visible ".cp__user-login"))
+
+(defn goto-journals
+  []
+  (search-and-click "Go to journals"))
+
+(defn refresh-until-graph-loaded
+  []
+  (w/refresh)
+  (assert/assert-graph-loaded?))
+
+(defn move-cursor-to-end
+  []
+  (k/press ["ControlOrMeta+a" "ArrowRight"]
+           {:delay 20}))
+
+(defn move-cursor-to-start
+  []
+  (k/press ["ControlOrMeta+a" "ArrowLeft"]
+           {:delay 20}))
+
+(defn input-command
+  [command]
+  (let [content (get-edit-content)]
+    (when (and (not= (str (last content)) " ")
+               (not= content ""))
+      (press-seq " ")))
+  (press-seq "/" {:delay 20})
+  (w/wait-for ".ui__popover-content")
+  (press-seq command {:delay 20})
+  (w/click "a.menu-link.chosen"))
+
+(defn set-tag
+  "`hidden?`: some tags may be hidden from the UI, e.g. Page"
+  [tag & {:keys [hidden?]
+          :or {hidden? false}}]
+  (press-seq " #" {:delay 20})
+  (press-seq tag)
+  (w/click (first (w/query (format "a.menu-link:has-text(\"%s\")" tag))))
+  (when (and (not= (string/lower-case tag) "task") (not hidden?))
+    ;; wait tag added on ui
+    (assert/assert-is-visible
+     (-> ".ls-block:not(.block-add-button)"
+         (loc/filter :has ".editor-wrapper textarea")
+         (loc/filter :has (format ".block-tag :text('%s')" tag))))))
+
+(defn -query-last
+  [q]
+  (.last (w/-query q)))
+
+(defn get-by-text
+  [text exact?]
+  (if exact?
+    (.getByText (w/get-page) text (.setExact (Page$GetByTextOptions.) true))
+    (.getByText (w/get-page) text)))

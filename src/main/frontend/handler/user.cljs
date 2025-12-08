@@ -5,6 +5,7 @@
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [cljs.core.async :as async :refer [<! go]]
+            [clojure.set :as set]
             [clojure.string :as string]
             [frontend.common.missionary :as c.m]
             [frontend.config :as config]
@@ -86,7 +87,9 @@
    :sub))
 
 (defn logged-in? []
-  (some? (state/get-auth-refresh-token)))
+  (let [token (state/get-auth-refresh-token)]
+    (when (string? token)
+      (not (string/blank? token)))))
 
 (defn- set-token-to-localstorage!
   ([id-token access-token]
@@ -106,6 +109,19 @@
     (doseq [key (js/Object.keys js/localStorage)]
       (when (string/starts-with? key prefix)
         (js/localStorage.removeItem key)))))
+
+(defn auto-fill-refresh-token-from-cognito!
+  []
+  (let [prefix "CognitoIdentityServiceProvider."
+        refresh-token-key (some #(when (string/starts-with? % prefix)
+                                   (when (string/ends-with? % "refreshToken")
+                                     %))
+                                (js/Object.keys js/localStorage))]
+    (when refresh-token-key
+      (let [refresh-token (js/localStorage.getItem refresh-token-key)]
+        (when (and refresh-token (not= refresh-token "undefined"))
+          (state/set-auth-refresh-token refresh-token)
+          (js/localStorage.setItem "refresh-token" refresh-token))))))
 
 (defn- clear-tokens
   ([]
@@ -127,12 +143,16 @@
   ([id-token access-token]
    (state/set-auth-id-token id-token)
    (state/set-auth-access-token access-token)
-   (set-token-to-localstorage! id-token access-token))
+   (set-token-to-localstorage! id-token access-token)
+   (some->> (parse-jwt (state/get-auth-id-token))
+            (reset! flows/*current-login-user)))
   ([id-token access-token refresh-token]
    (state/set-auth-id-token id-token)
    (state/set-auth-access-token access-token)
    (state/set-auth-refresh-token refresh-token)
-   (set-token-to-localstorage! id-token access-token refresh-token)))
+   (set-token-to-localstorage! id-token access-token refresh-token)
+   (some->> (parse-jwt (state/get-auth-id-token))
+            (reset! flows/*current-login-user))))
 
 (defn- <refresh-tokens
   "return refreshed id-token, access-token"
@@ -201,7 +221,7 @@
    (:jwtToken (:idToken session))
    (:jwtToken (:accessToken session))
    (:token (:refreshToken session)))
-  (reset! flows/*current-login-user (parse-jwt (state/get-auth-id-token)))
+  (auto-fill-refresh-token-from-cognito!)
   (state/pub-event! [:user/fetch-info-and-graphs]))
 
 (defn ^:export login-with-username-password-e2e
@@ -278,9 +298,9 @@
 
 ;;; user groups
 
-(defn team-member?
+(defn rtc-group?
   []
-  (contains? (state/user-groups) "team"))
+  (boolean (seq (set/intersection (state/user-groups) #{"team" "rtc_2025_07_10"}))))
 
 (defn alpha-user?
   []

@@ -96,7 +96,7 @@ export class HTMLShape extends TLBoxShape<HTMLShapeProps> {
     React.useEffect(() => {
       if (this.props.size[1] === 0) {
         this.onResetBounds({ zoom: app.viewport.camera.zoom })
-        app.persist({replace: true})
+        app.persist()
       }
     }, [])
 

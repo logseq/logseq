@@ -1,0 +1,85 @@
+.PersistentSheetWithDetent-customBackdrop {
+  /* SELF-LAYOUT */
+  position: fixed;
+  z-index: 1;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+
+  /* APPEARANCE */
+  background-color: black;
+
+  /* INTERACTIVITY */
+  pointer-events: none;
+
+  /* TRANSFORMATION */
+  opacity: 0;
+}
+
+.PersistentSheetWithDetent-themeColorDimmingController {
+  position: fixed;
+  z-index: 1;
+  top: -10px;
+  left: 0;
+  width: 100%;
+  height: 10px;
+  background-color: rgba(63, 165, 225, 1);
+  box-shadow: 0 2px 6px -2px rgb(0, 0, 0, 0.25);
+
+  /* TRANSFORMATION */
+  opacity: 0;
+}
+
+.PersistentSheetWithDetent-view {
+  --retracted-height: 76px;
+
+  /* SELF-LAYOUT */
+  z-index: 2;
+  bottom: -1px; /* Avoid subpixel misalignment in Safari */
+  width: 100%;
+}
+.PersistentSheetWithDetent-view.onDetent2-true {
+  /* SELF-LAYOUT */
+  /* When resting on the detent 2, we switch the side the view is
+  anchored to to the top. It looks better when mobile browsers'
+  UI expand/collapse. */
+  bottom: initial;
+  top: 0;
+}
+
+.PersistentSheetWithDetent-content {
+  /* SELF-LAYOUT */
+  box-sizing: border-box;
+  height: 100%;
+
+  /* APPEARANCE */
+  box-shadow: 0 -2px 6px -2px rgb(0, 0, 0, 0.25);
+  background-color: rgba(63, 165, 225, 1);
+}
+
+.PersistentSheetWithDetent-innerContent {
+  /* INNER-LAYOUT */
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+
+  /* INNER-LAYOUT */
+  position: relative;
+  padding-top: env(safe-area-inset-top, 0px);
+  display: grid;
+}
+
+.PersistentSheetWithDetent-retractedContent {
+  /* SELF-LAYOUT */
+  box-sizing: border-box;
+  position: absolute;
+  top: 0;
+  width: 100%;
+  height: var(--retracted-height);
+}
+
+.PersistentSheetWithDetent-expandedContent {
+  /* SELF-LAYOUT */
+  place-self: stretch;
+}

@@ -586,13 +586,13 @@
       (when (and develop-mode? (util/electron?) (not market?))
         [:div
          (ui/tooltip
-           (ui/button
-             (t :plugin/load-unpacked)
-             {:icon "upload"
-              :intent "link"
-              :class "load-unpacked"
-              :on-click plugin-handler/load-unpacked-plugin})
-           [:div (t :plugin/unpacked-tips)])
+          (ui/button
+           (t :plugin/load-unpacked)
+           {:icon "upload"
+            :intent "link"
+            :class "load-unpacked"
+            :on-click plugin-handler/load-unpacked-plugin})
+          [:div (t :plugin/unpacked-tips)])
 
          (when (util/electron?)
            (unpacked-plugin-loader selected-unpacked-pkg))])]
@@ -1270,9 +1270,11 @@
                                                                 (if-not (state/get-left-sidebar-open?)
                                                                   (- width-t width-l) width-t))]
                                           (set-max-width! (max (- width-t width-c' 100) 76))))]
-             (.addEventListener js/window "resize" calc-wrap-max-width)
-             (js/setTimeout calc-wrap-max-width 16)
-             #(.removeEventListener js/window "resize" calc-wrap-max-width)))))
+             (when (util/electron?)
+               (.addEventListener js/window "resize" calc-wrap-max-width)
+               (js/setTimeout calc-wrap-max-width 16))
+             #(when (util/electron?)
+                (.removeEventListener js/window "resize" calc-wrap-max-width))))))
      [right-sidebar-resized])
 
     [:div.list-wrap
@@ -1524,13 +1526,13 @@
             (bean/->clj (.-settingsSchema pl)) pl)))]]]]))
 
 (rum/defc custom-js-installer
-  [{:keys [t current-repo db-restoring? nfs-granted?]}]
+  [{:keys [t current-repo db-restoring?]}]
   (hooks/use-effect!
    (fn []
      (when (and (not db-restoring?)
-                (or (not util/nfs?) nfs-granted?))
+                (not util/nfs?))
        (ui-handler/exec-js-if-exists-&-allowed! t)))
-   [current-repo db-restoring? nfs-granted?])
+   [current-repo db-restoring?])
   nil)
 
 (rum/defc perf-tip-content
@@ -1596,15 +1598,16 @@
   (cond-> routes
     config/lsp-enabled?
     (concat (some->> (plugin-handler/get-route-renderers)
-                     (mapv #(when-let [{:keys [name path render]} %]
-                              (when (not (string/blank? path))
-                                [path {:name name :view (fn [r] (render r %))}])))
+                     (mapv (fn [custom-route]
+                             (when-let [{:keys [name path render]} custom-route]
+                               (when (not (string/blank? path))
+                                 [path {:name name :view (fn [r] (render r custom-route))}]))))
                      (remove nil?)))))
 
 (defn hook-daemon-renderers
   []
   (when-let [rs (seq (plugin-handler/get-daemon-renderers))]
-    [:div.lsp-daemon-container.fixed.z-10
+    [:div.lsp-daemon-container
      (for [{:keys [key _pid render]} rs]
        (when (fn? render)
          [:div.lsp-daemon-container-card {:data-key key} (render)]))]))
