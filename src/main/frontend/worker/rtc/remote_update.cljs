@@ -707,6 +707,7 @@
                tx-meta {:rtc-tx? true
                         :persist-op? false
                         :gen-undo-ops? false}]
+           (d/unlisten! temp-conn ::rtc-batch-tx)
            (reset! temp-conn nil)
            (vreset! *batch-tx-data nil)
            (when (seq tx-data)
