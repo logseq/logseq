@@ -5,8 +5,8 @@
             ["path" :as node-path]
             [borkdude.rewrite-edn :as rewrite]
             [clojure.string :as string]
-            [datascript.core :as d]
             [logseq.common.config :as common-config]
+            [logseq.db :as ldb]
             [logseq.db.common.sqlite-cli :as sqlite-cli]
             [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
@@ -48,9 +48,9 @@
           additional-config
           (pretty-print-merge additional-config))
         git-sha (get-git-sha)]
-    (d/transact! conn (sqlite-create-graph/build-db-initial-data config-content
-                                                                 (merge {:import-type import-type}
-                                                                        (when git-sha {:graph-git-sha git-sha}))))))
+    (ldb/transact! conn (sqlite-create-graph/build-db-initial-data config-content
+                                                                   (merge {:import-type import-type}
+                                                                          (when git-sha {:graph-git-sha git-sha}))))))
 
 (defn init-conn
   "Create sqlite DB, initialize datascript connection and sync listener and then

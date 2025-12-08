@@ -77,7 +77,7 @@ export interface LSPluginPkgConfig {
   /**
    * Alternative entrypoint for development.
    */
-  devEntry: unknown
+  devEntry: string
   /**
    * For legacy themes, do not use.
    */
@@ -190,7 +190,8 @@ export interface BlockEntity {
   format: 'markdown' | 'org'
   parent: IEntityID
   title: string
-  content?: string // @deprecated. Use :title instead!
+  fullTitle: string // replace block reference uuid with title text
+  content?: string // @deprecated. use :title instead!
   page: IEntityID // owner page
   createdAt: number
   updatedAt: number
@@ -231,6 +232,7 @@ export interface PageEntity {
   children?: Array<PageEntity>
   properties?: Record<string, any>
   journalDay?: number
+  ident?: string
 
   [key: string]: unknown
 }
@@ -655,7 +657,7 @@ export interface IEditorProxy extends Record<string, any> {
    *
    * @param srcPage - the page name or uuid
    */
-  getPageBlocksTree: (srcPage: PageIdentity) => Promise<Array<BlockEntity>>
+  getPageBlocksTree: (srcPage: PageIdentity) => Promise<Array<BlockEntity> | null>
 
   /**
    * get all page/block linked references
@@ -702,6 +704,8 @@ export interface IEditorProxy extends Record<string, any> {
     opts?: Partial<{
       before: boolean
       sibling: boolean
+      start: boolean
+      end: boolean
       isPageBlock: boolean
       focus: boolean
       customUUID: string
@@ -759,6 +763,7 @@ export interface IEditorProxy extends Record<string, any> {
     opts?: Partial<{
       redirect: boolean
       createFirstBlock: boolean
+      customUUID: string
       format: BlockEntity['format']
       journal: boolean
     }>
@@ -773,6 +778,15 @@ export interface IEditorProxy extends Record<string, any> {
   renamePage: (oldName: string, newName: string) => Promise<void>
 
   getAllPages: (repo?: string) => Promise<PageEntity[] | null>
+  getAllTags: () => Promise<PageEntity[] | null>
+  getAllProperties: () => Promise<PageEntity[] | null>
+  getTagObjects: (nameOrIdent: string) => Promise<BlockEntity[] | null>
+  createTag: (tagName: string, opts?: Partial<{ uuid: string }>) => Promise<PageEntity | null>
+  getTag: (nameOrIdent: string) => Promise<PageEntity | null>
+  addTagProperty: (tagId: BlockIdentity, propertyIdOrName: BlockIdentity) => Promise<void>
+  removeTagProperty: (tagId: BlockIdentity, propertyIdOrName: BlockIdentity) => Promise<void>
+  addBlockTag: (blockId: BlockIdentity, tagId: BlockIdentity) => Promise<void>
+  removeBlockTag: (blockId: BlockIdentity, tagId: BlockIdentity) => Promise<void>
 
   prependBlockInPage: (
     page: PageIdentity,
@@ -834,6 +848,7 @@ export interface IEditorProxy extends Record<string, any> {
   getBlockProperty: (block: BlockIdentity, key: string) => Promise<BlockEntity | unknown>
 
   getBlockProperties: (block: BlockIdentity) => Promise<Record<string, any> | null>
+  getPageProperties: (page: PageIdentity) => Promise<Record<string, any> | null>
 
   scrollToBlockInPage: (
     pageName: BlockPageName,

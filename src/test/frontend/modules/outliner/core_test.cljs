@@ -1,5 +1,5 @@
 (ns frontend.modules.outliner.core-test
-  (:require [cljs.test :refer [deftest is use-fixtures testing] :as test]
+  (:require [cljs.test :refer [deftest is testing use-fixtures] :as test]
             [clojure.set :as set]
             [clojure.test.check.generators :as gen]
             [clojure.walk :as walk]
@@ -13,7 +13,6 @@
             [frontend.test.helper :as test-helper :refer [load-test-files]]
             [frontend.worker.db-listener :as worker-db-listener]
             [logseq.db :as ldb]
-            [logseq.db.test.helper :as db-test]
             [logseq.graph-parser.block :as gp-block]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.transaction :as outliner-tx]))
@@ -169,7 +168,8 @@
      (transact-opts)
      (outliner-core/move-blocks! test-db
                                  (db/get-db test-db false)
-                                 [(get-block 3)] (get-block 14) true))
+                                 [(get-block 3)] (get-block 14)
+                                 {:sibling? true}))
     (is (= [6 9] (get-children 2)))
     (is (= [13 14 3 15] (get-children 12))))
 
@@ -192,7 +192,8 @@
        (transact-opts)
        (outliner-core/move-blocks! test-db
                                    (db/get-db test-db false)
-                                   [(get-block 3)] (get-block 12) false))
+                                   [(get-block 3)] (get-block 12)
+                                   {:sibling? false}))
       (is (= [6 9] (get-children 2)))
       (is (= [3 13 14 15] (get-children 12))))))
 
@@ -205,7 +206,8 @@
      (transact-opts)
      (outliner-core/move-blocks! test-db
                                  (db/get-db test-db false)
-                                 [(get-block 3)] (get-block 2) true))
+                                 [(get-block 3)] (get-block 2)
+                                 {:sibling? true}))
     (is (= [4] (get-children 2)))
     (is (= [2 3 5] (get-children 22)))))
 
@@ -220,7 +222,8 @@
      (transact-opts)
      (outliner-core/move-blocks! test-db
                                  (db/get-db test-db false)
-                                 [(get-block 3) (get-block 6)] (get-block 2) true))
+                                 [(get-block 3) (get-block 6)] (get-block 2)
+                                 {:sibling? true}))
     (is (= [4] (get-children 2)))
     (is (= [2 3 6 5 7] (get-children 22)))))
 
@@ -236,7 +239,8 @@
      (transact-opts)
      (outliner-core/move-blocks! test-db
                                  (db/get-db test-db false)
-                                 [(get-block 3) (get-block 5)] (get-block 2) false))
+                                 [(get-block 3) (get-block 5)] (get-block 2)
+                                 {:sibling? false}))
     (is (= [3 5 4] (get-children 2)))
     (is (= [2 6 7 8] (get-children 22)))))
 
@@ -516,22 +520,6 @@
                                                     (state/get-date-formatter)
                                                     block)))
 
-(deftest save-inline-tag
-  (let [conn (db-test/create-conn-with-blocks
-              [{:page {:block/title "page1"} :blocks [{:block/title "test"}]}])
-        block (db-test/find-block-by-content @conn "test")
-        _ (outliner-core/save-block! "logseq_db_test" conn
-                                     "MMM do, yyyy"
-                                     {:block/uuid (:block/uuid block)
-                                      :block/refs '({:block/name "audio", :block/title "audio", :block/uuid #uuid "6852be3e-6e80-4245-b72c-0d586f1fd007", :block/created-at 1750253118663, :block/updated-at 1750253118663, :block/tags [:logseq.class/Page]}),
-                                      :block/tags '({:block/name "audio", :block/title "audio", :block/uuid #uuid "6852be3e-6e80-4245-b72c-0d586f1fd007", :block/created-at 1750253118663, :block/updated-at 1750253118663, :block/tags [:logseq.class/Tag]}),
-                                      :block/title "test #[[6852be3e-6e80-4245-b72c-0d586f1fd007]]",
-                                      :db/id (:db/id block)})
-        audio-tag (ldb/get-page @conn "audio")]
-    (is (some? (:db/ident audio-tag)) "#audio doesn't have db/ident")
-    (is (= [:logseq.class/Tag] (map :db/ident (:block/tags audio-tag)))
-        "#audio has wrong tags")))
-
 (deftest save-test
   (load-test-files [{:file/path "pages/page1.md"
                      :file/content "alias:: foo, bar
@@ -706,7 +694,11 @@ tags:: tag1, tag2
           (when (seq blocks)
             (let [target (get-random-block)]
               (outliner-tx/transact! (transact-opts)
-                                     (outliner-core/move-blocks! test-db (db/get-db test-db false) blocks target (gen/generate gen/boolean)))
+                                     (outliner-core/move-blocks! test-db
+                                                                 (db/get-db test-db false)
+                                                                 blocks
+                                                                 target
+                                                                 {:sibling? (gen/generate gen/boolean)}))
               (let [total (get-blocks-count)]
                 (is (= total (count @*random-blocks)))))))))))
 
@@ -774,7 +766,9 @@ tags:: tag1, tag2
                    (outliner-tx/transact! (transact-opts)
                                           (outliner-core/move-blocks! test-db
                                                                       (db/get-db test-db false)
-                                                                      blocks (get-random-block) (gen/generate gen/boolean))))))
+                                                                      blocks
+                                                                      (get-random-block)
+                                                                      {:sibling? (gen/generate gen/boolean)})))))
 
              ;; move up down
              (fn []

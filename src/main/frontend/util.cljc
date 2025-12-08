@@ -6,6 +6,8 @@
             ["/frontend/selection" :as selection]
             ["/frontend/utils" :as utils]
             ["@capacitor/status-bar" :refer [^js StatusBar Style]]
+            ["@capacitor/core" :refer [Capacitor]]
+            ["@capacitor/clipboard" :as CapacitorClipboard]
             ["grapheme-splitter" :as GraphemeSplitter]
             ["sanitize-filename" :as sanitizeFilename]
             ["check-password-strength" :refer [passwordStrength]]
@@ -75,7 +77,7 @@
        (when-not node-test?
          (safe-re-find #"Mobi" js/navigator.userAgent)))
      (def mobile? (memoize mobile*?))
-     (def capacitor-new? (memoize #(and js/window (gobj/get js/window "isCapacitorNew"))))))
+     (def capacitor? (memoize #(and js/window (gobj/get js/window "isCapacitorNew"))))))
 
 #?(:cljs
    (extend-protocol IPrintWithWriter
@@ -91,29 +93,20 @@
 #?(:cljs (defonce ^js node-path utils/nodePath))
 #?(:cljs (defonce ^js sem-ver semver))
 #?(:cljs (defonce ^js full-path-extname pathCompleteExtname))
-#?(:cljs
-   (defn current-page-scroll
-     []
-     (some-> (or
-              (js/document.querySelector "ion-modal.show-modal")
-              (js/document.querySelector ".ion-page:not(.ion-page-hidden)"))
-             (.querySelector "ion-content.scrolling")
-             (.-shadowRoot)
-             (.querySelector "[part=scroll]"))))
 
 #?(:cljs (defn app-scroll-container-node
            ([]
-            (if (capacitor-new?)
-              (current-page-scroll)
-              (gdom/getElement "main-content-container")))
+            (or
+             (gdom/getElement "main-content-container")
+             (gdom/getElement "app-main-home")))
            ([el]
-            (if (capacitor-new?)
-              (current-page-scroll)
-              (if (.closest el "#main-content-container")
-                (app-scroll-container-node)
-                (or
-                 (gdom/getElementByClass "sidebar-item-list")
-                 (app-scroll-container-node)))))))
+            (if (or
+                 (some-> el (.closest "#main-content-container"))
+                 (some-> el (.closest "#app-main-home")))
+              (app-scroll-container-node)
+              (or
+               (gdom/getElementByClass "sidebar-item-list")
+               (app-scroll-container-node))))))
 #?(:cljs (defonce el-visible-in-viewport? utils/elementIsVisibleInViewport))
 #?(:cljs (defonce convert-to-roman utils/convertToRoman))
 #?(:cljs (defonce convert-to-letters utils/convertToLetters))
@@ -167,10 +160,6 @@
                     (not (mobile-util/native-platform?))))
      (def web-platform? nfs?)
      (def plugin-platform? (or (and web-platform? (not common-config/PUBLISHING)) (electron?)))))
-#?(:cljs
-   (defn file-protocol?
-     []
-     (string/starts-with? js/window.location.href "file://")))
 
 #?(:cljs
    (def format common-util/format))
@@ -220,17 +209,13 @@
    (defn set-theme-light
      []
      (p/do!
-      (.setStyle StatusBar (clj->js {:style (.-Light Style)}))
-      (when (mobile-util/native-android?)
-        (.setBackgroundColor StatusBar (clj->js {:color "#ffffff"}))))))
+      (.setStyle StatusBar (clj->js {:style (.-Light Style)})))))
 
 #?(:cljs
    (defn set-theme-dark
      []
      (p/do!
-      (.setStyle StatusBar (clj->js {:style (.-Dark Style)}))
-      (when (mobile-util/native-android?)
-        (.setBackgroundColor StatusBar (clj->js {:color "#000000"}))))))
+      (.setStyle StatusBar (clj->js {:style (.-Dark Style)})))))
 
 (defn find-first
   [pred coll]
@@ -265,11 +250,7 @@
                            (.then #(on-ok %)))
                        (on-failed resp)))))))))
 
-(defn zero-pad
-  [n]
-  (if (< n 10)
-    (str "0" n)
-    (str n)))
+#?(:cljs (def zero-pad common-util/zero-pad))
 
 #?(:cljs
    (defn safe-parse-int
@@ -784,6 +765,14 @@
 #?(:cljs (def clear-selection! selection/clearSelection))
 
 #?(:cljs
+   (defn write-clipboard
+     ([data] (write-clipboard data nil))
+     ([data owner-window]
+      (if (.isNativePlatform ^js Capacitor)
+        (.write (gobj/get CapacitorClipboard "Clipboard") #js {:string (gobj/get data "text")})
+        (utils/writeClipboard data owner-window)))))
+
+#?(:cljs
    (defn copy-to-clipboard!
      [text & {:keys [graph html blocks embed-block? owner-window]}]
      (let [blocks (map (fn [block] (if (de/entity? block)
@@ -801,8 +790,8 @@
                                :embed-block? embed-block?
                                :blocks (mapv #(dissoc % :block.temp/load-status %) blocks)}))}))]
        (if owner-window
-         (utils/writeClipboard data owner-window)
-         (utils/writeClipboard data)))))
+         (write-clipboard data owner-window)
+         (write-clipboard data)))))
 
 (defn drop-nth [n coll]
   (keep-indexed #(when (not= %1 n) %2) coll))
@@ -953,24 +942,6 @@
        (boolean (and (safe-re-find #"Chrome" user-agent)
                      (safe-re-find #"Google Inc" vendor))))))
 
-#?(:cljs
-   (defn indexeddb-check?
-     "Check if indexedDB support is available, reject if not"
-     []
-     (let [db-name "logseq-indexeddb-check"]
-       (if js/window.indexedDB
-         (js/Promise. (fn [resolve reject]
-                        (let [req (js/window.indexedDB.open db-name)]
-                          (set! (.-onerror req) reject)
-                          (set! (.-onsuccess req)
-                                (fn [_event]
-                                  (.close (.-result req))
-                                  (let [req (js/window.indexedDB.deleteDatabase db-name)]
-                                    (set! (.-onerror req) reject)
-                                    (set! (.-onsuccess req) (fn [_event]
-                                                              (resolve true)))))))))
-         (p/rejected "no indexeddb defined")))))
-
 (defonce mac? #?(:cljs goog.userAgent/MAC
                  :clj nil))
 
@@ -1104,7 +1075,7 @@
 
 (defn keyname [key] (str (namespace key) "/" (name key)))
 
-;; FIXME: drain-chan was copied from frontend.worker.util due to shadow-cljs compile bug
+;; FIXME: drain-chan was copied from frontend.worker-common.util due to shadow-cljs compile bug
 #?(:cljs
    (defn drain-chan
      "drop all stuffs in CH, and return all of them"
@@ -1235,47 +1206,28 @@
            (= button 2)))))
 
 (def keyboard-height (atom nil))
-#?(:cljs
-   (defn mobile-get-scroll
-     [^js/HTMLElement el]
-     (when (and el (mobile?))
-       (let [box-rect    (.getBoundingClientRect el)
-             box-top     (.-top box-rect)
-             box-bottom  (.-bottom box-rect)
-             current-pos (get-selection-start el)
-             grapheme-pos (get-graphemes-pos (.-value el) current-pos)
-             mock-text   (some-> (gdom/getElement "mock-text")
-                                 gdom/getChildren
-                                 array-seq
-                                 (nth-safe grapheme-pos))
-             offset-top   (and mock-text (.-offsetTop mock-text))
-             offset-height (and mock-text (.-offsetHeight mock-text))
-
-             cursor-y    (if offset-top (+ offset-top box-top offset-height 2) box-bottom)
-             vw-height   (or (.-height js/window.visualViewport)
-                             (.-clientHeight js/document.documentElement))]
-         {:scroll (- cursor-y (- vw-height (+ @keyboard-height (+ 40 4))))
-          :cursor-y cursor-y
-          :offset-height offset-height}))))
 
 #?(:cljs
    (defn scroll-editor-cursor
-     [^js/HTMLElement el]
-     (when (and el (mobile?))
-       (let [header-height (or (some-> (gdom/getElementByClass "cp__header") (.-clientHeight)) 24)
-             main-node   (app-scroll-container-node el)
-             scroll-top'  (.-scrollTop main-node)
-             {:keys [scroll offset-height cursor-y]} (mobile-get-scroll el)]
-         (cond
-           (and (< cursor-y (+ header-height offset-height 4)) ;; 4 is top+bottom padding for per line
-                (>= cursor-y header-height))
-           (.scrollBy main-node (bean/->js {:top (- (+ offset-height 4))}))
-
-           (> scroll 0)
-           (set! (.-scrollTop main-node) (+ scroll-top' scroll))
-
-           :else
-           nil)))))
+     ([el] (scroll-editor-cursor el true))
+     ([^js/HTMLElement el start?]
+      (when (and el (mobile?)
+              ;; start? selection
+                 (or (not start?) (zero? (get-selection-start el))))
+        (when-let [scroll-node (app-scroll-container-node el)]
+          (let [scroll-top' (.-scrollTop scroll-node)
+                vw-height (if (mobile-util/native-platform?)
+                            (- (.-height js/window.screen) (or @keyboard-height 312))
+                            (or (.-height js/window.visualViewport)
+                                (.-clientHeight js/document.documentElement)))
+                ^js box-rect (.getBoundingClientRect el)
+                box-top (.-top box-rect)
+                top-offset 84
+                inset (- box-top (- vw-height top-offset))]
+            (when (> inset 0)
+              (js/setTimeout
+               #(set! (.-scrollTop scroll-node)
+                      (+ scroll-top' inset (if (false? start?) 96 64))) 16))))))))
 
 #?(:cljs
    (do
@@ -1412,13 +1364,44 @@
        (set! (.-src image) data-url))))
 
 #?(:cljs
-   (defn write-blob-to-clipboard
-     [blob]
-     (->> blob
-          (js-obj (.-type blob))
-          (js/ClipboardItem.)
-          (array)
-          (js/navigator.clipboard.write))))
+   (def native-clipboard (gobj/get CapacitorClipboard "Clipboard")))
+
+#?(:cljs
+   (do
+     ;; Helper: Blob -> data URL (returns a JS Promise)
+     (defn blob->data-url [blob]
+       (js/Promise.
+        (fn [resolve reject]
+          (let [reader (js/FileReader.)]
+            (set! (.-onload reader)
+                  (fn [_e]
+                    ;; result is a "data:<mime>;base64,..." string
+                    (resolve (.-result reader))))
+            (set! (.-onerror reader)
+                  (fn [_e]
+                    (reject (.-error reader))))
+            (.readAsDataURL reader blob)))))
+
+     (defn write-blob-to-clipboard [blob]
+       (if native-clipboard
+         ;; 1) Native (Capacitor) path – expects a data URL
+         (-> (blob->data-url blob)
+             (.then (fn [data-url]
+                        ;; Your Capacitor plugin signature: { image: <data-url> }
+                      (.write native-clipboard #js {:image data-url})))
+             (.then (fn []
+                      (js/console.log "Copied via native clipboard")))
+             (.catch (fn [err]
+                       (js/console.error "Native clipboard failed" err))))
+
+         ;; 2) Web Clipboard API path (desktop browsers etc.)
+         (let [item (js/ClipboardItem.
+                     (js-obj (.-type blob) blob))]
+           (-> (.write (.-clipboard js/navigator) (array item))
+               (.then (fn []
+                        (js/console.log "Copied via web clipboard")))
+               (.catch (fn [err]
+                         (js/console.error "Web clipboard failed" err)))))))))
 
 #?(:cljs
    (defn copy-image-to-clipboard
@@ -1467,21 +1450,6 @@ Arg *stop: atom, reset to true to stop the loop"
                (async/<! (async/timeout 5000))
                (recur))))))))
 
-(defmacro concatv
-  "Vector version of concat. non-lazy"
-  [& args]
-  `(vec (concat ~@args)))
-
-(defmacro mapcatv
-  "Vector version of mapcat. non-lazy"
-  [f coll & colls]
-  `(vec (mapcat ~f ~coll ~@colls)))
-
-(defmacro removev
-  "Vector version of remove. non-lazy"
-  [pred coll]
-  `(vec (remove ~pred ~coll)))
-
 ;; from rum
 #?(:cljs
    (def schedule
@@ -1517,11 +1485,6 @@ Arg *stop: atom, reset to true to stop the loop"
        (some-> target (.querySelector ".CodeMirror") (.-CodeMirror)))))
 
 #?(:cljs
-   (defn mobile-keep-keyboard-open
-     ([]
-      (mobile-keep-keyboard-open true))
-     ([schedule?]
-      (when (mobile?)
-        (let [f #(when-let [node (gdom/getElement "app-keep-keyboard-open-input")]
-                   (.focus node))]
-          (if schedule? (schedule f) (f)))))))
+   (defn rtc-test?
+     []
+     (string/includes? js/window.location.search "?rtc-test=true")))

@@ -301,8 +301,8 @@
                [{:page {:block/title "page1"}
                  :blocks [{:block/title "b1" :user.property/default [:block/uuid used-closed-value-uuid]}]}]})
         _ (assert (:user.property/default (db-test/find-block-by-content @conn "b1")))
-        property-uuid (:block/uuid (d/entity @conn :user.property-default))
-        _ (outliner-property/delete-closed-value! conn property-uuid [:block/uuid closed-value-uuid])]
+        property-id (:db/id (d/entity @conn :user.property/default))
+        _ (outliner-property/delete-closed-value! conn property-id [:block/uuid closed-value-uuid])]
     (is (nil? (d/entity @conn [:block/uuid closed-value-uuid])))))
 
 (deftest class-add-property!

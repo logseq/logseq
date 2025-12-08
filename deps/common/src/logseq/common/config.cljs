@@ -30,14 +30,18 @@
 
 (defonce asset-protocol "assets://")
 
+(defonce db-version-prefix "logseq_db_")
+(defonce file-version-prefix "logseq_local_")
+
 (defonce local-assets-dir "assets")
+(defonce unlinked-graphs-dir "Unlinked graphs")
 
 (defonce favorites-page-name "$$$favorites")
 (defonce views-page-name "$$$views")
 (defonce library-page-name "Library")
 (defonce quick-add-page-name "Quick add")
 
-(defn local-asset?
+(defn local-relative-asset?
   [s]
   (and (string? s)
        (re-find (re-pattern (str "^[./]*" local-assets-dir)) s)))
@@ -46,6 +50,14 @@
   [s]
   (when (string? s)
     (string/starts-with? s asset-protocol)))
+
+(defn protocol-path?
+  [s]
+  (try
+    (let [url (js/URL. s)]
+      (some? (.-protocol url)))
+    (catch :default _
+      false)))
 
 (defn remove-asset-protocol
   [s]

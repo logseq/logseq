@@ -210,7 +210,7 @@
                  :url "link"
                  :property "letter-p"
                  :page "page"
-                 :node "letter-n"
+                 :node "point-filled"
                  "letter-t"))]
     (ui/icon icon {:class "opacity-50"
                    :size 15})))
@@ -370,6 +370,7 @@
         property-key (rum/react *property-key)
         batch? (pv/batch-operation?)
         hide-property-key? (or (contains? #{:date :datetime} (:logseq.property/type property))
+                               (= (:db/ident property) :logseq.property/icon)
                                (pv/select-type? block property)
                                (and
                                 batch?
@@ -490,7 +491,10 @@
 
          (let [property-desc (when-not (= (:db/ident property) :logseq.property/description)
                                (:logseq.property/description property))]
-           [:div.ls-block.property-value-container.flex.flex-row.gap-1.items-start
+           [:div.ls-block.property-value-container.flex.flex-row.gap-1
+            {:class (if (contains? #{:checkbox :date :datetime} type)
+                      "items-center"
+                      "items-start")}
 
             (when-not (or block? (and property-desc (:class-schema? opts)))
               [:div.flex.items-center {:style {:height 28}}
@@ -503,7 +507,7 @@
                 (pv/property-value block property opts))]]])]))))
 
 (rum/defc ordered-properties
-  [block properties* opts]
+  [block properties* sorted-property-entities opts]
   (let [[properties set-properties!] (hooks/use-state properties*)
         [properties-order set-properties-order!] (hooks/use-state (mapv first properties))
         m (zipmap (map first properties*) (map second properties*))
@@ -527,15 +531,21 @@
                {:sort-by-inner-element? true
                 :on-drag-end (fn [properties-order {:keys [active-id over-id direction]}]
                                (set-properties-order! properties-order)
-                               (let [move-down? (= direction :down)
-                                     over (db/entity (keyword over-id))
-                                     active (db/entity (keyword active-id))
-                                     over-order (:block/order over)
-                                     new-order (if move-down?
-                                                 (let [next-order (db-order/get-next-order (db/get-db) nil (:db/id over))]
-                                                   (db-order/gen-key over-order next-order))
-                                                 (let [prev-order (db-order/get-prev-order (db/get-db) nil (:db/id over))]
-                                                   (db-order/gen-key prev-order over-order)))]
+                               (p/let [;; Before reordering properties,
+                                       ;; check if the :block/order of these properties is reasonable.
+                                       normalize-tx-data (db-property/normalize-sorted-entities-block-order
+                                                          sorted-property-entities)
+                                       _ (when (seq normalize-tx-data)
+                                           (db/transact! (state/get-current-repo) normalize-tx-data))
+                                       move-down? (= direction :down)
+                                       over (db/entity (keyword over-id))
+                                       active (db/entity (keyword active-id))
+                                       over-order (:block/order over)
+                                       new-order (if move-down?
+                                                   (let [next-order (db-order/get-next-order (db/get-db) nil (:db/id over))]
+                                                     (db-order/gen-key over-order next-order))
+                                                   (let [prev-order (db-order/get-prev-order (db/get-db) nil (:db/id over))]
+                                                     (db-order/gen-key prev-order over-order)))]
                                  (db/transact! (state/get-current-repo)
                                                [{:db/id (:db/id active)
                                                  :block/order new-order}
@@ -546,12 +556,20 @@
 (rum/defc properties-section < rum/static
   [block properties opts]
   (when (seq properties)
-      ;; Sort properties by :block/order
-    (let [properties' (sort-by (fn [[k _v]]
-                                 (if (= k :logseq.property.class/properties)
-                                   "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
-                                   (:block/order (db/entity k)))) properties)]
-      (ordered-properties block properties' opts))))
+    (let [sorted-prop-entities (db-property/sort-properties (map (comp db/entity first) properties))
+          prop-kv-map (reduce (fn [m [p v]] (assoc m p v)) {} properties)
+          properties' (keep (fn [ent] (find prop-kv-map (:db/ident ent))) sorted-prop-entities)]
+      (ordered-properties block properties' sorted-prop-entities opts))))
+
+(rum/defc hidden-properties-cp
+  [block hidden-properties {:keys [root-block? sidebar-properties?] :as opts}]
+  (when (and (seq hidden-properties) (or root-block? sidebar-properties?))
+    [:details.my-1
+     [:summary.text-sm.opacity-50.hover:opacity-90.cursor-pointer
+      {:style {:margin-left 11}}
+      [:span.ml-1 "Hidden properties"]]
+     [:div.mt-1
+      (properties-section block hidden-properties opts)]]))
 
 (rum/defcs ^:large-vars/cleanup-todo properties-area < rum/reactive db-mixins/query
   {:init (fn [state]
@@ -560,7 +578,7 @@
              (assoc state
                     ::id (str (random-uuid))
                     ::block block)))}
-  [state _target-block {:keys [sidebar-properties? tag-dialog?] :as opts}]
+  [state _target-block {:keys [page-title? journal-page? sidebar-properties? tag-dialog?] :as opts}]
   (let [id (::id state)
         db-id (:db/id (::block state))
         block (db/sub-block db-id)
@@ -571,7 +589,7 @@
                                                      (and (set? ids) (contains? ids (:block/uuid block))))))
         properties (:block/properties block)
         remove-built-in-or-other-position-properties
-        (fn [properties]
+        (fn [properties show-in-hidden-properties?]
           (remove (fn [property]
                     (let [id (if (vector? property) (first property) property)]
                       (or
@@ -582,9 +600,11 @@
                           (and (not (ldb/public-built-in-property? ent))
                                (ldb/built-in? ent))
                           ;; other position
-                          (when-not (or show-properties?
-                                        (and (:sidebar? opts) (= (:id opts) (str (:block/uuid block))))
-                                        show-empty-and-hidden-properties?)
+                          (when-not (or
+                                     sidebar-properties?
+                                     (and page-title? (not journal-page?))
+                                     show-empty-and-hidden-properties?
+                                     show-in-hidden-properties?)
                             (outliner-property/property-with-other-position? ent))
 
                           (and (:gallery-view? opts)
@@ -594,7 +614,6 @@
         classes-properties-set (set (map :db/ident classes-properties))
         block-own-properties (->> properties
                                   (remove (fn [[id _]] (classes-properties-set id))))
-        root-block? (= (:id opts) (str (:block/uuid block)))
         state-hide-empty-properties? (:ui/hide-empty-properties? (state/get-config))
         ;; This section produces own-properties and full-hidden-properties
         hide-with-property-id (fn [property-id]
@@ -605,17 +624,11 @@
                                      false
                                      state-hide-empty-properties?
                                      (nil? (get block property-id))
+                                     (and (:logseq.property/hide-empty-value property)
+                                          (nil? (get properties property-id)))
+                                     true
                                      :else
-                                     ;; sidebar or tag dialog properties ignore these checks
-                                     (when-not show-properties?
-                                       (cond
-                                         root-block?
-                                         false
-                                         (and (:logseq.property/hide-empty-value property)
-                                              (nil? (get properties property-id)))
-                                         true
-                                         :else
-                                         (boolean (:logseq.property/hide? property))))))))
+                                     (boolean (:logseq.property/hide? property))))))
         property-hide-f (cond
                           config/publishing?
                           ;; Publishing is read only so hide all blank properties as they
@@ -631,7 +644,7 @@
                               (nil? property-value)))
                           :else
                           (comp hide-with-property-id first))
-        {_block-hidden-properties true
+        {block-hidden-properties true
          block-own-properties' false} (group-by property-hide-f block-own-properties)
         class-properties (loop [classes all-classes
                                 properties (set (map first block-own-properties'))
@@ -639,19 +652,28 @@
                            (if-let [class (first classes)]
                              (let [cur-properties (->> (db-property/get-class-ordered-properties class)
                                                        (map :db/ident)
-                                                       (remove properties)
-                                                       (remove hide-with-property-id))]
+                                                       (remove properties))]
                                (recur (rest classes)
                                       (set/union properties (set cur-properties))
                                       (if (seq cur-properties)
                                         (into result cur-properties)
                                         result)))
                              result))
-        full-properties (->> (concat block-own-properties'
-                                     (map (fn [p] [p (get block p)]) class-properties))
-                             remove-built-in-or-other-position-properties)]
+        full-properties (-> (concat block-own-properties'
+                                    (remove property-hide-f (map (fn [p] [p (get block p)]) class-properties)))
+                            (remove-built-in-or-other-position-properties false))
+        hidden-properties (-> (concat block-hidden-properties
+                                      (filter property-hide-f (map (fn [p] [p (get block p)]) class-properties)))
+                              (remove-built-in-or-other-position-properties true))
+        root-block? (or (= (str (:block/uuid block))
+                           (state/get-current-page))
+                        (and (= (str (:block/uuid block)) (:id opts))
+                             (not (entity-util/page? block))))]
     (cond
-      (empty? full-properties)
+      (and (empty? full-properties) (seq hidden-properties) (not root-block?) (not sidebar-properties?))
+      nil
+
+      (and (empty? full-properties) (empty? hidden-properties))
       (when show-properties?
         (rum/with-key (new-property block opts) (str id "-add-property")))
 
@@ -669,6 +691,10 @@
          [:<>
           (properties-section block properties' opts)
 
+          (when-not class?
+            (hidden-properties-cp block hidden-properties
+                                  (assoc opts :root-block? root-block?)))
+
           (when (and page? (not class?))
             (rum/with-key (new-property block opts) (str id "-add-property")))
 
@@ -685,4 +711,6 @@
                  "Tag properties are inherited by all nodes using the tag. For example, each #Task node inherits 'Status' and 'Priority'."]]
                [:div.ml-4
                 (properties-section block properties opts')
+                (hidden-properties-cp block hidden-properties
+                                      (assoc opts :root-block? root-block?))
                 (rum/with-key (new-property block opts') (str id "-class-add-property"))]]))]]))))

@@ -158,12 +158,20 @@
                                                         [(entity-plus/entity-memoized @conn :logseq.class/Cards)]))))))
 
 (deftest validate-tags-property
-  (let [conn (db-test/create-conn-with-blocks
-              {:classes {:SomeTag {}}
+  (let [class-uuid (random-uuid)
+        conn (db-test/create-conn-with-blocks
+              {:classes {:SomeTag {:block/uuid class-uuid :build/keep-uuid? true}}
                :pages-and-blocks
                [{:page {:block/title "page1"}
-                 :blocks [{:block/title "block"}]}]})
-        block (db-test/find-block-by-content @conn "block")]
+                 :blocks [{:block/title "block"
+                           :build/children [{:block/title "block - invalid location"}]}
+                          {:block/title "block / invalid title"}]}
+                {:page {:block/uuid class-uuid}
+                 :blocks [{:block/title "class block"}]}]
+               :build-existing-tx? true})
+        block (db-test/find-block-by-content @conn "block")
+        block-invalid-title (db-test/find-block-by-content @conn #"invalid title")
+        block-invalid-location (db-test/find-block-by-content @conn #"invalid location")]
 
     (is (thrown-with-msg?
          js/Error
@@ -185,15 +193,60 @@
 
     (is (thrown-with-msg?
          js/Error
-         #"Can't set tag.*Page"
-         (outliner-validate/validate-tags-property @conn [(:db/id block)] :logseq.class/Page))
+         #"Can't set tag.*Tag"
+         (outliner-validate/validate-tags-property @conn [(:db/id block)] :logseq.class/Tag))
         "Nodes can't be tagged with built-in private tags")
 
     (is (thrown-with-msg?
          js/Error
          #"Can't set tag.*Priority"
          (outliner-validate/validate-tags-property @conn [(:db/id block)] :logseq.property/priority))
-        "Nodes can't be tagged with built-in non tags")))
+        "Nodes can't be tagged with built-in non tags")
+
+    (is (nil? (outliner-validate/validate-tags-property @conn [(:db/id block)] :logseq.class/Page))
+        "Blocks can be tagged with #Page")
+
+    (is (thrown-with-msg?
+         js/Error
+         #"Page name can't.*/"
+         (outliner-validate/validate-tags-property @conn [(:db/id block-invalid-title)] :logseq.class/Page))
+        "Block with invalid title can't be tagged with #Page")
+
+    (is (thrown-with-msg?
+         js/Error
+         #"Can't convert this block to page"
+         (outliner-validate/validate-tags-property @conn [(:db/id block-invalid-location)] :logseq.class/Page))
+        "Block with invalid location can't be tagged with #Page")))
+
+(deftest validate-tags-property-deletion
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:SomeTag {}}
+               :pages-and-blocks
+               [{:page {:block/title "page1"}
+                 :blocks [{:block/title "block" :build/tags [:logseq.class/Page]}]}]})
+        page (db-test/find-page-by-title @conn "page1")
+        page-with-parent (db-test/find-block-by-content @conn "block")]
+
+    (is (thrown-with-msg?
+         js/Error
+         #"Can't remove tag.*Task"
+         (outliner-validate/validate-tags-property-deletion @conn [(:db/id (d/entity @conn :logseq.class/Task))] :logseq.class/Tag))
+        "built-in class must not have tag deleted by the user")
+
+    (is (thrown-with-msg?
+         js/Error
+         #"Can't remove tag.*Tag"
+         (outliner-validate/validate-tags-property-deletion @conn [(:db/id (d/entity @conn :user.class/SomeTag))] :logseq.class/Tag))
+        "Node can't have private tag deleted by user")
+
+    (is (nil? (outliner-validate/validate-tags-property-deletion @conn [(:db/id page-with-parent)] :logseq.class/Page))
+        "Page with parent can remove #Page")
+
+    (is (thrown-with-msg?
+         js/Error
+         #"This page cannot be converted"
+         (outliner-validate/validate-tags-property-deletion @conn [(:db/id page)] :logseq.class/Page))
+        "Page without parent can't remove #Page")))
 
 ;; Try as many of the validations against a new graph to confirm
 ;; that validations make sense and are valid for a new graph

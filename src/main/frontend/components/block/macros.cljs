@@ -1,15 +1,15 @@
 (ns frontend.components.block.macros
   "Logseq macros that render and evaluate in blocks"
   (:require [clojure.walk :as walk]
+            [datascript.core :as d]
+            [frontend.config :as config]
+            [frontend.db.conn :as db-conn]
             [frontend.extensions.sci :as sci]
             [frontend.handler.common :as common-handler]
+            [frontend.state :as state]
             [goog.string :as gstring]
             [goog.string.format]
-            [frontend.state :as state]
-            [frontend.config :as config]
-            [datascript.core :as d]
-            [logseq.db.frontend.property :as db-property]
-            [frontend.db.conn :as db-conn]))
+            [logseq.db.frontend.property :as db-property]))
 
 (defn- properties-by-name
   "Given a block from a query result, returns a map of its properties indexed by

@@ -1,18 +1,58 @@
 (ns mobile.core
   "Mobile core"
   (:require ["react-dom/client" :as rdc]
+            [clojure.string :as string]
             [frontend.background-tasks]
-            [frontend.components.page :as page]
             [frontend.handler :as fhandler]
             [frontend.handler.db-based.rtc-background-tasks]
+            [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
-            [frontend.util :as util]
+            [frontend.mobile.util :as mobile-util]
+            [frontend.state :as state]
+            [lambdaisland.glogi :as log]
             [mobile.components.app :as app]
+            [mobile.components.selection-toolbar :as selection-toolbar]
             [mobile.events]
             [mobile.init :as init]
-            [mobile.state :as state]
+            [mobile.navigation :as mobile-nav]
+            [mobile.routes :refer [routes] :as mobile-routes]
+            [mobile.state :as mobile-state]
             [reitit.frontend :as rf]
             [reitit.frontend.easy :as rfe]))
+
+(defn- alert*
+  [content status timeout]
+  (if (string? content)
+    (mobile-util/alert {:title content
+                        :type (or (when (keyword? status) (name status)) "info")
+                        :duration timeout
+                        :position "top"})
+    (log/warn ::native-alert-non-string {:content content})))
+
+(defn- alert
+  "Native mobile alert replacement for `frontend.handler.notification/show!`."
+  ([content]
+   (alert content :info nil nil nil nil))
+  ([content status]
+   (alert content status nil nil nil nil))
+  ([content status clear?]
+   (alert content status clear? nil nil nil))
+  ([content status clear? uid]
+   (alert content status clear? uid nil nil))
+  ([content status clear? uid timeout]
+   (alert content status clear? uid timeout nil))
+  ([content status _clear? _uid timeout _close-cb]
+   (alert* content status timeout)))
+
+(set! notification/show! alert)
+
+(set! notification/clear!
+      (fn [_]
+        (mobile-util/hide-alert)))
+
+(set! notification/clear-all!
+      (fn [_]
+        (mobile-util/hide-alert)))
 
 (defonce ^js root (rdc/createRoot (.getElementById js/document "root")))
 
@@ -20,38 +60,37 @@
   []
   (.render root (app/main)))
 
-(def routes
-  [["/page/:name"
-    {:name :page
-     :view (fn [route-match]
-             (page/page-cp (assoc route-match :current-page? true)))}]])
-
 (defn set-router!
   []
-  (.addEventListener js/window "popstate" route-handler/restore-scroll-pos)
-  (rfe/start!
-   (rf/router routes nil)
-   (fn [route]
-     (route-handler/set-route-match! route)
-     (case (get-in route [:data :name])
-       :page
-       (let [id-str (get-in route [:path-params :name])]
-         (when (util/uuid-string? id-str)
-           (let [page-uuid (uuid id-str)]
-             (state/set-modal! {:open? true
-                                :block {:block/uuid page-uuid}}))))
-       :user-login
-       nil
-       nil))
+  (mobile-nav/install-navigation-hooks!)
+  (let [router (rf/router routes nil)]
+    (rfe/start!
+     router
+     (fn [route]
+       (when (state/get-edit-block)
+         (state/clear-edit!))
+       (selection-toolbar/close-selection-bar!)
+       (let [route-name (get-in route [:data :name])
+             path (-> js/location .-hash (string/replace-first #"^#" ""))]
+         (mobile-nav/notify-route-change!
+          {:route {:to route-name
+                   :path-params (:path-params route)
+                   :query-params (:query-params route)}
+           :route-match route
+           :path path
+           :stack (mobile-nav/current-stack)})
+         (route-handler/set-route-match! route)))
 
-   ;; set to false to enable HistoryAPI
-   {:use-fragment true}))
+     ;; set to false to enable HistoryAPI
+     {:use-fragment true})))
 
 (defn ^:export init []
   ;; init is called ONCE when the page loads
   ;; this is called in the index.html and must be exported
   ;; so it is available even in :advanced release builds
-  (prn "[capacitor-new] init!")
+  (prn "[Mobile] init!")
+  (log/add-handler mobile-state/log-append!)
+  (mobile-nav/install-native-bridge!)
   (set-router!)
   (init/init!)
   (fhandler/start! render!))
@@ -59,4 +98,4 @@
 (defn ^:export stop! []
   ;; stop is called before any code is reloaded
   ;; this is controlled by :before-load in the config
-  (prn "[capacitor-new] stop!"))
+  (prn "[Mobile] stop!"))

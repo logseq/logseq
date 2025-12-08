@@ -13,7 +13,7 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]))
 
-(defonce db-version-prefix "logseq_db_")
+(defonce db-version-prefix common-config/db-version-prefix)
 
 (def ^:private write-handlers (cljs-bean.transit/writer-handlers))
 (def ^:private read-handlers {})
@@ -34,19 +34,27 @@
                                                                      (fn [^de/entity entity]
                                                                        (assert (some? (:db/id entity)))
                                                                        (assoc (.-kv entity)
-                                                                              :db/id (:db/id entity)))))
+                                                                              :db/id (:db/id entity))))
+                                    ExceptionInfo (transit/write-handler (constantly "error")
+                                                                         (fn [e]
+                                                                           {:message (ex-message e)
+                                                                            :data (ex-data e)}))
+                                    js/Error (transit/write-handler (constantly "js/Error")
+                                                                    (fn [e] {:message (ex-message e)})))
                              (merge write-handlers))
         writer (transit/writer :json {:handlers write-handlers*})]
     (fn write-transit-str* [o]
       (try (transit/write writer o)
            (catch :default e
-             (prn ::write-transit-str o)
+             (prn ::write-transit-str (type o) o)
              (js/console.trace)
              (throw e))))))
 
 (def read-transit-str
   (let [read-handlers* (->> (assoc dt/read-handlers
-                                   "datascript/Entity" identity)
+                                   "datascript/Entity" identity
+                                   "error" (fn [m] (ex-info (:message m) (:data m)))
+                                   "js/Error" (fn [m] (js/Error. (:message m))))
                             (merge read-handlers))
         reader (transit/reader :json {:handlers read-handlers*})]
     (fn read-transit-str* [s]
@@ -129,8 +137,10 @@
           ;; Timestamp is useful as this can occur much later than :logseq.kv/graph-created-at
            (kv :logseq.kv/imported-at (common-util/time-ms))]
           (mapv
-           ;; Don't import some RTC related entities
            (fn [db-ident] [:db/retractEntity db-ident])
-           [:logseq.kv/graph-uuid
-            :logseq.kv/graph-local-tx
-            :logseq.kv/remote-schema-version])))
+           [:logseq.kv/graph-uuid       ;rtc related
+            :logseq.kv/graph-local-tx   ;rtc related
+            :logseq.kv/remote-schema-version ;rtc related
+            :logseq.kv/graph-rtc-e2ee?  ;rtc related
+            :logseq.kv/graph-text-embedding-model-name ;embedding
+            ])))

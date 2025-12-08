@@ -1,0 +1,41 @@
+{
+  "name": "@logseq/cli",
+  "version": "0.4.1",
+  "description": "Logseq CLI",
+  "bin": {
+    "logseq": "cli.mjs"
+  },
+  "engines": {
+    "node": ">=22.17.0"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@logseq/nbb-logseq": "github:logseq/nbb-logseq#feat-db-v29",
+    "@modelcontextprotocol/sdk": "^1.17.5",
+    "better-sqlite3": "~11.10.0",
+    "fastify": "5.3.2",
+    "fs-extra": "^11.3.0",
+    "jszip": "3.8.0",
+    "mldoc": "^1.5.9",
+    "zod": "^4.1.5"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/logseq/logseq.git",
+    "directory": "deps/cli"
+  },
+  "keywords": [
+    "logseq",
+    "knowledge graph",
+    "note taking",
+    "clojurescript",
+    "nbb"
+  ],
+  "files": [
+    "src",
+    "vendor"
+  ],
+  "scripts": {
+    "test": "yarn nbb-logseq -cp test -m nextjournal.test-runner"
+  }
+}

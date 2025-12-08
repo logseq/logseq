@@ -35,7 +35,7 @@
       [:div#journals
        (ui/virtualized-list
         {:custom-scroll-parent (util/app-scroll-container-node)
-         :increase-viewport-by {:top 300 :bottom 300}
+         :increase-viewport-by {:top 100 :bottom 100}
          :compute-item-key (fn [idx]
                              (let [id (util/nth-safe data idx)]
                                (str "journal-" id)))

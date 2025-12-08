@@ -37,17 +37,6 @@
                             :payload {:message "Page name can't be blank."
                                       :type :warning}})))))
 
-(def ^:api uneditable-page? ldb/built-in?)
-
-(defn ^:api validate-built-in-pages
-  "Validates built-in pages shouldn't be modified"
-  [entity & {:keys [message]}]
-  (when (uneditable-page? entity)
-    (throw (ex-info "Rename built-in pages"
-                    {:type :notification
-                     :payload {:message (or message "Built-in pages can't be edited")
-                               :type :warning}}))))
-
 (defn- find-other-ids-with-title-and-tags
   "Query that finds other ids given the id to ignore, title to look up and tags to consider"
   [entity]
@@ -138,18 +127,19 @@
 (defn validate-block-title
   "Validates a block title when it has changed for a entity-util/page? or tagged node"
   [db new-title existing-block-entity]
-  (validate-built-in-pages existing-block-entity)
   (validate-unique-by-name-and-tags db new-title existing-block-entity)
   (validate-disallow-page-with-journal-name new-title existing-block-entity))
 
 (defn validate-property-title
   "Validates a property's title when it has changed"
-  [new-title]
-  (when-not (db-property/valid-property-name? new-title)
-    (throw (ex-info "Property name is invalid"
-                    {:type :notification
-                     :payload {:message "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['."
-                               :type :error}}))))
+  ([new-title] (validate-property-title new-title {}))
+  ([new-title meta-m]
+   (when-not (db-property/valid-property-name? new-title)
+     (throw (ex-info "Property name is invalid"
+                     (merge meta-m
+                            {:type :notification
+                             :payload {:message "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['."
+                                       :type :error}}))))))
 
 (defn- validate-extends-property-have-correct-type
   "Validates whether given parent and children are classes"
@@ -165,9 +155,9 @@
 (defn- disallow-built-in-class-extends-change
   [_parent-ent child-ents]
   (when (some #(get db-class/built-in-classes (:db/ident %)) child-ents)
-    (throw (ex-info "Can't change the parent of a built-in tag"
+    (throw (ex-info "Can't change the extends of a built-in tag"
                     {:type :notification
-                     :payload {:message "Can't change the parent of a built-in tag"
+                     :payload {:message "Can't change the extends of a built-in tag"
                                :type :error}}))))
 
 (defn- disallow-extends-cycle
@@ -187,8 +177,8 @@
   (let [parent-ent (if (integer? parent-ent*)
                      (d/entity db parent-ent*)
                      parent-ent*)]
-    (disallow-extends-cycle db parent-ent child-ents)
     (when built-in? (disallow-built-in-class-extends-change parent-ent child-ents))
+    (disallow-extends-cycle db parent-ent child-ents)
     (validate-extends-property-have-correct-type parent-ent child-ents)))
 
 (defn- disallow-node-cant-tag-with-built-in-non-tags
@@ -204,11 +194,13 @@
 
 (defn- disallow-node-cant-tag-with-private-tags
   [db block-eids v & {:keys [delete?]}]
-  (when (and (ldb/private-tags (:db/ident (d/entity db v)))
-             ;; Allow assets to be tagged
-             (not (and
-                   (every? (fn [id] (ldb/asset? (d/entity db id))) block-eids)
-                   (= :logseq.class/Asset (:db/ident (d/entity db v))))))
+  ;; Skip #Page as it is validated by later fns
+  (when (and (contains? (disj ldb/private-tags :logseq.class/Page) (:db/ident (d/entity db v)))
+             (not
+               ;; Allow assets to be tagged
+              (and
+               (every? (fn [id] (ldb/asset? (d/entity db id))) block-eids)
+               (= :logseq.class/Asset (:db/ident (d/entity db v))))))
     (throw (ex-info (str (if delete? "Can't remove tag" "Can't set tag")
                          " with built-in #" (:block/title (d/entity db v)))
                     {:type :notification
@@ -229,15 +221,77 @@
                                              " on built-in " (pr-str (:block/title built-in-ent)))
                                :type :error}}))))
 
+(defn- disallow-removing-page-tag
+  "Disallow page->block when
+  1. this page doesn't have :block/parent
+  2. its parent is Library
+  3. it has page child"
+  [db eids v]
+  (when (= (:db/ident (d/entity db v)) :logseq.class/Page)
+    (let [library-page (ldb/get-library-page db)]
+      (doseq [eid eids]
+        (let [entity (d/entity db eid)]
+          (when (ldb/internal-page? entity)
+            (cond
+              (not (:block/parent entity))
+              (throw (ex-info "This page cannot be converted to a block"
+                              {:type :notification
+                               :payload
+                               {:message (str "Page " (pr-str (:block/title entity)) " cannot be converted to a block")
+                                :type :error
+                                :entity (into {} entity)
+                                :property :block/tags}}))
+              (= (:db/id library-page) (:db/id (:block/parent entity)))
+              (throw (ex-info "This page cannot be converted to a block"
+                              {:type :notification
+                               :payload
+                               {:message (str "Page " (pr-str (:block/title entity)) " cannot be converted to a block, please move it to another page first")
+                                :type :error
+                                :entity (into {} entity)
+                                :property :block/tags}}))
+              (some entity-util/page? (:block/_parent entity))
+              (throw (ex-info "This page cannot be converted to a block"
+                              {:type :notification
+                               :payload
+                               {:message (str "Page " (pr-str (:block/title entity)) " cannot be converted to a block because it has page children")
+                                :type :error
+                                :entity (into {} entity)
+                                :property :block/tags}})))))))))
+
+(defn- validate-block-can-tag-with-page-tag
+  "Validates block can convert to page by adding #Page for allowed scenarios"
+  [db eids v]
+  (when (= (:db/ident (d/entity db v)) :logseq.class/Page)
+    (doseq [eid eids]
+      (let [block (d/entity db eid)]
+        (when (:block/parent block)
+          (validate-page-title (:block/title block) {:node block})
+          (validate-page-title-characters (:block/title block) {:node block})
+
+          ;; Only allow block to be page when its parent is a page to guard against invalid pages
+          ;; in property values or pages being created with blocks as namespace parents
+          (when (or (not (entity-util/page? (:block/parent block)))
+                    (:logseq.property/created-from-property block))
+            (let [message (if (:logseq.property/created-from-property block)
+                            "Can't convert property value to page."
+                            "Can't convert this block to page since its parent is not a page.")]
+              (throw (ex-info message
+                              {:type :notification
+                               :payload {:message message
+                                         :type :error
+                                         :block (into {} block)}})))))))))
+
 (defn validate-tags-property
   "Validates adding a property value to :block/tags for given blocks"
   [db block-eids v]
   (disallow-tagging-a-built-in-entity db block-eids)
   (disallow-node-cant-tag-with-private-tags db block-eids v)
+  (validate-block-can-tag-with-page-tag db block-eids v)
   (disallow-node-cant-tag-with-built-in-non-tags db block-eids v))
 
 (defn validate-tags-property-deletion
   "Validates deleting a property value from :block/tags for given blocks"
   [db block-eids v]
   (disallow-tagging-a-built-in-entity db block-eids {:delete? true})
-  (disallow-node-cant-tag-with-private-tags db block-eids v {:delete? true}))
+  (disallow-node-cant-tag-with-private-tags db block-eids v {:delete? true})
+  (disallow-removing-page-tag db block-eids v))

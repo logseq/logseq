@@ -9,8 +9,11 @@ const ip = require('ip')
 const replace = require('gulp-replace')
 
 const outputPath = path.join(__dirname, 'static')
+const outputJsPath = path.join(outputPath, 'js')
 const resourcesPath = path.join(__dirname, 'resources')
 const publicRootPath = path.join(__dirname, 'public')
+const mobilePath = path.join(outputPath, 'mobile')
+const mobileJsPath = path.join(mobilePath, 'js')
 const sourcePath = path.join(__dirname, 'src/main/frontend')
 const resourceFilePath = path.join(resourcesPath, '**')
 const outputFilePath = path.join(outputPath, '**')
@@ -76,9 +79,8 @@ const common = {
         'node_modules/marked/marked.min.js',
         'node_modules/@highlightjs/cdn-assets/highlight.min.js',
         'node_modules/@isomorphic-git/lightning-fs/dist/lightning-fs.min.js',
-        'packages/amplify/dist/amplify.js',
         'packages/ui/dist/ui/ui.js',
-        'node_modules/@logseq/sqlite-wasm/sqlite-wasm/jswasm/sqlite3.wasm',
+        'node_modules/@sqlite.org/sqlite-wasm/sqlite-wasm/jswasm/sqlite3.wasm',
         'node_modules/react/umd/react.production.min.js',
         'node_modules/react/umd/react.development.js',
         'node_modules/react-dom/umd/react-dom.production.min.js',
@@ -127,13 +129,18 @@ const common = {
         'node_modules/prop-types/prop-types.min.js',
         'node_modules/interactjs/dist/interact.min.js',
         'node_modules/photoswipe/dist/umd/*.js',
-        'packages/amplify/dist/amplify.js',
         'packages/ui/dist/ui/ui.js',
-        'node_modules/@logseq/sqlite-wasm/sqlite-wasm/jswasm/sqlite3.wasm',
+        'node_modules/@sqlite.org/sqlite-wasm/sqlite-wasm/jswasm/sqlite3.wasm',
       ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'js'))),
       () => gulp.src([
-        'packages/ui/dist/ionic/*.js',
-      ]).pipe(gulp.dest(path.join(outputPath, 'mobile'))),
+        'node_modules/inter-ui/inter.css',
+      ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'css'))),
+      () => gulp.src('node_modules/inter-ui/Inter (web)/*.*').
+        pipe(gulp.dest(path.join(outputPath, 'mobile', 'css', 'Inter (web)'))),
+      () => gulp.src([
+        'node_modules/@tabler/icons-webfont/fonts/**',
+        'node_modules/katex/dist/fonts/*.woff2',
+      ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'css', 'fonts'))),
     )(...params)
   },
 
@@ -164,6 +171,18 @@ const common = {
       path.join(outputPath, 'js/**'),
       path.join(outputPath, 'css/**'),
     ], { ignoreInitial: true }, common.syncJS_CSSinRt)
+  },
+
+  syncWorkersToMobile () {
+    return gulp.src([
+      path.join(outputPath, 'js/db-worker.js'),
+    ], { base: outputJsPath }).pipe(gulp.dest(mobileJsPath))
+  },
+
+  keepSyncWorkersToMobile () {
+    return gulp.watch([
+      path.join(outputPath, 'js/db-worker.js'),
+    ], { ignoreInitial: false }, common.syncWorkersToMobile)
   },
 
   async runCapWithLocalDevServerEntry (cb) {
@@ -205,20 +224,22 @@ const common = {
     cb()
   },
 
-  switchReactDevelopmentMode(cb) {
+  switchReactDevelopmentMode (cb) {
     try {
-      const reactFrom = path.join(outputPath, 'js', 'react.development.js');
-      const reactTo = path.join(outputPath, 'js', 'react.production.min.js');
-      fs.renameSync(reactFrom, reactTo);
+      const reactFrom = path.join(outputPath, 'js', 'react.development.js')
+      const reactTo = path.join(outputPath, 'js', 'react.production.min.js')
+      fs.renameSync(reactFrom, reactTo)
 
-      const reactDomFrom = path.join(outputPath, 'js', 'react-dom.development.js');
-      const reactDomTo = path.join(outputPath, 'js', 'react-dom.production.min.js');
-      fs.renameSync(reactDomFrom, reactDomTo);
+      const reactDomFrom = path.join(outputPath, 'js',
+        'react-dom.development.js')
+      const reactDomTo = path.join(outputPath, 'js',
+        'react-dom.production.min.js')
+      fs.renameSync(reactDomFrom, reactDomTo)
 
-      cb();
+      cb()
     } catch (err) {
-      console.error("Error during switchReactDevelopmentMode:", err);
-      cb(err);
+      console.error('Error during switchReactDevelopmentMode:', err)
+      cb(err)
     }
   },
 }
@@ -277,7 +298,7 @@ exports.watch = gulp.series(
   gulp.parallel(common.keepSyncResourceFile, css.watchCSS))
 exports.watchMobile = gulp.series(
   common.syncResourceFile, common.syncAssetFiles,
-  gulp.parallel(common.keepSyncResourceFile, css.watchMobileCSS))
+  gulp.parallel(common.keepSyncResourceFile, common.keepSyncWorkersToMobile, css.watchMobileCSS))
 exports.build = gulp.series(common.clean, common.syncResourceFile,
   common.syncAssetFiles, css.buildCSS)
 exports.buildMobile = gulp.series(common.clean, common.syncResourceFile,

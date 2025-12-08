@@ -382,7 +382,7 @@
  :whiteboard/snap-to-grid "Encaixar na grade"
  :whiteboard/toggle-pen-mode "Alternar modo de caneta"
  :flashcards/modal-welcome-title "Hora de criar um cartão!"
- :flashcards/modal-welcome-desc-1 "Você pode adicionar \"#card\" a qualquer bloco para transformá-lo em um cartão ou acionar \"/cloze\" para adicionar algumas partes ocultas."
+ :flashcards/modal-welcome-desc-1 "Você pode adicionar \"{1}\" a qualquer bloco para transformá-lo em um cartão ou acionar \"/cloze\" para adicionar algumas partes ocultas."
  :flashcards/modal-welcome-desc-2 "Você pode "
  :flashcards/modal-welcome-desc-3 "clique neste link"
  :flashcards/modal-welcome-desc-4 " para verificar a documentação."
@@ -445,7 +445,6 @@
  :remove-heading "Remover cabeçalho"
  :heading "Cabeçalho {1}"
  :auto-heading "Cabeçalho automático"
- :open-a-directory "Abrir um diretório local"
  :toggle-theme "Alternar tema"
 
  :help/shortcut-page-title "Atalhos de teclado"

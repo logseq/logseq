@@ -1,28 +1,38 @@
 (ns mobile.state
   "Mobile state"
-  (:require [frontend.rum :as r]))
+  (:require [frontend.rum :as r]
+            [frontend.state :as state]
+            [mobile.navigation :as mobile-nav]))
+
+(defonce *search-input (atom ""))
+(defn use-search-input []
+  (r/use-atom *search-input))
+(defonce *search-last-input-at (atom nil))
+(defn use-search-last-input-at []
+  (r/use-atom *search-last-input-at))
 
 (defonce *tab (atom "home"))
-(defonce *tabs-el (atom nil))
-(defn set-tab!
-  [tab ^js tabs]
-  (reset! *tab tab)
-  (reset! *tabs-el tabs))
+(defn set-tab! [tab]
+  (let [prev @*tab]
+    ;; When leaving the search tab, clear its stack so reopening starts fresh.
+    (when (and (= prev "search")
+               (not= tab "search"))
+      (reset! *search-input "")
+      (mobile-nav/reset-stack-history! "search"))
+    (reset! *tab tab)
+    (mobile-nav/switch-stack! tab)))
 (defn use-tab [] (r/use-atom *tab))
-
-(defonce *modal-data (atom nil))
-(defn set-modal!
-  [data]
-  (reset! *modal-data data))
-(defn open-block-modal!
-  [block]
-  (set-modal! {:open? true
-               :block block}))
 
 (defonce *popup-data (atom nil))
 (defn set-popup!
   [data]
-  (reset! *popup-data data))
+  (reset! *popup-data data)
+  (when data
+    (state/pub-event! [:mobile/clear-edit])))
 
-(defn redirect-to-tab! [name]
-  (some-> @*tabs-el (.select name)))
+(defonce *log (atom []))
+(defn log-append!
+  [record]
+  (swap! *log conj record)
+  (when (> (count @*log) 1000)
+    (reset! *log (subvec @*log 800))))

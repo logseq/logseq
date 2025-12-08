@@ -11,7 +11,8 @@
 
 (defn get-all-graphs
   []
-  (p/let [idb-repos (idb/get-nfs-dbs)
+  (p/let [idb-repos (when-not (or util/web-platform? (util/mobile?))
+                      (idb/get-nfs-dbs))
           repos (persist-db/<list-db)
           repos' (map
                   (fn [{:keys [name] :as repo}]

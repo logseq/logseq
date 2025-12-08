@@ -127,7 +127,7 @@
 
 (deftest new-graph-is-valid
   (let [conn (db-test/create-conn)
-        validation (db-validate/validate-db! @conn)]
+        validation (db-validate/validate-local-db! @conn)]
     ;; For debugging
     ;; (println (count (:errors validation)) "errors of" (count (:entities validation)))
     ;; (cljs.pprint/pprint (:errors validation))
@@ -149,7 +149,7 @@
                    ;; :url macros are used for consistently building urls with the same hostname e.g. docs graph
                    {:block/title "b2" :build/properties {:url "{{docs-base-url test}}"}}]}]})
 
-      (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+      (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
           "Graph with different :url blocks has no validation errors"))))
 
 (deftest build-db-initial-data-test

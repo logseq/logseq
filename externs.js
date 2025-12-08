@@ -143,6 +143,7 @@ dummy.ELEMENT = function() {};
 dummy.TEXT = function() {};
 dummy.isAbsolute = function() {};
 dummy._address = function() {};
+dummy.setInterfaceStyle = function() {};
 dummy.Consumer = {}
 
 var utils = {}
@@ -167,3 +168,7 @@ var openDirectoryOptions;
  * @param {function} cb
  */
 var openDirectory = function(options, cb) {};
+var StatusBar;
+StatusBar.setStyle = {}
+StatusBar.setBackgroundColor = {}
+StatusBar.setOverlaysWebView = {}

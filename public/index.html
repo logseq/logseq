@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <!-- Handle iOS indexedDB preloading. Ref: https://developer.apple.com/forums/thread/681201 -->
+  <script type="text/javascript">
+    window.indexedDB;
+  </script>
+  <meta content="minimum-scale=1, initial-scale=1, maximum-scale=1, width=device-width, shrink-to-fit=no" name="viewport">
+  <link href="/static/css/style.css" rel="stylesheet" type="text/css">
+  <link href="/static/img/logo.png" rel="shortcut icon" type="image/png">
+  <link href="/static/img/logo.png" rel="shortcut icon" sizes="192x192">
+  <link href="/static/img/logo.png" rel="apple-touch-icon">
+  <meta content="Logseq" name="apple-mobile-web-app-title">
+  <meta content="yes" name="apple-mobile-web-app-capable">
+  <meta content="yes" name="apple-touch-fullscreen">
+  <meta content="black-translucent" name="apple-mobile-web-app-status-bar-style">
+  <meta content="yes" name="mobile-web-app-capable">
+  <meta content="summary" name="twitter:card">
+  <meta content="A privacy-first, open-source platform for knowledge management and collaboration." name="twitter:description">
+  <meta content="@logseq" name="twitter:site">
+  <meta content="A privacy-first, open-source platform for knowledge management and collaboration." name="twitter:title">
+  <meta content="https://asset.logseq.com/static/img/logo.png" name="twitter:image:src">
+  <meta content="A privacy-first, open-source platform for knowledge management and collaboration." name="twitter:image:alt">
+  <meta content="A privacy-first, open-source platform for knowledge management and collaboration." property="og:title">
+  <meta content="site" property="og:type">
+  <meta content="https://logseq.com" property="og:url">
+  <meta content="https://asset.logseq.com/static/img/logo.png" property="og:image">
+  <meta content="A privacy-first, open-source platform for knowledge management and collaboration." property="og:description">
+  <title>Logseq: "A privacy-first platform for knowledge management and collaboration."</title>
+  <meta content="logseq" property="og:site_name">
+  <meta content="A privacy-first, open-source platform for knowledge management and collaboration." name="description">
+</head>
+<body>
+<div id="root"></div>
+<script>window.user = null</script>
+<script>window.__LSP__HOST__ = true</script>
+<script src="/static/js/magic_portal.js"></script>
+<script>let worker = new Worker('/static/js/worker.js')
+  const portal = new MagicPortal(worker);
+  (async () => {
+    const fs = await portal.get('fs')
+    window.fs = fs
+    const pfs = await portal.get('pfs')
+    window.pfs = pfs
+    const workerThread = await portal.get('workerThread')
+    window.workerThread = workerThread
+  })()
+</script>
+<script defer src="/static/js/highlight.min.js"></script>
+<script defer src="/static/js/interact.min.js"></script>
+<script defer src="/static/js/marked.min.js"></script>
+<script defer src="/static/js/eventemitter3.umd.min.js"></script>
+<script defer src="/static/js/html2canvas.min.js"></script>
+<script defer src="/static/js/lsplugin.core.js"></script>
+<script defer src="/static/js/react.production.min.js"></script>
+<script defer src="/static/js/react-dom.production.min.js"></script>
+<script defer src="/static/js/ui.js"></script>
+<script defer src="/static/js/main.js"></script>
+<script defer src="/static/js/amplify.js"></script>
+<script defer src="/static/js/prop-types.min.js"></script>
+<script defer src="/static/js/tabler-icons-react.min.js"></script>
+<script defer src="/static/js/tabler.ext.js"></script>
+<script defer src="/static/js/code-editor.js"></script>
+<script defer src="/static/js/tldraw.js"></script>
+<script defer src="/static/js/excalidraw.js"></script>
+</body>
+</html>

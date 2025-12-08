@@ -167,6 +167,8 @@
  :asset/delete "画像を削除"
  :asset/copy "画像をコピー"
  :asset/maximize "画像を最大化"
+ :asset/ref-block "画像ブロック引用"
+
  :asset/confirm-delete "この {1} を削除してもよろしいですか？"
  :asset/physical-delete "ファイルも削除します（元に戻せないことにご注意ください）"
  :color/gray "グレー"
@@ -463,7 +465,6 @@
  :remove-heading "見出しを消去"
  :heading "見出し {1}"
  :auto-heading "自動見出し"
- :open-a-directory "ローカルディレクトリを開く"
  :toggle-theme "テーマを切り替える"
 
  :help/shortcut-page-title "キーボードショートカット"

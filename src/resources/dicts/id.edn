@@ -378,7 +378,7 @@
  :whiteboard/toggle-grid "Alihkan grid"
  :whiteboard/snap-to-grid "Tetapkan ke grid"
  :flashcards/modal-welcome-title "Saatnya membuat kartu!"
- :flashcards/modal-welcome-desc-1 "Anda dapat menambahkan \"#card\" ke blok apa pun untuk mengubahnya menjadi kartu atau memicu \"/cloze\" untuk menambahkan beberapa cloze."
+ :flashcards/modal-welcome-desc-1 "Anda dapat menambahkan \"{1}\" ke blok apa pun untuk mengubahnya menjadi kartu atau memicu \"/cloze\" untuk menambahkan beberapa cloze."
  :flashcards/modal-welcome-desc-2 "Anda dapat "
  :flashcards/modal-welcome-desc-3 "klik tautan ini"
  :flashcards/modal-welcome-desc-4 " untuk memeriksa dokumentasinya."
@@ -443,7 +443,6 @@
  :remove-heading "Hapus judul"
  :heading "Judul {1}"
  :auto-heading "Judul otomatis"
- :open-a-directory "Buka direktori lokal"
  :toggle-theme "Alihkan tema"
 
  :help/shortcut-page-title "Pintasan Papan Ketik"

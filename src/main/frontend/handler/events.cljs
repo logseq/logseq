@@ -16,7 +16,6 @@
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
             [frontend.db.react :as react]
-            [frontend.db.transact :as db-transact]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.fs :as fs]
             [frontend.fs.sync :as sync]
@@ -119,15 +118,10 @@
   (state/set-state! :db/async-queries {})
   (st/refresh!)
 
-  (p/let [writes-finished? (state/<invoke-db-worker :thread-api/file-writes-finished? (state/get-current-repo))
-          request-finished? (db-transact/request-finished?)]
+  (p/let [writes-finished? (state/<invoke-db-worker :thread-api/file-writes-finished? (state/get-current-repo))]
     (if (not writes-finished?) ; TODO: test (:sync-graph/init? @state/state)
       (do
-        (log/info :graph/switch (cond->
-                                 {:request-finished? request-finished?
-                                  :file-writes-finished? writes-finished?}
-                                  (false? request-finished?)
-                                  (assoc :unfinished-requests? @db-transact/*unfinished-request-ids)))
+        (log/info :graph/switch {:file-writes-finished? writes-finished?})
         (notification/show!
          "Please wait seconds until all changes are saved for the current graph."
          :warning))
@@ -145,10 +139,12 @@
     (page-handler/<create! page-name opts)))
 
 (defmethod handle :page/deleted [[_ repo page-name file-path tx-meta]]
-  (page-common-handler/after-page-deleted! repo page-name file-path tx-meta))
+  (when-not (util/mobile?)
+    (page-common-handler/after-page-deleted! repo page-name file-path tx-meta)))
 
 (defmethod handle :page/renamed [[_ repo data]]
-  (page-common-handler/after-page-renamed! repo data))
+  (when-not (util/mobile?)
+    (page-common-handler/after-page-renamed! repo data)))
 
 (defmethod handle :page/create-today-journal [[_ _repo]]
   (p/let [_ (page-handler/create-today-journal!)]
@@ -157,6 +153,7 @@
 (defmethod handle :graph/sync-context []
   (let [context {:dev? config/dev?
                  :node-test? util/node-test?
+                 :mobile? (util/mobile?)
                  :validate-db-options (:dev/validate-db-options (state/get-config))
                  :importing? (:graph/importing @state/state)
                  :date-formatter (state/get-date-formatter)
@@ -183,9 +180,6 @@
   (let [db-based? (config/db-based-graph? repo)]
     (p/do!
      (state/pub-event! [:graph/sync-context])
-    ;; re-render-root is async and delegated to rum, so we need to wait for main ui to refresh
-     (when (util/mobile?)
-       (state/pub-event! [:mobile/post-init]))
      ;; FIXME: an ugly implementation for redirecting to page on new window is restored
      (repo-handler/graph-ready! repo)
      (when-not config/publishing?
@@ -198,7 +192,7 @@
     (js/console.error "instrument data-map should only contains [:type :payload]"))
   (posthog/capture type payload))
 
-(defmethod handle :capture-error [[_ {:keys [error payload]}]]
+(defmethod handle :capture-error [[_ {:keys [error payload extra]}]]
   (let [[user-uuid graph-uuid tx-id] @sync/graphs-txid
         payload (merge
                  {:schema-version (str db-schema/version)
@@ -210,7 +204,8 @@
                   :db-based (config/db-based-graph? (state/get-current-repo))}
                  payload)]
     (Sentry/captureException error
-                             (bean/->js {:tags payload}))))
+                             (bean/->js {:tags payload
+                                         :extra extra}))))
 
 (defmethod handle :exec-plugin-cmd [[_ {:keys [pid cmd action]}]]
   (commands/exec-plugin-simple-command! pid cmd action))
@@ -221,22 +216,19 @@
     (st/consume-pending-shortcuts!)))
 
 (defmethod handle :mobile/keyboard-will-show [[_ keyboard-height]]
-  (let [main-node (util/app-scroll-container-node)]
-    (state/set-state! :mobile/show-action-bar? false)
-    (when (= (state/sub :editor/record-status) "RECORDING")
-      (state/set-state! :mobile/show-recording-bar? true))
+  (let [_main-node (util/app-scroll-container-node)]
     (when-let [^js html (js/document.querySelector ":root")]
       (.setProperty (.-style html) "--ls-native-kb-height" (str keyboard-height "px"))
       (.add (.-classList html) "has-mobile-keyboard")
       (.setProperty (.-style html) "--ls-native-toolbar-opacity" 1))
-    (when (mobile-util/native-ios?)
+    (when (mobile-util/native-platform?)
       (reset! util/keyboard-height keyboard-height)
-      (set! (.. main-node -style -marginBottom) (str keyboard-height "px")))))
+      (util/schedule
+       #(some-> (state/get-input)
+                (util/scroll-editor-cursor false))))))
 
 (defmethod handle :mobile/keyboard-will-hide [[_]]
   (let [main-node (util/app-scroll-container-node)]
-    (when (= (state/sub :editor/record-status) "RECORDING")
-      (state/set-state! :mobile/show-recording-bar? false))
     (when-let [^js html (js/document.querySelector ":root")]
       (.removeProperty (.-style html) "--ls-native-kb-height")
       (.setProperty (.-style html) "--ls-native-toolbar-opacity" 0)
@@ -371,6 +363,9 @@
                       (db/entity [:block/uuid (:block/uuid block)])))]
        (js/setTimeout #(editor-handler/edit-block! block :max) 100)))))
 
+(defmethod handle :vector-search/sync-state [[_ state]]
+  (state/set-state! :vector-search/state state))
+
 (defmethod handle :rtc/sync-state [[_ state]]
   (state/update-state! :rtc/state (fn [old] (merge old state))))
 
@@ -403,11 +398,10 @@
       (shui/popup-hide! :download-rtc-graph)))
    (p/catch (fn [e]
               (println "RTC download graph failed, error:")
-              (js/console.error e)
-              (when (util/mobile?)
-                (shui/popup-hide! :download-rtc-graph)
-                ;; TODO: notify error
-                )))))
+              (log/error :rtc-download-graph-failed e)
+              (shui/popup-hide! :download-rtc-graph)
+              ;; TODO: notify error
+              ))))
 
 ;; db-worker -> UI
 (defmethod handle :db/sync-changes [[_ data]]
@@ -432,6 +426,9 @@
     (p/all (map (fn [id]
                   (db-async/<get-block (state/get-current-repo) id
                                        {:skip-refresh? false})) ids))))
+
+(defmethod handle :vector-search/load-model-progress [[_ data]]
+  (state/set-state! :vector-search/load-model-progress data))
 
 (defn run!
   []

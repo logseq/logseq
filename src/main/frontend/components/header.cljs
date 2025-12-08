@@ -20,6 +20,7 @@
             [frontend.db :as db]
             [frontend.handler :as handler]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
+            [frontend.handler.db-based.vector-search-flows :as vector-search-flows]
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
@@ -332,15 +333,41 @@
 
 (rum/defc block-breadcrumb
   [page-name]
-  [:div.ls-block-breadcrumb
-   (when-let [page (when (and page-name (common-util/uuid-string? page-name))
-                     (db/entity [:block/uuid (uuid page-name)]))]
-     (when (:block/parent page)
+  (when-let [page (when (and page-name (common-util/uuid-string? page-name))
+                    (db/entity [:block/uuid (uuid page-name)]))]
+    ;; FIXME: in publishing? :block/tags incorrectly returns integer until fully restored
+    (when (and (if config/publishing? (not (state/sub :db/restoring?)) true)
+               (ldb/page? page) (:block/parent page))
+      [:div.ls-block-breadcrumb
        [:div.text-sm
         (component-block/breadcrumb {}
                                     (state/get-current-repo)
                                     (:block/uuid page)
-                                    {:header? true})]))])
+                                    {:header? true})]])))
+
+(rum/defc semantic-search-progressing
+  [repo]
+  (let [[vec-search-state set-vec-search-state] (hooks/use-state nil)
+        {:keys [indexing?]} (get-in vec-search-state [:repo->index-info repo])]
+    (hooks/use-effect!
+     (fn []
+       (c.m/run-task
+         ::update-vec-search-state
+         (m/reduce
+          (fn [_ v]
+            (set-vec-search-state v))
+          (m/ap
+            (m/?> vector-search-flows/infer-worker-ready-flow)
+            (c.m/<? (state/<invoke-db-worker :thread-api/vec-search-update-index-info repo))
+            (m/?> vector-search-flows/vector-search-state-flow)))
+         :succ (constantly nil)))
+     [])
+    (when indexing?
+      (shui/button
+       {:class   "opacity-50"
+        :variant :ghost
+        :size    :sm}
+       "Embedding..."))))
 
 (rum/defc ^:large-vars/cleanup-todo header-aux < rum/reactive
   [{:keys [current-repo default-home new-block-mode]}]
@@ -349,7 +376,8 @@
                                                  (state/set-left-sidebar-open!
                                                   (not (:ui/left-sidebar-open? @state/state))))})
         custom-home-page? (and (state/custom-home-page?)
-                               (= (state/sub-default-home-page) (state/get-current-page)))]
+                               (= (state/sub-default-home-page) (state/get-current-page)))
+        db-based? (config/db-based-graph? current-repo)]
     [:div.cp__header.drag-region#head
      {:class           (util/classnames [{:electron-mac   electron-mac?
                                           :native-ios     (mobile-util/native-ios?)
@@ -377,7 +405,8 @@
          (when current-repo
            (ui/with-shortcut :go/search "right"
              [:button.button.icon#search-button
-              {:title (t :header/search)
+              {:data-keep-selection true
+               :title (t :header/search)
                :on-click #(do (when (or (mobile-util/native-android?)
                                         (mobile-util/native-iphone?))
                                 (state/set-left-sidebar-open! false))
@@ -387,11 +416,11 @@
      [:div.r.flex.drag-region.justify-between.items-center.gap-2.overflow-x-hidden.w-full
       [:div.flex.flex-1
        (block-breadcrumb (state/get-current-page))]
-      [:div.flex
+      [:div.flex.items-center
        (when (and current-repo
                   (ldb/get-graph-rtc-uuid (db/get-db))
                   (user-handler/logged-in?)
-                  (config/db-based-graph? current-repo)
+                  db-based?
                   (user-handler/rtc-group?))
          [:<>
           (recent-slider)
@@ -404,9 +433,12 @@
        (when (user-handler/logged-in?)
          (rtc-indicator/uploading-detail))
 
+       (when db-based?
+         (semantic-search-progressing current-repo))
+
        (when (and current-repo
                   (not (config/demo-graph? current-repo))
-                  (not (config/db-based-graph? current-repo))
+                  (not db-based?)
                   (user-handler/alpha-or-beta-user?))
          (fs-sync/indicator))
 

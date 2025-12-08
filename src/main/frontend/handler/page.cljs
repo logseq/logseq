@@ -226,7 +226,8 @@
             class? (and db-based?
                         (or (string/includes? chosen (str (t :new-tag) " "))
                             (ldb/class? chosen-result)))
-            inline-tag? (and class? (= (.-identifier e) "auto-complete/meta-complete"))
+            inline-tag? (and class? (= (.-identifier e) "auto-complete/meta-complete")
+                             (not= chosen "Page"))
             chosen (-> chosen
                        (string/replace-first (str (t :new-tag) " ") "")
                        (string/replace-first (str (t :new-page) " ") ""))
@@ -261,8 +262,9 @@
   (fn [chosen-result e]
     (util/stop e)
     (state/clear-editor-action!)
-    (p/let [_ (when-let [id (:block/uuid chosen-result)]
-                (db-async/<get-block (state/get-current-repo) id {:children? false}))
+    (p/let [repo (state/get-current-repo)
+            _ (when-let [id (:block/uuid chosen-result)]
+                (db-async/<get-block repo id {:children? false}))
             chosen-result (if (:block/uuid chosen-result)
                             (db/entity [:block/uuid (:block/uuid chosen-result)])
                             chosen-result)
@@ -278,7 +280,10 @@
                                                   page (date/js-date->journal-title gd)]
                                               [page (db/get-page page)])))
                                         [chosen' chosen-result])
-            ref-text (if (and (de/entity? chosen-result) (not (ldb/page? chosen-result)))
+            datoms (state/<invoke-db-worker :thread-api/datoms repo :avet :block/name (util/page-name-sanity-lc chosen'))
+            multiple-pages-same-name? (> (count datoms) 1)
+            ref-text (if (and (de/entity? chosen-result)
+                              (or multiple-pages-same-name? (not (ldb/page? chosen-result))))
                        (ref/->page-ref (:block/uuid chosen-result))
                        (get-page-ref-text chosen'))
             result (when db-based?
@@ -329,21 +334,21 @@
                (not (:graph/importing @state/state))
                (not (state/loading-files? repo))
                (not config/publishing?))
-      (state/set-today! (date/today))
-      (when (or (config/db-based-graph? repo)
-                (config/local-file-based-graph? repo))
-        (if-let [title (date/today)]
+      (when-let [title (date/today)]
+        (state/set-today! title)
+        (when (or (config/db-based-graph? repo)
+                  (config/local-file-based-graph? repo))
           (let [today-page (util/page-name-sanity-lc title)
                 format (state/get-preferred-format repo)
                 db-based? (config/db-based-graph? repo)
                 create-f (fn []
-                           (p/do!
-                            (<create! title {:redirect? false
-                                             :split-namespace? false
-                                             :today-journal? true})
-                            (when-not db-based? (state/pub-event! [:journal/insert-template today-page]))
-                            (ui-handler/re-render-root!)
-                            (plugin-handler/hook-plugin-app :today-journal-created {:title today-page})))]
+                           (p/let [result (<create! title {:redirect? false
+                                                           :split-namespace? false
+                                                           :today-journal? true})]
+                             (when-not db-based? (state/pub-event! [:journal/insert-template today-page]))
+                             (ui-handler/re-render-root!)
+                             (plugin-handler/hook-plugin-app :today-journal-created {:title today-page})
+                             result))]
             (when-not (db/get-page today-page)
               (if db-based?
                 (create-f)
@@ -356,8 +361,7 @@
                                        (fs/read-file repo-dir file-rpath))]
                   (when (or (not file-exists?)
                             (and file-exists? (string/blank? file-content)))
-                    (create-f))))))
-          (notification/show! "Failed to parse date to journal name." :error))))))
+                    (create-f)))))))))))
 
 (defn open-today-in-sidebar
   []

@@ -3,6 +3,7 @@
    [clojure.test :refer [deftest testing is use-fixtures]]
    [com.climate.claypoole :as cp]
    [logseq.e2e.assert :as assert]
+   [logseq.e2e.block :as b]
    [logseq.e2e.fixtures :as fixtures :refer [*page1 *page2]]
    [logseq.e2e.graph :as graph]
    [logseq.e2e.page :as page]
@@ -50,6 +51,29 @@
           (doseq [page-name page-names]
             (util/search page-name)
             (assert/assert-is-hidden (w/get-by-test-id page-name))))))
+    (testing "Page reference created"
+      (let [page-name "test-page-reference"
+            {:keys [_local-tx remote-tx]}
+            (w/with-page @*page1
+              (rtc/with-wait-tx-updated
+                (page/new-page page-name)))]
+        (w/with-page @*page2
+          (rtc/wait-tx-update-to remote-tx)))
+      (let [test-page (str "random page " (random-uuid))
+            block-title (format "test ref [[%s]]" test-page)
+            {:keys [_local-tx remote-tx]}
+            (w/with-page @*page1
+              (rtc/with-wait-tx-updated
+                (b/new-block block-title)
+                (b/new-block "add new-block to ensure last block saved")))]
+        (w/with-page @*page2
+          (rtc/wait-tx-update-to remote-tx)
+          (util/search-and-click test-page)
+          (w/wait-for ".references .ls-block")
+          ;; ensure ref exists
+          (let [refs (w/all-text-contents ".references .ls-block .block-title-wrap")]
+            (is (= refs [block-title]))))))
+
     (testing "cleanup"
       (w/with-page @*page2
         (graph/remove-remote-graph graph-name)))))

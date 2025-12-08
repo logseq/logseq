@@ -1,6 +1,6 @@
 (ns frontend.extensions.srs
-  "SRS fns, will be deprecated in db-based version.
-  see also `frontend.extensions.fsrs`"
+  "SRS fns for file based graphs. Will be deprecated in db-based version.
+  See also `frontend.extensions.fsrs`"
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [cljs-time.local :as tl]
@@ -693,7 +693,7 @@
          [:h1.title (t :flashcards/modal-welcome-title)]
 
          [:div
-          [:p (t :flashcards/modal-welcome-desc-1)]
+          [:p (t :flashcards/modal-welcome-desc-1 "#card")]
           [:img.my-4 {:src "https://docs.logseq.com/assets/2021-07-22_22.28.02_1626964258528_0.gif"}]
           [:p (t :flashcards/modal-welcome-desc-2)
            [:a {:href "https://docs.logseq.com/#/page/Flashcards" :target "_blank"}

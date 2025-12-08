@@ -34,7 +34,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Node
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'yarn'
@@ -48,7 +48,7 @@ jobs:
           bb: ${{ env.BABASHKA_VERSION }}
 
       - name: Clojure cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         id: clojure-deps
         with:
           path: |
@@ -62,7 +62,7 @@ jobs:
         run: clojure -A:cljs -P
 
       - name: Shadow-cljs cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: .shadow-cljs
           # ensure update cache every time
@@ -79,7 +79,7 @@ jobs:
       # NOTE: require the app to be build with DEV-RELEASE flag
       - name: Prepare E2E test build
         run: |
-          yarn gulp:build && clojure -M:cljs release app --config-merge "{:closure-defines {frontend.config/DEV-RELEASE true}}" --debug
+          yarn gulp:build && clojure -M:cljs release app db-worker inference-worker --config-merge "{:closure-defines {frontend.config/DEV-RELEASE true}}" --debug && yarn webpack-app-build
           rsync -avz --exclude node_modules --exclude android --exclude ios ./static/ ./public/
           ls -lR ./public
 

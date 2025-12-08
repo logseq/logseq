@@ -1,5 +1,5 @@
 (ns frontend.persist-db.browser
-  "Browser db persist support, using @logseq/sqlite-wasm.
+  "Browser db persist support, using sqlite-wasm.
 
    This interface uses clj data format as input."
   (:require ["comlink" :as Comlink]
@@ -8,6 +8,7 @@
             [frontend.common.thread-api :as thread-api]
             [frontend.config :as config]
             [frontend.date :as date]
+            [frontend.db :as db]
             [frontend.db.transact :as db-transact]
             [frontend.handler.notification :as notification]
             [frontend.handler.worker :as worker-handler]
@@ -15,6 +16,7 @@
             [frontend.state :as state]
             [frontend.undo-redo :as undo-redo]
             [frontend.util :as util]
+            [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [missionary.core :as m]
             [promesa.core :as p]))
@@ -23,8 +25,8 @@
   []
   (p/let [persistent? (.persist js/navigator.storage)]
     (if persistent?
-      (js/console.log "Storage will not be cleared unless from explicit user action")
-      (js/console.warn "OPFS storage may be cleared by the browser under storage pressure."))))
+      (log/info :storage-persistent "Storage will not be cleared unless from explicit user action")
+      (log/warn :opfs-storage-may-be-cleared "OPFS storage may be cleared by the browser under storage pressure."))))
 
 (defn- sync-app-state!
   []
@@ -39,6 +41,12 @@
               (constantly nil)
               (m/ap
                 (let [m (m/?> (m/relieve state-flow))]
+                  (when (and (contains? m :git/current-repo)
+                             (nil? (:git/current-repo m)))
+                    (log/error :sync-app-state
+                               [m (select-keys @state/state
+                                               [:git/current-repo
+                                                :auth/id-token :auth/access-token :auth/refresh-token])]))
                   (c.m/<? (state/<invoke-db-worker :thread-api/sync-app-state m))
                   (p/resolve! <init-sync-done?))))]
     (c.m/run-task* task)
@@ -70,6 +78,7 @@
   (let [;; TODO: a better way to share those information with worker, maybe using the state watcher to notify the worker?
         context {:dev? config/dev?
                  :node-test? util/node-test?
+                 :mobile? (util/mobile?)
                  :validate-db-options (:dev/validate-db-options (state/get-config))
                  :importing? (:graph/importing @state/state)
                  :date-formatter (state/get-date-formatter)
@@ -82,43 +91,104 @@
                  :pages-directory (config/get-pages-directory)}]
     (state/<invoke-db-worker :thread-api/transact repo tx-data tx-meta context)))
 
+(defn- set-worker-fs
+  [worker]
+  (p/let [portal (js/MagicPortal. worker)
+          fs (.get portal "fs")
+          pfs (.get portal "pfs")
+          worker-thread (.get portal "workerThread")]
+    (set! (.-fs js/window) fs)
+    (set! (.-pfs js/window) pfs)
+    (set! (.-workerThread js/window) worker-thread)))
+
+(defn- reload-app-if-old-db-worker-exists
+  []
+  (when (util/capacitor?)
+    (log/info ::reload-app {:client-id @state/*db-worker-client-id})
+    (when-let [client-id @state/*db-worker-client-id]
+      (js/navigator.locks.request client-id #js {:mode "exclusive"
+                                                 :ifAvailable true}
+                                  (fn [lock]
+                                    (log/info ::reload-app-lock {:acquired? (some? lock)})
+                                    (when-not lock
+                                      (js/window.location.reload)))))))
+
 (defn start-db-worker!
   []
   (when-not util/node-test?
-    (let [worker-url (if config/publishing? "static/js/db-worker.js" "js/db-worker.js")
-          worker (js/Worker. (str worker-url "?electron=" (util/electron?) "&publishing=" config/publishing?))
-          wrapped-worker* (Comlink/wrap worker)
-          wrapped-worker (fn [qkw direct-pass? & args]
-                           (p/let [result (.remoteInvoke ^js wrapped-worker*
-                                                         (str (namespace qkw) "/" (name qkw))
-                                                         direct-pass?
-                                                         (if direct-pass?
-                                                           (into-array args)
-                                                           (ldb/write-transit-str args)))]
-                             (if direct-pass?
-                               result
-                               (ldb/read-transit-str result))))
+    (p/do!
+     (reload-app-if-old-db-worker-exists)
+     (let [worker-url (if config/publishing? "static/js/db-worker.js" "js/db-worker.js")
+           worker (js/Worker.
+                   (str worker-url
+                        "?electron=" (util/electron?)
+                        "&capacitor=" (util/capacitor?)
+                        "&publishing=" config/publishing?))
+           _ (set-worker-fs worker)
+           wrapped-worker* (Comlink/wrap worker)
+           wrapped-worker (fn [qkw direct-pass? & args]
+                            (p/let [result (.remoteInvoke ^js wrapped-worker*
+                                                          (str (namespace qkw) "/" (name qkw))
+                                                          direct-pass?
+                                                          (cond
+                                                            (= qkw :thread-api/set-infer-worker-proxy)
+                                                            (first args)
+                                                            direct-pass?
+                                                            (into-array args)
+                                                            :else
+                                                            (ldb/write-transit-str args)))]
+                              (if direct-pass?
+                                result
+                                (ldb/read-transit-str result))))
+           t1 (util/time-ms)]
+       (Comlink/expose #js{"remoteInvoke" thread-api/remote-function} worker)
+       (worker-handler/handle-message! worker wrapped-worker)
+       (reset! state/*db-worker wrapped-worker)
+       (-> (p/let [_ (state/<invoke-db-worker :thread-api/init config/RTC-WS-URL)
+                   _ (sync-app-state!)
+                   _ (log/info "init worker spent" (str (- (util/time-ms) t1) "ms"))
+                   _ (sync-ui-state!)
+                   _ (ask-persist-permission!)
+                   _ (state/pub-event! [:graph/sync-context])]
+             (ldb/register-transact-fn!
+              (fn worker-transact!
+                [repo tx-data tx-meta]
+                (db-transact/transact transact!
+                                      (if (string? repo) repo (state/get-current-repo))
+                                      tx-data
+                                      (assoc tx-meta :client-id (:client-id @state/state))))))
+           (p/catch (fn [error]
+                      (log/error :init-sqlite-wasm-error ["Can't init SQLite wasm" error]))))))))
+
+(defn <check-webgpu-available?
+  []
+  (if (some? js/navigator.gpu)
+    (p/chain (js/navigator.gpu.requestAdapter) some?)
+    (p/promise false)))
+
+(defn start-inference-worker!
+  []
+  (when-not util/node-test?
+    (let [worker-url "js/inference-worker.js"
+          ^js worker (js/SharedWorker.
+                      (str worker-url
+                           "?electron=" (util/electron?)
+                           "&capacitor=" (util/capacitor?)
+                           "&publishing=" config/publishing?))
+          ^js port (.-port worker)
+          wrapped-worker (Comlink/wrap port)
           t1 (util/time-ms)]
-      (Comlink/expose #js{"remoteInvoke" thread-api/remote-function} worker)
-      (worker-handler/handle-message! worker wrapped-worker)
-      (reset! state/*db-worker wrapped-worker)
-      (-> (p/let [_ (sync-app-state!)
-                  _ (state/<invoke-db-worker :thread-api/init config/RTC-WS-URL)
-                  _ (js/console.debug (str "debug: init worker spent: " (- (util/time-ms) t1) "ms"))
-                  _ (sync-ui-state!)
-                  _ (ask-persist-permission!)
-                  _ (state/pub-event! [:graph/sync-context])]
-            (ldb/register-transact-fn!
-             (fn worker-transact!
-               [repo tx-data tx-meta]
-               (db-transact/transact transact!
-                                     (if (string? repo) repo (state/get-current-repo))
-                                     tx-data
-                                     (assoc tx-meta :client-id (:client-id @state/state)))))
-            (db-transact/listen-for-requests))
-          (p/catch (fn [error]
-                     (prn :debug "Can't init SQLite wasm")
-                     (js/console.error error)))))))
+      (worker-handler/handle-message! port wrapped-worker)
+      (reset! state/*infer-worker wrapped-worker)
+      (p/do!
+       (let [embedding-model-name (ldb/get-key-value (db/get-db) :logseq.kv/graph-text-embedding-model-name)]
+         (.init wrapped-worker embedding-model-name))
+       (log/info "init infer-worker spent:" (str (- (util/time-ms) t1) "ms"))))))
+
+(defn <connect-db-worker-and-infer-worker!
+  []
+  (assert (and @state/*infer-worker @state/*db-worker))
+  (state/<invoke-db-worker-direct-pass :thread-api/set-infer-worker-proxy (Comlink/proxy @state/*infer-worker)))
 
 (defn <export-db!
   [repo data]
@@ -127,7 +197,14 @@
 
 (defn- sqlite-error-handler
   [error]
-  (notification/show! [:div (str "SQLiteDB error: " error)] :error))
+  (state/pub-event! [:capture-error
+                     {:error error
+                      :payload {:type :sqlite-error}}])
+  (if (util/mobile?)
+    (js/window.location.reload)
+    (do
+      (log/error :sqlite-error error)
+      (notification/show! (str "SQLiteDB error: " error) :error))))
 
 (defrecord InBrowser []
   protocol/PersistentDB
@@ -150,7 +227,7 @@
                 _ (when disk-db-data
                     (state/<invoke-db-worker-direct-pass :thread-api/import-db repo disk-db-data))
                 _ (state/<invoke-db-worker :thread-api/create-or-open-db repo opts)]
-          (state/<invoke-db-worker :thread-api/get-initial-data repo))
+          (state/<invoke-db-worker :thread-api/get-initial-data repo opts))
         (p/catch sqlite-error-handler)))
 
   (<export-db [_this repo opts]
@@ -160,13 +237,11 @@
               data
               (<export-db! repo data))))
         (p/catch (fn [error]
-                   (prn :debug :save-db-error repo)
-                   (js/console.error error)
-                   (notification/show! [:div (str "SQLiteDB save error: " error)] :error) {}))))
+                   (log/error :export-db-error repo error "SQLiteDB save error")
+                   (notification/show! (str "SQLiteDB save error: " error) :error) {}))))
 
   (<import-db [_this repo data]
     (-> (state/<invoke-db-worker-direct-pass :thread-api/import-db repo data)
         (p/catch (fn [error]
-                   (prn :debug :import-db-error repo)
-                   (js/console.error error)
-                   (notification/show! [:div (str "SQLiteDB import error: " error)] :error) {})))))
+                   (log/error :import-db-error repo error "SQLiteDB import error")
+                   (notification/show! (str "SQLiteDB import error: " error) :error) {})))))

@@ -6,6 +6,16 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]))
 
+(defn group-datoms-by-entity
+  "Groups transaction datoms by entity and returns a map of entity-id to datoms."
+  [tx-data]
+  (let [datom-vec-coll (map vec tx-data)
+        id->same-entity-datoms (group-by first datom-vec-coll)
+        id-order (distinct (map first datom-vec-coll))
+        same-entity-datoms-coll (map id->same-entity-datoms id-order)]
+    {:same-entity-datoms-coll same-entity-datoms-coll
+     :id->same-entity-datoms  id->same-entity-datoms}))
+
 (defn- latest-add?->v->t
   [add?->v->t]
   (let [latest-add     (first (sort-by second > (seq (add?->v->t true))))
@@ -128,10 +138,10 @@
    {} entity-datoms))
 
 (defn generate-rtc-ops
-  [db-before db-after same-entity-datoms-coll e->a->v->add?->t]
+  [db-before db-after same-entity-datoms-coll e->a->add?->v->t]
   (mapcat
    (partial entity-datoms=>ops
-            db-before db-after e->a->v->add?->t rtc-const/ignore-attrs-when-syncing)
+            db-before db-after e->a->add?->v->t rtc-const/ignore-attrs-when-syncing)
    same-entity-datoms-coll))
 
 (defn- generate-rtc-ops-from-entities
@@ -144,8 +154,8 @@
                            datoms (d/datoms db :eavt e)]
                        [e datoms])))
               ents)
-        e->a->v->add?->t (update-vals id->same-entity-datoms entity-datoms=>a->add?->v->t)]
-    (generate-rtc-ops db db (vals id->same-entity-datoms) e->a->v->add?->t)))
+        e->a->add?->v->t (update-vals id->same-entity-datoms entity-datoms=>a->add?->v->t)]
+    (generate-rtc-ops db db (vals id->same-entity-datoms) e->a->add?->v->t)))
 
 (defn generate-rtc-ops-from-property-entities
   [property-ents]
@@ -158,3 +168,15 @@
   (when (seq class-ents)
     (assert (every? ldb/class? class-ents))
     (generate-rtc-ops-from-entities class-ents)))
+
+(defn generate-rtc-rename-db-ident-ops
+  [rename-db-idents]
+  (assert (every? (fn [{:keys [db-ident-or-block-uuid new-db-ident]}]
+                    (and (or (keyword? db-ident-or-block-uuid) (uuid? db-ident-or-block-uuid))
+                         (keyword? new-db-ident)))
+                  rename-db-idents)
+          rename-db-idents)
+  (map
+   (fn [{:keys [db-ident-or-block-uuid new-db-ident]}]
+     [:rename-db-ident 0 {:db-ident-or-block-uuid db-ident-or-block-uuid :new-db-ident new-db-ident}])
+   rename-db-idents))

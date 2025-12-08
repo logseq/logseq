@@ -4,6 +4,7 @@
             [logseq.e2e.custom-report :as custom-report]
             [logseq.e2e.graph :as graph]
             [logseq.e2e.page :as page]
+            [logseq.e2e.playwright-page :as pw-page]
             [logseq.e2e.settings :as settings]
             [wally.main :as w]))
 
@@ -18,7 +19,7 @@
     (w/grant-permissions :clipboard-write :clipboard-read)
     (binding [custom-report/*pw-contexts* #{(.context (w/get-page))}
               custom-report/*pw-page->console-logs* (atom {})]
-      (w/navigate (str "http://localhost:" (or port @config/*port)))
+      (w/navigate (pw-page/get-test-url port))
       (settings/developer-mode)
       (w/refresh)
       (assert/assert-graph-loaded?)
@@ -28,8 +29,12 @@
                                  (swap! custom-report/*pw-page->console-logs* update p conj (.text msg))))))
       (f))))
 
-(def *page1 (atom nil))
-(def *page2 (atom nil))
+(def *page1
+  "this 'page' means playwright-page, not logseq-page. it points to the client1 when testing rtc"
+  (atom nil))
+(def *page2
+  "this 'page' means playwright-page, not logseq-page. it points to the client2 when testing rtc"
+  (atom nil))
 
 (defn open-2-pages
   "Use `*page1` and `*page2` in `f`"
@@ -48,7 +53,7 @@
               w/*page* (delay (throw (ex-info "Don't use *page*, use *page1* and *page2* instead" {})))]
       (run!
        #(w/with-page %
-          (w/navigate (str "http://localhost:" port'))
+          (w/navigate (pw-page/get-test-url port))
           (settings/developer-mode)
           (w/refresh)
           (assert/assert-graph-loaded?)
@@ -87,8 +92,8 @@
 (defonce *page-number (atom 0))
 
 (defn create-page
-  []
-  (let [page-name (str "page " (swap! *page-number inc))]
+  [& [page-name]]
+  (let [page-name (or page-name (str "page " (swap! *page-number inc)))]
     (page/new-page page-name)
     page-name))
 

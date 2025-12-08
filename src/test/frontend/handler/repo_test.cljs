@@ -26,12 +26,12 @@
 
     (docs-graph-helper/docs-graph-assertions db graph-dir (map :file/path files))
     (testing "Additional Counts"
-      (is (= 77370 (count (d/datoms db :eavt))) "Correct datoms count")
+      (is (= 58149 (count (d/datoms db :eavt))) "Correct datoms count")
 
-      (is (= 7095
+      (is (= 2065
              (ffirst
               (d/q '[:find (count ?b)
-                     :where [?b :block/path-refs ?bp] [?bp :block/name]] db)))
+                     :where [?b :block/refs ?bp] [?bp :block/name]] db)))
           "Correct referenced blocks count"))))
 
 (deftest parse-files-and-load-to-db-with-block-refs-on-reload

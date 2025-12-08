@@ -10,7 +10,6 @@
             [frontend.handler.property :as property-handler]
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.schema.handler.repo-config :as repo-config-schema]
             [frontend.state :as state]
@@ -64,10 +63,10 @@
                             (-> refs
                                 remove-non-existed-refs!
                                 (use-cached-refs! block))))))
+        title' (db-content/title-ref->id-ref (or (get block :block/title) title) (:block/refs block))
         result (-> block
                    (merge (if level {:block/level level} {}))
-                   (assoc :block/title
-                          (db-content/title-ref->id-ref (:block/title block) (:block/refs block))))]
+                   (assoc :block/title title'))]
     result))
 
 (defn save-file!
@@ -97,8 +96,8 @@
    {:outliner-op :save-block}
    (doseq [id block-ids]
      (let [e (db/entity [:block/uuid id])
-           title (commands/clear-markdown-heading (:block/title e))
-           block {:block/uuid (:block/uuid e)
-                  :block/title title}]
-       (outliner-op/save-block! block)))
+           raw-title (:block/raw-title e)
+           new-raw-title (commands/clear-markdown-heading raw-title)]
+       (when (not= new-raw-title raw-title)
+         (property-handler/set-block-property! repo id :block/title new-raw-title))))
    (property-handler/batch-set-block-property! repo block-ids :logseq.property/heading heading)))

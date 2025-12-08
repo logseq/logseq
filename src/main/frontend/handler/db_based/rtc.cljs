@@ -49,7 +49,10 @@
     (->
      (when (not= result :timeout)
        (assert (some? download-info-s3-url) result)
-       (state/<invoke-db-worker :thread-api/rtc-download-graph-from-s3 graph-uuid graph-name download-info-s3-url))
+       (p/let [r (state/<invoke-db-worker :thread-api/rtc-download-graph-from-s3
+                                          graph-uuid graph-name download-info-s3-url)]
+         (when (instance? ExceptionInfo r)
+           (log/error :rtc-download-graph-from-s3 r))))
      (p/finally
        #(state/set-state! :rtc/downloading-graph-uuid nil)))))
 
@@ -60,10 +63,8 @@
 (defn <rtc-branch-graph!
   [repo]
   (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
-          token (state/get-auth-id-token)
-          start-ex (state/<invoke-db-worker :thread-api/rtc-async-branch-graph repo token)]
-    (when-let [ex-data* (:ex-data start-ex)]
-      (throw (ex-info (:ex-message start-ex) ex-data*)))))
+          token (state/get-auth-id-token)]
+    (state/<invoke-db-worker :thread-api/rtc-async-branch-graph repo token)))
 
 (defn notification-download-higher-schema-graph!
   [graph-name graph-uuid schema-version]
@@ -95,60 +96,6 @@
       "Upload to server")]]
    :warning false))
 
-(defn <rtc-start!
-  [repo & {:keys [stop-before-start?] :or {stop-before-start? true}}]
-  (when-let [graph-uuid (ldb/get-graph-rtc-uuid (db/get-db repo))]
-    (p/do!
-     (js/Promise. user-handler/task--ensure-id&access-token)
-     (p/let [start-ex (state/<invoke-db-worker :thread-api/rtc-start stop-before-start?)
-             ex-data* (:ex-data start-ex)
-             _ (case (:type ex-data*)
-                 (:rtc.exception/not-rtc-graph
-                  :rtc.exception/not-found-db-conn)
-                 (notification/show! (:ex-message start-ex) :error)
-
-                 :rtc.exception/major-schema-version-mismatched
-                 (case (:sub-type ex-data*)
-                   :download
-                   (notification-download-higher-schema-graph! repo graph-uuid (:remote ex-data*))
-                   :create-branch
-                   (notification-upload-higher-schema-graph! repo)
-                   ;; else
-                   (do (log/info :start-ex start-ex)
-                       (notification/show! [:div
-                                            [:div (:ex-message start-ex)]
-                                            [:div (-> ex-data*
-                                                      (select-keys [:app :local :remote])
-                                                      pp/pprint
-                                                      with-out-str)]]
-                                           :error)))
-
-                 :rtc.exception/lock-failed
-                 (js/setTimeout #(<rtc-start! repo) 1000)
-
-                 ;; else
-                 nil)]
-       nil))))
-
-(defn <get-remote-graphs
-  []
-  (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
-          token (state/get-auth-id-token)
-          graphs (state/<invoke-db-worker :thread-api/rtc-get-graphs token)
-          result (->> graphs
-                      (remove (fn [graph] (= (:graph-status graph) "deleting")))
-                      (mapv (fn [graph]
-                              (merge
-                               (let [url (str config/db-version-prefix (:graph-name graph))]
-                                 {:url url
-                                  :GraphName (:graph-name graph)
-                                  :GraphSchemaVersion (:graph-schema-version graph)
-                                  :GraphUUID (:graph-uuid graph)
-                                  :rtc-graph? true})
-                               (dissoc graph :graph-uuid :graph-name)))))]
-    (state/set-state! :rtc/graphs result)
-    (repo-handler/refresh-repos!)))
-
 (defn <rtc-get-users-info
   []
   (when-let [graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]
@@ -157,14 +104,78 @@
             result (state/<invoke-db-worker :thread-api/rtc-get-users-info token graph-uuid)]
       (state/set-state! :rtc/users-info {repo result}))))
 
+(defn <rtc-start!
+  [repo & {:keys [stop-before-start?] :or {stop-before-start? true}}]
+  (p/let [graph-uuid (state/<invoke-db-worker :thread-api/get-rtc-graph-uuid repo)]
+    (if-not graph-uuid
+      (log/info :skip-<rtc-start! ["graph-uuid not found" repo])
+      (->
+       (p/do!
+        (js/Promise. user-handler/task--ensure-id&access-token)
+        (state/<invoke-db-worker :thread-api/rtc-start stop-before-start?))
+       (p/catch
+        (fn [ex]
+          (let [ex-data* (ex-data ex)]
+            (case (:type ex-data*)
+              (:rtc.exception/not-rtc-graph
+               :rtc.exception/not-found-db-conn)
+              (notification/show! (ex-message ex) :error)
+
+              :rtc.exception/major-schema-version-mismatched
+              (case (:sub-type ex-data*)
+                :download
+                (notification-download-higher-schema-graph! repo graph-uuid (:remote ex-data*))
+                :create-branch
+                (notification-upload-higher-schema-graph! repo)
+                        ;; else
+                (do (log/info :start-ex ex)
+                    (notification/show! [:div
+                                         [:div (ex-message ex)]
+                                         [:div (-> ex-data*
+                                                   (select-keys [:app :local :remote])
+                                                   pp/pprint
+                                                   with-out-str)]]
+                                        :error)))
+
+              :rtc.exception/lock-failed nil
+
+                      ;; else
+              nil))))))))
+
+(defn <get-remote-graphs
+  []
+  (->
+   (p/let [_ (state/set-state! [:file-sync/remote-graphs :loading] true)
+           _ (js/Promise. user-handler/task--ensure-id&access-token)
+           token (state/get-auth-id-token)
+           graphs (state/<invoke-db-worker :thread-api/rtc-get-graphs token)
+           result (->> graphs
+                       (remove (fn [graph] (= (:graph-status graph) "deleting")))
+                       (mapv (fn [graph]
+                               (merge
+                                (let [url (str config/db-version-prefix (:graph-name graph))]
+                                  {:url url
+                                   :GraphName (:graph-name graph)
+                                   :GraphSchemaVersion (:graph-schema-version graph)
+                                   :GraphUUID (:graph-uuid graph)
+                                   :rtc-graph? true})
+                                (dissoc graph :graph-uuid :graph-name)))))]
+     (state/set-state! :rtc/graphs result)
+     (repo-handler/refresh-repos!))
+   (p/finally
+     (fn []
+       (state/set-state! [:file-sync/remote-graphs :loading] false)))))
+
 (defn <rtc-invite-email
   [graph-uuid email]
-  (let [token (state/get-auth-id-token)]
-    (->
-     (p/do!
-      (state/<invoke-db-worker :thread-api/rtc-grant-graph-access
-                               token (str graph-uuid) [] [email])
-      (notification/show! "Invitation sent!" :success))
-     (p/catch (fn [e]
-                (notification/show! "Something wrong, please try again." :error)
-                (js/console.error e))))))
+  (let [token (state/get-auth-id-token)
+        user-uuid (user-handler/user-uuid)]
+    (when (and user-uuid token)
+      (->
+       (p/do!
+        (state/<invoke-db-worker :thread-api/rtc-grant-graph-access
+                                 token (str graph-uuid) user-uuid email)
+        (notification/show! "Invitation sent!" :success))
+       (p/catch (fn [e]
+                  (notification/show! "Something wrong, please try again." :error)
+                  (js/console.error e)))))))

@@ -1,3 +1,4 @@
 {:linters
- {:unresolved-var {:exclude [wally.main/click
+ {:redundant-let {:level :off}
+  :unresolved-var {:exclude [wally.main/click
                              wally.main/fill]}}}
