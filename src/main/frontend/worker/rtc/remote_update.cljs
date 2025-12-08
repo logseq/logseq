@@ -195,7 +195,7 @@
                                     (d/entity @conn [:block/uuid block-uuid]))
                                   block-uuids-to-remove)]
         (when (seq deleting-blocks)
-          (transact-db! :delete-blocks repo conn date-formatter [deleting-blocks] {}))))))
+          (transact-db! :delete-blocks repo conn date-formatter deleting-blocks {}))))))
 
 (defn- insert-or-move-block
   [repo conn block-uuid remote-parents remote-block-order move? op-value]
