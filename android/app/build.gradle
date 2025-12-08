@@ -1,5 +1,8 @@
 apply plugin: 'com.android.application'
 
+apply from: 'capacitor.build.gradle'
+apply plugin: 'kotlin-android'
+
 android {
     namespace "com.logseq.app"
     compileSdkVersion rootProject.ext.compileSdkVersion
@@ -11,8 +14,8 @@ android {
         versionName "0.11.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
-             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
-             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+            // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
@@ -22,10 +25,14 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
+
+    kotlinOptions {
+        jvmTarget = '21'
+    }
 }
 
 repositories {
-    flatDir{
+    flatDir {
         dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
     }
 }
@@ -43,13 +50,11 @@ dependencies {
     implementation project(':capacitor-cordova-android-plugins')
 }
 
-apply from: 'capacitor.build.gradle'
-
 try {
     def servicesJSON = file('google-services.json')
     if (servicesJSON.text) {
         apply plugin: 'com.google.gms.google-services'
     }
-} catch(Exception e) {
+} catch (Exception e) {
     logger.warn("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
 }

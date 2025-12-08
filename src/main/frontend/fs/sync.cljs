@@ -474,7 +474,7 @@
   (comp
    (partition-by #(.-updated? ^FileTxn %))
    (map (fn [ts]
-          (if (some-> (first ts) (.-updated?))
+          (if (some-> ^js (first ts) (.-updated?))
             (partition-all n ts)
             (map list ts))))
    cat))
@@ -1335,7 +1335,7 @@
   [^FileTxn filetxn origin-db-content]
   (go
     (cond
-      (.renamed? filetxn)
+      (.renamed? ^js filetxn)
       false
       (.-deleted? filetxn)
       false
@@ -1532,66 +1532,66 @@
 
 (defn- apply-filetxns
   [*sync-state graph-uuid base-path filetxns *paused]
-  (go
-    (cond
-      (.renamed? (first filetxns))
-      (let [^FileTxn filetxn (first filetxns)
-            from-path (.-from-path filetxn)
-            to-path (.-to-path filetxn)]
-        (assert (= 1 (count filetxns)))
-        (<! (<rename-local-file rsapi graph-uuid base-path
-                                (relative-path from-path)
-                                (relative-path to-path))))
+  (let [^FileTxn filetxn (first filetxns)]
+    (go
+      (cond
+        (.renamed? filetxn)
+        (let [from-path (.-from-path filetxn)
+              to-path (.-to-path filetxn)]
+          (assert (= 1 (count filetxns)))
+          (<! (<rename-local-file rsapi graph-uuid base-path
+                                  (relative-path from-path)
+                                  (relative-path to-path))))
 
-      (.-updated? (first filetxns))
-      (let [repo (state/get-current-repo)
-            txn->db-content-vec (->> filetxns
-                                     (mapv
-                                      #(when (is-journals-or-pages? %)
-                                         [% (db/get-file repo (relative-path %))]))
-                                     (remove nil?))]
+        (.-updated? filetxn)
+        (let [repo (state/get-current-repo)
+              txn->db-content-vec (->> filetxns
+                                       (mapv
+                                        #(when (is-journals-or-pages? %)
+                                           [% (db/get-file repo (relative-path %))]))
+                                       (remove nil?))]
 
-        (doseq [relative-p (map relative-path filetxns)]
-          (when-some [relative-p*
-                      (<! (<case-different-local-file-exist? graph-uuid rsapi base-path relative-p))]
-            (let [recent-remote->local-file-item {:remote->local-type :delete
-                                                  :checksum nil
-                                                  :path relative-p*}]
-              (println :debug "found case-different-same-local-file" relative-p relative-p*)
-              (swap! *sync-state sync-state--add-recent-remote->local-files
-                     [recent-remote->local-file-item])
-              (<! (<delete-local-files rsapi graph-uuid base-path [relative-p*]))
-              (go (<! (timeout 5000))
-                  (swap! *sync-state sync-state--remove-recent-remote->local-files
-                         [recent-remote->local-file-item])))))
+          (doseq [relative-p (map relative-path filetxns)]
+            (when-some [relative-p*
+                        (<! (<case-different-local-file-exist? graph-uuid rsapi base-path relative-p))]
+              (let [recent-remote->local-file-item {:remote->local-type :delete
+                                                    :checksum nil
+                                                    :path relative-p*}]
+                (println :debug "found case-different-same-local-file" relative-p relative-p*)
+                (swap! *sync-state sync-state--add-recent-remote->local-files
+                       [recent-remote->local-file-item])
+                (<! (<delete-local-files rsapi graph-uuid base-path [relative-p*]))
+                (go (<! (timeout 5000))
+                    (swap! *sync-state sync-state--remove-recent-remote->local-files
+                           [recent-remote->local-file-item])))))
 
-        (let [update-local-files-ch (if (state/enable-sync-diff-merge?)
-                                      (<fetch-remote-and-update-local-files graph-uuid base-path (map relative-path filetxns))
-                                      (<update-local-files rsapi graph-uuid base-path (map relative-path filetxns)))
-              r (<! (<with-pause update-local-files-ch *paused))]
-          (doseq [[filetxn origin-db-content] txn->db-content-vec]
-            (when (<! (need-add-version-file? filetxn origin-db-content))
-              (<! (<add-new-version rsapi repo (relative-path filetxn) origin-db-content))
-              (put-sync-event! {:event :created-local-version-file
-                                :data {:graph-uuid graph-uuid
-                                       :repo repo
-                                       :path (relative-path filetxn)
-                                       :epoch (tc/to-epoch (t/now))}})))
-          r))
+          (let [update-local-files-ch (if (state/enable-sync-diff-merge?)
+                                        (<fetch-remote-and-update-local-files graph-uuid base-path (map relative-path filetxns))
+                                        (<update-local-files rsapi graph-uuid base-path (map relative-path filetxns)))
+                r (<! (<with-pause update-local-files-ch *paused))]
+            (doseq [[filetxn origin-db-content] txn->db-content-vec]
+              (when (<! (need-add-version-file? filetxn origin-db-content))
+                (<! (<add-new-version rsapi repo (relative-path filetxn) origin-db-content))
+                (put-sync-event! {:event :created-local-version-file
+                                  :data {:graph-uuid graph-uuid
+                                         :repo repo
+                                         :path (relative-path filetxn)
+                                         :epoch (tc/to-epoch (t/now))}})))
+            r))
 
-      (.-deleted? (first filetxns))
-      (let [filetxn (first filetxns)]
-        (assert (= 1 (count filetxns)))
-        (if (<! (<local-file-not-exist? graph-uuid rsapi base-path (relative-path filetxn)))
+        (.-deleted? filetxn)
+        (let [filetxn (first filetxns)]
+          (assert (= 1 (count filetxns)))
+          (if (<! (<local-file-not-exist? graph-uuid rsapi base-path (relative-path filetxn)))
           ;; not exist, ignore
-          true
-          (let [r (<! (if (state/enable-sync-diff-merge?)
-                        (<apply-remote-deletion graph-uuid base-path [(relative-path filetxn)])
-                        (<delete-local-files rsapi graph-uuid base-path [(relative-path filetxn)])))]
-            (if (and (instance? ExceptionInfo r)
-                     (string/index-of (str (ex-cause r)) "No such file or directory"))
-              true
-              r)))))))
+            true
+            (let [r (<! (if (state/enable-sync-diff-merge?)
+                          (<apply-remote-deletion graph-uuid base-path [(relative-path filetxn)])
+                          (<delete-local-files rsapi graph-uuid base-path [(relative-path filetxn)])))]
+              (if (and (instance? ExceptionInfo r)
+                       (string/index-of (str (ex-cause r)) "No such file or directory"))
+                true
+                r))))))))
 
 (declare sync-state-reset-full-remote->local-files)
 (defn apply-filetxns-partitions
@@ -1646,7 +1646,7 @@
                                       :chan)))
 
 (defmethod need-sync-remote? :max [_] true)
-(defmethod need-sync-remote? :txid [[txid remote->local-syncer]]
+(defmethod need-sync-remote? :txid [[txid ^Remote->LocalSyncer remote->local-syncer]]
   (let [remote-txid txid
         local-txid (.-txid remote->local-syncer)]
     (or (nil? local-txid)
@@ -3213,7 +3213,7 @@
 (defn <sync-start
   []
   (go
-    (when-not @*sync-starting
+    (when-not (or @*sync-starting (util/mobile?) util/web-platform?)
       (reset! *sync-starting true)
       (if-not (and (<! (<should-start-sync?))
                    (<! (<connectivity-testing)))

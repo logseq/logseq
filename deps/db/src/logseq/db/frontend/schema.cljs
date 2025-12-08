@@ -37,7 +37,7 @@
          (map (juxt :major :minor)
               [(parse-schema-version x) (parse-schema-version y)])))
 
-(def version (parse-schema-version "64.9"))
+(def version (parse-schema-version "65.13"))
 
 (defn major-version
   "Return a number.
@@ -72,8 +72,7 @@
 ;; If only block/title changes
 (def retract-attributes
   "Retract attributes for DB graphs"
-  #{:block/refs
-    :block/warning})
+  #{:block/warning})
 
 ;; DB graph helpers
 ;; ================

@@ -271,10 +271,6 @@
  ;; Default value: 2
  :ref/default-open-blocks-level 2
 
- ;; Configure the threshold for linked references before collapsing.
- ;; Default value: 100
- :ref/linked-references-collapsed-threshold 50
-
  ;; Graph view configuration.
  ;; Example usage:
  ;; :graph/settings
@@ -282,6 +278,14 @@
  ;;  :builtin-pages?  false  ; Default value: false
  ;;  :excluded-pages? false  ; Default value: false
  ;;  :journal?        false} ; Default value: false
+
+ ;; Graph view configuration.
+ ;; Example usage:
+ ;; :graph/forcesettings
+ ;; {:link-dist       180    ; Default value: 180
+ ;;  :charge-strength -600   ; Default value: -600
+ ;;  :charge-range    600    ; Default value: 600
+ ;;  :link-strength   10}   ; Default value: 10
 
  ;; Favorites to list on the left sidebar
    :favorites ["Interstellar" "some page"]

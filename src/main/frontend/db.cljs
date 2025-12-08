@@ -24,7 +24,7 @@
   entity pull pull-many]
 
  [frontend.db.model
-  delete-files get-block-and-children get-block-by-uuid get-block-children sort-by-order
+  delete-files get-block-and-children get-block-by-uuid sort-by-order
   get-block-parent get-block-parents parents-collapsed?
   get-block-immediate-children get-block-page
   get-file file-exists?  get-files-full

@@ -124,6 +124,11 @@
     (dom/remove! el-style))
   (add-style-if-exists!))
 
+(defn set-file-graph-flag!
+  [file-graph?]
+  (apply (if file-graph? dom/add-class! dom/remove-class!)
+         [js/document.documentElement "is-file-graph"]))
+
 (def *js-execed (atom #{}))
 
 (defn exec-js-if-exists-&-allowed!
@@ -288,7 +293,7 @@
                         (not show?))}))))
 
 (defn scroll-to-anchor-block
-  [ref blocks gallery?]
+  [^js ref blocks gallery?]
   (when ref
     (let [anchor (get-in (state/get-route-match) [:query-params :anchor])
           anchor-id (when (and anchor (string/starts-with? anchor "ls-block-"))

@@ -130,19 +130,22 @@
                          method' (last ns-method)
                          args    (.-args data)
                          ret-fn! #(ipc/invoke (str :electron.server/sync! sync-id) %)
-                         app? (contains? #{"app" "editor"} ns')
+                         app? (contains? #{"app" "editor" "db" "cli"} ns')
                          ^js sdk1 (aget js/window.logseq "api")
                          ^js sdk2 (aget js/window.logseq "sdk")]
 
                      (try
-                       (println "invokeLogseqAPI:" method)
+                       (println "invokeLogseqAPI:" method ", args:" args)
                        (let [^js methodTarget (if app? sdk1 (aget sdk2 ns'))]
                          (when-not methodTarget
                            (throw (js/Error. (str "MethodNotExist: " method))))
                          (-> (p/promise (apply js-invoke methodTarget method' args))
                              (p/then #(ret-fn! %))
-                             (p/catch #(ret-fn! {:error %}))))
-                       (catch js/Error e
+                             (p/catch #(do
+                                         (js/console.error "Unexpected error:" %)
+                                         (ret-fn! {:error (.-message %)})))))
+                       (catch :default e
+                         (js/console.error "Unexpected error:" e)
                          (ret-fn! {:error (.-message e)}))))))
 
   (safe-api-call "syncAPIServerState"

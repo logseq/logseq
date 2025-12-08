@@ -214,21 +214,6 @@ html.is-native-ios {
   @apply focus:ring-0 focus:ring-offset-0;
 }
 
-.ls-dummy-block {
-  @apply mb-[20px] pt-[5px] pb-[3px] h-[28px];
-
-  &.selected {
-  }
-
-  .bullet {
-    @apply relative -top-[3px] left-[-2px];
-  }
-
-  .text {
-    @apply relative -top-[2px];
-  }
-}
-
 .ls-preview-popup {
   @apply pl-6;
 
@@ -251,16 +236,12 @@ html.is-native-ios {
   }
 }
 
-.add-button-link-wrap {
-  @apply invisible;
-}
-
-.show-add-button {
-  .add-button-link-wrap {
-    @apply visible;
-  }
-}
-
 .ls-page-blocks {
   @apply min-h-[60px] overflow-hidden;
+}
+
+.block-add-button {
+  &.selected {
+    opacity: 1 !important;
+  }
 }

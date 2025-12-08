@@ -12,31 +12,39 @@ on:
 
 env:
   CLOJURE_VERSION: '1.11.1.1413'
-  NODE_VERSION: '20'
+  NODE_VERSION: '22'
   JAVA_VERSION: '11'
 
 jobs:
   build-app:
-    runs-on: macos-13
+    runs-on: macos-26
     steps:
       - name: Check out Git repository
-        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c  # v3.3.0
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.git-ref }}
-
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26.0.1'
+      - name: Show runtimes
+        run: |
+          xcrun simctl list > /dev/null
+      - name: Install iOS platform
+        run: |
+          xcodebuild -downloadPlatform iOS
       - name: Install Node.js, NPM and Yarn
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Setup Java JDK
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: ${{ env.JAVA_VERSION }}
 
       - name: Cache clojure deps
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.m2/repository
@@ -56,13 +64,23 @@ jobs:
           echo "ENABLE_FILE_SYNC_PRODUCTION=true" >> $GITHUB_ENV
 
       - name: Compile CLJS
-        run: yarn install && yarn release-app
+        run: yarn install && yarn release-mobile
         env:
           LOGSEQ_SENTRY_DSN: ${{ secrets.LOGSEQ_SENTRY_DSN }}
           LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
 
-      - name: Sync static build files
-        run: rsync -avz --exclude node_modules --exclude '*.js.map' --exclude android ./static/ ./public/static/
+      - name: Upload Sentry Sourcemaps (beta only)
+        # if: ${{ github.repository == 'logseq/logseq' && (inputs.build-target == 'beta' || github.event.inputs.build-target == 'beta') }}
+        run: |
+          curl -sL https://sentry.io/get-cli/ | bash
+          release_name="logseq-ios@${{ steps.ref.outputs.version }}"
+          sentry-cli releases new "${release_name}"
+          sentry-cli releases files "${release_name}" upload-sourcemaps --ext map --ext js ./static/js --url-prefix '~/static/js'
+          sentry-cli releases finalize "${release_name}"
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: logseq
+          SENTRY_PROJECT: logseq
 
       - name: Prepare iOS build
         run: npx cap sync ios
@@ -78,9 +96,11 @@ jobs:
           SLACK_URL: ${{ secrets.SLACK_URL }}
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
           MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+          XCODE_XCARGS: "-allowProvisioningUpdates"
 
       - name: Save Static File
         uses: actions/upload-artifact@v4
         with:
           name: static
           path: static
+          retention-days: 3

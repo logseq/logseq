@@ -6,8 +6,8 @@
             [cljs.test :refer [deftest async use-fixtures is testing]]
             [datascript.core :as d]
             [logseq.db.common.initial-data :as common-initial-data]
-            [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.common.sqlite-cli :as sqlite-cli]
+            [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.test.helper :as db-test]))
 

@@ -327,10 +327,6 @@
  ;; Default value: 2
  :ref/default-open-blocks-level 2
 
- ;; Configure the threshold for linked references before collapsing.
- ;; Default value: 100
- :ref/linked-references-collapsed-threshold 50
-
  ;; Graph view configuration.
  ;; Example usage:
  ;; :graph/settings

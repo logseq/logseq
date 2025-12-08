@@ -4,7 +4,8 @@
             [datascript.core :as d]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
-            [logseq.db.common.entity-util :as common-entity-util]))
+            [logseq.db.common.entity-util :as common-entity-util]
+            [logseq.db.frontend.entity-util :as entity-util]))
 
 ;; [[uuid]]
 (def id-ref-pattern
@@ -40,29 +41,34 @@
 
 (defn id-ref->title-ref
   "Convert id ref backs to page name refs using refs."
-  [content* refs* & {:keys [replace-block-id?]
-                     :or {replace-block-id? false}}]
-  (let [refs (if replace-block-id?
-               ;; The caller need to handle situations including
-               ;; mutual references and circle references.
-               refs*
-               (filter common-entity-util/page? refs*))
-        content (str content*)]
-    (if (re-find id-ref-pattern content)
-      (reduce
-       (fn [content ref]
-         (if (:block/title ref)
-           (let [content' (if (not (string/includes? (:block/title ref) " "))
-                            (string/replace content
-                                            (str "#" (page-ref/->page-ref (:block/uuid ref)))
-                                            (str "#" (:block/title ref)))
-                            content)]
-             (string/replace content' (page-ref/->page-ref (:block/uuid ref))
-                             (page-ref/->page-ref (:block/title ref))))
-           content))
-       content
-       (sort-refs refs))
-      content)))
+  [content* refs* & {:keys [db replace-block-id? replace-pages-with-same-name?]
+                     :or {replace-block-id? false
+                          replace-pages-with-same-name? true}}]
+  (when (string? content*)
+    (let [refs (if replace-block-id?
+                 ;; The caller need to handle situations including
+                 ;; mutual references and circle references.
+                 refs*
+                 (cond->> (filter common-entity-util/page? refs*)
+                   (and db (false? replace-pages-with-same-name?))
+                   (remove (fn [e]
+                             (> (count (entity-util/get-pages-by-name db (:block/title e))) 1)))))
+          content (str content*)]
+      (if (re-find id-ref-pattern content)
+        (reduce
+         (fn [content ref]
+           (if (:block/title ref)
+             (let [content' (if (not (string/includes? (:block/title ref) " "))
+                              (string/replace content
+                                              (str "#" (page-ref/->page-ref (:block/uuid ref)))
+                                              (str "#" (:block/title ref)))
+                              content)]
+               (string/replace content' (page-ref/->page-ref (:block/uuid ref))
+                               (page-ref/->page-ref (:block/title ref))))
+             content))
+         content
+         (sort-refs refs))
+        content))))
 
 (defn get-matched-ids
   [content]
@@ -106,19 +112,23 @@
   [title refs & {:keys [replace-tag?]
                  :or {replace-tag? true}}]
   (assert (string? title))
-  (let [refs' (->>
-               (map
-                (fn [ref]
-                  (if (and (vector? ref) (= :block/uuid (first ref)))
-                    {:block/uuid (second ref)
-                     :block/title (str (first ref))}
-                    ref))
-                refs)
-               sort-refs)]
+  (let [refs' (->> refs
+                   (map (fn [ref]
+                          ;; remove uuid references since they're introduced to detect multiple pages
+                          ;; that have the same name
+                          (if (and (map? ref) (some-> (:block.temp/original-page-name ref) common-util/uuid-string?))
+                            (dissoc ref :block.temp/original-page-name)
+                            ref)))
+                   (map
+                    (fn [ref]
+                      (if (and (vector? ref) (= :block/uuid (first ref)))
+                        {:block/uuid (second ref)
+                         :block/title (str (first ref))}
+                        ref)))
+                   sort-refs)]
     (reduce
-     (fn [content {uuid' :block/uuid :block/keys [title] :as block}]
-       (let [title' (or (:block.temp/original-page-name block) title)]
-         (replace-page-ref-with-id content title' uuid' replace-tag?)))
+     (fn [content {uuid' :block/uuid :block/keys [title]}]
+       (replace-page-ref-with-id content title uuid' replace-tag?))
      title
      (filter :block/title refs'))))
 

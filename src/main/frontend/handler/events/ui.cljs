@@ -7,6 +7,7 @@
             [frontend.components.page :as component-page]
             [frontend.components.plugins :as plugin]
             [frontend.components.property.dialog :as property-dialog]
+            [frontend.components.quick-add :as quick-add]
             [frontend.components.repo :as repo]
             [frontend.components.select :as select]
             [frontend.components.selection :as selection]
@@ -42,12 +43,14 @@
             [promesa.core :as p]))
 
 (defmethod events/handle :go/search [_]
-  (shui/dialog-open!
-   cmdk/cmdk-modal
-   {:id :ls-dialog-cmdk
-    :align :top
-    :content-props {:class "ls-dialog-cmdk"}
-    :close-btn? false}))
+  (when-not (editor-handler/dialog-exists? :ls-dialog-cmdk)
+    (shui/dialog-open!
+     cmdk/cmdk-modal
+     {:id :ls-dialog-cmdk
+      :align :top
+      :content-props {:class "ls-dialog-cmdk"}
+      :close-btn? false
+      :onEscapeKeyDown (fn [e] (.preventDefault e))})))
 
 (defmethod events/handle :command/run [_]
   (when (util/electron?)
@@ -85,7 +88,9 @@
    {:id :https-proxy-panel :center? true :class "lg:max-w-2xl"}))
 
 (defmethod events/handle :redirect-to-home [_]
-  (page-handler/create-today-journal!))
+  (page-handler/create-today-journal!)
+  (when (util/capacitor?)
+    (state/pub-event! [:mobile/set-tab "home"])))
 
 (defmethod events/handle :page/show-delete-dialog [[_ selected-rows ok-handler]]
   (shui/dialog-open!
@@ -176,7 +181,7 @@
                   (shui/dialog-close!)
                   (nfs-handler/refresh! (state/get-current-repo) refresh-cb)))]]))
 
-(defn- editor-new-property [block target {:keys [selected-blocks] :as opts}]
+(defn- editor-new-property [block target {:keys [selected-blocks popup-id] :as opts}]
   (let [editing-block (state/get-edit-block)
         pos (state/get-edit-pos)
         edit-block-or-selected (cond
@@ -228,8 +233,9 @@
         (if target'
           (shui/popup-show! target'
                             #(property-dialog/dialog blocks opts')
-                            {:align "start"
-                             :auto-focus? true})
+                            (cond-> {:align "start"}
+                              popup-id
+                              (assoc :id popup-id)))
           (shui/dialog-open! #(property-dialog/dialog blocks opts')
                              {:id :property-dialog
                               :align "start"}))))))
@@ -245,6 +251,7 @@
    repo/new-db-graph
    {:id :new-db-graph
     :title [:h2 "Create a new graph"]
+    :align (if (util/mobile?) :top :center)
     :style {:max-width "500px"}}))
 
 (defmethod events/handle :dialog-select/graph-open []
@@ -256,11 +263,16 @@
 (defmethod events/handle :dialog-select/db-graph-replace []
   (select/dialog-select! :db-graph-replace))
 
+(defn- hide-action-bar!
+  []
+  (when (editor-handler/popup-exists? :selection-action-bar)
+    (shui/popup-hide! :selection-action-bar)))
+
 (defmethod events/handle :editor/show-action-bar []
   (let [selection (state/get-selection-blocks)
         first-visible-block (some #(when (util/el-visible-in-viewport? % true) %) selection)]
     (when first-visible-block
-      (shui/popup-hide! :selection-action-bar)
+      (hide-action-bar!)
       (shui/popup-show!
        first-visible-block
        (fn []
@@ -274,7 +286,8 @@
         :align :start}))))
 
 (defmethod events/handle :editor/hide-action-bar []
-  (shui/popup-hide! :selection-action-bar))
+  (hide-action-bar!)
+  (state/set-state! :mobile/show-action-bar? false))
 
 (defmethod events/handle :user/logout [[_]]
   (file-sync-handler/reset-session-graphs)
@@ -305,7 +318,8 @@
 (defmethod events/handle :user/fetch-info-and-graphs [[_]]
   (state/set-state! [:ui/loading? :login] false)
   (async/go
-    (let [result (async/<! (sync/<user-info sync/remoteapi))]
+    (let [result (async/<! (sync/<user-info sync/remoteapi))
+          mobile-or-web? (or (util/mobile?) util/web-platform?)]
       (cond
         (instance? ExceptionInfo result)
         nil
@@ -318,15 +332,18 @@
             (when (and (= status :welcome) (user-handler/logged-in?))
               (enable-beta-features!)
               (async/<! (p->c (rtc-handler/<get-remote-graphs)))
-              (async/<! (file-sync-handler/load-session-graphs))
+              (when-not mobile-or-web?
+                (async/<! (file-sync-handler/load-session-graphs)))
               (p/let [repos (repo-handler/refresh-repos!)]
                 (when-let [repo (state/get-current-repo)]
-                  (when (some #(and (= (:url %) repo)
-                                    (vector? (:sync-meta %))
-                                    (util/uuid-string? (first (:sync-meta %)))
-                                    (util/uuid-string? (second (:sync-meta %)))) repos)
-                    (sync/<sync-start)))))
-            (file-sync/maybe-onboarding-show status)))))))
+                  (when-not mobile-or-web?
+                    (when (some #(and (= (:url %) repo)
+                                      (vector? (:sync-meta %))
+                                      (util/uuid-string? (first (:sync-meta %)))
+                                      (util/uuid-string? (second (:sync-meta %)))) repos)
+                      (sync/<sync-start))))))
+            (when-not mobile-or-web?
+              (file-sync/maybe-onboarding-show status))))))))
 
 (defmethod events/handle :file-sync/onboarding-tip [[_ type opts]]
   (let [type (keyword type)]
@@ -336,3 +353,21 @@
        (merge {:close-btn? false
                :center? true
                :close-backdrop? (not= type :welcome)} opts)))))
+
+(defmethod events/handle :dialog/show-block [[_ block option]]
+  (shui/dialog-open!
+   [:div.p-8.w-full.h-full
+    (component-page/page-container block option)]
+   {:id :ls-dialog-block
+    :align :top
+    :content-props {:class "ls-dialog-block"}
+    :onEscapeKeyDown (fn [e] (.preventDefault e))}))
+
+(defmethod events/handle :dialog/quick-add [_]
+  (shui/dialog-open!
+   [:div.w-full.h-full
+    (quick-add/quick-add)]
+   {:id :ls-dialog-quick-add
+    :align :top
+    :content-props {:class "ls-dialog-quick-add"}
+    :onEscapeKeyDown (fn [e] (.preventDefault e))}))

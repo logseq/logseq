@@ -1,7 +1,7 @@
 (ns ^:no-doc frontend.db.debug
-  (:require [frontend.db.utils :as db-utils]
+  (:require [datascript.core :as d]
             [frontend.db :as db]
-            [datascript.core :as d]))
+            [frontend.db.utils :as db-utils]))
 
 ;; shortcut for query a block with string ref
 (defn qb
@@ -16,8 +16,7 @@
      (:block/page block)]
     (:block/tags block)
     (:block/alias block)
-    (:block/refs block)
-    (:block/path-refs block))
+    (:block/refs block))
    (remove nil?)
    (some (fn [x]
            (and

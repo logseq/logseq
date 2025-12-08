@@ -4,14 +4,16 @@
             [logseq.common.util :as common-util]))
 
 (defonce *main-thread (atom nil))
+(defonce *infer-worker (atom nil))
+(defonce *deleted-block-uuid->db-id (atom {}))
 
 (defn- <invoke-main-thread*
-  [qkw direct-pass-args? args-list]
+  [qkw direct-pass? args-list]
   (let [main-thread @*main-thread]
     (when (nil? main-thread)
       (prn :<invoke-main-thread-error qkw)
       (throw (ex-info "main-thread has not been initialized" {})))
-    (apply main-thread qkw direct-pass-args? args-list)))
+    (apply main-thread qkw direct-pass? args-list)))
 
 (defn <invoke-main-thread
   "invoke main thread api"
@@ -19,9 +21,9 @@
   (<invoke-main-thread* qkw false args))
 
 (comment
-  (defn <invoke-main-thread-direct-pass-args
+  (defn <invoke-main-thread-direct-pass
     "invoke main thread api.
-  But directly pass args to main-thread(won't do transit-write on them)"
+  But directly pass args to main-thread and result from main-thread as well."
     [qkw & args]
     (<invoke-main-thread* qkw true args)))
 
@@ -39,8 +41,7 @@
                        :rtc/downloading-graph? false
 
                        ;; thread atoms, these atoms' value are syncing from ui-thread
-                       :thread-atom/online-event (atom nil)
-                       }))
+                       :thread-atom/online-event (atom nil)}))
 
 (defonce *rtc-ws-url (atom nil))
 
@@ -56,6 +57,7 @@
 ;; repo -> pool
 (defonce *opfs-pools (atom nil))
 
+;;; ================================================================
 (defn get-sqlite-conn
   ([repo] (get-sqlite-conn repo :db))
   ([repo which-db]
@@ -127,3 +129,16 @@
 (defn get-id-token
   []
   (:auth/id-token @*state))
+
+(comment
+  (defn mobile?
+    []
+    (:mobile? (get-context))))
+
+;;; ========================== mobile log ======================================
+(defonce *log (atom []))
+(defn log-append!
+  [record]
+  (swap! *log conj record)
+  (when (> (count @*log) 1000)
+    (reset! *log (subvec @*log 800))))

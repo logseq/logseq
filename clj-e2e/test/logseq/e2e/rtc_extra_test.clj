@@ -45,12 +45,12 @@
 
 (defn- new-logseq-page
   "new logseq page and switch to this page on both page1 and page2"
-  []
+  [& [page-name]]
   (let [*page-name (atom nil)
         {:keys [_local-tx remote-tx]}
         (w/with-page @*page1
           (rtc/with-wait-tx-updated
-            (reset! *page-name (fixtures/create-page))))]
+            (reset! *page-name (fixtures/create-page page-name))))]
     (w/with-page @*page2
       (rtc/wait-tx-update-to remote-tx)
       (page/goto-page @*page-name))))
@@ -287,3 +287,69 @@ page2:
           (k/enter)
           (b/indent)))
       (validate-2-graphs))))
+
+(deftest rtc-page-test
+  (let [prefix "rtc-page-test-"]
+    ;; (testing "create same name page in different clients.
+;; - client1: offline, create page1
+;; - client2: offline, create page1
+;; - restart rtc"
+;;       (rtc/with-stop-restart-rtc
+;;         [@*page1 @*page2]
+;;         [@*page1 (rtc/with-wait-tx-updated (b/new-block "pw1-done-1"))
+;;          @*page2 (rtc/with-wait-tx-updated (b/new-block "pw2-done-1"))]
+;;         (w/with-page @*page1
+;;           (page/new-page (str prefix 1)))
+;;         (w/with-page @*page2
+;;           (page/new-page (str prefix 1))))
+;;       (validate-2-graphs))
+
+;;     (testing "
+;; - client1: offline, add blocks on page-2
+;; - client2: offline, delete page-2"
+;;       (let [page-name (str prefix 2)]
+;;         (let [*latest-remote-tx (atom nil)]
+;;           (w/with-page @*page1
+;;             (let [{:keys [_local-tx remote-tx]}
+;;                   (rtc/with-wait-tx-updated
+;;                     (page/new-page page-name))]
+;;               (reset! *latest-remote-tx remote-tx)))
+;;           (w/with-page @*page2
+;;             (rtc/wait-tx-update-to @*latest-remote-tx)))
+;;         (validate-2-graphs)
+
+;;         (rtc/with-stop-restart-rtc
+;;           [@*page1 @*page2]
+;;           [@*page1 (rtc/with-wait-tx-updated (b/new-block "pw1-done-2"))
+;;            @*page2 (rtc/with-wait-tx-updated (b/new-block "pw2-done-2"))]
+;;           (w/with-page @*page1
+;;             (b/new-blocks (map #(str "block-" %) (range 5))))
+;;           (w/with-page @*page2
+;;             (page/delete-page page-name)))
+;;         (validate-2-graphs)))
+    (testing "page rename"
+      (let [page-name (str prefix 3)]
+        (new-logseq-page page-name)
+        (validate-2-graphs)
+        (rtc/with-stop-restart-rtc
+          [@*page1 @*page2]
+          [@*page1 (rtc/with-wait-tx-updated (b/new-block "pw1-done-3"))
+           @*page2 (rtc/with-wait-tx-updated (b/new-block "pw2-done-3"))]
+          (w/with-page @*page1
+            (page/rename-page page-name (str page-name "-rename1")))
+          (w/with-page @*page2
+            (page/rename-page page-name (str page-name "-rename2"))))
+        (validate-2-graphs)))))
+
+(deftest long-block-title-test
+  (testing "insert >4KB block/title"
+    (let [long-block-title (apply str (repeat 5000 "a"))
+          {:keys [_local-tx remote-tx]}
+          (w/with-page @*page1
+            (rtc/with-wait-tx-updated
+              (b/new-block long-block-title)))]
+      (w/with-page @*page2
+        (rtc/wait-tx-update-to remote-tx))
+      (validate-2-graphs)
+      (w/with-page @*page2
+        (assert/assert-is-visible (loc/filter ".block-title-wrap" :has-text long-block-title))))))

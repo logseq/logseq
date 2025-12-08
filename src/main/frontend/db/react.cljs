@@ -16,7 +16,18 @@
 ;; Query atom of map of Key ([repo q inputs]) -> atom
 ;; TODO: replace with LRUCache, only keep the latest 20 or 50 items?
 
-(defonce query-state (atom {}))
+(defonce *query-state (atom {}))
+
+;; [[repo q]]
+(defonce *collapsed-queries (atom {}))
+
+(defn set-q-collapsed!
+  [k collapsed?]
+  (swap! *collapsed-queries assoc k collapsed?))
+
+(defn- query-collapsed?
+  [k]
+  (@*collapsed-queries k))
 
 ;; Current dynamic component
 (def ^:dynamic *query-component* nil)
@@ -31,26 +42,28 @@
 
 (defn set-new-result!
   [k new-result]
-  (when-let [result-atom (get-in @query-state [k :result])]
+  (when-let [result-atom (get-in @*query-state [k :result])]
     (reset! result-atom new-result)))
 
 (defn clear-query-state!
   []
-  (reset! query-state {}))
+  (reset! *query-state {})
+  (reset! *collapsed-queries {}))
 
 (defn add-q!
   [k query inputs result-atom transform-fn query-fn inputs-fn]
-  (swap! query-state assoc k {:query query
-                              :inputs inputs
-                              :result result-atom
-                              :transform-fn transform-fn
-                              :query-fn query-fn
-                              :inputs-fn inputs-fn})
+  (swap! *query-state assoc k {:query query
+                               :inputs inputs
+                               :result result-atom
+                               :transform-fn transform-fn
+                               :query-fn query-fn
+                               :inputs-fn inputs-fn})
   result-atom)
 
 (defn remove-q!
   [k]
-  (swap! query-state dissoc k))
+  (when-not (and (= (second k) :custom) (nth k 3))                   ; today query
+    (swap! *query-state dissoc k)))
 
 (defn add-query-component!
   [k component]
@@ -75,7 +88,7 @@
 
 (defn get-query-cached-result
   [k]
-  (when-let [result (get @query-state k)]
+  (when-let [result (get @*query-state k)]
     (when (satisfies? IWithMeta @(:result result))
       (set! (.-state (:result result))
             @(:result result)))
@@ -87,7 +100,8 @@
         q (if util/node-test?
             (fn [query inputs] (apply d/q query db inputs))
             (fn [query inputs]
-              (let [q-f #(apply db-async-util/<q repo {:transact-db? false} (cons query inputs))]
+              (let [q-f #(apply db-async-util/<q repo {:transact-db? false
+                                                       :advanced-query? true} (cons query inputs))]
                 (if built-in-query?
                   ;; delay built-in-queries to not block journal rendering
                   (p/let [_ (p/delay 100)]
@@ -160,32 +174,34 @@
   [repo-url affected-keys & {:keys [skip-kv-custom-keys?]
                              :or {skip-kv-custom-keys? false}}]
   (util/profile
-   "refresh!"
-   (let [db (conn/get-db repo-url)
-         affected-keys-set (set affected-keys)
-         state (->> (keep (fn [[k cache]]
-                            (let [k' (vec (rest k))]
-                              (when (and (= (first k) repo-url)
-                                         (or (contains? affected-keys-set k')
-                                             (contains? #{:custom :kv} (first k'))))
-                                [k' cache]))) @query-state)
-                    (into {}))
-         all-keys (concat (distinct affected-keys)
-                          (when-not skip-kv-custom-keys?
-                            (filter #(contains? #{:custom :kv} (first %)) (keys state))))]
-     (doseq [k all-keys]
-       (when-let [cache (get state k)]
-         (let [{:keys [query query-fn]} cache
-               custom? (= :custom (first k))]
-           (when (or query query-fn)
-             (try
-               (let [f #(execute-query! repo-url db (vec (cons repo-url k)) cache)]
-                 (if custom?
-                   (async/put! (state/get-reactive-custom-queries-chan) [f query])
-                   (f)))
-               (catch :default e
-                 (js/console.error e)
-                 nil)))))))))
+    "refresh!"
+    (let [db (conn/get-db repo-url)
+          affected-keys-set (set affected-keys)
+          state (->> (keep (fn [[k cache]]
+                             (let [k' (vec (rest k))]
+                               (when (and (= (first k) repo-url)
+                                          (or (contains? affected-keys-set k')
+                                              (contains? #{:custom :kv} (first k'))))
+                                 [k' cache]))) @*query-state)
+                     (into {}))
+          all-keys (concat (distinct affected-keys)
+                           (when-not skip-kv-custom-keys?
+                             (filter #(contains? #{:custom :kv} (first %)) (keys state))))]
+      (doseq [k all-keys]
+        (when-let [cache (get state k)]
+          (let [{:keys [query query-fn]} cache
+                custom? (= :custom (first k))]
+            (when (or query query-fn)
+              (try
+                (let [f #(execute-query! repo-url db (vec (cons repo-url k)) cache)]
+                  (if custom?
+                   ;; perf: don't execute custom queries if they were collapsed
+                    (when-not (query-collapsed? k)
+                      (async/put! (state/get-reactive-custom-queries-chan) [f query]))
+                    (f)))
+                (catch :default e
+                  (js/console.error e)
+                  nil)))))))))
 
 (defn refresh!
   "Re-compute corresponding queries (from tx) and refresh the related react components."

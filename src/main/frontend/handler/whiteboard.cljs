@@ -149,7 +149,7 @@
        :deleted-shapes deleted-shapes
        :new-shapes created-shapes
        :metadata {:whiteboard/transact? true
-                  :pipeline-replace? replace?}})))
+                  :whiteboard/replace? replace?}})))
 
 (defonce *last-shapes-nonce (atom {}))
 

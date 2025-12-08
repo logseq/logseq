@@ -5,6 +5,7 @@
                                     :sha "8571fae7c51400ac61c8b1026cbfba68279bc461"}
         ;; io.github.zmedelis/bosquet {:mvn/version "2025.03.28"}
         org.clj-commons/claypoole          {:mvn/version "1.2.2"}
+        metosin/jsonista                   {:mvn/version "0.3.13"}
         clj-time/clj-time                  {:mvn/version "0.15.2"}}
  :aliases
  {:build {:deps {io.github.clojure/tools.build {:mvn/version "0.10.5"}}
@@ -17,4 +18,8 @@
          :extra-deps {org.clojure/test.check {:mvn/version "1.1.1"}
                       io.github.cognitect-labs/test-runner
                       {:git/tag "v0.5.1" :git/sha "dfb30dd"}}}
-  :dev {:extra-paths ["dev" "test"]}}}
+  :dev {:extra-paths ["dev" "test"]}
+  :dev-run-rtc-extra-test {:extra-paths ["dev" "test"]
+                           :exec-fn user/run-rtc-extra-test2}
+  :dev-run-all-basic-test {:extra-paths ["dev" "test"]
+                           :exec-fn user/run-all-basic-test}}}

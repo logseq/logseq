@@ -1,7 +1,6 @@
 (ns logseq.common.config
   "Common config constants and fns that are shared between deps and app"
-  (:require [clojure.string :as string]
-            [goog.object :as gobj]))
+  (:require [clojure.string :as string]))
 
 (goog-define PUBLISHING false)
 
@@ -30,17 +29,19 @@
 (def app-name "logseq")
 
 (defonce asset-protocol "assets://")
-(defonce capacitor-protocol "capacitor://")
-(defonce capacitor-prefix "_capacitor_file_")
-(defonce capacitor-protocol-with-prefix (str capacitor-protocol "localhost/" capacitor-prefix))
-(defonce capacitor-x-protocol-with-prefix (str (gobj/getValueByKeys js/globalThis "location" "href") capacitor-prefix))
+
+(defonce db-version-prefix "logseq_db_")
+(defonce file-version-prefix "logseq_local_")
 
 (defonce local-assets-dir "assets")
+(defonce unlinked-graphs-dir "Unlinked graphs")
 
 (defonce favorites-page-name "$$$favorites")
 (defonce views-page-name "$$$views")
+(defonce library-page-name "Library")
+(defonce quick-add-page-name "Quick add")
 
-(defn local-asset?
+(defn local-relative-asset?
   [s]
   (and (string? s)
        (re-find (re-pattern (str "^[./]*" local-assets-dir)) s)))
@@ -48,17 +49,21 @@
 (defn local-protocol-asset?
   [s]
   (when (string? s)
-    (or (string/starts-with? s asset-protocol)
-        (string/starts-with? s capacitor-protocol)
-        (string/starts-with? s capacitor-x-protocol-with-prefix))))
+    (string/starts-with? s asset-protocol)))
+
+(defn protocol-path?
+  [s]
+  (try
+    (let [url (js/URL. s)]
+      (some? (.-protocol url)))
+    (catch :default _
+      false)))
 
 (defn remove-asset-protocol
   [s]
   (if (local-protocol-asset? s)
     (-> s
-        (string/replace-first asset-protocol "file://")
-        (string/replace-first capacitor-protocol-with-prefix "file://")
-        (string/replace-first capacitor-x-protocol-with-prefix "file://"))
+        (string/replace-first asset-protocol "file://"))
     s))
 
 (defonce default-draw-directory "draws")

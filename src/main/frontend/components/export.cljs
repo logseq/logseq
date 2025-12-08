@@ -18,6 +18,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.db :as ldb]
+            [logseq.db.sqlite.export :as sqlite-export]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -101,17 +102,19 @@
         (when db-based?
           [:div
            [:a.font-medium {:on-click #(export/export-repo-as-sqlite-db! current-repo)}
-            (t :export-sqlite-db)]])
+            (t :export-sqlite-db)]
+           [:p.text-sm.opacity-70.mb-0 "Primary way to backup graph's content to a single .sqlite file."]])
         (when db-based?
           [:div
            [:a.font-medium {:on-click #(export/export-repo-as-zip! current-repo)}
-            (t :export-zip)]])
+            (t :export-zip)]
+           [:p.text-sm.opacity-70.mb-0 "Primary way to backup graph's content and assets to a .zip file."]])
 
-        (when db-based?
+        (when (and db-based? (not (util/mobile?)))
           [:div
            [:a.font-medium {:on-click #(db-export-handler/export-repo-as-db-edn! current-repo)}
-            (t :export-db-edn)]])
-
+            (t :export-db-edn)]
+           [:p.text-sm.opacity-70.mb-0 "Exports to a readable and editable .edn file. Don't rely on this as a primary backup."]])
         (when-not (mobile-util/native-platform?)
           [:div
            [:a.font-medium {:on-click #(export-text/export-repo-as-markdown! current-repo)}
@@ -134,9 +137,10 @@
           [:div
            [:a.font-medium {:on-click #(export/export-repo-as-debug-transit! current-repo)}
             "Export debug transit file"]
-           [:p.text-sm.opacity-70.mb-0 "Any sensitive data will be removed in the exported transit file, you can send it to us for debugging."]])
+           [:p.text-sm.opacity-70.mb-0 "Exports to a .transit file to send to us for debugging. Any sensitive data will be removed in the exported file."]])
 
-        (when (and db-based? util/web-platform?)
+        (when (and db-based? util/web-platform?
+                   (not (util/mobile?)))
           [:div
            [:hr]
            (auto-backup)])]])))
@@ -177,9 +181,18 @@
                       :selected-nodes
                       {:node-ids (mapv #(vector :block/uuid %) root-block-uuids-or-page-uuid)}
                       {})]
-    (state/<invoke-db-worker :thread-api/export-edn
-                             (state/get-current-repo)
-                             (merge {:export-type export-type} export-args))))
+    (p/let [export-edn (state/<invoke-db-worker :thread-api/export-edn
+                                                (state/get-current-repo)
+                                                (merge {:export-type export-type} export-args))]
+      ;; Don't validate :block for now b/c it requires more setup
+      (if (#{:page :selected-nodes} export-type)
+        (if-let [error (:error (sqlite-export/validate-export export-edn))]
+          (do
+            (js/console.log "Invalid export EDN:")
+            (pprint/pprint export-edn)
+            {:export-edn-error error})
+          export-edn)
+        export-edn))))
 
 (defn- get-zoom-level
   [page-uuid]
@@ -283,7 +296,8 @@
                       :on-click #(do (reset! *export-block-type :edn)
                                      (p/let [result (<export-edn-helper top-level-uuids export-type)
                                              pull-data (with-out-str (pprint/pprint result))]
-                                       (when-not (= :export-edn-error result)
+                                       (if (:export-edn-error result)
+                                         (notification/show! (:export-edn-error result) :error)
                                          (reset! *content pull-data))))))])
       (if (= :png tp)
         [:div.flex.items-center.justify-center.relative

@@ -1,13 +1,13 @@
 (ns logseq.graph-parser.text
   "Miscellaneous text util fns for the parser. Used by file and DB graphs"
-  (:require [goog.string :as gstring]
+  (:require [clojure.set :as set]
             [clojure.string :as string]
-            [clojure.set :as set]
-            [logseq.graph-parser.property :as gp-property]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [goog.string :as gstring]
             [logseq.common.util :as common-util]
+            [logseq.common.util.namespace :as ns-util]
             [logseq.common.util.page-ref :as page-ref]
-            [logseq.common.util.namespace :as ns-util]))
+            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.graph-parser.property :as gp-property]))
 
 (def get-file-basename page-ref/get-file-basename)
 

@@ -1,23 +1,24 @@
 (ns frontend.persist-db
   "Backend of DB based graph"
-  (:require [frontend.persist-db.browser :as browser]
+  (:require [frontend.config :as config]
+            [frontend.db :as db]
+            [frontend.persist-db.browser :as browser]
             [frontend.persist-db.protocol :as protocol]
-            [promesa.core :as p]
             [frontend.state :as state]
-            [frontend.config :as config]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [promesa.core :as p]))
 
 (defonce opfs-db (browser/->InBrowser))
 
- (defn- get-impl
+(defn- get-impl
   "Get the actual implementation of PersistentDB"
   []
   opfs-db)
 
- (defn <list-db []
-   (protocol/<list-db (get-impl)))
+(defn <list-db []
+  (protocol/<list-db (get-impl)))
 
- (defn <unsafe-delete [repo]
+(defn <unsafe-delete [repo]
   (when repo (protocol/<unsafe-delete (get-impl) repo)))
 
 (defn <export-db
@@ -41,15 +42,26 @@
   (p/let [_ (protocol/<new (get-impl) repo opts)]
     (<export-db repo {})))
 
+;; repo->max-tx
+(defonce *last-synced-graph->tx (atom {}))
+
+(defn- graph-has-changed?
+  [repo]
+  (let [tx (@*last-synced-graph->tx repo)
+        db (db/get-db repo)]
+    (or (nil? tx)
+        (> tx (:max-tx db)))))
+
 (defn export-current-graph!
   [& {:keys [succ-notification? force-save?]}]
   (when (util/electron?)
     (when-let [repo (state/get-current-repo)]
-      (when (or (config/db-based-graph? repo) force-save?)
+      (when (or (and (config/db-based-graph? repo) (graph-has-changed? repo)) force-save?)
         (println :debug :save-db-to-disk repo)
         (->
          (p/do!
           (<export-db repo {})
+          (swap! *last-synced-graph->tx assoc repo (:max-tx (db/get-db repo)))
           (when succ-notification?
             (state/pub-event!
              [:notification/show {:content "The current db has been saved successfully to the disk."
@@ -64,5 +76,5 @@
 (defn run-export-periodically!
   []
   (js/setInterval export-current-graph!
-                  ;; every 3 minutes
-                  (* 3 60 1000)))
+                  ;; every 30 seconds
+                  (* 30 1000)))

@@ -8,9 +8,9 @@
 
 (defn react-components
   [f]
-  (reset! react/query-state {})
+  (reset! react/*query-state {})
   (let [r (f)]
-    (reset! react/query-state {})
+    (reset! react/*query-state {})
     r))
 
 (defn- reset-datascript

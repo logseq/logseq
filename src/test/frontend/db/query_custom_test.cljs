@@ -1,8 +1,8 @@
 (ns frontend.db.query-custom-test
   (:require [cljs.test :refer [deftest is use-fixtures testing]]
-            [frontend.test.helper :as test-helper :refer [load-test-files]]
             [frontend.db.query-custom :as query-custom]
-            [frontend.db.react :as react]))
+            [frontend.db.react :as react]
+            [frontend.test.helper :as test-helper :refer [load-test-files]]))
 
 (use-fixtures :each {:before test-helper/start-test-db!
                      :after test-helper/destroy-test-db!})
@@ -10,7 +10,7 @@
 (defn- custom-query
   [query]
   (react/clear-query-state!)
-  (when-let [result (query-custom/custom-query test-helper/test-db query {})]
+  (when-let [result (last (query-custom/custom-query test-helper/test-db query {}))]
     (map first (deref result))))
 
 (deftest custom-query-test

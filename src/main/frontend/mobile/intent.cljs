@@ -14,10 +14,10 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.mobile.util :as mobile-util]
-            [frontend.util.ref :as ref]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.fs :as fs-util]
+            [frontend.util.ref :as ref]
             [goog.string :as gstring]
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
@@ -83,26 +83,15 @@
   (let [args (transform-args args)]
     (state/pub-event! [:editor/quick-capture args])))
 
-(defn- embed-asset-file [url format]
+(defn- embed-asset-file [url _format]
   (p/let [basename (node-path/basename url)
-          label (-> basename util/node-path.name)
-          time (date/get-current-time)
-          date-ref-name (date/today)
-          path (assets-handler/get-asset-path basename)
-          _file (p/catch
-                 (.copy Filesystem (clj->js {:from url :to path}))
-                 (fn [error]
-                   (log/error :copy-file-error {:error error})))
-          url (util/format "../assets/%s" basename)
-          url (assets-handler/get-asset-file-link format url label true)
-          template (get-in (state/get-config)
-                           [:quick-capture-templates :media]
-                           "**{time}** [[quick capture]]: {url}")]
-    (-> template
-        (string/replace "{time}" time)
-        (string/replace "{date}" date-ref-name)
-        (string/replace "{text}" "")
-        (string/replace "{url}" (or url "")))))
+          file (.readFile Filesystem #js {:path url})
+          file-base64-str (some-> file (.-data))
+          file (some-> file-base64-str (util/base64string-to-unit8array)
+                       (vector) (clj->js) (js/File. basename #js {}))
+          result (editor-handler/db-based-save-assets!
+                  (state/get-current-repo) [file] {})]
+    (first result)))
 
 (defn- embed-text-file
   "Store external content with url into Logseq repo"
@@ -134,13 +123,8 @@
 (defn- handle-received-media [result]
   (p/let [{:keys [url]} result
           page (or (state/get-current-page) (string/lower-case (date/journal-name)))
-          format (db/get-page-format page)
-          content (embed-asset-file url format)]
-    (if (state/get-edit-block)
-      (editor-handler/insert content)
-      (editor-handler/api-insert-new-block! content {:page page
-                                                     :edit-block? false
-                                                     :replace-empty-target? true}))))
+          format (db/get-page-format page)]
+    (embed-asset-file url format)))
 
 (defn- handle-received-application [result]
   (p/let [{:keys [title url type]} result
@@ -153,7 +137,9 @@
 
                     (contains? (set/union config/doc-formats config/media-formats)
                                (keyword application-type))
-                    (embed-asset-file url format)
+                    (do
+                      (embed-asset-file url format)
+                      nil)
 
                     :else
                     (notification/show!
@@ -163,11 +149,12 @@
                            :target "_blank"} "Github"]
                       ". We will look into it soon."]
                      :warning false))]
-    (if (state/get-edit-block)
-      (editor-handler/insert content)
-      (editor-handler/api-insert-new-block! content {:page page
-                                                     :edit-block? false
-                                                     :replace-empty-target? true}))))
+    (when content
+      (if (state/get-edit-block)
+        (editor-handler/insert content)
+        (editor-handler/api-insert-new-block! content {:page page
+                                                       :edit-block? false
+                                                       :replace-empty-target? true})))))
 
 (defn decode-received-result [m]
   (into {} (for [[k v] m]
@@ -182,17 +169,20 @@
                         (common-util/safe-decode-uri-component v)
                         v))])))
 
-(defn- handle-asset-file [url format]
-  (p/let [basename (node-path/basename url)
-          label (-> basename util/node-path.name)
-          path (assets-handler/get-asset-path basename)
-          _file (p/catch
-                 (.copy Filesystem (clj->js {:from url :to path}))
-                 (fn [error]
-                   (log/error :copy-file-error {:error error})))
-          url (util/format "../assets/%s" basename)
-          url-link (assets-handler/get-asset-file-link format url label true)]
-    url-link))
+(defn- handle-asset-file [url _format]
+  (-> (p/let [basename (node-path/basename url)
+              _label (-> basename util/node-path.name)
+              _path (assets-handler/get-asset-path basename)
+              file (.readFile Filesystem #js {:path url})
+              file-base64-str (some-> file (.-data))
+              file (some-> file-base64-str (util/base64string-to-unit8array)
+                           (vector) (clj->js) (js/File. basename #js {}))
+              result (editor-handler/db-based-save-assets!
+                      (state/get-current-repo) [file] {})
+              asset-entity (first result)
+              url-link (util/format "[[%s]]" (:block/uuid asset-entity))]
+        url-link)
+      (p/catch #(log/error :handle-asset-file %))))
 
 (defn- handle-payload-resource
   [{:keys [type name ext url] :as resource} format]

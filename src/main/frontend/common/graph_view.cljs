@@ -26,29 +26,31 @@
      pages
      (remove ldb/hidden?)
      (remove nil?)
-     (mapv (fn [p]
-             (let [page-title (:block/title p)
-                   current-page? (= page-title current-page)
-                   color (case [dark? current-page?] ; FIXME: Put it into CSS
-                           [false false] "#999"
-                           [false true]  "#045591"
-                           [true false]  "#93a1a1"
-                           [true true]   "#ffffff")
-                   color (if (contains? tags (:db/id p))
-                           (if dark? "orange" "green")
-                           color)
-                   n (get page-links page-title 1)
-                   size (int (* 8 (max 1.0 (js/Math.cbrt n))))]
-               (cond->
-                {:id (str (:db/id p))
-                 :label page-title
-                 :size size
-                 :color color
-                 :block/created-at (:block/created-at p)}
-                 (contains? page-parents (:db/id p))
-                 (assoc :parent true))))))))
+     (keep (fn [p]
+             (if-let [page-title (:block/title p)]
+               (let [current-page? (= page-title current-page)
+                     color (case [dark? current-page?] ; FIXME: Put it into CSS
+                             [false false] "#999"
+                             [false true]  "#045591"
+                             [true false]  "#93a1a1"
+                             [true true]   "#ffffff")
+                     color (if (contains? tags (:db/id p))
+                             (if dark? "orange" "green")
+                             color)
+                     n (get page-links page-title 1)
+                     size (int (* 8 (max 1.0 (js/Math.cbrt n))))]
+                 (cond->
+                  {:id (str (:db/id p))
+                   :label page-title
+                   :size size
+                   :color color
+                   :block/created-at (:block/created-at p)}
+                   (contains? page-parents (:db/id p))
+                   (assoc :parent true)))
+               (js/console.error (str "Page doesn't have :block/title " p)))))
+     vec)))
 
-                  ;; slow
+;; slow
 (defn- uuid-or-asset?
   [label]
   (or (common-util/uuid-string? label)

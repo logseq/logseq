@@ -14,16 +14,16 @@
 
 (rum/defcs panel-of-tokens
   < rum/reactive
-  (rum/local nil ::tokens)
-  {:will-mount
-   (fn [s]
-     (let [*tokens (s ::tokens)]
-       (reset! *tokens (get-in @state/state [:electron/server :tokens])) s))}
+    (rum/local nil ::tokens)
+    {:will-mount
+     (fn [s]
+       (let [*tokens (s ::tokens)]
+         (reset! *tokens (get-in @state/state [:electron/server :tokens])) s))}
   [_state close-panel]
 
   (let [server-state (state/sub :electron/server)
-        *tokens      (::tokens _state)
-        changed?     (not= @*tokens (:tokens server-state))]
+        *tokens (::tokens _state)
+        changed? (not= @*tokens (:tokens server-state))]
     [:div.cp__server-tokens-panel.pt-6
      [:h2.text-3xl.-translate-y-4 "Authorization tokens"]
      ;; items
@@ -32,17 +32,25 @@
          [:div.item.py-2.flex.space-x-2.items-center
           {:key idx}
           [:input.form-input.basis-36
-           {:auto-focus  true
+           {:auto-focus true
             :placeholder "name"
-            :value       name
-            :on-change   #(let [value (.-value (.-target %))]
-                            (update-value! idx :name value))}]
+            :value name
+            :on-change #(let [value (.-value (.-target %))]
+                          (update-value! idx :name value))}]
           [:input.form-input
            {:placeholder "value"
-            :value       value
-            :on-change   #(let [value (.-value (.-target %))]
-                            (update-value! idx :value value))}]
+            :value value
+            :on-change #(let [value (.-value (.-target %))]
+                          (update-value! idx :value value))}]
 
+          [:button.px-2.opacity-50.hover:opacity-90.active:opacity-100
+           {:on-click #(let [new-token (util/unique-id)
+                             ^js input-el (some-> (.-target %) (.closest ".item") (.querySelector "input.form-input:nth-child(2)"))]
+                         (update-value! idx :value new-token)
+                         (when input-el
+                           (js/setTimeout (fn [] (.select input-el)) 64)))
+            :title "Regenerate token value"}
+           [:span.flex.items-center (ui/icon "refresh")]]
           [:button.px-2.opacity-50.hover:opacity-90.active:opacity-100
            {:on-click #(reset! *tokens (into [] (medley/remove-nth idx @*tokens)))}
            [:span.flex.items-center (ui/icon "trash-x")]]]))
@@ -134,10 +142,10 @@
          #(js/clearTimeout t))))
    [])
 
-  (let [{:keys [status error]} server-state
-        status   (keyword (util/safe-lower-case status))
+  (let [{:keys [status error mcp-enabled?]} server-state
+        status (keyword (util/safe-lower-case status))
         running? (= :running status)
-        href     (and running? (str "http://" (:host server-state) ":" (:port server-state)))]
+        href (and running? (str "http://" (:host server-state) ":" (:port server-state)))]
 
     (hooks/use-effect!
      #(when error
@@ -180,7 +188,16 @@
                                                  [:span.ml-1.text-sm.opacity-70
                                                   (if-not running?
                                                     (string/upper-case (or (:status server-state) "stopped"))
-                                                    [:a.hover:underline {:href href} href])]]
+                                                    [:span.flex.flex-col.gap-1.text-xs.font-mono
+                                                     [:a.hover:underline.flex.items-center {:href href}
+                                                      href (shui/tabler-icon "external-link" {:size 12 :class "inline-block ml-1 pt-[1px]"})]
+                                                     (when mcp-enabled?
+                                                       [:a.hover:underline.flex.items-center
+                                                        {:on-click (fn []
+                                                                     (util/copy-to-clipboard! (str href "/mcp"))
+                                                                     (notification/show! "MCP URL copied to clipboard!" :success))}
+                                                        (str href "/mcp")
+                                                        (shui/tabler-icon "copy" {:size 12 :class "inline-block ml-1 mt-[1px]"})])])]]
                                                 (for [{:keys [hr? title options icon]} items]
                                                   (cond
                                                     hr?

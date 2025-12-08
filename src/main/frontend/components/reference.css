@@ -15,7 +15,15 @@
 }
 
 .ls-filters {
-  max-width: 704px;
+    @screen md {
+        min-width: 700px;
+        width: 700px;
+    }
+
+    @screen sm {
+        min-width: 600px;
+        width: 600px;
+    }
 }
 
 .custom-query-page-result {

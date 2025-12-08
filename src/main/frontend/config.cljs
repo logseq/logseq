@@ -96,23 +96,6 @@
     "http://localhost:3001"
     (util/format "https://%s.com" app-name)))
 
-(def asset-domain (util/format "https://asset.%s.com"
-                               app-name))
-
-;; TODO: Remove this, switch to lazy loader
-(defn asset-uri
-  [path]
-  (cond
-    publishing?
-    path
-
-    (util/file-protocol?)
-    (string/replace path "/static/" "./")
-
-    :else
-    (if dev? path
-        (str asset-domain path))))
-
 (def markup-formats
   #{:org :md :markdown :asciidoc :adoc :rst})
 
@@ -360,7 +343,11 @@
 (defonce idb-db-prefix "logseq-db/")
 (defonce local-db-prefix "logseq_local_")
 (defonce local-handle "handle")
-(defonce db-version-prefix sqlite-util/db-version-prefix)
+(defonce db-version-prefix common-config/db-version-prefix)
+
+(defn db-graph-name
+  [repo-with-prefix]
+  (string/replace-first repo-with-prefix db-version-prefix ""))
 
 (defn local-file-based-graph?
   [s]
@@ -420,7 +407,8 @@
 
     ;; nfs, browser-fs-access
     ;; Format: logseq_local_{dir-name}
-        (local-file-based-graph? repo-url)
+        (or (local-file-based-graph? repo-url)
+            (and publishing? (not db-based?)))
         (string/replace-first repo-url local-db-prefix "")
 
      ;; unit test

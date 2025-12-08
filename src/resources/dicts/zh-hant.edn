@@ -43,7 +43,6 @@
  :right-side-bar/page-graph "頁面圖表"
  :right-side-bar/block-ref "區塊引用"
  :right-side-bar/graph-view "圖表顯示"
- :right-side-bar/all-pages "所有頁面"
  :right-side-bar/whiteboards "白板"
  :right-side-bar/flashcards "卡片"
  :right-side-bar/show-journals "顯示日記頁面"
@@ -55,7 +54,6 @@
  :page/logseq-is-having-a-problem "Logseq 出了些問題。請按照以下安全步驟將其恢復到正常狀態："
  :page/step "步驟 {1}"
  :page/try "嘗試"
- :page/delete-confirmation "你確定想刪除此頁面檔案嗎？"
  :page/open-in-finder "開啟資料夾"
  :page/open-with-default-app "使用預設應用程式開啟"
  :page/make-public "將其公開讓所有人均可檢視"
@@ -83,6 +81,8 @@
  :asset/delete "刪除圖片"
  :asset/copy "複製圖片"
  :asset/maximize "圖片最大化"
+ :asset/ref-block "資源塊引用"
+
  :asset/confirm-delete "你確定要刪除 {1} 嗎？"
  :asset/physical-delete "同時刪除原檔案（將無法還原）"
  :color/gray "灰色"
@@ -180,7 +180,6 @@
  :export-roam-json "以 Roam JSON 格式匯出"
  :export-edn "以 EDN 格式匯出"
  :all-graphs "所有圖表"
- :all-pages "所有分頁"
  :all-whiteboards "所有白板"
  :all-files "所有資料"
  :all-journals "所有日記"
@@ -203,7 +202,6 @@
  :remove-heading "移除標頭"
  :heading "標頭 {1}"
  :auto-heading "自動寫入標頭"
- :open-a-directory "於本地開啟資料夾"
 
  :help/shortcut-page-title "鍵盤快捷鍵"
 

@@ -88,7 +88,7 @@
     }
 
     .property-value {
-      @apply pl-1;
+      @apply pl-1 min-h-[28px];
 
       .jtrigger-id {
         @apply left-[-34px] top-[2px];
@@ -136,9 +136,6 @@
   }
 
   .cp__select-main {
-    width: fit-content;
-    margin: 0;
-
     .ui__dropdown-trigger {
       position: absolute;
 
@@ -166,11 +163,6 @@
     @apply w-full;
     margin: 0;
   }
-
-  .property-key a {
-    color: var(--ls-primary-text-color);
-  }
-
   .property-key a:hover {
     color: var(--ls-link-text-hover-color);
   }
@@ -180,8 +172,12 @@
   }
 }
 
+.property-key a, .ls-new-property a {
+    color: var(--ls-primary-text-color);
+}
+
 .ui__button.empty-btn, .empty-text-btn {
-  @apply !h-6 !px-0 font-normal opacity-50;
+  @apply !h-6 !px-0 !text-base opacity-50 font-normal;
 }
 
 .ui__button.empty-btn:hover, .empty-text-btn:hover {
@@ -242,9 +238,6 @@ input.simple-input:focus {
 .page-add-tags, .page-tags, .property-select, .ls-property-add,
 .property-configure, .ui__dropdown-menu-content {
   .cp__select-main {
-    width: fit-content;
-    margin: 0;
-
     .ui__dropdown-trigger {
       position: absolute;
 
@@ -293,6 +286,7 @@ a.control-link {
   min-height: 28px;
   padding-top: 0;
   padding-bottom: 0;
+  container-type: normal;
 }
 
 .ls-page-properties .property-key, .ls-properties-area .property-key {
@@ -369,9 +363,6 @@ a.control-link {
 .ls-property-dropdown {
   @apply w-[260px] p-1.5;
 
-  .ui__dropdown-menu-item, .ui__dropdown-menu-sub-trigger {
-  }
-
   [role=separator] {
     @apply my-2;
   }
@@ -437,7 +428,8 @@ a.control-link {
 }
 
 .ls-property-choices-sub-pane {
-  @apply w-[220px] p-0;
+  @apply w-[220px] px-0 pb-8 overflow-y-scroll;
+  max-height: 100vh;
 
   > ul.choices-list {
     @apply m-0 px-1.5 pt-1 pb-[1px];

@@ -101,7 +101,7 @@
   []
   (when-not (state/sub [:file-sync/remote-graphs :loading])
     (go
-      (when-not util/web-platform?
+      (when-not (or util/web-platform? (util/mobile?))
         (state/set-state! [:file-sync/remote-graphs :loading] true)
         (let [graphs-or-exp (<! (<list-graphs))]
           (when-not (instance? ExceptionInfo graphs-or-exp)

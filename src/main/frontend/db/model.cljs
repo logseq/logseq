@@ -1,14 +1,12 @@
 (ns frontend.db.model
   "Core db functions."
-  (:require [clojure.set :as set]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
             [frontend.common.graph-view :as graph-view]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db.conn :as conn]
-            [frontend.db.file-based.model :as file-model]
             [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
@@ -99,8 +97,7 @@ independent of format as format specific heading characters are stripped"
                 (fn content-matches? [block-content external-content block-id]
                   (let [block (db-utils/entity repo block-id)
                         ref-tags (distinct (concat (:block/tags block) (:block/refs block)))]
-                    (= (-> block-content
-                           (db-content/id-ref->title-ref ref-tags)
+                    (= (-> (db-content/id-ref->title-ref block-content ref-tags)
                            (db-content/content-id-ref->page ref-tags)
                            heading-content->route-name)
                        (string/lower-case external-content))))
@@ -229,13 +226,14 @@ independent of format as format specific heading characters are stripped"
 
 (defn get-block-deep-last-open-child-id
   [db db-id]
-  (loop [node (db-utils/entity db db-id)]
-    (if-let [last-child-id (get-block-last-direct-child-id db (:db/id node) true)]
-      (let [e (db-utils/entity db last-child-id)]
-        (if (or (:block/collapsed? e) (empty? (:block/_parent e)))
-          last-child-id
-          (recur e)))
-      nil)))
+  (when db
+    (loop [node (db-utils/entity db db-id)]
+      (if-let [last-child-id (get-block-last-direct-child-id db (:db/id node) true)]
+        (let [e (db-utils/entity db last-child-id)]
+          (if (or (:block/collapsed? e) (empty? (:block/_parent e)))
+            last-child-id
+            (recur e)))
+        nil))))
 
 (def page? ldb/page?)
 
@@ -313,15 +311,6 @@ independent of format as format specific heading characters are stripped"
   (when-let [db (conn/get-db repo)]
     (ldb/get-children db block-uuid)))
 
-(defn get-block-children
-  "Including nested children."
-  [repo block-uuid]
-  (when-let [db (conn/get-db repo)]
-    (let [ids (ldb/get-block-children-ids db block-uuid)]
-      (when (seq ids)
-        (let [ids' (map (fn [id] [:block/uuid id]) ids)]
-          (db-utils/pull-many repo '[*] ids'))))))
-
 (defn get-block-and-children
   [repo block-uuid & {:as opts}]
   (let [db (conn/get-db repo)]
@@ -332,24 +321,15 @@ independent of format as format specific heading characters are stripped"
   (when page-id-name-or-uuid
     (ldb/get-page (conn/get-db) page-id-name-or-uuid)))
 
+(defn get-journal-page
+  [page-name]
+  (when page-name
+    (ldb/get-journal-page (conn/get-db) page-name)))
+
 (defn get-case-page
   [page-name-or-uuid]
   (when page-name-or-uuid
     (ldb/get-case-page (conn/get-db) page-name-or-uuid)))
-
-(defn get-journal-page
-  [page-title]
-  (when-let [journal-day (date/journal-title->int page-title)]
-    (when-let [db (conn/get-db)]
-      (->
-       (d/q
-        '[:find [?page ...]
-          :in $ ?day
-          :where
-          [?page :block/journal-day ?day]]
-        db
-        journal-day)
-       first))))
 
 (defn get-redirect-page-name
   "Given any readable page-name, return the exact page-name in db. If page
@@ -388,31 +368,6 @@ independent of format as format specific heading characters are stripped"
   (when-let [db (conn/get-db repo)]
     (graph-view/get-pages-that-mentioned-page db page-id include-journals?)))
 
-(defn get-page-referenced-blocks-full
-  ([page-id]
-   (get-page-referenced-blocks-full (state/get-current-repo) page-id))
-  ([repo page-id]
-   (when (and repo page-id)
-     (when-let [db (conn/get-db repo)]
-       (let [pages (page-alias-set repo page-id)
-             aliases (set/difference pages #{page-id})]
-         (->>
-          (d/q
-           '[:find [(pull ?block ?block-attrs) ...]
-             :in $ [?ref-page ...] ?block-attrs
-             :where
-             [?block :block/path-refs ?ref-page]]
-           db
-           pages
-           (butlast file-model/file-graph-block-attrs))
-          (remove (fn [block] (= page-id (:db/id (:block/page block)))))
-          db-utils/group-by-page
-          (map (fn [[k blocks]]
-                 (let [k (if (contains? aliases (:db/id k))
-                           (assoc k :block/alias? true)
-                           k)]
-                   [k blocks])))))))))
-
 (defn get-referenced-blocks
   ([eid]
    (get-referenced-blocks (state/get-current-repo) eid))
@@ -433,18 +388,11 @@ independent of format as format specific heading characters are stripped"
                          (some? (get block (:db/ident entity))))))
               (util/distinct-by :db/id)))))))
 
-(defn get-block-referenced-blocks
-  [block-id]
-  (when-let [repo (state/get-current-repo)]
-    (when (conn/get-db repo)
-      (->> (get-referenced-blocks repo block-id)
-           (sort-by-order-recursive)
-           db-utils/group-by-page))))
-
 (defn journal-page?
   "sanitized page-name only"
   [page-name]
-  (ldb/journal? (ldb/get-page (conn/get-db) page-name)))
+  (when (string? page-name)
+    (ldb/journal? (ldb/get-page (conn/get-db) page-name))))
 
 (defn get-all-referenced-blocks-uuid
   "Get all uuids of blocks with any back link exists."
@@ -516,16 +464,21 @@ independent of format as format specific heading characters are stripped"
                     :nonce (:nonce shape)}))))))
 
 (defn get-all-classes
-  [repo & {:keys [except-root-class? except-private-tags?]
+  [repo & {:keys [except-root-class? except-private-tags?
+                  except-extends-hidden-tags?]
            :or {except-root-class? false
-                except-private-tags? true}}]
+                except-private-tags? true
+                except-extends-hidden-tags? false}}]
   (let [db (conn/get-db repo)
         classes (->> (d/datoms db :avet :block/tags :logseq.class/Tag)
                      (map (fn [d]
                             (db-utils/entity db (:e d))))
                      (remove (fn [d]
                                (and except-private-tags?
-                                    (contains? ldb/private-tags (:db/ident d))))))]
+                                    (contains? ldb/private-tags (:db/ident d)))))
+                     (remove (fn [d]
+                               (and except-extends-hidden-tags?
+                                    (contains? ldb/extends-hidden-tags (:db/ident d))))))]
     (if except-root-class?
       (keep (fn [e] (when-not (= :logseq.class/Root (:db/ident e)) e)) classes)
       classes)))
@@ -543,10 +496,10 @@ independent of format as format specific heading characters are stripped"
           view-context (get m :logseq.property/view-context :all)]
       (or (contains? #{:logseq.property/query} (:db/ident m))
           (and (not block-page?) (contains? #{:block/alias} (:db/ident m)))
-        ;; Filters out properties from being in wrong :view-context and :never view-contexts
+          ;; Filters out properties from being in wrong :view-context and :never view-contexts
           (and (not= view-context :all) (not (contains? block-types view-context)))
-          (and (ldb/built-in? block) (contains? #{:logseq.property/parent} (:db/ident m)))
-        ;; Filters out adding buggy class properties e.g. Alias and Parent
+          (and (ldb/built-in? block) (contains? #{:logseq.property.class/extends} (:db/ident m)))
+          ;; Filters out adding buggy class properties e.g. Alias and Parent
           (and class-schema? (ldb/public-built-in-property? m) (:logseq.property/view-context m))))))
 
 (defn get-all-properties
@@ -591,7 +544,7 @@ independent of format as format specific heading characters are stripped"
   [repo class-id]
   (when-let [class (db-utils/entity repo class-id)]
     (->>
-     (if (first (:logseq.property/_parent class))        ; has children classes
+     (if (first (:logseq.property.class/_extends class))        ; has children classes
        (let [all-classes (conj (->> (get-structured-children repo class-id)
                                     (map #(db-utils/entity repo %)))
                                class)]

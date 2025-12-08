@@ -21,16 +21,6 @@ html[data-theme=light] {
   height: calc(100vh - 48px);
 }
 
-.cp__header {
-  > .r > div:not(.ui__dropdown-trigger) a, button {
-    @apply opacity-70 text-[inherit];
-
-    &:hover {
-      @apply opacity-100;
-    }
-  }
-}
-
 .cp__right-sidebar-topbar {
   @apply px-1 h-12;
 

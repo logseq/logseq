@@ -25,25 +25,26 @@
     (k/backspace)
     (w/wait-for-not-visible ".ui__popover-content")))
 
-(deftest node-reference-test
-  (testing "Node reference"
-    (testing "Page reference"
-      (b/new-blocks ["b1" ""])
-      (util/input-command "Node reference")
-      (util/press-seq "Another page")
-      (k/enter)
-      (is (= "[[Another page]]" (util/get-edit-content)))
-      (util/exit-edit)
-      (is (= "Another page" (util/get-text "a.page-ref"))))
-    (testing "Block reference"
-      (b/new-block "")
-      (util/input-command "Node reference")
-      (util/press-seq "b1")
-      (util/wait-timeout 300)
-      (k/enter)
-      (is (string/includes? (util/get-edit-content) "[["))
-      (util/exit-edit)
-      (is (= "b1" (.textContent (second (w/query "a.page-ref"))))))))
+(deftest page-reference-test
+  (testing "Page reference"
+    (b/new-blocks ["b1" ""])
+    (util/input-command "Node reference")
+    (util/press-seq "Another page")
+    (k/enter)
+    (is (= "[[Another page]]" (util/get-edit-content)))
+    (util/exit-edit)
+    (is (= "Another page" (util/get-text "a.page-ref")))))
+
+(deftest block-reference-test
+  (testing "Block reference"
+    (b/new-blocks ["block test" ""])
+    (util/input-command "Node reference")
+    (util/press-seq "block test")
+    (util/wait-timeout 300)
+    (k/enter)
+    (is (string/includes? (util/get-edit-content) "[["))
+    (util/exit-edit)
+    (is (= "block test" (util/get-text "a.page-ref")))))
 
 (deftest link-test
   (testing "/link"
@@ -153,6 +154,10 @@
         (util/input-command command)
         (k/enter)
         (assert/assert-editor-mode)
+        ;; FIXME: cannot exit edit by k/esc???
+        ;; (util/exit-edit)
+        (k/esc)
+        (b/new-block "temp fix")
         (util/exit-edit)
         (is (= command (util/get-text ".property-k")))
         (is (= "Today" (util/get-text ".ls-datetime a.page-ref")))))))

@@ -1,11 +1,11 @@
 (ns logseq.graph-parser.test.docs-graph-helper
   "Helper fns for setting up and running tests against docs graph"
-  (:require ["fs" :as fs]
-            ["child_process" :as child-process]
+  (:require ["child_process" :as child-process]
+            ["fs" :as fs]
             [cljs.test :refer [is testing]]
             [clojure.string :as string]
-            [logseq.common.config :as common-config]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [logseq.common.config :as common-config]))
 
 ;; Helper fns for test setup
 ;; =========================
@@ -105,16 +105,15 @@
                 (into {})))
         "Task marker counts")
 
-    (is (= {:markdown 7322 :org 500} (get-block-format-counts db))
+    (is (= {:markdown 7372 :org 500} (get-block-format-counts db))
         "Block format counts")
 
-    (is (= {:rangeincludes 13, :description 137, :updated-at 46, :tags 5,
-            :logseq.order-list-type 16, :query-table 8, :logseq.macro-arguments 105,
-            :parent 14, :logseq.tldraw.shape 79, :card-last-score 5, :card-repeats 5,
-            :name 16, :card-next-schedule 5, :ls-type 79, :card-last-interval 5, :type 166,
-            :template 5, :domainincludes 7, :title 114, :alias 62, :supports 6, :id 145,
-            :url 30, :card-ease-factor 5, :logseq.macro-name 105, :created-at 46,
-            :card-last-reviewed 5, :platforms 79, :initial-version 16, :heading 315}
+    (is (= {:rangeincludes 13, :description 137, :updated-at 46, :tags 5, :logseq.order-list-type 16, :query-table 8,
+            :logseq.macro-arguments 105, :parent 14, :logseq.tldraw.shape 79, :card-last-score 5, :card-repeats 5,
+            :name 16, :card-next-schedule 5, :ls-type 79, :card-last-interval 5, :type
+            166, :template 5, :domainincludes 7, :title 114, :alias 62, :supports 6, :id
+            146, :url 30, :card-ease-factor 5, :logseq.macro-name 105, :created-at 46,
+            :card-last-reviewed 5, :platforms 79, :initial-version 16, :heading 332}
            (get-top-block-properties db))
         "Counts for top block properties")
 
@@ -159,7 +158,7 @@
   ;; Counts assertions help check for no major regressions. These counts should
   ;; only increase over time as the docs graph rarely has deletions
   (testing "Counts"
-    (is (= 340 (count files)) "Correct file count")
+    (is (= 339 (count files)) "Correct file count")
     (is (= 33
            (ffirst
             (d/q '[:find (count ?b)

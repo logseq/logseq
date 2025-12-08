@@ -1,10 +1,13 @@
 (ns logseq.db.frontend.class
   "Class related fns for DB graphs and frontend/datascript usage"
   (:require [clojure.set :as set]
+            [clojure.string :as string]
             [datascript.core :as d]
+            [datascript.impl.entity :as de]
             [flatland.ordered.map :refer [ordered-map]]
             [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.db.frontend.db-ident :as db-ident]
+            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.sqlite.util :as sqlite-util]))
 
@@ -26,12 +29,12 @@
 
      :logseq.class/Journal
      {:title "Journal"
-      :properties {:logseq.property/parent :logseq.class/Page
+      :properties {:logseq.property.class/extends :logseq.class/Page
                    :logseq.property.journal/title-format "MMM do, yyyy"}}
 
      :logseq.class/Whiteboard
      {:title "Whiteboard"
-      :properties {:logseq.property/parent :logseq.class/Page}}
+      :properties {:logseq.property.class/extends :logseq.class/Page}}
 
      :logseq.class/Task
      {:title "Task"
@@ -49,7 +52,7 @@
      :logseq.class/Cards
      {:title "Cards"
       :properties {:logseq.property/icon {:type :tabler-icon :id "search"}
-                   :logseq.property/parent :logseq.class/Query}}
+                   :logseq.property.class/extends :logseq.class/Query}}
 
      :logseq.class/Asset
      {:title "Asset"
@@ -94,7 +97,7 @@
   "Children of :logseq.class/Page"
   (set
    (keep (fn [[class-ident m]]
-           (when (= (get-in m [:properties :logseq.property/parent]) :logseq.class/Page) class-ident))
+           (when (= (get-in m [:properties :logseq.property.class/extends]) :logseq.class/Page) class-ident))
          built-in-classes)))
 
 (def page-classes
@@ -111,41 +114,74 @@
   "Built-in classes that are private and should not be used by a user directly.
   These used to be in block/type"
   (set/union (disj internal-tags :logseq.class/Root)
-             #{:logseq.class/Journal :logseq.class/Whiteboard}))
+             #{:logseq.class/Journal :logseq.class/Whiteboard
+               :logseq.class/Pdf-annotation}))
+
+(def block-kind-tags
+  #{:logseq.class/Cards :logseq.class/Code-block
+    :logseq.class/Math-block :logseq.class/Quote-block
+    :logseq.class/Query :logseq.class/Pdf-annotation
+    :logseq.class/Template})
+
+(def disallowed-inline-tags
+  "Classes that should be removed from inline tags"
+  (set/union page-classes
+             private-tags
+             block-kind-tags))
+
+(def extends-hidden-tags
+  "Built-in classes that are hidden when choosing extends"
+  (set/union
+   private-tags
+   block-kind-tags))
 
 (def hidden-tags
   "Built-in classes that are hidden in a few contexts like property values"
   #{:logseq.class/Page :logseq.class/Root :logseq.class/Asset})
 
-(defn get-structured-children
-  [db eid]
-  (->>
-   (d/q '[:find [?children ...]
-          :in $ ?parent %
-          :where
-          (parent ?parent ?children)]
-        db
-        eid
-        (:parent rules/rules))
-   (remove #{eid})))
-
 ;; Helper fns
 ;; ==========
+(defn get-structured-children
+  "Returns all children of a class"
+  [db eid]
+  (->>
+   (d/q '[:find [?c ...]
+          :in $ ?p %
+          :where
+          (class-extends ?p ?c)]
+        db
+        eid
+        (:class-extends rules/rules))
+   (remove #{eid})))
+
+(defn get-class-extends
+  "Returns all extends of a class"
+  [class]
+  (assert (de/entity? class) "get-class-extends `class` should be an entity")
+  (loop [extends (:logseq.property.class/extends class)
+         result []]
+    (if (seq extends)
+      (recur (mapcat :logseq.property.class/extends extends)
+             (into result extends))
+      (reverse (distinct result)))))
 
 (defn create-user-class-ident-from-name
   "Creates a class :db/ident for a default user namespace.
    NOTE: Only use this when creating a db-ident for a new class."
-  [class-name]
-  (db-ident/create-db-ident-from-name "user.class" class-name))
+  [db class-name & {:keys [ident-namespace]}]
+  (let [ident-ns (or ident-namespace "user.class")
+        db-ident (db-ident/create-db-ident-from-name ident-ns class-name)]
+    (if db
+      (db-ident/ensure-unique-db-ident db db-ident)
+      db-ident)))
 
 (defn build-new-class
   "Builds a new class with a unique :db/ident. Also throws exception for user
   facing messages when name is invalid"
-  [db page-m]
+  [db page-m & {:as option}]
   {:pre [(string? (:block/title page-m))]}
-  (let [db-ident (create-user-class-ident-from-name (:block/title page-m))
-        db-ident' (db-ident/ensure-unique-db-ident db db-ident)]
-    (sqlite-util/build-new-class (assoc page-m :db/ident db-ident'))))
+  (let [db-ident (create-user-class-ident-from-name db (:block/title page-m) option)]
+    (sqlite-util/build-new-class (assoc page-m :db/ident db-ident))))
 
 (defonce logseq-class "logseq.class")
 
@@ -153,3 +189,19 @@
   "Determines if keyword is a logseq class"
   [kw]
   (= logseq-class (namespace kw)))
+
+(defn user-class-namespace?
+  "Determines if namespace string is a user class"
+  [s]
+  (string/includes? s ".class"))
+
+(defn get-class-objects
+  "Get class objects including children classes'"
+  [db class-id]
+  (let [class-children (get-structured-children db class-id)
+        class-ids (distinct (conj class-children class-id))
+        datoms (mapcat (fn [id] (d/datoms db :avet :block/tags id)) class-ids)
+        non-hidden-e (fn [id] (let [e (d/entity db id)]
+                                (when-not (entity-util/hidden? e)
+                                  e)))]
+    (keep (fn [d] (non-hidden-e (:e d))) datoms)))

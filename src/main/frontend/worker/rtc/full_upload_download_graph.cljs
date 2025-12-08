@@ -4,25 +4,26 @@
   (:require [cljs-http-missionary.client :as http]
             [clojure.set :as set]
             [datascript.core :as d]
+            [frontend.common.crypt :as crypt]
             [frontend.common.missionary :as c.m]
             [frontend.common.thread-api :as thread-api]
-            [frontend.worker.crypt :as crypt]
-            [frontend.worker.db-listener :as db-listener]
+            [frontend.worker-common.util :as worker-util]
             [frontend.worker.db-metadata :as worker-db-metadata]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.const :as rtc-const]
+            [frontend.worker.rtc.crypt :as rtc-crypt]
+            [frontend.worker.rtc.db :as rtc-db]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
             [frontend.worker.rtc.ws-util :as ws-util]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
-            [frontend.worker.util :as worker-util]
+            [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
-            [logseq.db.frontend.schema :as db-schema]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.pipeline :as outliner-pipeline]
             [malli.core :as ma]
+            [malli.error :as me]
             [malli.transform :as mt]
             [missionary.core :as m]
             [promesa.core :as p]))
@@ -60,7 +61,9 @@
 
 (def ^:private normalized-remote-blocks-coercer
   (ma/coercer [:sequential normalized-remote-block-schema]
-              (mt/transformer {:name :custom} mt/string-transformer)))
+              (mt/transformer {:name :custom} mt/string-transformer)
+              nil
+              #(ma/-fail! ::normalized-remote-block-schema (select-keys % [:value]))))
 
 (defn- schema->ref-type-attrs
   [db-schema]
@@ -120,79 +123,106 @@
                   (:db/ident block) (update :db/ident ldb/read-transit-str)
                   (:block/order block) (update :block/order ldb/read-transit-str)))))))
 
-(defn- remove-rtc-data-in-conn!
-  [repo]
-  (client-op/reset-client-op-conn repo)
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (d/transact! conn [[:db/retractEntity :logseq.kv/graph-uuid]
-                       [:db/retractEntity :logseq.kv/graph-local-tx]
-                       [:db/retractEntity :logseq.kv/remote-schema-version]])))
+(defn- task--encrypt-blocks
+  [encrypt-key encrypt-attr-set blocks]
+  (m/sp
+    (loop [[block & rest-blocks] blocks
+           result []]
+      (if-not block
+        result
+        (let [block' (c.m/<? (crypt/<encrypt-map encrypt-key encrypt-attr-set block))]
+          (recur rest-blocks (conj result block')))))))
+
+(comment
+  (def db @(frontend.worker.state/get-datascript-conn (frontend.worker.state/get-current-repo)))
+  (def blocks (export-as-blocks db))
+  (def salt (rtc-encrypt/gen-salt))
+  (def canceler ((m/sp
+                   (let [k (c.m/<? (rtc-encrypt/<salt+password->key salt "password"))]
+                     (m/? (task--encrypt-blocks k #{:block/title :block/name} blocks))))
+                 #(def encrypted-blocks %) prn)))
 
 (defn new-task--upload-graph
   [get-ws-create-task repo conn remote-graph-name major-schema-version]
   (m/sp
-    (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :fetching-presigned-put-url
-                                                :message "fetching presigned put-url"})
-    (let [[{:keys [url key]} all-blocks-str]
-          (m/?
-           (m/join
-            vector
-            (ws-util/send&recv get-ws-create-task {:action "presign-put-temp-s3-obj"})
-            (m/sp
-              (let [all-blocks (export-as-blocks
-                                @conn
-                                :ignore-attr-set rtc-const/ignore-attrs-when-init-upload
-                                :ignore-entity-set rtc-const/ignore-entities-when-init-upload)]
-                (ldb/write-transit-str all-blocks)))))]
-      (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :upload-data
-                                                  :message "uploading data"})
-      (m/? (http/put url {:body all-blocks-str :with-credentials? false}))
-      (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :request-upload-graph
-                                                  :message "requesting upload-graph"})
-      (let [aes-key (c.m/<? (crypt/<gen-aes-key))
-            aes-key-jwk (ldb/write-transit-str (c.m/<? (crypt/<export-key aes-key)))
-            upload-resp
-            (m/? (ws-util/send&recv get-ws-create-task {:action "upload-graph"
-                                                        :s3-key key
-                                                        :schema-version (str major-schema-version)
-                                                        :graph-name remote-graph-name}))]
-        (if-let [graph-uuid (:graph-uuid upload-resp)]
-          (let [schema-version (ldb/get-graph-schema-version @conn)]
-            (ldb/transact! conn
-                           [(ldb/kv :logseq.kv/graph-uuid graph-uuid)
-                            (ldb/kv :logseq.kv/graph-local-tx "0")
-                            (ldb/kv :logseq.kv/remote-schema-version schema-version)])
-            (client-op/update-graph-uuid repo graph-uuid)
-            (client-op/remove-local-tx repo)
-            (client-op/add-all-exists-asset-as-ops repo)
-            (crypt/store-graph-keys-jwk repo aes-key-jwk)
-            (when-not rtc-const/RTC-E2E-TEST
-              (c.m/<? (worker-db-metadata/<store repo (pr-str {:kv/value graph-uuid}))))
-            (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :upload-completed
-                                                        :message "upload-graph completed"})
-            {:graph-uuid graph-uuid})
-          (throw (ex-info "upload-graph failed" {:upload-resp upload-resp})))))))
+    (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :generate-aes-key
+                                                :message "generate aes-encrypt-key"})
+    (let [aes-key (m/? (rtc-crypt/task--generate-graph-aes-key))
+          user-uuid (some-> (worker-state/get-id-token)
+                            worker-util/parse-jwt
+                            :sub)
+          public-key (when user-uuid
+                       (:public-key (m/? (rtc-crypt/task--fetch-user-rsa-key-pair get-ws-create-task user-uuid))))]
+      (when-not public-key
+        (throw (ex-info "user public-key not found" {:type :rtc.exception/not-found-user-rsa-key-pair
+                                                     :user-uuid user-uuid})))
 
-(def page-of-block
-  (memoize
-   (fn [id->block-map block]
-     (when-let [parent-id (:block/parent block)]
-       (when-let [parent (id->block-map parent-id)]
-         (if (:block/name parent)
-           parent
-           (page-of-block id->block-map parent)))))))
+      (let [encrypted-aes-key (c.m/<? (crypt/<encrypt-aes-key public-key aes-key))
+            _ (ldb/transact! conn [(ldb/kv :logseq.kv/graph-rtc-e2ee? true)])
+            _ (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :fetching-presigned-put-url
+                                                          :message "fetching presigned put-url"})
+            [{:keys [url key]} all-blocks-str]
+            (m/?
+             (m/join
+              vector
+              (ws-util/send&recv get-ws-create-task {:action "presign-put-temp-s3-obj"})
+              (m/sp
+                (let [all-blocks (export-as-blocks
+                                  @conn
+                                  :ignore-attr-set rtc-const/ignore-attrs-when-init-upload
+                                  :ignore-entity-set rtc-const/ignore-entities-when-init-upload)
+                      encrypted-blocks (c.m/<? (task--encrypt-blocks aes-key rtc-const/encrypt-attr-set all-blocks))]
+                  (ldb/write-transit-str encrypted-blocks)))))]
+        (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :upload-data
+                                                    :message "uploading data"})
+        (m/? (http/put url {:body all-blocks-str :with-credentials? false}))
+        (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :request-upload-graph
+                                                    :message "requesting upload-graph"})
+        (let [upload-resp
+              (m/? (ws-util/send&recv get-ws-create-task {:action "upload-graph"
+                                                          :s3-key key
+                                                          :schema-version (str major-schema-version)
+                                                          :graph-name remote-graph-name
+                                                          :encrypted-aes-key
+                                                          (ldb/write-transit-str encrypted-aes-key)}))]
+          (if-let [graph-uuid (:graph-uuid upload-resp)]
+            (let [schema-version (ldb/get-graph-schema-version @conn)]
+              (ldb/transact! conn
+                             [(ldb/kv :logseq.kv/graph-uuid graph-uuid)
+                              (ldb/kv :logseq.kv/graph-local-tx "0")
+                              (ldb/kv :logseq.kv/remote-schema-version schema-version)])
+              (client-op/update-graph-uuid repo graph-uuid)
+              (client-op/remove-local-tx repo)
+              (client-op/update-local-tx repo 1)
+              (client-op/add-all-exists-asset-as-ops repo)
+              (c.m/<? (worker-db-metadata/<store repo (pr-str {:kv/value graph-uuid})))
+              (m/? (rtc-crypt/task--persist-graph-encrypted-aes-key graph-uuid encrypted-aes-key))
+              (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :upload-completed
+                                                          :message "upload-graph completed"})
+              {:graph-uuid graph-uuid})
+            (throw (ex-info "upload-graph failed" {:upload-resp upload-resp}))))))))
 
 (defn- fill-block-fields
   [blocks]
-  (let [groups (group-by #(boolean (:block/name %)) blocks)
-        other-blocks (set (get groups false))
-        id->block (into {} (map (juxt :db/id identity) blocks))
-        block-id->page-id (into {} (map (fn [b] [(:db/id b) (:db/id (page-of-block id->block b))]) other-blocks))]
-    (mapv (fn [b]
-            (if-let [page-id (block-id->page-id (:db/id b))]
-              (assoc b :block/page page-id)
-              b))
-          blocks)))
+  (let [id->block (into {} (map (juxt :db/id identity) blocks))
+        *block->parent-block-cache (atom {})]
+    (letfn [(page-of-block-2 [block]
+              (or
+               (@*block->parent-block-cache block)
+               (when-let [parent-id (:block/parent block)]
+                 (when-let [parent (id->block parent-id)]
+                   (if (:block/name parent)
+                     (do (swap! *block->parent-block-cache assoc block parent)
+                         parent)
+                     (page-of-block-2 parent))))))]
+      (let [groups (group-by #(boolean (:block/name %)) blocks)
+            other-blocks (set (get groups false))
+            block-id->page-id (into {} (map (fn [b] [(:db/id b) (:db/id (page-of-block-2 b))]) other-blocks))]
+        (mapv (fn [b]
+                (if-let [page-id (block-id->page-id (:db/id b))]
+                  (assoc b :block/page page-id)
+                  b))
+              blocks)))))
 
 (defn- blocks->card-one-attrs
   [blocks]
@@ -220,28 +250,36 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (let [db @conn]
       (when-let [schema-version (:kv/value (d/entity db :logseq.kv/schema-version))]
-        (d/transact! conn
-                     [(ldb/kv :logseq.kv/remote-schema-version schema-version)]
-                     {:rtc-download-graph? true
-                      :gen-undo-ops? false
-                      :persist-op? false})))))
+        (ldb/transact! conn
+                       [(ldb/kv :logseq.kv/remote-schema-version schema-version)]
+                       {:rtc-download-graph? true
+                        :gen-undo-ops? false
+                        :persist-op? false})))))
 
-(defn- transact-block-refs!
-  [repo]
+(defn- <transact-block-refs!
+  [repo graph-uuid]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (let [db @conn
           ;; get all the block datoms
           datoms (d/datoms db :avet :block/uuid)
-          refs-tx (keep
+          page-or-object?-memoized (memoize outliner-pipeline/page-or-object?-helper)
+          refs-tx (mapcat
                    (fn [d]
-                     (let [block (d/entity @conn (:e d))
-                           refs (outliner-pipeline/db-rebuild-block-refs @conn block)]
-                       (when (seq refs)
-                         {:db/id (:db/id block)
-                          :block/refs refs})))
+                     (let [block (d/entity db (:e d))
+                           refs (outliner-pipeline/db-rebuild-block-refs
+                                 db block :page-or-object?-memoized page-or-object?-memoized)]
+                       (map
+                        (fn [ref]
+                          [:db/add (:db/id block) :block/refs ref])
+                        refs)))
                    datoms)]
-      (ldb/transact! conn refs-tx (cond-> {:outliner-op :rtc-download-rebuild-block-refs}
-                                    rtc-const/RTC-E2E-TEST (assoc :frontend.worker.pipeline/skip-store-conn true))))))
+      (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :transact-graph-data-to-db-5
+                                                    :message (str "transacting block-refs(" (count refs-tx) ")")
+                                                    :graph-uuid graph-uuid})
+      (p/doseq [refs-tx* (partition-all 500 refs-tx)]
+        (ldb/transact! conn refs-tx* {:outliner-op :rtc-download-rebuild-block-refs
+                                      :rtc-download-graph? true})
+        (p/delay 10)))))
 
 (defn- block->schema-map
   [block]
@@ -264,28 +302,6 @@
          [(conj schema-blocks schema-block) (conj normal-blocks strip-schema-attrs-block)])
        [schema-blocks (conj normal-blocks block)]))
    [[] []] blocks))
-
-(defn- create-graph-for-rtc-test
-  "it's complex to setup db-worker related stuff, when I only want to test rtc related logic"
-  [repo init-tx-data other-tx-data]
-  (let [conn (d/create-conn db-schema/schema)
-        db-initial-data (sqlite-create-graph/build-db-initial-data "")]
-    (swap! worker-state/*datascript-conns assoc repo conn)
-    (d/transact! conn db-initial-data {:initial-db? true
-                                       :frontend.worker.pipeline/skip-store-conn rtc-const/RTC-E2E-TEST})
-    (db-listener/listen-db-changes! repo conn)
-    (d/transact! conn init-tx-data {:rtc-download-graph? true
-                                    :gen-undo-ops? false
-                                    ;; only transact db schema, skip validation to avoid warning
-                                    :frontend.worker.pipeline/skip-validate-db? true
-                                    :frontend.worker.pipeline/skip-store-conn rtc-const/RTC-E2E-TEST
-                                    :persist-op? false})
-    (d/transact! conn other-tx-data {:rtc-download-graph? true
-                                     :gen-undo-ops? false
-                                     :frontend.worker.pipeline/skip-store-conn rtc-const/RTC-E2E-TEST
-                                     :persist-op? false})
-    (transact-remote-schema-version! repo)
-    (transact-block-refs! repo)))
 
 (defn- blocks-resolve-temp-id
   [schema-blocks blocks]
@@ -331,8 +347,15 @@
         card-one-attrs (blocks->card-one-attrs blocks)
         blocks1 (worker-util/profile :convert-card-one-value-from-value-coll
                                      (map (partial convert-card-one-value-from-value-coll card-one-attrs) blocks))
-        blocks2 (worker-util/profile :normalize-remote-blocks
-                                     (normalized-remote-blocks-coercer blocks1))
+        blocks2 (try
+                  (worker-util/profile :normalize-remote-blocks
+                                       (normalized-remote-blocks-coercer blocks1))
+                  (catch :default e
+                    (log/error :rtc-malli-coerce-failed e)
+                    (prn :debug :coerce-errors
+                         (me/humanize (get-in (ex-data e) [:data :explain]))
+                         :data (:data (ex-data e)))
+                    (throw e)))
         blocks (sequence
                 (comp
                  ;;TODO: remove this
@@ -368,34 +391,64 @@
      :init-tx-data init-tx-data
      :tx-data tx-data}))
 
+(defn- task--decrypt-blocks-aux
+  [aes-key encrypt-attr-set blocks]
+  (m/sp
+    (loop [[block & rest-blocks] blocks
+           result []]
+      (if-not block
+        result
+        (let [block* (c.m/<? (crypt/<decrypt-map aes-key encrypt-attr-set block))]
+          (recur rest-blocks (conj result block*)))))))
+
+(defn- task--decrypt-blocks
+  [graph-uuid blocks]
+  (m/sp
+    (let [token (worker-state/get-id-token)
+          user-uuid (:sub (worker-util/parse-jwt token))
+          _ (assert (and token user-uuid))
+          {:keys [get-ws-create-task]}
+          (ws-util/gen-get-ws-create-map--memoized (ws-util/get-ws-url token))
+          aes-key (m/? (rtc-crypt/task--get-aes-key get-ws-create-task user-uuid graph-uuid))]
+      (if aes-key
+        (m/? (task--decrypt-blocks-aux aes-key rtc-const/encrypt-attr-set blocks))
+        blocks))))
+
 (defn- new-task--transact-remote-all-blocks!
   [all-blocks repo graph-uuid]
   (let [{:keys [remote-t init-tx-data tx-data]}
         (remote-all-blocks->tx-data+t all-blocks graph-uuid)]
     (m/sp
-      (client-op/update-local-tx repo remote-t)
       (rtc-log-and-state/update-local-t graph-uuid remote-t)
       (rtc-log-and-state/update-remote-t graph-uuid remote-t)
-      (if rtc-const/RTC-E2E-TEST
-        (create-graph-for-rtc-test repo init-tx-data tx-data)
-        (c.m/<?
-         (p/do!
-          ((@thread-api/*thread-apis :thread-api/create-or-open-db) repo {:close-other-db? false})
-          ((@thread-api/*thread-apis :thread-api/export-db) repo)
+      (c.m/<?
+       (p/do!
+        ((@thread-api/*thread-apis :thread-api/create-or-open-db) repo {:close-other-db? false})
+        (client-op/update-local-tx repo remote-t)
+        ((@thread-api/*thread-apis :thread-api/export-db) repo)
+        (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :transact-graph-data-to-db-1
+                                                      :message (str "transacting init data(" (count init-tx-data) ")")
+                                                      :graph-uuid graph-uuid})
+        ((@thread-api/*thread-apis :thread-api/transact)
+         repo init-tx-data
+         {:rtc-download-graph? true
+          :gen-undo-ops? false
+          :persist-op? false}
+         (worker-state/get-context))
+        (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :transact-graph-data-to-db-2
+                                                      :message (str "transacting other data(" (count tx-data) ")")
+                                                      :graph-uuid graph-uuid})
+        (p/doseq [tx-data* (partition-all 500 tx-data)]
           ((@thread-api/*thread-apis :thread-api/transact)
-           repo init-tx-data
-           {:rtc-download-graph? true
-            :gen-undo-ops? false
-             ;; only transact db schema, skip validation to avoid warning
-            :frontend.worker.pipeline/skip-validate-db? true
-            :persist-op? false}
-           (worker-state/get-context))
-          ((@thread-api/*thread-apis :thread-api/transact)
-           repo tx-data {:rtc-download-graph? true
-                         :gen-undo-ops? false
-                         :persist-op? false} (worker-state/get-context))
-          (transact-remote-schema-version! repo)
-          (transact-block-refs! repo))))
+           repo tx-data* {:rtc-download-graph? true
+                          :gen-undo-ops? false
+                          :persist-op? false} (worker-state/get-context))
+          (p/delay 10))
+        (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :transact-graph-data-to-db-3
+                                                      :message "transacting remote schema version"
+                                                      :graph-uuid graph-uuid})
+        (transact-remote-schema-version! repo)
+        (<transact-block-refs! repo graph-uuid)))
       (shared-service/broadcast-to-clients! :add-repo {:repo repo}))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -447,36 +500,43 @@
 
 (defn new-task--download-graph-from-s3
   [graph-uuid graph-name s3-url]
-  (m/sp
-    (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :downloading-graph-data
-                                                  :message "downloading graph data"
-                                                  :graph-uuid graph-uuid})
-    (let [{:keys [status body] :as r} (m/? (http/get s3-url {:with-credentials? false}))
-          repo                        (str sqlite-util/db-version-prefix graph-name)]
-      (if (not= 200 status)
-        (throw (ex-info "download-graph from s3 failed" {:resp r}))
-        (do
-          (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :transact-graph-data-to-db
-                                                        :message "transacting graph data to local db"
-                                                        :graph-uuid graph-uuid})
-          (let [all-blocks (ldb/read-transit-str body)]
-            (worker-state/set-rtc-downloading-graph! true)
-            (m/? (new-task--transact-remote-all-blocks! all-blocks repo graph-uuid))
-            (client-op/update-graph-uuid repo graph-uuid)
-            (when-not rtc-const/RTC-E2E-TEST
-              (c.m/<? (worker-db-metadata/<store repo (pr-str {:kv/value graph-uuid}))))
-            (worker-state/set-rtc-downloading-graph! false)
-            (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :download-completed
-                                                          :message "download completed"
+  (let [graph-uuid (if (string? graph-uuid) (parse-uuid graph-uuid) graph-uuid)]
+    (m/sp
+      (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :downloading-graph-data
+                                                    :message "downloading graph data"
+                                                    :graph-uuid graph-uuid})
+      (let [{:keys [status body] :as r} (m/? (http/get s3-url {:with-credentials? false}))
+            repo                        (str sqlite-util/db-version-prefix graph-name)]
+        (if (not= 200 status)
+          (throw (ex-info "download-graph from s3 failed" {:resp r}))
+          (do
+            (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :transact-graph-data-to-db
+                                                          :message "transacting graph data to local db"
                                                           :graph-uuid graph-uuid})
-            nil))))))
+            (let [all-blocks (ldb/read-transit-str body)
+                  blocks (:blocks all-blocks)
+                  e2ee-graph? (boolean (some (fn [block] (= :logseq.kv/graph-rtc-e2ee? (:db/ident block))) blocks))
+                  blocks* (if e2ee-graph? (m/? (task--decrypt-blocks graph-uuid blocks)) blocks)
+                  all-blocks* (assoc all-blocks :blocks blocks*)]
+              (worker-state/set-rtc-downloading-graph! true)
+              (m/? (new-task--transact-remote-all-blocks! all-blocks* repo graph-uuid))
+              (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :transacted-all-blocks
+                                                            :message "transacted all blocks"
+                                                            :graph-uuid graph-uuid})
+              (client-op/update-graph-uuid repo graph-uuid)
+              (c.m/<? (worker-db-metadata/<store repo (pr-str {:kv/value graph-uuid})))
+              (worker-state/set-rtc-downloading-graph! false)
+              (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :download-completed
+                                                            :message "download completed"
+                                                            :graph-uuid graph-uuid})
+              nil)))))))
 
 (defn new-task--branch-graph
   [get-ws-create-task repo conn graph-uuid major-schema-version]
   (m/sp
     (rtc-log-and-state/rtc-log :rtc.log/branch-graph {:sub-type :fetching-presigned-put-url
                                                       :message "fetching presigned put-url"})
-    (remove-rtc-data-in-conn! repo)
+    (rtc-db/remove-rtc-data-in-conn! repo)
     (let [[{:keys [url key]} all-blocks-str]
           (m/?
            (m/join
@@ -493,9 +553,7 @@
       (m/? (http/put url {:body all-blocks-str :with-credentials? false}))
       (rtc-log-and-state/rtc-log :rtc.log/branch-graph {:sub-type :request-branch-graph
                                                         :message "requesting branch-graph"})
-      (let [aes-key (c.m/<? (crypt/<gen-aes-key))
-            aes-key-jwk (ldb/write-transit-str (c.m/<? (crypt/<export-key aes-key)))
-            resp (m/? (ws-util/send&recv get-ws-create-task {:action "branch-graph"
+      (let [resp (m/? (ws-util/send&recv get-ws-create-task {:action "branch-graph"
                                                              :s3-key key
                                                              :schema-version (str major-schema-version)
                                                              :graph-uuid graph-uuid}))]
@@ -508,9 +566,66 @@
             (client-op/update-graph-uuid repo graph-uuid)
             (client-op/remove-local-tx repo)
             (client-op/add-all-exists-asset-as-ops repo)
-            (crypt/store-graph-keys-jwk repo aes-key-jwk)
             (c.m/<? (worker-db-metadata/<store repo (pr-str {:kv/value graph-uuid})))
             (rtc-log-and-state/rtc-log :rtc.log/branch-graph {:sub-type :completed
                                                               :message "branch-graph completed"})
             nil)
           (throw (ex-info "branch-graph failed" {:upload-resp resp})))))))
+
+(comment
+  (do
+    (def repo "logseq_db_test-transact-huge-graph")
+    (def debug-transit (shadow.resource/inline "debug2.transit"))
+    (def all-blocks (ldb/read-transit-str debug-transit)))
+  (let [{:keys [remote-t init-tx-data tx-data]}
+        (time (remote-all-blocks->tx-data+t all-blocks "36203c0d-c861-4ce0-a6ba-e355e7750989"))]
+    (def init-tx-data init-tx-data)
+    (def tx-data tx-data))
+
+  (p/do!
+   (prn :xxx1 (js/Date.))
+   ((@thread-api/*thread-apis :thread-api/create-or-open-db) repo {:close-other-db? false})
+   (prn :xxx2 (js/Date.))
+   ((@thread-api/*thread-apis :thread-api/transact)
+    repo init-tx-data
+    {:rtc-download-graph? true
+     :gen-undo-ops? false
+     :persist-op? false}
+    (worker-state/get-context))
+   (prn :xxx3 (js/Date.))
+   (p/doseq [tx-data* (partition-all 500 tx-data)]
+     ((@thread-api/*thread-apis :thread-api/transact)
+      repo tx-data* {:rtc-download-graph? true
+                     :gen-undo-ops? false
+                     :persist-op? false} (worker-state/get-context))
+     (p/delay 10))
+   (prn :xxx4 (js/Date.))
+   (transact-remote-schema-version! repo)
+   (prn :xxx5 (js/Date.))
+   (<transact-block-refs! repo nil)
+   (prn :xxx6 (js/Date.)))
+
+  (p/do!
+   ((@thread-api/*thread-apis :thread-api/unsafe-unlink-db) repo)))
+
+(comment
+
+  (let [db @(frontend.worker.state/get-datascript-conn (frontend.worker.state/get-current-repo))
+        datoms (d/datoms db :avet :block/uuid)
+        page-or-object?-memoized (memoize outliner-pipeline/page-or-object?-helper)
+        refs-tx
+        (time
+         (vec
+          (mapcat
+           (fn [d]
+             (let [block (d/entity db (:e d))
+                   refs (outliner-pipeline/db-rebuild-block-refs
+                         db block :page-or-object?-memoized page-or-object?-memoized)]
+               (map
+                (fn [ref]
+                  [:db/add (:db/id block) :block/refs ref])
+                refs)))
+           datoms)))]
+    (prn ::count (count refs-tx))
+    ;; (prn ::take-20 (take 20 (sort-by second > (into [] (frequencies (map last refs-tx))))))
+    ))

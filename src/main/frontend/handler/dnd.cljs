@@ -6,9 +6,17 @@
             [frontend.handler.property :as property-handler]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
-            [frontend.util.ref :as ref]
             [frontend.state :as state]
+            [frontend.util.ref :as ref]
             [logseq.db :as ldb]))
+
+(defn set-drag-image!
+  ([e image]
+   (set-drag-image! e image 0 0))
+  ([e image offset-x offset-y]
+   (let [dt (.-dataTransfer e)]
+     (.setDragImage dt image offset-x offset-y)
+     e)))
 
 (defn move-blocks
   [^js event blocks target-block original-block move-to]
@@ -51,12 +59,13 @@
                     (:block/uuid (ldb/get-left-sibling target-block)))]
              (if first-child?
                (when-let [parent (:block/parent target-block)]
-                 (outliner-op/move-blocks! blocks' parent false))
+                 (outliner-op/move-blocks! blocks' parent {:sibling? false}))
                (if-let [before-node (ldb/get-left-sibling target-block)]
-                 (outliner-op/move-blocks! blocks' before-node true)
+                 (outliner-op/move-blocks! blocks' before-node {:sibling? true})
                  (when-let [parent (:block/parent target-block)]
-                   (outliner-op/move-blocks! blocks' parent false)))))
-           (outliner-op/move-blocks! blocks' target-block (not nested?)))))
+                   (outliner-op/move-blocks! blocks' parent {:sibling? false})))))
+           (outliner-op/move-blocks! blocks' target-block
+                                     {:sibling? (not nested?)}))))
 
       :else
       nil)))

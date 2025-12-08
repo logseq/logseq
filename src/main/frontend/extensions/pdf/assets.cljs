@@ -19,12 +19,13 @@
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.route :as route-handler]
-            [frontend.util.ref :as ref]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.ref :as ref]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
+            [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.publishing.db :as publish-db]
             [medley.core :as medley]
             [promesa.core :as p]
@@ -34,26 +35,28 @@
 (defn get-in-repo-assets-full-filename
   [url]
   (let [repo-dir (config/get-repo-dir (state/get-current-repo))]
-    (when (some-> url (string/trim) (string/includes? repo-dir))
+    (if (some-> url (string/trim) (string/includes? repo-dir))
       (some-> (string/split url repo-dir)
               (last)
-              (string/replace-first "/assets/" "")))))
+              (string/replace-first "/assets/" ""))
+      url)))
 
 (defn inflate-asset
   [original-path & {:keys [href block]}]
   (let [web-link? (string/starts-with? original-path "http")
-        blob-res? (some-> href (string/starts-with? "blob"))
-        asset-res? (some-> href (string/starts-with? "assets"))
-        filename  (util/node-path.basename original-path)
-        ext-name  "pdf"
-        url       (if blob-res? href
-                      (assets-handler/normalize-asset-resource-url original-path))
-        filename' (if (or asset-res? web-link? blob-res?) filename
+        protocol-link? (common-config/protocol-path? href)
+        filename (util/node-path.basename original-path)
+        ext-name "pdf"
+        url (if protocol-link?
+              href
+              (assets-handler/normalize-asset-resource-url original-path))
+        filename' (if protocol-link?
+                    filename
                     (some-> url (js/decodeURIComponent)
-                      (get-in-repo-assets-full-filename)
-                      (string/replace '"/" "_")))
-        filekey   (util/safe-sanitize-file-name
-                   (subs filename' 0 (- (count filename') (inc (count ext-name)))))]
+                            (get-in-repo-assets-full-filename)
+                            (string/replace '"/" "_")))
+        filekey (gp-exporter/safe-sanitize-file-name
+                 (subs filename' 0 (- (count filename') (inc (count ext-name)))))]
     (when-let [key (and (not (string/blank? filekey))
                         (if web-link?
                           (str filekey "__" (hash url))
@@ -93,7 +96,7 @@
         (if-not page
           (let [label (:filename pdf-current)]
             (p/do!
-             (page-handler/<create! page-name {:redirect?        false :create-first-block? false
+             (page-handler/<create! page-name {:redirect?        false
                                                :split-namespace? false
                                                :format           format
                                                :properties       {:file
@@ -118,7 +121,7 @@
             page))))))
 
 (defn file-based-ensure-ref-block!
-  [pdf-current {:keys [id content page properties] :as hl} insert-opts]
+  [pdf-current {:keys [id content page properties] :as _hl} insert-opts]
   (p/let [ref-page (when pdf-current (file-based-ensure-ref-page! pdf-current))]
     (when ref-page
       (let [ref-block (db-model/query-block-by-uuid id)]
@@ -126,29 +129,23 @@
           (do
             (println "[existed ref block]" ref-block)
             ref-block)
-          (let [text       (:text content)
+          (let [text (:text content)
+                area? (not (nil? (:image content)))
                 wrap-props #(if-let [stamp (:image content)]
                               (assoc %
                                      :hl-type :area
                                      :hl-stamp stamp)
                               %)
-                db-base? (config/db-based-graph? (state/get-current-repo))
-                props (cond->
-                       {(pu/get-pid :logseq.property/ls-type)  :annotation
-                        (pu/get-pid :logseq.property.pdf/hl-page)  page
-                        (pu/get-pid :logseq.property.pdf/hl-color) (:color properties)}
-
-                        db-base?
-                        (assoc (pu/get-pid :logseq.property.pdf/hl-value) hl)
-
-                        (not db-base?)
-                         ;; force custom uuid
-                        (assoc :id (if (string? id) (uuid id) id)))
+                props {:id (if (string? id) (uuid id) id)
+                       (pu/get-pid :logseq.property/ls-type) :annotation
+                       (pu/get-pid :logseq.property.pdf/hl-page) page
+                       (pu/get-pid :logseq.property.pdf/hl-color) (:color properties)}
                 properties (wrap-props props)]
             (when (string? text)
               (editor-handler/api-insert-new-block!
-               text (merge {:page        (:block/name ref-page)
+               text (merge {:page (:block/name ref-page)
                             :custom-uuid id
+                            :edit-block? (not area?)
                             :properties properties}
                            insert-opts)))))))))
 
@@ -166,7 +163,7 @@
                                              (:db/id color))) colors)]
           (when color-id
             (let [properties (cond->
-                              {:block/tags :logseq.class/Pdf-annotation
+                              {:block/tags #{(:db/id (db/entity :logseq.class/Pdf-annotation))}
                                :logseq.property/ls-type  :annotation
                                :logseq.property.pdf/hl-color color-id
                                :logseq.property/asset (:db/id pdf-block)
@@ -193,8 +190,7 @@
   [hls-page]
   (p/let [result (db-async/<get-block (state/get-current-repo)
                                       (:block/uuid hls-page)
-                                      {:children? true
-                                       :nested-children? false})]
+                                      {:children? true})]
     {:highlights (keep :logseq.property.pdf/hl-value result)}))
 
 (defn file-based-load-hls-data$
@@ -387,7 +383,7 @@
        (when-let [e (some->> (:key current) (str "hls__") (db-model/get-page))]
          (rfe/push-state :page {:name (str (:block/uuid e))} (if id {:anchor (str "block-content-" + id)} nil)))))))
 
-(defn open-lightbox
+(defn open-lightbox!
   [e]
   (let [images (js/document.querySelectorAll ".hl-area img")
         images (to-array images)
@@ -450,7 +446,7 @@
               {:title (t :asset/maximize)
                :tabIndex "-1"
                :on-pointer-down util/stop
-               :on-click open-lightbox}
+               :on-click open-lightbox!}
 
               (ui/icon "maximize")]]
             [:img.w-full {:src @*src}]]])))))

@@ -19,7 +19,7 @@
 (defn- validate-db
   "Validate db, usually after transacting an import"
   [db]
-  (let [validation (db-validate/validate-db! db)]
+  (let [validation (db-validate/validate-local-db! db)]
     (when (seq (:errors validation)) (cljs.pprint/pprint {:validate (:errors validation)}))
     (is (empty? (map :entity (:errors validation))) "Imported graph has no validation errors")))
 
@@ -34,8 +34,7 @@
                                                       :block-id [:block/uuid (:block/uuid export-block)]})
             (sqlite-export/build-import @import-conn {:current-block import-block}))
         ;; _ (cljs.pprint/pprint _txs)
-        _ (d/transact! import-conn init-tx)
-        _ (d/transact! import-conn block-props-tx)]
+        _ (d/transact! import-conn (concat init-tx block-props-tx))]
     (validate-db @import-conn)
     (sqlite-export/build-export @import-conn {:export-type :block
                                               :block-id (:db/id import-block)})))
@@ -50,14 +49,13 @@
             ;; ((fn [x] (cljs.pprint/pprint {:export x}) x))
             (sqlite-export/build-import @import-conn {}))
         ;; _ (cljs.pprint/pprint _txs)
-        _ (d/transact! import-conn init-tx)
-        _ (d/transact! import-conn block-props-tx)
+        _ (d/transact! import-conn (concat init-tx block-props-tx))
         _ (validate-db @import-conn)
         page2 (db-test/find-page-by-title @import-conn page-title)]
     (sqlite-export/build-export @import-conn {:export-type :page :page-id (:db/id page2)})))
 
 (defn- import-second-time-assertions [conn conn2 page-title original-data
-                                      & {:keys [transform-expected-blocks build-journal]
+                                      & {:keys [transform-expected-blocks build-journal skip-updated-at?]
                                          :or {transform-expected-blocks (fn [bs] (into bs bs))}}]
   (let [page (db-test/find-page-by-title @conn2 page-title)
         imported-page (export-page-and-import-to-another-graph conn conn2 page-title)
@@ -75,8 +73,9 @@
         "Blocks are appended to existing page")
     (is (= (:block/created-at page) (:block/created-at updated-page))
         "Existing page didn't get re-created")
-    (is (= (:block/updated-at page) (:block/updated-at updated-page))
-        "Existing page didn't get updated")))
+    (when-not skip-updated-at?
+      (is (= (:block/updated-at page) (:block/updated-at updated-page))
+          "Existing page didn't get updated"))))
 
 (defn- export-graph-and-import-to-another-graph
   "Exports graph and imports it to a 2nd graph, validates it and then exports the 2nd graph"
@@ -85,9 +84,7 @@
         (-> (sqlite-export/build-export @export-conn {:export-type :graph :graph-options export-options})
             (sqlite-export/build-import @import-conn {}))
         ;; _ (cljs.pprint/pprint _txs)
-        _ (d/transact! import-conn init-tx)
-        _ (d/transact! import-conn block-props-tx)
-        _ (d/transact! import-conn misc-tx)
+        _ (d/transact! import-conn (concat init-tx block-props-tx misc-tx))
         _ (validate-db @import-conn)
         imported-graph (sqlite-export/build-export @import-conn {:export-type :graph :graph-options export-options})]
     imported-graph))
@@ -371,9 +368,9 @@
                       :user.property/node-p1 {:logseq.property/type :default}}
          :classes {:user.class/MyClass {:build/class-properties [:user.property/p1 :user.property/p2]}
                    :user.class/MyClass2 {:build/class-properties [:user.property/p2]}
-                   :user.class/ChildClass {:build/class-parent :user.class/MyClass
+                   :user.class/ChildClass {:build/class-extends [:user.class/MyClass]
                                            :build/class-properties [:user.property/p3]}
-                   :user.class/ChildClass2 {:build/class-parent :user.class/MyClass2}
+                   :user.class/ChildClass2 {:build/class-extends [:user.class/MyClass2]}
                    ;; shallow class b/c it's a property's class property
                    :user.class/NodeClass {:build/class-properties [:user.property/node-p1]}
                    :user.class/NodeClass2 {}}
@@ -402,7 +399,7 @@
     (is (= (:pages-and-blocks original-data) (:pages-and-blocks imported-page))
         "Page's blocks are imported")
 
-    (import-second-time-assertions conn conn2 "page1" original-data)))
+    (import-second-time-assertions conn conn2 "page1" original-data {:skip-updated-at? true})))
 
 (deftest import-journal-page
   (let [original-data
@@ -419,6 +416,28 @@
 
     (import-second-time-assertions conn conn2 journal-title original-data {:build-journal 20250210})))
 
+(deftest import-class-page
+  (let [class-uuid (random-uuid)
+        original-data
+        {:classes {:user.class/C0 {}
+                   :user.class/C1 {:build/class-extends [:user.class/C0]
+                                   :build/class-properties [:user.property/p1]
+                                   :block/uuid class-uuid
+                                   :build/keep-uuid? true}}
+         :properties {:user.property/p1 {:logseq.property/type :default}}
+         :pages-and-blocks [{:page {:block/uuid class-uuid}
+                             :blocks [{:block/title "class block"}]}]}
+        conn (db-test/create-conn-with-blocks (assoc original-data :build-existing-tx? true))
+        conn2 (db-test/create-conn)
+        imported-page (export-page-and-import-to-another-graph conn conn2 "C1")]
+
+    (is (= (expand-classes (:classes original-data)) (:classes imported-page))
+        "Class page is imported")
+    (is (= (expand-properties (:properties original-data)) (:properties imported-page))
+        "Class page's properties are imported")
+    (is (= (:pages-and-blocks original-data) (:pages-and-blocks imported-page))
+        "Page's blocks are imported")))
+
 (deftest import-page-with-different-property-types
   (let [block-object-uuid (random-uuid)
         original-data
@@ -428,7 +447,8 @@
                       :user.property/node {:logseq.property/type :node
                                            :db/cardinality :db.cardinality/many
                                            :build/property-classes [:user.class/MyClass]}
-                      :user.property/p1 {:logseq.property/type :default}}
+                      :user.property/p1 {:logseq.property/type :default}
+                      :user.property/map {:logseq.property/type :map}}
          :classes {:user.class/MyClass {:build/class-properties [:user.property/p1]}}
          :pages-and-blocks
          [{:page {:block/title "page1"}
@@ -442,7 +462,9 @@
                      :build/properties {:user.property/node #{[:build/page {:block/title "page object"
                                                                             :build/tags [:user.class/MyClass]}]
                                                               [:block/uuid block-object-uuid]
-                                                              :logseq.class/Task}}}]}
+                                                              :logseq.class/Task}}}
+                    {:block/title "map block"
+                     :build/properties {:user.property/map {:foo :bar :num 2}}}]}
           {:page {:block/title "Blocks"}
            :blocks [{:block/title "myclass object"
                      :build/tags [:user.class/MyClass]
@@ -486,7 +508,7 @@
                                :build/property-classes [:user.class/MyClass]}}
          :classes
          {:user.class/MyClass {:build/properties {:user.property/url "https://example.com/MyClass"}}
-          :user.class/MyClass2 {:build/class-parent :user.class/MyClass
+          :user.class/MyClass2 {:build/class-extends [:user.class/MyClass]
                                 :build/properties {:logseq.property/description "tests child class"}}}}
         conn (db-test/create-conn-with-blocks original-data)
         conn2 (db-test/create-conn)
@@ -494,8 +516,7 @@
         (-> (sqlite-export/build-export @conn {:export-type :graph-ontology})
             (sqlite-export/build-import @conn2 {}))
         ;; _ (cljs.pprint/pprint _txs)
-        _ (d/transact! conn2 init-tx)
-        _ (d/transact! conn2 block-props-tx)
+        _ (d/transact! conn2 (concat init-tx block-props-tx))
         _ (validate-db @conn2)
         imported-ontology (sqlite-export/build-export @conn2 {:export-type :graph-ontology})]
 
@@ -524,14 +545,13 @@
                             (mapv #(vector :block/uuid (:block/uuid %)))))
         conn2 (db-test/create-conn)
         {:keys [init-tx block-props-tx] :as _txs}
-        (-> (sqlite-export/build-export @conn {:export-type :view-nodes :node-ids (get-node-ids @conn)})
+        (-> (sqlite-export/build-export @conn {:export-type :view-nodes :rows (get-node-ids @conn)})
             (sqlite-export/build-import @conn2 {}))
         ;; _ (cljs.pprint/pprint _txs)
-        _ (d/transact! conn2 init-tx)
-        _ (d/transact! conn2 block-props-tx)
+        _ (d/transact! conn2 (concat init-tx block-props-tx))
         _ (validate-db @conn2)
         imported-nodes (sqlite-export/build-export @conn2 {:export-type :view-nodes
-                                                           :node-ids (get-node-ids @conn2)})]
+                                                           :rows (get-node-ids @conn2)})]
 
     (is (= (sort-pages-and-blocks (:pages-and-blocks original-data)) (:pages-and-blocks imported-nodes)))
     (is (= (expand-properties (:properties original-data)) (:properties imported-nodes)))
@@ -563,8 +583,7 @@
         (-> (sqlite-export/build-export @conn {:export-type :selected-nodes :node-ids (get-node-ids @conn)})
             (sqlite-export/build-import @conn2 {}))
         ;; _ (cljs.pprint/pprint _txs)
-        _ (d/transact! conn2 init-tx)
-        _ (d/transact! conn2 block-props-tx)
+        _ (d/transact! conn2 (concat init-tx block-props-tx))
         _ (validate-db @conn2)
         imported-nodes (sqlite-export/build-export @conn2 {:export-type :selected-nodes :node-ids (get-node-ids @conn2)})]
 
@@ -619,7 +638,7 @@
                                 (assoc :block/alias #{[:block/uuid class-alias-uuid]}))
           :user.class/MyClassAlias {:block/uuid class-alias-uuid
                                     :build/keep-uuid? true}
-          :user.class/MyClass2 {:build/class-parent :user.class/MyClass
+          :user.class/MyClass2 {:build/class-extends [:user.class/MyClass]
                                 :block/collapsed? true
                                 :block/uuid class2-uuid
                                 :build/keep-uuid? true
@@ -695,6 +714,10 @@
           {:page {:block/uuid property-uuid}
            :blocks [{:block/title "property block1"}]}
           ;; built-in pages
+          {:page {:block/title "Library" :build/properties {:logseq.property/built-in? true}}
+           :blocks []}
+          {:page {:block/title "Quick add" :build/properties {:logseq.property/built-in? true
+                                                              :logseq.property/hide? true}}, :blocks []}
           {:page {:block/title "Contents" :build/properties {:logseq.property/built-in? true}}
            :blocks [{:block/title "right sidebar"}]}
           {:page {:block/title common-config/favorites-page-name
@@ -796,36 +819,6 @@
     (is (= (::sqlite-export/graph-files original-data) (::sqlite-export/graph-files imported-graph))
         "All :file/path entities are imported")))
 
-(deftest import-graph-with-overlapping-ontology-properties
-  (let [overlapping-uuid (random-uuid)
-        original-data
-        {:properties {:user.property/p1
-                      {:block/uuid overlapping-uuid
-                       :build/keep-uuid? true
-                       :logseq.property/type :node
-                       :build/property-classes [:user.property/p1]}
-                      :user.property/p2 {:logseq.property/type :default}}
-         :classes {:user.class/C1 {}
-                   :user.property/p1
-                   {:build/keep-uuid? true
-                    :block/uuid overlapping-uuid
-                    :build/class-parent :user.class/C1
-                    :build/class-properties [:user.property/p2]}}
-         :pages-and-blocks
-         [{:page {:block/uuid overlapping-uuid}
-           :blocks [{:block/title "b1"
-                     :build/children [{:block/title "b2"}]}]}]
-         :build-existing-tx? true}
-        conn (db-test/create-conn-with-blocks original-data)
-        conn2 (db-test/create-conn)
-        imported-graph (export-graph-and-import-to-another-graph conn conn2 {:exclude-built-in-pages? true})]
-
-    (is (= (sort-pages-and-blocks (:pages-and-blocks original-data)) (:pages-and-blocks imported-graph)))
-    (is (= (expand-properties (:properties original-data)) (:properties imported-graph)))
-    (is (= (expand-classes (:classes original-data))
-           (-> (:classes imported-graph)
-               (medley/dissoc-in [:user.property/p1 :build/properties]))))))
-
 (defn- test-import-existing-page [import-options expected-page-properties]
   (let [original-data
         {:properties {:user.property/node {:logseq.property/type :node
@@ -855,8 +848,7 @@
         {:keys [init-tx block-props-tx] :as _txs}
         (sqlite-export/build-import import-data @conn {})
         ;; _ (cljs.pprint/pprint _txs)
-        _ (d/transact! conn init-tx)
-        _ (d/transact! conn block-props-tx)
+        _ (d/transact! conn (concat init-tx block-props-tx))
         _ (validate-db @conn)
         expected-pages-and-blocks
         [{:block/uuid page-uuid
@@ -882,8 +874,8 @@
 (deftest build-import-can-import-existing-page-with-different-uuid
   (testing "By default any properties passed to an existing page are upserted"
     (test-import-existing-page {}
-                              {:logseq.property/description "second description"
-                               :logseq.property/exclude-from-graph-view true}))
+                               {:logseq.property/description "second description"
+                                :logseq.property/exclude-from-graph-view true}))
   (testing "With ::existing-pages-keep-properties?, existing properties on existing pages are not overwritten by imported data"
     (test-import-existing-page {:existing-pages-keep-properties? true}
                                {:logseq.property/description "first description"

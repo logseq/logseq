@@ -203,13 +203,16 @@
 
 (defn export-repo-as-sqlite-db!
   [repo]
-  (p/let [data (persist-db/<export-db repo {:return-data? true})
-          filename (file-name repo "sqlite")
-          url (js/URL.createObjectURL (js/Blob. #js [data]))]
-    (when-let [anchor (gdom/getElement "download-as-sqlite-db")]
-      (.setAttribute anchor "href" url)
-      (.setAttribute anchor "download" filename)
-      (.click anchor))))
+  (->
+   (p/let [data (persist-db/<export-db repo {:return-data? true})
+           filename (file-name repo "sqlite")
+           url (js/URL.createObjectURL (js/Blob. #js [data]))]
+     (when-let [anchor (gdom/getElement "download-as-sqlite-db")]
+       (.setAttribute anchor "href" url)
+       (.setAttribute anchor "download" filename)
+       (.click anchor)))
+   (p/catch (fn [error]
+              (js/console.error error)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Export to roam json ;;
@@ -271,12 +274,13 @@
                        (idb/get-item (str "handle/" (js/btoa repo) "/" backup-folder))
                        (catch :default _e
                          (throw (ex-info "Backup file handle no longer exists" {:repo repo}))))
-              [_folder handle] (try
-                                 (utils/verifyPermission handle true)
-                                 [backup-folder handle]
-                                 (catch :default e
-                                   (js/console.error e)
-                                   (choose-backup-folder repo)))
+              [_folder handle] (when handle
+                                 (try
+                                   (utils/verifyPermission handle true)
+                                   [backup-folder handle]
+                                   (catch :default e
+                                     (js/console.error e)
+                                     (choose-backup-folder repo))))
               repo-name (common-sqlite/sanitize-db-name repo)]
         (if handle
           (->

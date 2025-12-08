@@ -166,20 +166,22 @@
         [page-uuid
          uuid1-client uuid2-client
          uuid1-remote uuid2-remote] (repeatedly random-uuid)]
-    (test-helper/create-page! page-name {:redirect? false :create-first-block? false :uuid page-uuid})
+    (test-helper/create-page! page-name {:redirect? false :uuid page-uuid})
     (outliner-tx/transact!
      opts
      (outliner-core/insert-blocks!
       repo
       conn
-      [{:block/uuid uuid1-client :block/title "uuid1-client"
+      [{:block/uuid uuid1-client
+        :block/title "uuid1-client"
         :block/order "a1"
         :block/parent [:block/uuid page-uuid]}
-       {:block/uuid uuid2-client :block/title "uuid2-client"
+       {:block/uuid uuid2-client
+        :block/title "uuid2-client"
         :block/order "a2"
         :block/parent [:block/uuid page-uuid]}]
       (ldb/get-page @conn page-name)
-      {:sibling? true :keep-uuid? true}))
+      {:sibling? false :keep-uuid? true}))
     (testing "apply-remote-move-ops-test1"
       (let [data-from-ws {:req-id "req-id"
                           :t 1        ;; not used
@@ -188,7 +190,10 @@
                           {uuid1-remote {:op :move
                                          :self uuid1-remote
                                          :parents [page-uuid]
-                                         :block/order "a0"}}}
+                                         :block/order "a0"
+                                         :block/title (ldb/write-transit-str "")
+                                         :block/created-at (js/Date.now)
+                                         :block/updated-at (js/Date.now)}}}
             move-ops (#'r.remote/move-ops-map->sorted-move-ops
                       (:move-ops-map
                        (#'r.remote/affected-blocks->diff-type-ops
@@ -208,11 +213,17 @@
                           {uuid2-remote {:op :move
                                          :self uuid2-remote
                                          :parents [uuid1-client]
-                                         :block/order "a0"}
+                                         :block/order "a0"
+                                         :block/title (ldb/write-transit-str "")
+                                         :block/created-at (js/Date.now)
+                                         :block/updated-at (js/Date.now)}
                            uuid1-remote {:op :move
                                          :self uuid1-remote
                                          :parents [uuid2-remote]
-                                         :block/order "a1"}}}
+                                         :block/order "a1"
+                                         :block/title (ldb/write-transit-str "")
+                                         :block/created-at (js/Date.now)
+                                         :block/updated-at (js/Date.now)}}}
             move-ops (#'r.remote/move-ops-map->sorted-move-ops
                       (:move-ops-map
                        (#'r.remote/affected-blocks->diff-type-ops
@@ -236,7 +247,7 @@
         [page-uuid
          uuid1-client uuid2-client
          uuid1-not-exist] (repeatedly random-uuid)]
-    (test-helper/create-page! page-name {:redirect? false :create-first-block? false :uuid page-uuid})
+    (test-helper/create-page! page-name {:redirect? false})
     (outliner-tx/transact!
      opts
      (outliner-core/insert-blocks!
@@ -249,7 +260,7 @@
         :block/left [:block/uuid uuid1-client]
         :block/parent [:block/uuid page-uuid]}]
       (ldb/get-page @conn page-name)
-      {:sibling? true :keep-uuid? true}))
+      {:sibling? false :keep-uuid? true}))
     (testing "apply-remote-remove-ops-test1"
       (let [data-from-ws {:req-id "req-id" :t 1 :t-before 0
                           :affected-blocks
@@ -301,7 +312,7 @@ result:
           page-name "apply-remote-remove-ops-test2"
           [page-uuid
            uuid1 uuid2 uuid3] (repeatedly random-uuid)]
-      (test-helper/create-page! page-name {:redirect? false :create-first-block? false :uuid page-uuid})
+      (test-helper/create-page! page-name {:redirect? false})
       (outliner-tx/transact!
        opts
        (outliner-core/insert-blocks!
@@ -337,14 +348,18 @@ result:
   (let [repo (state/get-current-repo)
         conn (conn/get-db repo false)
         [page1-uuid ;; page2-uuid page3-uuid page4-uuid
-         ](repeatedly random-uuid)]
+         ](repeatedly random-uuid)
+        page-tags [(:block/uuid (d/entity @conn :logseq.class/Page))]]
     (testing "apply-remote-update-page-ops-test1"
       (let [data-from-ws {:req-id "req-id" :t 1 :t-before 0
                           :affected-blocks
                           {page1-uuid {:op :update-page
                                        :self page1-uuid
                                        :page-name (ldb/write-transit-str (str "X" page1-uuid))
-                                       :block/title (ldb/write-transit-str (str "X" page1-uuid))}}}
+                                       :block/title (ldb/write-transit-str (str "X" page1-uuid))
+                                       :block/tags page-tags
+                                       :block/created-at (js/Date.now)
+                                       :block/updated-at (js/Date.now)}}}
             update-page-ops (vals
                              (:update-page-ops-map
                               (#'r.remote/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
@@ -358,7 +373,10 @@ result:
                           {page1-uuid {:op :update-page
                                        :self page1-uuid
                                        :page-name (ldb/write-transit-str (str page1-uuid "-rename"))
-                                       :block/title (ldb/write-transit-str (str page1-uuid "-rename"))}}}
+                                       :block/title (ldb/write-transit-str (str page1-uuid "-rename"))
+                                       :block/tags page-tags
+                                       :block/created-at (js/Date.now)
+                                       :block/updated-at (js/Date.now)}}}
             update-page-ops (vals
                              (:update-page-ops-map
                               (#'r.remote/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
@@ -391,7 +409,7 @@ result:
           [page1-uuid page2-uuid
            uuid1-client uuid2-client
            uuid1-remote uuid2-remote] (repeatedly random-uuid)]
-      (test-helper/create-page! page-name {:redirect? false :create-first-block? false :uuid page1-uuid})
+      (test-helper/create-page! page-name {:redirect? false})
       (outliner-tx/transact!
        opts
        (outliner-core/insert-blocks!
@@ -406,7 +424,7 @@ result:
           :block/left [:block/uuid uuid1-client]
           :block/parent [:block/uuid page1-uuid]}]
         (ldb/get-page @conn page-name)
-        {:sibling? true :keep-uuid? true}))
+        {:sibling? false :keep-uuid? true}))
       (let [data-from-ws {:req-id "req-id" :t 1 :t-before 0
                           :affected-blocks
                           {page2-uuid {:op :update-page

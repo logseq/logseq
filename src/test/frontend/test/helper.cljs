@@ -6,19 +6,19 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
-            [frontend.handler.db-based.page :as db-page-handler]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file-based.repo :as file-repo-handler]
             [frontend.handler.file-based.status :as status]
             [frontend.state :as state]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.pipeline :as worker-pipeline]
+            [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
             [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.graph-parser.text :as text]
-            [logseq.outliner.db-pipeline :as db-pipeline]))
+            [logseq.graph-parser.text :as text]))
 
 (def node? (exists? js/process))
 
@@ -33,9 +33,11 @@
         test-db' (if db-graph? test-db-name-db-version test-db-name)]
     (state/set-current-repo! test-db')
     (conn/start! test-db' opts)
+    (ldb/register-transact-pipeline-fn!
+     (fn [tx-report]
+       (worker-pipeline/transact-pipeline test-db' tx-report)))
     (let [conn (conn/get-db test-db' false)]
       (when db-graph?
-        (db-pipeline/add-listener conn)
         (d/transact! conn (sqlite-create-graph/build-db-initial-data "")))
       (d/listen! conn ::listen-db-changes!
                  (fn [tx-report]
@@ -187,7 +189,9 @@ This can be called in synchronous contexts as no async fns should be invoked"
      [;; page
       {:block/uuid page-uuid
        :block/name "test"
-       :block/title "Test"}
+       :block/title "Test"
+       ;; :block/tags #{:logseq.class/Page}
+       }
       ;; first block
       {:block/uuid first-block-uuid
        :block/page page-id
@@ -238,7 +242,8 @@ This can be called in synchronous contexts as no async fns should be invoked"
   [repo block-uuid content {:keys [tags]}]
   (editor-handler/save-block! repo block-uuid content)
   (doseq [tag tags]
-    (db-page-handler/add-tag repo block-uuid (db/get-page tag))))
+    (db-property-handler/set-block-property! block-uuid :block/tags
+                                             (db/get-page tag))))
 
 (defn create-page!
   [title & {:as opts}]

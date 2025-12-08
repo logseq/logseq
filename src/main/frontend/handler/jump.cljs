@@ -99,9 +99,7 @@
         (editor-handler/expand-block! current-block-id))
       (let [f #(let [selected-block-or-editing-block (or (first (state/get-selection-blocks))
                                                          ;; current editing block
-                                                         (some-> (state/get-editing-block-dom-id)
-                                                                 js/document.getElementById
-                                                                 (util/rec-get-node ".ls-block")))
+                                                         (state/get-editor-block-container))
                      triggers (->> (if selected-block-or-editing-block
                                      (d/sel selected-block-or-editing-block ".jtrigger")
                                      (d/sel ".jtrigger"))

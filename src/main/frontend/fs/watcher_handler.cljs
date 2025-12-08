@@ -5,8 +5,8 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.db.model :as model]
             [frontend.db.file-based.model :as file-model]
+            [frontend.db.model :as model]
             [frontend.fs :as fs]
             [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.file-based.property :as file-property-handler]
@@ -95,7 +95,7 @@
 
                 (and (= "change" type)
                      (= dir repo-dir)
-                     (not (common-config/local-asset? path)))
+                     (not (common-config/local-relative-asset? path)))
                 (handle-add-and-change! repo path content db-content ctime mtime (not global-dir)) ;; no backup for global dir
 
                 (and (= "unlink" type)

@@ -115,27 +115,29 @@
   (m/reduce {} nil (m/eduction (take 1) f)))
 
 (defn- fail-case-default-handler
-  [e]
-  (when-not (instance? Cancelled e)
-    (log/error :run-task*-failed e)))
+  [key' e]
+  (when-not (or (instance? Cancelled e)
+                (= "missionary.Cancelled" (ex-message e)))
+    (log/error :run-task-failed e :key key')))
 
 (defn run-task
   "Return the canceler"
   [key' task & {:keys [succ fail]}]
-  (let [cancel (task (or succ #(log/info :key key' :succ %)) (or fail fail-case-default-handler))]
+  (let [cancel (task (or succ #(log/info :key key' :succ %)) (or fail (partial fail-case-default-handler key')))]
     #(cancel)))
 
 (defn run-task*
   "Return the canceler"
   [task & {:keys [succ fail]}]
-  (let [cancel (task (or succ (constantly nil)) (or fail fail-case-default-handler))]
+  (let [cancel (task (or succ (constantly nil)) (or fail (partial fail-case-default-handler nil)))]
     #(cancel)))
 
-(defn run-task-throw
-  "Return the canceler"
-  [key' task & {:keys [succ]}]
-  (let [cancel (task (or succ #(log/info :key key' :succ %)) #(throw (ex-info "task stopped" {:key key' :e %})))]
-    #(cancel)))
+(comment
+  (defn run-task-throw
+    "Return the canceler"
+    [key' task & {:keys [succ]}]
+    (let [cancel (task (or succ #(log/info :key key' :succ %)) #(throw (ex-info "task stopped" {:key key' :e %})))]
+      #(cancel))))
 
 (defonce ^:private *background-task-cancelers ; key -> canceler
   (volatile! {}))
@@ -148,7 +150,7 @@
     (canceler)
     (vswap! *background-task-cancelers assoc key' nil))
   (prn :run-background-task key')
-  (let [canceler (run-task key' task)]
+  (let [canceler (run-task key' task :fail (fn [e] (log/error :background-task-stopped {:k key' :e e})))]
     (vswap! *background-task-cancelers assoc key' canceler)
     nil))
 

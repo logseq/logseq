@@ -261,7 +261,7 @@
 
    :editor/replace-block-reference-at-point {:binding "mod+shift+r"
                                              :fn      editor-handler/replace-block-reference-with-content-at-point}
-   :editor/copy-embed                       {:binding "mod+e"
+   :editor/copy-embed                       {:binding "mod+shift+e"
                                              :fn      editor-handler/copy-current-block-embed}
 
    :editor/paste-text-in-one-block-at-point {:binding "mod+shift+v"
@@ -290,6 +290,8 @@
 
    :editor/move-block-down                  {:binding (if mac? "mod+shift+down" "alt+shift+down")
                                              :fn      (editor-handler/move-up-down false)}
+   :editor/move-blocks                      {:binding "mod+shift+m"
+                                             :fn      editor-handler/move-selected-blocks}
 
    :editor/open-edit                        {:binding "enter"
                                              :fn      (fn [e]
@@ -365,6 +367,11 @@
                                              :fn      (fn [e]
                                                         (when e (util/stop e))
                                                         (state/pub-event! [:editor/new-property {}]))}
+   :editor/set-tags                         {:binding "p t"
+                                             :db-graph? true
+                                             :selection? true
+                                             :fn      (fn []
+                                                        (state/pub-event! [:editor/new-property {:property-key "Tags"}]))}
 
    :editor/add-property-deadline            {:binding "p d"
                                              :db-graph? true
@@ -390,7 +397,7 @@
                                              :fn      (fn []
                                                         (state/pub-event! [:editor/new-property {:property-key "Icon"}]))}
 
-   :editor/toggle-display-all-properties    {:binding "p t"
+   :editor/toggle-display-hidden-properties {:binding "p a"
                                              :db-graph? true
                                              :fn      ui-handler/toggle-show-empty-hidden-properties!}
 
@@ -400,7 +407,7 @@
    :go/search                               {:binding "mod+k"
                                              :fn      #(search :global)}
 
-   :go/search-themes                        {:binding "mod+shift+i"
+   :go/search-themes                        {:binding (if mac? "mod+shift+i" "alt+shift+i")
                                              :fn      #(search :themes)}
 
    :command-palette/toggle                  {:binding "mod+shift+p"
@@ -462,9 +469,11 @@
                                              :binding []}
 
    :graph/add                               {:fn      (fn [] (route-handler/redirect! {:to :graphs}))
+                                             :inactive config/publishing?
                                              :binding []}
 
    :graph/db-add                            {:fn #(state/pub-event! [:graph/new-db-graph])
+                                             :inactive config/publishing?
                                              :binding false}
 
    :graph/db-save                           {:fn #(state/pub-event! [:graph/save-db-to-disk])
@@ -516,7 +525,8 @@
    :ui/toggle-document-mode                 {:binding "t d"
                                              :fn      state/toggle-document-mode!}
 
-   :ui/highlight-recent-blocks              {:fn      state/toggle-highlight-recent-blocks!}
+   :ui/highlight-recent-blocks              {:binding "mod+c mod+r"
+                                             :fn      state/toggle-highlight-recent-blocks!}
 
    :ui/toggle-settings                      {:binding (if mac? ["t s" "mod+,"] "t s")
                                              :fn      ui-handler/toggle-settings-modal!}
@@ -539,6 +549,10 @@
    :command/toggle-favorite                 {:binding "mod+shift+f"
                                              :fn      page-handler/toggle-favorite!}
 
+   :editor/quick-add                        {:binding (if mac? "mod+e" "mod+alt+e")
+                                             :db-graph? true
+                                             :inactive config/publishing?
+                                             :fn      editor-handler/quick-add}
    :editor/jump                             {:binding "mod+j"
                                              :fn      jump-handler/jump-to}
    :editor/open-file-in-default-app         {:binding  "mod+d mod+a"
@@ -598,6 +612,10 @@
    :dev/fix-broken-graph {:binding []
                           :db-graph? true
                           :fn #(repo-handler/fix-broken-graph! (state/get-current-repo))}
+
+   :dev/gc-graph {:binding []
+                  :inactive (not (state/developer-mode?))
+                  :fn #(repo-handler/gc-graph! (state/get-current-repo))}
 
    :dev/replace-graph-with-db-file {:binding []
                                     :inactive (or (not (util/electron?)) (not (state/developer-mode?)))
@@ -782,6 +800,7 @@
           :editor/select-down
           :editor/move-block-up
           :editor/move-block-down
+          :editor/move-blocks
           :editor/open-edit
           :editor/open-selected-blocks-in-sidebar
           :editor/select-block-up
@@ -807,6 +826,7 @@
           :editor/toggle-number-list
           :editor/undo
           :editor/redo
+          :editor/quick-add
           :ui/toggle-brackets
           :go/search-in-page
           :go/search
@@ -851,11 +871,12 @@
           :editor/copy-current-file
           :editor/copy-page-url
           :editor/new-whiteboard
+          :editor/set-tags
           :editor/add-property-deadline
           :editor/add-property-status
           :editor/add-property-priority
           :editor/add-property-icon
-          :editor/toggle-display-all-properties
+          :editor/toggle-display-hidden-properties
           :ui/toggle-wide-mode
           :ui/select-theme-color
           :ui/goto-plugins
@@ -876,6 +897,7 @@
           :dev/replace-graph-with-db-file
           :dev/validate-db
           :dev/fix-broken-graph
+          :dev/gc-graph
           :dev/rtc-stop
           :dev/rtc-start
           :ui/customize-appearance])
@@ -908,7 +930,8 @@
      :editor/redo
      :editor/copy
      :editor/copy-text
-     :editor/cut]
+     :editor/cut
+     :editor/quick-add]
 
     :shortcut.category/formatting
     [:editor/bold
@@ -955,6 +978,7 @@
      :editor/open-link-in-sidebar
      :editor/move-block-up
      :editor/move-block-down
+     :editor/move-blocks
      :editor/escape-editing]
 
     :shortcut.category/block-command-editing
@@ -983,11 +1007,12 @@
      :editor/select-block-down
      :editor/delete-selection
      :editor/add-property
+     :editor/set-tags
      :editor/add-property-deadline
      :editor/add-property-status
      :editor/add-property-priority
      :editor/add-property-icon
-     :editor/toggle-display-all-properties]
+     :editor/toggle-display-hidden-properties]
 
     :shortcut.category/toggle
     [:ui/toggle-help
@@ -1072,6 +1097,7 @@
      :dev/replace-graph-with-db-file
      :dev/validate-db
      :dev/fix-broken-graph
+     :dev/gc-graph
      :dev/rtc-stop
      :dev/rtc-start
      :ui/clear-all-notifications]

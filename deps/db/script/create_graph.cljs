@@ -5,13 +5,14 @@
             ["path" :as node-path]
             [babashka.cli :as cli]
             [clojure.edn :as edn]
-            [datascript.core :as d]
+            [logseq.db :as ldb]
+            [logseq.db.common.sqlite-cli :as sqlite-cli]
+            [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.outliner.cli :as outliner-cli]
+            [clojure.pprint :as pprint]
             [nbb.classpath :as cp]
-            [nbb.core :as nbb]
-            [validate-db]
-            [logseq.db.common.sqlite-cli :as sqlite-cli]))
+            [nbb.core :as nbb]))
 
 (defn- resolve-path
   "If relative path, resolve with $ORIGINAL_PWD"
@@ -19,6 +20,19 @@
   (if (node-path/isAbsolute path)
     path
     (node-path/join (or js/process.env.ORIGINAL_PWD ".") path)))
+
+(defn- validate-db [db db-name options]
+  (if-let [errors (:errors
+                   (db-validate/validate-local-db!
+                    db
+                    (merge options {:db-name db-name :verbose true})))]
+    (do
+      (println "Found" (count errors)
+               (if (= 1 (count errors)) "entity" "entities")
+               "with errors:")
+      (pprint/pprint errors)
+      (js/process.exit 1))
+    (println "Valid!")))
 
 (def spec
   "Options spec"
@@ -51,12 +65,12 @@
              (count (filter :block/title init-tx)) "blocks ...")
     ;; (fs/writeFileSync "txs.edn" (with-out-str (cljs.pprint/pprint _txs)))
     ;; (cljs.pprint/pprint _txs)
-    (d/transact! conn init-tx)
-    (when (seq block-props-tx) (d/transact! conn block-props-tx))
-    (when (seq misc-tx) (d/transact! conn misc-tx))
+    (ldb/transact! conn init-tx)
+    (when (seq block-props-tx) (ldb/transact! conn block-props-tx))
+    (when (seq misc-tx) (ldb/transact! conn misc-tx))
     (println (if graph-exists? "Updated graph" "Created graph") (str db-name "!"))
     (when (:validate options)
-      (validate-db/validate-db @conn db-name {:group-errors true :closed-maps true :humanize true}))))
+      (validate-db @conn db-name {}))))
 
 (when (= nbb/*file* (nbb/invoked-file))
   (-main *command-line-args*))

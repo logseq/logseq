@@ -29,12 +29,10 @@
  :right-side-bar/page-graph "페이지 그래프"
  :right-side-bar/block-ref "블록 참조"
  :right-side-bar/graph-view "그래프 뷰"
- :right-side-bar/all-pages "모든 페이지"
  :right-side-bar/flashcards "플래시 카드"
  :left-side-bar/journals "일지"
  :left-side-bar/nav-favorites "즐겨찾기"
  :left-side-bar/nav-recent-pages "최근 페이지"
- :page/delete-confirmation "이 페이지와 페이지의 파일들을 삭제하시겠습니까?"
  :page/open-in-finder "디렉토리에서 열기"
  :page/open-with-default-app "기본 앱으로 열기"
  :page/make-public "출판 전 공개 상태로 만들기"
@@ -125,7 +123,6 @@
  :export-roam-json "Roam JSON으로 내보내기"
  :export-edn "EDN으로 내보내기"
  :all-graphs "모든 그래프"
- :all-pages "모든 페이지"
  :all-files "모든 파일"
  :all-journals "모든 일지"
  :settings "설정"
@@ -142,7 +139,6 @@
  :download "다운로드"
  :language "언어"
  :remove-background "배경 제거"
- :open-a-directory "로컬 디렉토리 열기"
 
  :help/shortcut-page-title "키보드 단축키"
 
@@ -379,7 +375,7 @@
  :command.ui/install-plugins-from-file            "plugins.edn에서 플러그인 설치"
  :command.command-palette/toggle                  "명령어 검색"
  :command.go/search-in-page                       "현재 페이지에서 블록 검색"
- 
+
  :settings-page/preferred-outdenting-tip "왼쪽은 기본 상태, 오른쪽은 설정이 활성화된 상태를 표시합니다. "
  :settings-page/preferred-outdenting-tip-more "→ 더 알아보기"
  :settings-page/preferred-pasting-file-hint "활성화하면, 인터넷으로부터 이미지를 붙여넣기할 때 이미지를 다운로드한 뒤 삽입합니다. 비활성화하면, 이미지의 링크를 붙여넣습니다."

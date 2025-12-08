@@ -22,7 +22,7 @@
     :block/pre-block? :block/scheduled :block/deadline :block/type :block/name :block/marker
 
     :block.temp/ast-title
-    :block.temp/fully-loaded? :block.temp/ast-body
+    :block.temp/load-status :block.temp/has-children? :block.temp/ast-body
 
     :db/valueType :db/cardinality :db/ident :db/index
 
@@ -33,7 +33,7 @@
   it means `(db/entity :block/title)` always return same result"
   #{:block/link :block/updated-at :block/refs :block/closed-value-property
     :block/created-at :block/collapsed? :block/tags :block/title
-    :block/path-refs :block/parent :block/order :block/page
+    :block/parent :block/order :block/page
 
     :logseq.property/created-from-property
     :logseq.property/icon
@@ -63,7 +63,7 @@
 
 (defn entity-memoized
   [db eid]
-  (if (qualified-keyword? eid)
+  (if (and (qualified-keyword? eid) (not (exists? js/process))) ; don't memoize on node
     (when-not (contains? nil-db-ident-entities eid) ;fast return nil
       (if (and @*reset-cache-background-task-running?
                (contains? immutable-db-ident-entities eid)) ;return cache entity if possible which isn't nil
@@ -73,6 +73,13 @@
               r))
         (d/entity db eid)))
     (d/entity db eid)))
+
+(defn unsafe->Entity
+  "Faster version of d/entity without checking e exists.
+  Only use it in performance-critical areas and where the existence of 'e' is confirmed."
+  [db e]
+  {:pre [(pos-int? e)]}
+  (Entity. db e (volatile! false) (volatile! {})))
 
 (defn db-based-graph?
   "Whether the current graph is db-only"
@@ -95,11 +102,13 @@
        (get (.-kv e) k)
        (if db-based?
          (let [result (lookup-entity e k default-value)
-             ;; Replace title for pages only, otherwise it'll recursively
-             ;; replace block id refs if there're cycle references of blocks
+               ;; Replace title for pages only, otherwise it'll recursively
+               ;; replace block id refs if there're cycle references of blocks
                refs (:block/refs e)
                result' (if (and (string? result) refs)
-                         (db-content/id-ref->title-ref result refs)
+                         (db-content/id-ref->title-ref result refs
+                                                       {:db db
+                                                        :replace-pages-with-same-name? false})
                          result)]
            (or result' default-value))
          (lookup-entity e k default-value))))))
@@ -160,14 +169,8 @@
            :block.temp/property-keys
            (get-property-keys e)
 
-           ;; cache :block/title
            :block/title
-           (or
-            (:block.temp/cached-title @(.-cache e))
-            (let [title (get-block-title e k default-value)]
-              (vreset! (.-cache e) (assoc @(.-cache e)
-                                          :block.temp/cached-title title))
-              title))
+           (get-block-title e k default-value)
 
            :block/_parent
            (->> (lookup-entity e k default-value)
@@ -188,12 +191,8 @@
 
 (defn- cache-with-kv
   [^js this]
-  (let [v @(.-cache this)
-        v' (if (:block/title v)
-             (assoc v :block/title
-                    (db-content/id-ref->title-ref (:block/title v) (:block/refs this)))
-             v)]
-    (concat (seq v')
+  (let [v @(.-cache this)]
+    (concat (seq v)
             (seq (.-kv this)))))
 
 #?(:org.babashka/nbb

@@ -111,7 +111,10 @@
                   (assert (:db/ident property-map) "Key in map must have a :db/ident")
                   (when pure? (assert (some? gen-uuid-value-prefix) block))
                   [(or (:original-property-id property-map) (:db/ident property-map))
-                   (if (set? v)
+                   (cond
+                     (and (set? v) (every? uuid? v))
+                     (set (map #(vector :block/uuid %) v))
+                     (set? v)
                      (set (map #(build-property-value-block
                                  block' property-map %
                                  (cond-> {}
@@ -121,6 +124,9 @@
                                    (assoc :block-uuid
                                           (common-uuid/gen-uuid :builtin-block-uuid (str gen-uuid-value-prefix "-" %)))))
                                v))
+                     (uuid? v)
+                     [:block/uuid v]
+                     :else
                      (build-property-value-block block' property-map v
                                                  (cond-> {}
                                                    property-value-properties
@@ -130,12 +136,25 @@
                                                           (common-uuid/gen-uuid :builtin-block-uuid (str gen-uuid-value-prefix "-" v))))))])))
          (into {}))))
 
+(defn- lookup-id?
+  [v]
+  (and (vector? v)
+       (= 2 (count v))
+       (= :block/uuid (first v))
+       (uuid? (second v))))
+
 (defn build-properties-with-ref-values
   "Given a properties map with property values to be transacted e.g. from
   build-property-values-tx-m, build a properties map to be transacted with the block"
   [prop-vals-tx-m]
   (update-vals prop-vals-tx-m
                (fn [v]
-                 (if (set? v)
+                 (cond
+                   (and (set? v) (every? lookup-id? v))
+                   v
+                   (set? v)
                    (set (map #(vector :block/uuid (:block/uuid %)) v))
+                   (lookup-id? v)
+                   v
+                   :else
                    (vector :block/uuid (:block/uuid v))))))

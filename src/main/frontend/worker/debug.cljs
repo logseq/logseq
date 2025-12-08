@@ -1,7 +1,7 @@
 (ns frontend.worker.debug
   "For debug usage"
-  (:require [frontend.worker.state :as worker-state]
-            [datascript.core :as d]))
+  (:require [datascript.core :as d]
+            [frontend.worker.state :as worker-state]))
 
 (defn get-conn
   "Get current db conn"

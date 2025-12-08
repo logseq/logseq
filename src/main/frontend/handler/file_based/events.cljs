@@ -203,7 +203,8 @@
    {:id :page-histories :label "modal-page-histories"}))
 
 (defmethod events/handle :file-sync/maybe-onboarding-show [[_ type]]
-  (file-sync/maybe-onboarding-show type))
+  (when-not util/web-platform?
+    (file-sync/maybe-onboarding-show type)))
 
 (defmethod events/handle :file-sync/storage-exceed-limit [[_]]
   (notification/show! "file sync storage exceed limit" :warning false)

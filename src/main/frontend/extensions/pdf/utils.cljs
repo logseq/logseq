@@ -2,7 +2,6 @@
   (:require ["/frontend/extensions/pdf/utils" :as js-utils]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [frontend.util :as util]
             [logseq.common.uuid :as common-uuid]
             [promesa.core :as p]))
 
@@ -109,10 +108,13 @@
   ([^js win]
    (some-> win (.getSelection) (.removeAllRanges))))
 
-(def adjust-viewer-size!
-  (util/debounce
-   (fn [^js viewer] (set! (. viewer -currentScaleValue) "auto"))
-   200))
+(defn adjust-viewer-size!
+  [^js viewer]
+  (let [bus (.-eventBus viewer)]
+    (.dispatch bus "resizing")))
+
+(defn reset-viewer-auto! [^js viewer]
+  (set! (. viewer -currentScaleValue) "auto"))
 
 (defn fix-nested-js
   [its]
@@ -122,11 +124,6 @@
 (defn gen-uuid
   []
   (common-uuid/gen-uuid))
-
-(defn load-base-assets$
-  []
-  (p/let [_ (util/js-load$ (str util/JS_ROOT "/pdfjs/pdf.js"))
-          _ (util/js-load$ (str util/JS_ROOT "/pdf_viewer2.js"))]))
 
 (defn get-page-from-el
   [^js/HTMLElement el]

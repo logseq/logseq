@@ -1,11 +1,14 @@
 (ns logseq.e2e.outliner-basic-test
   (:require
    [clojure.test :refer [deftest testing is use-fixtures]]
+   [logseq.e2e.assert :as assert]
    [logseq.e2e.block :as b]
    [logseq.e2e.fixtures :as fixtures]
    [logseq.e2e.keyboard :as k]
+   [logseq.e2e.page :as p]
    [logseq.e2e.util :as util]
-   [wally.main :as w]))
+   [wally.main :as w]
+   [wally.repl :as repl]))
 
 (use-fixtures :once fixtures/open-page)
 (use-fixtures :each
@@ -44,6 +47,23 @@
     (let [[x2 x3 x4 x5] (map (comp first util/bounding-xy #(w/find-one-by-text "span" %)) ["b2" "b3" "b4" "b5"])]
       (is (and (= x2 x4) (= x3 x5) (< x2 x3))))))
 
+(defn indent-outdent-embed-page []
+  (p/new-page "Page embed")
+  (b/new-blocks ["b1" "b2"])
+  (p/new-page "Page testing")
+  (b/new-blocks ["b3" ""])
+  (util/input-command "Node embed")
+  (util/press-seq "Page embed" {:delay 60})
+  (k/press "Enter" {:delay 60})
+  (util/exit-edit)
+  (b/new-blocks ["b4"])
+  (b/outdent)
+  (b/indent)
+  (util/exit-edit)
+  (let [[x2 x3 x4] (map (comp first util/bounding-xy #(w/find-one-by-text "span" %)) ["b2" "b3" "b4"])]
+    (is (= x2 x4))
+    (is (< x3 x2))))
+
 (defn move-up-down []
   (b/new-blocks ["b1" "b2" "b3" "b4"])
   (util/repeat-keyboard 2 "Shift+ArrowUp")
@@ -65,6 +85,14 @@
     (is (= "b1" (util/get-edit-content)))
     (is (= 1 (util/page-blocks-count)))))
 
+(defn delete-end []
+  (testing "Delete at end"
+    (b/new-blocks ["b1" "b2" "b3"])
+    (k/arrow-up)
+    (k/delete)
+    (is (= "b2b3" (util/get-edit-content)))
+    (is (= 2 (util/page-blocks-count)))))
+
 (defn delete-test-with-children []
   (testing "Delete block with its children"
     (b/new-blocks ["b1" "b2" "b3" "b4"])
@@ -73,6 +101,7 @@
     (b/indent)
     (k/arrow-up)
     (b/delete-blocks)
+    (util/wait-editor-visible)
     (is (= "b1" (util/get-edit-content)))
     (is (= 1 (util/page-blocks-count)))))
 
@@ -82,11 +111,66 @@
 (deftest indent-and-outdent-test
   (indent-and-outdent))
 
+(deftest indent-outdent-embed-page-test
+  (indent-outdent-embed-page))
+
 (deftest move-up-down-test
   (move-up-down))
 
 (deftest delete-test
   (delete))
 
+(deftest delete-end-test
+  (delete-end))
+
 (deftest delete-test-with-children-test
   (delete-test-with-children))
+
+(deftest delete-concat-test-2-blocks
+  (testing "Delete concat with empty block"
+    (b/new-blocks ["" "b2"])
+    (b/indent)
+    (k/arrow-up)
+    (k/delete)
+    (util/wait-editor-visible)
+    (is (= "b2" (util/get-edit-content)))
+    (util/exit-edit)
+    (is (= ["b2"] (util/get-page-blocks-contents)))))
+
+(deftest delete-concat-test-3-blocks
+  (testing "Delete concat with empty block"
+    (b/new-blocks ["" "b2" "b3"])
+    (b/indent)
+    (k/arrow-up)
+    (k/arrow-up)
+    (k/delete)
+    (util/wait-editor-visible)
+    (is (= "b2" (util/get-edit-content)))
+    (util/exit-edit)
+    (is (= ["b2" "b3"] (util/get-page-blocks-contents)))))
+
+(deftest delete-concat-test-with-children
+  (testing "Delete concat with children blocks"
+    (b/new-blocks ["" "b2" "b3"])
+    (b/indent)
+    (k/arrow-up)
+    (b/indent)
+    (k/arrow-up)
+    (k/delete)
+    (util/wait-editor-visible)
+    (is (= "" (util/get-edit-content)))
+    (is (= 3 (util/page-blocks-count)))))
+
+(deftest delete-concat-test-with-tag
+  (testing "Delete concat with tag"
+    (b/new-blocks ["" "b2"])
+    (b/indent)
+    (util/set-tag "tag1")
+    (k/arrow-up)
+    (k/delete)
+    (util/wait-editor-visible)
+    (is (= "b2" (util/get-edit-content)))
+    (util/exit-edit)
+    (assert/assert-is-visible
+     ".ls-block a.tag:has-text('tag1')")
+    (is (= ["b2"] (util/get-page-blocks-contents)))))

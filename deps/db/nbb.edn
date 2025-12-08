@@ -9,5 +9,5 @@
   logseq/clj-fractional-indexing        {:git/url "https://github.com/logseq/clj-fractional-indexing"
                                          :sha     "1087f0fb18aa8e25ee3bbbb0db983b7a29bce270"}
   io.github.nextjournal/nbb-test-runner
-  {:git/sha "012017a8a8983d05f905f38f631f5222f25b9ed9"}
+  {:git/sha "b379325cfa5a3306180649da5de3bf5166414e71"}
   io.github.pez/baldr {:mvn/version "1.0.9"}}}
