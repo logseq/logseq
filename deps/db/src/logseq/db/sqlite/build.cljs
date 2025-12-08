@@ -136,7 +136,7 @@
                                        (merge (:build/properties v)
                                               {:block/tags (mapv #(hash-map :db/ident (get-ident all-idents %))
                                                                  (:build/tags v))}
-                                              (select-keys v [:block/created-at :block/updated-at])))]
+                                              (select-keys v [:block/created-at :block/updated-at :block/uuid])))]
                     (cond-> property-map
                       (and (:build/property-value v) (seq pvalue-attrs))
                       (assoc :property-value-properties pvalue-attrs)))
