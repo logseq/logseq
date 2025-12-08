@@ -21,7 +21,6 @@
             [mobile.components.graphs :as graphs]
             [mobile.components.header :as mobile-header]
             [mobile.components.popup :as popup]
-            [mobile.components.search :as search]
             [mobile.components.selection-toolbar :as selection-toolbar]
             [mobile.components.ui :as ui-component]
             [mobile.state :as mobile-state]
@@ -106,7 +105,7 @@
        (cond
          (= tab "graphs") (graphs/page)
          (= tab "go to") (favorites/favorites)
-         (= tab "search") (search/search)
+         (= tab "search") nil
          (= tab "capture") (capture)))]))
 
 (rum/defc main-content < rum/static
