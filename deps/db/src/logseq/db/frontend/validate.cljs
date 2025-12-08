@@ -74,8 +74,11 @@
                            ;; Provide additional page info for debugging
                            (:block/page ent)
                            (update :block/page
-                                   (fn [id] (select-keys (d/entity db id)
-                                                         [:block/name :block/tags :db/id :block/created-at]))))
+                                   (fn [id]
+                                     (let [page-ent (d/entity db id)]
+                                       (cond-> (select-keys page-ent [:block/name :db/id :block/created-at])
+                                         (:block/tags page-ent)
+                                         (assoc :block/tags (mapv :db/ident (:block/tags page-ent))))))))
                  :dispatch-key (->> (dissoc ent :db/id) (db-malli-schema/entity-dispatch-key db))
                  :errors errors'})))))
 
