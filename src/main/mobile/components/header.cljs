@@ -148,7 +148,7 @@
                               (ldb/get-graph-rtc-uuid (db/get-db))
                               (user-handler/logged-in?))
           base {:title title
-                :hidden (boolean hidden?)}
+                :hidden hidden?}
           page? (= route-name :page)
           left-buttons (cond
                          (and (= tab "home") (nil? route-view))
