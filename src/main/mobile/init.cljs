@@ -25,7 +25,8 @@
 (defn- ios-init!
   "Initialize iOS-specified event listeners"
   []
-  (mobile-util/check-ios-zoomed-display))
+  (mobile-util/check-ios-zoomed-display)
+  (mobile-util/sync-ios-content-size!))
 
 (defn- android-init!
   "Initialize Android-specified event listeners"
@@ -130,5 +131,6 @@
 
 (comment
   (defn keyboard-show
+    "Notice, iOS is not supported"
     []
     (.show Keyboard)))

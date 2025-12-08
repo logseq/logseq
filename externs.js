@@ -143,6 +143,7 @@ dummy.ELEMENT = function() {};
 dummy.TEXT = function() {};
 dummy.isAbsolute = function() {};
 dummy._address = function() {};
+dummy.setInterfaceStyle = function() {};
 dummy.Consumer = {}
 
 var utils = {}

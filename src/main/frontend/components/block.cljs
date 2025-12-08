@@ -2677,8 +2677,6 @@
                                           first
                                           util/caret-range)
                 mobile-range (when mobile? (get-cursor-range))]
-            (when-not forbidden-edit?
-              (util/mobile-keep-keyboard-open false))
             (when (and (not forbidden-edit?) (contains? #{1 0} button))
               (cond
                 (and meta? shift?)
@@ -2709,6 +2707,7 @@
 
                 :else
                 (let [block (or (db/entity [:block/uuid (:block/uuid block)]) block)]
+                  (mobile-util/mobile-focus-hidden-input)
                   (editor-handler/clear-selection!)
                   (editor-handler/unhighlight-blocks!)
                   (p/do!

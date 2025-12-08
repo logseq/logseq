@@ -12,11 +12,7 @@ import NaturalLanguage
 import Drops
 
 func isDarkMode() -> Bool {
-    if #available(iOS 12.0, *) {
-        return UITraitCollection.current.userInterfaceStyle == .dark
-    } else {
-        return false
-    }
+    return UITraitCollection.current.userInterfaceStyle == .dark
 }
 
 func isOnlyDayDifferentOrSame(date1: Foundation.Date, date2: Date) -> Bool {
@@ -120,10 +116,8 @@ class DatePickerDialogViewController: UIViewController {
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         super.traitCollectionDidChange(previousTraitCollection)
 
-        if #available(iOS 12.0, *) {
-            if traitCollection.userInterfaceStyle != previousTraitCollection?.userInterfaceStyle {
-                dialogView.backgroundColor = .logseqBackground
-            }
+        if traitCollection.userInterfaceStyle != previousTraitCollection?.userInterfaceStyle {
+            dialogView.backgroundColor = .logseqBackground
         }
     }
 

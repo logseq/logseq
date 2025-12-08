@@ -743,9 +743,9 @@
     (shui-editor-popups id format action nil)))
 
 (defn- editor-on-hide
-  [state type e]
+  [state type e editing-another-block?]
   (let [action (state/get-editor-action)
-        [_id config] (:rum/args state)]
+        [_opts _id config] (:rum/args state)]
     (cond
       (and (= type :esc) (editor-handler/editor-commands-popup-exists?))
       nil
@@ -768,12 +768,11 @@
       ;; exit editing mode
       :else
       (let [select? (= type :esc)]
-        (when (.closest (.-target e) ".block-content")
-          (util/mobile-keep-keyboard-open))
         (when-let [container (gdom/getElement "app-container")]
           (dom/remove-class! container "blocks-selection-mode"))
         (p/do!
-         (editor-handler/escape-editing {:select? select?})
+         (editor-handler/escape-editing {:select? select?
+                                         :editing-another-block? editing-another-block?})
          (some-> config :on-escape-editing
                  (apply [(str uuid) (= type :esc)])))))))
 
@@ -795,7 +794,12 @@
       {:node @(::ref state)
        :on-hide (fn [_state e type]
                   (when-not (= type :esc)
-                    (editor-on-hide state type e)))})))
+                    (let [target (.-target e)
+                          block-container (.closest target ".ls-block")
+                          editing-another-block? (and block-container
+                                                      (not (dom/has-class? block-container "block-add-button"))
+                                                      (gdom/contains block-container target))]
+                      (editor-on-hide state type e editing-another-block?))))})))
   (mixins/event-mixin setup-key-listener!)
   lifecycle/lifecycle
   [state {:keys [format block parent-block]} id config]
@@ -815,7 +819,7 @@
                                     (if-let [on-key-down (:on-key-down config)]
                                       (on-key-down e)
                                       (when (= (util/ekey e) "Escape")
-                                        (editor-on-hide state :esc e))))
+                                        (editor-on-hide state :esc e false))))
                :auto-focus true
                :auto-capitalize (if (util/mobile?) "sentences" "off")
                :auto-correct (if (util/mobile?) "true" "false")

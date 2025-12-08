@@ -897,6 +897,7 @@
                   concat-prev-block?
                   (let [children (:block/_parent (db/entity (:db/id block)))]
                     (p/do!
+                     (mobile-util/mobile-focus-hidden-input)
                      (state/set-state! :editor/edit-block-fn edit-block-f)
                      (ui-outliner-tx/transact!
                       transact-opts
@@ -2094,7 +2095,7 @@
                                               (when-not keep-uuid? [:id])
                                               [:custom_id :custom-id]
                                               exclude-properties))
-                    :block/properties-text-values (apply dissoc (:block/properties-text-values block)
+                    :block/properties-text-values (apply dissoc (not-empty (:block/properties-text-values block))
                                                          (concat
                                                           (when-not keep-uuid? [:id])
                                                           exclude-properties))
@@ -3915,16 +3916,15 @@
             (select-all-blocks! {})))))))
 
 (defn escape-editing
-  [& {:keys [select? save-block?]
+  [& {:keys [select? save-block? editing-another-block?]
       :or {save-block? true}}]
-  (let [edit-block (state/get-edit-block)]
-    (p/do!
-     (when save-block? (save-current-block!))
-     (if select?
-       (when-let [node (some-> (state/get-input) (util/rec-get-node "ls-block"))]
-         (state/exit-editing-and-set-selected-blocks! [node]))
-       (when (= (:db/id edit-block) (:db/id (state/get-edit-block)))
-         (state/clear-edit!))))))
+  (p/do!
+   (when save-block? (save-current-block!))
+   (if select?
+     (when-let [node (some-> (state/get-input) (util/rec-get-node "ls-block"))]
+       (state/exit-editing-and-set-selected-blocks! [node]))
+     (when-not editing-another-block?
+       (state/clear-edit!)))))
 
 (defn replace-block-reference-with-content-at-point
   []
@@ -4050,7 +4050,7 @@
            (when query-block
              (save-block-inner! query-block current-query {})))))))))
 
-(defn show-quick-add
+(defn quick-add-ensure-new-block-exists!
   []
   (let [graph (state/get-current-repo)]
     (p/do!
@@ -4067,26 +4067,31 @@
        (when (empty? children')
          (api-insert-new-block! "" {:page (:block/uuid add-page)
                                     :container-id :unknown-container
-                                    :replace-empty-target? false})))
-     (state/pub-event! [(if (util/mobile?)
-                          :dialog/mobile-quick-add
-                          :dialog/quick-add)]))))
+                                    :replace-empty-target? false}))))))
+
+(defn show-quick-add
+  []
+  (p/do!
+   (quick-add-ensure-new-block-exists!)
+   (state/pub-event! [:dialog/quick-add])))
 
 (defn quick-add-blocks!
   []
   (let [today (db/get-page (date/today))
         add-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)]
-    (when (and today add-page)
-      (let [children (:block/_parent (db/entity (:db/id add-page)))]
-        (p/do!
-         (when (seq children)
-           (if-let [today-last-child (last (ldb/sort-by-order (:block/_parent today)))]
-             (move-blocks! children today-last-child {:sibling? true})
-             (move-blocks! children today {:sibling? false})))
-         (state/close-modal!)
-         (shui/popup-hide!)
-         (when (seq children)
-           (notification/show! "Blocks added to today!" :success)))))))
+    (p/do!
+     (save-current-block!)
+     (when (and today add-page)
+       (let [children (:block/_parent (db/entity (:db/id add-page)))]
+         (p/do!
+          (when (seq children)
+            (if-let [today-last-child (last (ldb/sort-by-order (:block/_parent today)))]
+              (move-blocks! children today-last-child {:sibling? true})
+              (move-blocks! children today {:sibling? false})))
+          (state/close-modal!)
+          (shui/popup-hide!)
+          (when (seq children)
+            (notification/show! "Blocks added to today!" :success))))))))
 
 (defn quick-add
   []

@@ -59,7 +59,7 @@
      (when (and (string/blank? input) (seq recents))
        [:div
         [:div.px-2.font-medium.text-muted-foreground
-         [:div.flex.flex-item.items-center.justify-between.mt-2
+         [:div.flex.flex-item.items-center.justify-between
           "Recent"
           (shui/button
            {:variant :text

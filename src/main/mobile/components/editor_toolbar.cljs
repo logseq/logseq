@@ -8,14 +8,12 @@
             [frontend.mobile.haptics :as haptics]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
-            [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.shui.hooks :as hooks]
             [mobile.components.recorder :as recorder]
             [mobile.init :as mobile-init]
-            [mobile.state :as mobile-state]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -149,42 +147,21 @@
               (state/clear-edit!)
               (mobile-init/keyboard-hide))})
 
-(defn- capture-action
-  []
-  {:id "capture"
-   :title "Capture"
-   :system-icon "paperplane"
-   :handler (fn []
-              (state/clear-edit!)
-              (mobile-init/keyboard-hide)
-              (editor-handler/quick-add-blocks!))})
-
 (defn- toolbar-actions
-  [quick-add?]
-  (let [audio (audio-action)
-        keyboard (keyboard-action)
-        main-actions (if quick-add?
-                       [(undo-action)
-                        (todo-action)
-                        audio
-                        (camera-action)
-                        (tag-action)
-                        (page-ref-action)
-                        (indent-outdent-action false)
-                        (indent-outdent-action true)
-                        (redo-action)]
-                       [(undo-action)
-                        (todo-action)
-                        (indent-outdent-action false)
-                        (indent-outdent-action true)
-                        (tag-action)
-                        (camera-action)
-                        (page-ref-action)
-                        audio
-                        (slash-action)
-                        (redo-action)])]
+  []
+  (let [keyboard (keyboard-action)
+        main-actions [(undo-action)
+                      (todo-action)
+                      (indent-outdent-action false)
+                      (indent-outdent-action true)
+                      (tag-action)
+                      (camera-action)
+                      (page-ref-action)
+                      (audio-action)
+                      (slash-action)
+                      (redo-action)]]
     {:main main-actions
-     :trailing (if quick-add? (capture-action) keyboard)}))
+     :trailing keyboard}))
 
 (defn- action->native
   [{:keys [id title system-icon]}]
@@ -223,12 +200,11 @@
     (hooks/use-effect!
      (fn []
        (when (mobile-util/native-ios?)
-         (if should-show?
+         (when should-show?
            (.present plugin (clj->js {:actions native-actions
                                       :trailingAction trailing-native
-                                      :tintColor (colors/get-accent-color)}))
-           (.dismiss plugin)))
-       #(when (mobile-util/native-ios?)
+                                      :tintColor (colors/get-accent-color)}))))
+       #(when (and (mobile-util/native-ios?) should-show?)
           (.dismiss plugin)))
      [should-show? native-actions trailing-native])
 
@@ -238,12 +214,8 @@
   []
   (let [editing? (state/sub :editor/editing?)
         code-block? (state/sub :editor/code-block-context)
-        quick-add? (mobile-state/quick-add-open?)
-        keep-open? (= "app-keep-keyboard-open-input"
-                      (some-> js/document.activeElement (.-id)))
-        show? (and (util/mobile?)
-                   (not code-block?)
-                   (or editing? keep-open?))
-        actions (toolbar-actions quick-add?)]
+        show? (and (not code-block?)
+                   editing?)
+        actions (toolbar-actions)]
     (when (mobile-util/native-ios?)
       (native-toolbar show? actions))))

@@ -18,10 +18,10 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.db :as ldb]
+            [logseq.db.sqlite.export :as sqlite-export]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [logseq.db.sqlite.export :as sqlite-export]))
+            [rum.core :as rum]))
 
 (rum/defcs auto-backup < rum/reactive
   {:init (fn [state]
@@ -102,17 +102,19 @@
         (when db-based?
           [:div
            [:a.font-medium {:on-click #(export/export-repo-as-sqlite-db! current-repo)}
-            (t :export-sqlite-db)]])
+            (t :export-sqlite-db)]
+           [:p.text-sm.opacity-70.mb-0 "Primary way to backup graph's content to a single .sqlite file."]])
         (when db-based?
           [:div
            [:a.font-medium {:on-click #(export/export-repo-as-zip! current-repo)}
-            (t :export-zip)]])
+            (t :export-zip)]
+           [:p.text-sm.opacity-70.mb-0 "Primary way to backup graph's content and assets to a .zip file."]])
 
-        (when db-based?
+        (when (and db-based? (not (util/mobile?)))
           [:div
            [:a.font-medium {:on-click #(db-export-handler/export-repo-as-db-edn! current-repo)}
-            (t :export-db-edn)]])
-
+            (t :export-db-edn)]
+           [:p.text-sm.opacity-70.mb-0 "Exports to a readable and editable .edn file. Don't rely on this as a primary backup."]])
         (when-not (mobile-util/native-platform?)
           [:div
            [:a.font-medium {:on-click #(export-text/export-repo-as-markdown! current-repo)}
@@ -135,9 +137,10 @@
           [:div
            [:a.font-medium {:on-click #(export/export-repo-as-debug-transit! current-repo)}
             "Export debug transit file"]
-           [:p.text-sm.opacity-70.mb-0 "Any sensitive data will be removed in the exported transit file, you can send it to us for debugging."]])
+           [:p.text-sm.opacity-70.mb-0 "Exports to a .transit file to send to us for debugging. Any sensitive data will be removed in the exported file."]])
 
-        (when (and db-based? util/web-platform?)
+        (when (and db-based? util/web-platform?
+                   (not (util/mobile?)))
           [:div
            [:hr]
            (auto-backup)])]])))

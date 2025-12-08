@@ -4,14 +4,41 @@
 }
 
 :root {
-  --ls-page-title-size: 26px;
-  --safe-area-inset-top: 40px;
-  --safe-area-inset-bottom: 16px;
+  --ls-mobile-font-scale: 1;
+  --ls-page-title-size: calc(26px * var(--ls-mobile-font-scale, 1));
+  --ls-mobile-font-size: 16px;
 }
 
-html.is-native-ios {
-  --safe-area-inset-top: 58px;
-  --safe-area-inset-bottom: 24px;
+html.is-native-ios,
+html.is-ios {
+  font-size: calc(var(--ls-mobile-font-size) * var(--ls-mobile-font-scale, 1));
+}
+
+#app-main {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+}
+
+html.is-native-ios body,
+html.is-native-ios textarea,
+html.is-native-ios input,
+html.is-native-ios select,
+html.is-native-ios .block-content,
+html.is-native-ios .editor-inner,
+html.is-ios body,
+html.is-ios textarea,
+html.is-ios input,
+html.is-ios select,
+html.is-ios .block-content,
+html.is-ios .editor-inner,
+{
+  font-size: inherit;
+}
+
+html.is-native-ios, html.is-ios {
+    .block-content, .editor-inner, textarea {
+        line-height: 1.6;
+    }
 }
 
 html.has-mobile-keyboard {
@@ -19,8 +46,8 @@ html.has-mobile-keyboard {
     @apply overflow-hidden
   }
 
-  .app-popup, #main-content-container {
-    padding-bottom: calc(var(--ls-native-kb-height, 0px) + 160px);
+  .app-popup, #main-content-container, #app-main-home {
+    padding-bottom: calc(var(--ls-native-kb-height, 0px) + 32px);
   }
 }
 
@@ -182,7 +209,7 @@ ul {
 }
 
 .ls-page-title {
-  margin-left: -8px;
+  margin-left: -3px;
 }
 
 .ls-block[draggable="true"] {
@@ -238,17 +265,17 @@ ul {
     @apply text-gray-12 dark:text-gray-11;
 
     .page-title {
-      @apply text-base opacity-80;
+      @apply text-base opacity-100;
       display: flex !important;
     }
   }
 
   .cp__sidebar-left-layout a, .wrap-th, .more {
-    @apply !opacity-80;
+    @apply !opacity-100;
   }
 
   .hd .wrap-th > strong {
-    @apply !text-lg;
+    @apply !text-base;
   }
 }
 
@@ -282,7 +309,8 @@ body, #root {
     height: 100%;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    padding-bottom: 160px;
+    padding-top: 0px;
+    padding-bottom: 64px;
 }
 
 .cp__select-main, .cp__emoji-icon-picker, .ls-property-key {
@@ -320,4 +348,19 @@ div[data-radix-menu-content] {
 
 .ls-nlp-calendar {
     @apply flex-1;
+}
+
+.mobile-setting-item {
+    @apply rounded-2xl px-3 py-3 shadow-sm flex items-center justify-between bg-gray-03;
+}
+
+#ls-mobile-kb-anchor {
+    opacity:0;
+    position:fixed;
+    top:-9999px;
+}
+
+.bullet {
+    width: 0.45em;
+    height: 0.45em;
 }

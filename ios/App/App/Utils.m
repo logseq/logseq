@@ -11,4 +11,5 @@
 CAP_PLUGIN(Utils, "Utils",
     CAP_PLUGIN_METHOD(isZoomed, CAPPluginReturnPromise);
     CAP_PLUGIN_METHOD(getDocumentRoot, CAPPluginReturnPromise);
+    CAP_PLUGIN_METHOD(setInterfaceStyle, CAPPluginReturnPromise);
 )

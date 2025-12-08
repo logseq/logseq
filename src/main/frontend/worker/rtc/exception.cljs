@@ -34,7 +34,11 @@ the server will put it to s3 and return its presigned-url to clients."}
   :rtc.exception/fetch-user-rsa-public-key-error {:doc "Failed to fetch user RSA public-key from server"}
   :rtc.exception/fetch-graph-aes-key-error {:doc "Failed to fetch graph AES key from server"}
   :rtc.exception/not-found-user-rsa-key-pair {:doc "user rsa-key-pair not found"}
-  :rtc.exception/not-found-graph-aes-key {:doc "graph aes-key not found"})
+  :rtc.exception/not-found-graph-aes-key {:doc "graph aes-key not found"}
+
+  :rtc.exception/read-asset-failed {:doc "read asset from fs failed, maybe not exists"}
+  :rtc.exception/upload-asset-failed {:doc "upload asset failed"}
+  :rtc.exception/download-asset-failed {:doc "download asset failed"})
 
 (def ex-remote-graph-lock-missing
   (ex-info "remote graph lock missing(server internal error)"

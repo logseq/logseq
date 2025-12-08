@@ -40,9 +40,23 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // 2) Wrap in SwiftUI root (LiquidTabsRootView)
         let rootView = LiquidTabsRootView(navController: nav)
         let hosting = UIHostingController(rootView: rootView)
+        hosting.view.backgroundColor = UIColor.logseqBackground
+
+        let savedTheme = UserDefaults.standard.string(forKey: "logseqTheme") ?? "system"
+
+        let style: UIUserInterfaceStyle
+        switch savedTheme {
+        case "dark":
+            style = .dark
+        case "light":
+            style = .light
+        default:
+            style = .unspecified
+        }
 
         // 3) Standard UIWindowScene setup
         let window = UIWindow(windowScene: windowScene)
+        window.overrideUserInterfaceStyle = style
         window.rootViewController = hosting
         window.tintColor = UIColor.logseqTint
         self.window = window

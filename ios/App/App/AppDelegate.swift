@@ -12,13 +12,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
     private var ignoreRoutePopCount = 0
     private var popSnapshotView: UIView?
 
-    private lazy var navigationSwipeGesture: UISwipeGestureRecognizer = {
-        let gesture = UISwipeGestureRecognizer(target: self, action: #selector(handleNavigationSwipe(_:)))
-        gesture.direction = .right
-        gesture.cancelsTouchesInView = false
-        return gesture
-    }()
-
     private func normalizedPath(_ raw: String?) -> String {
         guard let raw = raw, !raw.isEmpty else { return "/" }
         return raw
@@ -195,9 +188,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
     // ---------------------------------------------------------
 
     func navigationController(
-        _ navigationController: UINavigationController,
-        willShow viewController: UIViewController,
-        animated: Bool
+      _ navigationController: UINavigationController,
+      willShow viewController: UIViewController,
+      animated: Bool
     ) {
         guard let toVC = viewController as? NativePageViewController else { return }
         guard let coordinator = navigationController.transitionCoordinator else { return }
@@ -214,6 +207,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
         }
 
         if isPop {
+            // -----------------------------
+            // POP — keep your existing logic
+            // -----------------------------
             let previousStack = pathStack
             if pathStack.count > 1 { _ = pathStack.popLast() }
             if let last = pathStack.last, last != toVC.targetPath {
@@ -250,8 +246,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
                 }
 
                 SharedWebViewController.instance.attach(
-                    to: toVC,
-                    leavePlaceholderInPreviousParent: fromVC != nil
+                  to: toVC,
+                  leavePlaceholderInPreviousParent: fromVC != nil
                 )
 
                 if let snapshot = self.popSnapshotView {
@@ -262,6 +258,26 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
                     SharedWebViewController.instance.clearPlaceholder()
                     self.popSnapshotView?.removeFromSuperview()
                     self.popSnapshotView = nil
+                }
+            }
+        } else {
+            // -----------------------------
+            // PUSH / RESET
+            // -----------------------------
+            // Attach the shared webview to the *destination* page
+            // before/during the animation so it can start rendering immediately.
+            SharedWebViewController.instance.attach(
+              to: toVC,
+              leavePlaceholderInPreviousParent: fromVC != nil
+            )
+
+            coordinator.animate(alongsideTransition: nil) { ctx in
+                if ctx.isCancelled, let fromVC {
+                    // If the push is cancelled (interactive back), put the webview back.
+                    SharedWebViewController.instance.attach(to: fromVC)
+                } else {
+                    // Transition completed → clear any placeholders.
+                    SharedWebViewController.instance.clearPlaceholder()
                 }
             }
         }
@@ -279,7 +295,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
             SharedWebViewController.instance.attach(to: current)
         }
 
-        attachNavigationSwipeGesture()
     }
 
     func navigationController(
@@ -290,31 +305,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
     ) -> UIViewControllerAnimatedTransitioning? {
         // Sidebar animator removed → always return nil
         return nil
-    }
-
-    // ---------------------------------------------------------
-    // MARK: Gestures
-    // ---------------------------------------------------------
-
-    private func attachNavigationSwipeGesture() {
-        guard let nav = navController else { return }
-
-        if let edgePan = nav.interactivePopGestureRecognizer {
-            navigationSwipeGesture.require(toFail: edgePan)
-        }
-        if navigationSwipeGesture.view !== nav.view {
-            nav.view.addGestureRecognizer(navigationSwipeGesture)
-        }
-    }
-
-    @objc private func handleNavigationSwipe(_ gesture: UISwipeGestureRecognizer) {
-        guard gesture.state == .ended else { return }
-        guard let nav = navController else { return }
-
-        if nav.viewControllers.count > 1 {
-            nav.popViewController(animated: true)
-            return
-        }
     }
 
     // ---------------------------------------------------------

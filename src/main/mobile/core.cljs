@@ -60,7 +60,6 @@
   []
   (.render root (app/main)))
 
-(defonce ^:private *route-timeout (atom nil))
 (defn set-router!
   []
   (let [router (rf/router routes nil)]
@@ -71,23 +70,13 @@
          (state/clear-edit!))
        (selection-toolbar/close-selection-bar!)
        (let [route-name (get-in route [:data :name])
-             path (-> js/location .-hash (string/replace-first #"^#" ""))
-             pop? (= :pop @mobile-nav/navigation-source)
-             timeout @*route-timeout]
-         (when timeout
-           (js/clearTimeout timeout))
+             path (-> js/location .-hash (string/replace-first #"^#" ""))]
          (mobile-nav/notify-route-change!
           {:route {:to route-name
                    :path-params (:path-params route)
                    :query-params (:query-params route)}
            :path path})
-
-         (if pop?
-           (route-handler/set-route-match! route)
-           (reset! *route-timeout
-                   (js/setTimeout
-                    #(route-handler/set-route-match! route)
-                    200)))))
+         (route-handler/set-route-match! route)))
 
      ;; set to false to enable HistoryAPI
      {:use-fragment true})))

@@ -2,7 +2,9 @@
   "App root"
   (:require ["../externals.js"]
             [frontend.components.journal :as journal]
+            [frontend.components.quick-add :as quick-add]
             [frontend.handler.common :as common-handler]
+            [frontend.handler.editor :as editor-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.rum :as frum]
             [frontend.state :as state]
@@ -16,20 +18,20 @@
             [mobile.bottom-tabs :as bottom-tabs]
             [mobile.components.editor-toolbar :as editor-toolbar]
             [mobile.components.favorites :as favorites]
+            [mobile.components.graphs :as graphs]
             [mobile.components.header :as mobile-header]
             [mobile.components.popup :as popup]
             [mobile.components.search :as search]
             [mobile.components.selection-toolbar :as selection-toolbar]
-            [mobile.components.settings :as settings]
             [mobile.components.ui :as ui-component]
             [mobile.state :as mobile-state]
+            [promesa.core :as p]
             [rum.core :as rum]))
 
 (rum/defc journals
   []
   (ui-component/classic-app-container-wrap
-   [:div.pt-3
-    (journal/all-journals)]))
+   (journal/all-journals)))
 
 (rum/defc home-inner < rum/static
   [db-restoring?]
@@ -85,19 +87,28 @@
        #(.removeEventListener js/window "orientationchange" handle-size!)))
    []))
 
-(rum/defc other-page
-  [view tab route-match]
-  (let [tab' (keyword tab)]
-    [:div#main-content-container.px-5.ls-layer
-     (case tab'
-       :settings (settings/page)
-       (if view
-         (view route-match)
-         (case tab'
-           :home nil
-           :favorites (favorites/favorites)
-           :search (search/search)
-           nil)))]))
+(rum/defc capture <
+  {:did-mount (fn [state]
+                (p/do!
+                 (editor-handler/quick-add-ensure-new-block-exists!)
+                 (editor-handler/quick-add-open-last-block!))
+                state)}
+  []
+  (quick-add/quick-add))
+
+(rum/defc other-page < rum/static
+  [route-view tab route-match]
+  (let [page-view? (= (get-in route-match [:data :name]) :page)]
+    [:div#main-content-container.pl-3.ls-layer
+     {:class (if page-view? "pr-2" "pr-3")}
+     (if route-view
+       (route-view route-match)
+       ;; NOTE: `case` caused IllegalArgumentException: Duplicate case test constant
+       (cond
+         (= tab "graphs") (graphs/page)
+         (= tab "go to") (favorites/favorites)
+         (= tab "search") (search/search)
+         (= tab "capture") (capture)))]))
 
 (rum/defc main-content < rum/static
   [tab route-match]
@@ -109,7 +120,7 @@
     ;; Both are absolutely positioned and stacked; we toggle visibility.
     [:div.h-full.relative
      ;; Journals scroll container (keep-alive)
-     [:div#app-main-home.px-5.absolute.inset-0.overflow-y-auto
+     [:div#app-main-home.pl-3.pr-2.absolute.inset-0
       {:class (when-not home? "invisible pointer-events-none")}
       (home)]
 
@@ -130,11 +141,14 @@
        (when-let [element (util/app-scroll-container-node)]
          (common-handler/listen-to-scroll! element)))
      [])
-    [:div.h-full {:class (if (contains? #{"search"} tab)
-                           "mt-20"
-                           "mt-24")}
+    [:div.h-full
      (mobile-header/header current-repo tab)
      (main-content tab route-match)]))
+
+(defonce hidden-input
+  [:input
+   {:id mobile-util/mobile-keyboard-anchor-id
+    :type "text"}])
 
 (rum/defc main < rum/reactive
   []
@@ -144,7 +158,7 @@
         show-popup? (and open? content-fn)
         fold-button-on-right? (state/enable-fold-button-right?)
         route-match (state/sub :route-match)]
-    [:main.w-full.h-full
+    [:div#app-main.w-full.h-full
      {:class (util/classnames
               [{:ls-fold-button-on-right fold-button-on-right?}])}
      [:div.w-full.h-full {:class (when show-popup? "invisible")}
@@ -156,7 +170,12 @@
      (when show-action-bar?
        (selection-toolbar/action-bar))
      (shui-popup/install-popups)
-     (ui-component/keep-keyboard-virtual-input)
      (ui-component/install-notifications)
      (shui-toaster/install-toaster)
-     (shui-dialog/install-modals)]))
+     (shui-dialog/install-modals)
+     [:div.download
+      [:a#download.hidden]
+      [:a#download-as-transit-debug.hidden]
+      [:a#download-as-sqlite-db.hidden]
+      [:a#download-as-zip.hidden]]
+     hidden-input]))

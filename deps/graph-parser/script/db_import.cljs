@@ -14,9 +14,9 @@
             [logseq.common.graph :as common-graph]
             [logseq.db.common.sqlite-cli :as sqlite-cli]
             [logseq.db.frontend.asset :as db-asset]
+            [logseq.db.frontend.validate :as db-validate]
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.outliner.cli :as outliner-cli]
-            [logseq.outliner.pipeline :as outliner-pipeline]
             [nbb.classpath :as cp]
             [nbb.core :as nbb]
             [promesa.core :as p]))
@@ -145,6 +145,19 @@
       (p/let [_ (gp-exporter/export-doc-files conn files' <read-file doc-options)]
         {:import-state (:import-state doc-options)}))))
 
+(defn- validate-db [db db-name options]
+  (if-let [errors (:errors
+                   (db-validate/validate-local-db!
+                    db
+                    (merge options {:db-name db-name :verbose true})))]
+    (do
+      (println "Found" (count errors)
+               (if (= 1 (count errors)) "entity" "entities")
+               "with errors:")
+      (pprint/pprint errors)
+      (js/process.exit 1))
+    (println "Valid!")))
+
 (def spec
   "Options spec"
   {:help {:alias :h
@@ -171,7 +184,10 @@
    :property-parent-classes
    {:alias :P
     :coerce []
-    :desc "List of properties whose values convert to a parent class"}})
+    :desc "List of properties whose values convert to a parent class"}
+   :validate
+   {:alias :V
+    :desc "Validate db after creation"}})
 
 (defn -main [args]
   (let [[file-graph db-graph-dir] args
@@ -197,7 +213,7 @@
                        (set/rename-keys {:all-tags :convert-all-tags? :remove-inline-tags :remove-inline-tags?}))
         _ (when (:verbose options) (prn :options user-options))
         options' (merge {:user-options user-options}
-                        (select-keys options [:files :verbose :continue :debug]))]
+                        (select-keys options [:files :verbose :continue :debug :validate]))]
     (p/let [{:keys [import-state]}
             (if directory?
               (import-file-graph-to-db file-graph' db-full-dir conn options')
@@ -210,7 +226,8 @@
       (when-let [ignored-files (seq @(:ignored-files import-state))]
         (println (count ignored-files) "ignored file(s):" (pr-str (vec ignored-files))))
       (when (:verbose options') (println "Transacted" (count (d/datoms @conn :eavt)) "datoms"))
-      (println "Created graph" (str db-name "!")))))
+      (println "Created graph" (str db-name "!"))
+      (when (:validate options') (validate-db @conn db-name {})))))
 
 (when (= nbb/*file* (nbb/invoked-file))
   (-main *command-line-args*))

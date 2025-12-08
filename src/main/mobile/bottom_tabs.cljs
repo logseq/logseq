@@ -39,13 +39,14 @@
    `f` receives the tab id string.
    Returns the Capacitor listener handle; call `(.remove handle)` to unsubscribe."
   [f]
-  (.addListener
-   liquid-tabs
-   "tabSelected"
-   (fn [data]
+  (when (and (util/capacitor?) liquid-tabs)
+    (.addListener
+     liquid-tabs
+     "tabSelected"
+     (fn [data]
       ;; data is like { id: string }
-     (when-let [id (.-id data)]
-       (f id)))))
+       (when-let [id (.-id data)]
+         (f id))))))
 
 (defn add-search-listener!
   "Listen to native search query changes from the SwiftUI search tab.
@@ -79,28 +80,14 @@
                (editor-handler/keydown-new-block-handler nil))))
          nil)))))
 
-(defonce *previous-tab (atom nil))
 (defonce add-tab-listeners!
   (do
     (add-tab-selected-listener!
      (fn [tab]
-       (if (= tab "capture")
-         (editor-handler/show-quick-add)
-         (let [exit-search? (= "search" @*previous-tab)]
-           (when-not (= tab @*previous-tab)
-             (when-not exit-search?
-               (mobile-nav/reset-route!))
-             (mobile-state/set-tab! tab))
+       (mobile-state/set-tab! tab)
 
-           (case tab
-             "home"
-             (util/scroll-to-top false)
-             ;; TODO: support longPress detection
-             ;; (if (= "longPress" interaction)
-             ;;   (state/pub-event! [:mobile/start-audio-record])
-             ;;   (editor-handler/show-quick-add))
-             nil)
-           (reset! *previous-tab tab)))))
+       (when (= "home" tab)
+         (util/scroll-to-top false))))
 
     (add-watch mobile-state/*tab ::select-tab
                (fn [_ _ _old new]
@@ -119,6 +106,6 @@
   []
   (configure-tabs
    [{:id "home"       :title "Home"       :systemImage "house" :role "normal"}
-    {:id "favorites"  :title "Favorites"  :systemImage "star"  :role "normal"}
+    {:id "graphs"     :title "Graphs"     :systemImage "app.background.dotted"  :role "normal"}
     {:id "capture"    :title "Capture"    :systemImage "tray"  :role "normal"}
-    {:id "settings"   :title "Settings"   :systemImage "gear"  :role "normal"}]))
+    {:id "go to"  :title "Go To"  :systemImage "square.stack.3d.down.right"  :role "normal"}]))

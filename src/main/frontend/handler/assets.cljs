@@ -8,6 +8,7 @@
             [frontend.fs :as fs]
             [frontend.state :as state]
             [frontend.util :as util]
+            [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
@@ -213,6 +214,7 @@
              (constantly nil))))
 
 (defn <read-asset
+  "Throw if asset not found"
   [repo asset-block-id asset-type]
   (let [repo-dir (config/get-repo-dir repo)
         file-path (path/path-join common-config/local-assets-dir
@@ -262,7 +264,10 @@
   [repo aes-key asset-block-uuid-str asset-type checksum put-url]
   (assert (and asset-type checksum))
   (m/sp
-    (let [asset-file (c.m/<? (<read-asset repo asset-block-uuid-str asset-type))
+    (let [asset-file (try (c.m/<? (<read-asset repo asset-block-uuid-str asset-type))
+                          (catch :default e
+                            (log/info :read-asset e)
+                            (throw (ex-info "read-asset failed" {:type :rtc.exception/read-asset-failed} e))))
           asset-file* (if (not aes-key)
                         asset-file
                         (ldb/write-transit-str
@@ -282,7 +287,8 @@
         :succ (constantly nil))
       (let [{:keys [status] :as r} (m/? http-task)]
         (when-not (http/unexceptional-status? status)
-          {:ex-data {:type :rtc.exception/upload-asset-failed :data (dissoc r :body)}})))))
+          (throw (ex-info "upload-asset failed"
+                          {:type :rtc.exception/upload-asset-failed :data (dissoc r :body)})))))))
 
 (defn new-task--rtc-download-asset
   [repo aes-key asset-block-uuid-str asset-type get-url]
@@ -302,7 +308,8 @@
       (try
         (let [{:keys [status body] :as r} (m/? http-task)]
           (if-not (http/unexceptional-status? status)
-            {:ex-data {:type :rtc.exception/download-asset-failed :data (dissoc r :body)}}
+            (throw (ex-info "download asset failed"
+                            {:type :rtc.exception/download-asset-failed :data (dissoc r :body)}))
             (let [asset-file
                   (if (not aes-key)
                     body
@@ -318,7 +325,6 @@
                           (throw e)))))]
               (c.m/<? (<write-asset repo asset-block-uuid-str asset-type asset-file))
               nil)))
-
         (catch Cancelled e
           (progress-canceler)
           (throw e))))))

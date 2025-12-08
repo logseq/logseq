@@ -29,7 +29,7 @@
             [rum.core :as rum]))
 
 (rum/defc normalized-graph-label
-  [{:keys [url remote? GraphName GraphUUID] :as graph} on-click]
+  [{:keys [url remote? graph-e2ee? GraphName GraphUUID] :as graph} on-click]
   (let [db-based? (config/db-based-graph? url)]
     (when graph
       [:span.flex.items-center
@@ -40,7 +40,7 @@
            [:a.flex.items-center {:title local-dir
                                   :on-click #(on-click graph)}
             [:span graph-name (when (and GraphName (not db-based?)) [:strong.pl-1 "(" GraphName ")"])]
-            (when remote? [:strong.px-1.flex.items-center (ui/icon "cloud")])])
+            (when remote? [:strong.px-1.flex.items-center (ui/icon (if graph-e2ee? "lock" "cloud"))])])
          [:a.flex.items-center {:title GraphUUID
                                 :on-click #(on-click graph)}
           (db/get-repo-path (or url GraphName))
@@ -227,12 +227,14 @@
      (when-not (util/capacitor?)
        [:h1.title (t :graph/all-graphs)])
 
-     [:div.pl-1.content.mt-8
-      [:div.flex.flex-row.my-8
-       [:div.mr-8
-        (ui/button
-         "Create a new graph"
-         :on-click #(state/pub-event! [:graph/new-db-graph]))]]
+     [:div.pl-1.content
+      {:class (when-not (util/mobile?) "mt-8")}
+      (when-not (util/mobile?)
+        [:div.flex.flex-row.my-8
+         [:div.mr-8
+          (ui/button
+           "Create a new graph"
+           :on-click #(state/pub-event! [:graph/new-db-graph]))]])
 
       [:div
        [:h2.text-lg.font-medium.mb-4 (t :graph/local-graphs)]
@@ -272,7 +274,7 @@
   (let [switch-repos (if-not (nil? current-repo)
                        (remove (fn [repo] (= current-repo (:url repo))) repos) repos) ; exclude current repo
         repo-links (mapv
-                    (fn [{:keys [url remote? rtc-graph? GraphName GraphSchemaVersion GraphUUID] :as graph}]
+                    (fn [{:keys [url remote? graph-e2ee? rtc-graph? GraphName GraphSchemaVersion GraphUUID] :as graph}]
                       (let [local? (config/local-file-based-graph? url)
                             db-only? (config/db-based-graph? url)
                             repo-url (cond
@@ -287,7 +289,7 @@
                           {:title [:span.flex.items-center.title-wrap short-repo-name
                                    (when remote? [:span.pl-1.flex.items-center
                                                   {:title (str "<" GraphName "> #" GraphUUID)}
-                                                  (ui/icon "cloud" {:size 18})
+                                                  (ui/icon (if graph-e2ee? "lock" "cloud") {:size 18})
                                                   (when downloading?
                                                     [:span.opacity.text-sm.pl-1 "downloading"])])]
                            :hover-detail repo-url ;; show full path on hover
@@ -359,12 +361,13 @@
      (shui/button {:size :sm :variant :ghost
                    :on-click (fn []
                                (if (util/mobile?)
-                                 (state/pub-event! [:mobile/set-tab "settings"])
+                                 (state/pub-event! [:mobile/set-tab "graphs"])
                                  (route-handler/redirect-to-all-graphs)))}
                   (shui/tabler-icon "layout-2") [:span (t :all-graphs)]))])
 
 (rum/defcs repos-dropdown-content < rum/reactive
-  [_state & {:keys [contentid] :as opts}]
+  [_state & {:keys [contentid footer?] :as opts
+             :or {footer? true}}]
   (let [multiple-windows? false
         current-repo (state/sub :git/current-repo)
         login? (boolean (state/sub :auth/id-token))
@@ -380,7 +383,7 @@
                  (repo-handler/combine-local-&-remote-graphs repos (concat remotes rtc-graphs)) repos))
         items-fn #(repos-dropdown-links repos current-repo downloading-graph-id opts)
         header-fn #(when (> (count repos) 1) ; show switch to if there are multiple repos
-                     [:div.font-medium.md:text-sm.md:opacity-50.px-1.py-1.flex.flex-row.justify-between.items-center
+                     [:div.font-medium.md:text-sm.md:opacity-50.p-2.flex.flex-row.justify-between.items-center
                       [:h4.pb-1 (t :left-side-bar/switch)]
 
                       (when (and (file-sync/enable-sync?) login?)
@@ -422,7 +425,8 @@
                      :style {:color "inherit"}} title]
                    [:span.flex.items-center.gap-1.w-full
                     icon [:div title]]))))))]
-     (repos-footer multiple-windows? db-based?)]))
+     (when footer?
+       (repos-footer multiple-windows? db-based?))]))
 
 (rum/defcs graphs-selector < rum/reactive
   [_state]

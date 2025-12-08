@@ -2,6 +2,7 @@
   (:require ["@capacitor/core" :refer [Capacitor registerPlugin]]
             ["@capacitor/splash-screen" :refer [SplashScreen]]
             [clojure.string :as string]
+            [goog.dom :as gdom]
             [promesa.core :as p]))
 
 (defn platform []
@@ -35,8 +36,40 @@
   (set! native-selection-action-bar (registerPlugin "NativeSelectionActionBarPlugin"))
   (set! ios-utils (registerPlugin "Utils")))
 
+(defonce ios-content-size-listener nil)
+
+(defn- set-ios-font-scale!
+  [scale]
+  (let [^js style (.-style js/document.documentElement)
+        scale (or scale 1)]
+    (.setProperty style "--ls-mobile-font-scale" (str scale))))
+
+(defn sync-ios-content-size!
+  "Fetch the current iOS Dynamic Type scale and sync it to CSS variables.
+   Also attaches a listener to keep it in sync when the user changes the setting."
+  []
+  (when (native-ios?)
+    (let [apply-scale! (fn [payload]
+                         (let [payload (js->clj payload :keywordize-keys true)]
+                           (set-ios-font-scale! (:scale payload))))]
+      (p/let [payload (p/chain (.getContentSize ^js ios-utils)
+                               #(js->clj % :keywordize-keys true))]
+        (set-ios-font-scale! (:scale payload)))
+      (when (nil? ios-content-size-listener)
+        (set! ios-content-size-listener
+              (.addListener ^js ios-utils "contentSizeCategoryChanged"
+                            (fn [^js payload]
+                              (apply-scale! payload))))))))
+
 (defn hide-splash []
   (.hide SplashScreen))
+
+(defn set-ios-interface-style!
+  [mode system?]
+  (when (native-ios?)
+    (p/do!
+     (.setInterfaceStyle ^js ios-utils (clj->js {:mode mode
+                                                 :system system?})))))
 
 (defn get-idevice-model
   []
@@ -132,6 +165,17 @@
   (if (native-ios?)
     (.hideAlert ^js ui-local)
     (p/resolved nil)))
+
+(def mobile-keyboard-anchor-id "ls-mobile-kb-anchor")
+(defonce *hidden-input-timeout (atom nil))
+(defn mobile-focus-hidden-input
+  []
+  (when-let [t @*hidden-input-timeout]
+    (js/clearTimeout t))
+  (when (native-platform?)
+    (when-let [^js anchor (gdom/getElement mobile-keyboard-anchor-id)]
+      (reset! *hidden-input-timeout (js/setTimeout #(.blur anchor) 200))
+      (.focus anchor))))
 
 (comment
   (defn app-active?

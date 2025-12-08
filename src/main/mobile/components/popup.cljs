@@ -1,13 +1,12 @@
 (ns mobile.components.popup
   "Mobile popup"
-  (:require [frontend.handler.editor :as editor-handler]
-            [frontend.mobile.util :as mobile-util]
+  (:require [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [frontend.util :as util]
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.ui :as shui]
             [mobile.state :as mobile-state]
+            [promesa.core :as p]
             [rum.core :as rum]))
 
 (defonce *last-popup? (atom nil))
@@ -42,23 +41,18 @@
 
 (defn- handle-native-sheet-state!
   [^js data]
-  (let [presenting? (.-presenting data)
-        presented? (.-presented data)
+  (let [;; presenting? (.-presenting data)
         dismissing? (.-dismissing data)]
     (cond
-      presenting?
-      (when (mobile-state/quick-add-open?)
-        (util/mobile-keep-keyboard-open false))
-
-      presented?
-      (when (mobile-state/quick-add-open?)
-        (editor-handler/quick-add-open-last-block!))
-
       dismissing?
       (when (some? @mobile-state/*popup-data)
-        (state/pub-event! [:mobile/clear-edit])
-        (mobile-state/set-popup! nil)
-        (reset! *last-popup-data nil))
+        (p/do!
+         (state/pub-event! [:mobile/clear-edit])
+         (mobile-state/set-popup! nil)
+         (reset! *last-popup-data nil)
+         (when (mobile-util/native-ios?)
+           (let [plugin ^js mobile-util/native-editor-toolbar]
+             (.dismiss plugin)))))
 
       :else
       nil)))

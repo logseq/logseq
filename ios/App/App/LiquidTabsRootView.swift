@@ -158,10 +158,24 @@ private struct LiquidTabs26View: View {
     }
 
     private func focusSearchField() {
-        // Drive focus (and keyboard) only through searchFocused.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             isSearchFocused = true
         }
+    }
+
+    @ViewBuilder
+    private func mainTabContent(index: Int, tab: LiquidTab) -> some View {
+        // Normal content tab → shared webview
+        NativeNavHost(navController: navController)
+          .ignoresSafeArea()
+          .background(Color.logseqBackground)
+    }
+
+    @ViewBuilder
+    private func mainTabLabel(index: Int, tab: LiquidTab) -> some View {
+        let isSelected = (selectedTab == .content(index))
+        Label(tab.title, systemImage: tab.systemImage)
+            .environment(\.symbolVariants, isSelected ? .fill : .none)
     }
 
     var body: some View {
@@ -175,22 +189,27 @@ private struct LiquidTabs26View: View {
                 Color.logseqBackground.ignoresSafeArea()
 
                 TabView(selection: tabSelectionProxy) {
-                    // Dynamic main tabs using Tab(...) API
-                    ForEach(Array(store.tabs.prefix(maxMainTabs).enumerated()),
-                            id: \.element.id) { index, tab in
+                    // Dynamic main tabs
+                    ForEach(
+                        Array(store.tabs.prefix(maxMainTabs).enumerated()),
+                        id: \.element.id
+                    ) { index, tab in
                         Tab(
-                            tab.title,
-                            systemImage: tab.systemImage,
                             value: LiquidTabsTabSelection.content(index)
                         ) {
-                            NativeNavHost(navController: navController)
-                                .ignoresSafeArea()
-                                .background(Color.logseqBackground)
+                            mainTabContent(index: index, tab: tab)
+                        } label: {
+                            mainTabLabel(index: index, tab: tab)
                         }
                     }
 
-                    // Search Tab
-                    Tab(value: .search, role: .search) {
+                    // Search Tab (system search role)
+                    Tab(
+                        "Search",
+                        systemImage: "magnifyingglass",
+                        value: .search,
+                        role: .search
+                    ) {
                         SearchTabHost26(
                             navController: navController,
                             selectedTab: $selectedTab,
@@ -200,9 +219,7 @@ private struct LiquidTabs26View: View {
                         .ignoresSafeArea()
                     }
                 }
-                .searchable(
-                    text: $searchText
-                )
+                .searchable(text: $searchText)
                 .searchFocused($isSearchFocused)
                 .searchToolbarBehavior(.minimize)
                 .onChange(of: searchText) { query in
@@ -232,12 +249,9 @@ private struct LiquidTabs26View: View {
                     .foregroundColor: dimmed
                 ]
 
-                // Unselected icon color (90%)
-                appearance.stackedLayoutAppearance.normal.iconColor =
-                    UIColor.label.withAlphaComponent(0.9)
-
                 let tabBar = UITabBar.appearance()
                 tabBar.tintColor = .label
+                tabBar.unselectedItemTintColor = dimmed
                 tabBar.standardAppearance = appearance
                 tabBar.scrollEdgeAppearance = appearance
             }
@@ -249,20 +263,15 @@ private struct LiquidTabs26View: View {
 
                 switch newValue {
                 case .search:
-                    // Every time we switch to the search tab, re-focus the search
-                    // field so the search bar auto-focuses and keyboard appears.
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                         hackShowKeyboard = true
                     }
-
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
                         hackShowKeyboard = false
                     }
-
                     focusSearchField()
 
                 case .content:
-                    // Leaving search tab – drop focus and stop hack keyboard.
                     isSearchFocused = false
                     hackShowKeyboard = false
                 }
@@ -281,6 +290,7 @@ private struct LiquidTabs26View: View {
         }
     }
 }
+
 
 // Search host for 26+
 // Only responsible for cancel behaviour and tab switching.

@@ -65,6 +65,10 @@
           result (bean/->clj result)]
     result))
 
+(defn- wrap-throw-ex-info
+  [p]
+  (p/catch p (fn [e] (throw (ex-info (str e) {})))))
+
 (defrecord Node []
   protocol/Fs
   (mkdir! [_this dir]
@@ -77,9 +81,10 @@
   (mkdir-recur! [_this dir]
     (ipc/ipc "mkdir-recur" dir))
 
-  (readdir [_this dir]                   ; recursive
-    (p/then (ipc/ipc "readdir" dir)
-            bean/->clj))
+  (readdir [_this dir]                  ; recursive
+    (wrap-throw-ex-info
+     (p/then (ipc/ipc "readdir" dir)
+             bean/->clj)))
 
   (unlink! [_this repo path _opts]
     (ipc/ipc "unlink"
@@ -93,19 +98,19 @@
     (let [path (if (nil? dir)
                  path
                  (path/path-join dir path))]
-      (ipc/ipc "readFile" path)))
+      (wrap-throw-ex-info (ipc/ipc "readFile" path))))
 
   (read-file-raw [_this dir path _options]
     (let [path (if (nil? dir)
                  path
                  (path/path-join dir path))]
-      (ipc/ipc "readFileRaw" path)))
+      (wrap-throw-ex-info (ipc/ipc "readFileRaw" path))))
 
   (write-file! [this repo dir path content opts]
     (p/let [fpath (path/path-join dir path)
             stat (p/catch
-                  (protocol/stat this fpath)
-                  (fn [_e] :not-found))
+                     (protocol/stat this fpath)
+                     (fn [_e] :not-found))
             parent-dir (path/parent fpath)
             _ (protocol/mkdir-recur! this parent-dir)]
       (write-file-impl! repo dir path content opts stat)))

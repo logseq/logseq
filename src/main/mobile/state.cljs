@@ -21,10 +21,6 @@
   (when data
     (state/pub-event! [:mobile/clear-edit])))
 
-(defn quick-add-open?
-  []
-  (= :ls-quick-add (get-in @*popup-data [:opts :id])))
-
 (defonce *log (atom []))
 (defn log-append!
   [record]

@@ -130,6 +130,10 @@ main.ls-fold-button-on-right {
     }
   }
 
+  .block-main-container {
+    padding-right: calc(1.2rem + env(safe-area-inset-right, 0px)); /* leave room for the right fold toggle */
+  }
+
   .cp__sidebar-left-layout {
     width: 15px;
 
@@ -173,6 +177,12 @@ main.ls-fold-button-on-right {
     .block-content-wrapper {
       width: 100%;
     }
+  }
+
+  /* Keep the right fold toggle vertically aligned with the first line of text */
+  .ls-block .block-control {
+    top: 0.1em;
+    margin-top: 0;
   }
 
   .block-children-container {
