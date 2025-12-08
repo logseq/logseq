@@ -103,17 +103,18 @@
                     {:tx-data tx-data}))))
 
 (defn- transact-sync
-  [repo-or-conn tx-data tx-meta]
+  [conn tx-data tx-meta]
   (try
-    (let [conn repo-or-conn
-          db @conn
+    (let [db @conn
           db-based? (entity-plus/db-based-graph? db)]
       (if (and db-based?
-               (not (:reset-conn! tx-meta))
-               (not (:initial-db? tx-meta))
-               (not (:rtc-download-graph? tx-meta))
-               (not (:skip-validate-db? tx-meta false))
-               (not (:logseq.graph-parser.exporter/new-graph? tx-meta)))
+               (not
+                (or (:rtc-temp-conn? @conn)
+                    (:rtc-download-graph? tx-meta)
+                    (:reset-conn! tx-meta)
+                    (:initial-db? tx-meta)
+                    (:skip-validate-db? tx-meta false)
+                    (:logseq.graph-parser.exporter/new-graph? tx-meta))))
         (let [tx-report* (d/with db tx-data tx-meta)
               pipeline-f @*transact-pipeline-fn
               tx-report (if-let [f pipeline-f] (f tx-report*) tx-report*)
@@ -132,7 +133,8 @@
               ;; notify ui
               (when-let [f @*transact-invalid-callback]
                 (f tx-report errors))
-              (throw (ex-info "DB write failed with invalid data" {:tx-data tx-data
+              (throw (ex-info "DB write failed with invalid data" {:tx-meta tx-meta
+                                                                   :tx-data tx-data
                                                                    :errors errors
                                                                    :pipeline-tx-data (map
                                                                                       (fn [[e a v t]]
