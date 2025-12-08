@@ -16,7 +16,8 @@ public class LiquidTabsPlugin: CAPPlugin, CAPBridgedPlugin {
     public let jsName = "LiquidTabsPlugin"
     public let pluginMethods: [CAPPluginMethod] = [
       CAPPluginMethod(name: "configureTabs", returnType: CAPPluginReturnPromise),
-      CAPPluginMethod(name: "selectTab", returnType: CAPPluginReturnPromise)
+      CAPPluginMethod(name: "selectTab", returnType: CAPPluginReturnPromise),
+      CAPPluginMethod(name: "updateNativeSearchResults", returnType: CAPPluginReturnPromise),
     ]
 
     public override func load() {
@@ -74,6 +75,27 @@ public class LiquidTabsPlugin: CAPPlugin, CAPBridgedPlugin {
         call.resolve()
     }
 
+    /// Update native search results list from JS.
+    /// { results: [{ id, title, subtitle? }] }
+    @objc func updateNativeSearchResults(_ call: CAPPluginCall) {
+        guard let resultDicts = call.getArray("results", JSObject.self) else {
+            call.reject("Missing 'results'")
+            return
+        }
+
+        let mapped: [NativeSearchResult] = resultDicts.compactMap { dict in
+            guard let id = dict["id"] as? String,
+                  let title = dict["title"] as? String else {
+                return nil
+            }
+            let subtitle = dict["subtitle"] as? String
+            return NativeSearchResult(id: id, title: title, subtitle: subtitle)
+        }
+
+        store.updateSearchResults(mapped)
+        call.resolve()
+    }
+
     // MARK: - Events to JS
 
     func notifyTabSelected(id: String) {
@@ -86,6 +108,10 @@ public class LiquidTabsPlugin: CAPPlugin, CAPBridgedPlugin {
 
     func notifyKeyboardHackKey(key: String) {
         notifyListeners("keyboardHackKey", data: ["key": key])
+    }
+
+    func openResult(id: String) {
+        notifyListeners("openSearchResultBlock", data: ["id": id])
     }
 
     private func installKeyboardHackScript() {

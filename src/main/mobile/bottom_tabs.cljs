@@ -3,10 +3,13 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.common.util :as common-util]
-            [mobile.state :as mobile-state]))
+            [mobile.search :as mobile-search]
+            [mobile.state :as mobile-state]
+            [promesa.core :as p]))
 
 ;; Capacitor plugin instance:
 ;; Make sure the plugin is registered as `LiquidTabs` on the native side.
@@ -31,6 +34,12 @@
   (.selectTab
    liquid-tabs
    #js {:id id}))
+
+(defn update-native-search-results!
+  "Send native search result list to the iOS plugin."
+  [results]
+  (when (and (util/capacitor?) liquid-tabs (.-updateNativeSearchResults liquid-tabs))
+    (.updateNativeSearchResults liquid-tabs (clj->js {:results results}))))
 
 (defn add-tab-selected-listener!
   "Listen to native tab selection.
@@ -59,6 +68,16 @@
    (fn [data]
        ;; data is like { query: string }
      (f (.-query data)))))
+
+(defn add-search-result-item-listener!
+  []
+  (.addListener
+   liquid-tabs
+   "openSearchResultBlock"
+   (fn [data]
+     (when-let [id (.-id data)]
+       (when-not (string/blank? id)
+         (route-handler/redirect-to-page! id {:push false}))))))
 
 (defn add-keyboard-hack-listener!
   "Listen for Backspace or Enter while the invisible keyboard field is focused."
@@ -97,9 +116,9 @@
        (js/console.log "Native search query" q)
        (reset! mobile-state/*search-input q)
        (reset! mobile-state/*search-last-input-at (common-util/time-ms))
-       (comment
-         (when (= :page (state/get-current-route))
-           (mobile-nav/reset-route!)))))
+       (p/let [result (mobile-search/search q)]
+         (update-native-search-results! result))))
+    (add-search-result-item-listener!)
     (add-keyboard-hack-listener!)))
 
 (defn configure
