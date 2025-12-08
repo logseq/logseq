@@ -30,8 +30,7 @@
 
 (rum/defc journals
   []
-  (ui-component/classic-app-container-wrap
-   (journal/all-journals)))
+  (journal/all-journals))
 
 (rum/defc home-inner < rum/static
   [db-restoring?]
@@ -118,13 +117,13 @@
     ;; - Journals layer keeps its own scroll container and is always in the DOM.
     ;; - Page/other-tab layer keeps its own independent scroll container.
     ;; Both are absolutely positioned and stacked; we toggle visibility.
-    [:div.h-full.relative
-     ;; Journals scroll container (keep-alive)
+    [:div.w-full.relative
+        ;; Journals scroll container (keep-alive)
      [:div#app-main-home.pl-3.pr-2.absolute.inset-0
       {:class (when-not home? "invisible pointer-events-none")}
       (home)]
 
-     ;; Other pages: search, settings, specific page, etc.
+        ;; Other pages: search, settings, specific page, etc.
      (when-not home?
        (other-page view tab route-match))]))
 
@@ -141,7 +140,7 @@
        (when-let [element (util/app-scroll-container-node)]
          (common-handler/listen-to-scroll! element)))
      [])
-    [:div.h-full
+    [:<>
      (mobile-header/header current-repo tab)
      (main-content tab route-match)]))
 
@@ -156,13 +155,11 @@
         show-action-bar? (state/sub :mobile/show-action-bar?)
         {:keys [open? content-fn opts]} (rum/react mobile-state/*popup-data)
         show-popup? (and open? content-fn)
-        fold-button-on-right? (state/enable-fold-button-right?)
         route-match (state/sub :route-match)]
-    [:div#app-main.w-full.h-full
-     {:class (util/classnames
-              [{:ls-fold-button-on-right fold-button-on-right?}])}
-     [:div.w-full.h-full {:class (when show-popup? "invisible")}
-      (app current-repo route-match)]
+    [:main#app-container-wrapper.ls-fold-button-on-right
+     [:div#app-container {:class (when show-popup? "invisible")}
+      [:div#main-container.flex.flex-1.overflow-x-hidden
+       (app current-repo route-match)]]
      (when show-popup?
        [:div.ls-layer
         (popup/popup opts content-fn)])

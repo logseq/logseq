@@ -62,6 +62,7 @@
 
 (defn set-router!
   []
+  (mobile-nav/install-navigation-hooks!)
   (let [router (rf/router routes nil)]
     (rfe/start!
      router
@@ -75,7 +76,9 @@
           {:route {:to route-name
                    :path-params (:path-params route)
                    :query-params (:query-params route)}
-           :path path})
+           :route-match route
+           :path path
+           :stack (mobile-nav/current-stack)})
          (route-handler/set-route-match! route)))
 
      ;; set to false to enable HistoryAPI
@@ -87,6 +90,7 @@
   ;; so it is available even in :advanced release builds
   (prn "[Mobile] init!")
   (log/add-handler mobile-state/log-append!)
+  (mobile-nav/install-native-bridge!)
   (set-router!)
   (init/init!)
   (fhandler/start! render!))

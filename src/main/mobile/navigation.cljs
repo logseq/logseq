@@ -4,13 +4,30 @@
             [frontend.handler.route :as route-handler]
             [frontend.mobile.util :as mobile-util]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [reitit.frontend.easy :as rfe]))
 
+;; Each tab owns a navigation stack
 (defonce navigation-source (atom nil))
-(defonce ^:private initialised? (atom false))
+(defonce ^:private initialised-stacks (atom {}))
+(def ^:private primary-stack "home")
+(defonce ^:private active-stack (atom primary-stack))
+(defonce ^:private stack-history (atom {}))
+(defonce ^:private pending-navigation (atom nil))
+(defonce ^:private hooks-installed? (atom false))
 
 ;; Track whether the latest change came from a native back gesture / popstate.
-(.addEventListener js/window "popstate" (fn [_] (reset! navigation-source :pop)))
+(.addEventListener js/window "popstate" (fn [_]
+                                          (reset! navigation-source :pop)))
+
+(defn current-stack
+  []
+  @active-stack)
+
+(defn set-current-stack!
+  [stack]
+  (when (some? stack)
+    (reset! active-stack stack)))
 
 (defn- strip-fragment [href]
   (when (string? href)
@@ -18,14 +35,129 @@
         (string/replace-first #"^#/" "/")
         (string/replace-first #"^#" ""))))
 
-(defn- navigation-type [push?]
-  (let [src @navigation-source]
+(defn- current-path
+  []
+  (let [p (strip-fragment (.-hash js/location))]
+    (if (string/blank? p) "/" p)))
+
+(defn- stack-defaults
+  [stack]
+  (let [name (keyword stack)
+        path (if (= stack primary-stack) "/" (str "/__stack__/" stack))]
+    {:path path
+     :route (when (= stack primary-stack)
+              {:to :home
+               :path-params {}
+               :query-params {}})
+     :route-match {:data {:name (if (= stack primary-stack) :home name)}
+                   :parameters {:path {} :query {}}}}))
+
+(defn- record-navigation-intent!
+  [{:keys [type stack]}]
+  (let [stack (or stack @active-stack primary-stack)]
+    (reset! pending-navigation {:type type
+                                :stack stack})))
+
+(defonce orig-push-state rfe/push-state)
+(defn push-state
+  "Sets the new route, leaving previous route in history."
+  ([k]
+   (push-state k nil nil))
+  ([k params]
+   (push-state k params nil))
+  ([k params query]
+   (record-navigation-intent! {:type :push
+                               :stack @active-stack})
+   (orig-push-state k params query)))
+
+(defonce orig-replace-state rfe/replace-state)
+(defn- replace-state
+  ([k]
+   (replace-state k nil nil))
+  ([k params]
+   (replace-state k params nil))
+  ([k params query]
+   (record-navigation-intent! {:type :replace
+                               :stack @active-stack})
+   (orig-replace-state k params query)))
+
+(defn install-navigation-hooks!
+  "Wrap reitit navigation helpers so we know whether a change was push or replace.
+   Also tags navigation with the active stack so native can keep per-stack history."
+  []
+  (when (compare-and-set! hooks-installed? false true)
+    (set! rfe/push-state push-state)
+    (set! rfe/replace-state replace-state)))
+
+(defn- consume-navigation-intent!
+  []
+  (let [intent @pending-navigation]
+    (reset! pending-navigation nil)
+    intent))
+
+(defn- ensure-stack
+  [stack]
+  (swap! stack-history #(if (contains? % stack)
+                          %
+                          (assoc % stack {:history [(stack-defaults stack)]})))
+  stack)
+
+(defn- stack-top
+  [stack]
+  (-> @stack-history (get stack) :history last))
+
+(defn- remember-route!
+  [stack nav-type route path route-match]
+  (when stack
+    (let [stack (ensure-stack stack)
+          path (or path (current-path))
+          entry (when path {:path path :route route :route-match route-match})
+          update-history
+          (fn [history]
+            (let [history (vec history)
+                  last-path (:path (last history))]
+              (case nav-type
+                "pop" (if (> (count history) 1) (vec (butlast history)) history)
+                "replace" (if (seq history)
+                            (conj (vec (butlast history)) entry)
+                            [entry])
+                "push" (if (= last-path (:path entry))
+                         (conj (vec (butlast history)) entry)
+                         (conj history entry))
+                history)))]
+      (when entry
+        (swap! stack-history update stack (fn [{:keys [history]}]
+                                            {:history (update-history history)}))
+        (swap! initialised-stacks assoc stack true)))))
+
+(defn reset-stack-history!
+  [stack]
+  (when stack
+    (swap! stack-history assoc stack {:history [(stack-defaults stack)]})
+    (swap! initialised-stacks dissoc stack)))
+
+(defn- next-navigation!
+  [{:keys [push stack nav-type]}]
+  (let [src @navigation-source
+        intent (consume-navigation-intent!)
+        stack (or stack (:stack intent) @active-stack primary-stack)
+        first? (not (get @initialised-stacks stack))
+        nav-type (or nav-type
+                     (cond
+                       (= src :pop) "pop"
+                       (false? push) "replace"
+                       (= (:type intent) :replace) "replace"
+                       first? "replace"
+                       (= (:type intent) :push) "push"
+                       (true? push) "push"
+                       :else "push"))]
     (reset! navigation-source nil)
-    (cond
-      (= src :pop) "pop"
-      (false? push?) "replace"
-      (compare-and-set! initialised? false true) "replace" ;; first load
-      :else "push")))
+
+    (when first?
+      (swap! initialised-stacks assoc stack true))
+    {:navigation-type nav-type
+     :push? (= nav-type "push")
+     :stack stack}))
 
 (defn- notify-route-payload!
   [payload]
@@ -36,23 +168,87 @@
                             :payload payload})))))
 
 (defn notify-route-change!
-  "Inform native iOS layer of a route change to keep native stack in sync.
-   {route {to keyword, path-params map, query-params map}
-    path  string      ;; optional, e.g. \"/page/Today\"
-    push  boolean?    ;; optional, explicit push vs replace hint}"
-  [{:keys [route path push]}]
-  (when (and (mobile-util/native-ios?)
-             mobile-util/ui-local)
-    (let [nav-type (navigation-type push)
-          payload (cond-> {:navigationType nav-type
-                           :push (not= nav-type "replace")}
-                    route (assoc :route route)
-                    (or path (.-hash js/location))
-                    (assoc :path (strip-fragment (or path (.-hash js/location)))))]
-      (notify-route-payload! payload))))
+  "Inform native iOS layer of a route change to keep native stack in sync."
+  [{:keys [route route-match path push stack]}]
+  (let [{:keys [navigation-type push? stack]} (next-navigation! {:push push
+                                                                 :nav-type (:navigation-type route-match)
+                                                                 :stack (or stack (current-stack))})
+        stack (or stack (current-stack))
+        path (or path (current-path))]
+    (set-current-stack! stack)
+    (remember-route! stack navigation-type route path route-match)
+    (when (and (mobile-util/native-ios?)
+               mobile-util/ui-local)
+      (let [payload (cond-> {:navigationType navigation-type
+                             :push push?
+                             :stack stack}
+                      route (assoc :route route)
+                      path (assoc :path (strip-fragment path)))]
+        (notify-route-payload! payload)))))
 
-(defn reset-route!
+(comment
+  (defn reset-route!
+    []
+    (route-handler/redirect-to-home! false)
+    (let [stack (current-stack)]
+      (reset-stack-history! stack)
+      (notify-route-payload!
+       {:navigationType "reset"
+        :push false
+        :stack stack}))))
+
+(defn switch-stack!
+  "Activate a stack and restore its last known route."
+  [stack]
+  (when stack
+    (let [stack (ensure-stack stack)
+          current @active-stack]
+      (set-current-stack! stack)
+      (when-let [{:keys [path route route-match]} (stack-top stack)]
+        (let [route-match (or route-match (:route-match (stack-defaults stack)))
+              path        (or path (current-path))]
+          (route-handler/set-route-match! route-match)
+          (when (= current "search")
+            ;; reset to :home
+            (orig-replace-state :home nil nil))
+          (notify-route-change!
+           {:route {:to          (or (get-in route [:data :name])
+                                     (get-in route-match [:data :name]))
+                    :path-params (or (:path-params route)
+                                     (get-in route-match [:parameters :path]))
+                    :query-params (or (:query-params route)
+                                      (get-in route-match [:parameters :query]))}
+            :path  path
+            :stack stack
+            :push  false}))))))
+
+(defn pop-stack!
+  "Pop one route from the current stack, update router via replace-state.
+   Called when native UINavigationController pops (back gesture / back button)."
   []
-  (route-handler/redirect-to-home! false)
-  (notify-route-payload!
-   {:navigationType "reset"}))
+  (let [stack (current-stack)
+        {:keys [history]} (get @stack-history stack)
+        history (vec history)]
+    (when (> (count history) 1)
+      (let [new-history (subvec history 0 (dec (count history)))
+            {:keys [route-match]} (peek new-history)
+            route-match   (or route-match (:route-match (stack-defaults stack)))
+            route-name    (get-in route-match [:data :name])
+            path-params   (get-in route-match [:parameters :path])
+            query-params  (get-in route-match [:parameters :query])]
+
+        (swap! stack-history assoc stack {:history new-history})
+
+        ;; Pretend this came from a pop for next-navigation!
+        (reset! navigation-source :pop)
+
+        ;; Use *original* replace-state to avoid recording a :replace intent.
+        (orig-replace-state route-name path-params query-params)
+
+        (route-handler/set-route-match! route-match)))))
+
+(defn ^:export install-native-bridge!
+  []
+  (set! (.-LogseqNative js/window)
+        (clj->js
+         {:onNativePop (fn [] (pop-stack!))})))

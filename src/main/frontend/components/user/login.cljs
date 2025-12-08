@@ -3,7 +3,6 @@
             [clojure.string :as string]
             [dommy.core :refer-macros [sel by-id]]
             [frontend.config :as config]
-            [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user]
             [frontend.modules.shortcut.core :as shortcut]
@@ -38,15 +37,14 @@
 
 (rum/defc user-pane
   [_sign-out! user]
-  (let [session  (:signInUserSession user)
-        username (:username user)]
+  (let [session  (:signInUserSession user)]
 
     (hooks/use-effect!
      (fn []
        (when session
          (user/login-callback session)
-         (notification/show! (str "Hi, " username " :)") :success)
          (shui/dialog-close!)
+         (shui/popup-hide!)
          (when (= :user-login (state/get-current-route))
            (route-handler/redirect! {:to :home}))))
      [])

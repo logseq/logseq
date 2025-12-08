@@ -14,7 +14,11 @@ html.is-ios {
   font-size: calc(var(--ls-mobile-font-size) * var(--ls-mobile-font-scale, 1));
 }
 
-#app-main {
+#app-container-wrapper, #app-container, #main-container {
+    @apply w-full h-full;
+}
+
+#app-container-wrapper {
     padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
 }
@@ -306,6 +310,7 @@ body, #root {
 /* Both layers use their own independent scroll containers. */
 #app-main-home, #main-content-container
 {
+    @apply overflow-x-hidden;
     height: 100%;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;

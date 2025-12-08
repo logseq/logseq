@@ -5,6 +5,7 @@
             [cljs-time.local :as tl]
             [clojure.string :as string]
             [frontend.date :as date]
+            [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.handler.editor :as editor-handler]
             [frontend.mobile.util :as mobile-util]
@@ -12,6 +13,8 @@
             [frontend.util :as util]
             [goog.functions :as gfun]
             [lambdaisland.glogi :as log]
+            [logseq.common.config :as common-config]
+            [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [mobile.init :as init]
@@ -62,9 +65,12 @@
                                            {:formatter-str audio-file-format})
                                           "."))]
       (p/let [file (js/File. [blob] filename #js {:type (.-type blob)})
-              result (editor-handler/db-based-save-assets! (state/get-current-repo)
-                                                           [file]
-                                                           {:last-edit-block @*last-edit-block})
+              capture? (= "capture" @mobile-state/*tab)
+              insert-opts (cond->
+                           {:last-edit-block @*last-edit-block}
+                            capture?
+                            (assoc :save-to-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)))
+              result (editor-handler/db-based-save-assets! (state/get-current-repo) [file] insert-opts)
               asset-entity (first result)]
         (when (nil? asset-entity)
           (log/error ::empty-asset-entity {}))
