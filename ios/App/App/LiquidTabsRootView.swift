@@ -113,7 +113,6 @@ private struct LiquidTabs26View: View {
     @StateObject private var store = LiquidTabsStore.shared
     let navController: UINavigationController
 
-    @State private var searchText: String = ""
     @FocusState private var isSearchFocused: Bool
 
     @State private var hackShowKeyboard: Bool = false
@@ -132,6 +131,13 @@ private struct LiquidTabs26View: View {
                     selectedTab = newValue
                 }
             }
+        )
+    }
+
+    private var searchTextBinding: Binding<String> {
+        Binding(
+            get: { store.searchText },
+            set: { store.searchText = $0 }
         )
     }
 
@@ -219,10 +225,13 @@ private struct LiquidTabs26View: View {
                         .ignoresSafeArea()
                     }
                 }
-                .searchable(text: $searchText)
+                .searchable(text: searchTextBinding)
                 .searchFocused($isSearchFocused)
                 .searchToolbarBehavior(.minimize)
-                .onChange(of: searchText) { query in
+                .onChange(of: store.searchText) { query in
+                    if query.isEmpty {
+                        store.searchResults = []
+                    }
                     LiquidTabsPlugin.shared?.notifySearchChanged(query: query)
                 }
                 .background(Color.logseqBackground)
@@ -296,34 +305,46 @@ private struct LiquidTabs26View: View {
 // Only responsible for cancel behaviour and tab switching.
 // It does NOT own the focus anymore.
 @available(iOS 26.0, *)
+private enum SearchRoute: Hashable {
+    case result(String)
+}
+
+@available(iOS 26.0, *)
 private struct SearchTabHost26: View {
     let navController: UINavigationController
     var selectedTab: Binding<LiquidTabsTabSelection>
     let firstTabId: String?
-    let store: LiquidTabsStore
+    @ObservedObject var store: LiquidTabsStore
 
     @Environment(\.isSearching) private var isSearching
     @State private var wasSearching: Bool = false
 
     var body: some View {
         NavigationStack {
-            NativeNavHost(navController: navController)
-                .ignoresSafeArea()
-                .onChange(of: isSearching) { searching in
-                    if searching {
-                        wasSearching = true
-                    } else if wasSearching,
-                              case .search = selectedTab.wrappedValue,
-                              let firstId = firstTabId {
+            ZStack {
+                Color.logseqBackground
+                  .ignoresSafeArea()
 
-                        // User tapped Cancel: switch back to first normal tab.
-                        wasSearching = false
-                        selectedTab.wrappedValue = .content(0)
-                        store.selectedId = firstId
-                    }
-                }
+                SearchResultsContent(
+                    navController: navController,
+                    store: store
+                )
+            }
         }
+          .onChange(of: isSearching) { searching in
+              if searching {
+                  wasSearching = true
+              } else if wasSearching,
+                        case .search = selectedTab.wrappedValue,
+                        let firstId = firstTabId {
+
+                  wasSearching = false
+                  selectedTab.wrappedValue = .content(0)
+                  store.selectedId = firstId
+              }
+          }
     }
+
 }
 
 // MARK: - iOS 16–25 implementation
@@ -333,8 +354,14 @@ private struct LiquidTabs16View: View {
     @StateObject private var store = LiquidTabsStore.shared
     let navController: UINavigationController
 
-    @State private var searchText: String = ""
     @State private var hackShowKeyboard: Bool = false
+
+    private var searchTextBinding: Binding<String> {
+        Binding(
+            get: { store.searchText },
+            set: { store.searchText = $0 }
+        )
+    }
 
     var body: some View {
         ZStack {
@@ -380,7 +407,8 @@ private struct LiquidTabs16View: View {
                         // --- 🔍 SEARCH TAB (iOS 16–25) ---
                         SearchTab16Host(
                             navController: navController,
-                            searchText: $searchText
+                            searchText: searchTextBinding,
+                            store: store
                         )
                         .ignoresSafeArea()
                         .tabItem {
@@ -425,13 +453,18 @@ private struct LiquidTabs16View: View {
 private struct SearchTab16Host: View {
     let navController: UINavigationController
     @Binding var searchText: String
+    @ObservedObject var store: LiquidTabsStore
 
     var body: some View {
         NavigationStack {
             ZStack {
-                // Main content (fills whole screen)
-                NativeNavHost(navController: navController)
-                    .ignoresSafeArea()
+                Color.logseqBackground
+                  .ignoresSafeArea()
+
+                SearchResultsContent(
+                    navController: navController,
+                    store: store
+                )
 
                 // Bottom search bar
                 VStack {
@@ -462,10 +495,36 @@ private struct SearchTab16Host: View {
                     .padding(.bottom, 12)
                 }
             }
-            .navigationBarHidden(true)
         }
         .onChange(of: searchText) { query in
             LiquidTabsPlugin.shared?.notifySearchChanged(query: query)
         }
+    }
+}
+
+private struct SearchResultsContent: View {
+    let navController: UINavigationController
+    @ObservedObject var store: LiquidTabsStore
+
+    var body: some View {
+        List(store.searchResults) { result in
+            NavigationLink(value: result) {
+                Text(result.title)
+                  .foregroundColor(.primary)
+                  .padding(.vertical, 8)
+                  .contentShape(Rectangle())   // improves tap area
+            }
+              .listRowBackground(Color.clear)
+        }
+          .scrollContentBackground(.hidden)
+          .scrollDismissesKeyboard(.immediately)
+          .navigationTitle("Search")
+          .navigationDestination(for: NativeSearchResult.self) { result in
+              NativeNavHost(navController: navController)
+                .ignoresSafeArea()
+                .onAppear {
+                    LiquidTabsPlugin.shared?.openResult(id: result.id)
+                }
+          }
     }
 }
