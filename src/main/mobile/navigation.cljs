@@ -110,25 +110,36 @@
   [stack nav-type route path route-match]
   (when stack
     (let [stack (ensure-stack stack)
-          path (or path (current-path))
-          entry (when path {:path path :route route :route-match route-match})
+          ;; Normalize & sanitize
+          raw-path (or path (current-path))
+          path (if (string/blank? raw-path) "/" raw-path)
+          route-match (or route-match (:route-match (stack-defaults stack)))
+          route (or route (:route (stack-defaults stack)))
+          entry {:path path :route route :route-match route-match}
+
           update-history
           (fn [history]
             (let [history (vec history)
                   last-path (:path (last history))]
               (case nav-type
-                "pop" (if (> (count history) 1) (vec (butlast history)) history)
+                "pop" (if (> (count history) 1)
+                        (vec (butlast history))
+                        history)
+
                 "replace" (if (seq history)
                             (conj (vec (butlast history)) entry)
                             [entry])
-                "push" (if (= last-path (:path entry))
+
+                "push" (if (= last-path path)
                          (conj (vec (butlast history)) entry)
                          (conj history entry))
+
                 history)))]
-      (when entry
-        (swap! stack-history update stack (fn [{:keys [history]}]
-                                            {:history (update-history history)}))
-        (swap! initialised-stacks assoc stack true)))))
+      (swap! stack-history update stack
+             (fn [{:keys [history]}]
+               {:history (update-history history)}))
+
+      (swap! initialised-stacks assoc stack true))))
 
 (defn reset-stack-history!
   [stack]
@@ -174,7 +185,9 @@
                                                                  :nav-type (:navigation-type route-match)
                                                                  :stack (or stack (current-stack))})
         stack (or stack (current-stack))
-        path (or path (current-path))]
+        path (-> (or path (current-path))
+                 (strip-fragment))
+        path (if (string/blank? path) "/" path)]
     (set-current-stack! stack)
     (remember-route! stack navigation-type route path route-match)
     (when (and (mobile-util/native-ios?)
