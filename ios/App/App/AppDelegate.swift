@@ -410,12 +410,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
                stackId == "home"{
 
                 // Just update bookkeeping so future home pushes/pop work correctly.
+                self.setPaths(["/__stack__/search"], for: "search")
                 self.activeStackId = "home"
                 self.setPaths(["/"], for: "home")
-                self.setPaths(["/__stack__/search"], for: "search")
 
-                nav.setViewControllers([], animated: false)
-                self.setViewControllers([], for: "home")
+                let vc = NativePageViewController(path: "/")
+                nav.setViewControllers([vc], animated: false)
+                self.setViewControllers([vc], for: "home")
 
                 // 👈 Do NOTHING to nav.viewControllers or SharedWebViewController here.
                 return
