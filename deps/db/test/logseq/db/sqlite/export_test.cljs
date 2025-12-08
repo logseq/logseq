@@ -271,11 +271,13 @@
         class-uuid (random-uuid)
         page-uuid (random-uuid)
         pvalue-page-uuid (random-uuid)
+        pvalue-block-uuid (random-uuid)
         property-uuid (random-uuid)
         journal-uuid (random-uuid)
         block-object-uuid (random-uuid)
         original-data
         {:classes {:user.class/C1 {:block/uuid class-uuid :build/keep-uuid? true}
+                   :user.class/C2 {}
                    :user.class/NodeClass {}}
          :properties {:user.property/p1
                       {:logseq.property/type :node
@@ -297,7 +299,14 @@
                     {:block/title (str "class ref to " (page-ref/->page-ref class-uuid))}
                     {:block/title (str "inline class ref to #" (page-ref/->page-ref class-uuid))}
                     {:block/title (str "property ref to " (page-ref/->page-ref property-uuid))}
-                    {:block/title (str "journal ref to " (page-ref/->page-ref journal-uuid))}]}
+                    {:block/title (str "journal ref to " (page-ref/->page-ref journal-uuid))}
+                    {:block/title (str "property block value ref to " (page-ref/->page-ref pvalue-block-uuid))}
+                    {:block/title "block with a pvalue that has a :block/uuid"
+                     :build/properties {:user.property/p2 {:build/property-value :block
+                                                           :block/title "property value block"
+                                                           :build/tags [:user.class/C2]
+                                                           :block/uuid pvalue-block-uuid
+                                                           :build/keep-uuid? true}}}]}
           {:page {:block/title "page with block ref"}
            :blocks [{:block/title "hi" :block/uuid block-uuid :build/keep-uuid? true
                      :build/properties {:user.property/p1 [:block/uuid block-object-uuid]}}]}

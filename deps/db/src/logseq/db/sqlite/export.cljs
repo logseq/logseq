@@ -199,12 +199,18 @@
     (assoc :build/class-extends
            (mapv :db/ident (:logseq.property.class/extends class-ent)))))
 
+(defn block-property-value? [%]
+  (and (map? %) (:build/property-value %)))
+
 (defn- build-node-classes
   [db build-block block-tags properties]
   (let [pvalue-classes (->> (:build/properties build-block)
                             vals
                             (mapcat (fn [val-or-vals]
-                                      (mapcat #(when (sqlite-build/page-prop-value? %) (:build/tags (second %)))
+                                      (mapcat #(cond (sqlite-build/page-prop-value? %)
+                                                     (:build/tags (second %))
+                                                     (block-property-value? %)
+                                                     (:build/tags %))
                                               (if (set? val-or-vals) val-or-vals [val-or-vals]))))
                             (remove db-class/logseq-class?))
         property-classes (->> (mapcat :build/property-classes (vals properties))
@@ -737,7 +743,7 @@
                                 ;; TODO: Walk data structure via :build/properties instead of slower walk
                                 page-map'
                                 (walk/postwalk (fn [f]
-                                                 (if (and (map? f) (:build/property-value f))
+                                                 (if (block-property-value? f)
                                                    (remove-uuid-if-not-ref f)
                                                    f))
                                                page-map)]
@@ -823,7 +829,7 @@
 (defn- find-undefined-uuids [db {:keys [classes properties pages-and-blocks]}]
   (let [pvalue-known-uuids (atom #{})
         _ (walk/postwalk (fn [f]
-                           (if (and (map? f) (:build/property-value f) (:block/uuid f))
+                           (if (and (block-property-value? f) (:block/uuid f))
                              (swap! pvalue-known-uuids conj (:block/uuid f))
                              f))
                          pages-and-blocks)
