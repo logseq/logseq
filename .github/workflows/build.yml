@@ -160,7 +160,7 @@ jobs:
           bb: ${{ env.BABASHKA_VERSION }}
 
       - name: Fetch scripts yarn deps
-        run: cd scripts && yarn install
+        run: cd scripts && yarn install --frozen-lockfile
 
       - name: Create DB graph with properties
         run: cd scripts && yarn nbb-logseq src/logseq/tasks/db_graph/create_graph_with_properties.cljs ./properties-graph
