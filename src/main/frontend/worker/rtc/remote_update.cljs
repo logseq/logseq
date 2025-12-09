@@ -21,7 +21,6 @@
             [logseq.db.common.property-util :as db-property-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.graph-parser.whiteboard :as gp-whiteboard]
-            [logseq.outliner.batch-tx :as batch-tx]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.transaction :as outliner-tx]
             [missionary.core :as m]))
@@ -192,9 +191,11 @@
           (when-let [target-b
                      (d/entity @conn (:db/id (:block/page (d/entity @conn [:block/uuid block-uuid]))))]
             (transact-db! :move-blocks&persist-op repo conn [b] target-b {:sibling? false}))))
-      (doseq [block-uuid block-uuids-to-remove]
-        (when-let [b (d/entity @conn [:block/uuid block-uuid])]
-          (transact-db! :delete-blocks repo conn date-formatter [b] {}))))))
+      (let [deleting-blocks (keep (fn [block-uuid]
+                                    (d/entity @conn [:block/uuid block-uuid]))
+                                  block-uuids-to-remove)]
+        (when (seq deleting-blocks)
+          (transact-db! :delete-blocks repo conn date-formatter deleting-blocks {}))))))
 
 (defn- insert-or-move-block
   [repo conn block-uuid remote-parents remote-block-order move? op-value]
@@ -209,8 +210,7 @@
           (if move?
             (transact-db! :move-blocks repo conn [(block-reuse-db-id b)] local-parent {:sibling? false})
             (transact-db! :insert-blocks repo conn
-                          [{:block/uuid block-uuid
-                            :block/title ""}]
+                          [{:block/uuid block-uuid}]
                           local-parent {:sibling? false :keep-uuid? true}))
           (transact-db! :update-block-order-directly repo conn block-uuid first-remote-parent remote-block-order))
 
@@ -681,20 +681,25 @@
             update-ops (vals update-ops-map)
             update-page-ops (vals update-page-ops-map)
             remove-page-ops (vals remove-page-ops-map)
-            db-before @conn]
+            db-before @conn
+            tx-meta {:rtc-tx? true
+                     :persist-op? false
+                     :gen-undo-ops? false}]
         (rtc-log-and-state/update-remote-t graph-uuid remote-t)
         (js/console.groupCollapsed "rtc/apply-remote-ops-log")
-        (batch-tx/with-batch-tx-mode conn {:rtc-tx? true
-                                           :persist-op? false
-                                           :gen-undo-ops? false}
-          (worker-util/profile :ensure-refed-blocks-exist (ensure-refed-blocks-exist repo conn refed-blocks))
-          (worker-util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo conn update-page-ops))
-          (worker-util/profile :apply-remote-move-ops (apply-remote-move-ops repo conn sorted-move-ops))
-          (worker-util/profile :apply-remote-update-ops (apply-remote-update-ops repo conn update-ops))
-          (worker-util/profile :apply-remote-remove-page-ops (apply-remote-remove-page-ops repo conn remove-page-ops)))
+        (ldb/transact-with-temp-conn!
+         conn tx-meta
+         (fn [temp-conn]
+           (worker-util/profile :ensure-refed-blocks-exist (ensure-refed-blocks-exist repo temp-conn refed-blocks))
+           (worker-util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo temp-conn update-page-ops))
+           (worker-util/profile :apply-remote-move-ops (apply-remote-move-ops repo temp-conn sorted-move-ops))
+           (worker-util/profile :apply-remote-update-ops (apply-remote-update-ops repo temp-conn update-ops))
+           (worker-util/profile :apply-remote-remove-page-ops (apply-remote-remove-page-ops repo temp-conn remove-page-ops))))
+
         ;; NOTE: we cannot set :persist-op? = true when batch-tx/with-batch-tx-mode (already set to false)
         ;; and there're some transactions in `apply-remote-remove-ops` need to :persist-op?=true
         (worker-util/profile :apply-remote-remove-ops (apply-remote-remove-ops repo conn date-formatter remove-ops))
+
         ;; wait all remote-ops transacted into db,
         ;; then start to check any asset-updates in remote
         (let [db-after @conn]
