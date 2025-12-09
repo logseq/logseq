@@ -665,12 +665,7 @@
   [graph-uuid repo conn date-formatter remote-update-event aes-key add-log-fn]
   (m/sp
     (when (apply-remote-update-check repo remote-update-event add-log-fn)
-      (let [temp-conn (d/conn-from-db @conn)
-            ;; can read from disk, write is disallowed
-            _ (swap! temp-conn assoc
-                     :skip-store? true
-                     :rtc-temp-conn? true)
-            remote-update-data (:value remote-update-event)
+      (let [remote-update-data (:value remote-update-event)
             remote-update-data (if aes-key
                                  (m/? (task--decrypt-blocks-in-remote-update-data
                                        aes-key rtc-const/encrypt-attr-set
@@ -686,31 +681,20 @@
             update-ops (vals update-ops-map)
             update-page-ops (vals update-page-ops-map)
             remove-page-ops (vals remove-page-ops-map)
-            db-before @temp-conn
-            *batch-tx-data (volatile! [])]
-        (d/listen! temp-conn ::rtc-batch-tx (fn [{:keys [tx-data]}]
-                                              (vswap! *batch-tx-data into tx-data)))
+            db-before @conn
+            tx-meta {:rtc-tx? true
+                     :persist-op? false
+                     :gen-undo-ops? false}]
         (rtc-log-and-state/update-remote-t graph-uuid remote-t)
         (js/console.groupCollapsed "rtc/apply-remote-ops-log")
-
-        (worker-util/profile :ensure-refed-blocks-exist (ensure-refed-blocks-exist repo temp-conn refed-blocks))
-        (worker-util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo temp-conn update-page-ops))
-        (worker-util/profile :apply-remote-move-ops (apply-remote-move-ops repo temp-conn sorted-move-ops))
-        (worker-util/profile :apply-remote-update-ops (apply-remote-update-ops repo temp-conn update-ops))
-        (worker-util/profile :apply-remote-remove-page-ops (apply-remote-remove-page-ops repo temp-conn remove-page-ops))
-
-        ;; transact tx-data to `conn` and validate db
-        (worker-util/profile
-         :batch-apply-remote-update-ops
-         (let [tx-data @*batch-tx-data
-               tx-meta {:rtc-tx? true
-                        :persist-op? false
-                        :gen-undo-ops? false}]
-           (d/unlisten! temp-conn ::rtc-batch-tx)
-           (reset! temp-conn nil)
-           (vreset! *batch-tx-data nil)
-           (when (seq tx-data)
-             (ldb/transact! conn tx-data tx-meta))))
+        (ldb/transact-with-temp-conn!
+         conn tx-meta
+         (fn [temp-conn]
+           (worker-util/profile :ensure-refed-blocks-exist (ensure-refed-blocks-exist repo temp-conn refed-blocks))
+           (worker-util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo temp-conn update-page-ops))
+           (worker-util/profile :apply-remote-move-ops (apply-remote-move-ops repo temp-conn sorted-move-ops))
+           (worker-util/profile :apply-remote-update-ops (apply-remote-update-ops repo temp-conn update-ops))
+           (worker-util/profile :apply-remote-remove-page-ops (apply-remote-remove-page-ops repo temp-conn remove-page-ops))))
 
         ;; NOTE: we cannot set :persist-op? = true when batch-tx/with-batch-tx-mode (already set to false)
         ;; and there're some transactions in `apply-remote-remove-ops` need to :persist-op?=true

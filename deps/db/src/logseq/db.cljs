@@ -109,7 +109,7 @@
           db-based? (entity-plus/db-based-graph? db)]
       (if (and db-based?
                (not
-                (or (:rtc-temp-conn? @conn)
+                (or (:batch-temp-conn? @conn)
                     (:rtc-download-graph? tx-meta)
                     (:reset-conn! tx-meta)
                     (:initial-db? tx-meta)
@@ -183,6 +183,28 @@
        (if-let [transact-fn @*transact-fn]
          (transact-fn repo-or-conn tx-data tx-meta)
          (transact-sync repo-or-conn tx-data tx-meta))))))
+
+(defn transact-with-temp-conn!
+  "Validate db and store once for a batch transaction, the `temp` conn can still load data from disk,
+  however it can't write to the disk."
+  [conn tx-meta batch-tx-fn]
+  (let [temp-conn (d/conn-from-db @conn)
+        *batch-tx-data (volatile! [])]
+    ;; can read from disk, write is disallowed
+    (swap! temp-conn assoc
+           :skip-store? true
+           :batch-temp-conn? true)
+    (d/listen! temp-conn ::temp-conn-batch-tx
+               (fn [{:keys [tx-data]}]
+                 (vswap! *batch-tx-data into tx-data)))
+    (batch-tx-fn temp-conn)
+    (let [tx-data @*batch-tx-data]
+      (d/unlisten! temp-conn ::temp-conn-batch-tx)
+      (reset! temp-conn nil)
+      (vreset! *batch-tx-data nil)
+      (when (seq tx-data)
+        ;; transact tx-data to `conn` and validate db
+        (transact! conn tx-data tx-meta)))))
 
 (def page? common-entity-util/page?)
 (def internal-page? entity-util/internal-page?)

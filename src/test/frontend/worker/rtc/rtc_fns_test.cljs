@@ -156,6 +156,14 @@
                :logseq.property/status [status-value-uuid2]}}
              r)))))
 
+(defn- apply-move-ops!
+  [repo conn move-ops]
+  (ldb/transact-with-temp-conn!
+   conn
+   {}
+   (fn [temp-conn]
+     (#'r.remote/apply-remote-move-ops repo temp-conn move-ops))))
+
 (deftest apply-remote-move-ops-test
   (let [repo (state/get-current-repo)
         conn (conn/get-db repo false)
@@ -183,9 +191,6 @@
       (ldb/get-page @conn page-name)
       {:sibling? false :keep-uuid? true}))
 
-    ;; disable db validation
-    (swap! conn assoc :rtc-temp-conn? true)
-
     (testing "apply-remote-move-ops-test1"
       (let [data-from-ws {:req-id "req-id"
                           :t 1        ;; not used
@@ -203,7 +208,7 @@
                        (#'r.remote/affected-blocks->diff-type-ops
                         repo (:affected-blocks data-from-ws))))]
         (is (rtc-schema/data-from-ws-validator data-from-ws) data-from-ws)
-        (#'r.remote/apply-remote-move-ops repo conn move-ops)
+        (apply-move-ops! repo conn move-ops)
         (let [page-blocks (ldb/get-page-blocks @conn (:db/id (ldb/get-page @conn page-name)) {})]
           (is (= #{uuid1-remote uuid1-client uuid2-client} (set (map :block/uuid page-blocks)))
               [uuid1-remote uuid1-client uuid2-client])
@@ -233,7 +238,7 @@
                        (#'r.remote/affected-blocks->diff-type-ops
                         repo (:affected-blocks data-from-ws))))]
         (is (rtc-schema/data-from-ws-validator data-from-ws))
-        (#'r.remote/apply-remote-move-ops repo conn move-ops)
+        (apply-move-ops! repo conn move-ops)
         (let [page-blocks (ldb/get-page-blocks @conn (:db/id (ldb/get-page @conn page-name)) {})]
           (is (= #{uuid1-remote uuid2-remote uuid1-client uuid2-client} (set (map :block/uuid page-blocks))))
           (is (= ["a0" "a1"]
