@@ -31,6 +31,7 @@
             [logseq.outliner.property :as outliner-property]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
+            [logseq.api.block :as api-block]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -172,7 +173,16 @@
                         (let [convert? (:convert-page-to-property? x)]
                           {:label (if convert?
                                     (util/format "Convert \"%s\" to property" (:block/title x))
-                                    (:block/title x))
+                                    (let [ident (:db/ident x)
+                                          ns' (some-> ident (namespace))
+                                          plugin? (some-> ident (api-block/plugin-property-key?))
+                                          _plugin-name (and plugin? (second (re-find #"^plugin\.property\.([^.]+)" ns')))]
+                                      [:span.flex.gap-1.items-center
+                                       {:title (str ident)}
+                                       (if plugin?
+                                         [:span.pt-1 (shui/tabler-icon "puzzle" {:size 15 :class "opacity-40"})]
+                                         [:span.pt-1 (shui/tabler-icon "letter-t" {:size 15 :class "opacity-40"})])
+                                       [:strong.font-normal (:block/title x)]]))
                            :value (:block/uuid x)
                            :convert-page-to-property? convert?})) properties)
                  (util/distinct-by-last-wins :value))]
