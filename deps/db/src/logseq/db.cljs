@@ -170,7 +170,7 @@
                                        (empty? m)))))
          delete-blocks-tx (when-not (string? repo-or-conn)
                             (delete-blocks/update-refs-history-and-macros @repo-or-conn tx-data tx-meta))
-         tx-data (distinct (concat tx-data delete-blocks-tx))]
+         tx-data (concat tx-data delete-blocks-tx)]
 
      ;; Ensure worker can handle the request sequentially (one by one)
      ;; Because UI assumes that the in-memory db has all the data except the last one transaction
