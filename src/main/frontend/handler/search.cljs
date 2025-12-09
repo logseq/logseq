@@ -10,7 +10,6 @@
             [frontend.handler.notification :as notification]
             [frontend.search :as search]
             [frontend.state :as state]
-            [frontend.storage :as storage]
             [frontend.util :as util]
             [logseq.db :as ldb]
             [missionary.core :as m]
@@ -166,18 +165,3 @@
                                         result)))
                              (conj result [:span content])))]
             [:span {:class "m-0"} elements]))))))
-
-(defn get-recents
-  []
-  (storage/get :recent-search-items))
-
-(defn add-recent!
-  [item]
-  (when-not (string/blank? item)
-    (let [recents (get-recents)]
-      (storage/set :recent-search-items
-                   (distinct (take 20 (cons item recents)))))))
-
-(defn clear-recents!
-  []
-  (storage/remove :recent-search-items))
