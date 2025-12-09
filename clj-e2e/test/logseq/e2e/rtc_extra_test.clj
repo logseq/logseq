@@ -1,6 +1,6 @@
 (ns logseq.e2e.rtc-extra-test
   (:require
-   [clojure.test :refer [deftest testing is use-fixtures run-test run-tests]]
+   [clojure.test :refer [deftest testing is use-fixtures run-test]]
    [com.climate.claypoole :as cp]
    [logseq.e2e.assert :as assert]
    [logseq.e2e.block :as b]

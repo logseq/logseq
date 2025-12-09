@@ -10,7 +10,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@logseq/nbb-logseq": "github:logseq/nbb-logseq#feat-db-v29",
+    "@logseq/nbb-logseq": "github:logseq/nbb-logseq#feat-db-v30",
     "@modelcontextprotocol/sdk": "^1.17.5",
     "better-sqlite3": "~11.10.0",
     "fastify": "5.3.2",
