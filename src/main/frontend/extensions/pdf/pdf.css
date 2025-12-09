@@ -1037,5 +1037,11 @@ html.is-system-window {
 }
 
 .pdfViewer .page.loadingIcon::after {
-  background: none;
+  @apply bg-none;
+}
+
+.textLayer :is(span, br) {
+  &::selection {
+    @apply text-transparent;
+  }
 }
