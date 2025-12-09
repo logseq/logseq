@@ -6,7 +6,6 @@
             [frontend.handler.route :as route-handler]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.common.util :as common-util]
             [mobile.search :as mobile-search]
             [mobile.state :as mobile-state]
             [promesa.core :as p]))
@@ -115,7 +114,6 @@
        ;; wire up search handler
        (js/console.log "Native search query" q)
        (reset! mobile-state/*search-input q)
-       (reset! mobile-state/*search-last-input-at (common-util/time-ms))
        (p/let [result (mobile-search/search q)]
          (update-native-search-results! result))))
     (add-search-result-item-listener!)
