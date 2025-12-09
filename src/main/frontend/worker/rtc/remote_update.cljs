@@ -210,8 +210,7 @@
           (if move?
             (transact-db! :move-blocks repo conn [(block-reuse-db-id b)] local-parent {:sibling? false})
             (transact-db! :insert-blocks repo conn
-                          [{:block/uuid block-uuid
-                            :block/title ""}]
+                          [{:block/uuid block-uuid}]
                           local-parent {:sibling? false :keep-uuid? true}))
           (transact-db! :update-block-order-directly repo conn block-uuid first-remote-parent remote-block-order))
 
