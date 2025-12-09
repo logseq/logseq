@@ -785,8 +785,12 @@ export interface IEditorProxy extends Record<string, any> {
   getTag: (nameOrIdent: string) => Promise<PageEntity | null>
   addTagProperty: (tagId: BlockIdentity, propertyIdOrName: BlockIdentity) => Promise<void>
   removeTagProperty: (tagId: BlockIdentity, propertyIdOrName: BlockIdentity) => Promise<void>
+  addTagExtends: (tagId: BlockIdentity, parentTagIdOrName: BlockIdentity) => Promise<void>
+  removeTagExtends: (tagId: BlockIdentity, parentTagIdOrName: BlockIdentity) => Promise<void>
   addBlockTag: (blockId: BlockIdentity, tagId: BlockIdentity) => Promise<void>
   removeBlockTag: (blockId: BlockIdentity, tagId: BlockIdentity) => Promise<void>
+  setBlockIcon: (blockId: BlockIdentity, iconType: 'tabler-icon' | 'emoji', iconName: string) => Promise<void>
+  removeBlockIcon: (blockId: BlockIdentity) => Promise<void>
 
   prependBlockInPage: (
     page: PageIdentity,

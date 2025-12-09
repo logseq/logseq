@@ -233,8 +233,8 @@
                     {:tag tag}))))
 
 (defn add-tag-extends [tag-id extend-id]
-  (let [tag (db-async/<get-block (state/get-current-repo) tag-id)
-        extend (db-async/<get-block (state/get-current-repo) extend-id)]
+  (p/let [tag (db-async/<get-block (state/get-current-repo) tag-id)
+          extend (db-async/<get-block (state/get-current-repo) extend-id)]
     (throw-error-if-not-tag! tag tag-id)
     (throw-error-if-not-tag! extend extend-id)
     (when (ldb/built-in? tag)
@@ -244,8 +244,8 @@
                                              (:db/id extend))))
 
 (defn remove-tag-extends [tag-id extend-id]
-  (let [tag (db-async/<get-block (state/get-current-repo) tag-id)
-        extend (db-async/<get-block (state/get-current-repo) extend-id)]
+  (p/let [tag (db-async/<get-block (state/get-current-repo) tag-id)
+          extend (db-async/<get-block (state/get-current-repo) extend-id)]
     (throw-error-if-not-tag! tag tag-id)
     (throw-error-if-not-tag! extend extend-id)
     (when (ldb/built-in? tag)
