@@ -24,25 +24,31 @@
 (defn icon
   [icon' & [opts]]
   (let [icon' (if (or (string? icon') (keyword? icon'))
-                {:type :tabler-icon :id (name icon')} icon')
-        color? (:color? opts)
-        opts (dissoc opts :color?)
-        item (cond
-               (and (= :emoji (:type icon')) (:id icon'))
-               [:span.ui__icon
-                [:em-emoji (merge {:id (:id icon')
-                                   :style {:line-height 1}}
-                                  opts)]]
+                {:type :tabler-icon :id (name icon')} icon')]
+    (if (and (contains? #{:emoji :tabler-icon} (:type icon'))
+             (string? (:id icon'))
+             (not (string/blank? (:id icon'))))
+      (let [color? (:color? opts)
+            opts (dissoc opts :color?)
+            item (cond
+                   (and (= :emoji (:type icon')) (:id icon'))
+                   [:span.ui__icon
+                    [:em-emoji (merge {:id (:id icon')
+                                       :style {:line-height 1}}
+                                      opts)]]
 
-               (and (= :tabler-icon (:type icon')) (:id icon'))
-               (ui/icon (:id icon') opts)
+                   (and (= :tabler-icon (:type icon')) (:id icon'))
+                   (ui/icon (:id icon') opts)
 
-               :else
-               icon')]
-    (if color?
-      [:span.inline-flex.items-center.ls-icon-color-wrap
-       {:style {:color (or (some-> icon' :color) "inherit")}} item]
-      item)))
+                   :else
+                   icon')]
+        (if color?
+          [:span.inline-flex.items-center.ls-icon-color-wrap
+           {:style {:color (or (some-> icon' :color) "inherit")}} item]
+          item))
+      (do
+        (js/console.error "Invalid icon")
+        [:span]))))
 
 (defn get-node-icon
   [node-entity {:keys [ignore-current-icon?]
