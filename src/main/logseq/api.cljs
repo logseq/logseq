@@ -203,10 +203,14 @@
 (def ^:export get_tag_objects db-based-api/get-tag-objects)
 (def ^:export create_tag db-based-api/create-tag)
 (def ^:export get_tag db-based-api/get-tag)
+(def ^:export add_tag_extends db-based-api/add-tag-extends)
+(def ^:export remove_tag_extends db-based-api/remove-tag-extends)
 (def ^:export add_block_tag db-based-api/add-block-tag)
 (def ^:export remove_block_tag db-based-api/remove-block-tag)
 (def ^:export add_tag_property db-based-api/tag-add-property)
 (def ^:export remove_tag_property db-based-api/tag-remove-property)
+(def ^:export set_block_icon db-based-api/set-block-icon)
+(def ^:export remove_block_icon db-based-api/remove-block-icon)
 
 ;; Internal db-based CLI APIs
 ;; CLI APIs should use ensure-db-graph unless they have a nested check in cli-common-mcp-tools ns
