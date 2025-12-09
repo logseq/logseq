@@ -42,13 +42,15 @@
   [item]
   (let [block (:source-block item)
         id (:block/uuid block)
-        title (some-> block :block/title string/trim)
+        title (some-> block :block.temp/original-title string/trim)
         subtitle (some-> block block->page-name string/trim)]
     (when (and id (not (string/blank? title)))
       (let [short-title (when title (safe-truncate title))]
         {:id (str id)
          :title short-title
-         :subtitle (when-not (string/blank? subtitle) subtitle)}))))
+         :subtitle (when-not (:page? block)
+                     (when-not (string/blank? subtitle)
+                       subtitle))}))))
 
 (defn search
   [input]

@@ -509,22 +509,32 @@ private struct SearchResultsContent: View {
     var body: some View {
         List(store.searchResults) { result in
             NavigationLink(value: result) {
-                Text(result.title)
-                  .foregroundColor(.primary)
-                  .padding(.vertical, 8)
-                  .contentShape(Rectangle())   // improves tap area
+                VStack(alignment: .leading, spacing: 4) {
+                    if let subtitle = result.subtitle,
+                       !subtitle.isEmpty {
+                        Text(subtitle)
+                          .font(.subheadline)
+                          .foregroundColor(.primary.opacity(0.7))
+                          .lineLimit(1)
+                    }
+
+                    Text(result.title)
+                      .foregroundColor(.primary.opacity(0.9))
+                }
+                .padding(.vertical, 4)
+                .contentShape(Rectangle())   // improves tap area
             }
-              .listRowBackground(Color.clear)
+            .listRowBackground(Color.clear)
         }
-          .scrollContentBackground(.hidden)
-          .scrollDismissesKeyboard(.immediately)
-          .navigationTitle("Search")
-          .navigationDestination(for: NativeSearchResult.self) { result in
-              NativeNavHost(navController: navController)
+        .scrollContentBackground(.hidden)
+        .scrollDismissesKeyboard(.immediately)
+        .navigationTitle("Search")
+        .navigationDestination(for: NativeSearchResult.self) { result in
+            NativeNavHost(navController: navController)
                 .ignoresSafeArea()
                 .onAppear {
                     LiquidTabsPlugin.shared?.openResult(id: result.id)
                 }
-          }
+        }
     }
 }
