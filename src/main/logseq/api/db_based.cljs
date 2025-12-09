@@ -1,11 +1,11 @@
 (ns logseq.api.db-based
   "DB version related fns"
-  (:require [cljs-bean.core :as bean]
+  (:require ["@emoji-mart/data" :as emoji-data]
+            [cljs-bean.core :as bean]
             [cljs.reader]
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
-            [logseq.graph-parser.text :as text]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
@@ -17,15 +17,21 @@
             [frontend.modules.layout.core]
             [frontend.state :as state]
             [frontend.util :as util]
+            [goog.object :as gobj]
             [logseq.api.block :as api-block]
             [logseq.db :as ldb]
             [logseq.db.common.entity-util :as common-entity-util]
+            [logseq.graph-parser.text :as text]
             [logseq.outliner.core :as outliner-core]
             [logseq.sdk.core]
             [logseq.sdk.experiments]
             [logseq.sdk.git]
             [logseq.sdk.utils :as sdk-utils]
             [promesa.core :as p]))
+
+(defonce ^:private name->emoji
+  (->> (vals (bean/->clj (gobj/get emoji-data "emojis")))
+       (group-by :name)))
 
 (defn -get-property
   [^js plugin k]
@@ -206,36 +212,64 @@
 
 (defn create-tag [title ^js opts]
   (this-as
-    this
-    (when-not (string? title)
-      (throw (ex-info "Tag title should be a string" {:title title})))
-    (when (string/blank? title)
-      (throw (ex-info "Tag title shouldn't be empty" {:title title})))
-    (when (text/namespace-page? title)
-      (throw (ex-info "Tag title shouldn't include forward slash" {:title title})))
-    (let [opts (bean/->clj opts)
-          opts' (assoc opts
-                  :redirect? false
-                  :class-ident-namespace (api-block/resolve-class-prefix-for-db this))]
-      (p/let [tag (db-page-handler/<create-class! title opts')]
-        (sdk-utils/result->js tag)))))
+   this
+   (when-not (string? title)
+     (throw (ex-info "Tag title should be a string" {:title title})))
+   (when (string/blank? title)
+     (throw (ex-info "Tag title shouldn't be empty" {:title title})))
+   (when (text/namespace-page? title)
+     (throw (ex-info "Tag title shouldn't include forward slash" {:title title})))
+   (let [opts (bean/->clj opts)
+         opts' (assoc opts
+                      :redirect? false
+                      :class-ident-namespace (api-block/resolve-class-prefix-for-db this))]
+     (p/let [tag (db-page-handler/<create-class! title opts')]
+       (sdk-utils/result->js tag)))))
+
+(defn- throw-error-if-not-tag!
+  [tag tag-id]
+  (when-not (ldb/class? tag)
+    (throw (ex-info (str "Not a tag: " tag-id)
+                    {:tag tag}))))
+
+(defn add-tag-extends [tag-id extend-id]
+  (let [tag (db-async/<get-block (state/get-current-repo) tag-id)
+        extend (db-async/<get-block (state/get-current-repo) extend-id)]
+    (throw-error-if-not-tag! tag tag-id)
+    (throw-error-if-not-tag! extend extend-id)
+    (when (ldb/built-in? tag)
+      (throw (ex-info "Built-in tag's extends can't be modified" {:tag tag})))
+    (db-property-handler/set-block-property! (:db/id tag)
+                                             :logseq.property.class/extends
+                                             (:db/id extend))))
+
+(defn remove-tag-extends [tag-id extend-id]
+  (let [tag (db-async/<get-block (state/get-current-repo) tag-id)
+        extend (db-async/<get-block (state/get-current-repo) extend-id)]
+    (throw-error-if-not-tag! tag tag-id)
+    (throw-error-if-not-tag! extend extend-id)
+    (when (ldb/built-in? tag)
+      (throw (ex-info "Built-in tag's extends can't be modified" {:tag tag})))
+    (db-property-handler/delete-property-value! (:db/id tag)
+                                                :logseq.property.class/extends
+                                                (:db/id extend))))
 
 (defn get-tag [class-uuid-or-ident-or-title]
   (this-as
-    this
-    (let [title-or-ident (-> (if-not (string? class-uuid-or-ident-or-title)
-                               (str class-uuid-or-ident-or-title)
-                               class-uuid-or-ident-or-title)
-                           (string/replace #"^:+" ""))
-          eid (if (text/namespace-page? title-or-ident)
-                (keyword title-or-ident)
-                (if (util/uuid-string? title-or-ident)
-                  (when-let [id (sdk-utils/uuid-or-throw-error title-or-ident)]
-                    [:block/uuid id])
-                  (keyword (api-block/resolve-class-prefix-for-db this) title-or-ident)))
-          tag (db/entity eid)]
-      (when (ldb/class? tag)
-        (sdk-utils/result->js tag)))))
+   this
+   (let [title-or-ident (-> (if-not (string? class-uuid-or-ident-or-title)
+                              (str class-uuid-or-ident-or-title)
+                              class-uuid-or-ident-or-title)
+                            (string/replace #"^:+" ""))
+         eid (if (text/namespace-page? title-or-ident)
+               (keyword title-or-ident)
+               (if (util/uuid-string? title-or-ident)
+                 (when-let [id (sdk-utils/uuid-or-throw-error title-or-ident)]
+                   [:block/uuid id])
+                 (keyword (api-block/resolve-class-prefix-for-db this) title-or-ident)))
+         tag (db/entity eid)]
+     (when (ldb/class? tag)
+       (sdk-utils/result->js tag)))))
 
 (defn tag-add-property [tag-id property-id-or-name]
   (p/let [tag (db/get-case-page tag-id)
@@ -262,6 +296,9 @@
   (p/let [repo (state/get-current-repo)
           tag (db-async/<get-block repo tag-id)
           block (db-async/<get-block repo id-or-name)]
+    (when-not (ldb/class? tag)
+      (throw (ex-info (str "Not a tag: " tag-id)
+                      {:tag tag})))
     (when (and tag block)
       (db-page-handler/add-tag repo (:db/id block) tag))))
 
@@ -269,6 +306,34 @@
   (p/let [repo (state/get-current-repo)
           block (db-async/<get-block repo id-or-name)
           tag (db-async/<get-block repo tag-id)]
+    (when-not (ldb/class? tag)
+      (throw (ex-info (str "Not a tag: " tag-id)
+                      {:tag tag})))
     (when (and block tag)
       (db-property-handler/delete-property-value!
        (:db/id block) :block/tags (:db/id tag)))))
+
+(defn set-block-icon
+  [block-id icon-type icon-name]
+  (when-not (contains? #{"tabler-icon" "emoji"} icon-type)
+    (throw (ex-info "icon-type should be one of [tabler-icon, emoji]" {:icon-type icon-type})))
+  (when (or (not (string? icon-name))
+            (string/blank? icon-name))
+    (throw (ex-info "icon-name should be a non-blank string" {:icon-name icon-name})))
+  (when (= icon-type "emoji")
+    (when-not (name->emoji icon-name)
+      (throw (ex-info (str "Can't find emoji for " icon-name) {}))))
+  (p/let [repo (state/get-current-repo)
+          block (db-async/<get-block repo block-id)]
+    (db-property-handler/set-block-property! (:db/id block)
+                                             :logseq.property/icon
+                                             {:type (keyword icon-type)
+                                              :id (if (= icon-type "emoji")
+                                                    (:id (first (name->emoji icon-name)))
+                                                    icon-name)})))
+(defn remove-block-icon
+  [block-id]
+  (p/let [repo (state/get-current-repo)
+          block (db-async/<get-block repo block-id)]
+    (db-property-handler/remove-block-property! (:block/uuid block)
+                                                :logseq.property/icon)))
