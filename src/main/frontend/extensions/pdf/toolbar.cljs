@@ -596,11 +596,13 @@
          (svg/search2 19)]
 
         ;; annotations
-        (when asset-block
-          [:a.button
-           {:title "Annotations page"
-            :on-click #(pdf-assets/goto-annotations-page! (:pdf/current @state/state))}
-           (svg/annotations 16)])
+        [:a.button
+         {:title "Annotations page"
+          :on-click (fn []
+                      (if asset-block
+                        (pdf-assets/goto-annotations-page! (:pdf/current @state/state))
+                        (state/pub-event! [:asset/dialog-edit-external-src nil pdf-current])))}
+         (svg/annotations 16)]
 
         ;; system window
         [:a.button
