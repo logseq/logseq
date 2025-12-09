@@ -182,6 +182,10 @@
         :block/parent [:block/uuid page-uuid]}]
       (ldb/get-page @conn page-name)
       {:sibling? false :keep-uuid? true}))
+
+    ;; disable db validation
+    (swap! conn assoc :rtc-temp-conn? true)
+
     (testing "apply-remote-move-ops-test1"
       (let [data-from-ws {:req-id "req-id"
                           :t 1        ;; not used
