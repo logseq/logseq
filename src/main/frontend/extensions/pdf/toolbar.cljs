@@ -601,7 +601,7 @@
           :on-click (fn []
                       (if asset-block
                         (pdf-assets/goto-annotations-page! (:pdf/current @state/state))
-                        (state/pub-event! [:asset/dialog-edit-external-src nil pdf-current])))}
+                        (state/pub-event! [:asset/dialog-edit-external-url nil pdf-current])))}
          (svg/annotations 16)]
 
         ;; system window

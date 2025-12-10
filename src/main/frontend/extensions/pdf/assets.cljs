@@ -160,7 +160,7 @@
         (let [ref-asset-id (:image content)
               image? (not (nil? ref-asset-id))
               text (if image? (.toLocaleString (js/Date.))
-                              (:text content))
+                       (:text content))
               colors (:property/closed-values (db/entity :logseq.property.pdf/hl-color))
               color-id (some (fn [color] (when (= (:block/title color) (:color properties))
                                            (:db/id color))) colors)]
@@ -361,8 +361,8 @@
   [block]
   (let [hl-value (:logseq.property.pdf/hl-value block)
         asset (:logseq.property/asset block)
-        external-src (:logseq.property.asset/external-src asset)
-        file-path (or external-src (str "../assets/" (:block/uuid asset) ".pdf"))]
+        external-url (:logseq.property.asset/external-url asset)
+        file-path (or external-url (str "../assets/" (:block/uuid asset) ".pdf"))]
     (if asset
       (->
        (p/let [href (assets-handler/<make-asset-url file-path)]
