@@ -414,6 +414,13 @@
                  (when (:logseq.property/ui-position e)
                    [:db/retract (:e d) :logseq.property/ui-position]))))))
 
+(defn- rename-external-src-to-external-url
+  [db]
+  (let [f (rename-properties
+           {:logseq.property.asset/external-src :logseq.property.asset/external-url}
+           {})]
+    (f db)))
+
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
@@ -433,7 +440,8 @@
    ["65.12" {:fix remove-position-property-from-url-properties}]
    ["65.13" {:properties [:logseq.property.asset/width
                           :logseq.property.asset/height]}]
-   ["65.14" {:properties [:logseq.property.asset/external-src]}]])
+   ["65.14" {:properties [:logseq.property.asset/external-src]}]
+   ["65.15" {:fix rename-external-src-to-external-url}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]

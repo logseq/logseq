@@ -284,12 +284,6 @@
          (when-not db?
            (block-template block-id))
 
-         (when (and db? (= "pdf" (:logseq.property.asset/type block)))
-           (shui/dropdown-menu-item
-            {:key      "Edit asset source url"
-             :on-click #(state/pub-event! [:asset/dialog-edit-external-src block])}
-            "Edit Asset source url"))
-
          (cond
            (srs/card-block? block)
            (shui/dropdown-menu-item

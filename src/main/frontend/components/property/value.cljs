@@ -41,6 +41,12 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
+;; TODO: support :string editing
+(defonce string-value-on-click
+  {:logseq.property.asset/external-url
+   (fn [block]
+     (state/pub-event! [:asset/dialog-edit-external-url block]))})
+
 (defn- entity-map?
   [m]
   (and (map? m) (:db/id m)))
@@ -1240,7 +1246,14 @@
        (property-block-value value block property page-cp opts)
 
        :else
-       (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros))))]))
+       (let [content (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros)))]
+         (if (contains? (set (keys string-value-on-click))
+                        (:db/ident property))
+           [:div.w-full {:on-click (fn []
+                                     (let [f (get string-value-on-click (:db/ident property))]
+                                       (f block)))}
+            content]
+           content)))]))
 
 (rum/defc single-number-input
   [block property value-block table-view?]
