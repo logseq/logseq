@@ -62,6 +62,7 @@
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.file-based.schema :as file-schema]
             [logseq.db.frontend.asset :as db-asset]
+            [logseq.db.frontend.db :as db-db]
             [logseq.db.frontend.property :as db-property]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
@@ -4104,9 +4105,28 @@
     (quick-add-blocks!)
     (show-quick-add)))
 
+(defn get-user-quick-add-blocks
+  "Get quick add blocks for the current user if logged in"
+  []
+  (let [db (db/get-db)
+        user-id-str (user-handler/user-uuid)]
+    (if-let [page (db-db/get-built-in-page db common-config/quick-add-page-name)]
+      (let [children (:block/_parent page)]
+        (if (and user-id-str (ldb/get-graph-rtc-uuid db))
+          (let [user-id (uuid user-id-str)
+                user-db-id (:db/id (db/entity [:block/uuid user-id]))]
+            (if user-db-id
+              (filter (fn [block]
+                        (let [create-by-id (:db/id (:logseq.property/created-by-ref block))]
+                          (or (= user-db-id create-by-id)
+                              (nil? create-by-id)))) children)
+              children))
+          children))
+      (throw (ex-info "Quick add page doesn't exists" {})))))
+
 (defn quick-add-open-last-block!
   []
-  (when-let [add-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)]
-    (when (:block/_parent add-page)
-      (let [block (last (ldb/sort-by-order (:block/_parent add-page)))]
+  (let [blocks (get-user-quick-add-blocks)]
+    (when (seq blocks)
+      (let [block (last (ldb/sort-by-order blocks))]
         (edit-block! block :max {:container-id :unknown-container})))))
