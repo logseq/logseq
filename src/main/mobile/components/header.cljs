@@ -147,8 +147,10 @@
           rtc-indicator? (and repo
                               (ldb/get-graph-rtc-uuid (db/get-db))
                               (user-handler/logged-in?))
-          base {:title title
-                :hidden hidden?}
+          base (cond->
+                {:hidden hidden?}
+                 (not (mobile-util/native-ipad?))
+                 (assoc :title title))
           page? (= route-name :page)
           left-buttons (cond
                          (and (= tab "home") (nil? route-view))
