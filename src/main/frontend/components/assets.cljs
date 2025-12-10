@@ -8,10 +8,10 @@
    [frontend.config :as config]
    [frontend.context.i18n :refer [t]]
    [frontend.handler.assets :as assets-handler]
-   [frontend.handler.notification :as notification]
-   [frontend.handler.editor :as editor-handler]
-   [frontend.handler.route :as route-handler]
    [frontend.handler.db-based.property :as db-property-handler]
+   [frontend.handler.editor :as editor-handler]
+   [frontend.handler.notification :as notification]
+   [frontend.handler.route :as route-handler]
    [frontend.state :as state]
    [frontend.ui :as ui]
    [frontend.util :as util]
@@ -226,7 +226,7 @@
         [:h2.font-bold.opacity-80 "Selected directories:"]
         (alias-directories)])]))
 
-(rum/defc edit-external-src-form
+(rum/defc edit-external-url-form
   [asset-block {:keys [url title on-saved]}]
   (let [[saving? set-saving?] (rum/use-state false)
         create? (nil? asset-block)]
@@ -256,15 +256,14 @@
                                          checksum (assets-handler/get-file-checksum src)]
                                    (db-property-handler/set-block-properties!
                                     (:db/id asset-block)
-                                    {:logseq.property.asset/external-src src
+                                    {:logseq.property.asset/external-url src
                                      :logseq.property.asset/checksum checksum}))]))
                            (p/then #(when on-saved (on-saved asset-block false)))
                            (p/catch err-handle)
-                           (p/finally #(set-saving? false)))
-                       )))}
+                           (p/finally #(set-saving? false))))))}
      [:label [:span.block.pb-2.text-sm.opacity-60 "Asset title:"]
       (shui/input {:small true :default-value title :name "title"})]
-     [:label [:span.block.pb-2.text-sm.opacity-60 "Asset src:"]
+     [:label [:span.block.pb-2.text-sm.opacity-60 "Asset external url:"]
       [:span.flex.items-center.gap-2
        (shui/input {:small true :default-value url :name "src"})
        (when (util/electron?)
@@ -278,13 +277,13 @@
                            (when (not (string/blank? file-path))
                              (let [^js input (-> (.-target e) (.closest "form") (.querySelector "input[name='src']"))]
                                (set! (.-value input) file-path))))))}
-          "Select from local"))]]
+          "Select from disk"))]]
      [:div.flex.justify-end.pt-3
       (ui/button (if create? "Create" "Save") {:disabled saving?})]]))
 
-(rum/defc edit-external-src-content
+(rum/defc edit-external-url-content
   [asset-block pdf-current]
-  [:div.edit-external-src-content
+  [:div.edit-external-url-content
    (let [on-saved! (fn [asset-block update?]
                      (when-let [uuid' (and pdf-current (:block/uuid asset-block))]
                        (when pdf-current (state/set-current-pdf! nil))
@@ -292,18 +291,16 @@
                      (shui/dialog-close!))]
      (if asset-block
        [:div.pb-2.-mt-2
-        (let [url (:logseq.property.asset/external-src asset-block)
+        (let [url (:logseq.property.asset/external-url asset-block)
               title (:block/title asset-block)]
-          (edit-external-src-form asset-block {:url url :title title :on-saved on-saved!}))]
+          (edit-external-url-form asset-block {:url url :title title :on-saved on-saved!}))]
 
        (when-let [url (:url pdf-current)]
          [:div.pb-2
           (shui/alert
            {:variant "warning"}
            (shui/alert-description
-            "⚠️ PDF annotations should be with internal asset(pdf) ref block to work properly."
-            ))
+            "⚠️ PDF annotations should be with internal asset(pdf) ref block to work properly."))
 
           (let [title (util/node-path.basename url)]
-            (edit-external-src-form asset-block {:url url :title title :on-saved on-saved!}))])
-       ))])
+            (edit-external-url-form asset-block {:url url :title title :on-saved on-saved!}))])))])

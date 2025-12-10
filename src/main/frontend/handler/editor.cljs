@@ -1534,16 +1534,16 @@
         (fs/write-plain-text-file! repo dir file-rpath content nil)))))
 
 (defn- new-asset-block
-  [repo ^js file {:keys [repo-dir asset-dir-rpath external-src]}]
+  [repo ^js file {:keys [repo-dir asset-dir-rpath external-url]}]
   ;; WARN file name maybe fully qualified path when paste file
   (p/let [[file title] (if (map? file) [(:src file) (:title file)] [file nil])
-          [file external-src] (if (string? file) [nil file] [file external-src])
-          file-name (node-path/basename (or (some-> file (.-name)) (str external-src)))
+          [file external-url] (if (string? file) [nil file] [file external-url])
+          file-name (node-path/basename (or (some-> file (.-name)) (str external-url)))
           file-name-without-ext* (db-asset/asset-name->title file-name)
           file-name-without-ext (if (= file-name-without-ext* "image")
                                   (date/get-date-time-string-2)
                                   file-name-without-ext*)
-          checksum (some-> (or file external-src) (assets-handler/get-file-checksum))
+          checksum (some-> (or file external-url) (assets-handler/get-file-checksum))
           size (or (some-> file (.-size)) 0)
           existing-asset (some->> checksum (db-async/<get-asset-with-checksum repo))]
     (if existing-asset
@@ -1574,7 +1574,7 @@
          {:block/title (or title file-name-without-ext)
           :block/uuid block-id
           :logseq.property.asset/type ext
-          :logseq.property.asset/external-src external-src
+          :logseq.property.asset/external-url external-url
           :logseq.property.asset/size size
           :logseq.property.asset/checksum checksum
           :block/tags #{(:db/id asset)}})))))

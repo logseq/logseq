@@ -156,42 +156,6 @@
         link
         (str protocol "://" link)))))
 
-(defn- get-file-absolute-path
-  [config path]
-  (let [path (string/replace path "file:" "")
-        block-id (:block/uuid config)
-        current-file (and block-id
-                          (:file/path (:block/file (:block/page (db/entity [:block/uuid block-id])))))]
-    (when current-file
-      (let [parts (string/split current-file #"/")
-            parts-2 (string/split path #"/")
-            current-dir (util/string-join-path (drop-last 1 parts))]
-        (cond
-          (if util/win32? (utils/win32 path) (util/starts-with? path "/"))
-          path
-
-          (and (not (util/starts-with? path ".."))
-               (not (util/starts-with? path ".")))
-          (str current-dir "/" path)
-
-          :else
-          (let [parts (loop [acc []
-                             parts (reverse parts)
-                             col (reverse parts-2)]
-                        (if (empty? col)
-                          acc
-                          (let [[part parts] (case (first col)
-                                               ".."
-                                               [(first parts) (rest parts)]
-                                               "."
-                                               ["" parts]
-                                               [(first col) (rest parts)])]
-                            (recur (conj acc part)
-                                   parts
-                                   (rest col)))))
-                parts (remove #(string/blank? %) parts)]
-            (util/string-join-path (reverse parts))))))))
-
 (rum/defcs file-based-asset-loader
   < rum/reactive
   (rum/local nil ::exist?)
@@ -470,16 +434,17 @@
   ([src] (audio-cp src nil))
   ([src ext]
    ;; Change protocol to allow media fragment uris to play
-   (let [src (string/replace-first src common-config/asset-protocol "file://")
-         opts {:controls true
-               :on-touch-start #(util/stop %)}]
-     (case ext
-       :m4a [:audio opts [:source {:src src :type "audio/mp4"}]]
-       [:audio (assoc opts :src src)]))))
+   (when src
+     (let [src (string/replace-first src common-config/asset-protocol "file://")
+           opts {:controls true
+                 :on-touch-start #(util/stop %)}]
+       (case ext
+         :m4a [:audio opts [:source {:src src :type "audio/mp4"}]]
+         [:audio (assoc opts :src src)])))))
 
 (defn- open-pdf-file
   [e block href]
-  (let [href (or (:logseq.property.asset/external-src block) href)]
+  (let [href (or (:logseq.property.asset/external-url block) href)]
     (when-let [s (or href (some-> (.-target e) (.-dataset) (.-href)))]
       (let [load$ (fn []
                     (p/let [href (or href
@@ -516,14 +481,13 @@
                (nil? js-url)
                (config/get-local-asset-absolute-path))
         db-based? (config/db-based-graph? repo)]
-
     (when (nil? @src)
       (-> (assets-handler/<make-asset-url href js-url)
           (p/then (fn [url]
                     (reset! src (common-util/safe-decode-uri-component url))))
           (p/catch #(js/console.log "Failed to load asset:" %))))
     (:image-placeholder config)
-    (if-not @src
+    (if (and (:image-placeholder config) (nil? @src))
       (:image-placeholder config)
       (let [ext (keyword (or (util/get-file-ext @src)
                              (util/get-file-ext href)))
@@ -539,7 +503,6 @@
                                rel-dir (string/replace rel-dir #"^/+" "")
                                asset-url (path/path-join repo-dir rel-dir basename)]
                            (mobile-intent/open-or-share-file asset-url))))]
-
         (cond
           (or (contains? config/audio-formats ext)
               (and (= ext :webm) (string/starts-with? title "Audio-")))
@@ -635,7 +598,7 @@
                     :else
                     (if (assets-handler/check-alias-path? href)
                       (assets-handler/normalize-asset-resource-url href)
-                      (get-file-absolute-path config href)))]
+                      href))]
          (resizable-image config title href metadata full_text false))))))
 
 (def timestamp-to-string export-common-handler/timestamp-to-string)
@@ -1075,9 +1038,9 @@
   {:will-mount (fn [state]
                  (let [block (last (:rum/args state))
                        asset-type (:logseq.property.asset/type block)
-                       external-src? (not (string/blank? (:logseq.property.asset/external-src block)))
+                       external-url? (not (string/blank? (:logseq.property.asset/external-url block)))
                        path (path/path-join common-config/local-assets-dir (str (:block/uuid block) "." asset-type))]
-                   (p/let [result (if (or external-src? config/publishing?)
+                   (p/let [result (if (or external-url? config/publishing?)
                                                         ;; publishing doesn't have window.pfs defined
                                     true
                                     (fs/file-exists? (config/get-repo-dir (state/get-current-repo)) path))]
@@ -1507,7 +1470,7 @@
                  :else
                  (if (assets-handler/check-alias-path? href)
                    (assets-handler/resolve-asset-real-path-url (state/get-current-repo) href)
-                   (get-file-absolute-path config href)))]
+                   href))]
       (audio-cp href))))
 
 (defn- media-link
@@ -2425,10 +2388,10 @@
          [(hl-ref)]
 
          (let [config' (cond-> config
-                               (and (:page-ref? config)
-                                    (= 1 (count block-ast-title))
-                                    (= "Link" (ffirst block-ast-title)))
-                               (assoc :node-ref-link-only? true))]
+                         (and (:page-ref? config)
+                              (= 1 (count block-ast-title))
+                              (= "Link" (ffirst block-ast-title)))
+                         (assoc :node-ref-link-only? true))]
            (conj
             (map-inline config' block-ast-title)
             (when (= block-type :whiteboard-shape) [:span.mr-1 (ui/icon "whiteboard-element" {:extension? true})])))
