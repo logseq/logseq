@@ -211,7 +211,8 @@
 (defn <encrypt-text
   "Encrypts text with an AES key."
   [aes-key text]
-  (assert (and (string? text) (instance? js/CryptoKey aes-key)))
+  (assert (and (string? text) (ldb/read-transit-str text)) "text must be transit-encoded")
+  (assert (instance? js/CryptoKey aes-key))
   (p/let [iv (js/crypto.getRandomValues (js/Uint8Array. 12))
           encoded-text (.encode (js/TextEncoder.) text)
           encrypted-data (.encrypt subtle
