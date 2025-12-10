@@ -497,14 +497,21 @@
     (:build/properties m)
     (update :build/properties
             (fn [props]
-              (update-vals props #(if (block-property-value? %)
-                                    ;; Keep property value as map if uuid is referenced or it has unique attributes
-                                    (if (or (contains? ref-uuids (:block/uuid %))
-                                            ;; Keep this in sync with build-pvalue-entity-default
-                                            ((some-fn :build/tags :build/properties) %))
-                                      %
-                                      (:block/title %))
-                                    %))))))
+              (let [shrink-property-value
+                    (fn shrink-property-value [v]
+                      (if (block-property-value? v)
+                        ;; Keep property value as map if uuid is referenced or it has unique attributes
+                        (if (or (contains? ref-uuids (:block/uuid v))
+                               ;; Keep this in sync with build-pvalue-entity-default
+                                ((some-fn :build/tags :build/properties) v))
+                          v
+                          (:block/title v))
+                        v))]
+                (update-vals props
+                             (fn [v]
+                               (if (set? v)
+                                 (set (map shrink-property-value v))
+                                 (shrink-property-value v)))))))))
 
 (defn- build-page-export*
   "When given the :handle-block-uuids option, handle uuid references between
