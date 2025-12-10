@@ -699,15 +699,13 @@ export interface IEditorProxy extends Record<string, any> {
    * @param opts
    */
   insertBlock: (
-    srcBlock: BlockIdentity,
+    srcBlock: BlockIdentity | EntityID,
     content: string,
     opts?: Partial<{
       before: boolean
       sibling: boolean
       start: boolean
       end: boolean
-      isPageBlock: boolean
-      focus: boolean
       customUUID: string
       properties: {}
     }>
@@ -725,30 +723,20 @@ export interface IEditorProxy extends Record<string, any> {
   ) => Promise<Array<BlockEntity> | null>
 
   updateBlock: (
-    srcBlock: BlockIdentity,
+    srcBlock: BlockIdentity | EntityID,
     content: string,
     opts?: Partial<{ properties: {} }>
   ) => Promise<void>
 
-  removeBlock: (srcBlock: BlockIdentity) => Promise<void>
+  removeBlock: (srcBlock: BlockIdentity | EntityID) => Promise<void>
 
   getBlock: (
     srcBlock: BlockIdentity | EntityID,
     opts?: Partial<{ includeChildren: boolean }>
   ) => Promise<BlockEntity | null>
 
-  /**
-   * @example
-   *
-   * ```ts
-   *  logseq.Editor.setBlockCollapsed('uuid', true)
-   *  logseq.Editor.setBlockCollapsed('uuid', 'toggle')
-   * ```
-   * @param uuid
-   * @param opts
-   */
   setBlockCollapsed: (
-    uuid: BlockUUID,
+    srcBlock: BlockIdentity | EntityID,
     opts: { flag: boolean | 'toggle' } | boolean | 'toggle'
   ) => Promise<void>
 
@@ -808,11 +796,11 @@ export interface IEditorProxy extends Record<string, any> {
   ) => Promise<BlockEntity | null>
 
   getPreviousSiblingBlock: (
-    srcBlock: BlockIdentity
+    srcBlock: BlockIdentity | EntityID
   ) => Promise<BlockEntity | null>
 
   getNextSiblingBlock: (
-    srcBlock: BlockIdentity
+    srcBlock: BlockIdentity | EntityID
   ) => Promise<BlockEntity | null>
 
   moveBlock: (
