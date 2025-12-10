@@ -280,11 +280,10 @@
              db-based? (config/db-based-graph?)
              block (<get-block id {:children? false})
              opts' (bean/->clj opts)]
-       (when block
+       (when-let [block-uuid (:block/uuid block)]
          (if db-based?
            (db-based-api/update-block this block content opts')
-           (editor-handler/save-block! repo
-                                       (sdk-utils/uuid-or-throw-error block-uuid) content
+           (editor-handler/save-block! repo block-uuid content
                                        (if db-based? (dissoc opts' :properties) opts'))))))))
 
 (def move_block
