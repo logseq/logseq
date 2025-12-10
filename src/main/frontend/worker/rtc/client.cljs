@@ -259,8 +259,8 @@
              (d/entity db [:block/uuid block-uuid])]
     (swap! *remote-ops conj
            [:update-page (cond-> {:block-uuid block-uuid
-                                  :page-name page-name
-                                  :block/title (or title page-name)}
+                                  :page-name (ldb/write-transit-str page-name)
+                                  :block/title (ldb/write-transit-str (or title page-name))}
                            db-ident (assoc :db/ident db-ident))])))
 
 (defmethod local-block-ops->remote-ops-aux :remove-op
