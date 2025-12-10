@@ -557,6 +557,10 @@
         ;; else
         nil))))
 
+(defn- need-update-block-attrs-when-apply-update-page-op?
+  [update-page-op-value]
+  (seq (set/difference (set (keys update-page-op-value)) #{:op :self :page-name :block/title})))
+
 (defn- apply-remote-update-page-ops
   [repo conn update-page-ops]
   (let [config (worker-state/get-config repo)]
@@ -578,7 +582,8 @@
             ;; if there's already existing same name page
             (assert (= page-uuid self) {:page-name page-name :page-uuid page-uuid :should-be self})
             (assert (some? (d/entity @conn [:block/uuid page-uuid])) {:page-uuid page-uuid :page-name page-name})))
-        (update-block-attrs repo conn self op-value)))))
+        (when (need-update-block-attrs-when-apply-update-page-op? op-value)
+          (update-block-attrs repo conn self op-value))))))
 
 (defn- ensure-refed-blocks-exist
   "Ensure refed-blocks from remote existing in client"
