@@ -389,7 +389,7 @@
                                  (reset! *last-stop-exception e)
                                  (log/info :rtc-loop-task e)
                                  (when-not (or (instance? Cancelled e) (= "missionary.Cancelled" (ex-message e)))
-                                   (log/info :rtc-loop-task-ex-stack (.-stack e)))
+                                   (println (.-stack e)))
                                  (when (= :rtc.exception/ws-timeout (some-> e ex-data :type))
                                    ;; if fail reason is websocket-timeout, try to restart rtc
                                    (worker-state/<invoke-main-thread :thread-api/rtc-start-request repo))))
