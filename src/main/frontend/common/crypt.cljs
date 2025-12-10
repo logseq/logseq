@@ -86,7 +86,8 @@
                 #js ["encrypt" "decrypt"]))
 
 (defn <encrypt-private-key
-  "Encrypts a private key with a password."
+  "Encrypts a private key with a password.
+  Return encrypted-data which is a vector of [version, salt, iv, encrypted-private-key]"
   [password private-key]
   (assert (and (string? password) (instance? js/CryptoKey private-key)))
   (p/let [salt (js/crypto.getRandomValues (js/Uint8Array. 16))
@@ -99,7 +100,7 @@
           derived-key (.deriveKey subtle
                                   #js {:name "PBKDF2"
                                        :salt salt
-                                       :iterations 100000
+                                       :iterations 600000
                                        :hash "SHA-256"}
                                   password-key
                                   #js {:name "AES-GCM" :length 256}
@@ -110,14 +111,23 @@
                                           #js {:name "AES-GCM" :iv iv}
                                           derived-key
                                           exported-private-key)]
-    [salt iv (js/Uint8Array. encrypted-private-key)]))
+    ["20251210" salt iv (js/Uint8Array. encrypted-private-key)]))
 
 (defn <decrypt-private-key
-  "Decrypts a private key with a password."
+  "Decrypts a private key with a password.
+  encrypted-key-data is vector of
+  [version, salt, iv, encrypted-private-key-data]
+  or (old version)
+  [salt, iv, encrypted-private-key-data]"
   [password encrypted-key-data]
-  (assert (and (vector? encrypted-key-data) (= 3 (count encrypted-key-data))))
+  (assert (and (vector? encrypted-key-data) (<= 3 (count encrypted-key-data))))
   (->
-   (p/let [[salt-data iv-data encrypted-private-key-data] encrypted-key-data
+   (p/let [len (count encrypted-key-data)
+           [salt-data iv-data encrypted-private-key-data] (if (= len 3)
+                                                            encrypted-key-data
+                                                            (drop 1 encrypted-key-data))
+           version (when (= len 4) (first encrypted-key-data))
+           version>=20251210 (>= (compare version "20251210") 0)
            salt (js/Uint8Array. salt-data)
            iv (js/Uint8Array. iv-data)
            encrypted-private-key (js/Uint8Array. encrypted-private-key-data)
@@ -129,7 +139,7 @@
            derived-key (.deriveKey subtle
                                    #js {:name "PBKDF2"
                                         :salt salt
-                                        :iterations 100000
+                                        :iterations (if version>=20251210 600000 100000)
                                         :hash "SHA-256"}
                                    password-key
                                    #js {:name "AES-GCM" :length 256}
