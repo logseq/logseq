@@ -39,11 +39,20 @@ public class LiquidTabsPlugin: CAPPlugin, CAPBridgedPlugin {
 
         let tabs: [LiquidTab] = tabsArray.compactMap { dict in
             guard
-                let id = dict["id"] as? String,
-                let title = dict["title"] as? String
+              let id = dict["id"] as? String,
+              let title = dict["title"] as? String
             else { return nil }
 
-            let systemImage = dict["systemImage"] as? String ?? "square"
+            let rawSystemImage = dict["systemImage"] as? String ?? "square"
+
+            let systemImage: String = {
+                if UIImage(systemName: rawSystemImage) != nil {
+                    return rawSystemImage
+                } else {
+                    return "square"
+                }
+            }()
+
             let roleStr = dict["role"] as? String ?? "normal"
             let role: LiquidTab.Role = (roleStr == "search") ? .search : .normal
 
