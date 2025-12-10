@@ -10,7 +10,7 @@ jobs:
   build-and-sync-docs:
     runs-on: ubuntu-latest
     # Only run on manual trigger or when the commit message starts with "chore(libs): bump version"
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.head_commit.message, 'chore(libs): bump version')
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.head_commit.message, 'chore(libs):bump version')
 
     steps:
       - name: Checkout logseq repository
