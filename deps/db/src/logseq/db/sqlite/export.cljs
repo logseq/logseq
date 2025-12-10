@@ -55,10 +55,10 @@
         [:build/page {:build/journal (:block/journal-day pvalue)}]))
 
 (defn- build-pvalue-entity-default [db ent-properties pvalue
-                                    {:keys [include-uuid-fn]
-                                     :or {include-uuid-fn (constantly false)}
+                                    {:keys [content-ref-uuids]
+                                     :or {content-ref-uuids #{}}
                                      :as options}]
-  (if (or (seq ent-properties) (seq (:block/tags pvalue)))
+  (if (or (seq ent-properties) (seq (:block/tags pvalue)) (contains? content-ref-uuids (:block/uuid pvalue)))
     (cond-> {:build/property-value :block
              :block/title (or (block-title pvalue)
                               (:logseq.property/value pvalue))}
@@ -75,7 +75,7 @@
                               [k v]))))
                   (into {})))
 
-      (include-uuid-fn (:block/uuid pvalue))
+      (contains? content-ref-uuids (:block/uuid pvalue))
       (assoc :block/uuid (:block/uuid pvalue) :build/keep-uuid? true)
 
       (:include-timestamps? options)
@@ -95,10 +95,10 @@
             (if-let [build-page (and (not property-value-uuids?) (build-pvalue-entity-for-build-page pvalue))]
               build-page
               (if (contains? #{:node :date} (:logseq.property/type property-ent))
-                ;; Idents take precedence over uuid because they are keep data graph-agnostic
+                ;; Idents take precedence over uuid because they keep data graph-agnostic
                 (if (:db/ident pvalue)
                   (:db/ident pvalue)
-                  ;; Use metadata distinguish from block references that don't exist like closed values
+                  ;; Use metadata to distinguish from block references that don't exist like closed values
                   ^::existing-property-value? [:block/uuid (:block/uuid pvalue)])
                 (or (:db/ident pvalue)
                     (let [ent-properties* (->> (apply dissoc (db-property/properties pvalue)
@@ -488,12 +488,13 @@
 
 (defn- remove-uuid-if-not-ref-given-uuids
   [ref-uuids m]
-  (if (contains? ref-uuids (:block/uuid m))
-    m
-    (dissoc m :block/uuid :build/keep-uuid?)))
+  (cond-> m
+    (not (contains? ref-uuids (:block/uuid m)))
+    (dissoc :block/uuid :build/keep-uuid?)))
 
 (defn- build-page-export*
-  "When given the :handle-block-uuids option, handle references between blocks"
+  "When given the :handle-block-uuids option, handle uuid references between
+  blocks including property value blocks"
   [db eid page-blocks* {:keys [handle-block-uuids?] :as options}]
   (let [page-entity (d/entity db eid)
         page-blocks (->> page-blocks*
@@ -542,6 +543,7 @@
         {:keys [content-ref-ents] :as content-ref-export} (build-content-ref-export db page-blocks*)
         {:keys [pvalue-uuids] :as page-export*}
         (build-page-export* db eid page-blocks* {:include-uuid-fn (:content-ref-uuids content-ref-export)
+                                                 :content-ref-uuids (:content-ref-uuids content-ref-export)
                                                  :handle-block-uuids? true
                                                  :include-alias? true})
         page-entity (d/entity db eid)
@@ -784,7 +786,7 @@
         ontology-export (build-graph-ontology-export db ontology-options)
         ontology-pvalue-uuids (set (concat (mapcat get-pvalue-uuids (vals (:properties ontology-export)))
                                            (mapcat get-pvalue-uuids (vals (:classes ontology-export)))))
-        pages-export (build-graph-pages-export db ontology-export options)
+        pages-export (build-graph-pages-export db ontology-export (assoc options :content-ref-uuids content-ref-uuids))
         graph-export* (-> (merge ontology-export pages-export) (dissoc :pvalue-uuids))
         graph-export (if (seq (:exclude-namespaces options))
                        (assoc graph-export* ::auto-include-namespaces (:exclude-namespaces options))

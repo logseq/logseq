@@ -304,9 +304,13 @@
                     {:block/title "block with a pvalue that has a :block/uuid"
                      :build/properties {:user.property/p2 {:build/property-value :block
                                                            :block/title "property value block"
-                                                           :build/tags [:user.class/C2]
                                                            :block/uuid pvalue-block-uuid
-                                                           :build/keep-uuid? true}}}]}
+                                                           :build/keep-uuid? true}}}
+                    ;; Not a ref case but needed to assert this somewhere
+                    {:block/title "block with a pvalue that has :build/tags"
+                     :build/properties {:user.property/p2 {:build/property-value :block
+                                                           :block/title "property value block2"
+                                                           :build/tags [:user.class/C2]}}}]}
           {:page {:block/title "page with block ref"}
            :blocks [{:block/title "hi" :block/uuid block-uuid :build/keep-uuid? true
                      :build/properties {:user.property/p1 [:block/uuid block-object-uuid]}}]}
