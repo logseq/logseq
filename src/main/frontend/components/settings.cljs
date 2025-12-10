@@ -1312,7 +1312,7 @@
           (let [on-submit (fn []
                             (-> (p/do!
                                  (set-reset-password-status! "Updating password ...")
-                                 (state/<invoke-db-worker :thread-api/reset-e2ee-password
+                                 (state/<invoke-db-worker :thread-api/change-e2ee-password
                                                           token refresh-token user-uuid current-password new-password)
                                  (set-reset-password-status! "Password updated successfully!"))
                                 (p/catch (fn [e]
