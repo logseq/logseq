@@ -122,10 +122,6 @@
             (let [history (vec history)
                   last-path (:path (last history))]
               (case nav-type
-                "pop" (if (> (count history) 1)
-                        (vec (butlast history))
-                        history)
-
                 "replace" (if (seq history)
                             (conj (vec (butlast history)) entry)
                             [entry])
@@ -242,8 +238,11 @@
   (let [stack (current-stack)
         {:keys [history]} (get @stack-history stack)
         history (vec history)]
-    (when (> (count history) 1)
-      (let [new-history (subvec history 0 (dec (count history)))
+    (when (>= (count history) 1)
+      (let [root-history? (= (count history) 1)
+            new-history (if root-history?
+                          history
+                          (subvec history 0 (dec (count history))))
             {:keys [route-match]} (peek new-history)
             route-match   (or route-match (:route-match (stack-defaults stack)))
             route-name    (get-in route-match [:data :name])
