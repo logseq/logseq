@@ -301,7 +301,7 @@
           derived-key (.deriveKey subtle
                                   #js {:name "PBKDF2"
                                        :salt salt
-                                       :iterations 100000
+                                       :iterations 600000
                                        :hash "SHA-256"}
                                   password-key
                                   #js {:name "AES-GCM" :length 256}
@@ -330,7 +330,7 @@
            derived-key (.deriveKey subtle
                                    #js {:name "PBKDF2"
                                         :salt salt
-                                        :iterations 100000
+                                        :iterations 600000
                                         :hash "SHA-256"}
                                    password-key
                                    #js {:name "AES-GCM" :length 256}
