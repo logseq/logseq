@@ -303,7 +303,7 @@
 (def normal-page
   (vec
    (concat
-    [:map
+    [:map {:error/path ["normal-page"]}
      ;; journal-day is only set for journal pages
      [:block/journal-day {:optional true} :int]
      [:block/parent {:optional true} :int]
@@ -315,14 +315,14 @@
   [:or
    (vec
     (concat
-     [:map
+     [:map {:error/path ["class-page"]}
       [:db/ident class-ident]
       [:logseq.property.class/extends [:set :int]]]
      page-attrs
      page-or-block-attrs))
    (vec
     (concat
-     [:map
+     [:map {:error/path ["class-page"]}
       [:db/ident [:= :logseq.class/Root]]]
      page-attrs
      page-or-block-attrs))])
@@ -336,7 +336,7 @@
 (def internal-property
   (vec
    (concat
-    [:map
+    [:map {:error/path ["internal-property"]}
      [:db/ident internal-property-ident]
      [:logseq.property/type (apply vector :enum (into db-property-type/internal-built-in-property-types
                                                       db-property-type/user-built-in-property-types))]
@@ -349,7 +349,7 @@
 (def user-property
   (vec
    (concat
-    [:map
+    [:map {:error/path ["user-property"]}
      [:db/ident user-property-ident]
      [:logseq.property/type (apply vector :enum (into db-property-type/user-allowed-internal-property-types
                                                       db-property-type/user-built-in-property-types))]]
@@ -361,7 +361,7 @@
 (def plugin-property
   (vec
    (concat
-    [:map
+    [:map {:error/path ["plugin-property"]}
      [:db/ident plugin-property-ident]
      [:logseq.property/type (apply vector :enum (concat db-property-type/user-built-in-property-types [:json :string :page]))]]
     property-common-schema-attrs
@@ -390,7 +390,7 @@
 (def hidden-page
   (vec
    (concat
-    [:map
+    [:map {:error/path ["hidden-page"]}
      ;; pages from :default property uses this but closed-value pages don't
      [:block/order {:optional true} block-order]
      [:logseq.property/hide? [:enum true]]]
@@ -411,7 +411,7 @@
   "A (shape) block for whiteboard"
   (vec
    (concat
-    [:map]
+    [:map {:error/path ["whiteboard-block"]}]
     [[:block/title :string]
      [:block/parent :int]
      ;; These blocks only associate with pages of type "whiteboard"
@@ -422,7 +422,7 @@
   "A common property value for user properties"
   (vec
    (concat
-    [:map]
+    [:map {:error/path "property-value-block"}]
     [[:logseq.property/value [:or :string :double :boolean]]
      [:logseq.property/created-from-property :int]]
     (remove #(#{:block/title :logseq.property/created-from-property} (first %)) block-attrs)
@@ -473,7 +473,7 @@
   "A block with content and no special type or tag behavior"
   (vec
    (concat
-    [:map]
+    [:map {:error/path ["normal-block"]}]
     block-attrs
     page-or-block-attrs)))
 
@@ -487,7 +487,7 @@
   "A block tagged with #Asset"
   (vec
    (concat
-    [:map]
+    [:map {:error/path ["asset-block"]}]
     ;; TODO: Derive required property types from existing schema in frontend.property
     [[:logseq.property.asset/type :string]
      [:logseq.property.asset/checksum :string]
@@ -498,7 +498,7 @@
     page-or-block-attrs)))
 
 (def file-block
-  [:map
+  [:map {:error/path ["file-block"]}
    [:block/uuid :uuid]
    [:block/tx-id {:optional true} :int]
    ;; App doesn't use timestamps but migrations may
@@ -512,13 +512,13 @@
 
 (def db-ident-key-val
   "A key value map with :db/ident and :kv/value"
-  [:map
+  [:map {:error/path ["db-ident-key-val"]}
    [:db/ident logseq-ident]
    [:kv/value :any]
    [:block/tx-id {:optional true} :int]])
 
 (def property-value-placeholder
-  [:map
+  [:map {:error/path ["property-value-placeholder"]}
    [:db/ident [:= :logseq.property/empty-placeholder]]
    [:block/uuid :uuid]
    [:block/tx-id {:optional true} :int]
