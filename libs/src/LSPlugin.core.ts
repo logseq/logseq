@@ -54,7 +54,7 @@ const DIR_PLUGINS = 'plugins'
 declare global {
   interface Window {
     LSPluginCore: LSPluginCore
-    DOMPurify: typeof DOMPurify
+    DOMPurify: any
     $$callerPluginID: string | undefined
   }
 }

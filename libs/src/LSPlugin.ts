@@ -789,6 +789,9 @@ export interface IEditorProxy extends Record<string, any> {
   removeTagExtends: (tagId: BlockIdentity, parentTagIdOrName: BlockIdentity) => Promise<void>
   addBlockTag: (blockId: BlockIdentity, tagId: BlockIdentity) => Promise<void>
   removeBlockTag: (blockId: BlockIdentity, tagId: BlockIdentity) => Promise<void>
+  /**
+   * @note Emoji icon name from https://learn.missiveapp.com/open/emoji-mart
+   * */
   setBlockIcon: (blockId: BlockIdentity, iconType: 'tabler-icon' | 'emoji', iconName: string) => Promise<void>
   removeBlockIcon: (blockId: BlockIdentity) => Promise<void>
 
