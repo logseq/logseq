@@ -55,34 +55,34 @@
         [:build/page {:build/journal (:block/journal-day pvalue)}]))
 
 (defn- build-pvalue-entity-default [db ent-properties pvalue
-                                    {:keys [content-ref-uuids]
-                                     :or {content-ref-uuids #{}}
+                                    {:keys [include-pvalue-uuid-fn]
+                                     :or {include-pvalue-uuid-fn (constantly false)}
                                      :as options}]
-  (if (or (seq ent-properties) (seq (:block/tags pvalue)) (contains? content-ref-uuids (:block/uuid pvalue)))
-    (cond-> {:build/property-value :block
-             :block/title (or (block-title pvalue)
-                              (:logseq.property/value pvalue))}
-      (seq (:block/tags pvalue))
-      (assoc :build/tags (->build-tags (:block/tags pvalue)))
+  (let [;; nbb-compatible version of db-property/property-value-content
+        property-value-content (or (block-title pvalue)
+                                   (:logseq.property/value pvalue))]
+    (if (or (seq ent-properties) (seq (:block/tags pvalue)) (include-pvalue-uuid-fn (:block/uuid pvalue)))
+      (cond-> {:build/property-value :block
+               :block/title property-value-content}
+        (seq (:block/tags pvalue))
+        (assoc :build/tags (->build-tags (:block/tags pvalue)))
 
-      (seq ent-properties)
-      (assoc :build/properties
-             ;; TODO: Add support for ref properties here and in sqlite.build
-             (->> ent-properties
-                  (keep (fn [[k v]]
-                          (let [prop-type (:logseq.property/type (d/entity db k))]
-                            (when-not (contains? db-property-type/all-ref-property-types prop-type)
-                              [k v]))))
-                  (into {})))
+        (seq ent-properties)
+        (assoc :build/properties
+               ;; TODO: Add support for ref properties here and in sqlite.build
+               (->> ent-properties
+                    (keep (fn [[k v]]
+                            (let [prop-type (:logseq.property/type (d/entity db k))]
+                              (when-not (contains? db-property-type/all-ref-property-types prop-type)
+                                [k v]))))
+                    (into {})))
 
-      (contains? content-ref-uuids (:block/uuid pvalue))
-      (assoc :block/uuid (:block/uuid pvalue) :build/keep-uuid? true)
+        (include-pvalue-uuid-fn (:block/uuid pvalue))
+        (assoc :block/uuid (:block/uuid pvalue) :build/keep-uuid? true)
 
-      (:include-timestamps? options)
-      (merge (select-keys pvalue [:block/created-at :block/updated-at])))
-    ;; nbb-compatible version of db-property/property-value-content
-    (or (block-title pvalue)
-        (:logseq.property/value pvalue))))
+        (:include-timestamps? options)
+        (merge (select-keys pvalue [:block/created-at :block/updated-at])))
+      property-value-content)))
 
 (defonce ignored-properties [:logseq.property/created-by-ref :logseq.property.embedding/hnsw-label-updated-at])
 
@@ -487,10 +487,24 @@
        (map #(d/entity db %))))
 
 (defn- remove-uuid-if-not-ref-given-uuids
+  "Cleans up blocks that have uuids that are not referenced elsewhere.
+   Handles a block map and its properties' value blocks (one level deep). For property
+   value blocks also handles reverting the value back to its concise form as needed"
   [ref-uuids m]
   (cond-> m
     (not (contains? ref-uuids (:block/uuid m)))
-    (dissoc :block/uuid :build/keep-uuid?)))
+    (dissoc :block/uuid :build/keep-uuid?)
+    (:build/properties m)
+    (update :build/properties
+            (fn [props]
+              (update-vals props #(if (block-property-value? %)
+                                    ;; Keep property value as map if uuid is referenced or it has unique attributes
+                                    (if (or (contains? ref-uuids (:block/uuid %))
+                                            ;; Keep this in sync with build-pvalue-entity-default
+                                            ((some-fn :build/tags :build/properties) %))
+                                      %
+                                      (:block/title %))
+                                    %))))))
 
 (defn- build-page-export*
   "When given the :handle-block-uuids option, handle uuid references between
@@ -543,7 +557,7 @@
         {:keys [content-ref-ents] :as content-ref-export} (build-content-ref-export db page-blocks*)
         {:keys [pvalue-uuids] :as page-export*}
         (build-page-export* db eid page-blocks* {:include-uuid-fn (:content-ref-uuids content-ref-export)
-                                                 :content-ref-uuids (:content-ref-uuids content-ref-export)
+                                                 :include-pvalue-uuid-fn (:content-ref-uuids content-ref-export)
                                                  :handle-block-uuids? true
                                                  :include-alias? true})
         page-entity (d/entity db eid)
@@ -687,13 +701,15 @@
                                 (set (map :e (d/datoms db :avet :block/tags :logseq.class/Property))))
         page-exports (mapv (fn [eid]
                              (let [page-blocks (get-page-blocks db eid)]
-                               (build-page-export* db eid page-blocks (merge options {:include-uuid-fn (constantly true)}))))
+                               (build-page-export* db eid page-blocks (merge options {:include-uuid-fn (constantly true)
+                                                                                      :include-pvalue-uuid-fn (constantly true)}))))
                            page-ids)
         ontology-page-exports
         (vec
          (keep (fn [eid]
                  (when-let [page-blocks (seq (remove :logseq.property/created-from-property (get-page-blocks db eid)))]
                    (build-page-export* db eid page-blocks (merge options {:include-uuid-fn (constantly true)
+                                                                          :include-pvalue-uuid-fn (constantly true)
                                                                           :ontology-page? true}))))
                ontology-ids))
         page-exports' (remove (fn [page-export]
@@ -772,7 +788,7 @@
 
 (defn- build-graph-export
   "Exports whole graph. Has the following options:
-   * :include-timestamps? - When set, timestamps are included on all blocks
+   * :include-timestamps? - When set, timestamps are included on all blocks except for property value blocks
    * :exclude-namespaces - A set of parent namespaces to exclude from properties and classes.
      This is useful for graphs seeded with an ontology e.g. schema.org as it eliminates noisy and needless
      export+import
@@ -786,7 +802,7 @@
         ontology-export (build-graph-ontology-export db ontology-options)
         ontology-pvalue-uuids (set (concat (mapcat get-pvalue-uuids (vals (:properties ontology-export)))
                                            (mapcat get-pvalue-uuids (vals (:classes ontology-export)))))
-        pages-export (build-graph-pages-export db ontology-export (assoc options :content-ref-uuids content-ref-uuids))
+        pages-export (build-graph-pages-export db ontology-export (assoc options :include-pvalue-uuid-fn content-ref-uuids))
         graph-export* (-> (merge ontology-export pages-export) (dissoc :pvalue-uuids))
         graph-export (if (seq (:exclude-namespaces options))
                        (assoc graph-export* ::auto-include-namespaces (:exclude-namespaces options))
