@@ -487,7 +487,7 @@
                                            :hide? true
                                            :public? false}
                                   :queryable? true}
-     :logseq.property.asset/external-src {:title "External URL"
+     :logseq.property.asset/external-url {:title "External URL"
                                           :schema {:type :string
                                                    :hide? false
                                                    :public? true}

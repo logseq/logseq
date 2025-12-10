@@ -175,7 +175,7 @@
                            ;; colors
                            (let [pdf-current (state/get-current-pdf)]
                              (if (and (config/db-based-graph?) (not (:block pdf-current)))
-                               (state/pub-event! [:asset/dialog-edit-external-src nil pdf-current])
+                               (state/pub-event! [:asset/dialog-edit-external-url nil pdf-current])
                                (let [properties {:color action}]
                                  (if-not id
                                    ;; add highlight
@@ -401,10 +401,10 @@
    (for [hl page-hls]
      (let [vw-hl (update-in hl [:position] #(pdf-utils/scaled-to-vw-pos viewer %))]
        (rum/with-key
-        (if (get-in hl [:content :image])
-          (pdf-highlight-area-region viewer vw-hl hl ops)
-          (pdf-highlights-text-region viewer vw-hl hl ops))
-        (:id hl))))])
+         (if (get-in hl [:content :image])
+           (pdf-highlight-area-region viewer vw-hl hl ops)
+           (pdf-highlights-text-region viewer vw-hl hl ops))
+         (:id hl))))])
 
 (rum/defc ^:large-vars/cleanup-todo pdf-highlight-area-selection
   [^js viewer {:keys [show-ctx-menu!]}]
