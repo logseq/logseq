@@ -277,7 +277,6 @@
         block-object-uuid (random-uuid)
         original-data
         {:classes {:user.class/C1 {:block/uuid class-uuid :build/keep-uuid? true}
-                   :user.class/C2 {}
                    :user.class/NodeClass {}}
          :properties {:user.property/p1
                       {:logseq.property/type :node
@@ -305,12 +304,7 @@
                      :build/properties {:user.property/p2 {:build/property-value :block
                                                            :block/title "property value block"
                                                            :block/uuid pvalue-block-uuid
-                                                           :build/keep-uuid? true}}}
-                    ;; Not a ref case but needed to assert this somewhere
-                    {:block/title "block with a pvalue that has :build/tags"
-                     :build/properties {:user.property/p2 {:build/property-value :block
-                                                           :block/title "property value block2"
-                                                           :build/tags [:user.class/C2]}}}]}
+                                                           :build/keep-uuid? true}}}]}
           {:page {:block/title "page with block ref"}
            :blocks [{:block/title "hi" :block/uuid block-uuid :build/keep-uuid? true
                      :build/properties {:user.property/p1 [:block/uuid block-object-uuid]}}]}
@@ -831,6 +825,38 @@
     (is (= (sort-pages-and-blocks (:pages-and-blocks original-data)) (:pages-and-blocks imported-graph)))
     (is (= (::sqlite-export/graph-files original-data) (::sqlite-export/graph-files imported-graph))
         "All :file/path entities are imported")))
+
+(deftest import-graph-with-different-property-value-cases
+  (let [pvalue-uuid1 (random-uuid)
+        original-data
+        {:classes {:user.class/C1 {}}
+         :properties {:user.property/default {:logseq.property/type :default}}
+         :pages-and-blocks
+         [{:page {:block/title "page1"}
+           :blocks [{:block/title "block with a pvalue that has :build/tags"
+                     :build/properties {:user.property/default {:build/property-value :block
+                                                                :block/title "property value block"
+                                                                :build/tags [:user.class/C1]}}}
+                    {:block/title "block that has a pvalue with a view"
+                     :build/properties {:user.property/default {:build/property-value :block
+                                                                :block/title "property value block2"
+                                                                :block/uuid pvalue-uuid1
+                                                                :build/keep-uuid? true}}}]}
+          {:page {:block/title "$$$views2"}
+           :blocks [{:block/title "Unlinked references",
+                     :build/properties
+                     {:logseq.property.view/type :logseq.property.view/type.list,
+                      :logseq.property.view/group-by-property :block/page,
+                      :logseq.property.view/feature-type :unlinked-references,
+                      :logseq.property/view-for
+                      [:block/uuid pvalue-uuid1]}}]}]}
+        conn (db-test/create-conn-with-blocks (assoc original-data :build-existing-tx? true))
+        conn2 (db-test/create-conn)
+        imported-graph (export-graph-and-import-to-another-graph conn conn2 {:exclude-built-in-pages? true})]
+
+    (is (= (expand-properties (:properties original-data)) (:properties imported-graph)))
+    (is (= (expand-classes (:classes original-data)) (:classes imported-graph)))
+    (is (= (sort-pages-and-blocks (:pages-and-blocks original-data)) (:pages-and-blocks imported-graph)))))
 
 (defn- test-import-existing-page [import-options expected-page-properties]
   (let [original-data
