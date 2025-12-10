@@ -972,7 +972,7 @@
 (defn setup!
   "setup plugin core handler"
   []
-  (when (and config/lsp-enabled? (not (util/mobile?)))
+  (when config/lsp-enabled?
     (setup-global-apis-for-web!)
     (init-plugins!)))
 
