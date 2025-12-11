@@ -122,7 +122,19 @@
 (defn configure
   []
   (configure-tabs
-   [{:id "home"       :title "Home"       :systemImage "house" :role "normal"}
-    {:id "graphs"     :title "Graphs"     :systemImage "app.background.dotted"  :role "normal"}
-    {:id "capture"    :title "Capture"    :systemImage "tray"  :role "normal"}
-    {:id "go to"  :title "Go To"  :systemImage "square.stack.3d.down.right"  :role "normal"}]))
+   [{:id "home"
+     :title "Home"
+     :systemImage "house"
+     :role "normal"}
+    {:id "graphs"
+     :title "Graphs"
+     :systemImage "app.background.dotted"
+     :role "normal"}
+    {:id "capture"
+     :title "Capture"
+     :systemImage "tray"
+     :role "normal"}
+    {:id "go to"
+     :title "Go To"
+     :systemImage "square.stack.3d.down.right"
+     :role "normal"}]))

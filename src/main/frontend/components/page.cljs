@@ -189,14 +189,7 @@
                      (and (= id quick-add-page-id)
                           (user-handler/user-uuid)
                           (ldb/get-graph-rtc-uuid (db/get-db)))
-                     (let [user-id (uuid (user-handler/user-uuid))
-                           user-db-id (:db/id (db/entity [:block/uuid user-id]))]
-                       (if user-db-id
-                         (filter (fn [block]
-                                   (let [create-by-id (:db/id (:logseq.property/created-by-ref block))]
-                                     (or (= user-db-id create-by-id)
-                                         (nil? create-by-id)))) children)
-                         children))
+                     (editor-handler/get-user-quick-add-blocks)
 
                      (ldb/class? block)
                      (remove (fn [b] (contains? (set (map :db/id (:block/tags b))) (:db/id block))) children)
