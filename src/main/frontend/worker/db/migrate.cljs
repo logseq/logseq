@@ -497,7 +497,13 @@
                                                  (let [existing-value (if (and (coll? existing-value) (not (map? existing-value)))
                                                                         (remove nil? existing-value)
                                                                         existing-value)]
-                                                   (if (some? existing-value) existing-value v))))))
+                                                   (cond
+                                                     (contains? #{:block/title :block/name} k)
+                                                     v
+                                                     (some? existing-value)
+                                                     existing-value
+                                                     :else
+                                                     v))))))
                                    data
                                    existing-data)))
                               data)
