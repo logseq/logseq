@@ -2,15 +2,17 @@ package com.logseq.app
 
 import android.app.Activity
 import android.net.Uri
-import android.view.Gravity
 import android.view.ViewGroup
 import android.webkit.WebView
 import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.*
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,6 +20,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
@@ -102,7 +106,16 @@ private fun ComposeNavigationHost(
     onExit: () -> Unit
 ) {
     val navController = rememberNavController()
-    HandleNavigationEvents(navController, navEvents)
+
+    // Track the last navigation type so we can change slide direction.
+    val lastNavTypeState = remember { mutableStateOf("push") }
+
+    HandleNavigationEvents(
+        navController = navController,
+        navEvents = navEvents
+    ) { type ->
+        lastNavTypeState.value = type
+    }
 
     BackHandler {
         if (navController.previousBackStackEntry != null) {
@@ -121,23 +134,51 @@ private fun ComposeNavigationHost(
     ) {
         composable(
             route = ROOT_ROUTE,
-            arguments = listOf(navArgument("encodedPath") { defaultValue = encodePath("/") }),
+            arguments = listOf(
+                navArgument("encodedPath") {
+                    defaultValue = encodePath("/")
+                }
+            ),
+            // ---- PUSH: A -> B ----
             enterTransition = {
-                fadeIn(animationSpec = tween(120))
+                if (lastNavTypeState.value == "pop") {
+                    slideInHorizontally(
+                        initialOffsetX = { fullWidth -> -fullWidth / 3 },
+                        animationSpec = tween(220)
+                    ) + fadeIn(animationSpec = tween(180))
+                } else {
+                    slideInHorizontally(
+                        initialOffsetX = { fullWidth -> fullWidth },
+                        animationSpec = tween(220)
+                    ) + fadeIn(animationSpec = tween(180))
+                }
             },
             exitTransition = {
-                fadeOut(animationSpec = tween(120))
+                if (lastNavTypeState.value == "pop") {
+                    slideOutHorizontally(
+                        targetOffsetX = { fullWidth -> fullWidth },
+                        animationSpec = tween(200)
+                    ) + fadeOut(animationSpec = tween(160))
+                } else {
+                    slideOutHorizontally(
+                        targetOffsetX = { fullWidth -> -fullWidth / 4 },
+                        animationSpec = tween(220)
+                    ) + fadeOut(animationSpec = tween(180))
+                }
             },
             popEnterTransition = {
-                fadeIn(animationSpec = tween(120))
+                slideInHorizontally(
+                    initialOffsetX = { fullWidth -> -fullWidth / 4 },
+                    animationSpec = tween(200)
+                ) + fadeIn(animationSpec = tween(160))
             },
             popExitTransition = {
-                fadeOut(animationSpec = tween(120))
+                slideOutHorizontally(
+                    targetOffsetX = { fullWidth -> fullWidth },
+                    animationSpec = tween(200)
+                ) + fadeOut(animationSpec = tween(160))
             }
         ) {
-            // 🔥 CHANGED: we now create a root with two layers:
-            // 1) webview_container         (holds the WebView)
-            // 2) webview_overlay_container (used by NativeSelectionActionBarPlugin)
             AndroidView(
                 factory = { context ->
                     FrameLayout(context).apply {
@@ -179,7 +220,8 @@ private fun ComposeNavigationHost(
                 },
                 modifier = Modifier.fillMaxSize(),
                 update = { root ->
-                    val webContainer = root.findViewById<FrameLayout>(R.id.webview_container)
+                    val webContainer =
+                        root.findViewById<FrameLayout>(R.id.webview_container)
                     if (webView.parent !== webContainer) {
                         (webView.parent as? ViewGroup)?.removeView(webView)
                         webContainer.addView(
@@ -192,7 +234,6 @@ private fun ComposeNavigationHost(
                     }
                 }
             )
-
         }
     }
 }
@@ -200,10 +241,12 @@ private fun ComposeNavigationHost(
 @Composable
 private fun HandleNavigationEvents(
     navController: NavHostController,
-    navEvents: SharedFlow<NavigationEvent>
+    navEvents: SharedFlow<NavigationEvent>,
+    onNavType: (String) -> Unit
 ) {
     LaunchedEffect(navController) {
         navEvents.collect { event ->
+            onNavType(event.navigationType)
             val route = routeFor(event.path)
             when (event.navigationType) {
                 "push" -> navController.navigate(route)

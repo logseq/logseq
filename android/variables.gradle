@@ -6,7 +6,7 @@ ext {
     androidxAppCompatVersion = '1.7.0'
     androidxCoordinatorLayoutVersion = '1.2.0'
     androidxCoreVersion = '1.15.0'
-    androidxNavigationVersion = '2.8.3'
+    androidxNavigationVersion = '2.9.6'
     androidxFragmentVersion = '1.8.4'
     junitVersion = '4.13.2'
     androidxJunitVersion = '1.2.1'
