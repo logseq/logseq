@@ -44,7 +44,7 @@
      :logseq.property/type {:title "Property type"
                             :schema {:type :keyword
                                      :hide? true}}
-     :logseq.property/hide? {:title "Hide this property"
+     :logseq.property/hide? {:title "Hide this property or page"
                              :schema {:type :checkbox
                                       :hide? true}}
      :logseq.property/public? {:title "Property public?"

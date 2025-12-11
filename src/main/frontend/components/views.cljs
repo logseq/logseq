@@ -352,7 +352,9 @@
                      (if (or (some #(= (:db/ident %) :block/tags) properties) (not add-tags-column?))
                        properties
                        (conj properties (db/entity :block/tags)))
-                     (remove nil?))
+                     (remove (fn [property]
+                               (or (nil? property)
+                                   (contains? #{:logseq.property/hide?} (:db/ident property))))))
         property-keys (set (map :db/ident properties'))]
     (->> (concat
           [{:id :select
