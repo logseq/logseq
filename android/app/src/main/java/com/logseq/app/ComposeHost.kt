@@ -2,17 +2,17 @@ package com.logseq.app
 
 import android.app.Activity
 import android.net.Uri
+import android.util.Log
 import android.view.ViewGroup
 import android.webkit.WebView
 import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.ExperimentalAnimationApi
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -117,13 +117,7 @@ private fun ComposeNavigationHost(
         lastNavTypeState.value = type
     }
 
-    BackHandler {
-        if (navController.previousBackStackEntry != null) {
-            onBackRequested()
-        } else {
-            onExit()
-        }
-    }
+    // You can comment this out if you want to rely purely on JS for back.
 
     NavHost(
         navController = navController,
@@ -166,6 +160,7 @@ private fun ComposeNavigationHost(
                     ) + fadeOut(animationSpec = tween(180))
                 }
             },
+            // ---- POP: B -> A ----
             popEnterTransition = {
                 slideInHorizontally(
                     initialOffsetX = { fullWidth -> -fullWidth / 4 },

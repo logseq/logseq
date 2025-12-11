@@ -12,6 +12,8 @@ import androidx.activity.EdgeToEdge;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.BridgeActivity;
+import androidx.activity.OnBackPressedDispatcher;
+import android.util.Log;
 
 import java.util.Timer;
 import java.util.TimerTask;
@@ -95,6 +97,20 @@ public class MainActivity extends BridgeActivity {
         super.onPause();
     }
 
+    @Override
+    public void onBackPressed() {
+        Log.d("onBackPressed", "Debug");
+
+        WebView webView = getBridge().getWebView();
+        if (webView != null) {
+            // Send "native back" into JS. JS will call your UILocal/route-change,
+            // which flows into ComposeHost.applyNavigation(...) and animates.
+            sendJsBack(webView);
+        } else {
+            // Fallback if for some reason there is no webview
+            super.onBackPressed();
+        }
+    }
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);

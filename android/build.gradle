@@ -1,10 +1,11 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
 
 buildscript {
-    
+
     ext {
         kotlin_version = '2.0.21'
         composeCompilerVersion = '1.7.0'
+        androidxActivityVersion = '1.9.2'
     }
     repositories {
         google()
