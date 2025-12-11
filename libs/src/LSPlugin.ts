@@ -839,7 +839,7 @@ export interface IEditorProxy extends Record<string, any> {
   ) => Promise<void>
 
   removeBlockProperty: (block: BlockIdentity | EntityID, key: string) => Promise<void>
-  getBlockProperty: (block: BlockIdentity | EntityID, key: string) => Promise<BlockEntity | unknown>
+  getBlockProperty: (block: BlockIdentity | EntityID, key: string) => Promise<BlockEntity | null>
   getBlockProperties: (block: BlockIdentity | EntityID) => Promise<Record<string, any> | null>
   getPageProperties: (page: PageIdentity | EntityID) => Promise<Record<string, any> | null>
 
