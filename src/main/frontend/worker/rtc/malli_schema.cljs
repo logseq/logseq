@@ -187,7 +187,9 @@
        [:block/order {:optional true} db-malli-schema/block-order]
        [:block/parent {:optional true} :uuid]
        [::m/default extra-attr-map-schema]]]]]
-   [:failed-ops {:optional true}
+   [:failed-ops {:optional true}        ;DEPRECATED
+    [:maybe [:sequential to-ws-op-schema]]]
+   [:not-found-target-ops {:optional true}
     [:maybe [:sequential to-ws-op-schema]]]])
 
 (def data-from-ws-schema
