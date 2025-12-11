@@ -335,3 +335,16 @@
           result (ls-api-call! :editor.get_tag_objects "logseq.class/Task")]
       (is (= (count result) 1))
       (is (= "task 1" (get (first result) "title"))))))
+
+(deftest create-and-get-tag-test
+  (testing "create and get tag with title or ident"
+    (let [title "book1"
+          title-ident (str :plugin.class._test_plugin/book1)
+          tag1 (ls-api-call! :editor.createTag title)
+          tag2 (ls-api-call! :editor.getTag title)
+          tag3 (ls-api-call! :editor.getTag title-ident)
+          tag4 (ls-api-call! :editor.getTag (get tag1 "uuid"))]
+      (is (= (get tag1 "ident") title-ident) "create tag ident")
+      (is (= (get tag2 "ident") title-ident) "get tag title")
+      (is (= (get tag3 "title") title) "get tag ident")
+      (is (= (get tag4 "title") title) "get tag uuid"))))
