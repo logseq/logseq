@@ -133,6 +133,7 @@ class LiquidTabsPlugin : Plugin() {
         val activity = activity
         val root = NativeUiUtils.contentRoot(activity)
         val nav = bottomNav ?: BottomNavigationView(activity).also { view ->
+            view.id = R.id.liquid_tabs_bottom_nav
             view.labelVisibilityMode = BottomNavigationView.LABEL_VISIBILITY_LABELED
             view.layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,

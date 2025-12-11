@@ -8,12 +8,16 @@ import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
+import com.google.android.material.bottomnavigation.BottomNavigationView
+import kotlin.math.max
 
 @CapacitorPlugin(name = "NativeSelectionActionBarPlugin")
 class NativeSelectionActionBarPlugin : Plugin() {
@@ -26,7 +30,8 @@ class NativeSelectionActionBarPlugin : Plugin() {
             return
         }
 
-        val actions = parseActions(call.getArray("actions"))
+        val actionsArray = call.getArray("actions")
+        val actions = parseActions(actionsArray)
         val tintHex = call.getString("tintColor")
         val bgHex = call.getString("backgroundColor")
 
@@ -37,6 +42,7 @@ class NativeSelectionActionBarPlugin : Plugin() {
                 return@runOnUiThread
             }
 
+            val root = NativeUiUtils.contentRoot(activity)
             val view = barView ?: SelectionActionBarView(activity).also { v ->
                 v.onAction = { id ->
                     notifyListeners("action", JSObject().put("id", id))
@@ -46,17 +52,21 @@ class NativeSelectionActionBarPlugin : Plugin() {
 
             view.bind(actions, tintHex, bgHex)
 
-            val root = NativeUiUtils.contentRoot(activity)
             if (view.parent !== root) {
                 NativeUiUtils.detachView(view)
+
                 val lp = FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.WRAP_CONTENT,
                     Gravity.BOTTOM
                 ).apply {
                     val margin = NativeUiUtils.dp(activity, 12f)
-                    setMargins(margin, margin, margin, margin)
+                    val bottomOffset = computeBottomOffset(activity, root)
+                    // top / left / right: margin
+                    // bottom: margin + bottom nav height + system/IME inset
+                    setMargins(margin, margin, margin, margin + bottomOffset)
                 }
+
                 root.addView(view, lp)
             }
 
@@ -73,7 +83,9 @@ class NativeSelectionActionBarPlugin : Plugin() {
     }
 
     private fun dismissInternal() {
-        val root = activity?.let { NativeUiUtils.contentRoot(it) } ?: return
+        val activity = activity ?: return
+        val root = NativeUiUtils.contentRoot(activity)
+
         barView?.let { root.removeView(it) }
         barView = null
     }
@@ -86,6 +98,27 @@ class NativeSelectionActionBarPlugin : Plugin() {
             SelectionAction.from(obj)?.let { result.add(it) }
         }
         return result
+    }
+
+    /**
+     * Compute how far we must lift the bar from the bottom so that it
+     * sits above:
+     *  - the BottomNavigationView created by LiquidTabsPlugin
+     *  - system nav / gesture bar
+     *  - IME (when showing)
+     */
+    private fun computeBottomOffset(activity: android.app.Activity, root: ViewGroup): Int {
+        val insets = ViewCompat.getRootWindowInsets(root)
+        val systemBarsBottom = insets?.getInsets(WindowInsetsCompat.Type.systemBars())?.bottom ?: 0
+        val imeBottom = insets?.getInsets(WindowInsetsCompat.Type.ime())?.bottom ?: 0
+
+        // Find the bottom nav created by LiquidTabsPlugin (must have this ID set there)
+        val bottomNav = activity.findViewById<BottomNavigationView>(R.id.liquid_tabs_bottom_nav)
+        // Fallback height if nav not measured yet
+        val navHeight = bottomNav?.height ?: NativeUiUtils.dp(activity, 56f)
+
+        val insetBottom = max(systemBarsBottom, imeBottom)
+        return navHeight + insetBottom
     }
 }
 
@@ -118,11 +151,12 @@ private class SelectionActionBarView(context: android.content.Context) : FrameLa
         }
         background = bg
         elevation = NativeUiUtils.dp(context, 6f).toFloat()
+
         setPadding(
-            NativeUiUtils.dp(context, 10f),
-            NativeUiUtils.dp(context, 10f),
-            NativeUiUtils.dp(context, 10f),
-            NativeUiUtils.dp(context, 10f)
+            dp(10f),
+            dp(10f),
+            dp(10f),
+            dp(10f)
         )
 
         scrollView.isHorizontalScrollBarEnabled = false
@@ -136,14 +170,20 @@ private class SelectionActionBarView(context: android.content.Context) : FrameLa
             LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT)
         )
 
-        val lp = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
-        addView(scrollView, lp)
+        addView(
+            scrollView,
+            LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
+        )
     }
+
+    private fun dp(v: Float) = NativeUiUtils.dp(context, v)
 
     fun bind(actions: List<SelectionAction>, tintHex: String?, bgHex: String?) {
         val tint = NativeUiUtils.parseColor(tintHex, Color.BLACK)
         bgHex?.let {
-            (background as? GradientDrawable)?.setColor(NativeUiUtils.parseColor(it, Color.parseColor("#F8F8F8")))
+            (background as? GradientDrawable)?.setColor(
+                NativeUiUtils.parseColor(it, Color.parseColor("#F8F8F8"))
+            )
         }
 
         actionsContainer.removeAllViews()
@@ -158,12 +198,12 @@ private class SelectionActionBarView(context: android.content.Context) : FrameLa
             setTextColor(tint)
             textSize = 13f
             gravity = Gravity.CENTER
-            minWidth = NativeUiUtils.dp(context, 48f)
+            minWidth = dp(48f)
             setPadding(
-                NativeUiUtils.dp(context, 10f),
-                NativeUiUtils.dp(context, 6f),
-                NativeUiUtils.dp(context, 10f),
-                NativeUiUtils.dp(context, 6f)
+                dp(10f),
+                dp(6f),
+                dp(10f),
+                dp(6f)
             )
             isClickable = true
             isFocusable = true

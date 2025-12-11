@@ -2,16 +2,15 @@ package com.logseq.app
 
 import android.app.Activity
 import android.net.Uri
+import android.view.Gravity
 import android.view.ViewGroup
 import android.webkit.WebView
 import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -136,16 +135,40 @@ private fun ComposeNavigationHost(
                 fadeOut(animationSpec = tween(120))
             }
         ) {
+            // 🔥 CHANGED: we now create a root with two layers:
+            // 1) webview_container         (holds the WebView)
+            // 2) webview_overlay_container (used by NativeSelectionActionBarPlugin)
             AndroidView(
                 factory = { context ->
-                    // Keep a dedicated container so we never try to reattach the WebView elsewhere.
                     FrameLayout(context).apply {
                         layoutParams = FrameLayout.LayoutParams(
                             FrameLayout.LayoutParams.MATCH_PARENT,
                             FrameLayout.LayoutParams.MATCH_PARENT
                         )
+
+                        val webContainer = FrameLayout(context).apply {
+                            id = R.id.webview_container
+                            layoutParams = FrameLayout.LayoutParams(
+                                FrameLayout.LayoutParams.MATCH_PARENT,
+                                FrameLayout.LayoutParams.MATCH_PARENT
+                            )
+                        }
+
+                        val overlayContainer = FrameLayout(context).apply {
+                            id = R.id.webview_overlay_container
+                            layoutParams = FrameLayout.LayoutParams(
+                                FrameLayout.LayoutParams.MATCH_PARENT,
+                                FrameLayout.LayoutParams.MATCH_PARENT
+                            )
+                            isClickable = false
+                            isFocusable = false
+                        }
+
+                        addView(webContainer)
+                        addView(overlayContainer)
+
                         (webView.parent as? ViewGroup)?.removeView(webView)
-                        addView(
+                        webContainer.addView(
                             webView,
                             FrameLayout.LayoutParams(
                                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -155,10 +178,11 @@ private fun ComposeNavigationHost(
                     }
                 },
                 modifier = Modifier.fillMaxSize(),
-                update = {
-                    if (webView.parent !== it) {
+                update = { root ->
+                    val webContainer = root.findViewById<FrameLayout>(R.id.webview_container)
+                    if (webView.parent !== webContainer) {
                         (webView.parent as? ViewGroup)?.removeView(webView)
-                        it.addView(
+                        webContainer.addView(
                             webView,
                             FrameLayout.LayoutParams(
                                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -168,6 +192,7 @@ private fun ComposeNavigationHost(
                     }
                 }
             )
+
         }
     }
 }
