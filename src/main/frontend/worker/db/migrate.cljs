@@ -9,9 +9,7 @@
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
-            [logseq.db.frontend.db-ident :as db-ident]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
@@ -20,20 +18,16 @@
 ;; Frontend migrations
 ;; ===================
 
-(defn- rename-properties-aux
+(defn- rename-properties-fix
   [db props-to-rename]
-  (let [property-tx (map
+  (let [;; update property title/name
+        ;; don't update :db/ident since it's addressed by `:rename-db-idents`
+        property-tx (map
                      (fn [[old new]]
-                       (let [e-new (d/entity db new)
-                             e-old (d/entity db old)]
-                         (if e-new
-                           (when e-old
-                             [:db/retractEntity (:db/id e-old)])
-                           (merge {:db/id (:db/id (d/entity db old))
-                                   :db/ident new}
-                                  (when-let [new-title (get-in db-property/built-in-properties [new :title])]
-                                    {:block/title new-title
-                                     :block/name (common-util/page-name-sanity-lc new-title)})))))
+                       (merge {:db/id (:db/id (d/entity db old))}
+                              (when-let [new-title (get-in db-property/built-in-properties [new :title])]
+                                {:block/title new-title
+                                 :block/name (common-util/page-name-sanity-lc new-title)})))
                      props-to-rename)
         titles-tx (->> (d/datoms db :avet :block/title)
                        (keep (fn [d]
@@ -118,21 +112,20 @@
             ordered-columns-tx
             filters-tx)))
 
-(defn rename-properties
-  [props-to-rename & {:keys [replace-fn]}]
-  (fn [db]
-    (when (ldb/db-based-graph? db)
-      (let [props-tx (rename-properties-aux db props-to-rename)
-            fix-tx (mapcat (fn [[old new]]
-                             ;; can't use datoms b/c user properties aren't indexed
-                             (->> (d/q '[:find ?b ?prop-v :in $ ?prop :where [?b ?prop ?prop-v]] db old)
-                                  (mapcat (fn [[id prop-value]]
-                                            (if (fn? replace-fn)
-                                              (replace-fn id prop-value)
-                                              [[:db/retract id old]
-                                               [:db/add id new prop-value]])))))
-                           props-to-rename)]
-        (concat props-tx fix-tx)))))
+(defn- rename-properties
+  [props-to-rename {:keys [fix]}]
+  {:rename-db-idents (mapv
+                      (fn [[old-ident new-ident]]
+                        {:db-ident-or-block-uuid old-ident
+                         :new-db-ident new-ident})
+                      props-to-rename)
+   :fix (fn [db]
+          (let [common-fix (rename-properties-fix db
+                                                  {:logseq.property.asset/external-src
+                                                   :logseq.property.asset/external-url})
+                additional-fix (when (fn? fix)
+                                 (fix db))]
+            (concat common-fix additional-fix)))})
 
 (comment
   (defn- rename-classes
@@ -146,238 +139,6 @@
                          {:block/title new-title
                           :block/name (common-util/page-name-sanity-lc new-title)})))
               classes-to-rename)))))
-
-(defn fix-rename-parent-to-extends
-  [db]
-  (let [parent-entity (d/entity db :logseq.property/parent)]
-    (when parent-entity
-      (let [old-p :logseq.property/parent
-            new-p :logseq.property.class/extends
-            f (rename-properties
-               {old-p new-p}
-               {:replace-fn (fn [id prop-value]
-                              (let [page (d/entity db id)
-                                    ;; bad impl, it's not just simple db/ident renaming
-                                    new-p' (if (ldb/class? page) new-p :block/parent)]
-                                [[:db/retract id old-p]
-                                 [:db/add id new-p' prop-value]]))})
-            rename-property-tx (f db)
-            library-page (if-let [page (ldb/get-built-in-page db common-config/library-page-name)]
-                           page
-                           (-> (sqlite-util/build-new-page common-config/library-page-name)
-                               sqlite-create-graph/mark-block-as-built-in))
-            library-id (:block/uuid library-page)
-            library-page-tx (when-not (de/entity? library-page)
-                              [library-page])
-            pages-with-parent (->> (d/datoms db :avet :logseq.property/parent)
-                                   (keep (fn [d]
-                                           (let [e (d/entity db (:e d))]
-                                             (when-not (ldb/class? e)
-                                               e)))))
-            parents (->> pages-with-parent
-                         (map :logseq.property/parent)
-                         (common-util/distinct-by :db/id))
-            top-parents (remove :logseq.property/parent parents)
-            top-parent-ids (set (map :db/id top-parents))
-            move-top-parents-to-library (map (fn [parent]
-                                               {:db/id (:db/id parent)
-                                                :block/parent [:block/uuid library-id]
-                                                :block/order (db-order/gen-key)}) top-parents)
-            update-children-parent-and-order (->> pages-with-parent
-                                                  (remove (fn [page] (top-parent-ids (:db/id page))))
-                                                  (map (fn [page]
-                                                         {:db/id (:db/id page)
-                                                          :block/order (db-order/gen-key)})))]
-        (concat
-         rename-property-tx
-         library-page-tx
-         move-top-parents-to-library
-         update-children-parent-and-order)))))
-
-(defn- retract-property-attributes
-  [id]
-  [[:db/retract id :block/tags :logseq.class/Property]
-   [:db/retract id :logseq.property/type]
-   [:db/retract id :db/cardinality]
-   [:db/retract id :db/valueType]
-   [:db/retract id :db/index]
-   [:db/retract id :logseq.property/classes]
-   [:db/retract id :logseq.property/hide?]
-   [:db/retract id :logseq.property/public?]
-   [:db/retract id :logseq.property/view-context]
-   [:db/retract id :logseq.property/ui-position]
-   [:db/retract id :logseq.property/default-value]
-   [:db/retract id :logseq.property/hide-empty-value]
-   [:db/retract id :logseq.property/enable-history?]])
-
-(defn separate-classes-and-properties
-  [db]
-  ;; find all properties that're classes, create new properties to separate them
-  ;; from classes.
-  (let [class-ids (d/q
-                   '[:find [?b ...]
-                     :where
-                     [?b :block/tags :logseq.class/Property]
-                     [?b :block/tags :logseq.class/Tag]]
-                   db)]
-    (mapcat
-     (fn [id]
-       (let [class (d/entity db id)
-             ident (:db/ident class)
-             new-property (sqlite-util/build-new-property
-                           (:block/title class)
-                           (select-keys class [:logseq.property/type :db/cardinality])
-                           {:title (:block/title class)
-                            :ref-type? true
-                            :properties (merge
-                                         (select-keys class [:logseq.property/hide? :logseq.property/public?
-                                                             :logseq.property/view-context :logseq.property/ui-position
-                                                             :logseq.property/default-value :logseq.property/hide-empty-value :logseq.property/enable-history?])
-                                         {:logseq.property/classes id})})
-             retract-property-attrs (retract-property-attributes id)
-             datoms (if (:db/index class)
-                      (d/datoms db :avet ident)
-                      (filter (fn [d] (= ident (:a d))) (d/datoms db :eavt)))
-             tag-properties (->> (d/datoms db :avet :logseq.property.class/properties id)
-                                 (mapcat (fn [d]
-                                           [[:db/retract (:e d) (:a d) (:v d)]
-                                            [:db/add (:e d) (:a d) [:block/uuid (:block/uuid new-property)]]])))
-             other-properties-tx (mapcat
-                                  (fn [ident]
-                                    (->> (d/datoms db :avet ident id)
-                                         (mapcat (fn [d]
-                                                   [[:db/retract (:e d) (:a d) (:v d)]
-                                                    [:db/add (:e d) (:a d) [:block/uuid (:block/uuid new-property)]]]))))
-                                  [:logseq.property.view/group-by-property :logseq.property.table/pinned-columns])]
-         (concat [new-property]
-                 tag-properties
-                 other-properties-tx
-                 retract-property-attrs
-                 (mapcat
-                  (fn [d]
-                    [[:db/retract (:e d) ident (:v d)]
-                     [:db/add (:e d) (:db/ident new-property) (:v d)]])
-                  datoms))))
-     class-ids)))
-
-(defn fix-tag-properties
-  [db]
-  ;; find all classes that're still used as properties
-  (let [class-ids (d/q
-                   '[:find [?b ...]
-                     :where
-                     [?b :block/tags :logseq.class/Tag]
-                     [?b1 :logseq.property.class/properties ?b]]
-                   db)]
-    (mapcat
-     (fn [id]
-       (let [class (d/entity db id)
-             property-id (first (ldb/page-exists? db (:block/title class) :logseq.class/Property))
-             tag-properties (when property-id
-                              (->> (d/datoms db :avet :logseq.property.class/properties id)
-                                   (mapcat (fn [d]
-                                             [[:db/retract (:e d) (:a d) (:v d)]
-                                              [:db/add (:e d) (:a d) property-id]]))))]
-         tag-properties))
-     class-ids)))
-
-(defn add-missing-db-ident-for-tags
-  [db _sqlite-db]
-  (let [class-ids (d/q
-                   '[:find [?b ...]
-                     :where
-                     [?b :block/tags :logseq.class/Tag]
-                     [(missing? $ ?b :db/ident)]]
-                   db)]
-    (mapcat
-     (fn [id]
-       [[:db/add id :logseq.property.class/extends :logseq.class/Root]
-        [:db/retract id :block/tags :logseq.class/Page]
-        [:db/retract id :block/refs :logseq.class/Page]
-        [:db/retract id :block/path-refs :logseq.class/Page]])
-     class-ids)))
-
-(defn add-missing-db-ident-for-tags2
-  [db]
-  (let [class-ids
-        (d/q
-         '[:find [?b ...]
-           :where
-           [?b :block/tags :logseq.class/Tag]
-           [(missing? $ ?b :db/ident)]]
-         db)]
-    (keep
-     (fn [id]
-       (let [ent (d/entity db id)
-             title (:block/title ent)
-             block-uuid (:block/uuid ent)]
-         (when block-uuid
-           {:db-ident-or-block-uuid block-uuid
-            :new-db-ident (db-ident/replace-db-ident-random-suffix
-                           (db-class/create-user-class-ident-from-name db title)
-                           (subs (str block-uuid) 28))})))
-     class-ids)))
-
-(defn fix-using-properties-as-tags
-  [db]
-  ;; find all properties that're tags
-  (let [property-ids (->>
-                      (d/q
-                       '[:find ?b ?i
-                         :where
-                         [?b :block/tags :logseq.class/Tag]
-                         [?b :db/ident ?i]]
-                       db)
-                      (filter (fn [[_ ident]] (= "user.property" (namespace ident))))
-                      (map first))]
-    (mapcat
-     (fn [id]
-       (into (retract-property-attributes id)
-             [[:db/retract id :logseq.property/parent]]))
-     property-ids)))
-
-(defn fix-using-properties-as-tags2
-  [db]
-  (let [property-ids
-        (->>
-         (d/q
-          '[:find ?b ?i
-            :where
-            [?b :block/tags :logseq.class/Tag]
-            [?b :db/ident ?i]]
-          db)
-         (filter (fn [[_ ident]] (= "user.property" (namespace ident))))
-         (map first))]
-    (keep
-     (fn [id]
-       (let [ent (d/entity db id)
-             title (:block/title ent)
-             block-uuid (:block/uuid ent)]
-         (when block-uuid
-           {:db-ident-or-block-uuid block-uuid
-            :new-db-ident (db-ident/replace-db-ident-random-suffix
-                           (db-class/create-user-class-ident-from-name db title)
-                           (subs (str block-uuid) 28))})))
-     property-ids)))
-
-(defn remove-block-order-for-tags
-  [db]
-  ;; find all properties that're tags
-  (let [tag-ids (d/q
-                 '[:find [?b ...]
-                   :where
-                   [?b :block/tags :logseq.class/Tag]
-                   [?b :block/order]]
-                 db)]
-    (map
-     (fn [id]
-       [:db/retract id :block/order])
-     tag-ids)))
-
-(defn- update-extends-to-cardinality-many
-  [db]
-  (let [extends (d/entity db :logseq.property.class/extends)]
-    [[:db/add (:db/id extends) :db/cardinality :db.cardinality/many]]))
 
 (defn- add-quick-add-page
   [_db]
@@ -414,25 +175,11 @@
                  (when (:logseq.property/ui-position e)
                    [:db/retract (:e d) :logseq.property/ui-position]))))))
 
-(defn- rename-external-src-to-external-url
-  [db]
-  (let [f (rename-properties
-           {:logseq.property.asset/external-src :logseq.property.asset/external-url}
-           {})]
-    (f db)))
-
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
    :rename-db-idents and :fix."
-  [["65.0" {:fix separate-classes-and-properties}]
-   ["65.1" {:fix fix-rename-parent-to-extends}]
-   ["65.2" {:fix fix-tag-properties}]
-   ["65.3" {:rename-db-idents add-missing-db-ident-for-tags2 :fix add-missing-db-ident-for-tags}]
-   ["65.4" {:rename-db-idents fix-using-properties-as-tags2 :fix fix-using-properties-as-tags}]
-   ["65.5" {:fix remove-block-order-for-tags}]
-   ["65.6" {:fix update-extends-to-cardinality-many}]
-   ["65.7" {:fix add-quick-add-page}]
+  [["65.7" {:fix add-quick-add-page}]
    ["65.8" {:fix add-missing-page-name}]
    ["65.9" {:properties [:logseq.property.embedding/hnsw-label-updated-at]}]
    ["65.10" {:properties [:block/journal-day :logseq.property.view/sort-groups-by-property :logseq.property.view/sort-groups-desc?]}]
@@ -441,7 +188,9 @@
    ["65.13" {:properties [:logseq.property.asset/width
                           :logseq.property.asset/height]}]
    ["65.14" {:properties [:logseq.property.asset/external-src]}]
-   ["65.15" {:fix rename-external-src-to-external-url}]])
+   ["65.15" (rename-properties {:logseq.property.asset/external-src
+                                :logseq.property.asset/external-url}
+                               {})]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]
