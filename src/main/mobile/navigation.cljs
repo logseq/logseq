@@ -1,5 +1,5 @@
 (ns mobile.navigation
-  "Native navigation bridge for mobile (iOS)."
+  "Native navigation bridge for mobile."
   (:require [clojure.string :as string]
             [frontend.handler.route :as route-handler]
             [frontend.mobile.util :as mobile-util]
@@ -186,7 +186,7 @@
         path (if (string/blank? path) "/" path)]
     (set-current-stack! stack)
     (remember-route! stack navigation-type route path route-match)
-    (when (and (mobile-util/native-ios?)
+    (when (and (mobile-util/native-platform?)
                mobile-util/ui-local)
       (let [payload (cond-> {:navigationType navigation-type
                              :push push?
@@ -258,6 +258,33 @@
         (orig-replace-state route-name path-params query-params)
 
         (route-handler/set-route-match! route-match)))))
+
+(defn pop-to-root!
+  "Pop current or given stack back to its root entry and notify navigation."
+  ([] (pop-to-root! (current-stack)))
+  ([stack]
+   (when stack
+     (let [{:keys [history]} (get @stack-history stack)
+           root (or (first history) (stack-defaults stack))
+           {:keys [route route-match path]} root
+           route-match (or route-match (:route-match (stack-defaults stack)))
+           path (or path (current-path))
+           route (or route {:to (get-in route-match [:data :name])
+                            :path-params (get-in route-match [:parameters :path])
+                            :query-params (get-in route-match [:parameters :query])})]
+       (swap! stack-history assoc stack {:history [root]})
+       (set-current-stack! stack)
+       ;; Use original replace-state to avoid recording a push intent.
+       (orig-replace-state (get-in route-match [:data :name])
+                           (get-in route-match [:parameters :path])
+                           (get-in route-match [:parameters :query]))
+       (route-handler/set-route-match! route-match)
+       (notify-route-change!
+        {:route route
+         :route-match route-match
+         :path path
+         :stack stack
+         :push false})))))
 
 (defn ^:export install-native-bridge!
   []

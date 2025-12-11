@@ -50,17 +50,16 @@
          (state/pub-event! [:mobile/clear-edit])
          (mobile-state/set-popup! nil)
          (reset! *last-popup-data nil)
-         (when (mobile-util/native-ios?)
-           (let [plugin ^js mobile-util/native-editor-toolbar]
-             (.dismiss plugin)))))
+         (when-let [plugin ^js mobile-util/native-editor-toolbar]
+           (.dismiss plugin))))
 
       :else
       nil)))
 
 (defonce native-sheet-listener
-  (when (mobile-util/native-ios?)
-    (when-let [^js plugin mobile-util/native-bottom-sheet]
-      (.addListener plugin "state" handle-native-sheet-state!))))
+  (when-let [^js plugin (when (and (mobile-util/native-platform?)
+                                   mobile-util/native-bottom-sheet))]
+    (.addListener plugin "state" handle-native-sheet-state!)))
 
 (defn- wrap-calc-commands-popup-side
   [pos opts]
@@ -98,7 +97,7 @@
     :else
     (when content-fn
       (reset! *last-popup? true)
-      (when (mobile-util/native-ios?)
+      (when-let [_plugin ^js mobile-util/native-bottom-sheet]
         (let [data {:open? true
                     :content-fn content-fn
                     :opts opts}]

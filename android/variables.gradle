@@ -6,6 +6,7 @@ ext {
     androidxAppCompatVersion = '1.7.0'
     androidxCoordinatorLayoutVersion = '1.2.0'
     androidxCoreVersion = '1.15.0'
+    androidxNavigationVersion = '2.8.3'
     androidxFragmentVersion = '1.8.4'
     junitVersion = '4.13.2'
     androidxJunitVersion = '1.2.1'
@@ -13,4 +14,7 @@ ext {
     cordovaAndroidVersion = '10.1.1'
     coreSplashScreenVersion = '1.0.1'
     androidxWebkitVersion = '1.12.1'
+    materialVersion = '1.12.0'
+    composeBomVersion = '2024.09.02'
+    composeCompilerVersion = '1.7.0'
 }

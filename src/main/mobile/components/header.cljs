@@ -108,11 +108,13 @@
    {:default-height false}))
 
 (defn- register-native-top-bar-events! []
-  (when (and (mobile-util/native-ios?)
+  (when (and (mobile-util/native-platform?)
+             mobile-util/native-top-bar
              (not @native-top-bar-listener?))
     (.addListener ^js mobile-util/native-top-bar "buttonTapped"
                   (fn [^js e]
                     (case (.-id e)
+                      "back" (js/history.back)
                       "title" (open-graph-switch!)
                       "calendar" (open-journal-calendar!)
                       "capture" (do
@@ -142,7 +144,8 @@
 
 (defn- configure-native-top-bar!
   [repo {:keys [tab title route-name route-view sync-color favorited?]}]
-  (when (mobile-util/native-ios?)
+  (when (and (mobile-util/native-platform?)
+             mobile-util/native-top-bar)
     (let [hidden? (= tab "search")
           rtc-indicator? (and repo
                               (ldb/get-graph-rtc-uuid (db/get-db))
@@ -153,6 +156,7 @@
                  (assoc :title title))
           page? (= route-name :page)
           left-buttons (cond
+                         page? [{:id "back" :systemIcon "chevron.backward"}]
                          (and (= tab "home") (nil? route-view))
                          [(conj {:id "calendar" :systemIcon "calendar"})]
                          (and (= tab "capture") (nil? route-view))
@@ -208,7 +212,8 @@
                      "#CA8A04")]
     (hooks/use-effect!
      (fn []
-       (when (mobile-util/native-ios?)
+       (when (and (mobile-util/native-platform?)
+                  mobile-util/native-top-bar)
          (register-native-top-bar-events!)
          (p/let [block (when (= route-name :page)
                          (let [id (get-in route-match [:parameters :path :name])]

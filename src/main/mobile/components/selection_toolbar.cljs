@@ -10,7 +10,8 @@
 
 (defn- dismiss-action-bar!
   []
-  (.dismiss ^js mobile-util/native-selection-action-bar))
+  (when-let [plugin ^js mobile-util/native-selection-action-bar]
+    (.dismiss plugin)))
 
 (defn close-selection-bar!
   []
@@ -81,7 +82,7 @@
 
     (hooks/use-effect!
      (fn []
-       (when (and (mobile-util/native-ios?)
+       (when (and (mobile-util/native-platform?)
                   mobile-util/native-selection-action-bar)
          (let [listener (.addListener ^js mobile-util/native-selection-action-bar
                                       "action"

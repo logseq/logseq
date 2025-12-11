@@ -2,6 +2,7 @@ apply plugin: 'com.android.application'
 
 apply from: 'capacitor.build.gradle'
 apply plugin: 'kotlin-android'
+apply plugin: 'org.jetbrains.kotlin.plugin.compose'
 
 android {
     namespace "com.logseq.app"
@@ -26,6 +27,14 @@ android {
         }
     }
 
+    buildFeatures {
+        compose true
+    }
+
+    composeOptions {
+        kotlinCompilerExtensionVersion rootProject.ext.composeCompilerVersion
+    }
+
     kotlinOptions {
         jvmTarget = '21'
     }
@@ -42,6 +51,15 @@ dependencies {
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation fileTree(include: ['*.jar'], dir: 'libs')
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation platform("androidx.compose:compose-bom:$composeBomVersion")
+    implementation "androidx.activity:activity-compose:$androidxActivityVersion"
+    implementation "androidx.compose.ui:ui"
+    implementation "androidx.compose.foundation:foundation"
+    implementation "androidx.compose.material3:material3"
+    implementation "androidx.compose.runtime:runtime"
+    implementation "androidx.compose.animation:animation"
+    implementation "androidx.navigation:navigation-compose:$androidxNavigationVersion"
+    implementation "com.google.android.material:material:$materialVersion"
     implementation project(':capacitor-android')
     implementation 'androidx.documentfile:documentfile:1.0.1'
     testImplementation "junit:junit:$junitVersion"

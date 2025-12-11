@@ -134,7 +134,7 @@
     (use-theme-effects! current-repo theme)
     (hooks/use-effect!
      (fn []
-       (when (mobile-util/native-ios?)
+       (when (mobile-util/native-platform?)
          (bottom-tabs/configure))
        (when-let [element (util/app-scroll-container-node)]
          (common-handler/listen-to-scroll! element)))

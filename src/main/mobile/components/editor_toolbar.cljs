@@ -179,12 +179,12 @@
         native-actions (mapv action->native main)
         trailing-native (some-> trailing action->native)
         plugin ^js mobile-util/native-editor-toolbar
-        should-show? (and show? (mobile-util/native-ios?) (some? plugin))]
+        should-show? (and show? (mobile-util/native-platform?) (some? plugin))]
     (set! (.-current handlers-ref) (action-handlers main trailing))
 
     (hooks/use-effect!
      (fn []
-       (when (and (mobile-util/native-ios?) plugin)
+       (when (and (mobile-util/native-platform?) plugin)
          (let [listener (.addListener plugin "action"
                                       (fn [^js e]
                                         (when-let [id (.-id e)]
@@ -199,12 +199,12 @@
 
     (hooks/use-effect!
      (fn []
-       (when (mobile-util/native-ios?)
+       (when (mobile-util/native-platform?)
          (when should-show?
            (.present plugin (clj->js {:actions native-actions
                                       :trailingAction trailing-native
                                       :tintColor (colors/get-accent-color)}))))
-       #(when (and (mobile-util/native-ios?) should-show?)
+       #(when (and (mobile-util/native-platform?) should-show?)
           (.dismiss plugin)))
      [should-show? native-actions trailing-native])
 
@@ -217,5 +217,5 @@
         show? (and (not code-block?)
                    editing?)
         actions (toolbar-actions)]
-    (when (mobile-util/native-ios?)
+    (when (mobile-util/native-platform?)
       (native-toolbar show? actions))))
