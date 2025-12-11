@@ -6,10 +6,9 @@ import android.content.Context;
 import android.content.IntentFilter;
 import android.content.res.Configuration;
 import android.os.Bundle;
-import android.view.View;
-import android.view.Window;
 import android.webkit.ValueCallback;
 import android.webkit.WebView;
+import androidx.activity.EdgeToEdge;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.BridgeActivity;
@@ -34,6 +33,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(LiquidTabsPlugin.class);
 
         super.onCreate(savedInstanceState);
+        EdgeToEdge.enable(this);
         WebView webView = getBridge().getWebView();
         webView.setOverScrollMode(WebView.OVER_SCROLL_NEVER);
         webView.getSettings().setUseWideViewPort(true);

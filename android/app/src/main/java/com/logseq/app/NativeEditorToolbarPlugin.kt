@@ -1,13 +1,33 @@
 package com.logseq.app
 
 import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.FrameLayout
-import android.widget.HorizontalScrollView
-import android.widget.LinearLayout
-import android.widget.TextView
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
@@ -106,53 +126,23 @@ data class EditorAction(
     }
 }
 
+private val DEFAULT_TOOLBAR_BG = Color.parseColor("#F5F5F5")
+
 private class EditorToolbarView(context: android.content.Context) : FrameLayout(context) {
     var onAction: ((String) -> Unit)? = null
 
-    private val scrollView = HorizontalScrollView(context)
-    private val actionsContainer = LinearLayout(context)
-    private val trailingContainer = LinearLayout(context)
+    private val composeView = ComposeView(context).apply {
+        setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+        layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
+    }
+
+    private var actions: List<EditorAction> = emptyList()
+    private var trailing: EditorAction? = null
+    private var tint: Int = Color.BLACK
+    private var backgroundColor: Int = DEFAULT_TOOLBAR_BG
 
     init {
-        layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
-        setPadding(
-            NativeUiUtils.dp(context, 8f),
-            NativeUiUtils.dp(context, 6f),
-            NativeUiUtils.dp(context, 8f),
-            NativeUiUtils.dp(context, 6f)
-        )
-
-        val bg = GradientDrawable().apply {
-            cornerRadius = NativeUiUtils.dp(context, 16f).toFloat()
-            setColor(Color.parseColor("#F5F5F5"))
-        }
-        background = bg
-        elevation = NativeUiUtils.dp(context, 6f).toFloat()
-
-        scrollView.isHorizontalScrollBarEnabled = false
-        scrollView.overScrollMode = OVER_SCROLL_NEVER
-        scrollView.layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.START)
-
-        actionsContainer.orientation = LinearLayout.HORIZONTAL
-        actionsContainer.gravity = Gravity.CENTER_VERTICAL
-        scrollView.addView(
-            actionsContainer,
-            LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT)
-        )
-
-        trailingContainer.orientation = LinearLayout.HORIZONTAL
-        trailingContainer.gravity = Gravity.CENTER_VERTICAL
-
-        val row = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-
-        val rowLp = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
-        addView(row, rowLp)
-
-        row.addView(scrollView, LinearLayout.LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
-        row.addView(trailingContainer, LinearLayout.LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT))
+        addView(composeView)
     }
 
     fun bind(
@@ -161,39 +151,91 @@ private class EditorToolbarView(context: android.content.Context) : FrameLayout(
         tintHex: String?,
         bgHex: String?
     ) {
-        val tint = NativeUiUtils.parseColor(tintHex, Color.BLACK)
-        bgHex?.let {
-            val drawable = (background as? GradientDrawable)
-            drawable?.setColor(NativeUiUtils.parseColor(it, Color.parseColor("#F5F5F5")))
-        }
-
-        actionsContainer.removeAllViews()
-        actions.forEach { action ->
-            actionsContainer.addView(makeButton(action, tint))
-        }
-
-        trailingContainer.removeAllViews()
-        trailing?.let { trailingAction ->
-            trailingContainer.addView(makeButton(trailingAction, tint))
-        }
+        this.actions = actions
+        this.trailing = trailing
+        tint = NativeUiUtils.parseColor(tintHex, Color.BLACK)
+        backgroundColor = NativeUiUtils.parseColor(bgHex, DEFAULT_TOOLBAR_BG)
+        render()
     }
 
-    private fun makeButton(action: EditorAction, tint: Int): TextView {
-        return TextView(context).apply {
-            text = action.title
-            setTextColor(tint)
-            textSize = 14f
-            gravity = Gravity.CENTER
-            minWidth = NativeUiUtils.dp(context, 44f)
-            setPadding(
-                NativeUiUtils.dp(context, 10f),
-                NativeUiUtils.dp(context, 8f),
-                NativeUiUtils.dp(context, 10f),
-                NativeUiUtils.dp(context, 8f)
+    private fun render() {
+        val onActionFn = onAction
+        val actionsSnapshot = actions
+        val trailingSnapshot = trailing
+        val tintColor = tint
+        val bgColor = backgroundColor
+
+        composeView.setContent {
+            EditorToolbar(
+                actions = actionsSnapshot,
+                trailing = trailingSnapshot,
+                tint = ComposeColor(tintColor),
+                background = ComposeColor(bgColor),
+                onAction = { id -> onActionFn?.invoke(id) }
             )
-            isClickable = true
-            isFocusable = true
-            setOnClickListener { onAction?.invoke(action.id) }
         }
     }
+}
+
+@Composable
+private fun EditorToolbar(
+    actions: List<EditorAction>,
+    trailing: EditorAction?,
+    tint: ComposeColor,
+    background: ComposeColor,
+    onAction: (String) -> Unit
+) {
+    Surface(
+        color = background,
+        shadowElevation = 6.dp,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .wrapContentHeight()
+            .navigationBarsPadding()
+            .imePadding() // Lift toolbar above system nav/IME when the keyboard opens
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                actions.forEach { action ->
+                    ToolbarButton(action, tint, onAction)
+                }
+            }
+
+            trailing?.let { trailingAction ->
+                if (actions.isNotEmpty()) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                ToolbarButton(trailingAction, tint, onAction)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ToolbarButton(
+    action: EditorAction,
+    tint: ComposeColor,
+    onAction: (String) -> Unit
+) {
+    Text(
+        text = action.title,
+        color = tint,
+        fontSize = 14.sp,
+        modifier = Modifier
+            .defaultMinSize(minWidth = 44.dp)
+            .clickable { onAction(action.id) }
+            .padding(horizontal = 10.dp, vertical = 8.dp)
+    )
 }

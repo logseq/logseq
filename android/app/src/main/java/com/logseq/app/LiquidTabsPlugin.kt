@@ -13,6 +13,8 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
@@ -31,6 +33,7 @@ class LiquidTabsPlugin : Plugin() {
     private var searchTabId: String? = null
     private var originalBottomPadding: Int? = null
     private var currentTabId: String? = null
+    private var navBaseBottomInset: Int = 0
 
     @PluginMethod
     fun configureTabs(call: PluginCall) {
@@ -129,6 +132,43 @@ class LiquidTabsPlugin : Plugin() {
         } ?: call.resolve()
     }
 
+    private fun setupImeBehaviorForNav(nav: BottomNavigationView) {
+        ViewCompat.setOnApplyWindowInsetsListener(nav) { v, insets ->
+            val imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime())
+            val navInsets = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
+            val imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
+
+            // 1. When IME is not visible, record the navigation-bar inset as our baseline gap.
+            if (!imeVisible) {
+                navBaseBottomInset = navInsets.bottom
+            }
+
+            // 2. Always apply that baseline inset as a bottom margin, so the bar sits above
+            //    the navigation bar area even when keyboard is hidden.
+            val lp = v.layoutParams as ViewGroup.MarginLayoutParams
+            if (lp.bottomMargin != navBaseBottomInset) {
+                lp.bottomMargin = navBaseBottomInset
+                v.layoutParams = lp
+            }
+
+            // 3. Extra offset only when IME is visible: keyboard height above nav bar.
+            val extra = if (imeVisible) {
+                (imeInsets.bottom - navBaseBottomInset).coerceAtLeast(0)
+            } else {
+                0
+            }
+
+            v.translationY = extra.toFloat()
+
+            // (Optional) Fade out while hidden under keyboard:
+            // v.alpha = if (imeVisible) 0f else 1f
+
+            insets
+        }
+
+        ViewCompat.requestApplyInsets(nav)
+    }
+
     private fun ensureNav(): BottomNavigationView {
         val activity = activity
         val root = NativeUiUtils.contentRoot(activity)
@@ -141,9 +181,15 @@ class LiquidTabsPlugin : Plugin() {
                 Gravity.BOTTOM
             )
             view.setBackgroundColor(Color.WHITE)
+            setupImeBehaviorForNav(view)
             bottomNav = view
             root.addView(view)
+
         }
+
+        // In case it was created before we added behavior
+        setupImeBehaviorForNav(nav)
+
         return nav
     }
 
