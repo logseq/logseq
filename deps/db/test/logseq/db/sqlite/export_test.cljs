@@ -830,18 +830,28 @@
   (let [pvalue-uuid1 (random-uuid)
         original-data
         {:classes {:user.class/C1 {}}
-         :properties {:user.property/default {:logseq.property/type :default}}
+         :properties
+         {:user.property/default {:logseq.property/type :default}
+          :user.property/default-many {:logseq.property/type :default
+                                       :db/cardinality :db.cardinality/many}}
          :pages-and-blocks
          [{:page {:block/title "page1"}
-           :blocks [{:block/title "block with a pvalue that has :build/tags"
+           :blocks [{:block/title "block with pvalue that has :build/tags"
                      :build/properties {:user.property/default {:build/property-value :block
-                                                                :block/title "property value block"
+                                                                :block/title "tags pvalue"
                                                                 :build/tags [:user.class/C1]}}}
-                    {:block/title "block that has a pvalue with a view"
+                    {:block/title "block with pvalue that has a view"
                      :build/properties {:user.property/default {:build/property-value :block
-                                                                :block/title "property value block2"
+                                                                :block/title "view pvalue"
                                                                 :block/uuid pvalue-uuid1
-                                                                :build/keep-uuid? true}}}]}
+                                                                :build/keep-uuid? true}}}
+                    {:block/title "block with pvalue map in a :many property"
+                     :build/properties
+                     {:user.property/default-many
+                      #{"yep"
+                        {:build/property-value :block
+                         :block/title ":many pvalue"
+                         :build/tags [:user.class/C1]}}}}]}
           {:page {:block/title "$$$views2"}
            :blocks [{:block/title "Unlinked references",
                      :build/properties
