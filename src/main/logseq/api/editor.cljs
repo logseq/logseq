@@ -451,64 +451,59 @@
 
 ;; block properties
 (defn upsert_block_property
-  [block-uuid key ^js value ^js options]
-  (this-as
-   this
-   (p/let [key' (api-block/sanitize-user-property-name key)
-           opts (bean/->clj options)
-           block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
-           repo (state/get-current-repo)
-           block (<get-block block-uuid {:children? false})
-           db-based? (config/db-based-graph?)
-           value (bean/->clj value)]
-     (when block
-       (if db-based?
-         (db-based-api/upsert-block-property this block key' value opts)
-         (property-handler/set-block-property! repo block-uuid key' value))))))
+  [id key ^js value ^js options]
+  (this-as this
+    (p/let [key' (api-block/sanitize-user-property-name key)
+            opts (bean/->clj options)
+            repo (state/get-current-repo)
+            block (<get-block id {:children? false})
+            db-based? (config/db-based-graph?)
+            value (bean/->clj value)]
+      (when-let [block-uuid (:block/uuid block)]
+        (if db-based?
+          (db-based-api/upsert-block-property this block key' value opts)
+          (property-handler/set-block-property! repo block-uuid key' value))))))
 
 (defn remove_block_property
-  [block-uuid key]
+  [id key]
   (this-as this
-           (p/let [key (api-block/sanitize-user-property-name key)
-                   block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
-                   _block (<get-block block-uuid {:children? false})
-                   db-based? (config/db-based-graph?)
-                   key-ns? (namespace (keyword key))
-                   key (if (and db-based? (not key-ns?))
-                         (api-block/get-db-ident-from-property-name key this)
-                         key)]
-             (property-handler/remove-block-property!
-              (state/get-current-repo)
-              block-uuid key))))
+    (p/let [block (<get-block id {:children? false})]
+      (when-let [block-uuid (:block/uuid block)]
+        (let [db-based? (config/db-based-graph?)
+              key (api-block/sanitize-user-property-name key)
+              key (if db-based?
+                    (api-block/get-db-ident-from-property-name key this)
+                    key)]
+          (property-handler/remove-block-property!
+            (state/get-current-repo)
+            block-uuid key))))))
 
 (defn get_block_property
-  [block-uuid key]
+  [id key]
   (this-as this
-           (p/let [block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
-                   _block (<get-block block-uuid {:children? false})]
-             (when-let [properties (some-> block-uuid (db-model/get-block-by-uuid) (:block/properties))]
-               (when (seq properties)
-                 (let [property-name (api-block/sanitize-user-property-name key)
-                       ident (api-block/get-db-ident-from-property-name property-name this)
-                       property-value (or (get properties property-name)
-                                          (get properties (keyword property-name))
-                                          (get properties ident))
-                       property-value (if-let [property-id (:db/id property-value)]
-                                        (db/pull property-id) property-value)
-                       property-value (cond-> property-value
-                                        (map? property-value)
-                                        (assoc
-                                         :value (or (:logseq.property/value property-value)
-                                                    (:block/title property-value))
-                                         :ident ident))
-                       parsed-value (api-block/parse-property-json-value-if-need ident property-value)]
-                   (or parsed-value
-                       (bean/->js (sdk-utils/normalize-keyword-for-json property-value)))))))))
+    (p/let [block (<get-block id {:children? false})]
+      (when-let [properties (some-> block (:block/uuid) (db-model/get-block-by-uuid) (:block/properties))]
+        (when (seq properties)
+          (let [property-name (api-block/sanitize-user-property-name key)
+                ident (api-block/get-db-ident-from-property-name property-name this)
+                property-value (or (get properties property-name)
+                                 (get properties (keyword property-name))
+                                 (get properties ident))
+                property-value (if-let [property-id (:db/id property-value)]
+                                 (db/pull property-id) property-value)
+                property-value (cond-> property-value
+                                 (map? property-value)
+                                 (assoc
+                                   :value (or (:logseq.property/value property-value)
+                                            (:block/title property-value))
+                                   :ident ident))
+                parsed-value (api-block/parse-property-json-value-if-need ident property-value)]
+            (or parsed-value
+              (bean/->js (sdk-utils/normalize-keyword-for-json property-value)))))))))
 
 (def get_block_properties
-  (fn [block-uuid]
-    (p/let [block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
-            block (<get-block block-uuid {:children? false})]
+  (fn [id]
+    (p/let [block (<get-block id {:children? false})]
       (when block
         (let [properties (if (config/db-based-graph?)
                            (api-block/into-readable-db-properties (:block/properties block))

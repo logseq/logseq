@@ -833,17 +833,15 @@ export interface IEditorProxy extends Record<string, any> {
 
   // block property related APIs
   upsertBlockProperty: (
-    block: BlockIdentity,
+    block: BlockIdentity | EntityID,
     key: string,
     value: any
   ) => Promise<void>
 
-  removeBlockProperty: (block: BlockIdentity, key: string) => Promise<void>
-
-  getBlockProperty: (block: BlockIdentity, key: string) => Promise<BlockEntity | unknown>
-
-  getBlockProperties: (block: BlockIdentity) => Promise<Record<string, any> | null>
-  getPageProperties: (page: PageIdentity) => Promise<Record<string, any> | null>
+  removeBlockProperty: (block: BlockIdentity | EntityID, key: string) => Promise<void>
+  getBlockProperty: (block: BlockIdentity | EntityID, key: string) => Promise<BlockEntity | unknown>
+  getBlockProperties: (block: BlockIdentity | EntityID) => Promise<Record<string, any> | null>
+  getPageProperties: (page: PageIdentity | EntityID) => Promise<Record<string, any> | null>
 
   scrollToBlockInPage: (
     pageName: BlockPageName,
