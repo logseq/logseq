@@ -856,12 +856,10 @@
                (file-sync-handler/set-sync-diff-merge-enabled! (not enabled?)))
              true))
 
-(defn sync-switcher-row [repo enabled?]
+(defn sync-switcher-row [enabled?]
   (row-with-button-action
-   (cond-> {:left-label (t :settings-page/sync)
-            :action (sync-enabled-switcher enabled?)}
-     (config/db-based-graph? repo)
-     (merge {:action nil :desc "Not available yet for database graphs"}))))
+   {:left-label (t :settings-page/sync)
+    :action (sync-enabled-switcher enabled?)}))
 
 (defn sync-diff-merge-switcher-row [enabled?]
   (row-with-button-action
@@ -1130,7 +1128,7 @@
           (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/beta-features)]]
         [:div.flex.flex-col.gap-4
          {:class (when-not user-handler/alpha-or-beta-user? "opacity-50 pointer-events-none cursor-not-allowed")}
-         (sync-switcher-row current-repo enable-sync?)
+         (sync-switcher-row enable-sync?)
          (when (and enable-sync? (not (config/db-based-graph? current-repo)))
            (sync-diff-merge-switcher-row enable-sync-diff-merge?))
          [:div.text-sm
