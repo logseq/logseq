@@ -9,6 +9,7 @@
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.exception :as r.ex]
+            [frontend.worker.rtc.gen-client-op :as gen-client-op]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
             [frontend.worker.rtc.malli-schema :as rtc-schema]
             [frontend.worker.rtc.remote-update :as r.remote-update]
@@ -16,6 +17,7 @@
             [frontend.worker.rtc.throttle :as r.throttle]
             [frontend.worker.rtc.ws :as ws]
             [frontend.worker.rtc.ws-util :as ws-util]
+            [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [logseq.db.frontend.schema :as db-schema]
             [missionary.core :as m]
@@ -524,12 +526,25 @@
                   ;; else
                   (do (rollback repo block-ops-map-coll update-kv-value-ops-map-coll rename-db-ident-ops-map-coll)
                       (throw (ex-info "Unavailable1" {:remote-ex remote-ex})))))
+            (if-let [not-found-target-ops (seq (:not-found-target-ops r))]
+              (do (rollback repo block-ops-map-coll update-kv-value-ops-map-coll rename-db-ident-ops-map-coll)
+                  ;; add more ents into ops for remote
+                  (let [ents (mapv
+                              (fn [op]
+                                (let [block-uuid (:block-uuid (second op))]
+                                  (assert block-uuid)
+                                  (d/entity @conn [:block/uuid block-uuid])))
+                              not-found-target-ops)
+                        extra-ops (gen-client-op/generate-rtc-ops-from-entities+parents ents)]
+                    (log/error :not-found-target-ops not-found-target-ops
+                               :extra-ops extra-ops)
+                    (client-op/add-ops! repo extra-ops)))
 
-            (do (assert (and (pos? (:t r)) (pos? (:t-query-end r))) r)
-                (m/?
-                 (r.remote-update/task--apply-remote-update
-                  graph-uuid repo conn date-formatter {:type :remote-update :value r} aes-key add-log-fn))
-                (add-log-fn :rtc.log/push-local-update {:remote-t (:t r) :remote-t-query-end (:t-query-end r)}))))))))
+              (do (assert (and (pos? (:t r)) (pos? (:t-query-end r))) r)
+                  (m/?
+                   (r.remote-update/task--apply-remote-update
+                    graph-uuid repo conn date-formatter {:type :remote-update :value r} aes-key add-log-fn))
+                  (add-log-fn :rtc.log/push-local-update {:remote-t (:t r) :remote-t-query-end (:t-query-end r)})))))))))
 
 (defn new-task--pull-remote-data
   [repo conn graph-uuid major-schema-version date-formatter get-ws-create-task aes-key add-log-fn]

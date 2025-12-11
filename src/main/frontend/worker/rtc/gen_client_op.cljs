@@ -146,16 +146,28 @@
 
 (defn- generate-rtc-ops-from-entities
   [ents]
-  (let [db (d/entity-db (first ents))
-        id->same-entity-datoms
-        (into {}
-              (map (fn [ent]
-                     (let [e (:db/id ent)
-                           datoms (d/datoms db :eavt e)]
-                       [e datoms])))
-              ents)
-        e->a->add?->v->t (update-vals id->same-entity-datoms entity-datoms=>a->add?->v->t)]
-    (generate-rtc-ops db db (vals id->same-entity-datoms) e->a->add?->v->t)))
+  (when (seq ents)
+    (let [db (d/entity-db (first ents))
+          id->same-entity-datoms
+          (into {}
+                (map (fn [ent]
+                       (let [e (:db/id ent)
+                             datoms (d/datoms db :eavt e)]
+                         [e datoms])))
+                ents)
+          e->a->add?->v->t (update-vals id->same-entity-datoms entity-datoms=>a->add?->v->t)]
+      (generate-rtc-ops db db (vals id->same-entity-datoms) e->a->add?->v->t))))
+
+(defn generate-rtc-ops-from-entities+parents
+  "generate ents and their parents as rtc-ops"
+  [ents]
+  (let [ents*
+        (set
+         (mapcat
+          (fn [ent]
+            (take 20 (take-while some? (iterate :block/parent ent))))
+          ents))]
+    (generate-rtc-ops-from-entities ents*)))
 
 (defn generate-rtc-ops-from-property-entities
   [property-ents]
