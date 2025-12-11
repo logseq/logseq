@@ -114,11 +114,12 @@
 
 (defn- rename-properties
   [props-to-rename {:keys [fix]}]
-  {:rename-db-idents (mapv
-                      (fn [[old-ident new-ident]]
-                        {:db-ident-or-block-uuid old-ident
-                         :new-db-ident new-ident})
-                      props-to-rename)
+  {:rename-db-idents (fn [_db]
+                       (mapv
+                        (fn [[old-ident new-ident]]
+                          {:db-ident-or-block-uuid old-ident
+                           :new-db-ident new-ident})
+                        props-to-rename))
    :fix (fn [db]
           (let [common-fix (rename-properties-fix db
                                                   {:logseq.property.asset/external-src
