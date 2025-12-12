@@ -102,11 +102,49 @@ object WebViewSnapshotManager {
             }
         }
 
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        // Limit bitmap size to avoid OOM (e.g., max 4096x4096 or 16MB)
+        val MAX_BITMAP_DIMENSION = 4096
+        val MAX_BITMAP_SIZE = 16 * 1024 * 1024 // 16MB
+        val safeWidth = width.coerceAtMost(MAX_BITMAP_DIMENSION)
+        val safeHeight = height.coerceAtMost(MAX_BITMAP_DIMENSION)
+        val estimatedSize = safeWidth * safeHeight * 4
+        if (estimatedSize > MAX_BITMAP_SIZE) {
+            // Fallback: show plain color view if too large
+            return View(webView.context).apply {
+                layoutParams = FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+                setBackgroundColor(snapshotBackgroundColor)
+                isClickable = false
+                isFocusable = false
+            }
+        }
+
+        val bitmap = try {
+            Bitmap.createBitmap(safeWidth, safeHeight, Bitmap.Config.ARGB_8888)
+        } catch (e: OutOfMemoryError) {
+            // Fallback: show plain color view if OOM
+            return View(webView.context).apply {
+                layoutParams = FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+                setBackgroundColor(snapshotBackgroundColor)
+                isClickable = false
+                isFocusable = false
+            }
+        }
         // Fast fallback: capture via View#draw (can be imperfect for WebView on some devices).
         try {
             val canvas = Canvas(bitmap)
             canvas.drawColor(snapshotBackgroundColor)
+            // If we had to scale down, scale the canvas
+            if (safeWidth != width || safeHeight != height) {
+                val scaleX = safeWidth.toFloat() / width
+                val scaleY = safeHeight.toFloat() / height
+                canvas.scale(scaleX, scaleY)
+            }
             webView.draw(canvas)
         } catch (_: Exception) {
             // Keep bitmap with background color only.
