@@ -142,23 +142,25 @@
 (defn configure
   []
   (configure-tabs
-   [{:id "home"
-     :title "Home"
-     :systemImage "house"
-     :role "normal"}
-    {:id "graphs"
-     :title "Graphs"
-     :systemImage "app.background.dotted"
-     :role "normal"}
-    {:id "capture"
-     :title "Capture"
-     :systemImage "tray"
-     :role "normal"}
-    {:id "go to"
-     :title "Go To"
-     :systemImage "square.stack.3d.down.right"
-     :role "normal"}
-    {:id "search"
-     :title "Search"
-     :systemImage "search"
-     :role "search"}]))
+   (cond->
+    [{:id "home"
+      :title "Home"
+      :systemImage "house"
+      :role "normal"}
+     {:id "graphs"
+      :title "Graphs"
+      :systemImage "app.background.dotted"
+      :role "normal"}
+     {:id "capture"
+      :title "Capture"
+      :systemImage "tray"
+      :role "normal"}
+     {:id "go to"
+      :title "Go To"
+      :systemImage "square.stack.3d.down.right"
+      :role "normal"}]
+     (mobile-util/native-android?)
+     (conj {:id "search"
+            :title "Search"
+            :systemImage "search"
+            :role "search"}))))
