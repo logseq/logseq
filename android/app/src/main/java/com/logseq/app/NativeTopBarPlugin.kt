@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -141,12 +143,14 @@ class NativeTopBarPlugin : Plugin() {
             val id = obj.optString("id", "")
             if (id.isBlank()) continue
             val systemIcon = obj.optString("systemIcon", "")
+            val title = obj.optString("title", id)
             val tintHex = obj.optString("tintColor", obj.optString("color", ""))
             val size = obj.optString("size", "medium")
             result.add(
                 ButtonSpec(
                     id = id,
-                    label = if (systemIcon.isNotBlank()) systemIcon else id,
+                    title = if (title.isNotBlank()) title else id,
+                    systemIcon = systemIcon.takeIf { it.isNotBlank() },
                     tint = tintHex,
                     size = size
                 )
@@ -158,7 +162,8 @@ class NativeTopBarPlugin : Plugin() {
 
 data class ButtonSpec(
     val id: String,
-    val label: String,
+    val title: String,
+    val systemIcon: String?,
     val tint: String?,
     val size: String
 )
@@ -274,6 +279,7 @@ private fun TopBarButton(
     fallbackTint: ComposeColor,
     onTap: (String) -> Unit
 ) {
+    val icon = remember(spec.systemIcon) { MaterialIconResolver.resolve(spec.systemIcon) }
     val tint = remember(spec.tint, fallbackTint) {
         spec.tint?.let { ComposeColor(NativeUiUtils.parseColor(it, fallbackTint.toArgb())) } ?: fallbackTint
     }
@@ -282,14 +288,27 @@ private fun TopBarButton(
         "large" -> 17.sp
         else -> 15.sp
     }
-    Text(
-        text = spec.label,
-        color = tint,
-        fontSize = fontSize,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
-            .padding(horizontal = 8.dp, vertical = 6.dp)
             .clickable { onTap(spec.id) }
-    )
+            .padding(horizontal = 8.dp, vertical = 6.dp)
+    ) {
+        if (icon != null) {
+            Icon(
+                imageVector = icon,
+                contentDescription = spec.title.ifBlank { spec.id },
+                tint = tint,
+                modifier = Modifier.size(22.dp)
+            )
+        } else {
+            Text(
+                text = spec.title,
+                color = tint,
+                fontSize = fontSize,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
 }

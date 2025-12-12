@@ -5,7 +5,6 @@ import android.text.Editable
 import android.text.TextWatcher
 import android.view.Gravity
 import android.view.KeyEvent
-import android.view.Menu
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
@@ -13,27 +12,41 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Circle
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.doOnNextLayout
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
-import com.google.android.material.bottomnavigation.BottomNavigationView
 
 @CapacitorPlugin(name = "LiquidTabsPlugin")
 class LiquidTabsPlugin : Plugin() {
-    private var bottomNav: BottomNavigationView? = null
+    private var bottomNav: ComposeView? = null
     private var searchContainer: LinearLayout? = null
     private var searchInput: EditText? = null
     private var resultsContainer: LinearLayout? = null
-    private val tabIds: MutableMap<String, Int> = mutableMapOf()
-    private var searchTabId: String? = null
     private var originalBottomPadding: Int? = null
-    private var currentTabId: String? = null
     private var navBaseBottomInset: Int = 0
+
+    private var tabsState by mutableStateOf<List<TabSpec>>(emptyList())
+    private var currentTabId by mutableStateOf<String?>(null)
 
     @PluginMethod
     fun configureTabs(call: PluginCall) {
@@ -42,53 +55,18 @@ class LiquidTabsPlugin : Plugin() {
             return
         }
         val tabs = parseTabs(call.getArray("tabs"))
-        searchTabId = tabs.firstOrNull { it.role == "search" }?.id
 
         activity.runOnUiThread {
-            val nav = ensureNav()
-            nav.menu.clear()
-
-            tabs.forEachIndexed { index, tab ->
-                val itemId = tabIds.getOrPut(tab.id) { View.generateViewId() }
-                val iconRes = iconFor(tab)
-                val item = nav.menu.add(Menu.NONE, itemId, index, tab.title)
-                if (iconRes != null) {
-                    item.setIcon(iconRes)
+            tabsState = tabs
+            val activeId = currentTabId?.takeIf { id -> tabs.any { it.id == id } }
+                ?: tabs.firstOrNull()?.id
+            currentTabId = activeId
+            ensureNav()
+            currentTabId?.let { id ->
+                tabsState.find { it.id == id }?.let { tab ->
+                    handleSelection(tab, reselected = false)
                 }
-            }
-
-            nav.setOnItemSelectedListener { item ->
-                val selected = tabs.find { tabIds[it.id] == item.itemId } ?: return@setOnItemSelectedListener false
-                val reselected = selected.id == currentTabId
-
-                // Always notify, even on reselect.
-                notifyListeners("tabSelected", JSObject().put("id", selected.id).put("reselected", reselected))
-
-                if (reselected) {
-                    // Keep currentTabId unchanged, but still refresh UI if needed.
-                    if (selected.role == "search") {
-                        showSearchUi()
-                    } else {
-                        hideSearchUi()
-                    }
-                    return@setOnItemSelectedListener true
-                }
-
-                currentTabId = selected.id
-                if (selected.role == "search") {
-                    showSearchUi()
-                } else {
-                    hideSearchUi()
-                }
-                true
-            }
-
-            if (nav.menu.size() > 0) {
-                val firstId = tabs.firstOrNull()?.id
-                val firstMenuItemId = nav.menu.getItem(0).itemId
-                currentTabId = firstId
-                nav.selectedItemId = firstMenuItemId
-            }
+            } ?: hideSearchUi()
             adjustWebViewPadding()
             call.resolve()
         }
@@ -100,20 +78,19 @@ class LiquidTabsPlugin : Plugin() {
             call.reject("Missing id")
             return
         }
-        val nav = bottomNav ?: run {
+        val tab = tabsState.find { it.id == id }
+        if (tab == null) {
+            call.resolve()
+            return
+        }
+        val nav = bottomNav
+        if (nav == null) {
             call.resolve()
             return
         }
         nav.post {
-            val itemId = tabIds[id] ?: return@post
-            if (currentTabId == id) {
-                // Still notify so JS can pop to root on reselect.
-                notifyListeners("tabSelected", JSObject().put("id", id).put("reselected", true))
-                call.resolve()
-                return@post
-            }
-            currentTabId = id
-            nav.selectedItemId = itemId
+            val reselected = currentTabId == tab.id
+            handleSelection(tab, reselected)
             call.resolve()
         }
     }
@@ -132,65 +109,47 @@ class LiquidTabsPlugin : Plugin() {
         } ?: call.resolve()
     }
 
-    private fun setupImeBehaviorForNav(nav: BottomNavigationView) {
-        ViewCompat.setOnApplyWindowInsetsListener(nav) { v, insets ->
-            val imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime())
-            val navInsets = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
-            val imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
-
-            // 1. When IME is not visible, record the navigation-bar inset as our baseline gap.
-            if (!imeVisible) {
-                navBaseBottomInset = navInsets.bottom
-            }
-
-            // 2. Always apply that baseline inset as a bottom margin, so the bar sits above
-            //    the navigation bar area even when keyboard is hidden.
-            val lp = v.layoutParams as ViewGroup.MarginLayoutParams
-            if (lp.bottomMargin != navBaseBottomInset) {
-                lp.bottomMargin = navBaseBottomInset
-                v.layoutParams = lp
-            }
-
-            // 3. Extra offset only when IME is visible: keyboard height above nav bar.
-            val extra = if (imeVisible) {
-                (imeInsets.bottom - navBaseBottomInset).coerceAtLeast(0)
-            } else {
-                0
-            }
-
-            v.translationY = extra.toFloat()
-
-            // (Optional) Fade out while hidden under keyboard:
-            // v.alpha = if (imeVisible) 0f else 1f
-
-            insets
-        }
-
-        ViewCompat.requestApplyInsets(nav)
-    }
-
-    private fun ensureNav(): BottomNavigationView {
-        val activity = activity
+    private fun ensureNav(): ComposeView {
+        val activity = activity ?: throw IllegalStateException("No activity")
         val root = NativeUiUtils.contentRoot(activity)
-        val nav = bottomNav ?: BottomNavigationView(activity).also { view ->
+        val nav = bottomNav ?: ComposeView(activity).also { view ->
             view.id = R.id.liquid_tabs_bottom_nav
-            view.labelVisibilityMode = BottomNavigationView.LABEL_VISIBILITY_LABELED
+            view.setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             view.layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.BOTTOM
             )
             view.setBackgroundColor(Color.WHITE)
-            setupImeBehaviorForNav(view)
             bottomNav = view
             root.addView(view)
-
+            setupImeBehaviorForNav(view)
         }
 
-        // In case it was created before we added behavior
-        setupImeBehaviorForNav(nav)
+        nav.setContent {
+            BottomNavBar(
+                tabs = tabsState,
+                currentId = currentTabId,
+                onSelect = { tab ->
+                    val reselected = tab.id == currentTabId
+                    handleSelection(tab, reselected)
+                }
+            )
+        }
 
+        nav.doOnNextLayout { adjustWebViewPadding() }
         return nav
+    }
+
+    private fun handleSelection(tab: TabSpec, reselected: Boolean) {
+        currentTabId = tab.id
+        if (tab.role == "search") {
+            showSearchUi()
+        } else {
+            hideSearchUi()
+        }
+
+        notifyListeners("tabSelected", JSObject().put("id", tab.id).put("reselected", reselected))
     }
 
     private fun adjustWebViewPadding() {
@@ -204,6 +163,34 @@ class LiquidTabsPlugin : Plugin() {
             val h = nav.height
             webView.setPadding(webView.paddingLeft, webView.paddingTop, webView.paddingRight, padding + h)
         }
+    }
+
+    private fun setupImeBehaviorForNav(nav: View) {
+        ViewCompat.setOnApplyWindowInsetsListener(nav) { v, insets ->
+            val imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime())
+            val navInsets = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
+            val imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
+
+            if (!imeVisible) {
+                navBaseBottomInset = navInsets.bottom
+            }
+
+            val lp = v.layoutParams as ViewGroup.MarginLayoutParams
+            if (lp.bottomMargin != navBaseBottomInset) {
+                lp.bottomMargin = navBaseBottomInset
+                v.layoutParams = lp
+            }
+
+            val extra = if (imeVisible) {
+                (imeInsets.bottom - navBaseBottomInset).coerceAtLeast(0)
+            } else {
+                0
+            }
+            v.translationY = extra.toFloat()
+            insets
+        }
+
+        ViewCompat.requestApplyInsets(nav)
     }
 
     private fun ensureSearchUi() {
@@ -317,6 +304,34 @@ class LiquidTabsPlugin : Plugin() {
         }
     }
 
+    @Composable
+    private fun BottomNavBar(
+        tabs: List<TabSpec>,
+        currentId: String?,
+        onSelect: (TabSpec) -> Unit
+    ) {
+        NavigationBar(containerColor = ComposeColor.White) {
+            tabs.forEach { tab ->
+                val selected = tab.id == currentId
+                val icon = remember(tab.systemImage, tab.id) {
+                    MaterialIconResolver.resolve(tab.systemImage) ?: MaterialIconResolver.resolve(tab.id)
+                }
+
+                NavigationBarItem(
+                    selected = selected,
+                    onClick = { onSelect(tab) },
+                    icon = {
+                        Icon(
+                            imageVector = icon ?: Icons.Filled.Circle,
+                            contentDescription = tab.title
+                        )
+                    },
+                    label = { Text(tab.title) }
+                )
+            }
+        }
+    }
+
     private fun parseTabs(array: JSArray?): List<TabSpec> {
         if (array == null) return emptyList()
         val result = mutableListOf<TabSpec>()
@@ -344,16 +359,6 @@ class LiquidTabsPlugin : Plugin() {
             result.add(SearchResult(id, title, subtitle))
         }
         return result
-    }
-
-    private fun iconFor(tab: TabSpec): Int? {
-        return when {
-            tab.role == "search" -> android.R.drawable.ic_menu_search
-            tab.systemImage.contains("house") -> android.R.drawable.ic_menu_view
-            tab.systemImage.contains("tray") -> android.R.drawable.ic_menu_upload
-            tab.systemImage.contains("square") -> android.R.drawable.ic_menu_agenda
-            else -> android.R.drawable.ic_menu_view
-        }
     }
 }
 

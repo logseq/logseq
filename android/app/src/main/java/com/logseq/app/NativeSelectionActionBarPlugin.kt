@@ -1,22 +1,41 @@
 package com.logseq.app
 
 import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
-import android.widget.HorizontalScrollView
-import android.widget.LinearLayout
-import android.widget.TextView
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.doOnNextLayout
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
-import com.google.android.material.bottomnavigation.BottomNavigationView
 import kotlin.math.max
 
 @CapacitorPlugin(name = "NativeSelectionActionBarPlugin")
@@ -113,7 +132,7 @@ class NativeSelectionActionBarPlugin : Plugin() {
         val imeBottom = insets?.getInsets(WindowInsetsCompat.Type.ime())?.bottom ?: 0
 
         // Find the bottom nav created by LiquidTabsPlugin (must have this ID set there)
-        val bottomNav = activity.findViewById<BottomNavigationView>(R.id.liquid_tabs_bottom_nav)
+        val bottomNav = activity.findViewById<View>(R.id.liquid_tabs_bottom_nav)
         // Fallback height if nav not measured yet
         val navHeight = bottomNav?.height ?: NativeUiUtils.dp(activity, 56f)
 
@@ -140,74 +159,84 @@ data class SelectionAction(
 
 private class SelectionActionBarView(context: android.content.Context) : FrameLayout(context) {
     var onAction: ((String) -> Unit)? = null
-
-    private val scrollView = HorizontalScrollView(context)
-    private val actionsContainer = LinearLayout(context)
+    private val composeView: ComposeView
 
     init {
-        val bg = GradientDrawable().apply {
-            cornerRadius = NativeUiUtils.dp(context, 14f).toFloat()
-            setColor(Color.parseColor("#F8F8F8"))
+        composeView = ComposeView(context).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
         }
-        background = bg
-        elevation = NativeUiUtils.dp(context, 6f).toFloat()
-
-        setPadding(
-            dp(10f),
-            dp(10f),
-            dp(10f),
-            dp(10f)
-        )
-
-        scrollView.isHorizontalScrollBarEnabled = false
-        scrollView.overScrollMode = OVER_SCROLL_NEVER
-
-        actionsContainer.orientation = LinearLayout.HORIZONTAL
-        actionsContainer.gravity = Gravity.CENTER_VERTICAL
-
-        scrollView.addView(
-            actionsContainer,
-            LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT)
-        )
-
-        addView(
-            scrollView,
-            LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
-        )
+        addView(composeView)
     }
-
-    private fun dp(v: Float) = NativeUiUtils.dp(context, v)
 
     fun bind(actions: List<SelectionAction>, tintHex: String?, bgHex: String?) {
-        val tint = NativeUiUtils.parseColor(tintHex, Color.BLACK)
-        bgHex?.let {
-            (background as? GradientDrawable)?.setColor(
-                NativeUiUtils.parseColor(it, Color.parseColor("#F8F8F8"))
-            )
-        }
+        val tint = ComposeColor(NativeUiUtils.parseColor(tintHex, Color.BLACK))
+        val backgroundColor = ComposeColor(NativeUiUtils.parseColor(bgHex, Color.parseColor("#F8F8F8")))
+        val onActionFn = onAction
 
-        actionsContainer.removeAllViews()
-        actions.forEach { action ->
-            actionsContainer.addView(makeButton(action, tint))
+        composeView.setContent {
+            SelectionActionBar(actions, tint, backgroundColor) { id ->
+                onActionFn?.invoke(id)
+            }
+        }
+        composeView.doOnNextLayout { requestLayout() }
+    }
+}
+
+@Composable
+private fun SelectionActionBar(
+    actions: List<SelectionAction>,
+    tint: ComposeColor,
+    background: ComposeColor,
+    onAction: (String) -> Unit
+) {
+    Surface(
+        color = background,
+        shadowElevation = 6.dp,
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            actions.forEach { action ->
+                SelectionActionButton(action, tint, onAction)
+            }
         }
     }
+}
 
-    private fun makeButton(action: SelectionAction, tint: Int): TextView {
-        return TextView(context).apply {
-            text = action.title
-            setTextColor(tint)
-            textSize = 13f
-            gravity = Gravity.CENTER
-            minWidth = dp(48f)
-            setPadding(
-                dp(10f),
-                dp(6f),
-                dp(10f),
-                dp(6f)
+@Composable
+private fun SelectionActionButton(
+    action: SelectionAction,
+    tint: ComposeColor,
+    onAction: (String) -> Unit
+) {
+    val icon = remember(action.systemIcon) { MaterialIconResolver.resolve(action.systemIcon) }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier
+            .defaultMinSize(minWidth = 48.dp)
+            .clickable { onAction(action.id) }
+            .padding(horizontal = 10.dp, vertical = 6.dp)
+    ) {
+        if (icon != null) {
+            Icon(
+                imageVector = icon,
+                contentDescription = action.title.ifBlank { action.id },
+                tint = tint,
+                modifier = Modifier.size(20.dp)
             )
-            isClickable = true
-            isFocusable = true
-            setOnClickListener { onAction?.invoke(action.id) }
         }
+        Text(
+            text = action.title,
+            color = tint,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium
+        )
     }
 }

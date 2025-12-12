@@ -1,6 +1,8 @@
 package com.logseq.app
 
 import android.graphics.Color
+import android.os.Handler
+import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -19,6 +21,7 @@ class NativeBottomSheetPlugin : Plugin() {
     private var previousIndex: Int = -1
     private var previousLayoutParams: ViewGroup.LayoutParams? = null
     private var placeholder: View? = null
+    private var container: FrameLayout? = null
 
     @PluginMethod
     fun present(call: PluginCall) {
@@ -38,17 +41,18 @@ class NativeBottomSheetPlugin : Plugin() {
             }
 
             val ctx = activity
-            val container = FrameLayout(ctx)
-            container.layoutParams = ViewGroup.LayoutParams(
+            container = FrameLayout(ctx)
+            container!!.layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
 
             val sheet = BottomSheetDialog(ctx)
-            sheet.setContentView(container)
+            sheet.setContentView(container!!)
 
+            // Move the WebView into the BottomSheet container
             detachWebView(webView, ctx)
-            container.addView(
+            container!!.addView(
                 webView,
                 FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
@@ -70,14 +74,26 @@ class NativeBottomSheetPlugin : Plugin() {
 
             sheet.setOnDismissListener {
                 notifyListeners("state", JSObject().put("dismissing", true))
-                restoreWebView(webView)
-                notifyListeners(
-                    "state",
-                    JSObject()
-                        .put("presented", false)
-                        .put("dismissing", false)
-                )
+
+                // Forcefully detach WebView before restoring
+                try {
+                    (webView.parent as? ViewGroup)?.removeView(webView)
+                    container?.removeAllViews()
+                } catch (_: Exception) {}
+
+                // Delay restoration slightly to let Android clean up window surfaces
+                Handler(Looper.getMainLooper()).post {
+                    restoreWebView(webView)
+                    notifyListeners(
+                        "state",
+                        JSObject()
+                            .put("presented", false)
+                            .put("dismissing", false)
+                    )
+                }
+
                 dialog = null
+                container = null
             }
 
             notifyListeners("state", JSObject().put("presenting", true))
@@ -91,8 +107,17 @@ class NativeBottomSheetPlugin : Plugin() {
     @PluginMethod
     fun dismiss(call: PluginCall) {
         activity?.runOnUiThread {
-            dialog?.dismiss()
+            dialog?.let {
+                val webView = bridge.webView
+                if (webView != null) {
+                    (webView.parent as? ViewGroup)?.removeView(webView)
+                    container?.removeAllViews()
+                }
+                it.setOnDismissListener(null)
+                it.dismiss()
+            }
             dialog = null
+            container = null
             call.resolve()
         } ?: call.resolve()
     }
@@ -120,14 +145,26 @@ class NativeBottomSheetPlugin : Plugin() {
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         )
+
+        // Fully detach from any container
         (webView.parent as? ViewGroup)?.removeView(webView)
         placeholder?.let { parent.removeView(it) }
         placeholder = null
 
+        // Reattach WebView
         if (previousIndex in 0..parent.childCount) {
             parent.addView(webView, previousIndex, lp)
         } else {
             parent.addView(webView, lp)
+        }
+
+        // ✅ Force WebView to recreate its SurfaceView and redraw
+        webView.visibility = View.INVISIBLE
+        webView.post {
+            webView.visibility = View.VISIBLE
+            webView.requestLayout()
+            webView.invalidate()
+            webView.dispatchWindowVisibilityChanged(View.VISIBLE)
         }
 
         previousParent = null
