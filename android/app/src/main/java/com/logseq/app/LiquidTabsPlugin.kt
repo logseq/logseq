@@ -42,6 +42,7 @@ class LiquidTabsPlugin : Plugin() {
     private var searchContainer: LinearLayout? = null
     private var searchInput: EditText? = null
     private var resultsContainer: LinearLayout? = null
+    private var closeButton: TextView? = null
     private var originalBottomPadding: Int? = null
 
     private var tabsState by mutableStateOf<List<TabSpec>>(emptyList())
@@ -231,21 +232,10 @@ class LiquidTabsPlugin : Plugin() {
 
         // Search Input Setup
         if (searchInput == null) {
-            val inputContainer = LinearLayout(activity).apply {
-                // Add horizontal padding for the search box container
-                setPadding(
-                    NativeUiUtils.dp(activity, HORIZONTAL_PADDING_DP),
-                    NativeUiUtils.dp(activity, VERTICAL_PADDING_DP),
-                    NativeUiUtils.dp(activity, HORIZONTAL_PADDING_DP),
-                    NativeUiUtils.dp(activity, VERTICAL_PADDING_DP)
-                )
-                orientation = LinearLayout.VERTICAL
-                // Add a divider below the search box (optional visual polish)
-                val divider = View(activity).apply {
-                    layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, NativeUiUtils.dp(activity, 1f))
-                    setBackgroundColor(Color.parseColor("#E0E0E0")) // Light Gray
-                }
-                addView(divider, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, NativeUiUtils.dp(activity, 1f)))
+            // Container for input and close button
+            val searchRow = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL // Center items vertically
             }
 
             val input = EditText(activity).apply {
@@ -262,6 +252,9 @@ class LiquidTabsPlugin : Plugin() {
                     NativeUiUtils.dp(activity, 10f)
                 )
 
+                // Layout params to make EditText take most of the horizontal space
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f)
+
                 setOnKeyListener { _, keyCode, event ->
                     if (event.action == KeyEvent.ACTION_DOWN) {
                         when (keyCode) {
@@ -272,7 +265,11 @@ class LiquidTabsPlugin : Plugin() {
                     false
                 }
                 addTextChangedListener(object : TextWatcher {
-                    override fun afterTextChanged(s: Editable?) {}
+                    override fun afterTextChanged(s: Editable?) {
+                        // Toggle close button visibility based on text
+                        val hasText = !s.isNullOrEmpty()
+                        closeButton?.visibility = if (hasText) View.VISIBLE else View.GONE
+                    }
                     override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
                     override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                         notifyListeners("searchChanged", JSObject().put("query", s?.toString() ?: ""))
@@ -280,12 +277,58 @@ class LiquidTabsPlugin : Plugin() {
                 })
             }
 
-            // Insert the EditText at the top of inputContainer
-            inputContainer.addView(input, 0, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            // Close Button
+            val button = TextView(activity).apply {
+                text = "X" // Close icon (using simple 'X')
+                setTextColor(Color.DKGRAY)
+                textSize = 18f
+                gravity = Gravity.CENTER
+                setPadding(
+                    NativeUiUtils.dp(activity, 8f),
+                    NativeUiUtils.dp(activity, 8f),
+                    NativeUiUtils.dp(activity, 8f),
+                    NativeUiUtils.dp(activity, 8f)
+                )
+                visibility = View.GONE // Initially hidden
+
+                setOnClickListener {
+                    input.setText("") // Clear the EditText
+                    // TextWatcher will handle notifying the web view and hiding the button
+                }
+                // Set layout params for the button
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            }
+
+            // 1. Add EditText
+            searchRow.addView(input)
+            // 2. Add Close Button
+            searchRow.addView(button)
+
+            // inputContainer (was the old search container wrapper)
+            val inputContainer = LinearLayout(activity).apply {
+                // Add horizontal padding for the search box container
+                setPadding(
+                    NativeUiUtils.dp(activity, HORIZONTAL_PADDING_DP),
+                    NativeUiUtils.dp(activity, VERTICAL_PADDING_DP),
+                    NativeUiUtils.dp(activity, HORIZONTAL_PADDING_DP),
+                    NativeUiUtils.dp(activity, VERTICAL_PADDING_DP)
+                )
+                orientation = LinearLayout.VERTICAL
+                // Add the new searchRow (input + button)
+                addView(searchRow, 0, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+                // Add a divider below the search box (optional visual polish)
+                val divider = View(activity).apply {
+                    layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, NativeUiUtils.dp(activity, 1f))
+                    setBackgroundColor(Color.parseColor("#E0E0E0")) // Light Gray
+                }
+                addView(divider, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, NativeUiUtils.dp(activity, 1f)))
+            }
 
             // Insert the inputContainer into the main searchContainer
             container.addView(inputContainer, 0, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             searchInput = input
+            closeButton = button
         }
 
         // Search Results Setup
@@ -319,24 +362,21 @@ class LiquidTabsPlugin : Plugin() {
         return LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
 
-            // Apply vertical padding for the row item. Horizontal padding is on the parent (resultsContainer)
+            // Apply vertical padding for the row item, using RESULT_ROW_VERTICAL_PADDING_DP (10f)
+            // for both top and bottom to ensure they are equal.
             setPadding(0,
-                       NativeUiUtils.dp(activity, RESULT_ROW_VERTICAL_PADDING_DP),
-                       0,
-                       NativeUiUtils.dp(activity, RESULT_ROW_VERTICAL_PADDING_DP)
+                NativeUiUtils.dp(activity, RESULT_ROW_VERTICAL_PADDING_DP), // TOP: 10f
+                0,
+                NativeUiUtils.dp(activity, RESULT_ROW_VERTICAL_PADDING_DP)  // BOTTOM: 10f
             )
 
-            // Add a separator line (polishing detail)
-            val separator = View(activity).apply {
-                 layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, NativeUiUtils.dp(activity, 1f))
-                 setBackgroundColor(Color.parseColor("#E0E0E0")) // Light Gray
-            }
-            addView(separator)
+            // REMOVED: The separator View code was here, which caused the first search item
+            // to have a redundant top border/divider.
 
             val subtitleText = result.subtitle
             if (subtitleText != null &&
-                        !subtitleText.isNullOrBlank() &&
-                        subtitleText.lowercase() != "null") {
+                !subtitleText.isNullOrBlank() &&
+                subtitleText.lowercase() != "null") {
 
                 val sub = TextView(activity).apply {
                     text = subtitleText
