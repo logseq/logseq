@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -24,6 +25,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.platform.ComposeView
@@ -61,6 +63,7 @@ class LiquidTabsPlugin : Plugin() {
 
     // 💡 NEW: Define padding for the Tab Bar edges (makes it compact and adds left/right space)
     private val TAB_BAR_HORIZONTAL_PADDING = 12.dp
+    private val ACCENT_COLOR_HEX = "#6097c7"
 
     @PluginMethod
     fun configureTabs(call: PluginCall) {
@@ -265,6 +268,7 @@ class LiquidTabsPlugin : Plugin() {
             val input = EditText(activity).apply {
                 hint = "Search"
                 setSingleLine(true)
+                setTextColor(Color.BLACK)
                 // Remove EditText default background/border for a flat look
                 setBackgroundColor(Color.TRANSPARENT)
 
@@ -437,17 +441,24 @@ class LiquidTabsPlugin : Plugin() {
                 val icon = remember(tab.systemImage, tab.id) {
                     MaterialIconResolver.resolve(tab.systemImage) ?: MaterialIconResolver.resolve(tab.id)
                 }
+                val accent = ComposeColor(NativeUiUtils.parseColor(ACCENT_COLOR_HEX, Color.parseColor(ACCENT_COLOR_HEX)))
 
                 NavigationBarItem(
                     selected = selected,
                     onClick = { onSelect(tab) },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = accent,
+                        selectedTextColor = accent,
+                        indicatorColor = accent.copy(alpha = 0.12f)
+                    ),
                     icon = {
                         Icon(
                             imageVector = icon ?: Icons.Filled.Circle,
                             contentDescription = tab.title
                         )
                     },
-                    label = { Text(tab.title) }
+                    // Slightly reduce the default Material3 gap between icon and label.
+                    label = { Text(tab.title, modifier = Modifier.offset(y = (-4).dp)) }
                 )
             }
         }

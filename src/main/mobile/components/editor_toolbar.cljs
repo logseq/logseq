@@ -1,7 +1,6 @@
 (ns mobile.components.editor-toolbar
   "Mobile editor toolbar"
-  (:require [frontend.colors :as colors]
-            [frontend.commands :as commands]
+  (:require [frontend.commands :as commands]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.history :as history]
             [frontend.mobile.camera :as mobile-camera]
@@ -202,8 +201,7 @@
        (when (mobile-util/native-platform?)
          (when should-show?
            (.present plugin (clj->js {:actions native-actions
-                                      :trailingAction trailing-native
-                                      :tintColor (colors/get-accent-color)}))))
+                                      :trailingAction trailing-native}))))
        #(when (and (mobile-util/native-platform?) should-show?)
           (.dismiss plugin)))
      [should-show? native-actions trailing-native])
