@@ -22,19 +22,27 @@
 (defn convert-file-src [path-str]
   (.convertFileSrc Capacitor path-str))
 
+(defn plugin-available?
+  "Check if a native plugin is available from Capacitor.Plugins."
+  [name]
+  (boolean (aget (.-Plugins js/Capacitor) name)))
+
 (defonce folder-picker (registerPlugin "FolderPicker"))
 (defonce ui-local (registerPlugin "UILocal"))
-(defonce native-top-bar nil)
-(defonce native-bottom-sheet nil)
-(defonce native-editor-toolbar nil)
-(defonce native-selection-action-bar nil)
-(defonce ios-utils nil)
-(when (native-ios?)
-  (set! native-top-bar (registerPlugin "NativeTopBarPlugin"))
-  (set! native-bottom-sheet (registerPlugin "NativeBottomSheetPlugin"))
-  (set! native-editor-toolbar (registerPlugin "NativeEditorToolbarPlugin"))
-  (set! native-selection-action-bar (registerPlugin "NativeSelectionActionBarPlugin"))
-  (set! ios-utils (registerPlugin "Utils")))
+(defonce native-top-bar (when (and (native-platform?)
+                                   (plugin-available? "NativeTopBarPlugin"))
+                          (registerPlugin "NativeTopBarPlugin")))
+(defonce native-bottom-sheet (when (and (native-platform?)
+                                        (plugin-available? "NativeBottomSheetPlugin"))
+                               (registerPlugin "NativeBottomSheetPlugin")))
+(defonce native-editor-toolbar (when (and (native-platform?)
+                                          (plugin-available? "NativeEditorToolbarPlugin"))
+                                 (registerPlugin "NativeEditorToolbarPlugin")))
+(defonce native-selection-action-bar (when (and (native-platform?)
+                                                (plugin-available? "NativeSelectionActionBarPlugin"))
+                                       (registerPlugin "NativeSelectionActionBarPlugin")))
+(defonce ios-utils (when (native-ios?) (registerPlugin "Utils")))
+(defonce android-utils (when (native-android?) (registerPlugin "Utils")))
 
 (defonce ios-content-size-listener nil)
 
@@ -70,6 +78,21 @@
     (p/do!
      (.setInterfaceStyle ^js ios-utils (clj->js {:mode mode
                                                  :system system?})))))
+
+(defn set-android-interface-style!
+  [mode system?]
+  (when (native-android?)
+    (p/do!
+     (.setInterfaceStyle ^js android-utils (clj->js {:mode mode
+                                                     :system system?})))))
+
+(defn set-native-interface-style!
+  "Sync native light/dark/system appearance with Logseq theme mode."
+  [mode system?]
+  (cond
+    (native-ios?) (set-ios-interface-style! mode system?)
+    (native-android?) (set-android-interface-style! mode system?)
+    :else nil))
 
 (defn get-idevice-model
   []
@@ -158,11 +181,11 @@
                   accessibility (assoc :accessibility accessibility))]
     (cond
       (not title) (p/rejected (js/Error. "title is required"))
-      (native-ios?) (.alert ^js ui-local (clj->js payload))
+      (native-platform?) (.alert ^js ui-local (clj->js payload))
       :else (p/resolved nil))))
 
 (defn hide-alert []
-  (if (native-ios?)
+  (if (native-platform?)
     (.hideAlert ^js ui-local)
     (p/resolved nil)))
 
