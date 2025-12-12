@@ -2,7 +2,6 @@ package com.logseq.app
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmarks
-import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Close
@@ -11,7 +10,11 @@ import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.AddCircle
+import androidx.compose.material.icons.outlined.DataArray
+import androidx.compose.material.icons.outlined.KeyboardCommandKey
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.BookmarkAdd
@@ -59,9 +62,9 @@ object MaterialIconResolver {
             "paperplane", "send" -> Icons.Filled.Send
             "todo", "checkmark-square" -> Icons.Outlined.CheckBox
             "number", "tag" -> Icons.Outlined.LocalOffer
-            "parentheses" -> Icons.Outlined.Code
-            "command", "slash" -> Icons.Filled.Menu
-            "camera" -> Icons.Filled.CameraAlt
+            "parentheses" -> Icons.Outlined.DataArray
+            "command", "slash" -> Icons.Outlined.KeyboardCommandKey
+            "camera" -> Icons.Outlined.CameraAlt
             "keyboard-chevron-compact-down", "keyboard-hide" -> Icons.Outlined.KeyboardHide
             "doc-on-doc", "copy" -> Icons.Outlined.ContentCopy
             "trash", "delete" -> Icons.Outlined.Delete
@@ -70,7 +73,7 @@ object MaterialIconResolver {
             "xmark", "close" -> Icons.Filled.Close
             "house", "home" -> Icons.Filled.Home
             "app-background-dotted" -> Icons.Outlined.Dashboard
-            "tray", "upload" -> Icons.Filled.CloudUpload
+            "tray", "add" -> Icons.Outlined.AddCircle
             "square-stack-3d-down-right", "layers" -> Icons.Filled.Layers
             "magnifyingglass", "search" -> Icons.Outlined.Search
             "go-to", "goto" -> Icons.Outlined.Explore
