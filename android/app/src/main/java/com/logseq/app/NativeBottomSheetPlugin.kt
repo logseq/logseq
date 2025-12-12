@@ -37,6 +37,7 @@ class NativeBottomSheetPlugin : Plugin() {
         }
 
         activity.runOnUiThread {
+            WebViewSnapshotManager.registerWindow(activity.window)
             if (dialog != null) {
                 call.resolve()
                 return@runOnUiThread

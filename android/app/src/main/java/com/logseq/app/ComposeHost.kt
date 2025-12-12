@@ -64,6 +64,7 @@ object ComposeHost {
         onBackRequested: () -> Unit,
         onExit: () -> Unit = { activity.finish() }
     ) {
+        WebViewSnapshotManager.registerWindow(activity.window)
         val root = activity.findViewById<FrameLayout>(android.R.id.content)
 
         // WebView already created by BridgeActivity; just reparent it into Compose.
