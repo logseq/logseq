@@ -255,21 +255,22 @@
                                                 (:db/id extend))))
 
 (defn get-tag [class-uuid-or-ident-or-title]
-  (this-as
-   this
-   (let [title-or-ident (-> (if-not (string? class-uuid-or-ident-or-title)
-                              (str class-uuid-or-ident-or-title)
-                              class-uuid-or-ident-or-title)
-                            (string/replace #"^:+" ""))
-         eid (if (text/namespace-page? title-or-ident)
-               (keyword title-or-ident)
-               (if (util/uuid-string? title-or-ident)
-                 (when-let [id (sdk-utils/uuid-or-throw-error title-or-ident)]
-                   [:block/uuid id])
-                 (keyword (api-block/resolve-class-prefix-for-db this) title-or-ident)))
-         tag (db/entity eid)]
-     (when (ldb/class? tag)
-       (sdk-utils/result->js tag)))))
+  (this-as this
+    (let [eid (if (number? class-uuid-or-ident-or-title)
+                class-uuid-or-ident-or-title
+                (let [title-or-ident (-> (if-not (string? class-uuid-or-ident-or-title)
+                                           (str class-uuid-or-ident-or-title)
+                                           class-uuid-or-ident-or-title)
+                                         (string/replace #"^:+" ""))]
+                  (if (text/namespace-page? title-or-ident)
+                    (keyword title-or-ident)
+                    (if (util/uuid-string? title-or-ident)
+                      (when-let [id (sdk-utils/uuid-or-throw-error title-or-ident)]
+                        [:block/uuid id])
+                      (keyword (api-block/resolve-class-prefix-for-db this) title-or-ident)))))
+          tag (db/entity eid)]
+      (when (ldb/class? tag)
+        (sdk-utils/result->js tag)))))
 
 (defn tag-add-property [tag-id property-id-or-name]
   (p/let [tag (db/get-case-page tag-id)

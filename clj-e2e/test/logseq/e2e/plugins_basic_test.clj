@@ -344,7 +344,22 @@
           tag2 (ls-api-call! :editor.getTag title)
           tag3 (ls-api-call! :editor.getTag title-ident)
           tag4 (ls-api-call! :editor.getTag (get tag1 "uuid"))]
-      (is (= (get tag1 "ident") title-ident) "create tag ident")
-      (is (= (get tag2 "ident") title-ident) "get tag title")
-      (is (= (get tag3 "title") title) "get tag ident")
-      (is (= (get tag4 "title") title) "get tag uuid"))))
+      (is (= (get tag1 "ident") title-ident) "create tag with title from test as plugin")
+      (is (= (get tag2 "ident") title-ident) "get tag with title")
+      (is (= (get tag3 "title") title) "get tag with ident")
+      (is (= (get tag4 "title") title) "get tag with uuid")))
+
+  (testing "add and remove tag extends"
+    (let [tag1 (ls-api-call! :editor.createTag "tag1")
+          tag2 (ls-api-call! :editor.createTag "tag2")
+          tag3 (ls-api-call! :editor.createTag "tag3")
+          id1 (get tag1 "id")
+          id2 (get tag2 "id")
+          id3 (get tag3 "id")
+          _ (ls-api-call! :editor.addTagExtends id1 id2)
+          tag1 (ls-api-call! :editor.getTag id1)]
+      (is (= (get tag1 ":logseq.property.class/extends") [id2]) "tag1 extends tag2 with db id")
+      (let [_ (ls-api-call! :editor.addTagExtends id1 id3)
+            tag1 (ls-api-call! :editor.getTag id1)]
+        (is (= (get tag1 ":logseq.property.class/extends") [id2 id3]) "tag1 extends tag2,tag3 with db ids"))
+      )))
