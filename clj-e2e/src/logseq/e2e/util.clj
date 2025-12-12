@@ -7,10 +7,14 @@
             [logseq.e2e.locator :as loc]
             [wally.main :as w]
             [wally.repl :as repl])
-  (:import (com.microsoft.playwright Locator$PressSequentiallyOptions
-                                     Locator$FilterOptions
-                                     Page$GetByTextOptions)
-           (com.microsoft.playwright TimeoutError)))
+  (:import [com.microsoft.playwright
+            Locator$PressSequentiallyOptions
+            Locator$FilterOptions
+            Locator$ClickOptions
+            Page$GetByTextOptions
+            TimeoutError]
+           [com.microsoft.playwright.options
+            MouseButton]))
 
 (defn repeat-until-visible
   [n q repeat-fn]
@@ -210,3 +214,7 @@
   (if exact?
     (.getByText (w/get-page) text (.setExact (Page$GetByTextOptions.) true))
     (.getByText (w/get-page) text)))
+
+(defn right-click
+  [q]
+  (w/click q (-> (Locator$ClickOptions.) (.setButton MouseButton/RIGHT))))
