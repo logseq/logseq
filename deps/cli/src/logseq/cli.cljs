@@ -116,15 +116,14 @@
     :spec default-spec
     :fn default-command}])
 
-(defn- error-if-db-version-not-installed
+(defn- warn-if-db-version-not-installed
   []
   (when-not (fs/existsSync (cli-common-graph/get-db-graphs-dir))
-    (println "Error: The database version's desktop app is not installed. Please install per https://github.com/logseq/logseq/#-database-version.")
-    (js/process.exit 1)))
+    (println "[WARN] The database version's desktop app is not installed. Please install per https://github.com/logseq/logseq/#-database-version.")))
 
 (defn ^:api -main [& args]
   (when-not (contains? #{nil "-h" "--help"} (first args))
-    (error-if-db-version-not-installed))
+    (warn-if-db-version-not-installed))
   (try
     (cli/dispatch table
                   args
