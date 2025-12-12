@@ -54,9 +54,6 @@ object WebViewSnapshotManager {
         val container = containerRefs.remove(tag)?.get()
         if (view != null && container != null) {
             container.removeView(view)
-            container.setBackgroundColor(Color.TRANSPARENT)
-            container.alpha = 1f
-            container.visibility = View.GONE
         }
     }
 

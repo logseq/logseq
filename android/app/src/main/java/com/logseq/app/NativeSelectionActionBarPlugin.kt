@@ -251,6 +251,7 @@ private fun SelectionActionButton(
     onAction: (String) -> Unit
 ) {
     val icon = remember(action.systemIcon) { MaterialIconResolver.resolve(action.systemIcon) }
+    val contentTint = remember(tint) { tint.copy(alpha = 0.8f) }
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -263,13 +264,13 @@ private fun SelectionActionButton(
             Icon(
                 imageVector = icon,
                 contentDescription = action.title.ifBlank { action.id },
-                tint = tint,
+                tint = contentTint,
                 modifier = Modifier.size(22.dp)
             )
         }
         Text(
             text = action.title,
-            color = tint,
+            color = contentTint,
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center

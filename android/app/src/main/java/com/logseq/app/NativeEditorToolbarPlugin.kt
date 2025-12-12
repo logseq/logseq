@@ -235,6 +235,7 @@ private fun ToolbarButton(
     onAction: (String) -> Unit
 ) {
     val icon = remember(action.systemIcon) { MaterialIconResolver.resolve(action.systemIcon) }
+    val contentTint = remember(tint) { tint.copy(alpha = 0.8f) }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -246,7 +247,7 @@ private fun ToolbarButton(
             Icon(
                 imageVector = icon,
                 contentDescription = action.title.ifBlank { action.id },
-                tint = tint,
+                tint = contentTint,
                 modifier = Modifier
                     .defaultMinSize(minWidth = 20.dp)
                     .padding(end = 2.dp)
@@ -254,7 +255,7 @@ private fun ToolbarButton(
         } else {
             Text(
                 text = action.title,
-                color = tint,
+                color = contentTint,
                 fontSize = 14.sp
             )
         }

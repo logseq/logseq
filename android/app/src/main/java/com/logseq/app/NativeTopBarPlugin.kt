@@ -224,6 +224,7 @@ private fun TopBarContent(
     val theme by LogseqTheme.colors.collectAsState()
     val background = ComposeColor(theme.background)
     val tint = tintOverride?.let { ComposeColor(it) } ?: ComposeColor(theme.tint)
+    val contentTint = tint.copy(alpha = 0.8f)
 
     Surface(
         color = background,
@@ -245,13 +246,13 @@ private fun TopBarContent(
                     if (index > 0) {
                         Spacer(modifier = Modifier.width(8.dp))
                     }
-                    TopBarButton(button, tint, onTap)
+                    TopBarButton(button, contentTint, onTap)
                 }
             }
 
             Text(
                 text = title,
-                color = tint,
+                color = contentTint,
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
@@ -276,7 +277,7 @@ private fun TopBarContent(
                     if (index > 0) {
                         Spacer(modifier = Modifier.width(8.dp))
                     }
-                    TopBarButton(button, tint, onTap)
+                    TopBarButton(button, contentTint, onTap)
                 }
             }
         }
@@ -290,9 +291,10 @@ private fun TopBarButton(
     onTap: (String) -> Unit
 ) {
     val icon = remember(spec.systemIcon) { MaterialIconResolver.resolve(spec.systemIcon) }
-    val tint = remember(spec.tint, fallbackTint) {
+    val baseTint = remember(spec.tint, fallbackTint) {
         spec.tint?.let { ComposeColor(NativeUiUtils.parseColor(it, fallbackTint.toArgb())) } ?: fallbackTint
     }
+    val tint = remember(baseTint) { baseTint.copy(alpha = 0.8f) }
     val fontSize = when (spec.size.lowercase()) {
         "small" -> 13.sp
         "large" -> 17.sp
