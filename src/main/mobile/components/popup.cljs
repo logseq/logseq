@@ -41,8 +41,7 @@
 
 (defn- handle-native-sheet-state!
   [^js data]
-  (let [;; presenting? (.-presenting data)
-        dismissing? (.-dismissing data)]
+  (let [dismissing? (.-dismissing data)]
     (cond
       dismissing?
       (when (some? @mobile-state/*popup-data)
@@ -57,8 +56,8 @@
       nil)))
 
 (defonce native-sheet-listener
-  (when-let [^js plugin (when (and (mobile-util/native-platform?)
-                                   mobile-util/native-bottom-sheet))]
+  (when-let [^js plugin (when (mobile-util/native-platform?)
+                          mobile-util/native-bottom-sheet)]
     (.addListener plugin "state" handle-native-sheet-state!)))
 
 (defn- wrap-calc-commands-popup-side
