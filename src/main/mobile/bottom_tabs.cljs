@@ -4,6 +4,7 @@
             [clojure.string :as string]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
             [mobile.navigation :as mobile-nav]
@@ -80,7 +81,7 @@
      (fn [data]
        (when-let [id (.-id data)]
          (when-not (string/blank? id)
-           (route-handler/redirect-to-page! id {:push false})))))))
+           (route-handler/redirect-to-page! id {:push (mobile-util/native-android?)})))))))
 
 (defn add-keyboard-hack-listener!
   "Listen for Backspace or Enter while the invisible keyboard field is focused."

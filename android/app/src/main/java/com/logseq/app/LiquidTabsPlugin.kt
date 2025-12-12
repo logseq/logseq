@@ -36,6 +36,9 @@ import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
 
+// NOTE: NativeUiUtils and MaterialIconResolver are assumed to be defined elsewhere in your project
+// and are necessary for this code to compile.
+
 @CapacitorPlugin(name = "LiquidTabsPlugin")
 class LiquidTabsPlugin : Plugin() {
     private var bottomNav: ComposeView? = null
@@ -114,11 +117,26 @@ class LiquidTabsPlugin : Plugin() {
         } ?: call.resolve()
     }
 
+    /**
+     * FIX: Allows the web view to explicitly show the search UI again,
+     * typically after backing out of an opened search result item.
+     */
+    @PluginMethod
+    fun showSearchUiNative(call: PluginCall) {
+        activity?.runOnUiThread {
+            showSearchUi()
+            // Ensure padding is correct when search UI is manually shown
+            adjustWebViewPadding()
+            call.resolve()
+        } ?: call.resolve()
+    }
+
+
     private fun ensureNav(): ComposeView {
         val activity = activity ?: throw IllegalStateException("No activity")
         val root = NativeUiUtils.contentRoot(activity)
         val nav = bottomNav ?: ComposeView(activity).also { view ->
-            view.id = R.id.liquid_tabs_bottom_nav
+            view.id = R.id.liquid_tabs_bottom_nav // Assuming R.id.liquid_tabs_bottom_nav is defined
             view.setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             view.layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -369,9 +387,6 @@ class LiquidTabsPlugin : Plugin() {
                 0,
                 NativeUiUtils.dp(activity, RESULT_ROW_VERTICAL_PADDING_DP)  // BOTTOM: 10f
             )
-
-            // REMOVED: The separator View code was here, which caused the first search item
-            // to have a redundant top border/divider.
 
             val subtitleText = result.subtitle
             if (subtitleText != null &&

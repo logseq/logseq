@@ -238,6 +238,12 @@
   (let [stack (current-stack)
         {:keys [history]} (get @stack-history stack)
         history (vec history)]
+    ;; back to search root
+    (when (and
+           (mobile-util/native-android?)
+           (= stack "search")
+           (= (count history) 2))
+      (.showSearchUiNative ^js (.. js/Capacitor -Plugins -LiquidTabsPlugin)))
     (when (>= (count history) 1)
       (let [root-history? (= (count history) 1)
             new-history (if root-history?
