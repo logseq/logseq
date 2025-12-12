@@ -132,29 +132,33 @@
   (->> properties
        (keep (fn [[k v]]
                (when-let [property-map (build-property-map-for-pvalue-tx k v new-block properties-config all-idents)]
-                 [(let [pvalue-attrs (when (:build/property-value v)
-                                       (merge (:build/properties v)
-                                              {:block/tags (mapv #(hash-map :db/ident (get-ident all-idents %))
-                                                                 (:build/tags v))}
-                                              (select-keys v [:block/created-at :block/updated-at :block/uuid])))]
-                    (cond-> property-map
-                      (and (:build/property-value v) (seq pvalue-attrs))
-                      (assoc :property-value-properties pvalue-attrs)))
+                 [property-map
                   (let [property (when (keyword? k) (get properties-config k))
                         closed-value-id (when property (some (fn [item]
                                                                (when (= (:value item) v)
                                                                  (:uuid item)))
-                                                             (get property :build/closed-values)))]
-                    (cond
-                      closed-value-id
-                      closed-value-id
+                                                             (get property :build/closed-values)))
+                        build-pvalue
+                        (fn build-pvalue [v]
+                          {:attributes
+                           (when (:build/property-value v)
+                             (merge (:build/properties v)
+                                    {:block/tags (mapv #(hash-map :db/ident (get-ident all-idents %))
+                                                       (:build/tags v))}
+                                    (select-keys v [:block/created-at :block/updated-at :block/uuid])))
+                           :value
+                           (cond
+                             closed-value-id
+                             closed-value-id
 
-                      (:build/property-value v)
-                      (or (:logseq.property/value v) (:block/title v))
+                             (:build/property-value v)
+                             (or (:logseq.property/value v) (:block/title v))
 
-                      :else
-                      v))])))
-       (db-property-build/build-property-values-tx-m new-block)))
+                             :else
+                             v)})]
+                      (if (set? v) (set (map build-pvalue v)) (build-pvalue v)))])))
+       ((fn [x]
+          (db-property-build/build-property-values-tx-m new-block x {:pvalue-map? true})))))
 
 (defn- extract-basic-content-refs
   "Extracts basic refs from :block/title like `[[foo]]` or `[[UUID]]`. Can't
