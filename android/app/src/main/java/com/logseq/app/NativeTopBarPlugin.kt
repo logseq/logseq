@@ -145,7 +145,13 @@ class NativeTopBarPlugin : Plugin() {
             val systemIcon = obj.optString("systemIcon", "")
             val title = obj.optString("title", id)
             val tintHex = obj.optString("tintColor", obj.optString("color", ""))
-            val size = obj.optString("size", "medium")
+            val iconSize = if (id == "sync") {
+                "small"
+            } else {
+                "medium"
+            }
+
+            val size = obj.optString("size", iconSize)
             result.add(
                 ButtonSpec(
                     id = id,
@@ -295,11 +301,16 @@ private fun TopBarButton(
             .padding(horizontal = 8.dp, vertical = 6.dp)
     ) {
         if (icon != null) {
+            val iconSize = if (spec.size.lowercase() == "small") {
+                12.dp
+            } else {
+                22.dp
+            }
             Icon(
                 imageVector = icon,
                 contentDescription = spec.title.ifBlank { spec.id },
                 tint = tint,
-                modifier = Modifier.size(22.dp)
+                modifier = Modifier.size(iconSize)
             )
         } else {
             Text(
