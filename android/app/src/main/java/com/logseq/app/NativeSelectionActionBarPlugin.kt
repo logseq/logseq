@@ -5,15 +5,20 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -25,6 +30,7 @@ import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.ViewCompat
@@ -190,19 +196,47 @@ private fun SelectionActionBar(
     background: ComposeColor,
     onAction: (String) -> Unit
 ) {
+    val (mainActions, trailingAction) = remember(actions) {
+        val primary = if (actions.size > 1) actions.dropLast(1) else emptyList()
+        Pair(primary, actions.lastOrNull())
+    }
+    val scrollState = rememberScrollState()
+
     Surface(
         color = background,
         shadowElevation = 6.dp,
-        shape = RoundedCornerShape(14.dp)
+        shape = RoundedCornerShape(16.dp)
     ) {
         Row(
             modifier = Modifier
-                .horizontalScroll(rememberScrollState())
                 .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            actions.forEach { action ->
+            if (mainActions.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .horizontalScroll(scrollState),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    mainActions.forEach { action ->
+                        SelectionActionButton(action, tint, onAction)
+                    }
+                }
+            }
+
+            trailingAction?.let { action ->
+                if (mainActions.isNotEmpty()) {
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Divider(
+                        modifier = Modifier
+                            .height(28.dp)
+                            .width(1.dp),
+                        color = tint.copy(alpha = 0.15f)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                }
                 SelectionActionButton(action, tint, onAction)
             }
         }
@@ -216,27 +250,28 @@ private fun SelectionActionButton(
     onAction: (String) -> Unit
 ) {
     val icon = remember(action.systemIcon) { MaterialIconResolver.resolve(action.systemIcon) }
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
         modifier = Modifier
-            .defaultMinSize(minWidth = 48.dp)
+            .defaultMinSize(minWidth = 56.dp)
             .clickable { onAction(action.id) }
-            .padding(horizontal = 10.dp, vertical = 6.dp)
+            .padding(horizontal = 6.dp, vertical = 8.dp)
     ) {
         if (icon != null) {
             Icon(
                 imageVector = icon,
                 contentDescription = action.title.ifBlank { action.id },
                 tint = tint,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(22.dp)
             )
         }
         Text(
             text = action.title,
             color = tint,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center
         )
     }
 }
