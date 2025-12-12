@@ -126,7 +126,7 @@
     ;; Both are absolutely positioned and stacked; we toggle visibility.
     [:div.w-full.relative
         ;; Journals scroll container (keep-alive)
-     [:div#app-main-home.pl-3.pr-2.absolute.inset-0
+     [:div#app-main-home.pl-4.pr-3.absolute.inset-0
       {:class (when-not home? "invisible pointer-events-none")}
       (home)]
 
