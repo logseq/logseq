@@ -97,7 +97,7 @@ class UILocal : Plugin() {
       return
     }
     if (message.isNullOrBlank()) {
-      call.reject("message is required")
+      call.reject("title or message is required")
       return
     }
     toast?.cancel()
