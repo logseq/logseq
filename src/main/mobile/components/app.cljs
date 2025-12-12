@@ -89,7 +89,9 @@
   {:did-mount (fn [state]
                 (p/do!
                  (editor-handler/quick-add-ensure-new-block-exists!)
-                 (editor-handler/quick-add-open-last-block!))
+                 (when (mobile-util/native-ios?)
+                   ;; FIXME: android doesn't open keyboard automatically
+                   (editor-handler/quick-add-open-last-block!)))
                 state)}
   []
   (quick-add/quick-add))
