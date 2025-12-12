@@ -172,11 +172,12 @@ jobs:
       - name: Fetch deps/db yarn deps
         run: cd deps/db && yarn install --frozen-lockfile
 
+      # Can run from deps/db since all JS deps for this command are available in deps/db
       - name: Validate created DB graphs
-        run: cd deps/db && yarn nbb-logseq script/validate_db.cljs ../../scripts/properties-graph ../../scripts/schema-graph --closed-maps --group-errors
+        run: cd deps/db && yarn nbb-logseq -cp src:../cli/src -m logseq.cli validate -g ../../scripts/schema-graph
 
       - name: Export a created DB graph
-        run: cd deps/db && yarn nbb-logseq script/export_graph.cljs ../../scripts/properties-graph -f properties.edn -T
+        run: cd deps/db && yarn nbb-logseq -cp src:../cli/src -m logseq.cli export-edn -g ../../scripts/properties-graph -f properties.edn -T
 
       - name: Create graph from the export and diff the two graphs
         run: cd deps/db && yarn nbb-logseq -cp src:../outliner/src:script script/create_graph.cljs ./properties-graph2 properties.edn -iv && yarn nbb-logseq script/diff_graphs.cljs ../../scripts/properties-graph ./properties-graph2 -T
