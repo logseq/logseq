@@ -182,6 +182,9 @@
                           [{:id "capture" :systemIcon "paperplane"}]
 
                           :else nil)
+          [left-buttons right-buttons] (if (mobile-util/native-android?)
+                                         [(reverse left-buttons) (reverse right-buttons)]
+                                         [left-buttons right-buttons])
           header (cond-> base
                    left-buttons (assoc :leftButtons left-buttons)
                    right-buttons (assoc :rightButtons right-buttons)

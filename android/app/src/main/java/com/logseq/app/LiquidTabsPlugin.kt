@@ -23,9 +23,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.unit.dp // New Import for DP units
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.doOnNextLayout
@@ -55,6 +58,9 @@ class LiquidTabsPlugin : Plugin() {
     private val HORIZONTAL_PADDING_DP = 16f
     private val VERTICAL_PADDING_DP = 12f
     private val RESULT_ROW_VERTICAL_PADDING_DP = 10f
+
+    // 💡 NEW: Define padding for the Tab Bar edges (makes it compact and adds left/right space)
+    private val TAB_BAR_HORIZONTAL_PADDING = 12.dp
 
     @PluginMethod
     fun configureTabs(call: PluginCall) {
@@ -421,7 +427,11 @@ class LiquidTabsPlugin : Plugin() {
         currentId: String?,
         onSelect: (TabSpec) -> Unit
     ) {
-        NavigationBar(containerColor = ComposeColor.White) {
+        NavigationBar(
+            // ⭐️ IMPROVEMENT: Apply horizontal padding to the NavigationBar for a compact look and edge spacing
+            modifier = Modifier.padding(horizontal = TAB_BAR_HORIZONTAL_PADDING),
+            containerColor = ComposeColor.White
+        ) {
             tabs.forEach { tab ->
                 val selected = tab.id == currentId
                 val icon = remember(tab.systemImage, tab.id) {
