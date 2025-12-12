@@ -25,14 +25,10 @@ env:
   BABASHKA_VERSION: '1.0.168'
 
 jobs:
-  rtc-e2e-test-build:
-    name: Test ${{ matrix.test-task }}
+  build:
+    name: Build
     runs-on: ubuntu-22.04
     if: "contains(github.event.head_commit.message, 'rtc')"
-    strategy:
-      fail-fast: false
-      matrix:
-        test-task: [run-rtc-extra-test, run-rtc-extra-part2-test]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -84,13 +80,60 @@ jobs:
       - name: Prepare E2E test build
         run: |
           yarn gulp:build && clojure -M:cljs release app db-worker inference-worker --config-merge "{:closure-defines {frontend.config/DEV-RELEASE true}}" --debug && yarn webpack-app-build
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-build
+          path: static/
+          retention-days: 1
+
+  test:
+    name: Test ${{ matrix.test-task }}
+    needs: build
+    runs-on: ubuntu-22.04
+    if: "contains(github.event.head_commit.message, 'rtc')"
+    strategy:
+      fail-fast: false
+      matrix:
+        test-task: [run-rtc-extra-test, run-rtc-extra-part2-test]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Set up Clojure
+        uses: DeLaGuardo/setup-clojure@10.1
+        with:
+          cli: ${{ env.CLOJURE_VERSION }}
+          bb: ${{ env.BABASHKA_VERSION }}
+
+      - name: Clojure cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+          key: ${{ runner.os }}-clojure-deps-${{ hashFiles('deps.edn') }}
+          restore-keys: ${{ runner.os }}-clojure-deps-
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: static-build
+          path: static
+
+      - name: Prepare public dir
+        run: |
           rsync -avz --exclude node_modules --exclude android --exclude ios ./static/ ./public/
           ls -lR ./public
 
       - name: Run e2e tests
         run: cd clj-e2e && timeout 30m bb ${{ matrix.test-task }}
-        # env:
-        # DEBUG: "pw:api"
 
       - name: Collect screenshots
         if: ${{ failure() }}
