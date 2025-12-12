@@ -47,6 +47,11 @@ class LiquidTabsPlugin : Plugin() {
     private var tabsState by mutableStateOf<List<TabSpec>>(emptyList())
     private var currentTabId by mutableStateOf<String?>(null)
 
+    // Define a standard horizontal padding for consistency
+    private val HORIZONTAL_PADDING_DP = 16f
+    private val VERTICAL_PADDING_DP = 12f
+    private val RESULT_ROW_VERTICAL_PADDING_DP = 10f
+
     @PluginMethod
     fun configureTabs(call: PluginCall) {
         val activity = activity ?: run {
@@ -160,7 +165,12 @@ class LiquidTabsPlugin : Plugin() {
         nav.post {
             val padding = originalBottomPadding ?: 0
             val h = nav.height
-            webView.setPadding(webView.paddingLeft, webView.paddingTop, webView.paddingRight, padding + h)
+            val newPadding = if (searchContainer?.visibility == View.VISIBLE) {
+                padding
+            } else {
+                padding + h
+            }
+            webView.setPadding(webView.paddingLeft, webView.paddingTop, webView.paddingRight, newPadding)
         }
     }
 
@@ -189,41 +199,69 @@ class LiquidTabsPlugin : Plugin() {
     private fun showSearchUi() {
         val activity = activity ?: return
         val root = NativeUiUtils.contentRoot(activity)
+
+        // Calculate status bar height for safe area padding
+        val insets = ViewCompat.getRootWindowInsets(root)
+        val statusBarHeight = insets?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0
+
         val container = searchContainer ?: LinearLayout(activity).also { layout ->
             layout.orientation = LinearLayout.VERTICAL
-            layout.setBackgroundColor(Color.parseColor("#F5F5F5"))
+            layout.setBackgroundColor(Color.WHITE)
+
             val lp = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.BOTTOM
+                ViewGroup.LayoutParams.MATCH_PARENT
             )
-            lp.setMargins(
-                NativeUiUtils.dp(activity, 12f),
-                NativeUiUtils.dp(activity, 12f),
-                NativeUiUtils.dp(activity, 12f),
-                bottomNav?.height ?: NativeUiUtils.dp(activity, 56f)
-            )
-            layout.elevation = NativeUiUtils.dp(activity, 4f).toFloat()
-            layout.setPadding(
-                NativeUiUtils.dp(activity, 12f),
-                NativeUiUtils.dp(activity, 12f),
-                NativeUiUtils.dp(activity, 12f),
-                NativeUiUtils.dp(activity, 12f)
-            )
+
+            // Set bottom margin to clear the bottom navigation bar
+            lp.setMargins(0, 0, 0, bottomNav?.height ?: NativeUiUtils.dp(activity, 56f))
+
+            // Remove elevation/shadow
+            layout.elevation = 0f
+
+            // Apply status bar height as top padding for safe area
+            layout.setPadding(0, statusBarHeight, 0, 0)
+
             root.addView(layout, lp)
             searchContainer = layout
         }
 
+        // Re-apply top padding in case insets were not available on first run
+        container.setPadding(0, statusBarHeight, 0, 0)
+
+        // Search Input Setup
         if (searchInput == null) {
+            val inputContainer = LinearLayout(activity).apply {
+                // Add horizontal padding for the search box container
+                setPadding(
+                    NativeUiUtils.dp(activity, HORIZONTAL_PADDING_DP),
+                    NativeUiUtils.dp(activity, VERTICAL_PADDING_DP),
+                    NativeUiUtils.dp(activity, HORIZONTAL_PADDING_DP),
+                    NativeUiUtils.dp(activity, VERTICAL_PADDING_DP)
+                )
+                orientation = LinearLayout.VERTICAL
+                // Add a divider below the search box (optional visual polish)
+                val divider = View(activity).apply {
+                    layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, NativeUiUtils.dp(activity, 1f))
+                    setBackgroundColor(Color.parseColor("#E0E0E0")) // Light Gray
+                }
+                addView(divider, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, NativeUiUtils.dp(activity, 1f)))
+            }
+
             val input = EditText(activity).apply {
                 hint = "Search"
                 setSingleLine(true)
+                // Remove EditText default background/border for a flat look
+                setBackgroundColor(Color.TRANSPARENT)
+
+                // Fine-tune padding inside the EditText for text alignment
                 setPadding(
-                    NativeUiUtils.dp(activity, 8f),
+                    NativeUiUtils.dp(activity, 0f),
                     NativeUiUtils.dp(activity, 10f),
-                    NativeUiUtils.dp(activity, 8f),
+                    NativeUiUtils.dp(activity, 0f),
                     NativeUiUtils.dp(activity, 10f)
                 )
+
                 setOnKeyListener { _, keyCode, event ->
                     if (event.action == KeyEvent.ACTION_DOWN) {
                         when (keyCode) {
@@ -241,17 +279,31 @@ class LiquidTabsPlugin : Plugin() {
                     }
                 })
             }
-            container.addView(input, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+            // Insert the EditText at the top of inputContainer
+            inputContainer.addView(input, 0, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+            // Insert the inputContainer into the main searchContainer
+            container.addView(inputContainer, 0, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             searchInput = input
         }
 
+        // Search Results Setup
         if (resultsContainer == null) {
             val scroll = ScrollView(activity)
             val inner = LinearLayout(activity).apply {
                 orientation = LinearLayout.VERTICAL
+                // Apply horizontal padding for the list of results
+                setPadding(
+                    NativeUiUtils.dp(activity, HORIZONTAL_PADDING_DP), // Left
+                    NativeUiUtils.dp(activity, 0f),  // Top
+                    NativeUiUtils.dp(activity, HORIZONTAL_PADDING_DP), // Right
+                    NativeUiUtils.dp(activity, 12f)  // Bottom
+                )
             }
             scroll.addView(inner, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-            container.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            // The ScrollView should take up the rest of the vertical space
+            container.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
             resultsContainer = inner
         }
 
@@ -266,27 +318,43 @@ class LiquidTabsPlugin : Plugin() {
         val activity = activity ?: throw IllegalStateException("No activity")
         return LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(
-                NativeUiUtils.dp(activity, 8f),
-                NativeUiUtils.dp(activity, 10f),
-                NativeUiUtils.dp(activity, 8f),
-                NativeUiUtils.dp(activity, 10f)
+
+            // Apply vertical padding for the row item. Horizontal padding is on the parent (resultsContainer)
+            setPadding(0,
+                       NativeUiUtils.dp(activity, RESULT_ROW_VERTICAL_PADDING_DP),
+                       0,
+                       NativeUiUtils.dp(activity, RESULT_ROW_VERTICAL_PADDING_DP)
             )
+
+            // Add a separator line (polishing detail)
+            val separator = View(activity).apply {
+                 layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, NativeUiUtils.dp(activity, 1f))
+                 setBackgroundColor(Color.parseColor("#E0E0E0")) // Light Gray
+            }
+            addView(separator)
+
+            val subtitleText = result.subtitle
+            if (subtitleText != null &&
+                        !subtitleText.isNullOrBlank() &&
+                        subtitleText.lowercase() != "null") {
+
+                val sub = TextView(activity).apply {
+                    text = subtitleText
+                    setTextColor(Color.DKGRAY)
+                    textSize = 13f
+                }
+                addView(sub)
+            }
+
             val titleView = TextView(activity).apply {
                 text = result.title
                 setTextColor(Color.BLACK)
                 textSize = 15f
             }
             addView(titleView)
-            if (!result.subtitle.isNullOrBlank()) {
-                val sub = TextView(activity).apply {
-                    text = result.subtitle
-                    setTextColor(Color.DKGRAY)
-                    textSize = 13f
-                }
-                addView(sub)
-            }
+
             setOnClickListener {
+                hideSearchUi()
                 notifyListeners("openSearchResultBlock", JSObject().put("id", result.id))
             }
         }

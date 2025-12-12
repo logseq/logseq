@@ -146,7 +146,7 @@
   [repo {:keys [tab title route-name route-view sync-color favorited?]}]
   (when (and (mobile-util/native-platform?)
              mobile-util/native-top-bar)
-    (let [hidden? (= tab "search")
+    (let [hidden? (and (mobile-util/native-ios?) (= tab "search"))
           rtc-indicator? (and repo
                               (ldb/get-graph-rtc-uuid (db/get-db))
                               (user-handler/logged-in?))

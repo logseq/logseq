@@ -1,5 +1,6 @@
 package com.logseq.app
 
+import android.graphics.Color
 import android.app.Activity
 import android.net.Uri
 import android.util.Log
@@ -202,6 +203,10 @@ private fun ComposeNavigationHost(
                             isClickable = false
                             isFocusable = false
                         }
+
+                        overlayContainer.setBackgroundColor(Color.TRANSPARENT)
+                        overlayContainer.alpha = 1f
+                        overlayContainer.visibility = android.view.View.GONE
 
                         addView(webContainer)
                         addView(overlayContainer)

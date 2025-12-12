@@ -156,4 +156,8 @@
     {:id "go to"
      :title "Go To"
      :systemImage "square.stack.3d.down.right"
-     :role "normal"}]))
+     :role "normal"}
+    {:id "search"
+     :title "Search"
+     :systemImage "search"
+     :role "search"}]))
