@@ -53,7 +53,13 @@
   (hooks/use-effect!
    (fn []
      (state/sync-system-theme!)
-     (ui/setup-system-theme-effect!))
+     (ui/setup-system-theme-effect!)
+     (let [handler (fn [^js e]
+                     (when (:ui/system-theme? @state/state)
+                       (let [is-dark? (boolean (some-> e .-detail .-isDark))]
+                         (state/set-theme-mode! (if is-dark? "dark" "light") true))))]
+       (.addEventListener js/window "logseq:native-system-theme-changed" handler)
+       #(.removeEventListener js/window "logseq:native-system-theme-changed" handler)))
    [])
   (hooks/use-effect!
    #(let [^js doc js/document.documentElement
@@ -89,7 +95,9 @@
   {:did-mount (fn [state]
                 (p/do!
                  (editor-handler/quick-add-ensure-new-block-exists!)
-                 (editor-handler/quick-add-open-last-block!))
+                 (when (mobile-util/native-ios?)
+                   ;; FIXME: android doesn't open keyboard automatically
+                   (editor-handler/quick-add-open-last-block!)))
                 state)}
   []
   (quick-add/quick-add))
@@ -118,7 +126,7 @@
     ;; Both are absolutely positioned and stacked; we toggle visibility.
     [:div.w-full.relative
         ;; Journals scroll container (keep-alive)
-     [:div#app-main-home.pl-3.pr-2.absolute.inset-0
+     [:div#app-main-home.pl-4.pr-3.absolute.inset-0
       {:class (when-not home? "invisible pointer-events-none")}
       (home)]
 
@@ -134,7 +142,7 @@
     (use-theme-effects! current-repo theme)
     (hooks/use-effect!
      (fn []
-       (when (mobile-util/native-ios?)
+       (when (mobile-util/native-platform?)
          (bottom-tabs/configure))
        (when-let [element (util/app-scroll-container-node)]
          (common-handler/listen-to-scroll! element)))

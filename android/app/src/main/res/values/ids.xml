@@ -1,0 +1,5 @@
+<resources>
+    <item name="webview_container" type="id"/>
+    <item name="webview_overlay_container" type="id"/>
+    <item name="liquid_tabs_bottom_nav" type="id"/>
+</resources>

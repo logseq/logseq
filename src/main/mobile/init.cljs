@@ -3,7 +3,6 @@
   (:require ["@capacitor/app" :refer [^js App]]
             ["@capacitor/keyboard" :refer [^js Keyboard]]
             ["@capacitor/network" :refer [^js Network]]
-            ["@capgo/capacitor-navigation-bar" :refer [^js NavigationBar]]
             [clojure.string :as string]
             [frontend.handler.editor :as editor-handler]
             [frontend.mobile.flows :as mobile-flows]
@@ -46,8 +45,6 @@
 (defn- android-init!
   "Initialize Android-specified event listeners"
   []
-  (js/setTimeout
-   #(.setNavigationBarColor NavigationBar #js {:color "transparent"}) 128)
   (.addListener App "backButton"
                 (fn []
                   (when (false?
