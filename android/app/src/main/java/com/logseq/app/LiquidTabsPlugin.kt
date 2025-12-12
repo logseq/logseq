@@ -20,13 +20,17 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
@@ -152,7 +156,7 @@ class LiquidTabsPlugin : Plugin() {
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.BOTTOM
             )
-            view.setBackgroundColor(Color.WHITE)
+            view.setBackgroundColor(LogseqTheme.current().background)
             bottomNav = view
             root.addView(view)
             setupImeBehaviorForNav(view)
@@ -227,6 +231,10 @@ class LiquidTabsPlugin : Plugin() {
     private fun showSearchUi() {
         val activity = activity ?: return
         val root = NativeUiUtils.contentRoot(activity)
+        val theme = LogseqTheme.current()
+        val labelColor = if (theme.isDark) theme.tint else Color.BLACK
+        val secondaryLabelColor =
+            if (theme.isDark) Color.argb(200, 245, 247, 250) else Color.DKGRAY
 
         // Calculate status bar height for safe area padding
         val insets = ViewCompat.getRootWindowInsets(root)
@@ -234,7 +242,7 @@ class LiquidTabsPlugin : Plugin() {
 
         val container = searchContainer ?: LinearLayout(activity).also { layout ->
             layout.orientation = LinearLayout.VERTICAL
-            layout.setBackgroundColor(Color.WHITE)
+            layout.setBackgroundColor(theme.background)
 
             val lp = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -268,7 +276,8 @@ class LiquidTabsPlugin : Plugin() {
             val input = EditText(activity).apply {
                 hint = "Search"
                 setSingleLine(true)
-                setTextColor(Color.BLACK)
+                setTextColor(labelColor)
+                setHintTextColor(secondaryLabelColor)
                 // Remove EditText default background/border for a flat look
                 setBackgroundColor(Color.TRANSPARENT)
 
@@ -308,7 +317,7 @@ class LiquidTabsPlugin : Plugin() {
             // Close Button
             val button = TextView(activity).apply {
                 text = "X" // Close icon (using simple 'X')
-                setTextColor(Color.DKGRAY)
+                setTextColor(secondaryLabelColor)
                 textSize = 18f
                 gravity = Gravity.CENTER
                 setPadding(
@@ -348,7 +357,9 @@ class LiquidTabsPlugin : Plugin() {
                 // Add a divider below the search box (optional visual polish)
                 val divider = View(activity).apply {
                     layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, NativeUiUtils.dp(activity, 1f))
-                    setBackgroundColor(Color.parseColor("#E0E0E0")) // Light Gray
+                    setBackgroundColor(
+                        if (theme.isDark) Color.argb(40, 245, 247, 250) else Color.parseColor("#E0E0E0")
+                    )
                 }
                 addView(divider, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, NativeUiUtils.dp(activity, 1f)))
             }
@@ -387,6 +398,10 @@ class LiquidTabsPlugin : Plugin() {
 
     private fun makeResultRow(result: SearchResult): View {
         val activity = activity ?: throw IllegalStateException("No activity")
+        val theme = LogseqTheme.current()
+        val labelColor = if (theme.isDark) theme.tint else Color.BLACK
+        val secondaryLabelColor =
+            if (theme.isDark) Color.argb(200, 245, 247, 250) else Color.DKGRAY
         return LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
 
@@ -405,7 +420,7 @@ class LiquidTabsPlugin : Plugin() {
 
                 val sub = TextView(activity).apply {
                     text = subtitleText
-                    setTextColor(Color.DKGRAY)
+                    setTextColor(secondaryLabelColor)
                     textSize = 13f
                 }
                 addView(sub)
@@ -413,7 +428,7 @@ class LiquidTabsPlugin : Plugin() {
 
             val titleView = TextView(activity).apply {
                 text = result.title
-                setTextColor(Color.BLACK)
+                setTextColor(labelColor)
                 textSize = 15f
             }
             addView(titleView)
@@ -431,35 +446,46 @@ class LiquidTabsPlugin : Plugin() {
         currentId: String?,
         onSelect: (TabSpec) -> Unit
     ) {
-        NavigationBar(
-            // ⭐️ IMPROVEMENT: Apply horizontal padding to the NavigationBar for a compact look and edge spacing
-            modifier = Modifier.padding(horizontal = TAB_BAR_HORIZONTAL_PADDING),
-            containerColor = ComposeColor.White
+        val theme by LogseqTheme.colors.collectAsState()
+        val container = ComposeColor(theme.background)
+        val unselected = if (theme.isDark) ComposeColor(theme.tint).copy(alpha = 0.78f) else ComposeColor.Black.copy(alpha = 0.65f)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(container)
+                .padding(horizontal = TAB_BAR_HORIZONTAL_PADDING)
         ) {
-            tabs.forEach { tab ->
-                val selected = tab.id == currentId
-                val icon = remember(tab.systemImage, tab.id) {
-                    MaterialIconResolver.resolve(tab.systemImage) ?: MaterialIconResolver.resolve(tab.id)
-                }
-                val accent = ComposeColor(NativeUiUtils.parseColor(ACCENT_COLOR_HEX, Color.parseColor(ACCENT_COLOR_HEX)))
+            NavigationBar(
+                modifier = Modifier.fillMaxWidth(),
+                containerColor = container
+            ) {
+                tabs.forEach { tab ->
+                    val selected = tab.id == currentId
+                    val icon = remember(tab.systemImage, tab.id) {
+                        MaterialIconResolver.resolve(tab.systemImage) ?: MaterialIconResolver.resolve(tab.id)
+                    }
+                    val accent = ComposeColor(NativeUiUtils.parseColor(ACCENT_COLOR_HEX, Color.parseColor(ACCENT_COLOR_HEX)))
 
-                NavigationBarItem(
-                    selected = selected,
-                    onClick = { onSelect(tab) },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = accent,
-                        selectedTextColor = accent,
-                        indicatorColor = accent.copy(alpha = 0.12f)
-                    ),
-                    icon = {
-                        Icon(
-                            imageVector = icon ?: Icons.Filled.Circle,
-                            contentDescription = tab.title
-                        )
-                    },
-                    // Slightly reduce the default Material3 gap between icon and label.
-                    label = { Text(tab.title, modifier = Modifier.offset(y = (-4).dp)) }
-                )
+                    NavigationBarItem(
+                        selected = selected,
+                        onClick = { onSelect(tab) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = accent,
+                            selectedTextColor = accent,
+                            unselectedIconColor = unselected,
+                            unselectedTextColor = unselected,
+                            indicatorColor = accent.copy(alpha = 0.12f)
+                        ),
+                        icon = {
+                            Icon(
+                                imageVector = icon ?: Icons.Filled.Circle,
+                                contentDescription = tab.title
+                            )
+                        },
+                        // Slightly reduce the default Material3 gap between icon and label.
+                        label = { Text(tab.title, modifier = Modifier.offset(y = (-4).dp)) }
+                    )
+                }
             }
         }
     }

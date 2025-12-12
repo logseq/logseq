@@ -42,6 +42,7 @@
                                                 (plugin-available? "NativeSelectionActionBarPlugin"))
                                        (registerPlugin "NativeSelectionActionBarPlugin")))
 (defonce ios-utils (when (native-ios?) (registerPlugin "Utils")))
+(defonce android-utils (when (native-android?) (registerPlugin "Utils")))
 
 (defonce ios-content-size-listener nil)
 
@@ -77,6 +78,21 @@
     (p/do!
      (.setInterfaceStyle ^js ios-utils (clj->js {:mode mode
                                                  :system system?})))))
+
+(defn set-android-interface-style!
+  [mode system?]
+  (when (native-android?)
+    (p/do!
+     (.setInterfaceStyle ^js android-utils (clj->js {:mode mode
+                                                     :system system?})))))
+
+(defn set-native-interface-style!
+  "Sync native light/dark/system appearance with Logseq theme mode."
+  [mode system?]
+  (cond
+    (native-ios?) (set-ios-interface-style! mode system?)
+    (native-android?) (set-android-interface-style! mode system?)
+    :else nil))
 
 (defn get-idevice-model
   []

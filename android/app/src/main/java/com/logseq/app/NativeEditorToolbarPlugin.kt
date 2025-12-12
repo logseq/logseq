@@ -128,8 +128,6 @@ data class EditorAction(
     }
 }
 
-private val DEFAULT_TOOLBAR_BG = Color.parseColor("#F5F5F5")
-
 private class EditorToolbarView(context: android.content.Context) : FrameLayout(context) {
     var onAction: ((String) -> Unit)? = null
 
@@ -140,8 +138,8 @@ private class EditorToolbarView(context: android.content.Context) : FrameLayout(
 
     private var actions: List<EditorAction> = emptyList()
     private var trailing: EditorAction? = null
-    private var tint: Int = Color.BLACK
-    private var backgroundColor: Int = DEFAULT_TOOLBAR_BG
+    private var tint: Int = defaultTint()
+    private var backgroundColor: Int = defaultBackground()
 
     init {
         addView(composeView)
@@ -155,10 +153,15 @@ private class EditorToolbarView(context: android.content.Context) : FrameLayout(
     ) {
         this.actions = actions
         this.trailing = trailing
-        tint = NativeUiUtils.parseColor(tintHex, Color.BLACK)
-        backgroundColor = NativeUiUtils.parseColor(bgHex, DEFAULT_TOOLBAR_BG)
+        tint = NativeUiUtils.parseColor(tintHex, defaultTint())
+        backgroundColor = NativeUiUtils.parseColor(bgHex, defaultBackground())
         render()
     }
+
+    private fun defaultTint(): Int =
+        if (LogseqTheme.current().isDark) Color.WHITE else Color.BLACK
+
+    private fun defaultBackground(): Int = LogseqTheme.current().background
 
     private fun render() {
         val onActionFn = onAction

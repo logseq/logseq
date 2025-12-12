@@ -17,6 +17,12 @@ object WebViewSnapshotManager {
     private var overlayRef: WeakReference<FrameLayout>? = null
     private val snapshotRefs: MutableMap<String, WeakReference<View>> = mutableMapOf()
     private val containerRefs: MutableMap<String, WeakReference<FrameLayout>> = mutableMapOf()
+    private var snapshotBackgroundColor: Int = LogseqTheme.current().background
+
+    fun setSnapshotBackgroundColor(color: Int) {
+        snapshotBackgroundColor = color
+        overlayRef?.get()?.setBackgroundColor(Color.TRANSPARENT)
+    }
 
     fun registerOverlay(overlay: FrameLayout?) {
         overlayRef = overlay?.let { WeakReference(it) }
@@ -77,7 +83,7 @@ object WebViewSnapshotManager {
                     FrameLayout.LayoutParams.MATCH_PARENT,
                     FrameLayout.LayoutParams.MATCH_PARENT
                 )
-                setBackgroundColor(Color.WHITE)
+                setBackgroundColor(snapshotBackgroundColor)
                 isClickable = false
                 isFocusable = false
             }
@@ -86,7 +92,7 @@ object WebViewSnapshotManager {
         return try {
             val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bitmap)
-            canvas.drawColor(Color.WHITE)
+            canvas.drawColor(snapshotBackgroundColor)
             webView.draw(canvas)
 
             ImageView(webView.context).apply {
@@ -96,7 +102,7 @@ object WebViewSnapshotManager {
                     FrameLayout.LayoutParams.MATCH_PARENT,
                     FrameLayout.LayoutParams.MATCH_PARENT
                 )
-                setBackgroundColor(Color.WHITE)
+                setBackgroundColor(snapshotBackgroundColor)
                 isClickable = false
                 isFocusable = false
             }

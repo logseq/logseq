@@ -136,7 +136,7 @@ class NativeBottomSheetPlugin : Plugin() {
 
         parent.removeView(webView)
         placeholder = View(ctx).apply {
-            setBackgroundColor(Color.WHITE)
+            setBackgroundColor(LogseqTheme.current().background)
             layoutParams = previousLayoutParams ?: ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT

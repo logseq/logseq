@@ -53,7 +53,13 @@
   (hooks/use-effect!
    (fn []
      (state/sync-system-theme!)
-     (ui/setup-system-theme-effect!))
+     (ui/setup-system-theme-effect!)
+     (let [handler (fn [^js e]
+                     (when (:ui/system-theme? @state/state)
+                       (let [is-dark? (boolean (some-> e .-detail .-isDark))]
+                         (state/set-theme-mode! (if is-dark? "dark" "light") true))))]
+       (.addEventListener js/window "logseq:native-system-theme-changed" handler)
+       #(.removeEventListener js/window "logseq:native-system-theme-changed" handler)))
    [])
   (hooks/use-effect!
    #(let [^js doc js/document.documentElement

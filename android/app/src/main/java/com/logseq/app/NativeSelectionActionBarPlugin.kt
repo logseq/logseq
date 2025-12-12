@@ -176,8 +176,9 @@ private class SelectionActionBarView(context: android.content.Context) : FrameLa
     }
 
     fun bind(actions: List<SelectionAction>, tintHex: String?, bgHex: String?) {
-        val tint = ComposeColor(NativeUiUtils.parseColor(tintHex, Color.BLACK))
-        val backgroundColor = ComposeColor(NativeUiUtils.parseColor(bgHex, Color.parseColor("#F8F8F8")))
+        val defaultTint = if (LogseqTheme.current().isDark) Color.WHITE else Color.BLACK
+        val tint = ComposeColor(NativeUiUtils.parseColor(tintHex, defaultTint))
+        val backgroundColor = ComposeColor(NativeUiUtils.parseColor(bgHex, LogseqTheme.current().background))
         val onActionFn = onAction
 
         composeView.setContent {

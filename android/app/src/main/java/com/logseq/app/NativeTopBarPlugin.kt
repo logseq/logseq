@@ -19,6 +19,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,8 +58,9 @@ class NativeTopBarPlugin : Plugin() {
             val leftButtons = parseButtons(call.getArray("leftButtons"))
             val rightButtons = parseButtons(call.getArray("rightButtons"))
             val titleClickable = call.getBoolean("titleClickable") ?: false
-            val bgColor = NativeUiUtils.parseColor(call.getString("backgroundColor"), Color.WHITE)
-            val tintColor = NativeUiUtils.parseColor(call.getString("tintColor"), Color.BLACK)
+            val tintHex = call.getString("tintColor")
+            val tintColorOverride =
+                tintHex?.takeIf { it.isNotBlank() }?.let { NativeUiUtils.parseColor(it, LogseqTheme.current().tint) }
 
             val webView = bridge.webView
 
@@ -76,7 +79,7 @@ class NativeTopBarPlugin : Plugin() {
                 topBarView = view
             }
 
-            bar.bind(title, titleClickable, leftButtons, rightButtons, bgColor, tintColor)
+            bar.bind(title, titleClickable, leftButtons, rightButtons, tintColorOverride)
             bar.post {
                 adjustWebViewPadding(webView, bar.height)
             }
@@ -190,8 +193,7 @@ private class NativeTopBarView(context: android.content.Context) : FrameLayout(c
         titleClickable: Boolean,
         leftButtons: List<ButtonSpec>,
         rightButtons: List<ButtonSpec>,
-        backgroundColor: Int,
-        tintColor: Int
+        tintColorOverride: Int?
     ) {
         val onTapFn = onTap
         composeView.setContent {
@@ -200,8 +202,7 @@ private class NativeTopBarView(context: android.content.Context) : FrameLayout(c
                 titleClickable = titleClickable,
                 leftButtons = leftButtons,
                 rightButtons = rightButtons,
-                background = ComposeColor(backgroundColor),
-                tint = ComposeColor(tintColor),
+                tintOverride = tintColorOverride,
                 onTap = { id -> onTapFn?.invoke(id) }
             )
         }
@@ -217,10 +218,13 @@ private fun TopBarContent(
     titleClickable: Boolean,
     leftButtons: List<ButtonSpec>,
     rightButtons: List<ButtonSpec>,
-    background: ComposeColor,
-    tint: ComposeColor,
+    tintOverride: Int?,
     onTap: (String) -> Unit
 ) {
+    val theme by LogseqTheme.colors.collectAsState()
+    val background = ComposeColor(theme.background)
+    val tint = tintOverride?.let { ComposeColor(it) } ?: ComposeColor(theme.tint)
+
     Surface(
         color = background,
         shadowElevation = 4.dp

@@ -9,11 +9,13 @@ import android.os.Bundle;
 import android.webkit.ValueCallback;
 import android.webkit.WebView;
 import androidx.activity.EdgeToEdge;
+import androidx.core.view.WindowInsetsControllerCompat;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.BridgeActivity;
 import androidx.activity.OnBackPressedDispatcher;
 import android.util.Log;
+import android.view.View;
 
 import java.util.Timer;
 import java.util.TimerTask;
@@ -33,6 +35,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(NativeEditorToolbarPlugin.class);
         registerPlugin(NativeSelectionActionBarPlugin.class);
         registerPlugin(LiquidTabsPlugin.class);
+        registerPlugin(Utils.class);
 
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
@@ -40,6 +43,8 @@ public class MainActivity extends BridgeActivity {
         webView.setOverScrollMode(WebView.OVER_SCROLL_NEVER);
         webView.getSettings().setUseWideViewPort(true);
         webView.getSettings().setLoadWithOverviewMode(true);
+
+        applyLogseqTheme();
 
         // Let Compose host the WebView with system bar padding for safe areas and handle back.
         ComposeHost.INSTANCE.renderWithSystemInsets(this, webView, () -> {
@@ -80,6 +85,58 @@ public class MainActivity extends BridgeActivity {
                 });
             }
         }, 5000);
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        applyLogseqTheme();
+        dispatchSystemThemeToWeb();
+    }
+
+    private void applyLogseqTheme() {
+        LogseqTheme.INSTANCE.update(this);
+        LogseqThemeColors colors = LogseqTheme.INSTANCE.current();
+
+        int bg = colors.getBackground();
+        boolean isDark = colors.isDark();
+
+        View content = findViewById(android.R.id.content);
+        if (content != null) {
+            content.setBackgroundColor(bg);
+        }
+
+        WebView webView = getBridge() != null ? getBridge().getWebView() : null;
+        if (webView != null) {
+            webView.setBackgroundColor(bg);
+        }
+
+        getWindow().getDecorView().setBackgroundColor(bg);
+        getWindow().setStatusBarColor(bg);
+        getWindow().setNavigationBarColor(bg);
+
+        WindowInsetsControllerCompat controller = new WindowInsetsControllerCompat(getWindow(), getWindow().getDecorView());
+        controller.setAppearanceLightStatusBars(!isDark);
+        controller.setAppearanceLightNavigationBars(!isDark);
+
+        WebViewSnapshotManager.INSTANCE.setSnapshotBackgroundColor(bg);
+    }
+
+    public void applyLogseqThemeNow() {
+        applyLogseqTheme();
+    }
+
+    private void dispatchSystemThemeToWeb() {
+        try {
+            if (bridge == null) return;
+            boolean isDark = LogseqTheme.INSTANCE.isDark(this);
+            String js = "window.dispatchEvent(new CustomEvent('logseq:native-system-theme-changed', { detail: { isDark: "
+                + (isDark ? "true" : "false")
+                + " } }));";
+            bridge.eval(js, null);
+        } catch (Exception e) {
+            // ignore
+        }
     }
 
     public void initNavigationBarBgColor() {
