@@ -34,6 +34,8 @@ import androidx.navigation.navArgument
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private const val ROOT_ROUTE = "web/{encodedPath}"
 
@@ -112,7 +114,8 @@ private fun ComposeNavigationHost(
 
     HandleNavigationEvents(
         navController = navController,
-        navEvents = navEvents
+        navEvents = navEvents,
+        webView = webView
     ) { type ->
         lastNavTypeState.value = type
     }
@@ -203,6 +206,8 @@ private fun ComposeNavigationHost(
                         addView(webContainer)
                         addView(overlayContainer)
 
+                        WebViewSnapshotManager.registerOverlay(overlayContainer)
+
                         (webView.parent as? ViewGroup)?.removeView(webView)
                         webContainer.addView(
                             webView,
@@ -217,6 +222,9 @@ private fun ComposeNavigationHost(
                 update = { root ->
                     val webContainer =
                         root.findViewById<FrameLayout>(R.id.webview_container)
+                    val overlayContainer =
+                        root.findViewById<FrameLayout>(R.id.webview_overlay_container)
+                    WebViewSnapshotManager.registerOverlay(overlayContainer)
                     if (webView.parent !== webContainer) {
                         (webView.parent as? ViewGroup)?.removeView(webView)
                         webContainer.addView(
@@ -237,10 +245,15 @@ private fun ComposeNavigationHost(
 private fun HandleNavigationEvents(
     navController: NavHostController,
     navEvents: SharedFlow<NavigationEvent>,
+    webView: WebView,
     onNavType: (String) -> Unit
 ) {
     LaunchedEffect(navController) {
+        var snapshotVersion = 0
         navEvents.collect { event ->
+            snapshotVersion += 1
+            val currentSnapshotVersion = snapshotVersion
+            WebViewSnapshotManager.showSnapshot("navigation", webView)
             onNavType(event.navigationType)
             val route = routeFor(event.path)
             when (event.navigationType) {
@@ -270,6 +283,13 @@ private fun HandleNavigationEvents(
                 }
 
                 else -> navController.navigate(route)
+            }
+
+            launch {
+                delay(260)
+                if (currentSnapshotVersion == snapshotVersion) {
+                    WebViewSnapshotManager.clearSnapshot("navigation")
+                }
             }
         }
     }

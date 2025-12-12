@@ -16,6 +16,8 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 
 @CapacitorPlugin(name = "NativeBottomSheetPlugin")
 class NativeBottomSheetPlugin : Plugin() {
+    private val snapshotTag = "bottom-sheet"
+    private val mainHandler = Handler(Looper.getMainLooper())
     private var dialog: BottomSheetDialog? = null
     private var previousParent: ViewGroup? = null
     private var previousIndex: Int = -1
@@ -50,6 +52,8 @@ class NativeBottomSheetPlugin : Plugin() {
             val sheet = BottomSheetDialog(ctx)
             sheet.setContentView(container!!)
 
+            WebViewSnapshotManager.showSnapshot(snapshotTag, webView)
+
             // Move the WebView into the BottomSheet container
             detachWebView(webView, ctx)
             container!!.addView(
@@ -82,14 +86,20 @@ class NativeBottomSheetPlugin : Plugin() {
                 } catch (_: Exception) {}
 
                 // Delay restoration slightly to let Android clean up window surfaces
-                Handler(Looper.getMainLooper()).post {
+                mainHandler.post {
                     restoreWebView(webView)
-                    notifyListeners(
-                        "state",
-                        JSObject()
-                            .put("presented", false)
-                            .put("dismissing", false)
-                    )
+                    webView.alpha = 0f
+
+                    webView.postDelayed({
+                        webView.alpha = 1f
+                        WebViewSnapshotManager.clearSnapshot(snapshotTag)
+                        notifyListeners(
+                            "state",
+                            JSObject()
+                                .put("presented", false)
+                                .put("dismissing", false)
+                        )
+                    }, 120)
                 }
 
                 dialog = null
@@ -107,17 +117,13 @@ class NativeBottomSheetPlugin : Plugin() {
     @PluginMethod
     fun dismiss(call: PluginCall) {
         activity?.runOnUiThread {
-            dialog?.let {
-                val webView = bridge.webView
-                if (webView != null) {
-                    (webView.parent as? ViewGroup)?.removeView(webView)
-                    container?.removeAllViews()
-                }
-                it.setOnDismissListener(null)
-                it.dismiss()
+            if (dialog == null) {
+                WebViewSnapshotManager.clearSnapshot(snapshotTag)
+                call.resolve()
+                return@runOnUiThread
             }
-            dialog = null
-            container = null
+
+            dialog?.dismiss()
             call.resolve()
         } ?: call.resolve()
     }
