@@ -26,9 +26,13 @@ env:
 
 jobs:
   rtc-e2e-test-build:
-    name: Test
+    name: Test ${{ matrix.test-task }}
     runs-on: ubuntu-22.04
     if: "contains(github.event.head_commit.message, 'rtc')"
+    strategy:
+      fail-fast: false
+      matrix:
+        test-task: [run-rtc-extra-test, run-rtc-extra-part2-test]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -84,7 +88,7 @@ jobs:
           ls -lR ./public
 
       - name: Run e2e tests
-        run: cd clj-e2e && timeout 30m bb run-rtc-extra-test
+        run: cd clj-e2e && timeout 30m bb ${{ matrix.test-task }}
         # env:
         # DEBUG: "pw:api"
 
@@ -92,6 +96,6 @@ jobs:
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-screenshots
+          name: e2e-screenshots-${{ matrix.test-task }}
           path: clj-e2e/e2e-dump/*
           retention-days: 1
