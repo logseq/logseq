@@ -43,7 +43,6 @@ class LiquidTabsPlugin : Plugin() {
     private var searchInput: EditText? = null
     private var resultsContainer: LinearLayout? = null
     private var originalBottomPadding: Int? = null
-    private var navBaseBottomInset: Int = 0
 
     private var tabsState by mutableStateOf<List<TabSpec>>(emptyList())
     private var currentTabId by mutableStateOf<String?>(null)
@@ -168,21 +167,10 @@ class LiquidTabsPlugin : Plugin() {
     private fun setupImeBehaviorForNav(nav: View) {
         ViewCompat.setOnApplyWindowInsetsListener(nav) { v, insets ->
             val imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime())
-            val navInsets = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
             val imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
 
-            if (!imeVisible) {
-                navBaseBottomInset = navInsets.bottom
-            }
-
-            val lp = v.layoutParams as ViewGroup.MarginLayoutParams
-            if (lp.bottomMargin != navBaseBottomInset) {
-                lp.bottomMargin = navBaseBottomInset
-                v.layoutParams = lp
-            }
-
             val extra = if (imeVisible) {
-                (imeInsets.bottom - navBaseBottomInset).coerceAtLeast(0)
+                imeInsets.bottom
             } else {
                 0
             }
