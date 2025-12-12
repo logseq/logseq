@@ -177,5 +177,6 @@ class NativeBottomSheetPlugin : Plugin() {
         previousParent = null
         previousLayoutParams = null
         previousIndex = -1
+        container = null
     }
 }
