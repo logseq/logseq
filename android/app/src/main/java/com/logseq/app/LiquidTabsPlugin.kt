@@ -7,6 +7,7 @@ import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
@@ -276,6 +277,7 @@ class LiquidTabsPlugin : Plugin() {
             val input = EditText(activity).apply {
                 hint = "Search"
                 setSingleLine(true)
+                imeOptions = EditorInfo.IME_ACTION_SEARCH
                 setTextColor(labelColor)
                 setHintTextColor(secondaryLabelColor)
                 // Remove EditText default background/border for a flat look
@@ -292,14 +294,38 @@ class LiquidTabsPlugin : Plugin() {
                 // Layout params to make EditText take most of the horizontal space
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f)
 
-                setOnKeyListener { _, keyCode, event ->
-                    if (event.action == KeyEvent.ACTION_DOWN) {
-                        when (keyCode) {
-                            KeyEvent.KEYCODE_DEL -> notifyListeners("keyboardHackKey", JSObject().put("key", "backspace"))
-                            KeyEvent.KEYCODE_ENTER -> notifyListeners("keyboardHackKey", JSObject().put("key", "enter"))
-                        }
+                setOnEditorActionListener { _, actionId, event ->
+                    val isEnter =
+                        actionId == EditorInfo.IME_ACTION_SEARCH ||
+                            actionId == EditorInfo.IME_ACTION_DONE ||
+                            actionId == EditorInfo.IME_ACTION_GO ||
+                            (event?.keyCode == KeyEvent.KEYCODE_ENTER)
+                    if (isEnter) {
+                        notifyListeners("keyboardHackKey", JSObject().put("key", "enter"))
+                        true
+                    } else {
+                        false
                     }
-                    false
+                }
+
+                setOnKeyListener { _, keyCode, event ->
+                    when (keyCode) {
+                        KeyEvent.KEYCODE_ENTER -> {
+                            if (event.action == KeyEvent.ACTION_DOWN) {
+                                notifyListeners("keyboardHackKey", JSObject().put("key", "enter"))
+                            }
+                            true
+                        }
+                        KeyEvent.KEYCODE_DEL -> {
+                            if (text.isNullOrEmpty() && event.action == KeyEvent.ACTION_DOWN) {
+                                notifyListeners("keyboardHackKey", JSObject().put("key", "backspace"))
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        else -> false
+                    }
                 }
                 addTextChangedListener(object : TextWatcher {
                     override fun afterTextChanged(s: Editable?) {
