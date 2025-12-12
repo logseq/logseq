@@ -27,7 +27,7 @@ const config: CapacitorConfig = {
     },
 
     Keyboard: {
-      resize: 'none'
+      resize: 'resize'
     },
 
     SafeArea: {
