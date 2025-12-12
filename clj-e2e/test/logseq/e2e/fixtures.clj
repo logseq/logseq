@@ -1,11 +1,15 @@
 (ns logseq.e2e.fixtures
-  (:require [logseq.e2e.assert :as assert]
+  (:require [com.climate.claypoole :as cp]
+            [logseq.e2e.assert :as assert]
             [logseq.e2e.config :as config]
+            [logseq.e2e.const :refer [*page1 *page2]]
             [logseq.e2e.custom-report :as custom-report]
             [logseq.e2e.graph :as graph]
             [logseq.e2e.page :as page]
             [logseq.e2e.playwright-page :as pw-page]
+            [logseq.e2e.rtc :as rtc]
             [logseq.e2e.settings :as settings]
+            [logseq.e2e.util :as util]
             [wally.main :as w]))
 
 ;; TODO: save trace
@@ -28,13 +32,6 @@
                                (when custom-report/*pw-page->console-logs*
                                  (swap! custom-report/*pw-page->console-logs* update p conj (.text msg))))))
       (f))))
-
-(def *page1
-  "this 'page' means playwright-page, not logseq-page. it points to the client1 when testing rtc"
-  (atom nil))
-(def *page2
-  "this 'page' means playwright-page, not logseq-page. it points to the client2 when testing rtc"
-  (atom nil))
 
 (defn open-2-pages
   "Use `*page1` and `*page2` in `f`"
@@ -102,6 +99,23 @@
   (create-page)
   (f))
 
+(defn new-logseq-page-in-rtc*
+  "create a logseq page and switch to this page on both `*page1` and `*page2`"
+  [& [page-name]]
+  (let [*page-name (atom nil)
+        {:keys [_local-tx remote-tx]}
+        (w/with-page @*page1
+          (rtc/with-wait-tx-updated
+            (reset! *page-name (create-page page-name))))]
+    (w/with-page @*page2
+      (rtc/wait-tx-update-to remote-tx)
+      (page/goto-page @*page-name))))
+
+(defn new-logseq-page-in-rtc
+  [f]
+  (new-logseq-page-in-rtc*)
+  (f))
+
 (defn validate-graph
   [f]
   (f)
@@ -111,3 +125,33 @@
         (graph/validate-graph)))
 
     (graph/validate-graph)))
+
+(def ^:private formatter (java.time.format.DateTimeFormatter/ofPattern "yyyy-MM-dd'T'HH-mm-ss"))
+(defn- inst-string
+  [inst]
+  (.format formatter (.atZone inst (java.time.ZoneId/of "UTC"))))
+
+(defn prepare-rtc-graph-fixture
+  "open 2 app instances, add a rtc graph, check this graph available on other instance"
+  [graph-name-prefix f]
+  (let [graph-name (str graph-name-prefix "-" (inst-string (java.time.Instant/now)))]
+    (cp/prun!
+     2
+     #(w/with-page %
+        (settings/developer-mode)
+        (w/refresh)
+        (util/login-test-account))
+     [@*page1 @*page2])
+    (w/with-page @*page1
+      (graph/new-graph graph-name true))
+    (w/with-page @*page2
+      (graph/wait-for-remote-graph graph-name)
+      (graph/switch-graph graph-name true))
+
+    (binding [custom-report/*preserve-graph* false]
+      (f)
+      ;; cleanup
+      (if custom-report/*preserve-graph*
+        (println "Don't remove graph: " graph-name)
+        (w/with-page @*page2
+          (graph/remove-remote-graph graph-name))))))
