@@ -1,7 +1,6 @@
 (ns mobile.init
   "Main ns for handling mobile start"
   (:require ["@capacitor/app" :refer [^js App]]
-            ["@capacitor/core" :refer [Capacitor]]
             ["@capacitor/keyboard" :refer [^js Keyboard]]
             ["@capacitor/network" :refer [^js Network]]
             [clojure.string :as string]
