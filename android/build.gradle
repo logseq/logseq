@@ -4,7 +4,7 @@ buildscript {
 
     ext {
         kotlin_version = '2.0.21'
-        composeCompilerVersion = '1.7.0'
+        composeCompilerVersion = '2.0.1'
         androidxActivityVersion = '1.9.2'
     }
     repositories {
