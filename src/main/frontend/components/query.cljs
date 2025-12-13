@@ -26,7 +26,7 @@
 
 ;; TODO: Split this into file and DB graph versions. DB graph needlessly coupled to file graph args
 (rum/defcs custom-query-inner < rum/static
-  [state {:keys [db-graph? dsl-query?] :as config} {:keys [query breadcrumb-show?]}
+  [state {:keys [db-graph? dsl-query?] :as config} {:keys [query breadcrumb-show? group-collapsed?]}
    {:keys [query-error-atom
            current-block
            table?
@@ -84,6 +84,7 @@
                                               breadcrumb-show?
                                               true)
                           :group-by-page? blocks-grouped-by-page?
+                          :group-collapsed? group-collapsed?
                           :ref? true)
                    {:style {:margin-top "0.25rem"
                             :margin-left "0.25rem"}})
