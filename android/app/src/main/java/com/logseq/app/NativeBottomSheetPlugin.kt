@@ -1,6 +1,7 @@
 package com.logseq.app
 
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
 import android.view.View
@@ -50,8 +51,26 @@ class NativeBottomSheetPlugin : Plugin() {
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
 
+            val cornerRadius = NativeUiUtils.dp(ctx, 16f).toFloat()
+            val roundedBackground = GradientDrawable().apply {
+                setColor(LogseqTheme.current().background)
+                cornerRadii = floatArrayOf(
+                    cornerRadius, cornerRadius,  // 左上角
+                    cornerRadius, cornerRadius,  // 右上角
+                    0f, 0f,                      // 右下角
+                    0f, 0f                       // 左下角
+                )
+            }
+            container!!.background = roundedBackground
+            container!!.clipToOutline = true
+
             val sheet = BottomSheetDialog(ctx)
             sheet.setContentView(container!!)
+
+            sheet.setOnShowListener {
+                val bottomSheet = sheet.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+                bottomSheet?.setBackgroundColor(Color.TRANSPARENT)
+            }
 
             WebViewSnapshotManager.showSnapshot(snapshotTag, webView)
 
