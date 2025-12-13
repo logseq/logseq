@@ -40,7 +40,7 @@ html.is-ios textarea,
 html.is-ios input,
 html.is-ios select,
 html.is-ios .block-content,
-html.is-ios .editor-inner,
+html.is-ios .editor-inner
 {
   font-size: inherit;
 }
@@ -229,7 +229,7 @@ ul {
 }
 
 .app-popup {
-  @apply w-full overflow-y-auto overflow-x-hidden;
+  @apply w-full overflow-y-auto overflow-x-hidden px-1;
 }
 
 .app-audio-recorder {

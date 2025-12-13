@@ -21,7 +21,7 @@
   (let [username (user-handler/username)
         email (user-handler/email)
         initial  (or (some-> username (subs 0 1) string/upper-case) "?")]
-    [:div.pt-4
+    [:div.pt-2
      (if-not login?
        (shui/button
         {:variant :default
@@ -112,7 +112,7 @@
         theme-value (if system-theme?
                       "system"
                       (or theme "system"))]
-    [:div.app-index-settings.min-h-full.py-4.space-y-4
+    [:div.app-index-settings.min-h-full.space-y-4
      (user-profile login?)
      [:div.space-y-4
       [:div.mobile-setting-item
