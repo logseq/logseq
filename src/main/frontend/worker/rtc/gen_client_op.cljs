@@ -6,13 +6,52 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]))
 
+(defn remove-conflict-same-block-datoms
+  "remove conflict entity-datoms for same-block(same block/uuid) in same-entity-datoms-coll.
+  merge
+  [[[182 :block/uuid block-uuid1 1 false], ...]
+   [[183 :block/uuid block-uuid1 1 true], ...]]
+  into
+  [[[183 :block/uuid block-uuid1 1 true], ...]]
+"
+  [same-entity-datoms-coll]
+  (let [entity-info (map (fn [datoms]
+                           (let [first-datom (first datoms)
+                                 e           (nth first-datom 0)
+                                 t           (nth first-datom 3)
+                                 uuid        (some (fn [d]
+                                                     (when (keyword-identical? :block/uuid (nth d 1))
+                                                       (nth d 2)))
+                                                   datoms)]
+                             {:e e :t t :uuid uuid :datoms datoms}))
+                         same-entity-datoms-coll)
+        uuid-groups (group-by :uuid (filter :uuid entity-info))
+        loser-eids  (reduce
+                     (fn [acc [_uuid infos]]
+                       (let [t-groups (group-by :t infos)]
+                         (reduce
+                          (fn [acc* [_t infos*]]
+                            (if (> (count infos*) 1)
+                              (let [sorted-infos (sort-by :e > infos*)
+                                    losers       (rest sorted-infos)]
+                                (into acc* (map :e losers)))
+                              acc*))
+                          acc
+                          t-groups)))
+                     #{}
+                     uuid-groups)]
+    (if (seq loser-eids)
+      (map :datoms (remove #(contains? loser-eids (:e %)) entity-info))
+      same-entity-datoms-coll)))
+
 (defn group-datoms-by-entity
   "Groups transaction datoms by entity and returns a map of entity-id to datoms."
   [tx-data]
   (let [datom-vec-coll (map vec tx-data)
         id->same-entity-datoms (group-by first datom-vec-coll)
         id-order (distinct (map first datom-vec-coll))
-        same-entity-datoms-coll (map id->same-entity-datoms id-order)]
+        same-entity-datoms-coll (map id->same-entity-datoms id-order)
+        same-entity-datoms-coll (remove-conflict-same-block-datoms same-entity-datoms-coll)]
     {:same-entity-datoms-coll same-entity-datoms-coll
      :id->same-entity-datoms  id->same-entity-datoms}))
 
