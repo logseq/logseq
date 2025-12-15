@@ -11,7 +11,6 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
-            [logseq.shui.dialog.core :as shui-dialog]
             [mobile.deeplink :as deeplink]
             [promesa.core :as p]))
 
