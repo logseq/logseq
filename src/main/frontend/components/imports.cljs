@@ -412,9 +412,9 @@
                    :<read-and-copy-asset #(read-and-copy-asset repo (config/get-repo-dir repo) %1 %2 %3)
                    ;; doc file options
                    ;; Write to frontend first as writing to worker first is poor ux with slow streaming changes
-                   :<export-file (fn <export-file [conn m opts]
+                   :<export-file (fn <export-file [conn config m opts]
                                    (p/let [tx-reports
-                                           (gp-exporter/<add-file-to-db-graph conn (:file/path m) (:file/content m) opts)]
+                                           (gp-exporter/<add-file-to-db-graph conn config (:file/path m) (:file/content m) opts)]
                                      (doseq [tx-report tx-reports]
                                        (db-browser/transact! repo (:tx-data tx-report) (:tx-meta tx-report)))))}
           {:keys [files import-state]} (gp-exporter/export-file-graph repo db-conn config-file *files options)]
