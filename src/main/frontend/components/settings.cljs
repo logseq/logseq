@@ -1407,7 +1407,8 @@
          :succ (constantly nil)))
      [])
     [:div.panel-wrap
-     (mcp-server-row t)
+     (when (util/electron?)
+       (mcp-server-row t))
      [:div.flex.flex-col.gap-2.mt-4
       [:div.font-medium.text-muted-foreground.text-sm "Semantic search:"]
 
