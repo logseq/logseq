@@ -141,7 +141,7 @@
                                                                                       (dissoc options :user-config :verbose))}
                                                                 (select-keys options [:verbose])))
               files' (mapv #(hash-map :path %) files)
-              _ (gp-exporter/export-doc-files conn files' <read-file doc-options)]
+              _ (gp-exporter/export-doc-files conn {} files' <read-file doc-options)]
         {:import-state (:import-state doc-options)})
       (p/finally (fn [_]
                    (reset! gp-block/*export-to-db-graph? false)))))
