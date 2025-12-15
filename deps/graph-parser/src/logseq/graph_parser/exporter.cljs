@@ -227,7 +227,8 @@
                                 (disj :logseq.class/Page))))
         (seq page-tags)
         (merge {:logseq.property/page-tags page-tags})))
-    block))
+    ;; ensure page at least have a Page tag
+    (assoc block :block/tags [:logseq.class/Page])))
 
 (defn- add-uuid-to-page-map [m page-names-to-uuids]
   (assoc m :block/uuid (get-page-uuid page-names-to-uuids (:block/name m) {:block m})))
