@@ -111,7 +111,10 @@
    ;; :set-ui-state prn
    ;; config file options
    ;; TODO: Add actual default
-   :default-config {}})
+   :default-config {}
+   ;; TODO: Add zotero support
+   ;; :<get-file-stat (fn [path])
+   })
 
 (defn- import-file-graph-to-db
   "Import a file graph dir just like UI does. However, unlike the UI the
