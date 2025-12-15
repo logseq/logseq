@@ -491,7 +491,7 @@
         in-system-window? (.-$inSystemWindow viewer)
         doc               (pdf-windows/resolve-own-document viewer)
         ;; asset block container for db mode
-        asset-block (:block pdf-current)
+        asset-block (and (config/db-based-graph?) (:block pdf-current))
         dispatch-extra-state!
         (fn []
           (js/setTimeout
@@ -599,7 +599,7 @@
         [:a.button
          {:title "Annotations page"
           :on-click (fn []
-                      (if asset-block
+                      (if (or asset-block (not (config/db-based-graph?)))
                         (pdf-assets/goto-annotations-page! (:pdf/current @state/state))
                         (state/pub-event! [:asset/dialog-edit-external-url nil pdf-current])))}
          (svg/annotations 16)]
