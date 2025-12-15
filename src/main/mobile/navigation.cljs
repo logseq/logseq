@@ -1,9 +1,12 @@
 (ns mobile.navigation
   "Native navigation bridge for mobile."
   (:require [clojure.string :as string]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
             [frontend.mobile.util :as mobile-util]
+            [frontend.state :as state]
             [lambdaisland.glogi :as log]
+            [logseq.shui.dialog.core :as shui-dialog]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]))
 
@@ -231,6 +234,24 @@
             :stack stack
             :push  false}))))))
 
+(defn pop-modal!
+  []
+  (cond
+    ;; lightbox
+    (js/document.querySelector ".pswp")
+    (some-> js/window.photoLightbox (.destroy))
+
+    (shui-dialog/has-modal?)
+    (shui-dialog/close!)
+
+    (not-empty (state/get-selection-blocks))
+    (editor-handler/clear-selection!)
+
+    (state/editing?)
+    (editor-handler/escape-editing)
+
+    :else false))
+
 (defn pop-stack!
   "Pop one route from the current stack, update router via replace-state.
    Called when native UINavigationController pops (back gesture / back button)."
@@ -296,4 +317,6 @@
   []
   (set! (.-LogseqNative js/window)
         (clj->js
-         {:onNativePop (fn [] (pop-stack!))})))
+         {:onNativePop (fn []
+                         (when (false? (pop-modal!))
+                           (pop-stack!)))})))
