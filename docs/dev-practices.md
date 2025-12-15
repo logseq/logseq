@@ -336,7 +336,7 @@ These tasks are specific to database graphs. For these tasks there is a one time
 ```sh
   $ cd deps/db && yarn install && cd ../outliner && yarn install && cd ../graph-parser && yarn install && cd ../..
 ```
-
+* `dev:db-cli` - Run a CLI command from deps/db using latest deps/db code
 * `dev:db-query` - Query a DB graph
 
   ```sh
