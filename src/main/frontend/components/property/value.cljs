@@ -44,8 +44,9 @@
 ;; TODO: support :string editing
 (defonce string-value-on-click
   {:logseq.property.asset/external-url
-   (fn [block]
-     (state/pub-event! [:asset/dialog-edit-external-url block]))})
+   (fn [block property]
+     (when-not (string/starts-with? (get block (:db/ident property)) "zotero://")
+       (state/pub-event! [:asset/dialog-edit-external-url block])))})
 
 (defn- entity-map?
   [m]
@@ -1251,7 +1252,7 @@
                         (:db/ident property))
            [:div.w-full {:on-click (fn []
                                      (let [f (get string-value-on-click (:db/ident property))]
-                                       (f block)))}
+                                       (f block property)))}
             content]
            content)))]))
 
