@@ -1016,3 +1016,11 @@ html.is-system-window {
     @apply text-transparent;
   }
 }
+
+.block-title-wrap[data-hl-type=area] {
+  @apply flex flex-col;
+
+  .prefix-link {
+    @apply inline-block;
+  }
+}
