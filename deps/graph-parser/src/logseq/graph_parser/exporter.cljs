@@ -1323,7 +1323,8 @@
           (update-block-deadline-and-scheduled block page-names-to-uuids options)
           {block-after-assets :block :keys [asset-blocks-tx]}
           (<handle-assets-in-block config block-after-built-in-props walked-ast-blocks import-state (select-keys options [:log-fn :notify-user :<get-file-stat]))
-        ;; :block/page should be [:block/page NAME]
+          ;; :block/page should be [:block/page NAME]
+
           journal-page-created-at (some-> (:block/page block*) second journal-created-ats)
           prepared-block (cond-> block-after-assets
                            journal-page-created-at
@@ -1838,14 +1839,14 @@
                                        (-> page-block
                                            (assoc :logseq.property/ls-type :whiteboard-page)))))
           pre-blocks (->> blocks (keep #(when (:block/pre-block? %) (:block/uuid %))) set)
-          blocks-tx-promises (->> blocks
-                                  (remove :block/pre-block?)
-                                  (map #(<build-block-tx @conn config % pre-blocks per-file-state
-                                                         (assoc tx-options :whiteboard? (some? (seq whiteboard-pages)))))
-                                  p/all)
-          blocks-tx (->> blocks-tx-promises
-                         (apply concat)
-                         vec)
+
+          blocks-tx (p/loop [tx-data []
+                             blocks (remove :block/pre-block? blocks)]
+                      (if-let [block (first blocks)]
+                        (p/let [block-tx-data (<build-block-tx @conn config block pre-blocks per-file-state
+                                                               (assoc tx-options :whiteboard? (some? (seq whiteboard-pages))))]
+                          (p/recur (concat tx-data block-tx-data) (rest blocks)))
+                        tx-data))
 
           {:keys [property-pages-tx property-page-properties-tx] pages-tx' :pages-tx}
           (split-pages-and-properties-tx pages-tx old-properties existing-pages (:import-state options) @(:upstream-properties tx-options))
