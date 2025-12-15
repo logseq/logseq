@@ -22,13 +22,14 @@
                      (fn [{:keys [entity dispatch-key]}]
                        (let [entity (d/entity db (:db/id entity))]
                          (cond
+                           (and (ldb/property? entity)
+                                (:logseq.property.class/extends entity))
+                           [[:db/retract (:db/id entity) :logseq.property.class/extends]]
                            (:block/level entity)
                            [[:db/retract (:db/id entity) :block/level]]
                            ;; missing :db/ident
                            (and (ldb/class? entity) (nil? (:db/ident entity)) (:block/title entity))
                            [[:db/add (:db/id entity) :db/ident (db-class/create-user-class-ident-from-name db (:block/title entity))]]
-                           (and (:db/ident entity) (ldb/page? entity))
-                           [[:db/retract (:db/id entity) :db/ident]]
                            (and
                             (= (:block/title (:logseq.property/created-from-property entity)) "description")
                             (nil? (:block/page entity)))
