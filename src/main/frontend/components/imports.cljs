@@ -423,8 +423,7 @@
     (state/set-state! :graph/importing-state nil)
     (validate-imported-data @db-conn import-state files)
     (state/pub-event! [:graph/ready (state/get-current-repo)])
-    ;; (finished-cb)
-    ))
+    (finished-cb)))
 
 (defn import-file-to-db-handler
   "Import from a graph folder as a DB-based graph"
