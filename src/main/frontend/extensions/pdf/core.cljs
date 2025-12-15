@@ -125,11 +125,6 @@
        #(.removeEventListener doc "click" cb)))
    [])
 
-  ;; TODO: precise position
-  ;;(when-let [
-  ;;page-bounding (and highlight (pdf-utils/get-page-bounding viewer (:page highlight)))
-  ;;])
-
   (let [*el (rum/use-ref nil)
         ^js cnt (.-container viewer)
         ^js body (some-> (.-ownerDocument cnt) (.-body))
