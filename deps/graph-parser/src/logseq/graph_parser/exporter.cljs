@@ -1208,13 +1208,13 @@
 
 (defn- <handle-assets-in-block
   "If a block contains assets, creates them as #Asset nodes in the Asset page and references them in the block."
-  [config block {:keys [asset-links]} {:keys [assets ignored-assets pdf-annotation-pages]} {:keys [notify-user <get-file-stat] :as opts}]
+  [block {:keys [asset-links]} {:keys [assets ignored-assets pdf-annotation-pages]} {:keys [notify-user <get-file-stat user-config] :as opts}]
   (if (seq asset-links)
     (p/let [asset-maps* (p/all (map
                                 (fn [asset-link]
                                   (p/let [path* (-> asset-link second :url second)
                                           {:keys [path link base]} (if (map? path*)
-                                                                     (get-zotero-local-pdf-path config (second asset-link))
+                                                                     (get-zotero-local-pdf-path user-config (second asset-link))
                                                                      {:path path*})
                                           asset-name (-> path asset-path->name)
                                           asset-link-or-name (or link (-> path asset-path->name))
@@ -1313,16 +1313,17 @@
     block))
 
 (defn- <build-block-tx
-  [db config block* pre-blocks {:keys [page-names-to-uuids] :as per-file-state} {:keys [import-state journal-created-ats] :as options}]
+  [db block* pre-blocks {:keys [page-names-to-uuids] :as per-file-state}
+   {:keys [import-state journal-created-ats user-config] :as options}]
   ;; (prn ::block-in block*)
-  (p/let [walked-ast-blocks (walk-ast-blocks config (:block.temp/ast-blocks block*))
+  (p/let [walked-ast-blocks (walk-ast-blocks user-config (:block.temp/ast-blocks block*))
         ;; needs to come before update-block-refs to detect new property schemas
           {:keys [block properties-tx]}
           (handle-block-properties block* db page-names-to-uuids (:block/refs block*) walked-ast-blocks options)
           {block-after-built-in-props :block deadline-properties-tx :properties-tx}
           (update-block-deadline-and-scheduled block page-names-to-uuids options)
           {block-after-assets :block :keys [asset-blocks-tx]}
-          (<handle-assets-in-block config block-after-built-in-props walked-ast-blocks import-state (select-keys options [:log-fn :notify-user :<get-file-stat]))
+          (<handle-assets-in-block block-after-built-in-props walked-ast-blocks import-state (select-keys options [:log-fn :notify-user :<get-file-stat]))
           ;; :block/page should be [:block/page NAME]
 
           journal-page-created-at (some-> (:block/page block*) second journal-created-ats)
@@ -1811,11 +1812,11 @@
     (swap! (:all-existing-page-uuids import-state) merge (into {} (map (juxt :block/uuid identity) nodes)))))
 
 (defn- <build-blocks-tx
-  [conn config blocks pre-blocks per-file-state tx-options]
+  [conn blocks pre-blocks per-file-state tx-options]
   (p/loop [tx-data []
            blocks (remove :block/pre-block? blocks)]
     (if-let [block (first blocks)]
-      (p/let [block-tx-data (<build-block-tx @conn config block pre-blocks per-file-state
+      (p/let [block-tx-data (<build-block-tx @conn block pre-blocks per-file-state
                                              tx-options)]
         (p/recur (concat tx-data block-tx-data) (rest blocks)))
       tx-data)))
@@ -1831,10 +1832,10 @@
 * :macros - map of macros for use with macro expansion
 * :notify-user - Displays warnings to user without failing the import. Fn receives a map with :msg
 * :log-fn - Logs messages for development. Defaults to prn"
-  [conn config file content {:keys [notify-user log-fn]
-                             :or {notify-user #(println "[WARNING]" (:msg %))
-                                  log-fn prn}
-                             :as *options}]
+  [conn file content {:keys [notify-user log-fn]
+                      :or {notify-user #(println "[WARNING]" (:msg %))
+                           log-fn prn}
+                      :as *options}]
   (p/let [options (assoc *options :notify-user notify-user :log-fn log-fn :file file)
           {:keys [pages blocks]} (extract-pages-and-blocks @conn file content options)
           tx-options (merge (build-tx-options options)
@@ -1851,7 +1852,7 @@
           pre-blocks (->> blocks (keep #(when (:block/pre-block? %) (:block/uuid %))) set)
 
           blocks-tx (let [tx-options' (assoc tx-options :whiteboard? (some? (seq whiteboard-pages)))]
-                      (<build-blocks-tx conn config blocks pre-blocks per-file-state tx-options'))
+                      (<build-blocks-tx conn blocks pre-blocks per-file-state tx-options'))
           {:keys [property-pages-tx property-page-properties-tx] pages-tx' :pages-tx}
           (split-pages-and-properties-tx pages-tx old-properties existing-pages (:import-state options) @(:upstream-properties tx-options))
           ;; _ (when (seq property-pages-tx) (cljs.pprint/pprint {:property-pages-tx property-pages-tx}))
@@ -1898,18 +1899,18 @@
 ;; =======================
 
 (defn- export-doc-file
-  [{:keys [path idx] :as file} conn config <read-file
+  [{:keys [path idx] :as file} conn <read-file
    {:keys [notify-user set-ui-state <export-file]
     :or {set-ui-state (constantly nil)
-         <export-file (fn <export-file [conn config m opts]
-                        (<add-file-to-db-graph conn config (:file/path m) (:file/content m) opts))}
+         <export-file (fn <export-file [conn m opts]
+                        (<add-file-to-db-graph conn (:file/path m) (:file/content m) opts))}
     :as options}]
   ;; (prn :export-doc-file path idx)
   (-> (p/let [_ (set-ui-state [:graph/importing-state :current-idx] (inc idx))
               _ (set-ui-state [:graph/importing-state :current-page] path)
               content (<read-file file)
-              m {:file/path path :file/content content}]
-        (<export-file conn config m (dissoc options :set-ui-state :<export-file))
+              m {:file/path path :file/content content}
+              _ (<export-file conn m (dissoc options :set-ui-state :<export-file))]
         ;; returning val results in smoother ui updates
         m)
       (p/catch (fn [error]
@@ -1920,9 +1921,9 @@
 (defn export-doc-files
   "Exports all user created files i.e. under journals/ and pages/.
    Recommended to use build-doc-options and pass that as options"
-  [conn config *doc-files <read-file {:keys [notify-user set-ui-state]
-                                      :or {set-ui-state (constantly nil) notify-user prn}
-                                      :as options}]
+  [conn *doc-files <read-file {:keys [notify-user set-ui-state]
+                               :or {set-ui-state (constantly nil) notify-user prn}
+                               :as options}]
   (set-ui-state [:graph/importing-state :total] (count *doc-files))
   (let [doc-files (mapv #(assoc %1 :idx %2)
                         ;; Sort files to ensure reproducible import behavior
@@ -1931,10 +1932,10 @@
                                    [(not (string/starts-with? (node-path/basename path) "hls__")) path])
                                  *doc-files)
                         (range 0 (count *doc-files)))]
-    (-> (p/loop [_file-map (export-doc-file (get doc-files 0) conn config <read-file options)
+    (-> (p/loop [_file-map (export-doc-file (get doc-files 0) conn <read-file options)
                  i 0]
           (when-not (>= i (dec (count doc-files)))
-            (p/recur (export-doc-file (get doc-files (inc i)) conn config <read-file options)
+            (p/recur (export-doc-file (get doc-files (inc i)) conn <read-file options)
                      (inc i))))
         (p/catch (fn [e]
                    (notify-user {:msg (str "Import has unexpected error:\n" (.-message e))
@@ -2139,8 +2140,9 @@
    * :log-fn - fn which logs developer messages
    * :rpath-key - keyword used to get relative path in file map. Default to :path
    * :<read-file - fn which reads a file across multiple steps
+   * :<get-file-stat - fn which returns stat of a file path
    * :default-config - default config if config is unable to be read
-   * :user-options - map of user specific options. See add-file-to-db-graph for more
+   * :user-options - map of user specific options. See <add-file-to-db-graph for more
    * :<save-config-file - fn which saves a config file
    * :<save-logseq-file - fn which saves a logseq file
    * :<read-and-copy-asset - fn which reads and copies asset file
@@ -2174,7 +2176,7 @@
                                    <read-and-copy-asset
                                    (merge (select-keys options [:notify-user :set-ui-state :rpath-key])
                                           {:assets (get-in doc-options [:import-state :assets])}))
-        (export-doc-files conn config doc-files <read-file doc-options)
+        (export-doc-files conn doc-files <read-file doc-options)
         (export-favorites-from-config-edn conn repo-or-conn config {})
         (export-class-properties conn repo-or-conn)
         (move-top-parent-pages-to-library conn repo-or-conn)
