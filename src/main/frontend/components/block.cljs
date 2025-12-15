@@ -280,15 +280,16 @@
         asset-height (:logseq.property.asset/height asset-block)]
     (hooks/use-effect!
      (fn []
-       (when-not (or asset-width asset-height)
-         (measure-image!
-          src
-          (fn [width height]
-            (when (nil? (:logseq.property.asset/width asset-block))
-              (property-handler/set-block-properties! (state/get-current-repo)
-                                                      (:block/uuid asset-block)
-                                                      {:logseq.property.asset/width width
-                                                       :logseq.property.asset/height height})))))
+       (when (:block/uuid asset-block)
+         (when-not (or asset-width asset-height)
+           (measure-image!
+            src
+            (fn [width height]
+              (when (nil? (:logseq.property.asset/width asset-block))
+                (property-handler/set-block-properties! (state/get-current-repo)
+                                                        (:block/uuid asset-block)
+                                                        {:logseq.property.asset/width width
+                                                         :logseq.property.asset/height height}))))))
        (fn []))
      [])
     (let [*el-ref (rum/use-ref nil)
@@ -444,7 +445,11 @@
 
 (defn- open-pdf-file
   [e block href]
-  (let [href (or (:logseq.property.asset/external-url block) href)]
+  (let [href (if-let [url (:logseq.property.asset/external-url block)]
+               (if (string/starts-with? url "zotero://")
+                 (zotero/zotero-full-path (last (string/split url #"/")) (:logseq.property.asset/external-file-name block))
+                 url)
+               href)]
     (when-let [s (or href (some-> (.-target e) (.-dataset) (.-href)))]
       (let [load$ (fn []
                     (p/let [href (or href

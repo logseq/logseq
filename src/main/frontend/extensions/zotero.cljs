@@ -480,18 +480,21 @@
      :target "_blank"
      :href full-path)))
 
+(defn zotero-full-path
+  [item-key filename]
+  (str "file://"
+       (util/node-path.join
+        (setting/setting :zotero-data-directory)
+        "storage"
+        item-key
+        filename)))
+
 (rum/defc zotero-imported-file
   [item-key filename]
   (if (string/blank? (setting/setting :zotero-data-directory))
     [:p.warning "This is a zotero imported file, setting Zotero data directory would allow you to open the file in Logseq"]
     (let [filename (read-string filename)
-          full-path
-          (str "file://"
-               (util/node-path.join
-                (setting/setting :zotero-data-directory)
-                "storage"
-                item-key
-                filename))]
+          full-path (zotero-full-path item-key filename)]
       (open-button full-path))))
 
 (rum/defc zotero-linked-file

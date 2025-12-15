@@ -191,7 +191,8 @@
    ["65.14" {:properties [:logseq.property.asset/external-src]}]
    ["65.15" (rename-properties {:logseq.property.asset/external-src
                                 :logseq.property.asset/external-url}
-                               {})]])
+                               {})]
+   ["65.16" {:properties [:logseq.property.asset/external-file-name]}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]

@@ -889,10 +889,22 @@
          (apply str)
          string/trim)))
 
+;; {:url ["Complex" {:protocol "zotero", :link "select/library/items/6VCW9QFJ"}], :label [["Plain" "Dechow and Struppa - 2015 - Intertwingled.pdf"]], :full_text "[Dechow and Struppa - 2015 - Intertwingled.pdf](zotero://select/library/items/6VCW9QFJ)", :metadata ""}
+(defn- get-zotero-local-pdf-path
+  [config m]
+  (let [link (:link (second (:url m)))
+        label (second (first (:label m)))
+        id (last (string/split link #"/"))]
+    (when (and link id label)
+      (when-let [zotero-data-dir (get-in config [:zotero/settings-v2 "default" :zotero-data-directory])]
+        {:link (str "zotero://" link)
+         :path (node-path/join zotero-data-dir "storage" id label)
+         :base label}))))
+
 (defn- walk-ast-blocks
   "Walks each ast block in order to its full depth. Saves multiple ast types for
   use in build-block-tx. This walk is only done once for perf reasons"
-  [ast-blocks]
+  [config ast-blocks]
   (let [results (atom {:simple-queries []
                        :asset-links []
                        :embeds []})]
@@ -901,10 +913,15 @@
        (cond
          (and (vector? x)
               (= "Link" (first x))
-              (let [path (second (:url (second x)))]
-                (when (string? path)
-                  (or (common-config/local-relative-asset? path)
-                      (string/ends-with? path ".pdf")))))
+              (let [path-or-map (second (:url (second x)))]
+                (cond
+                  (string? path-or-map)
+                  (or (common-config/local-relative-asset? path-or-map)
+                      (string/ends-with? path-or-map ".pdf"))
+                  (and (map? path-or-map) (= "zotero" (:protocol path-or-map)) (string? (:link path-or-map)))
+                  (:link (get-zotero-local-pdf-path config (second x)))
+                  :else
+                  nil)))
          (swap! results update :asset-links conj x)
          (and (vector? x)
               (= "Macro" (first x))
@@ -1139,7 +1156,8 @@
           :logseq.property.asset/checksum (:checksum asset-data)
           :logseq.property.asset/size (:size asset-data)}
          (when-let [external-url (:external-url asset-data)]
-           {:logseq.property.asset/external-url external-url})))
+           {:logseq.property.asset/external-url external-url
+            :logseq.property.asset/external-file-name (:external-file-name asset-data)})))
 
 (defn- get-asset-block-id
   [assets path]
@@ -1190,53 +1208,58 @@
 
 (defn- <handle-assets-in-block
   "If a block contains assets, creates them as #Asset nodes in the Asset page and references them in the block."
-  [block {:keys [asset-links]} {:keys [assets ignored-assets pdf-annotation-pages]} {:keys [notify-user <get-file-stat] :as opts}]
+  [config block {:keys [asset-links]} {:keys [assets ignored-assets pdf-annotation-pages]} {:keys [notify-user <get-file-stat] :as opts}]
   (if (seq asset-links)
     (p/let [asset-maps* (p/all (map
                                 (fn [asset-link]
-                                  (p/let [path (-> asset-link second :url second)
+                                  (p/let [path* (-> asset-link second :url second)
+                                          {:keys [path link base]} (if (map? path*)
+                                                                     (get-zotero-local-pdf-path config (second asset-link))
+                                                                     {:path path*})
                                           asset-name (-> path asset-path->name)
-                                          asset-data* (when asset-name (get @assets asset-name))
-                                          _ (when (and asset-name
+                                          asset-link-or-name (or link (-> path asset-path->name))
+                                          asset-data* (when asset-link-or-name (get @assets asset-link-or-name))
+                                          _ (when (and asset-link-or-name
                                                        (not asset-data*)
                                                        (string/ends-with? path ".pdf")
                                                        (fn? <get-file-stat)) ; external pdf
                                               (->
                                                (p/let [^js stat (<get-file-stat path)]
-                                                 (swap! assets assoc asset-name
+                                                 (swap! assets assoc asset-link-or-name
                                                         {:asset-id (d/squuid)
                                                          :type "pdf"
                                                          ;; avoid using the real checksum since it could be the same with in-graph asset
                                                          :checksum "0000000000000000000000000000000000000000000000000000000000000000"
                                                          :size (.-size stat)
-                                                         :external-url path}))
+                                                         :external-url (or link path)
+                                                         :external-file-name base}))
                                                (p/catch (fn [error]
                                                           (js/console.error error)))))
-                                          asset-data (when asset-name (get @assets asset-name))]
+                                          asset-data (when asset-link-or-name (get @assets asset-link-or-name))]
                                     (if asset-data
                                       (cond
-                                        (not (get-asset-block-id assets asset-name))
-                                        (notify-user {:msg (str "Skipped creating asset " (pr-str asset-name) " because it has no asset id")
+                                        (not (get-asset-block-id assets asset-link-or-name))
+                                        (notify-user {:msg (str "Skipped creating asset " (pr-str asset-link-or-name) " because it has no asset id")
                                                       :level :error})
 
                                         ;; If asset tx is already built, no need to do it again
                                         (:asset-created? asset-data)
-                                        {:asset-name-uuid [asset-name (:asset-id asset-data)]}
+                                        {:asset-name-uuid [asset-link-or-name (:asset-id asset-data)]}
 
                                         :else
                                         (let [new-asset (merge (build-new-asset asset-data)
                                                                {:block/title (db-asset/asset-name->title (node-path/basename asset-name))
-                                                                :block/uuid (get-asset-block-id assets asset-name)}
+                                                                :block/uuid (get-asset-block-id assets asset-link-or-name)}
                                                                (when-let [metadata (not-empty (common-util/safe-read-map-string (:metadata (second asset-link))))]
                                                                  {:logseq.property.asset/resize-metadata metadata}))
-                                              pdf-annotations-tx (when (= "pdf" (path/file-ext asset-name))
-                                                                   (build-pdf-annotations-tx asset-name assets new-asset pdf-annotation-pages opts))
+                                              pdf-annotations-tx (when (= "pdf" (path/file-ext asset-link-or-name))
+                                                                   (build-pdf-annotations-tx asset-link-or-name assets new-asset pdf-annotation-pages opts))
                                               asset-tx (concat [new-asset] pdf-annotations-tx)]
                                           ;; (prn :asset-added! (node-path/basename asset-name))
                                           ;; (cljs.pprint/pprint asset-link)
                                           ;; (prn :debug :asset-tx asset-tx)
-                                          (swap! assets assoc-in [asset-name :asset-created?] true)
-                                          {:asset-name-uuid [asset-name (:block/uuid new-asset)]
+                                          (swap! assets assoc-in [asset-link-or-name :asset-created?] true)
+                                          {:asset-name-uuid [asset-link-or-name (:block/uuid new-asset)]
                                            :asset-tx asset-tx}))
                                       (do
                                         (swap! ignored-assets conj
@@ -1290,18 +1313,18 @@
     block))
 
 (defn- <build-block-tx
-  [db block* pre-blocks {:keys [page-names-to-uuids] :as per-file-state} {:keys [import-state journal-created-ats] :as options}]
+  [db config block* pre-blocks {:keys [page-names-to-uuids] :as per-file-state} {:keys [import-state journal-created-ats] :as options}]
   ;; (prn ::block-in block*)
-  (p/let [walked-ast-blocks (walk-ast-blocks (:block.temp/ast-blocks block*))
+  (p/let [walked-ast-blocks (walk-ast-blocks config (:block.temp/ast-blocks block*))
         ;; needs to come before update-block-refs to detect new property schemas
           {:keys [block properties-tx]}
           (handle-block-properties block* db page-names-to-uuids (:block/refs block*) walked-ast-blocks options)
           {block-after-built-in-props :block deadline-properties-tx :properties-tx}
           (update-block-deadline-and-scheduled block page-names-to-uuids options)
           {block-after-assets :block :keys [asset-blocks-tx]}
-          (<handle-assets-in-block block-after-built-in-props walked-ast-blocks import-state (select-keys options [:log-fn :notify-user :<get-file-stat]))
-
+          (<handle-assets-in-block config block-after-built-in-props walked-ast-blocks import-state (select-keys options [:log-fn :notify-user :<get-file-stat]))
           ;; :block/page should be [:block/page NAME]
+
           journal-page-created-at (some-> (:block/page block*) second journal-created-ats)
           prepared-block (cond-> block-after-assets
                            journal-page-created-at
@@ -1787,6 +1810,16 @@
   (when-let [nodes (seq (filter :block/name txs))]
     (swap! (:all-existing-page-uuids import-state) merge (into {} (map (juxt :block/uuid identity) nodes)))))
 
+(defn- <build-blocks-tx
+  [conn config blocks pre-blocks per-file-state tx-options]
+  (p/loop [tx-data []
+           blocks (remove :block/pre-block? blocks)]
+    (if-let [block (first blocks)]
+      (p/let [block-tx-data (<build-block-tx @conn config block pre-blocks per-file-state
+                                             tx-options)]
+        (p/recur (concat tx-data block-tx-data) (rest blocks)))
+      tx-data)))
+
 (defn <add-file-to-db-graph
   "Parse file and save parsed data to the given db graph. Options available:
 
@@ -1798,10 +1831,10 @@
 * :macros - map of macros for use with macro expansion
 * :notify-user - Displays warnings to user without failing the import. Fn receives a map with :msg
 * :log-fn - Logs messages for development. Defaults to prn"
-  [conn file content {:keys [notify-user log-fn]
-                      :or {notify-user #(println "[WARNING]" (:msg %))
-                           log-fn prn}
-                      :as *options}]
+  [conn config file content {:keys [notify-user log-fn]
+                             :or {notify-user #(println "[WARNING]" (:msg %))
+                                  log-fn prn}
+                             :as *options}]
   (p/let [options (assoc *options :notify-user notify-user :log-fn log-fn :file file)
           {:keys [pages blocks]} (extract-pages-and-blocks @conn file content options)
           tx-options (merge (build-tx-options options)
@@ -1810,19 +1843,15 @@
           ;; Build page and block txs
           {:keys [pages-tx page-properties-tx per-file-state existing-pages]} (build-pages-tx conn pages blocks tx-options)
           whiteboard-pages (->> pages-tx
-                              ;; support old and new whiteboards
+                                ;; support old and new whiteboards
                                 (filter ldb/whiteboard?)
                                 (map (fn [page-block]
                                        (-> page-block
                                            (assoc :logseq.property/ls-type :whiteboard-page)))))
           pre-blocks (->> blocks (keep #(when (:block/pre-block? %) (:block/uuid %))) set)
-          blocks-tx (p/loop [tx-data []
-                             blocks (remove :block/pre-block? blocks)]
-                      (if-let [block (first blocks)]
-                        (p/let [block-tx-data (<build-block-tx @conn block pre-blocks per-file-state
-                                                               (assoc tx-options :whiteboard? (some? (seq whiteboard-pages))))]
-                          (p/recur (concat tx-data block-tx-data) (rest blocks)))
-                        tx-data))
+
+          blocks-tx (let [tx-options' (assoc tx-options :whiteboard? (some? (seq whiteboard-pages)))]
+                      (<build-blocks-tx conn config blocks pre-blocks per-file-state tx-options'))
           {:keys [property-pages-tx property-page-properties-tx] pages-tx' :pages-tx}
           (split-pages-and-properties-tx pages-tx old-properties existing-pages (:import-state options) @(:upstream-properties tx-options))
           ;; _ (when (seq property-pages-tx) (cljs.pprint/pprint {:property-pages-tx property-pages-tx}))
@@ -1869,18 +1898,18 @@
 ;; =======================
 
 (defn- export-doc-file
-  [{:keys [path idx] :as file} conn <read-file
+  [{:keys [path idx] :as file} conn config <read-file
    {:keys [notify-user set-ui-state <export-file]
     :or {set-ui-state (constantly nil)
-         <export-file (fn <export-file [conn m opts]
-                        (<add-file-to-db-graph conn (:file/path m) (:file/content m) opts))}
+         <export-file (fn <export-file [conn config m opts]
+                        (<add-file-to-db-graph conn config (:file/path m) (:file/content m) opts))}
     :as options}]
   ;; (prn :export-doc-file path idx)
   (-> (p/let [_ (set-ui-state [:graph/importing-state :current-idx] (inc idx))
               _ (set-ui-state [:graph/importing-state :current-page] path)
               content (<read-file file)
               m {:file/path path :file/content content}]
-        (<export-file conn m (dissoc options :set-ui-state :<export-file))
+        (<export-file conn config m (dissoc options :set-ui-state :<export-file))
         ;; returning val results in smoother ui updates
         m)
       (p/catch (fn [error]
@@ -1891,9 +1920,9 @@
 (defn export-doc-files
   "Exports all user created files i.e. under journals/ and pages/.
    Recommended to use build-doc-options and pass that as options"
-  [conn *doc-files <read-file {:keys [notify-user set-ui-state]
-                               :or {set-ui-state (constantly nil) notify-user prn}
-                               :as options}]
+  [conn config *doc-files <read-file {:keys [notify-user set-ui-state]
+                                      :or {set-ui-state (constantly nil) notify-user prn}
+                                      :as options}]
   (set-ui-state [:graph/importing-state :total] (count *doc-files))
   (let [doc-files (mapv #(assoc %1 :idx %2)
                         ;; Sort files to ensure reproducible import behavior
@@ -1902,10 +1931,10 @@
                                    [(not (string/starts-with? (node-path/basename path) "hls__")) path])
                                  *doc-files)
                         (range 0 (count *doc-files)))]
-    (-> (p/loop [_file-map (export-doc-file (get doc-files 0) conn <read-file options)
+    (-> (p/loop [_file-map (export-doc-file (get doc-files 0) conn config <read-file options)
                  i 0]
           (when-not (>= i (dec (count doc-files)))
-            (p/recur (export-doc-file (get doc-files (inc i)) conn <read-file options)
+            (p/recur (export-doc-file (get doc-files (inc i)) conn config <read-file options)
                      (inc i))))
         (p/catch (fn [e]
                    (notify-user {:msg (str "Import has unexpected error:\n" (.-message e))
@@ -2145,7 +2174,7 @@
                                    <read-and-copy-asset
                                    (merge (select-keys options [:notify-user :set-ui-state :rpath-key])
                                           {:assets (get-in doc-options [:import-state :assets])}))
-        (export-doc-files conn doc-files <read-file doc-options)
+        (export-doc-files conn config doc-files <read-file doc-options)
         (export-favorites-from-config-edn conn repo-or-conn config {})
         (export-class-properties conn repo-or-conn)
         (move-top-parent-pages-to-library conn repo-or-conn)
