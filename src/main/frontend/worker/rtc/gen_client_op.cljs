@@ -7,23 +7,19 @@
             [logseq.db.frontend.property :as db-property]))
 
 (defn remove-conflict-same-block-datoms
-  "remove conflict entity-datoms for same-block(same block/uuid) in same-entity-datoms-coll.
-  merge
-  [[[182 :block/uuid block-uuid1 1 false], ...]
-   [[183 :block/uuid block-uuid1 1 true], ...]]
-  into
-  [[[183 :block/uuid block-uuid1 1 true], ...]]
-"
+  "remove conflict entity-datoms for same-block(same block/uuid) in same-entity-datoms-coll."
   [same-entity-datoms-coll]
   (let [entity-info (map (fn [datoms]
                            (let [first-datom (first datoms)
                                  e           (nth first-datom 0)
                                  t           (nth first-datom 3)
-                                 uuid        (some (fn [d]
+                                 uuid-datom  (some (fn [d]
                                                      (when (keyword-identical? :block/uuid (nth d 1))
-                                                       (nth d 2)))
-                                                   datoms)]
-                             {:e e :t t :uuid uuid :datoms datoms}))
+                                                       d))
+                                                   datoms)
+                                 uuid        (when uuid-datom (nth uuid-datom 2))
+                                 added?      (when uuid-datom (nth uuid-datom 4))]
+                             {:e e :t t :uuid uuid :added? added? :datoms datoms}))
                          same-entity-datoms-coll)
         uuid-groups (group-by :uuid (filter :uuid entity-info))
         loser-eids  (reduce
@@ -32,7 +28,9 @@
                          (reduce
                           (fn [acc* [_t infos*]]
                             (if (> (count infos*) 1)
-                              (let [sorted-infos (sort-by :e > infos*)
+                              (let [sorted-infos (sort-by (fn [x] [(if (:added? x) 1 0) (:e x)])
+                                                          (fn [a b] (compare b a))
+                                                          infos*)
                                     losers       (rest sorted-infos)]
                                 (into acc* (map :e losers)))
                               acc*))
