@@ -1810,6 +1810,16 @@
   (when-let [nodes (seq (filter :block/name txs))]
     (swap! (:all-existing-page-uuids import-state) merge (into {} (map (juxt :block/uuid identity) nodes)))))
 
+(defn- <build-blocks-tx
+  [conn config blocks pre-blocks per-file-state tx-options]
+  (p/loop [tx-data []
+           blocks (remove :block/pre-block? blocks)]
+    (if-let [block (first blocks)]
+      (p/let [block-tx-data (<build-block-tx @conn config block pre-blocks per-file-state
+                                             tx-options)]
+        (p/recur (concat tx-data block-tx-data) (rest blocks)))
+      tx-data)))
+
 (defn <add-file-to-db-graph
   "Parse file and save parsed data to the given db graph. Options available:
 
@@ -1833,21 +1843,15 @@
           ;; Build page and block txs
           {:keys [pages-tx page-properties-tx per-file-state existing-pages]} (build-pages-tx conn pages blocks tx-options)
           whiteboard-pages (->> pages-tx
-                              ;; support old and new whiteboards
+                                ;; support old and new whiteboards
                                 (filter ldb/whiteboard?)
                                 (map (fn [page-block]
                                        (-> page-block
                                            (assoc :logseq.property/ls-type :whiteboard-page)))))
           pre-blocks (->> blocks (keep #(when (:block/pre-block? %) (:block/uuid %))) set)
 
-          blocks-tx (p/loop [tx-data []
-                             blocks (remove :block/pre-block? blocks)]
-                      (if-let [block (first blocks)]
-                        (p/let [block-tx-data (<build-block-tx @conn config block pre-blocks per-file-state
-                                                               (assoc tx-options :whiteboard? (some? (seq whiteboard-pages))))]
-                          (p/recur (concat tx-data block-tx-data) (rest blocks)))
-                        tx-data))
-
+          blocks-tx (let [tx-options' (assoc tx-options :whiteboard? (some? (seq whiteboard-pages)))]
+                      (<build-blocks-tx conn config blocks pre-blocks per-file-state tx-options'))
           {:keys [property-pages-tx property-page-properties-tx] pages-tx' :pages-tx}
           (split-pages-and-properties-tx pages-tx old-properties existing-pages (:import-state options) @(:upstream-properties tx-options))
           ;; _ (when (seq property-pages-tx) (cljs.pprint/pprint {:property-pages-tx property-pages-tx}))
