@@ -889,6 +889,17 @@
          (apply str)
          string/trim)))
 
+(defn- zotero-link->asset-path
+  "Extract a usable path from zotero link so it can be treated as asset"
+  [node]
+  (when (and (vector? node) (= "Link" (first node)))
+    (let [m (second node)
+          proto (some-> m :url second :protocol)
+          label (some-> m :label first second)]
+      ;; (prn "--------" proto label)
+      (when (and (= proto "zotero") label)
+        (str "../assets/" label)))))
+
 (defn- walk-ast-blocks
   "Walks each ast block in order to its full depth. Saves multiple ast types for
   use in build-block-tx. This walk is only done once for perf reasons"
@@ -898,6 +909,8 @@
                        :embeds []})]
     (walk/prewalk
      (fn [x]
+       (when-let [p (zotero-link->asset-path x)]
+         (swap! results update :asset-links conj (update x 1 assoc :url ["zotero", p])))
        (cond
          (and (vector? x)
               (= "Link" (first x))
@@ -1183,12 +1196,27 @@
 (defn- handle-assets-in-block
   "If a block contains assets, creates them as #Asset nodes in the Asset page and references them in the block."
   [block {:keys [asset-links]} {:keys [assets ignored-assets pdf-annotation-pages]} {:keys [notify-user] :as opts}]
+  ;; (when (not= 0 (count asset-links))
+  ;;   (prn block asset-links assets))
+
   (if (seq asset-links)
     (let [asset-maps
           (keep
            (fn [asset-link]
-             (let [asset-name (-> asset-link second :url second asset-path->name)]
-               (if-let [asset-data (and asset-name (get @assets asset-name))]
+             (let [url       (:url (second asset-link))
+                   url-type  (first url)
+                   asset-name (-> url second asset-path->name)
+                   ;; If zotero link was not pre-populated in assets, create a placeholder entry
+                   asset-data (or (and asset-name (get @assets asset-name))
+                                  (when (and (= url-type "zotero") asset-name)
+                                    (let [placeholder {:size 0
+                                                       :type "zotero-linked-file"
+                                                       :path asset-name
+                                                       :checksum (apply str (repeat 64 "0"))
+                                                       :asset-id (d/squuid)}]
+                                      (swap! assets assoc asset-name placeholder)
+                                      placeholder)))]
+               (if asset-data
                  (cond
                    (not (get-asset-block-id assets asset-name))
                    (notify-user {:msg (str "Skipped creating asset " (pr-str asset-name) " because it has no asset id")
@@ -1199,8 +1227,9 @@
                    {:asset-name-uuid [asset-name (:asset-id asset-data)]}
 
                    :else
-                   (let [new-asset (merge (build-new-asset asset-data)
-                                          {:block/title (db-asset/asset-name->title (node-path/basename asset-name))
+                   (let [title (-> asset-link second :label first second)
+                         new-asset (merge (build-new-asset asset-data)
+                                          {:block/title title
                                            :block/uuid (get-asset-block-id assets asset-name)}
                                           (when-let [metadata (not-empty (common-util/safe-read-map-string (:metadata (second asset-link))))]
                                             {:logseq.property.asset/resize-metadata metadata}))
@@ -1208,6 +1237,8 @@
                                               (build-pdf-annotations-tx asset-name assets new-asset pdf-annotation-pages opts))
                          asset-tx (concat [new-asset]
                                           (when pdf-annotations-tx pdf-annotations-tx))]
+                    ;;  (when pdf-annotations-tx (prn "pdf: " pdf-annotations-tx))
+
                     ;;  (prn :asset-added! (node-path/basename asset-name))
                     ;;  (cljs.pprint/pprint asset-link)
                      (swap! assets assoc-in [asset-name :asset-created?] true)
