@@ -228,4 +228,13 @@
           result      (subject/remove-conflict-same-block-datoms same-entity-datoms-coll)]
       (is (= 2 (count result)))
       (is (= datoms-1 (first result)))
-      (is (= datoms-3 (second result))))))
+      (is (= datoms-3 (second result)))))
+
+  (testing "remove conflict entity-datoms should prefer add over retract"
+    (let [block-uuid1 #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+          datoms-1    [[100 :block/uuid block-uuid1 1 true]]
+          datoms-2    [[101 :block/uuid block-uuid1 1 false]]
+          same-entity-datoms-coll [datoms-1 datoms-2]
+          result      (subject/remove-conflict-same-block-datoms same-entity-datoms-coll)]
+      (is (= 1 (count result)))
+      (is (= datoms-1 (first result))))))
