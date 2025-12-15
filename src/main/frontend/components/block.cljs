@@ -1130,7 +1130,9 @@
               (and (string? uuid-or-title) (string/ends-with? uuid-or-title ".excalidraw"))
               [:div.draw {:on-click (fn [e]
                                       (.stopPropagation e))}
-               (excalidraw uuid-or-title (:block/uuid config))]
+               (if (config/db-based-graph?)
+                 [:div.warning "Excalidraw is no longer supported by default, we plan to support it through plugins."]
+                 (excalidraw uuid-or-title (:block/uuid config)))]
 
               :else
               (let [blank-title? (string/blank? (:block/title block))]
