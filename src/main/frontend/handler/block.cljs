@@ -363,8 +363,11 @@
                       (reset! *swiped? true)
                       (dom/set-style! block-container :transform (util/format "translateX(%dpx)" left)))))))))))))
 
+(defonce ^:private *swipe-timeout (atom nil))
 (defn on-touch-end
   [event]
+  (when-let [timeout @*swipe-timeout]
+    (js/clearTimeout timeout))
   (util/stop-propagation event)
   (when @*swipe
     (let [target (.-target event)
@@ -389,10 +392,11 @@
               (when (:mobile/show-action-bar? @state/state)
                 (state/set-state! :mobile/show-action-bar? false)))
             (haptics/haptics)))
-        (reset! *swiped? false)
         (catch :default e
           (js/console.error e))
         (finally
+          (reset! *swipe-timeout
+                  (js/setTimeout #(reset! *swiped? false) 50))
           (reset! *swipe nil)
           (reset! *touch-start nil))))))
 
