@@ -621,7 +621,6 @@
  :command.command-palette/toggle         "Suchbefehle"
  :command.command/run                    "Git-Befehl ausführen"
  :command.command/toggle-favorite        "Zu Favoriten hinzufügen/entfernen"
- :command.dev/fix-broken-graph            "Defekten Graph reparieren"
  :command.dev/gc-graph                   "(Dev) Graph bereinigen (ungenutzte Daten in SQLite entfernen)"
  :command.dev/replace-graph-with-db-file "(Dev) Graph mit db.sqlite-Datei ersetzen"
  :command.dev/rtc-start                  "(Dev) RTC starten"
