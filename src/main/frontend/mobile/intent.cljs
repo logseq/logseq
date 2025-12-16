@@ -24,6 +24,35 @@
             [logseq.common.util :as common-util]
             [promesa.core :as p]))
 
+(defn- normalize-native-file-path
+  "Normalize iOS shared file URLs to paths that Capacitor Filesystem can read.
+  iOS share extensions commonly provide `file://` URLs."
+  [url]
+  (let [url (some-> url common-util/safe-decode-uri-component)]
+    (cond
+      (string/blank? url)
+      url
+
+      (string/starts-with? url "file://")
+      (subs url (count "file://"))
+
+      ;; Some Capacitor APIs may provide `_capacitor_file_` URLs.
+      (string/starts-with? url "capacitor://localhost/_capacitor_file_")
+      (string/replace url "capacitor://localhost/_capacitor_file_" "")
+
+      :else
+      url)))
+
+(defn- <filesystem-read-file
+  [url]
+  (let [path (normalize-native-file-path url)]
+    (-> (.readFile Filesystem #js {:path path})
+        (p/catch (fn [error]
+                   ;; Fallback to the original string for older plugin versions.
+                   (if (= path url)
+                     (p/rejected error)
+                     (.readFile Filesystem #js {:path url})))))))
+
 (defn open-or-share-file
   "Share file to mobile platform"
   [uri]
@@ -85,7 +114,7 @@
 
 (defn- embed-asset-file [url _format]
   (p/let [basename (node-path/basename url)
-          file (.readFile Filesystem #js {:path url})
+          file (<filesystem-read-file url)
           file-base64-str (some-> file (.-data))
           file (some-> file-base64-str (util/base64string-to-unit8array)
                        (vector) (clj->js) (js/File. basename #js {}))
@@ -107,7 +136,7 @@
                                (config/get-pages-directory)
                                (str (js/encodeURI (fs-util/file-name-sanity title :markdown)) (node-path/extname url)))
           _ (p/catch
-             (.copy Filesystem (clj->js {:from url :to path}))
+             (.copy Filesystem (clj->js {:from (normalize-native-file-path url) :to path}))
              (fn [error]
                (log/error :copy-file-error {:error error})))
           url (ref/->page-ref title)
@@ -124,7 +153,10 @@
   (p/let [{:keys [url]} result
           page (or (state/get-current-page) (string/lower-case (date/journal-name)))
           format (db/get-page-format page)]
-    (embed-asset-file url format)))
+    (-> (embed-asset-file url format)
+        (p/catch (fn [error]
+                   (log/error :share-import-media-failed {:error error :url url})
+                   (notification/show! "Failed to import the shared media. Please try again." :error false))))))
 
 (defn- handle-received-application [result]
   (p/let [{:keys [title url type]} result
@@ -173,14 +205,16 @@
   (-> (p/let [basename (node-path/basename url)
               _label (-> basename util/node-path.name)
               _path (assets-handler/get-asset-path basename)
-              file (.readFile Filesystem #js {:path url})
+              file (<filesystem-read-file url)
               file-base64-str (some-> file (.-data))
               file (some-> file-base64-str (util/base64string-to-unit8array)
                            (vector) (clj->js) (js/File. basename #js {}))
               result (editor-handler/db-based-save-assets!
                       (state/get-current-repo) [file] {})]
         result)
-      (p/catch #(log/error :handle-asset-file %))))
+      (p/catch (fn [error]
+                 (log/error :handle-asset-file {:error error :url url})
+                 (notification/show! "Failed to import the shared file. Please try again." :error false)))))
 
 (defn- handle-payload-resource
   [{:keys [type name ext url] :as resource} format]
