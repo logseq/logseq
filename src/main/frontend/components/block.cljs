@@ -2439,11 +2439,15 @@
                                             "Hide query"
                                             "Set query")]))]
     [:div
-     {:class (if query?
-               "inline-flex"
-               "w-full inline")
-      :on-mouse-over #(set-hover? true)
-      :on-mouse-out #(set-hover? false)}
+     (merge
+      {:class (if query?
+                "inline-flex"
+                "w-full inline")
+       :on-mouse-over #(set-hover? true)
+       :on-mouse-out #(set-hover? false)}
+      (when-let [on-title-click (:on-title-click config)]
+        (when (fn? on-title-click)
+          {:on-click on-title-click})))
      (cond
        (and query? (and blank? (or advanced-query? show-query?)))
        [:span.opacity-75.hover:opacity-100 "Untitled query"]
