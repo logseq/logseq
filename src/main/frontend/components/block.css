@@ -555,7 +555,7 @@
 }
 
 @container (max-width: 600px) {
-    .time-spent, .positioned-properties.block-right {
+    .time-spent {
         display: none;
     }
 
