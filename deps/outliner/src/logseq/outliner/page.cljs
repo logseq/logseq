@@ -22,7 +22,11 @@
 (defn- db-refs->page
   "Replace [[page name]] with page name"
   [page-entity]
-  (let [refs (:block/_refs page-entity)
+  (let [refs (->> (:block/_refs page-entity)
+                  ;; remove child or self that refed this page
+                  (remove (fn [ref]
+                            (or (= (:db/id ref) (:db/id page-entity))
+                                (= (:db/id (:block/page ref)) (:db/id page-entity))))))
         id-ref->page #(db-content/content-id-ref->page % [page-entity])]
     (when (seq refs)
       (let [tx-data (mapcat (fn [{:block/keys [raw-title] :as ref}]
