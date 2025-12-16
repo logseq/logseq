@@ -104,7 +104,12 @@
   (ui-component/open-popup!
    (fn []
      [:div.px-1
-      (repo/repos-dropdown-content {:footer? false})])
+      (repo/repos-dropdown-content {:footer? false})
+      (ui/menu-link
+       {:on-click #(p/do!
+                    (shui/popup-hide!)
+                    (state/pub-event! [:graph/new-db-graph]))}
+       "Create new graph")])
    {:default-height false}))
 
 (defn- register-native-top-bar-events! []
