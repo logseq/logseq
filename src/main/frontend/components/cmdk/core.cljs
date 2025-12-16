@@ -326,7 +326,6 @@
     (p/let [blocks (search/block-search repo @!input opts)
             blocks (remove nil? blocks)
             items (keep (fn [block]
-                          (prn :debug :block block)
                           (if (:page? block)
                             (page-item repo block @!input)
                             (block-item repo block current-page @!input))) blocks)]
