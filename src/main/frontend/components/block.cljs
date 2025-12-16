@@ -280,15 +280,16 @@
         asset-height (:logseq.property.asset/height asset-block)]
     (hooks/use-effect!
      (fn []
-       (when-not (or asset-width asset-height)
-         (measure-image!
-          src
-          (fn [width height]
-            (when (nil? (:logseq.property.asset/width asset-block))
-              (property-handler/set-block-properties! (state/get-current-repo)
-                                                      (:block/uuid asset-block)
-                                                      {:logseq.property.asset/width width
-                                                       :logseq.property.asset/height height})))))
+       (when (:block/uuid asset-block)
+         (when-not (or asset-width asset-height)
+           (measure-image!
+            src
+            (fn [width height]
+              (when (nil? (:logseq.property.asset/width asset-block))
+                (property-handler/set-block-properties! (state/get-current-repo)
+                                                        (:block/uuid asset-block)
+                                                        {:logseq.property.asset/width width
+                                                         :logseq.property.asset/height height}))))))
        (fn []))
      [])
     (let [*el-ref (rum/use-ref nil)
@@ -444,7 +445,11 @@
 
 (defn- open-pdf-file
   [e block href]
-  (let [href (or (:logseq.property.asset/external-url block) href)]
+  (let [href (if-let [url (:logseq.property.asset/external-url block)]
+               (if (string/starts-with? url "zotero://")
+                 (zotero/zotero-full-path (last (string/split url #"/")) (:logseq.property.asset/external-file-name block))
+                 url)
+               href)]
     (when-let [s (or href (some-> (.-target e) (.-dataset) (.-href)))]
       (let [load$ (fn []
                     (p/let [href (or href
@@ -1130,7 +1135,9 @@
               (and (string? uuid-or-title) (string/ends-with? uuid-or-title ".excalidraw"))
               [:div.draw {:on-click (fn [e]
                                       (.stopPropagation e))}
-               (excalidraw uuid-or-title (:block/uuid config))]
+               (if (config/db-based-graph?)
+                 [:div.warning "Excalidraw is no longer supported by default, we plan to support it through plugins."]
+                 (excalidraw uuid-or-title (:block/uuid config)))]
 
               :else
               (let [blank-title? (string/blank? (:block/title block))]
@@ -2432,11 +2439,15 @@
                                             "Hide query"
                                             "Set query")]))]
     [:div
-     {:class (if query?
-               "inline-flex"
-               "w-full inline")
-      :on-mouse-over #(set-hover? true)
-      :on-mouse-out #(set-hover? false)}
+     (merge
+      {:class (if query?
+                "inline-flex"
+                "w-full inline")
+       :on-mouse-over #(set-hover? true)
+       :on-mouse-out #(set-hover? false)}
+      (when-let [on-title-click (:on-title-click config)]
+        (when (fn? on-title-click)
+          {:on-click on-title-click})))
      (cond
        (and query? (and blank? (or advanced-query? show-query?)))
        [:span.opacity-75.hover:opacity-100 "Untitled query"]

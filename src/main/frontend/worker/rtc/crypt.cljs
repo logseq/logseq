@@ -259,7 +259,7 @@
       (catch Cancelled _)
       (catch :default e e))))
 
-(def-thread-api :thread-api/reset-e2ee-password
+(def-thread-api :thread-api/change-e2ee-password
   [token refresh-token user-uuid old-password new-password]
   (m/sp
     (let [{:keys [get-ws-create-task]} (ws-util/gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]

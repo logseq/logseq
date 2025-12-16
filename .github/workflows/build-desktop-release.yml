@@ -155,7 +155,7 @@ jobs:
       - name: Upload Sentry Sourcemaps (beta only)
         # if: ${{ github.repository == 'logseq/logseq' && github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
         run: |
-          curl -sL https://sentry.io/get-cli/ | bash
+          curl -sL https://sentry.io/get-cli/ | SENTRY_CLI_VERSION=2.58.4 bash
           release_name="logseq@${{ steps.ref.outputs.version }}"
           sentry-cli releases new "${release_name}"
           sentry-cli releases files "${release_name}" upload-sourcemaps --ext map --ext js ./static/js --url-prefix '~/static/js'

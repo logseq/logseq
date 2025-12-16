@@ -375,3 +375,10 @@ div[data-radix-menu-content] {
     width: 0.45em;
     height: 0.45em;
 }
+
+.ls-foldable-title {
+    margin-left: -5px;
+}
+.ls-foldable-title-control {
+    margin-left: 0px;
+}

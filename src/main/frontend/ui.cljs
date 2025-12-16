@@ -628,26 +628,34 @@
                     (let [^js target (.-target e)]
                       (when (some-> target (.closest ".as-toggle"))
                         (reset! collapsed? (not @collapsed?)))))}
-       (when-not (mobile-util/native-platform?)
-         (let [style {:width 14 :height 16}]
-           [:a.ls-foldable-title-control.block-control.opacity-50.hover:opacity-100
-            (cond->
-             {:style style}
-              (not title-trigger?)
-              (assoc :on-pointer-down on-pointer-down))
-            [:span {:class (if (or @control? @collapsed?) "control-show cursor-pointer" "control-hide")}
-             (rotating-arrow @collapsed?)]]))
+       (let [style {:width 14 :height 16}]
+         [:a.ls-foldable-title-control.block-control.opacity-50.hover:opacity-100
+          (cond->
+           {:style style}
+            (not title-trigger?)
+            (assoc :on-pointer-down on-pointer-down))
+          [:span {:class (if (or @control? @collapsed? (util/mobile?))
+                           "control-show cursor-pointer"
+                           "control-hide")}
+           (rotating-arrow @collapsed?)]])
        (if (fn? header)
          (header @collapsed?)
          header)]]]))
 
 (rum/defcs foldable < db-mixins/query rum/reactive
   (rum/local false ::collapsed?)
+  (rum/local true ::render-content?)
+  (rum/local nil ::collapse-timeout)
   {:will-mount (fn [state]
                  (let [args (:rum/args state)]
                    (when (true? (:default-collapsed? (last args)))
-                     (reset! (get state ::collapsed?) true)))
+                     (reset! (get state ::collapsed?) true)
+                     (reset! (get state ::render-content?) false)))
                  state)
+   :will-unmount (fn [state]
+                   (when-let [timeout-id @(get state ::collapse-timeout)]
+                     (js/clearTimeout timeout-id))
+                   state)
    :did-mount (fn [state]
                 (when-let [f (:init-collapsed (last (:rum/args state)))]
                   (f (::collapsed? state)))
@@ -655,11 +663,27 @@
   [state header content {:keys [title-trigger? on-pointer-down class
                                 _default-collapsed? _init-collapsed]}]
   (let [collapsed? (get state ::collapsed?)
+        render-content? (get state ::render-content?)
+        collapse-timeout (get state ::collapse-timeout)
+        transition-ms 200
         on-pointer-down (fn [e]
                           (util/stop e)
-                          (swap! collapsed? not)
-                          (when on-pointer-down
-                            (on-pointer-down @collapsed?)))]
+                          (let [next-collapsed? (not @collapsed?)]
+                            (when-let [timeout-id @collapse-timeout]
+                              (js/clearTimeout timeout-id)
+                              (reset! collapse-timeout nil))
+                            (when (false? next-collapsed?)
+                              (reset! render-content? true))
+                            (reset! collapsed? next-collapsed?)
+                            (when (true? next-collapsed?)
+                              (reset! collapse-timeout
+                                      (js/setTimeout
+                                       (fn []
+                                         (reset! render-content? false)
+                                         (reset! collapse-timeout nil))
+                                       transition-ms)))
+                            (when on-pointer-down
+                              (on-pointer-down next-collapsed?))))]
     [:div.flex.flex-col
      {:class class}
      (foldable-title {:on-pointer-down on-pointer-down
@@ -668,10 +692,13 @@
                       :collapsed? collapsed?})
      ;; Don't stop propagation for the pointer down event to the high level content container.
      ;; That may cause the drag function to not work.
-     [:div {:class (if @collapsed? "hidden" "initial")}
-      (if (fn? content)
-        (if (not @collapsed?) (content) nil)
-        content)]]))
+     [:div.ls-foldable-content
+      {:class (when @collapsed? "is-collapsed")
+       :aria-hidden (boolean @collapsed?)}
+      [:div.ls-foldable-content-inner
+       (if (fn? content)
+         (when @render-content? (content))
+         content)]]]))
 
 (rum/defc admonition
   [type content]

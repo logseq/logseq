@@ -274,16 +274,21 @@
                 new-result)))]))
 
 (defn page-item
-  [repo page]
-  (let [entity (db/entity [:block/uuid (:block/uuid page)])
+  [repo page input]
+  (let [entity (-> (or (db/entity [:block/uuid (:block/uuid page)]) page)
+                   (update :block/tags (fn [tags]
+                                         (map (fn [tag]
+                                                (if (integer? tag)
+                                                  (db/entity tag)
+                                                  tag)) tags))))
         source-page (or (model/get-alias-source-page repo (:db/id entity))
                         (:alias page))
         icon (icon-component/get-node-icon-cp entity {:ignore-current-icon? true})
-        title (block-handler/block-unique-title (or entity page)
+        title (block-handler/block-unique-title entity
                                                 {:alias (:block/title source-page)})]
     (hash-map :icon icon
               :icon-theme :gray
-              :text title
+              :text (highlight-content-query title input)
               :header (when (:block/parent entity)
                         (block/breadcrumb {:disable-preview? true
                                            :search? true} repo (:block/uuid page)
@@ -322,7 +327,7 @@
             blocks (remove nil? blocks)
             items (keep (fn [block]
                           (if (:page? block)
-                            (page-item repo block)
+                            (page-item repo block @!input)
                             (block-item repo block current-page @!input))) blocks)]
       (if (= group :current-page)
         (let [items-on-current-page (filter :current-page? items)]

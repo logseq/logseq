@@ -104,10 +104,15 @@
   (ui-component/open-popup!
    (fn []
      [:div.px-1
-      (repo/repos-dropdown-content {:footer? false})])
+      (repo/repos-dropdown-content {:footer? false})
+      (ui/menu-link
+       {:on-click #(p/do!
+                    (shui/popup-hide!)
+                    (state/pub-event! [:graph/new-db-graph]))}
+       "Create new graph")])
    {:default-height false}))
 
-(defn- register-native-top-bar-events! []
+(defn- register-native-top-bar-events! [*configure-top-bar-f]
   (when (and (mobile-util/native-platform?)
              mobile-util/native-top-bar
              (not @native-top-bar-listener?))
@@ -131,9 +136,13 @@
                                    (when (common-util/uuid-string? id)
                                      (when-let [block (db/entity [:block/uuid (uuid id)])]
                                        (let [favorited? (page-handler/favorited? (str (:block/uuid block)))]
-                                         (if favorited?
-                                           (page-handler/<unfavorite-page! id)
-                                           (page-handler/<favorite-page! id))))))
+                                         (p/do!
+                                          (if favorited?
+                                            (page-handler/<unfavorite-page! id)
+                                            (page-handler/<favorite-page! id))
+                                          (let [favorited? (not favorited?)]
+                                            (when-let [f @*configure-top-bar-f]
+                                              (f favorited?))))))))
                       "page-setting" (when-let [id (state/get-current-page)]
                                        (when (common-util/uuid-string? id)
                                          (when-let [block (db/entity [:block/uuid (uuid id)])]
@@ -199,6 +208,7 @@
                           "Select a Graph")
         route-name (get-in route-match [:data :name])
         route-view (get-in route-match [:data :view])
+        [*configure-top-bar-f _] (hooks/use-state (atom nil))
         detail-info (hooks/use-flow-state (m/watch rtc-indicator/*detail-info))
         _ (hooks/use-flow-state flows/current-login-user-flow)
         online? (hooks/use-flow-state flows/network-online-event-flow)
@@ -217,7 +227,7 @@
      (fn []
        (when (and (mobile-util/native-platform?)
                   mobile-util/native-top-bar)
-         (register-native-top-bar-events!)
+         (register-native-top-bar-events! *configure-top-bar-f)
          (p/let [block (when (= route-name :page)
                          (let [id (get-in route-match [:parameters :path :name])]
                            (when (common-util/uuid-string? id)
@@ -231,15 +241,18 @@
                              (= tab "search")
                              "Search"
                              :else
-                             (string/capitalize tab))]
-           (configure-native-top-bar!
-            current-repo
-            {:tab tab
-             :title title
-             :route-name route-name
-             :route-view route-view
-             :sync-color sync-color
-             :favorited? favorited?})))
+                             (string/capitalize tab))
+                 f (fn [favorited?]
+                     (configure-native-top-bar!
+                      current-repo
+                      {:tab tab
+                       :title title
+                       :route-name route-name
+                       :route-view route-view
+                       :sync-color sync-color
+                       :favorited? favorited?}))]
+           (reset! *configure-top-bar-f f)
+           (f favorited?)))
        nil)
      [tab short-repo-name route-match sync-color])
 

@@ -795,7 +795,6 @@
   :dev/show-page-ast "(Dev) Show page AST"
   :dev/replace-graph-with-db-file "(Dev) Replace graph with its db.sqlite file"
   :dev/validate-db "(Dev) Validate current graph"
-  :dev/fix-broken-graph "Fix current broken graph"
   :dev/gc-graph "(Dev) Garbage collect graph (remove unused data in SQLite)"
   :dev/rtc-stop "(Dev) RTC Stop"
   :dev/rtc-start "(Dev) RTC Start"

@@ -458,21 +458,7 @@
       :on-pointer-down (fn [e]
                          (when (util/right-click? e)
                            (state/set-state! :page-title/context {:page (:block/title page)
-                                                                  :page-entity page})))
-      :on-click (fn [e]
-                  (when-not (some-> e (.-target) (.closest ".ls-properties-area"))
-                    (when-not (= (.-nodeName (.-target e)) "INPUT")
-                      (.preventDefault e)
-                      (cond
-                        (gobj/get e "shiftKey")
-                        (state/sidebar-add-block!
-                         (state/get-current-repo)
-                         (:db/id page)
-                         :page)
-                        (and (util/mobile?) journals?)
-                        (route-handler/redirect-to-page! (:block/uuid page))
-                        :else
-                        nil))))}
+                                                                  :page-entity page})))}
 
      [:div.w-full.relative
       (component-block/block-container
@@ -488,7 +474,18 @@
         :hide-children? true
         :container-id container-id
         :show-tag-and-property-classes? true
-        :journal-page? (ldb/journal? page)}
+        :journal-page? (ldb/journal? page)
+        :on-title-click (fn [e]
+                          (cond
+                            (gobj/get e "shiftKey")
+                            (state/sidebar-add-block!
+                             (state/get-current-repo)
+                             (:db/id page)
+                             :page)
+                            (and (util/mobile?) journals?)
+                            (route-handler/redirect-to-page! (:block/uuid page))
+                            :else
+                            nil))}
        page)]]))
 
 (defn- page-mouse-over
@@ -704,7 +701,8 @@
                                                    :whiteboard? whiteboard?}))])])
 
          (when-not preview?
-           [:div.ml-1.flex.flex-col.gap-8
+           [:div.flex.flex-col.gap-8
+            {:class (when-not (util/mobile?) "ml-1")}
             (when today?
               (today-queries repo today? sidebar?))
 

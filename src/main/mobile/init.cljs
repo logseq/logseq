@@ -11,7 +11,6 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
-            [logseq.shui.dialog.core :as shui-dialog]
             [mobile.deeplink :as deeplink]
             [promesa.core :as p]))
 
@@ -41,29 +40,6 @@
   []
   (mobile-util/check-ios-zoomed-display)
   (mobile-util/sync-ios-content-size!))
-
-(defn- android-init!
-  "Initialize Android-specified event listeners"
-  []
-  (.addListener App "backButton"
-                (fn []
-                  (when (false?
-                         (cond
-                           ;; lightbox
-                           (js/document.querySelector ".pswp")
-                           (some-> js/window.photoLightbox (.destroy))
-
-                           (shui-dialog/has-modal?)
-                           (shui-dialog/close!)
-
-                           (not-empty (state/get-selection-blocks))
-                           (editor-handler/clear-selection!)
-
-                           (state/editing?)
-                           (editor-handler/escape-editing)
-
-                           :else false))
-                    (prn "TODO: handle back button in Android")))))
 
 (defn- app-state-change-handler
   "NOTE: don't add more logic in this listener, use mobile-flows instead"
@@ -123,9 +99,6 @@
   (intent/handle-received)
 
   (reset! mobile-flows/*network Network)
-
-  (when (mobile-util/native-android?)
-    (android-init!))
 
   (when (mobile-util/native-ios?)
     (ios-init!))
