@@ -1,3 +1,8 @@
+## 0.4.2
+* Add `--validate` option to `export-edn` command
+* Fix cli can't run in CI environments
+* Fix `import-edn` and `mcp-server` commands not building refs for new or edited nodes
+
 ## 0.4.1
 * Add `--open-schema` option to `validate` command
 * Fix `append` command fails
