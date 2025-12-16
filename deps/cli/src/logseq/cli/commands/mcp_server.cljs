@@ -7,6 +7,7 @@
             [logseq.cli.common.mcp.tools :as cli-common-mcp-tools]
             [logseq.cli.util :as cli-util]
             [logseq.db.common.sqlite-cli :as sqlite-cli]
+            [logseq.outliner.db-pipeline :as db-pipeline]
             [nbb.core :as nbb]
             [promesa.core :as p]))
 
@@ -83,7 +84,8 @@
           (cli-common-mcp-server/create-mcp-api-server (partial call-api api-server-token)))
         (p/catch cli-util/command-catch-handler))
     (let [mcp-server (cli-common-mcp-server/create-mcp-server)
-          conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))]
+          conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))
+          _ (db-pipeline/add-listener conn)]
       (doseq [[k v] local-tools]
         (.registerTool mcp-server (name k) (:config v) (partial (:fn v) conn)))
       mcp-server)))
@@ -94,7 +96,8 @@
   (if debug-tool
     (if graph
       (if-let [tool-m (get local-tools debug-tool)]
-        (let [conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))]
+        (let [conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))
+              _ (db-pipeline/add-listener conn)]
           (p/let [resp ((:fn tool-m) conn (clj->js (dissoc opts :debug-tool)))]
             (js/console.log (clj->js resp))))
         (cli-util/error "Tool" (pr-str debug-tool) "not found"))
