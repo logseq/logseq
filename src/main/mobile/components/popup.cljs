@@ -30,9 +30,12 @@
         (.present
          plugin
          (clj->js
-          (let [height (popup-min-height (:default-height opts))]
+          (let [height (popup-min-height (:default-height opts))
+                height' (if (contains? #{:ls-icon-picker} id)
+                          760
+                          height)]
             (cond-> {:allowFullHeight (not= (:type opts) :action-sheet)}
-              (int? height) (assoc :defaultHeight height)))))))))
+              (int? height') (assoc :defaultHeight height')))))))))
 
 (defn- dismiss-native-sheet!
   []
