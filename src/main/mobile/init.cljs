@@ -11,7 +11,9 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
+            [mobile.bottom-tabs :as bottom-tabs]
             [mobile.deeplink :as deeplink]
+            [mobile.state :as mobile-state]
             [promesa.core :as p]))
 
 ;; FIXME: `appUrlOpen` are fired twice when receiving a same intent.
@@ -75,6 +77,10 @@
       (p/then (fn [^js data]
                 (when-let [url (.-url data)]
                   (log/info ::launch-url data)
+                  (reset! mobile-state/*app-launch-url url)
+                  (when (= url "logseq://mobile/go/quick-add")
+                    (mobile-state/set-tab! "capture")
+                    (js/setTimeout #(bottom-tabs/select! "capture") 2000))
                   (handle-incoming-url! url)))))
 
   (.addListener Keyboard "keyboardWillShow"
