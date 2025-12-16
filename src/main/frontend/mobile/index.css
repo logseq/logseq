@@ -112,6 +112,10 @@ html.is-zoomed-native-ios {
   }
 }
 
+.ui__dialog-content {
+    margin-top: 45px;
+}
+
 html.has-mobile-keyboard {
   .ui__dialog-overlay {
     &:has(.app-login-modal) {
