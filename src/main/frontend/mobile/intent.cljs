@@ -178,10 +178,8 @@
               file (some-> file-base64-str (util/base64string-to-unit8array)
                            (vector) (clj->js) (js/File. basename #js {}))
               result (editor-handler/db-based-save-assets!
-                      (state/get-current-repo) [file] {})
-              asset-entity (first result)
-              url-link (util/format "[[%s]]" (:block/uuid asset-entity))]
-        url-link)
+                      (state/get-current-repo) [file] {})]
+        result)
       (p/catch #(log/error :handle-asset-file %))))
 
 (defn- handle-payload-resource
@@ -223,14 +221,21 @@
 
           template (get-in (state/get-config)
                            [:quick-capture-templates :text]
-                           "**{time}** [[quick capture]]: {text} {url}")
+                           "**{time}** [[quick capture]]​ {text} {url}")
           {:keys [text resources]} payload
           text (or text "")
           rich-content (-> (p/all (map (fn [resource]
                                          (handle-payload-resource resource format))
                                        resources))
-                           (p/then (partial string/join "\n")))]
-    (when (or (not-empty text) (not-empty rich-content))
+                           (p/then (fn [result]
+                                     (when (every? string? result)
+                                       (string/join "\n" result)))))]
+    (when (and (or (not-empty text) (not-empty rich-content))
+               (not (every?
+                     (fn [resource]
+                       (contains? (set/union config/doc-formats config/media-formats)
+                                  (keyword (:ext resource))))
+                     resources)))
       (let [time (date/get-current-time)
             date-ref-name (date/today)
             content (-> template
