@@ -111,7 +111,8 @@
          (cond
            reselected?
            (do
-             (mobile-nav/pop-to-root! tab)
+             (when (mobile-util/native-android?)
+               (mobile-nav/pop-to-root! tab))
              (mobile-state/set-tab! tab)
              (when (= "home" tab)
                (util/scroll-to-top false)))
