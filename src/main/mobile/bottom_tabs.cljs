@@ -120,9 +120,10 @@
            (not= @*current-tab tab)
            (do
              (reset! *current-tab tab)
-             (mobile-state/set-tab! tab)
-             (when (= "home" tab)
-               (util/scroll-to-top false))))))
+             (mobile-state/set-tab! tab))
+
+           (= @*current-tab tab "home")
+           (util/scroll-to-top false))))
 
       (add-watch mobile-state/*tab ::select-tab
                  (fn [_ _ _old new]
