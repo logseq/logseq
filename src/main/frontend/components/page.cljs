@@ -701,7 +701,8 @@
                                                    :whiteboard? whiteboard?}))])])
 
          (when-not preview?
-           [:div.ml-1.flex.flex-col.gap-8
+           [:div.flex.flex-col.gap-8
+            {:class (when-not (util/mobile?) "ml-1")}
             (when today?
               (today-queries repo today? sidebar?))
 
