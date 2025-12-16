@@ -2002,6 +2002,39 @@
 
       (when (and db-based? add-new-object!) (new-record-button table view-entity))]]))
 
+(rum/defc group-item
+  [view-entity table' group group-by-property value option view-opts {:keys [list-view? group-by-page? readable-property-value]}]
+  (let [title [:div
+               {:class (when-not list-view? "my-2")}
+               (cond
+                 group-by-page?
+                 (if value
+                   (let [c (state/get-component :block/page-cp)]
+                     (c {:disable-preview? true} value))
+                   [:div.text-muted-foreground.text-sm
+                    "Pages"])
+
+                 (some? value)
+                 (let [icon (pu/get-block-property-value value :logseq.property/icon)]
+                   [:div.flex.flex-row.gap-1.items-center
+                    (when icon (icon-component/icon icon {:color? true}))
+                    (readable-property-value value)])
+                 :else
+                 (str "No " (:block/title group-by-property)))]
+        body-fn (fn []
+                  (let [render (view-cp view-entity
+                                        (assoc table' :rows group)
+                                        (assoc option
+                                                                      ;; disabled virtualization for nested view
+                                               :disable-virtualized? true)
+                                        view-opts)]
+                    (if (and list-view? (not (util/mobile?)))
+                      [:div.-ml-2 render]
+                      render)))]
+    (if (util/mobile?)
+      [:div.flex.flex-1.flex-col  title (body-fn)]
+      (ui/foldable title body-fn {:title-trigger? false}))))
+
 (rum/defc ^:large-vars/cleanup-todo view-inner < rum/static
   [view-entity {:keys [view-parent data full-data set-data! columns add-new-object! foldable-options input set-input! sorting set-sorting! filters set-filters! display-type group-by-property-ident config] :as option*}
    *scroller-ref]
@@ -2121,36 +2154,14 @@
                                                                        :else
                                                                        (str %))
                                         group-by-page? (or (= :block/page group-by-property-ident)
-                                                           (and (not db-based?) (contains? #{:linked-references :unlinked-references} display-type)))]
+                                                           (and (not db-based?) (contains? #{:linked-references :unlinked-references} display-type)))
+                                        key (str (:db/id view-entity) "-group-idx-" idx)]
                                     (rum/with-key
-                                      (ui/foldable
-                                       [:div
-                                        {:class (when-not list-view? "my-2")}
-                                        (cond
-                                          group-by-page?
-                                          (if value
-                                            (let [c (state/get-component :block/page-cp)]
-                                              (c {:disable-preview? true} value))
-                                            [:div.text-muted-foreground.text-sm
-                                             "Pages"])
-
-                                          (some? value)
-                                          (let [icon (pu/get-block-property-value value :logseq.property/icon)]
-                                            [:div.flex.flex-row.gap-1.items-center
-                                             (when icon (icon-component/icon icon {:color? true}))
-                                             (readable-property-value value)])
-                                          :else
-                                          (str "No " (:block/title group-by-property)))]
-                                       (fn []
-                                         (let [render (view-cp view-entity
-                                                               (assoc table' :rows group)
-                                                               (assoc option
-                                                                      ;; disabled virtualization for nested view
-                                                                      :disable-virtualized? true)
-                                                               view-opts)]
-                                           (if list-view? [:div.-ml-2 render] render)))
-                                       {:title-trigger? false})
-                                      (str (:db/id view-entity) "-group-idx-" idx))))}
+                                      (group-item view-entity table' group group-by-property value option view-opts
+                                                  {:list-view? list-view?
+                                                   :group-by-page? group-by-page?
+                                                   :readable-property-value readable-property-value})
+                                      key)))}
                  disable-virtualized?)])
              (view-cp view-entity table
                       (assoc option
