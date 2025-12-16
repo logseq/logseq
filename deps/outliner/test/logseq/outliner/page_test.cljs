@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [logseq.common.config :as common-config]
+            [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.frontend.db :as db-db]
             [logseq.db.test.helper :as db-test]
@@ -94,6 +95,21 @@
          #"can't include \"/"
          (outliner-page/create! conn "foo/bar" {}))
         "Page can't have '/'n title")))
+
+(deftest delete-page
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "D1"}
+                :blocks [{:block/title "b1"}]}])
+        d1 (ldb/get-page @conn "D1")
+        b1 (db-test/find-block-by-content @conn "b1")]
+    (ldb/transact! conn [{:db/id (:db/id b1)
+                          :block/title (str "b1 " (page-ref/->page-ref (:block/uuid d1)))
+                          :block/refs #{(:db/id d1)}}])
+    (is (contains? (set (map :db/id (:block/refs (d/entity @conn (:db/id b1)))))
+                   (:db/id d1)))
+    (outliner-page/delete! conn (:block/uuid d1))
+    (is (nil? (d/entity @conn (:db/id d1))))
+    (is (nil? (d/entity @conn (:db/id b1))))))
 
 (deftest create-journal
   (let [conn (db-test/create-conn)

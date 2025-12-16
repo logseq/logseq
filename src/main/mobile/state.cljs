@@ -31,3 +31,5 @@
   (swap! *log conj record)
   (when (> (count @*log) 1000)
     (reset! *log (subvec @*log 800))))
+
+(defonce *app-launch-url (atom nil))
