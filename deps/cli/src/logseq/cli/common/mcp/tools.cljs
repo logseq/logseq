@@ -126,8 +126,7 @@
     ;; (cljs.pprint/pprint _txs)
     (when error
       (throw (ex-info (str "Error while building import data: " error) {})))
-    (let [tx-meta {::sqlite-export/imported-data? true
-                   :import-db? true}]
+    (let [tx-meta {::sqlite-export/imported-data? true}]
       (ldb/transact! conn (vec (concat init-tx block-props-tx misc-tx)) tx-meta))))
 
 (defn- get-ident [idents title]
