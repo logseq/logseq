@@ -850,6 +850,7 @@ export interface IEditorProxy extends Record<string, any> {
   ) => void
 
   openInRightSidebar: (id: BlockUUID | EntityID) => void
+  openPDFViewer: (assetBlockIdOrFileUrl: string | EntityID) => Promise<void>
 
   /**
    * @example https://github.com/logseq/logseq-plugin-samples/tree/master/logseq-a-translator

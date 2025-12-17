@@ -135,6 +135,7 @@
 (def ^:export set_block_collapsed api-editor/set_block_collapsed)
 (def ^:export update_block api-editor/update_block)
 (def ^:export upsert_block_property api-editor/upsert_block_property)
+(def ^:export open_pdf_viewer api-editor/open_pdf_viewer)
 
 ;; ui
 (def ^:export show_msg sdk-ui/-show_msg)

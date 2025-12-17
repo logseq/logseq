@@ -17,6 +17,8 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.shell :as shell]
+            [frontend.handler.assets :as assets-handler]
+            [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.modules.layout.core]
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.state :as state]
@@ -27,6 +29,7 @@
             [logseq.api.block :as api-block]
             [logseq.api.db-based :as db-based-api]
             [logseq.common.util.date-time :as date-time-util]
+            [logseq.common.path :as path]
             [logseq.db :as ldb]
             [logseq.outliner.core :as outliner-core]
             [logseq.sdk.core]
@@ -515,3 +518,17 @@
   (p/let [page (<get-block id-or-page-name {:children? false})]
     (when-let [id (:block/uuid page)]
       (get_block_properties id))))
+
+(defn open_pdf_viewer
+  [block-identity-or-file-url]
+  (p/let [[block href] (if (and (string? block-identity-or-file-url)
+                                (or (path/protocol-url? block-identity-or-file-url)
+                                    (path/absolute? block-identity-or-file-url)))
+                         [nil block-identity-or-file-url]
+                         (p/let [block (<get-block block-identity-or-file-url {:children? false})]
+                           [block (if block
+                                    (util/format "../assets/%s.pdf" (:block/uuid block))
+                                    block-identity-or-file-url)]))
+          href' (assets-handler/<make-asset-url href)]
+    (when-let [current (pdf-assets/inflate-asset href {:block block :href href'})]
+      (state/set-current-pdf! current))))
