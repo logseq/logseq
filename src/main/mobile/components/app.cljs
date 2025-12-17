@@ -27,33 +27,35 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
-(rum/defc journals
-  []
-  (journal/all-journals))
+(rum/defc component-with-restoring < rum/static rum/reactive
+  [component]
+  (let [db-restoring? (state/sub :db/restoring?)]
+    (if db-restoring?
+      [:div.space-y-2.mt-8.mx-0.opacity-75
+       (shui/skeleton {:class "h-10 w-full mb-6"})
+       (shui/skeleton {:class "h-6 w-full"})
+       (shui/skeleton {:class "h-6 w-full"})]
+      component)))
 
-(rum/defc home-inner < rum/static
-  [db-restoring?]
-  (if db-restoring?
-    [:div.space-y-2.mt-8.mx-0.opacity-75
-     (shui/skeleton {:class "h-10 w-full mb-6"})
-     (shui/skeleton {:class "h-6 w-full"})
-     (shui/skeleton {:class "h-6 w-full"})]
-    (journals)))
-
-(rum/defc home < rum/reactive rum/static
+(rum/defc home < rum/static
   {:did-mount (fn [state]
                 (ui/inject-document-devices-envs!)
                 state)}
   []
-  (let [db-restoring? (state/sub :db/restoring?)]
-    (home-inner db-restoring?)))
+  (component-with-restoring (journal/all-journals)))
 
 (defn use-theme-effects!
   [current-repo theme]
   (hooks/use-effect!
    (fn []
      (state/sync-system-theme!)
-     (ui/setup-system-theme-effect!))
+     (ui/setup-system-theme-effect!)
+     (let [handler (fn [^js e]
+                     (when (:ui/system-theme? @state/state)
+                       (let [is-dark? (boolean (some-> e .-detail .-isDark))]
+                         (state/set-theme-mode! (if is-dark? "dark" "light") true))))]
+       (.addEventListener js/window "logseq:native-system-theme-changed" handler)
+       #(.removeEventListener js/window "logseq:native-system-theme-changed" handler)))
    [])
   (hooks/use-effect!
    #(let [^js doc js/document.documentElement
@@ -89,7 +91,9 @@
   {:did-mount (fn [state]
                 (p/do!
                  (editor-handler/quick-add-ensure-new-block-exists!)
-                 (editor-handler/quick-add-open-last-block!))
+                 (when (mobile-util/native-ios?)
+                   ;; FIXME: android doesn't open keyboard automatically
+                   (editor-handler/quick-add-open-last-block!)))
                 state)}
   []
   (quick-add/quick-add))
@@ -106,23 +110,32 @@
          (= tab "graphs") (graphs/page)
          (= tab "go to") (favorites/favorites)
          (= tab "search") nil
-         (= tab "capture") (capture)))]))
+         (= tab "capture") (component-with-restoring (capture))))]))
 
 (rum/defc main-content < rum/static
   [tab route-match]
   (let [view (get-in route-match [:data :view])
-        home? (and (= tab "home") (nil? view))]
+        home? (and (= tab "home") (nil? view))
+        [quick-add-launched? set-quick-add-launched!] (hooks/use-state
+                                                       (= @mobile-state/*app-launch-url
+                                                          "logseq://mobile/go/quick-add"))]
+    (hooks/use-effect!
+     (fn []
+       (when (and (= tab "home") quick-add-launched?)
+         (set-quick-add-launched! false))
+       (fn []))
+     [tab])
     ;; Two-layer structure:
     ;; - Journals layer keeps its own scroll container and is always in the DOM.
     ;; - Page/other-tab layer keeps its own independent scroll container.
     ;; Both are absolutely positioned and stacked; we toggle visibility.
     [:div.w-full.relative
-        ;; Journals scroll container (keep-alive)
-     [:div#app-main-home.pl-3.pr-2.absolute.inset-0
+     ;; Journals scroll container (keep-alive)
+     [:div#app-main-home.pl-4.pr-3.absolute.inset-0
       {:class (when-not home? "invisible pointer-events-none")}
-      (home)]
-
-        ;; Other pages: search, settings, specific page, etc.
+      (when-not quick-add-launched?
+        (home))]
+     ;; Other pages: search, settings, specific page, etc.
      (when-not home?
        (other-page view tab route-match))]))
 
@@ -134,7 +147,7 @@
     (use-theme-effects! current-repo theme)
     (hooks/use-effect!
      (fn []
-       (when (mobile-util/native-ios?)
+       (when (mobile-util/native-platform?)
          (bottom-tabs/configure))
        (when-let [element (util/app-scroll-container-node)]
          (common-handler/listen-to-scroll! element)))

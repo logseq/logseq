@@ -1,17 +1,18 @@
 (ns mobile.bottom-tabs
-  "iOS bottom tabs"
+  "Native bottom tabs"
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
+            [mobile.navigation :as mobile-nav]
             [mobile.search :as mobile-search]
             [mobile.state :as mobile-state]
             [promesa.core :as p]))
 
-;; Capacitor plugin instance:
-;; Make sure the plugin is registered as `LiquidTabs` on the native side.
+;; Capacitor plugin instance (nil if native side hasn't shipped it yet).
 (def ^js liquid-tabs
   (.. js/Capacitor -Plugins -LiquidTabsPlugin))
 
@@ -22,17 +23,19 @@
    [{:id \"home\"   :title \"Home\"   :system-image \"house\"   :role \"normal\"}
     {:id \"search\" :title \"Search\" :system-image \"magnifyingglass\" :role \"search\"}]"
   [tabs]
-  ;; Returns the underlying JS Promise from Capacitor
-  (.configureTabs
-   liquid-tabs
-   (bean/->js {:tabs tabs})))
+  (when liquid-tabs
+    ;; Returns the underlying JS Promise from Capacitor
+    (.configureTabs
+     liquid-tabs
+     (bean/->js {:tabs tabs}))))
 
 (defn select!
   "Programmatically select a tab by id. Returns a JS Promise."
   [id]
-  (.selectTab
-   liquid-tabs
-   #js {:id id}))
+  (when liquid-tabs
+    (.selectTab
+     liquid-tabs
+     #js {:id id})))
 
 (defn update-native-search-results!
   "Send native search result list to the iOS plugin."
@@ -43,17 +46,17 @@
 (defn add-tab-selected-listener!
   "Listen to native tab selection.
 
-   `f` receives the tab id string.
+   `f` receives the tab id string and a boolean indicating reselect.
    Returns the Capacitor listener handle; call `(.remove handle)` to unsubscribe."
   [f]
   (when (and (util/capacitor?) liquid-tabs)
     (.addListener
      liquid-tabs
      "tabSelected"
-     (fn [data]
-      ;; data is like { id: string }
+     (fn [^js data]
+      ;; data is like { id: string, reselected?: boolean }
        (when-let [id (.-id data)]
-         (f id))))))
+         (f id (boolean (.-reselected data))))))))
 
 (defn add-search-listener!
   "Listen to native search query changes from the SwiftUI search tab.
@@ -61,54 +64,73 @@
    `f` receives a query string.
    Returns the Capacitor listener handle; call `(.remove handle)` to unsubscribe."
   [f]
-  (.addListener
-   liquid-tabs
-   "searchChanged"
-   (fn [data]
-       ;; data is like { query: string }
-     (f (.-query data)))))
+  (when (and (util/capacitor?) liquid-tabs)
+    (.addListener
+     liquid-tabs
+     "searchChanged"
+     (fn [data]
+         ;; data is like { query: string }
+       (f (.-query data))))))
 
 (defn add-search-result-item-listener!
   []
-  (.addListener
-   liquid-tabs
-   "openSearchResultBlock"
-   (fn [data]
-     (when-let [id (.-id data)]
-       (when-not (string/blank? id)
-         (route-handler/redirect-to-page! id {:push false}))))))
+  (when (and (util/capacitor?) liquid-tabs)
+    (.addListener
+     liquid-tabs
+     "openSearchResultBlock"
+     (fn [data]
+       (when-let [id (.-id data)]
+         (when-not (string/blank? id)
+           (route-handler/redirect-to-page! id {:push (mobile-util/native-android?)})))))))
 
 (defn add-keyboard-hack-listener!
   "Listen for Backspace or Enter while the invisible keyboard field is focused."
   []
-  (.addListener
-   liquid-tabs
-   "keyboardHackKey"
-   (fn [data]
-     ;; data is like { key: string }
-     (when-let [k (.-key data)]
-       (case k
-         "backspace"
-         (editor-handler/delete-block-when-zero-pos! nil)
-         "enter"
-         (when-let [input (state/get-input)]
-           (let [value (.-value input)]
-             (when (string/blank? value)
-               (editor-handler/keydown-new-block-handler nil))))
-         nil)))))
+  (when (and (util/capacitor?) liquid-tabs)
+    (.addListener
+     liquid-tabs
+     "keyboardHackKey"
+     (fn [data]
+       ;; data is like { key: string }
+       (when-let [k (.-key data)]
+         (case k
+           "backspace"
+           (editor-handler/delete-block-when-zero-pos! nil)
+           "enter"
+           (when-let [input (state/get-input)]
+             (let [value (.-value input)]
+               (when (string/blank? value)
+                 (editor-handler/keydown-new-block-handler nil))))
+           nil))))))
 
 (defonce add-tab-listeners!
-  (do
-    (add-tab-selected-listener!
-     (fn [tab]
-       (mobile-state/set-tab! tab)
+  (when (and (util/capacitor?) liquid-tabs)
+    (let [*current-tab (atom nil)]
+      (add-tab-selected-listener!
+       (fn [tab reselected?]
+         (cond
+           reselected?
+           (do
+             (when (mobile-util/native-android?)
+               (mobile-nav/pop-to-root! tab))
+             (mobile-state/set-tab! tab)
+             (when (= "home" tab)
+               (util/scroll-to-top false)))
 
-       (when (= "home" tab)
-         (util/scroll-to-top false))))
+           (not= @*current-tab tab)
+           (do
+             (reset! *current-tab tab)
+             (mobile-state/set-tab! tab))
 
-    (add-watch mobile-state/*tab ::select-tab
-               (fn [_ _ _old new]
-                 (when new (select! new))))
+           (= @*current-tab tab "home")
+           (util/scroll-to-top false))))
+
+      (add-watch mobile-state/*tab ::select-tab
+                 (fn [_ _ _old new]
+                   (when (and new (not= @*current-tab new))
+                     (reset! *current-tab new)
+                     (select! new)))))
+
     (add-search-listener!
      (fn [q]
        ;; wire up search handler
@@ -122,19 +144,25 @@
 (defn configure
   []
   (configure-tabs
-   [{:id "home"
-     :title "Home"
-     :systemImage "house"
-     :role "normal"}
-    {:id "graphs"
-     :title "Graphs"
-     :systemImage "app.background.dotted"
-     :role "normal"}
-    {:id "capture"
-     :title "Capture"
-     :systemImage "tray"
-     :role "normal"}
-    {:id "go to"
-     :title "Go To"
-     :systemImage "square.stack.3d.down.right"
-     :role "normal"}]))
+   (cond->
+    [{:id "home"
+      :title "Home"
+      :systemImage "house"
+      :role "normal"}
+     {:id "graphs"
+      :title "Graphs"
+      :systemImage "app.background.dotted"
+      :role "normal"}
+     {:id "capture"
+      :title "Capture"
+      :systemImage "tray"
+      :role "normal"}
+     {:id "go to"
+      :title "Go To"
+      :systemImage "square.stack.3d.down.right"
+      :role "normal"}]
+     (mobile-util/native-android?)
+     (conj {:id "search"
+            :title "Search"
+            :systemImage "search"
+            :role "search"}))))

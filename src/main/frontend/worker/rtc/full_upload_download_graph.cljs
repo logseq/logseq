@@ -39,6 +39,12 @@
    [:db/cardinality {:optional true} :keyword]
    [:db/valueType {:optional true} :keyword]
    [:db/index {:optional true} :boolean]
+   ;; TODO: remove :block/name special custom-decode later
+   [:block/name {:optional true} [:string {:decode/custom
+                                           (fn [v] (try (ldb/read-transit-str v)
+                                                        (catch :default _
+                                                          (log/warn :non-transit-block-name v)
+                                                          v)))}]]
    [:malli.core/default [:map-of :keyword
                          [:any {:decode/custom
                                 (fn [x] ; convert db-id to db-id-string(as temp-id)

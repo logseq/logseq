@@ -1312,7 +1312,7 @@
           (let [on-submit (fn []
                             (-> (p/do!
                                  (set-reset-password-status! "Updating password ...")
-                                 (state/<invoke-db-worker :thread-api/reset-e2ee-password
+                                 (state/<invoke-db-worker :thread-api/change-e2ee-password
                                                           token refresh-token user-uuid current-password new-password)
                                  (set-reset-password-status! "Password updated successfully!"))
                                 (p/catch (fn [e]
@@ -1407,7 +1407,8 @@
          :succ (constantly nil)))
      [])
     [:div.panel-wrap
-     (mcp-server-row t)
+     (when (util/electron?)
+       (mcp-server-row t))
      [:div.flex.flex-col.gap-2.mt-4
       [:div.font-medium.text-muted-foreground.text-sm "Semantic search:"]
 

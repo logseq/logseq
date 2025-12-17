@@ -225,10 +225,6 @@
                            :status :error}])
        (create-db full-graph-name opts)))))
 
-(defn fix-broken-graph!
-  [graph]
-  (state/<invoke-db-worker :thread-api/fix-broken-graph graph))
-
 (defn gc-graph!
   [graph]
   (p/do!

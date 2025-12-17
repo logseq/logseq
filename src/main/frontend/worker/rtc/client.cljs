@@ -529,7 +529,7 @@
             (if-let [not-found-target-ops (seq (:not-found-target-ops r))]
               (do (rollback repo block-ops-map-coll update-kv-value-ops-map-coll rename-db-ident-ops-map-coll)
                   ;; add more ents into ops for remote
-                  (let [ents (mapv
+                  (let [ents (keep
                               (fn [op]
                                 (let [block-uuid (:block-uuid (second op))]
                                   (assert block-uuid)

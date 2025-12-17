@@ -262,28 +262,36 @@
   "Return hiccup of highlighted content FTS result"
   [content q]
   (when-not (or (string/blank? content) (string/blank? q))
-    [:div (loop [content content ;; why recur? because there might be multiple matches
-                 result  []]
-            (let [[b-cut hl-cut e-cut] (text-util/cut-by content "$pfts_2lqh>$" "$<pfts_2lqh$")
-                  hiccups-add [[:span b-cut]
-                               [:mark.p-0.rounded-none hl-cut]]
-                  hiccups-add (remove nil? hiccups-add)
-                  new-result (concat result hiccups-add)]
-              (if-not (string/blank? e-cut)
-                (recur e-cut new-result)
-                new-result)))]))
+    [:span (loop [content content ;; why recur? because there might be multiple matches
+                  result  []]
+             (let [[b-cut hl-cut e-cut] (text-util/cut-by content "$pfts_2lqh>$" "$<pfts_2lqh$")
+                   hiccups-add [[:span b-cut]
+                                [:mark.p-0.rounded-none hl-cut]]
+                   hiccups-add (remove nil? hiccups-add)
+                   new-result (concat result hiccups-add)]
+               (if-not (string/blank? e-cut)
+                 (recur e-cut new-result)
+                 new-result)))]))
 
 (defn page-item
-  [repo page]
-  (let [entity (db/entity [:block/uuid (:block/uuid page)])
+  [repo page input]
+  (let [entity (-> (or (db/entity [:block/uuid (:block/uuid page)]) page)
+                   (update :block/tags (fn [tags]
+                                         (map (fn [tag]
+                                                (if (integer? tag)
+                                                  (db/entity tag)
+                                                  tag)) tags))))
         source-page (or (model/get-alias-source-page repo (:db/id entity))
                         (:alias page))
         icon (icon-component/get-node-icon-cp entity {:ignore-current-icon? true})
-        title (block-handler/block-unique-title (or entity page)
+        title (block-handler/block-unique-title entity
                                                 {:alias (:block/title source-page)})]
     (hash-map :icon icon
               :icon-theme :gray
-              :text title
+              :text (if (string/includes? title "$pfts_2lqh>$") ; sqlite matched
+                      [:span {"data-testid" title}
+                       (highlight-content-query title input)]
+                      title)
               :header (when (:block/parent entity)
                         (block/breadcrumb {:disable-preview? true
                                            :search? true} repo (:block/uuid page)
@@ -322,7 +330,7 @@
             blocks (remove nil? blocks)
             items (keep (fn [block]
                           (if (:page? block)
-                            (page-item repo block)
+                            (page-item repo block @!input)
                             (block-item repo block current-page @!input))) blocks)]
       (if (= group :current-page)
         (let [items-on-current-page (filter :current-page? items)]

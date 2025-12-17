@@ -67,13 +67,10 @@
            (run '-dev:publishing-dev {:parallel true})
            (run '-dev:publishing-release))}
 
-  dev:validate-db
-  {:doc "Validate a DB graph's datascript schema"
-   :requires ([babashka.fs :as fs])
-   :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
-                "yarn -s nbb-logseq script/validate_db.cljs"
-                *command-line-args*)}
-
+  dev:cli
+  {:doc "Run CLI with current deps/db code. Commands with JS deps are not usable e.g. mcp-server"
+   :task (apply shell {:dir "deps/db"}
+                "yarn nbb-logseq -cp src:../cli/src:../graph-parser/src:../outliner/src -m logseq.cli" *command-line-args*)}
   dev:db-query
   {:doc "Query a DB graph's datascript db"
    :requires ([babashka.fs :as fs])
@@ -91,12 +88,6 @@
    :requires ([babashka.fs :as fs])
    :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
                 "yarn -s nbb-logseq -cp src:../outliner/src:script script/create_graph.cljs" *command-line-args*)}
-
-  dev:db-export
-  {:doc "Export a DB graph to a sqlite.build EDN file"
-   :requires ([babashka.fs :as fs])
-   :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
-                "yarn -s nbb-logseq script/export_graph.cljs" *command-line-args*)}
 
   dev:db-diff
   {:doc "Diffs two DB graphs"

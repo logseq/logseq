@@ -23,6 +23,12 @@ html.is-ios {
     padding-bottom: env(safe-area-inset-bottom);
 }
 
+html.is-native-android {
+  #app-container-wrapper {
+    padding-top: 56px;
+    padding-bottom: 0;
+  }
+}
 html.is-native-ios body,
 html.is-native-ios textarea,
 html.is-native-ios input,
@@ -34,7 +40,7 @@ html.is-ios textarea,
 html.is-ios input,
 html.is-ios select,
 html.is-ios .block-content,
-html.is-ios .editor-inner,
+html.is-ios .editor-inner
 {
   font-size: inherit;
 }
@@ -223,7 +229,7 @@ ul {
 }
 
 .app-popup {
-  @apply w-full overflow-y-auto overflow-x-hidden;
+  @apply w-full overflow-y-auto overflow-x-hidden px-1;
 }
 
 .app-audio-recorder {
@@ -368,4 +374,11 @@ div[data-radix-menu-content] {
 .bullet {
     width: 0.45em;
     height: 0.45em;
+}
+
+.ls-foldable-title {
+    margin-left: -5px;
+}
+.ls-foldable-title-control {
+    margin-left: 0px;
 }

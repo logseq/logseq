@@ -3,7 +3,6 @@
   (:require ["@capacitor/app" :refer [^js App]]
             ["@capacitor/keyboard" :refer [^js Keyboard]]
             ["@capacitor/network" :refer [^js Network]]
-            ["@capgo/capacitor-navigation-bar" :refer [^js NavigationBar]]
             [clojure.string :as string]
             [frontend.handler.editor :as editor-handler]
             [frontend.mobile.flows :as mobile-flows]
@@ -12,8 +11,9 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
-            [logseq.shui.dialog.core :as shui-dialog]
+            [mobile.bottom-tabs :as bottom-tabs]
             [mobile.deeplink :as deeplink]
+            [mobile.state :as mobile-state]
             [promesa.core :as p]))
 
 ;; FIXME: `appUrlOpen` are fired twice when receiving a same intent.
@@ -42,31 +42,6 @@
   []
   (mobile-util/check-ios-zoomed-display)
   (mobile-util/sync-ios-content-size!))
-
-(defn- android-init!
-  "Initialize Android-specified event listeners"
-  []
-  (js/setTimeout
-   #(.setNavigationBarColor NavigationBar #js {:color "transparent"}) 128)
-  (.addListener App "backButton"
-                (fn []
-                  (when (false?
-                         (cond
-                           ;; lightbox
-                           (js/document.querySelector ".pswp")
-                           (some-> js/window.photoLightbox (.destroy))
-
-                           (shui-dialog/has-modal?)
-                           (shui-dialog/close!)
-
-                           (not-empty (state/get-selection-blocks))
-                           (editor-handler/clear-selection!)
-
-                           (state/editing?)
-                           (editor-handler/escape-editing)
-
-                           :else false))
-                    (prn "TODO: handle back button in Android")))))
 
 (defn- app-state-change-handler
   "NOTE: don't add more logic in this listener, use mobile-flows instead"
@@ -102,6 +77,10 @@
       (p/then (fn [^js data]
                 (when-let [url (.-url data)]
                   (log/info ::launch-url data)
+                  (reset! mobile-state/*app-launch-url url)
+                  (when (= url "logseq://mobile/go/quick-add")
+                    (mobile-state/set-tab! "capture")
+                    (js/setTimeout #(bottom-tabs/select! "capture") 2000))
                   (handle-incoming-url! url)))))
 
   (.addListener Keyboard "keyboardWillShow"
@@ -126,9 +105,6 @@
   (intent/handle-received)
 
   (reset! mobile-flows/*network Network)
-
-  (when (mobile-util/native-android?)
-    (android-init!))
 
   (when (mobile-util/native-ios?)
     (ios-init!))

@@ -1,9 +1,12 @@
 (ns mobile.navigation
-  "Native navigation bridge for mobile (iOS)."
+  "Native navigation bridge for mobile."
   (:require [clojure.string :as string]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
             [frontend.mobile.util :as mobile-util]
+            [frontend.state :as state]
             [lambdaisland.glogi :as log]
+            [logseq.shui.dialog.core :as shui-dialog]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]))
 
@@ -186,7 +189,7 @@
         path (if (string/blank? path) "/" path)]
     (set-current-stack! stack)
     (remember-route! stack navigation-type route path route-match)
-    (when (and (mobile-util/native-ios?)
+    (when (and (mobile-util/native-platform?)
                mobile-util/ui-local)
       (let [payload (cond-> {:navigationType navigation-type
                              :push push?
@@ -231,6 +234,24 @@
             :stack stack
             :push  false}))))))
 
+(defn pop-modal!
+  []
+  (cond
+    ;; lightbox
+    (js/document.querySelector ".pswp")
+    (some-> js/window.photoLightbox (.destroy))
+
+    (shui-dialog/has-modal?)
+    (shui-dialog/close!)
+
+    (not-empty (state/get-selection-blocks))
+    (editor-handler/clear-selection!)
+
+    (state/editing?)
+    (editor-handler/escape-editing)
+
+    :else false))
+
 (defn pop-stack!
   "Pop one route from the current stack, update router via replace-state.
    Called when native UINavigationController pops (back gesture / back button)."
@@ -238,6 +259,12 @@
   (let [stack (current-stack)
         {:keys [history]} (get @stack-history stack)
         history (vec history)]
+    ;; back to search root
+    (when (and
+           (mobile-util/native-android?)
+           (= stack "search")
+           (= (count history) 2))
+      (.showSearchUiNative ^js (.. js/Capacitor -Plugins -LiquidTabsPlugin)))
     (when (>= (count history) 1)
       (let [root-history? (= (count history) 1)
             new-history (if root-history?
@@ -259,8 +286,37 @@
 
         (route-handler/set-route-match! route-match)))))
 
+(defn pop-to-root!
+  "Pop current or given stack back to its root entry and notify navigation."
+  ([] (pop-to-root! (current-stack)))
+  ([stack]
+   (when stack
+     (let [{:keys [history]} (get @stack-history stack)
+           root (or (first history) (stack-defaults stack))
+           {:keys [route route-match path]} root
+           route-match (or route-match (:route-match (stack-defaults stack)))
+           path (or path (current-path))
+           route (or route {:to (get-in route-match [:data :name])
+                            :path-params (get-in route-match [:parameters :path])
+                            :query-params (get-in route-match [:parameters :query])})]
+       (swap! stack-history assoc stack {:history [root]})
+       (set-current-stack! stack)
+       ;; Use original replace-state to avoid recording a push intent.
+       (orig-replace-state (get-in route-match [:data :name])
+                           (get-in route-match [:parameters :path])
+                           (get-in route-match [:parameters :query]))
+       (route-handler/set-route-match! route-match)
+       (notify-route-change!
+        {:route route
+         :route-match route-match
+         :path path
+         :stack stack
+         :push false})))))
+
 (defn ^:export install-native-bridge!
   []
   (set! (.-LogseqNative js/window)
         (clj->js
-         {:onNativePop (fn [] (pop-stack!))})))
+         {:onNativePop (fn []
+                         (when (false? (pop-modal!))
+                           (pop-stack!)))})))

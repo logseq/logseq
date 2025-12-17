@@ -189,3 +189,52 @@
              set
              (set/difference av-coll-attrs)
              empty?))))
+
+(deftest remove-conflict-same-block-datoms-test
+  (testing "remove conflict entity-datoms for same-block"
+    (let [block-uuid #uuid "693ec519-e73e-4f2c-b517-7e75ca2c64da"
+          datoms-182 [[182 :logseq.property/created-by-ref 161 536870976 false]
+                      [182 :block/created-at 1765721369994 536870976 false]
+                      [182 :block/parent 162 536870976 false]
+                      [182 :block/order "aF" 536870976 false]
+                      [182 :block/tx-id 536870972 536870976 false]
+                      [182 :block/page 162 536870976 false]
+                      [182 :block/uuid block-uuid 536870976 false]
+                      [182 :block/title "" 536870976 false]
+                      [182 :block/updated-at 1765721369994 536870976 false]]
+          datoms-185 [[185 :block/parent 162 536870976 true]
+                      [185 :logseq.property/created-by-ref 161 536870976 true]
+                      [185 :block/title "111" 536870976 true]
+                      [185 :logseq.property.embedding/hnsw-label-updated-at 0 536870976 true]
+                      [185 :block/order "aG" 536870976 true]
+                      [185 :block/page 162 536870976 true]
+                      [185 :block/created-at 1765721370449 536870976 true]
+                      [185 :block/updated-at 1765721370449 536870976 true]
+                      [185 :block/uuid block-uuid 536870976 true]
+                      [185 :block/tx-id 536870976 536870977 true]]
+          same-entity-datoms-coll [datoms-182 datoms-185]
+          result (subject/remove-conflict-same-block-datoms same-entity-datoms-coll)]
+      (is (= 1 (count result)))
+      (is (= 185 (nth (ffirst result) 0)))
+      (is (= datoms-185 (first result)))))
+
+  (testing "remove conflict entity-datoms should preserve order"
+    (let [block-uuid1 #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+          block-uuid2 #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+          datoms-1    [[100 :block/uuid block-uuid1 1 true]]
+          datoms-2    [[101 :block/uuid block-uuid2 2 true]]
+          datoms-3    [[102 :block/uuid block-uuid2 2 true]] ;; Conflict with datoms-2, wins (higher ID)
+          same-entity-datoms-coll [datoms-1 datoms-2 datoms-3]
+          result      (subject/remove-conflict-same-block-datoms same-entity-datoms-coll)]
+      (is (= 2 (count result)))
+      (is (= datoms-1 (first result)))
+      (is (= datoms-3 (second result)))))
+
+  (testing "remove conflict entity-datoms should prefer add over retract"
+    (let [block-uuid1 #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+          datoms-1    [[100 :block/uuid block-uuid1 1 true]]
+          datoms-2    [[101 :block/uuid block-uuid1 1 false]]
+          same-entity-datoms-coll [datoms-1 datoms-2]
+          result      (subject/remove-conflict-same-block-datoms same-entity-datoms-coll)]
+      (is (= 1 (count result)))
+      (is (= datoms-1 (first result))))))
