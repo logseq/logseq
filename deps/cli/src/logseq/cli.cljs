@@ -24,7 +24,7 @@
              :desc "Print version"}})
 
 (declare table)
-(defn- help [_m]
+(defn- print-general-help [_m]
   (println (str "Usage: logseq [command] [options]\n\nOptions:\n"
                 (cli/format-opts {:spec default-spec})))
   (println (str "\nCommands:\n" (format-commands {:table table}))))
@@ -37,7 +37,7 @@
         (println (-> (fs/readFileSync package-json)
                      js/JSON.parse
                      (aget "version")))))
-    (help m)))
+    (print-general-help m)))
 
 (defn- print-command-help [command cmd-map]
   (println (str "Usage: logseq " command
@@ -50,24 +50,30 @@
                 (when (:description cmd-map)
                   (str "\n\nDescription:\n" (cli-text-util/wrap-text (:description cmd-map) 80))))))
 
-(defn- help-command [{{:keys [command]} :opts}]
+(defn- help-command [{{:keys [command help]} :opts}]
   (if-let [cmd-map (and command (some #(when (= command (first (:cmds %))) %) table))]
     (print-command-help command cmd-map)
-    (println "Command" (pr-str command) "does not exist")))
+    ;; handle help --help
+    (if-let [cmd-map (and help (some #(when (= "help" (first (:cmds %))) %) table))]
+      (print-command-help "help" cmd-map)
+      (println "Command" (pr-str command) "does not exist"))))
 
 (defn- lazy-load-fn
-  "Lazy load fn to speed up start time. After nbb requires ~30 namespaces, start time gets close to 1s"
+  "Lazy load fn to speed up start time. After nbb requires ~30 namespaces, start time gets close to 1s.
+   Also handles --help on all commands"
   [fn-sym]
   (fn [& args]
-    (-> (p/let [_ (require (symbol (namespace fn-sym)))]
-          (apply (resolve fn-sym) args))
-        (p/catch (fn [err]
-                   (if (= :sci/error (:type (ex-data err)))
-                     (nbb.error/print-error-report err)
-                     (js/console.error "Error:" err))
-                   (js/process.exit 1))))))
+    (if (get-in (first args) [:opts :help])
+      (help-command {:opts {:command (-> args first :dispatch first)}})
+      (-> (p/let [_ (require (symbol (namespace fn-sym)))]
+            (apply (resolve fn-sym) args))
+          (p/catch (fn [err]
+                     (if (= :sci/error (:type (ex-data err)))
+                       (nbb.error/print-error-report err)
+                       (js/console.error "Error:" err))
+                     (js/process.exit 1)))))))
 
-(def ^:private table
+(def ^:private table*
   [{:cmds ["list"] :desc "List local graphs"
     :fn (lazy-load-fn 'logseq.cli.commands.graph/list-graphs)}
    {:cmds ["show"] :desc "Show DB graph(s) info"
@@ -116,30 +122,39 @@
     :spec default-spec
     :fn default-command}])
 
+;; Spec shared with all commands
+(def ^:private shared-spec
+  {:help {:alias :h
+          :desc "Print help"}})
+
+(def ^:private table
+  (mapv (fn [m] (update m :spec #(merge % shared-spec))) table*))
+
 (defn- warn-if-db-version-not-installed
   []
   (when-not (fs/existsSync (cli-common-graph/get-db-graphs-dir))
     (println "[WARN] The database version's desktop app is not installed. Please install per https://github.com/logseq/logseq/#-database-version.")))
 
 (defn ^:api -main [& args]
-  (when-not (contains? #{nil "-h" "--help"} (first args))
-    (warn-if-db-version-not-installed))
+  (warn-if-db-version-not-installed)
   (try
     (cli/dispatch table
                   args
-                  {:error-fn (fn [{:keys [cause msg option] type' :type :as data}]
-                               (if (and (= :org.babashka/cli type')
-                                        (= :require cause))
-                                 (do
-                                   (println "Error: Command missing required"
-                                            (if (get-in data [:spec option]) "option" "argument")
-                                            (pr-str (name option)))
-                                   (when-let [cmd-m (some #(when (= {:spec (:spec %)
-                                                                     :require (:require %)}
-                                                                    (select-keys data [:spec :require])) %) table)]
-                                     (print-command-help (-> cmd-m :cmds first) cmd-m)))
-                                 (throw (ex-info msg data)))
-                               (js/process.exit 1))})
+                  {:error-fn (fn [{:keys [cause msg option opts] type' :type :as data}]
+                               ;; Options aren't required when printing help
+                               (when-not (:help opts)
+                                 (if (and (= :org.babashka/cli type')
+                                          (= :require cause))
+                                   (do
+                                     (println "Error: Command missing required"
+                                              (if (get-in data [:spec option]) "option" "argument")
+                                              (pr-str (name option)))
+                                     (when-let [cmd-m (some #(when (= {:spec (:spec %)
+                                                                       :require (:require %)}
+                                                                      (select-keys data [:spec :require])) %) table)]
+                                       (print-command-help (-> cmd-m :cmds first) cmd-m)))
+                                   (throw (ex-info msg data)))
+                                 (js/process.exit 1)))})
     (catch ^:sci/error js/Error e
       (nbb.error/print-error-report e)
       (js/process.exit 1))))
