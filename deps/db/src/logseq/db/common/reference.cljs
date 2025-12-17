@@ -9,6 +9,7 @@
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.initial-data :as common-initial-data]
             [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.rules :as rules]))
 
 (defn get-filters
@@ -95,6 +96,7 @@
         (let [e (d/entity db eid)]
           (recur (:db/id (:block/parent e)) (conj parents' eid)))))))
 
+;; TODO(perf): recursive datascript rule is still too slow for filters for large graphs
 (defn get-linked-references
   [db id]
   (let [entity (d/entity db id)
@@ -102,28 +104,44 @@
         page-filters (get-filters db entity)
         excludes (map :db/id (:excluded page-filters))
         includes (map :db/id (:included page-filters))
+        has-filters? (or (seq excludes) (seq includes))
         class-ids (when (ldb/class? entity)
                     (let [class-children (db-class/get-structured-children db id)]
                       (set (conj class-children id))))
-        full-ref-block-ids (->> (mapcat (fn [id] (map :db/id (:block/_refs (d/entity db id)))) ids)
+        full-ref-block-ids (->> ids
+                                (mapcat (fn [id] (:block/_refs (d/entity db id))))
+                                (remove (fn [ref]
+                                          (or
+                                           (when class-ids
+                                             (some class-ids (map :db/id (:block/tags ref))))
+                                           (entity-util/hidden? ref)
+                                           (entity-util/hidden? (:block/page ref)))))
+                                (map :db/id)
                                 set)
-        matched-ref-block-ids (set (d/q (filter-refs-query includes excludes class-ids)
-                                        db
-                                        (rules/extract-rules rules/db-query-dsl-rules
-                                                             [:has-ref]
-                                                             {:deps rules/rules-dependencies})
-                                        ids))
-        matched-refs-with-children-ids (let [*result (atom #{})]
-                                         (doseq [ref-id matched-ref-block-ids]
-                                           (get-block-parents-until-top-ref db id ref-id full-ref-block-ids *result))
-                                         @*result)
-        ref-blocks (->> (set/intersection full-ref-block-ids matched-refs-with-children-ids)
+        matched-ref-block-ids (when has-filters?
+                                (let [ref-ids (d/q (filter-refs-query includes excludes class-ids)
+                                                   db
+                                                   (rules/extract-rules rules/db-query-dsl-rules
+                                                                        [:has-ref]
+                                                                        {:deps rules/rules-dependencies})
+                                                   ids)]
+                                  (set ref-ids)))
+        matched-refs-with-children-ids (when has-filters?
+                                         (let [*result (atom #{})]
+                                           (doseq [ref-id matched-ref-block-ids]
+                                             (get-block-parents-until-top-ref db id ref-id full-ref-block-ids *result))
+                                           @*result))
+        ref-blocks (->> (if has-filters?
+                          (set/intersection full-ref-block-ids matched-refs-with-children-ids)
+                          full-ref-block-ids)
                         (map (fn [id] (d/entity db id))))
-        filter-exists? (or (seq excludes) (seq includes))
-        children-ids (set (remove full-ref-block-ids matched-refs-with-children-ids))]
+        children-ids (if has-filters?
+                       (set (remove full-ref-block-ids matched-refs-with-children-ids))
+                       (->> (mapcat (fn [ref] (ldb/get-block-children-ids db (:db/id ref))) ref-blocks)
+                            set))]
     {:ref-blocks ref-blocks
      :ref-pages-count (get-ref-pages-count db id ref-blocks children-ids)
-     :ref-matched-children-ids (when filter-exists? children-ids)}))
+     :ref-matched-children-ids (when has-filters? children-ids)}))
 
 (defn get-unlinked-references
   [db id]
