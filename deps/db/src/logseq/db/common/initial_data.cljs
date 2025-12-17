@@ -86,10 +86,10 @@
       block)))
 
 (defn get-block-children-ids
-  "Returns children UUIDs, notice the result doesn't include property value children ids."
-  [db block-uuid & {:keys [include-collapsed-children?]
-                    :or {include-collapsed-children? true}}]
-  (when-let [eid (:db/id (d/entity db [:block/uuid block-uuid]))]
+  "Returns children ids, notice the result doesn't include property value children ids."
+  [db block-eid & {:keys [include-collapsed-children?]
+                   :or {include-collapsed-children? true}}]
+  (when-let [eid (:db/id (d/entity db block-eid))]
     (let [seen (volatile! #{})]
       (loop [eids-to-expand [eid]]
         (when (seq eids-to-expand)
@@ -100,31 +100,30 @@
                                       (not (:block/collapsed? e))
                                       (common-entity-util/page? e))
                               (:block/_parent e)))) eids-to-expand)
-                uuids-to-add (keep :block/uuid children)]
-            (vswap! seen (partial apply conj) uuids-to-add)
+                ids-to-add (keep :db/id children)]
+            (vswap! seen (partial apply conj) ids-to-add)
             (recur (keep :db/id children)))))
       @seen)))
 
 (defn get-block-children
   "Including nested children, notice the result doesn't include property values."
-  {:arglists '([db block-uuid & {:keys [include-collapsed-children?]}])}
-  [db block-uuid & {:as opts}]
-  (let [ids (get-block-children-ids db block-uuid opts)]
+  {:arglists '([db eid & {:keys [include-collapsed-children?]}])}
+  [db eid & {:as opts}]
+  (let [ids (get-block-children-ids db eid opts)]
     (when (seq ids)
-      (map (fn [id] (d/entity db [:block/uuid id])) ids))))
+      (map (fn [id] (d/entity db id)) ids))))
 
 (defn get-block-full-children-ids
   "Including nested, collapsed and property value children."
-  {:arglists '([db block-uuid])}
-  [db block-uuid]
+  {:arglists '([db block-eid])}
+  [db block-eid]
   (d/q
    '[:find [?c ...]
      :in $ ?id %
      :where
-     [?p :block/uuid ?id]
-     (parent ?p ?c)]
+     (parent ?id ?c)]
    db
-   block-uuid
+   block-eid
    (:parent rules/rules)))
 
 (defn- with-raw-title
@@ -218,7 +217,7 @@
       ;; (prn :debug :get-block (:db/id block) (:block/title block) :children? children?
       ;;      :include-collapsed-children? include-collapsed-children?)
       (let [children (when children?
-                       (let [children-blocks (get-block-children db (:block/uuid block) {:include-collapsed-children? include-collapsed-children?})
+                       (let [children-blocks (get-block-children db (:db/id block) {:include-collapsed-children? include-collapsed-children?})
                              large-page? (>= (count children-blocks) 100)
                              children (let [children' (if large-page?
                                                         (:block/_parent block)
