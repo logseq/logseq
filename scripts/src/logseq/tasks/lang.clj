@@ -208,7 +208,7 @@
    :pl #{:port :home :host :plugin/marketplace :whiteboard/link}
    :pt-BR #{:plugins :right-side-bar/flashcards :settings-page/enable-flashcards :page/backlinks
             :host :settings-page/tab-editor :shortcut.category/plugins :whiteboard/link :settings-of-plugins :whiteboard
-            :whiteboards :on-boarding/quick-tour-journal-page-desc-2 :plugin/downloads
+            :whiteboards :on-boarding/quick-tour-journal-page-desc-2 :plugin/downloads :plugin/popular
             :right-side-bar/whiteboards :search-item/whiteboard :settings-page/enable-whiteboards :settings-page/plugin-system
             :shortcut.category/whiteboard :command.whiteboard/zoom-in :command.whiteboard/zoom-out}
    :pt-PT #{:plugins :settings-of-plugins :plugin/downloads :right-side-bar/flashcards
