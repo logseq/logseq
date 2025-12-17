@@ -343,14 +343,15 @@
   [e {:keys [db-graph? private-property?]}]
   (let [k (if db-graph? (->db-keyword-property (nth e 1)) (->file-keyword-property (nth e 1)))
         v (nth e 2)
-        v' (if db-graph? (->db-property-value k v) (->file-property-value v))]
+        v' (if db-graph? (->db-property-value k v) (->file-property-value v))
+        ref-type? (= :db.type/ref (:db/valueType (db-utils/entity k)))]
     (if db-graph?
-      (if private-property?
-        {:query (list 'private-simple-query-property '?b k v')
-         :rules [:private-simple-query-property]}
-        {:query (list 'simple-query-property '?b k v')
-         :rules [:simple-query-property]})
-      {:query (list 'property '?b k v')
+      (let [rule (if private-property?
+                   (if ref-type? :private-ref-property :private-scalar-property)
+                   (if ref-type? :ref-property :scalar-property))]
+        {:query (list (symbol (name rule)) '?b k v')
+         :rules [rule]})
+      {:query (list 'property '?b k v' ref-type?)
        :rules [:property]})))
 
 (defn- build-property-one-arg
@@ -672,23 +673,23 @@ Some bindings in this fn:
       not?
       (cond
         (and b? p?)
-        (concat [['?b :block/uuid] ['?p :block/name] ['?b :block/page '?p]] q)
+        (concat q [['?b :block/uuid] ['?p :block/name] ['?b :block/page '?p]])
 
         b?
         (if db-graph?
           ;; This keeps built-in properties from showing up in not results.
           ;; May need to be revisited as more class and property filters are explored
-          (concat [['?b :block/uuid] '[(missing? $ ?b :logseq.property/built-in?)]] q)
-          (concat [['?b :block/uuid]] q))
+          (concat q [['?b :block/uuid] '[(missing? $ ?b :logseq.property/built-in?)]])
+          (concat q [['?b :block/uuid]]))
 
         p?
-        (concat [['?p :block/name]] q)
+        (concat q [['?p :block/name]])
 
         :else
         q)
 
       (and b? p?)
-      (concat [['?b :block/page '?p]] q)
+      (concat q [['?b :block/page '?p]])
 
       :else
       q)))

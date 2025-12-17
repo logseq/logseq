@@ -96,56 +96,29 @@
       [(>= ?d ?start)]
       [(<= ?d ?end)]]
 
-    :existing-property-value
-    '[;; non-ref value
-      [(existing-property-value ?b ?prop ?val)
+    :ref->val
+    '[[(ref->val ?pv ?val)
+       [?pv :block/title ?val]]
+      [(ref->val ?pv ?val)
+       [?pv :logseq.property/value ?val]]]
+
+    :scalar-property-value
+    '[[(scalar-property-value ?b ?prop-e ?val)
        [?prop-e :db/ident ?prop]
-       [(missing? $ ?prop-e :db/valueType)]
        [?b ?prop ?val]]
-      ;; ref value
-      [(existing-property-value ?b ?prop ?val)
+
+      [(scalar-property-value ?b ?prop-e ?val)
+       [?prop-e :logseq.property/scalar-default-value ?val]]]
+
+    :ref-property-value
+    '[[(ref-property-value ?b ?prop-e ?val)
        [?prop-e :db/ident ?prop]
-       [?prop-e :db/valueType :db.type/ref]
        [?b ?prop ?pv]
-       (or [?pv :block/title ?val]
-           [?pv :logseq.property/value ?val])]]
+       (ref->val ?pv ?val)]
 
-    :property-missing-value
-    '[(property-missing-value ?b ?prop-e ?default-p ?default-v)
-      [?t :logseq.property.class/properties ?prop-e]
-      [?prop-e :db/ident ?prop]
-      (object-has-class-property? ?b ?prop)
-       ;; Notice: `(missing? )` doesn't work here because `de/entity`
-       ;; returns the default value if there's no value yet.
-      [(get-else $ ?b ?prop "N/A") ?prop-v]
-      [(= ?prop-v "N/A")]
-      [?prop-e ?default-p ?default-v]]
-
-    :property-scalar-default-value
-    '[(property-scalar-default-value ?b ?prop-e ?default-p ?val)
-      (property-missing-value ?b ?prop-e ?default-p ?default-v)
-      [(missing? $ ?prop-e :db/valueType)]
-      [?prop-e ?default-p ?val]]
-
-    :property-default-value
-    '[(property-default-value ?b ?prop-e ?default-p ?val)
-      (property-missing-value ?b ?prop-e ?default-p ?default-v)
-      (or
-       [?default-v :block/title ?val]
-       [?default-v :logseq.property/value ?val])]
-
-    :property-value
-    '[[(property-value ?b ?prop-e ?val)
-       [?prop-e :db/ident ?prop]
-       (existing-property-value ?b ?prop ?val)]
-      [(property-value ?b ?prop-e ?val)
-       (or
-        (and
-         [(missing? $ ?prop-e :db/valueType)]
-         (property-scalar-default-value ?b ?prop-e :logseq.property/scalar-default-value ?val))
-        (and
-         [?prop-e :db/valueType :db.type/ref]
-         (property-default-value ?b ?prop-e :logseq.property/default-value ?val)))]]
+      [(ref-property-value ?b ?prop-e ?val)
+       [?prop-e :logseq.property/default-value ?pv]
+       (ref->val ?pv ?val)]]
 
     :object-has-class-property
     '[(object-has-class-property? ?b ?prop)
@@ -190,7 +163,24 @@
        [(missing? $ ?prop-e :logseq.property/public?)]
        [?prop-e :logseq.property/public? true])]
 
-    ;; Checks if a property has a value for any features that are not simple queries
+    ;; Checks if a property has a value for simple queries. Supports default values
+    :scalar-property
+    '[(scalar-property ?b ?prop ?val)
+      [?prop-e :db/ident ?prop]
+      (scalar-property-value ?b ?prop-e ?val)
+      (or
+       [(missing? $ ?prop-e :logseq.property/public?)]
+       [?prop-e :logseq.property/public? true])]
+
+    :ref-property
+    '[(ref-property ?b ?prop ?val)
+      [?prop-e :db/ident ?prop]
+      (ref-property-value ?b ?prop-e ?val)
+      (or
+       [(missing? $ ?prop-e :logseq.property/public?)]
+       [?prop-e :logseq.property/public? true])]
+
+    ;; `property` is slow, don't use it for user-facing queries
     :property
     '[(property ?b ?prop ?val)
       [?prop-e :db/ident ?prop]
@@ -210,39 +200,35 @@
         (or [?pv :block/title ?val]
             [?pv :logseq.property/value ?val])))]
 
-    ;; Checks if a property has a value for simple queries. Supports default values
-    :simple-query-property
-    '[(simple-query-property ?b ?prop ?val)
-      [?prop-e :db/ident ?prop]
-      [?prop-e :block/tags :logseq.class/Property]
-      (or
-       [(missing? $ ?prop-e :logseq.property/public?)]
-       [?prop-e :logseq.property/public? true])
-      (property-value ?b ?prop-e ?val)]
-
     ;; Same as property except it returns public and private properties like :block/title
-    :private-simple-query-property
-    '[(private-simple-query-property ?b ?prop ?val)
+    :private-scalar-property
+    '[(private-scalar-property ?b ?prop ?val)
       [?prop-e :db/ident ?prop]
       [?prop-e :block/tags :logseq.class/Property]
-      (property-value ?b ?prop-e ?val)]
+      (scalar-property-value ?b ?prop-e ?val ?ref-type)]
+
+    :private-ref-property
+    '[(private-ref-property ?b ?prop ?val)
+      [?prop-e :db/ident ?prop]
+      [?prop-e :block/tags :logseq.class/Property]
+      (ref-property-value ?b ?prop-e ?val ?ref-type)]
 
     :tags
     '[(tags ?b ?tags)
       [?b :block/tags ?tag]
       [(contains? ?tags ?tag)]
-      [(missing? $ ?b :block/link)]]
+      (not [?b :block/link _])]
 
     :task
     '[(task ?b ?statuses)
       ;; and needed to avoid binding error
-      (and (simple-query-property ?b :logseq.property/status ?val)
+      (and (ref-property ?b :logseq.property/status ?val)
            [(contains? ?statuses ?val)])]
 
     :priority
     '[(priority ?b ?priorities)
       ;; and needed to avoid binding error
-      (and (simple-query-property ?b :logseq.property/priority ?priority)
+      (and (ref-property ?b :logseq.property/priority ?priority)
            [(contains? ?priorities ?priority)])]}))
 
 (def rules-dependencies
@@ -251,18 +237,19 @@
   like find-rules-in-where"
   {:has-ref #{:parent}
    :page-ref #{:has-ref}
-   :task #{:simple-query-property}
-   :priority #{:simple-query-property}
-   :property-missing-value #{:object-has-class-property}
+
+   ;; simple query helpers
+   :task #{:ref-property}
+   :priority #{:ref-property}
    :has-property-or-object-property #{:object-has-class-property}
    :object-has-class-property #{:class-extends}
    :has-simple-query-property #{:has-property-or-object-property}
    :has-private-simple-query-property #{:has-property-or-object-property}
-   :property-default-value #{:existing-property-value :property-missing-value}
-   :property-scalar-default-value #{:existing-property-value :property-missing-value}
-   :property-value #{:property-default-value :property-scalar-default-value}
-   :simple-query-property #{:property-value}
-   :private-simple-query-property #{:property-value}})
+   :ref-property-value #{:ref->val}
+   :scalar-property #{:scalar-property-value}
+   :ref-property #{:ref-property-value}
+   :private-scalar-property #{:scalar-property-value}
+   :private-ref-property #{:ref-property-value}})
 
 (defn- get-full-deps
   [deps rules-deps]
