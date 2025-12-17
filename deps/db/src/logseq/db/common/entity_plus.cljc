@@ -195,6 +195,30 @@
     (concat (seq v)
             (seq (.-kv this)))))
 
+(defn- entity-ish? [x]
+  (instance? Entity x))
+
+(defn- ->printable
+  "Convert values so printing won't recurse forever:
+   - Entity => {:db/id eid}
+   - coll of Entity => coll of {:db/id ...}
+   - maps are walked (rare but safe)"
+  [x]
+  (cond
+    (entity-ish? x)
+    {:db/id (.-eid ^Entity x)}
+
+    (map? x)
+    (reduce-kv (fn [m k v] (assoc m k (->printable v))) {} x)
+
+    (sequential? x)
+    (map ->printable x)
+
+    (set? x)
+    (into #{} (map ->printable x))
+
+    :else x))
+
 #?(:org.babashka/nbb
    nil
    :default
@@ -222,8 +246,11 @@
 
      IPrintWithWriter
      (-pr-writer [this writer opts]
-       (let [m (-> (into {} (cache-with-kv this))
-                   (assoc :db/id (.-eid this)))]
+       ;; Touch ONLY this entity, to materialize its forward attrs
+       (entity/touch this)
+       (let [m0 (into {} (cache-with-kv this))
+             m  (-> (reduce-kv (fn [m k v] (assoc m k (->printable v))) {} m0)
+                    (assoc :db/id (.-eid this)))]
          (-pr-writer m writer opts)))
 
      ICollection
