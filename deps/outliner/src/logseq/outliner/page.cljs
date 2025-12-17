@@ -263,9 +263,9 @@
     (if (and existing-page (not (:block/parent existing-page)))
       (let [tx-meta {:persist-op? persist-op?
                      :outliner-op :save-block}]
-        (when (and class?
-                   (not (ldb/class? existing-page))
-                   (ldb/internal-page? existing-page))
+        (if (and class?
+                 (not (ldb/class? existing-page))
+                 (ldb/internal-page? existing-page))
           ;; Convert existing page to class
           (let [tx-data [(merge (db-class/build-new-class db
                                                           (select-keys existing-page [:block/title :block/uuid :block/created-at])
@@ -276,7 +276,10 @@
             {:tx-meta tx-meta
              :tx-data tx-data
              :page-uuid (:block/uuid existing-page)
-             :title (:block/title existing-page)})))
+             :title (:block/title existing-page)})
+          ;; Just return existing page info
+          {:page-uuid (:block/uuid existing-page)
+           :title (:block/title existing-page)}))
       (let [page           (gp-block/page-name->map title db true date-formatter
                                                     {:class? class?
                                                      :page-uuid (when (uuid? uuid') uuid')
@@ -315,5 +318,5 @@
   [conn title opts]
   (let [{:keys [tx-meta tx-data title' page-uuid]} (create @conn title opts)]
     (when (seq tx-data)
-      (ldb/transact! conn tx-data tx-meta)
-      [title' page-uuid])))
+      (ldb/transact! conn tx-data tx-meta))
+    [title' page-uuid]))
