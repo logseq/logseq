@@ -701,7 +701,7 @@
  :command.whiteboard/clone-down "Clona sotto"
  :command.whiteboard/clone-left "Clona a sinistra"
  :command.whiteboard/clone-right "Clona a destra"
- :command.whiteboard/clone-up "Clone sopra"
+ :command.whiteboard/clone-up "Clona sopra"
  :linked-references/filter-directions "Click per includere e Shift-Click per escludere. Clicca di nuovo per rimuovere."
  :linked-references/filter-excludes "Esclude: "
  :linked-references/filter-heading "Filtro"
