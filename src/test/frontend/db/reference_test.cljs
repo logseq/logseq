@@ -67,7 +67,7 @@
   (d/transact! conn [[:db/retract foo-id :logseq.property.linked-references/includes]
                      [:db/retract foo-id :logseq.property.linked-references/excludes]]))
 
-(deftest ^:large-vars/cleanup-todo get-linked-references
+(deftest ^:large-vars/cleanup-todo ^:focus get-linked-references
   (let [conn (create-conn!)
         foo-id (:db/id (ldb/get-page @conn "foo"))
         _ (retract-filters! conn foo-id)
