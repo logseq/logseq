@@ -617,7 +617,6 @@
  :command.dev/show-page-ast "(Dev) Mostrar AST da página"
  :command.dev/replace-graph-with-db-file "(Dev) Substituir grafo pelo seu arquivo db.sqlite"
  :command.dev/validate-db "(Dev) Valide o atual grafo"
- :command.dev/fix-broken-graph "Fixe o atual grafo quebrado"
  :command.dev/gc-graph "(Dev) Garbage collect no grafo (remover dados não utilizados no SQLite)"
  :command.dev/rtc-start "(Dev) RTC Começar"
  :command.dev/rtc-stop "(Dev) RTC Parar"
