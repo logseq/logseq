@@ -1,4 +1,5 @@
 ## 0.4.2
+* Add `--help` to all commands as an alternative to `help [command]`
 * Add `--validate` option to `export-edn` command
 * Fix cli can't run in CI environments
 * Fix `import-edn` and `mcp-server` commands not building refs for new or edited nodes
