@@ -205,13 +205,13 @@
     '[(private-scalar-property ?b ?prop ?val)
       [?prop-e :db/ident ?prop]
       [?prop-e :block/tags :logseq.class/Property]
-      (scalar-property-value ?b ?prop-e ?val ?ref-type)]
+      (scalar-property-value ?b ?prop-e ?val)]
 
     :private-ref-property
     '[(private-ref-property ?b ?prop ?val)
       [?prop-e :db/ident ?prop]
       [?prop-e :block/tags :logseq.class/Property]
-      (ref-property-value ?b ?prop-e ?val ?ref-type)]
+      (ref-property-value ?b ?prop-e ?val)]
 
     :tags
     '[(tags ?b ?tags)
