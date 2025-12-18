@@ -53,3 +53,51 @@ wait for 5-10 seconds, will found that \"aaa/bbb\" became \"aaa/<encrypted-strin
       (page/goto-page "aaa/bbb"))
 
     (rtc/validate-graphs-in-2-pw-pages)))
+
+(deftest paste-multiple-blocks-test
+  (testing "
+1. create 3 blocks
+  - block1
+  - block2
+  - block3
+2. copy these 3 blocks
+3. when cursor at block3, press <enter> to create a new block
+4. paste them at current position 5 times
+5. validate blocks are same on both clients"
+    (w/with-page @*page1
+      (b/new-blocks ["block1" "block2" "block3"])
+      (util/exit-edit)
+      (b/select-blocks 2)
+      (b/copy)
+      (b/jump-to-block "block3")
+      (util/repeat-keyboard 1 "Enter"))
+
+    (dotimes [_ 5]
+      (let [{:keys [remote-tx]}
+            (w/with-page @*page1
+              (rtc/with-wait-tx-updated
+                (b/paste)))]
+        (w/with-page @*page2
+          (rtc/wait-tx-update-to remote-tx))))
+
+    (let [{:keys [remote-tx]}
+          (w/with-page @*page1
+            (rtc/with-wait-tx-updated
+              (b/new-block "sync-trigger")))]
+      (w/with-page @*page2
+        (rtc/wait-tx-update-to remote-tx)))
+
+    (let [expected (vec (concat ["block1" "block2" "block3"]
+                                (take (* 3 5) (cycle ["block1" "block2" "block3"]))
+                                ["sync-trigger"]))]
+      (w/with-page @*page1
+        (util/exit-edit)
+        (is (= expected
+               (util/get-page-blocks-contents))))
+
+      (w/with-page @*page2
+        (util/exit-edit)
+        (is (= expected
+               (util/get-page-blocks-contents)))))
+
+    (rtc/validate-graphs-in-2-pw-pages)))
