@@ -1,9 +1,9 @@
 (ns logseq.e2e.rtc-extra-part2-test
-  (:require [clojure.string :as string]
-            [clojure.test :refer [deftest testing is use-fixtures run-test]]
+  (:require [clojure.test :refer [deftest testing is use-fixtures run-test]]
             [logseq.e2e.block :as b]
-            [logseq.e2e.const :refer [*page1 *page2]]
+            [logseq.e2e.const :refer [*page1 *page2 *graph-name*]]
             [logseq.e2e.fixtures :as fixtures]
+            [logseq.e2e.graph :as graph]
             [logseq.e2e.page :as page]
             [logseq.e2e.rtc :as rtc]
             [logseq.e2e.util :as util]
@@ -101,3 +101,37 @@ wait for 5-10 seconds, will found that \"aaa/bbb\" became \"aaa/<encrypted-strin
                (util/get-page-blocks-contents)))))
 
     (rtc/validate-graphs-in-2-pw-pages)))
+
+(deftest asset-blocks-validate-after-init-downloaded-test
+  (testing "
+- add some assets in client1
+- remove local graph in client2
+- re-download the remote graph in client2
+- compare asset-blocks data in both clients"
+    (let [asset-file "../assets/icon.png"
+          page-title (w/with-page @*page1 (page/get-page-name))]
+      (w/with-page @*page1
+        (let [p (w/get-page)]
+          (.onFileChooser p (reify java.util.function.Consumer
+                              (accept [_ fc]
+                                (.setFiles fc (into-array java.nio.file.Path [(java.nio.file.Paths/get asset-file (into-array String []))])))))
+          (b/new-block "asset block")
+          (util/input-command "Upload an asset")
+          (w/wait-for ".ls-block img")))
+
+      (let [{:keys [remote-tx]}
+            (w/with-page @*page1
+              (rtc/with-wait-tx-updated
+                (b/new-block "sync done")))]
+        (w/with-page @*page2
+          (rtc/wait-tx-update-to remote-tx)))
+
+      (w/with-page @*page2
+        (graph/remove-local-graph *graph-name*)
+        (graph/wait-for-remote-graph *graph-name*)
+        (graph/switch-graph *graph-name* true false)
+        (page/goto-page page-title)
+        (w/wait-for ".ls-block img")
+        (is (some? (.getAttribute (w/-query ".ls-block img") "src"))))
+
+      (rtc/validate-graphs-in-2-pw-pages))))
