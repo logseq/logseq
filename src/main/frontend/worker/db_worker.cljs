@@ -49,6 +49,7 @@
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.common.view :as db-view]
             [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.sqlite.gc :as sqlite-gc]
@@ -244,8 +245,19 @@
             conn (common-sqlite/get-storage-conn storage schema)
             _ (db-fix/check-and-fix-schema! repo conn)
             _ (when datoms
-                (let [data (map (fn [datom]
-                                  [:db/add (:e datom) (:a datom) (:v datom)]) datoms)]
+                (let [eid->datoms (group-by :e datoms)
+                      {properties true non-properties false} (group-by
+                                                              (fn [[_eid datoms]]
+                                                                (boolean
+                                                                 (some (fn [datom] (and (= (:a datom) :db/ident)
+                                                                                        (db-property/property? (:v datom))))
+                                                                       datoms)))
+                                                              eid->datoms)
+                      datoms (concat (mapcat second properties)
+                                     (mapcat second non-properties))
+                      data (map (fn [datom]
+                                  [:db/add (:e datom) (:a datom) (:v datom)])
+                                datoms)]
                   (d/transact! conn data {:initial-db? true})))
             client-ops-conn (when-not @*publishing? (common-sqlite/get-storage-conn
                                                      client-ops-storage
