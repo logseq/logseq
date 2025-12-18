@@ -137,6 +137,55 @@
                   (js/console.error error)
                   (throw (ex-info "get-block error" {:block id-uuid-or-name}))))))))
 
+(defn <get-blocks-with-opts
+  "Batch version of `<get-block` that issues a single worker call.
+  `requests` is a seq of `{:id <db-id|uuid|page-name> :opts {...}}`."
+  [graph requests & {:keys [skip-transact? skip-refresh?]
+                     :or {skip-transact? false
+                          skip-refresh? false}}]
+  (let [requests (vec (remove nil? requests))]
+    (when (seq requests)
+      (p/catch
+       (p/let [result-transit-str (state/<invoke-db-worker-direct-pass
+                                   :thread-api/get-blocks
+                                   graph
+                                   (ldb/write-transit-str requests))
+               result (ldb/read-transit-str result-transit-str)]
+         (when-not skip-transact?
+           (let [conn (db/get-db graph false)
+                 block-and-children (->> result
+                                         (mapcat (fn [{:keys [block children]}]
+                                                   (cond-> []
+                                                     block (conj block)
+                                                     (seq children) (into children)))))
+                 tx-data (->> (remove (fn [b] (:block.temp/load-status (db/entity (:db/id b))))
+                                      block-and-children)
+                              (common-util/fast-remove-nils)
+                              (remove empty?))
+                 affected-keys (->> block-and-children
+                                    (keep :db/id)
+                                    (mapv (fn [id] [:frontend.worker.react/block id])))]
+             (when (seq tx-data)
+               (d/transact! conn tx-data))
+             (when-not skip-refresh?
+               (react/refresh-affected-queries! graph affected-keys {:skip-kv-custom-keys? true}))))
+         result)
+       (fn [error]
+         (js/console.error error)
+         (throw (ex-info "<get-blocks-with-opts error" {:requests requests} error)))))))
+
+(defn <get-ordered-children-meta
+  "Returns ordered direct children metadata (minimal maps with :db/id, :block/uuid, :block/collapsed?).
+  `parent-id` is the parent's db eid (page or block)."
+  [graph parent-id]
+  (when (integer? parent-id)
+    (p/let [result-transit-str (state/<invoke-db-worker-direct-pass
+                                :thread-api/get-ordered-children-meta
+                                graph
+                                (ldb/write-transit-str {:parent-id parent-id}))
+            result (ldb/read-transit-str result-transit-str)]
+      result)))
+
 (defn <get-blocks
   [graph ids* & {:as opts}]
   (let [ids (remove (fn [id] (:block.temp/load-status (db/entity id))) ids*)]

@@ -4425,25 +4425,78 @@
          (when linked-block
            (str "-" (:block/uuid original-block))))))))
 
+(defn- blocks-source?
+  [blocks]
+  (and (map? blocks) (true? (:block-list/source? blocks))))
+
+(defn- blocks-total-count
+  [blocks]
+  (if (blocks-source? blocks)
+    (or (:total-count blocks) 0)
+    (count blocks)))
+
+(defn- blocks-item-at
+  [blocks idx]
+  (if (blocks-source? blocks)
+    (when-let [get-item (:get-item blocks)]
+      (get-item idx))
+    (nth blocks idx)))
+
+(defn- blocks-key-at
+  [blocks idx container-id]
+  (if (blocks-source? blocks)
+    (if-let [get-key (:get-key blocks)]
+      (get-key idx)
+      (str container-id "-idx-" idx))
+    (let [block (nth blocks idx)]
+      (str container-id "-" (:db/id block)))))
+
+(defn- blocks-ready?
+  [blocks idx]
+  (if (blocks-source? blocks)
+    (if-let [ready? (:ready? blocks)]
+      (boolean (ready? idx))
+      true)
+    true))
+
+(defn- blocks-placeholder
+  [blocks idx]
+  (if (blocks-source? blocks)
+    (if-let [placeholder (:placeholder blocks)]
+      (placeholder idx)
+      [:div {:style {:height 28}}])
+    [:div {:style {:height 28}}]))
+
 (rum/defc block-list
   [config blocks]
-  (let [[virtualized? _] (hooks/use-state (not (or (util/rtc-test?)
-                                                   (and (util/mobile?) (:journals? config))
-                                                   (if (:journals? config)
-                                                     (< (count blocks) 50)
-                                                     (< (count blocks) 10))
-                                                   (and (:block-children? config)
-                                                        ;; zoom-in block's children
-                                                        (not (and (:id config) (= (:id config) (str (:block/uuid (:block/parent (first blocks)))))))))))
+  (let [first-block (when-not (blocks-source? blocks) (first blocks))
+        total-count (blocks-total-count blocks)
+        disable-virtualized?
+        (or (util/rtc-test?)
+            (and (util/mobile?) (:journals? config)
+                 (if (:journals? config)
+                   (< total-count 50)
+                   (< total-count 10)))
+            (and (:block-children? config)
+                 ;; zoom-in block's children
+                 first-block
+                 (not (and (:id config)
+                           (= (:id config)
+                              (str (:block/uuid (:block/parent first-block))))))))
+        [virtualized? _] (hooks/use-state (not disable-virtualized?))
         render-item (fn [idx]
-                      (let [top? (zero? idx)
-                            bottom? (= (dec (count blocks)) idx)
-                            block (nth blocks idx)]
-                        (block-item (assoc config :top? top?)
-                                    block
-                                    {:top? top?
-                                     :bottom? bottom?})))
-        virtualized? (and virtualized? (seq blocks))
+                      (if-not (blocks-ready? blocks idx)
+                        (blocks-placeholder blocks idx)
+                        (let [top? (zero? idx)
+                              bottom? (= (dec total-count) idx)
+                              block (blocks-item-at blocks idx)]
+                          (if (some? block)
+                            (block-item (assoc config :top? top?)
+                                        block
+                                        {:top? top?
+                                         :bottom? bottom?})
+                            (blocks-placeholder blocks idx)))))
+        virtualized? (and (or (blocks-source? blocks) virtualized?) (pos? total-count))
         *virtualized-ref (hooks/use-ref nil)
         virtual-opts (when virtualized?
                        {:ref *virtualized-ref
@@ -4452,20 +4505,23 @@
                                                     (util/app-scroll-container-node node)
                                                     (util/app-scroll-container-node)))
                         :compute-item-key (fn [idx]
-                                            (let [block (nth blocks idx)]
-                                              (str (:container-id config) "-" (:db/id block))))
+                                            (blocks-key-at blocks idx (:container-id config)))
                         ;; Leave some space for the new inserted block
                         :increase-viewport-by 254
                         :overscan 254
-                        :total-count (count blocks)
+                        :total-count total-count
                         :item-content (fn [idx]
-                                        (let [top? (zero? idx)
-                                              bottom? (= (dec (count blocks)) idx)
-                                              block (nth blocks idx)]
-                                          (block-item (assoc config :top? top?)
-                                                      block
-                                                      {:top? top?
-                                                       :bottom? bottom?})))})
+                                        (render-item idx))
+                        :range-changed (when (blocks-source? blocks)
+                                         (when-let [on-range-changed (:on-range-changed blocks)]
+                                           (fn [r]
+                                             (let [start (cond
+                                                           (map? r) (or (get r :startIndex) (get r :start-index))
+                                                           :else (or (gobj/get r "startIndex") (.-startIndex r)))
+                                                   end (cond
+                                                         (map? r) (or (get r :endIndex) (get r :end-index))
+                                                         :else (or (gobj/get r "endIndex") (.-endIndex r)))]
+                                               (on-range-changed start end)))))})
         *wrap-ref (hooks/use-ref nil)]
     (hooks/use-effect!
      (fn []
@@ -4501,9 +4557,12 @@
        virtualized?
        (ui/virtualized-list virtual-opts)
        :else
-       (map-indexed (fn [idx block]
-                      (rum/with-key (render-item idx) (str (:container-id config) "-" (:db/id block))))
-                    blocks))]))
+       (if (blocks-source? blocks)
+         ;; Avoid non-virtualized render for block sources.
+         (ui/virtualized-list virtual-opts)
+         (map-indexed (fn [idx block]
+                        (rum/with-key (render-item idx) (str (:container-id config) "-" (:db/id block))))
+                      blocks)))]))
 
 (rum/defcs blocks-container < mixins/container-id rum/static
   {:init (fn [state]
@@ -4511,7 +4570,9 @@
   [state config blocks]
   (let [doc-mode? (:document/mode? config)
         id (::id state)]
-    (when (seq blocks)
+    (when (if (blocks-source? blocks)
+            (pos? (blocks-total-count blocks))
+            (seq blocks))
       [:div.blocks-container.flex-1
        {:id id
         :class (when doc-mode? "document-mode")

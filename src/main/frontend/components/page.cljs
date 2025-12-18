@@ -1,6 +1,7 @@
 (ns frontend.components.page
   (:require ["/frontend/utils" :as utils]
             [clojure.string :as string]
+            [datascript.core :as d]
             [dommy.core :as dom]
             [frontend.components.block :as component-block]
             [frontend.components.class :as class-component]
@@ -79,7 +80,7 @@
 
 (defn- open-root-block!
   [state]
-  (let [[_ block _ sidebar? preview?] (:rum/args state)]
+  (let [[block _ _ sidebar? preview?] (:rum/args state)]
     (when (and
            (or preview?
                (not (contains? #{:home :all-journals} (state/get-current-route))))
@@ -101,6 +102,76 @@
                           {:hiccup   hiccup
                            :sidebar? sidebar?})
          (str (:block/uuid page-e) "-hiccup"))])))
+
+(def ^:private long-page-direct-children-threshold 2000)
+
+(defn- direct-children-count
+  [db parent-eid]
+  (when (and db (integer? parent-eid))
+    (count (d/datoms db :avet :block/parent parent-eid))))
+
+(rum/defc long-page-blocks-inner
+  [page-e config sidebar? whiteboard? block-id]
+  (let [repo (state/get-current-repo)
+        parent-id (:db/id page-e)
+        [items set-items!] (hooks/use-state nil)
+        [ready-indices set-ready-indices!] (hooks/use-state #{})
+        *in-flight (hooks/use-ref #{})
+        ensure-loaded!
+        (fn [start end]
+          (when (seq items)
+            (let [total (count items)
+                  start (max 0 (int (or start 0)))
+                  end (min (dec total) (int (or end 0)))
+                  start (max 0 (- start 30))
+                  end (min (dec total) (+ end 30))
+                  in-flight (hooks/deref *in-flight)
+                  to-load (->> (range start (inc end))
+                               (remove ready-indices)
+                               (remove in-flight)
+                               vec)
+                  requests (mapv (fn [idx]
+                                   (let [{:keys [db/id block/uuid block/collapsed?]} (nth items idx)
+                                         collapsed? (if-some [v (state/get-block-collapsed uuid)]
+                                                      v
+                                                      collapsed?)]
+                                     {:id id
+                                      :opts {:children? (not collapsed?)}}))
+                                 to-load)]
+              (when (seq to-load)
+                (hooks/set-ref! *in-flight (into in-flight to-load))
+                (p/let [_ (db-async/<get-blocks-with-opts repo requests :skip-refresh? false)]
+                  (hooks/set-ref! *in-flight (reduce disj (hooks/deref *in-flight) to-load))
+                  (set-ready-indices! #(into % to-load)))))))]
+
+    (hooks/use-effect!
+     (fn []
+       (set-items! nil)
+       (set-ready-indices! #{})
+       (hooks/set-ref! *in-flight #{})
+       (p/let [items (db-async/<get-ordered-children-meta repo parent-id)]
+         (set-items! items)))
+     [repo parent-id])
+
+    (hooks/use-effect!
+     (fn []
+       (when (seq items)
+         (ensure-loaded! 0 30)))
+     [items])
+
+    (if-not (seq items)
+      [:div.page-blocks-inner {:style {:min-height 29}}]
+      (let [uuid->idx (into {} (map-indexed (fn [i m] [(:block/uuid m) i]) items))
+            source {:block-list/source? true
+                    :total-count (count items)
+                    :get-item (fn [idx]
+                                (when (contains? ready-indices idx)
+                                  (db/entity (:db/id (nth items idx)))))
+                    :get-key (fn [idx] (str (:block/uuid (nth items idx))))
+                    :ready? (fn [idx] (contains? ready-indices idx))
+                    :on-range-changed ensure-loaded!
+                    :index-of (fn [uuid] (get uuid->idx uuid))}]
+        (page-blocks-inner page-e source config sidebar? whiteboard? block-id)))))
 
 (declare page-cp)
 
@@ -185,6 +256,14 @@
                              [(take mobile-length-limit full-children) true]
                              [full-children false])
           quick-add-page-id (:db/id (db-db/get-built-in-page (db/get-db) common-config/quick-add-page-name))
+          long-page? (and
+                      (not block?)
+                      (not (:preview? config))
+                      (not config/publishing?)
+                      (not= id quick-add-page-id)
+                      (let [db (db/get-db)]
+                        (>= (or (direct-children-count db id) 0)
+                            long-page-direct-children-threshold)))
           children (cond
                      (and (= id quick-add-page-id)
                           (user-handler/user-uuid)
@@ -217,9 +296,19 @@
                               :document/mode? document-mode?}
                              config)
               config (common-handler/config-with-document-mode hiccup-config)
-              blocks (if block? [block] (db/sort-by-order children block))]
+              blocks (cond
+                       block?
+                       [block]
+
+                       long-page?
+                       nil
+
+                       :else
+                       (db/sort-by-order children block))]
           [:div.relative
-           (page-blocks-inner block blocks config sidebar? whiteboard? block-id)
+           (if long-page?
+             (long-page-blocks-inner block config sidebar? whiteboard? block-id)
+             (page-blocks-inner block blocks config sidebar? whiteboard? block-id))
            (when more?
              (shui/button {:variant :ghost
                            :class "text-muted-foreground w-full"

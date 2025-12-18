@@ -301,10 +301,15 @@
                         (when (util/uuid-string? id)
                           (uuid id))))]
       (when (and ref anchor-id)
-        (let [block-ids (map :block/uuid blocks)
-              find-idx (fn [anchor-id]
-                         (let [idx (.indexOf block-ids anchor-id)]
-                           (when (pos? idx) idx)))
+        (let [find-idx (cond
+                         (and (map? blocks) (true? (:block-list/source? blocks)) (fn? (:index-of blocks)))
+                         (:index-of blocks)
+
+                         :else
+                         (let [block-ids (to-array (map :block/uuid blocks))]
+                           (fn [anchor-id]
+                             (let [idx (.indexOf block-ids anchor-id)]
+                               (when (pos? idx) idx)))))
               idx (or (find-idx anchor-id)
                       (let [block (db/entity [:block/uuid anchor-id])
                             parents (map :block/uuid (db/get-block-parents (state/get-current-repo) (:block/uuid block) {}))]

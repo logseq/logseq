@@ -427,6 +427,38 @@
   (let [requests (ldb/read-transit-str requests)]
     (get-blocks-with-cache repo requests)))
 
+(def ^:private *ordered-children-meta-cache (volatile! (cache/lru-cache-factory {} :threshold 200)))
+(def ^:private get-ordered-children-meta-with-cache
+  (common.cache/cache-fn
+   *ordered-children-meta-cache
+   (fn [repo parent-id]
+     (let [db (some-> (worker-state/get-datascript-conn repo) deref)]
+       [[repo (:max-tx db) parent-id]
+        [db parent-id]]))
+   (fn [db parent-id]
+     (when (and db (integer? parent-id))
+       (let [rows (d/q '[:find ?child ?order ?uuid ?collapsed
+                         :in $ ?parent
+                         :where
+                         [?child :block/parent ?parent]
+                         [?child :block/order ?order]
+                         [?child :block/uuid ?uuid]
+                         [(get-else $ ?child :block/collapsed? false) ?collapsed]]
+                       db
+                       parent-id)]
+         (->> rows
+              (sort-by (fn [[child-id order]] [order child-id]))
+              (mapv (fn [[child-id _order child-uuid collapsed?]]
+                      {:db/id child-id
+                       :block/uuid child-uuid
+                       :block/collapsed? collapsed?}))))))))
+
+(def-thread-api :thread-api/get-ordered-children-meta
+  [repo request]
+  (let [{:keys [parent-id]} (ldb/read-transit-str request)]
+    (when-let [items (get-ordered-children-meta-with-cache repo parent-id)]
+      (ldb/write-transit-str items))))
+
 (def-thread-api :thread-api/get-block-refs
   [repo id]
   (when-let [conn (worker-state/get-datascript-conn repo)]
