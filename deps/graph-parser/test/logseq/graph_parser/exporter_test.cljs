@@ -210,7 +210,7 @@
 
       ;; Counts
       ;; Includes journals as property values e.g. :logseq.property/deadline
-      (is (= 30 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
+      (is (= 31 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
 
       (is (= 5 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Asset]] @conn))))
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
@@ -231,7 +231,7 @@
                   #_(map #(select-keys % [:block/title :block/tags]))
                   count))
           "Correct number of pages with block content")
-      (is (= 12 (->> @conn
+      (is (= 14 (->> @conn
                      (d/q '[:find [?ident ...]
                             :where [?b :block/tags :logseq.class/Tag] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
                      count))
@@ -492,6 +492,10 @@
       (is (= [:user.class/Quotes___life]
              (mapv :db/ident (:block/tags (db-test/find-block-by-content @conn #"with namespace tag"))))
           "Block tagged with namespace tag is only associated with leaf child tag")
+
+      (is (= #{:user.class/ai :user.class/block-tag :user.class/p1}
+             (set (map :db/ident (:block/tags (db-test/find-block-by-content @conn #"Block tags")))))
+          "Block with tags through tags property")
 
       (is (= []
              (->> (d/q '[:find (pull ?b [:block/title {:block/tags [:db/ident]}])
