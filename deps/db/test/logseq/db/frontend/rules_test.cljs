@@ -11,14 +11,14 @@
        (rules/extract-rules rules/db-query-dsl-rules)))
 
 (deftest get-full-deps
-  (let [property-value-deps #{:ref-property-value :ref->val}
-        property-deps (conj property-value-deps :ref-property)
+  (let [property-value-deps #{:ref->val :class-extends :object-has-class-property :property-missing-value :ref-property-value :ref-property-value-with-default}
+        property-deps (conj property-value-deps :ref-property-with-default)
         task-deps (conj property-deps :task)
         priority-deps (conj property-deps :priority)
         task-priority-deps (into priority-deps task-deps)]
     (are [x y] (= y (#'rules/get-full-deps x rules/rules-dependencies))
-      [:ref-property-value] property-value-deps
-      [:ref-property] property-deps
+      [:ref-property-value-with-default] property-value-deps
+      [:ref-property-with-default] property-deps
       [:task] task-deps
       [:priority] priority-deps
       [:task :priority] task-priority-deps)))

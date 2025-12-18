@@ -363,14 +363,38 @@
   (let [k (if db-graph? (->db-keyword-property (nth e 1)) (->file-keyword-property (nth e 1)))
         v (nth e 2)
         v' (if db-graph? (->db-property-value k v) (->file-property-value v))
-        ref-type? (= :db.type/ref (:db/valueType (db-utils/entity k)))]
+        property (when (qualified-keyword? k)
+                   (db-utils/entity k))
+        ref-type? (= :db.type/ref (:db/valueType property))]
     (if db-graph?
-      (let [rule (if private-property?
-                   (if ref-type? :private-ref-property :private-scalar-property)
-                   (if ref-type? :ref-property :scalar-property))]
+      (let [default-value (if ref-type?
+                            (when-let [value (:logseq.property/default-value property)]
+                              (or (:block/title value)
+                                  (:logseq.property/value value)))
+                            (:logseq.property/scalar-default-value property))
+            default-value? (and (some? v') (= default-value v'))
+            rule (if private-property?
+                   (cond
+                     (and ref-type? default-value?)
+                     :private-ref-property-with-default
+                     ref-type?
+                     :private-ref-property
+                     default-value?
+                     :private-scalar-property-with-default
+                     :else
+                     :private-scalar-property)
+                   (cond
+                     (and ref-type? default-value?)
+                     :ref-property-with-default
+                     ref-type?
+                     :ref-property
+                     default-value?
+                     :scalar-property-with-default
+                     :else
+                     :scalar-property))]
         {:query (list (symbol (name rule)) '?b k v')
          :rules [rule]})
-      {:query (list 'property '?b k v' ref-type?)
+      {:query (list 'property '?b k v')
        :rules [:property]})))
 
 (defn- build-property-one-arg
