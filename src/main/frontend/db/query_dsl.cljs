@@ -726,9 +726,6 @@ Some bindings in this fn:
                 (sequential? x)
                 (doseq [c x] (walk* c positive?))
 
-                (vector? x)
-                (doseq [c x] (walk* c positive?))
-
                 (map? x)
                 (do (doseq [k (keys x)] (walk* k positive?))
                     (doseq [v (vals x)] (walk* v positive?)))
