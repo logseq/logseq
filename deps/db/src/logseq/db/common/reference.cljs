@@ -131,6 +131,36 @@
    (or (empty? excludes)
        (not (some #(contains? exclude-set %) excludes)))))
 
+(defn- filter-matched-ref-blocks
+  [db top-ref-block-ids includes excludes {:keys [eff class-ok? can-satisfy-includes? allowed-subrefs]}]
+  (loop [stack   (vec top-ref-block-ids)
+         visited #{}
+         out     #{}]
+    (if (empty? stack)
+      out
+      (let [eid   (peek stack)
+            stack (pop stack)]
+        (if (contains? visited eid)
+          (recur stack visited out)
+          (let [visited (conj visited eid)
+                eff-refs (eff eid)]
+            (cond
+              ;; don't match this node, but still traverse
+              (not (class-ok? eid))
+              (recur (into stack (child-ids db eid)) visited out)
+
+                ;; prune: AND includes cannot be satisfied anywhere below
+              (not (can-satisfy-includes? eff-refs eid))
+              (recur stack visited out)
+
+              :else
+              (let [include-set (into eff-refs (allowed-subrefs eid))
+                    exclude-set eff-refs
+                    out' (if (matches-filters? include-set exclude-set includes excludes)
+                           (conj out eid)
+                           out)]
+                (recur (into stack (child-ids db eid)) visited out')))))))))
+
 (defn- matched-ref-block-ids-under-top
   "Return the set of block ids (top or child) that match filters.
 
@@ -166,33 +196,11 @@
                     (or (empty? class-ids)
                         (not (some #(has-datom? db eid :block/tags %) class-ids))))]
 
-    (loop [stack   (vec top-ref-block-ids)
-           visited #{}
-           out     #{}]
-      (if (empty? stack)
-        out
-        (let [eid   (peek stack)
-              stack (pop stack)]
-          (if (contains? visited eid)
-            (recur stack visited out)
-            (let [visited (conj visited eid)
-                  eff-refs (eff eid)]
-              (cond
-                ;; don't match this node, but still traverse
-                (not (class-ok? eid))
-                (recur (into stack (child-ids db eid)) visited out)
-
-                ;; prune: AND includes cannot be satisfied anywhere below
-                (not (can-satisfy-includes? eff-refs eid))
-                (recur stack visited out)
-
-                :else
-                (let [include-set (into eff-refs (allowed-subrefs eid))
-                      exclude-set eff-refs
-                      out' (if (matches-filters? include-set exclude-set includes excludes)
-                             (conj out eid)
-                             out)]
-                  (recur (into stack (child-ids db eid)) visited out'))))))))))
+    (filter-matched-ref-blocks db top-ref-block-ids includes excludes
+                               {:eff eff
+                                :class-ok? class-ok?
+                                :can-satisfy-includes? can-satisfy-includes?
+                                :allowed-subrefs allowed-subrefs})))
 
 ;; -----------------------------------------------------------------------------
 ;; Expand matched refs up to top refs
@@ -267,7 +275,6 @@
         class-ids    (when (ldb/class? entity)
                        (let [class-children (db-class/get-structured-children db id)]
                          (set (conj class-children id))))
-
         ;; Collect all top ref blocks that directly reference the page (or any alias).
         full-ref-block-ids
         (->> ids
@@ -280,25 +287,20 @@
                         (entity-util/hidden? (:block/page ref)))))
              (map :db/id)
              set)
-
         ;; matched can be top or child ids
         matched-ref-block-ids
         (when has-filters?
           (matched-ref-block-ids-under-top db full-ref-block-ids includes excludes class-ids))
-
         ;; Expand matches up to top refs so we can show parent chains and matched children.
         matched-refs-with-children-ids
         (when has-filters?
           (expand-to-top-refs db full-ref-block-ids matched-ref-block-ids))
-
         final-ref-ids
         (if has-filters?
           (set/intersection full-ref-block-ids matched-refs-with-children-ids)
           full-ref-block-ids)
-
-          ;; Materialize only at the end.
+        ;; Materialize only at the end.
         ref-blocks (map #(d/entity db %) final-ref-ids)
-
         children-ids
         (if has-filters?
           (set (remove full-ref-block-ids matched-refs-with-children-ids))
