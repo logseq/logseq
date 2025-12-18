@@ -15,6 +15,10 @@
    :rtc/ignore-attr-when-init-download true
    :rtc/ignore-attr-when-syncing true})
 
+(def ^:private property-ignore-rtc-upload-sync
+  {:rtc/ignore-attr-when-init-upload true
+   :rtc/ignore-attr-when-syncing true})
+
 ;; Main property vars
 ;; ==================
 
@@ -528,7 +532,7 @@
                                               :public? false}
                                              :properties
                                              {:logseq.property/description "Metadata of asset in remote storage"}
-                                             :rtc property-ignore-rtc}
+                                             :rtc property-ignore-rtc-upload-sync}
      :logseq.property.asset/resize-metadata {:title "Asset resize metadata"
                                              :schema {:type :map
                                                       :hide? true
