@@ -81,6 +81,12 @@
   (->> (m/latest vector (create-local-t-flow graph-uuid) (create-remote-t-flow graph-uuid))
        (m/eduction (filter (fn [[local-t remote-t]] (>= remote-t local-t))))))
 
+(defn clean-cached-graph-local-and-remote-t
+  [graph-uuid]
+  (let [graph-uuid (ensure-uuid graph-uuid)]
+    (swap! *graph-uuid->local-t dissoc graph-uuid)
+    (swap! *graph-uuid->remote-t dissoc graph-uuid)))
+
 (defn update-local-t
   [graph-uuid local-t]
   (let [graph-uuid (ensure-uuid graph-uuid)

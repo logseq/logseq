@@ -2,7 +2,7 @@
   (:require [com.climate.claypoole :as cp]
             [logseq.e2e.assert :as assert]
             [logseq.e2e.config :as config]
-            [logseq.e2e.const :refer [*page1 *page2]]
+            [logseq.e2e.const :refer [*page1 *page2 *graph-name*]]
             [logseq.e2e.custom-report :as custom-report]
             [logseq.e2e.graph :as graph]
             [logseq.e2e.page :as page]
@@ -148,9 +148,10 @@
       (graph/new-graph graph-name true))
     (w/with-page @*page2
       (graph/wait-for-remote-graph graph-name)
-      (graph/switch-graph graph-name true))
+      (graph/switch-graph graph-name true true))
 
-    (binding [custom-report/*preserve-graph* false]
+    (binding [custom-report/*preserve-graph* false
+              *graph-name* graph-name]
       (f)
       ;; cleanup
       (if custom-report/*preserve-graph*

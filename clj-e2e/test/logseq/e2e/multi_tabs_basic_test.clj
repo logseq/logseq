@@ -34,15 +34,15 @@
                 (w/with-page p2
                   (util/goto-journals)
                   (assert/assert-in-normal-mode?)
-                  (graph/switch-graph graph-name false))
+                  (graph/switch-graph graph-name false false))
                 (w/with-page p3
                   (util/goto-journals)
                   (assert/assert-in-normal-mode?)
-                  (graph/switch-graph graph-name false))
+                  (graph/switch-graph graph-name false false))
                 (w/with-page p1
                   (util/goto-journals)
                   (assert/assert-in-normal-mode?)
-                  (graph/switch-graph graph-name false))
+                  (graph/switch-graph graph-name false false))
                 (let [graph-new-blocks (map #(str graph-name "-b1-" %) (range 5))]
                   (add-blocks-and-check-on-other-tabs graph-new-blocks p1 [p2 p3])))]
         (w/with-page p1
