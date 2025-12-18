@@ -166,7 +166,12 @@
   logseq.tasks.dev/e2e-basic-test
 
   dev:e2e-rtc-extra-test
-  logseq.tasks.dev/e2e-rtc-extra-test
+  {:doc "Run e2e rtc extra tests. HTTP server should be available at localhost:3001"
+   :task (clojure {:dir "clj-e2e"} "-X:dev-run-rtc-extra-test")}
+
+  dev:e2e-rtc-extra-part2-test
+  {:doc "Run e2e rtc extra part2 tests. HTTP server should be available at localhost:3001"
+   :task (clojure {:dir "clj-e2e"} "-X:dev-run-rtc-extra-part2-test")}
 
   dev:gen-malli-kondo-config
   logseq.tasks.dev/gen-malli-kondo-config

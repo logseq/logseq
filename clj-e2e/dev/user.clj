@@ -15,6 +15,7 @@
             [logseq.e2e.property-basic-test]
             [logseq.e2e.reference-basic-test]
             [logseq.e2e.rtc-basic-test]
+            [logseq.e2e.rtc-extra-part2-test]
             [logseq.e2e.rtc-extra-test]
             [logseq.e2e.tag-basic-test]
             [logseq.e2e.util :as util]
@@ -77,6 +78,11 @@
 (defn run-rtc-extra-test2
   [& _args]
   (run-tests 'logseq.e2e.rtc-extra-test)
+  (System/exit 0))
+
+(defn run-rtc-extra-part2-test2
+  [& _args]
+  (run-tests 'logseq.e2e.rtc-extra-part2-test)
   (System/exit 0))
 
 (defn run-editor-basic-test

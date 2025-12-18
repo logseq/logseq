@@ -21,5 +21,7 @@
   :dev {:extra-paths ["dev" "test"]}
   :dev-run-rtc-extra-test {:extra-paths ["dev" "test"]
                            :exec-fn user/run-rtc-extra-test2}
+  :dev-run-rtc-extra-part2-test {:extra-paths ["dev" "test"]
+                                 :exec-fn user/run-rtc-extra-part2-test2}
   :dev-run-all-basic-test {:extra-paths ["dev" "test"]
                            :exec-fn user/run-all-basic-test}}}
