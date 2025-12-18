@@ -455,13 +455,14 @@
                result))))) col)))
 
 (defn- with-page-refs-and-tags
-  [{:keys [title body tags refs marker priority] :as block} db date-formatter]
+  [{:keys [title body tags refs marker priority] :as block} db date-formatter {:keys [structured-tags]
+                                                                               :or {structured-tags #{}}}]
   (let [db-based? (and (ldb/db-based-graph? db) (not @*export-to-db-graph?))
         refs (->> (concat tags refs (when-not db-based? [marker priority]))
                   (remove string/blank?)
                   (distinct))
         *refs (atom refs)
-        *structured-tags (atom #{})]
+        *structured-tags (atom (set structured-tags))]
     (walk/prewalk
      (fn [form]
        ;; skip custom queries
@@ -556,9 +557,9 @@
     (map (fn [page] (page-name->map page db true date-formatter)) page-refs)))
 
 (defn- with-page-block-refs
-  [block db date-formatter]
+  [block db date-formatter opts]
   (some-> block
-          (with-page-refs-and-tags db date-formatter)
+          (with-page-refs-and-tags db date-formatter opts)
           with-block-refs
           (update :refs (fn [col] (remove nil? col)))))
 
@@ -612,7 +613,7 @@
                                 :block/macros (extract-macros-from-ast body)
                                 :block.temp/ast-body body}
                          {:keys [tags refs]}
-                         (with-page-block-refs {:body body :refs property-refs} db date-formatter)]
+                         (with-page-block-refs {:body body :refs property-refs} db date-formatter {})]
                      (cond-> block
                        tags
                        (assoc :block/tags tags)
@@ -630,8 +631,17 @@
     properties))
 
 (defn- construct-block
-  [block properties timestamps body encoded-content format pos-meta {:keys [block-pattern db date-formatter remove-properties? db-graph-mode? export-to-db-graph?]}]
-  (let [id (get-custom-id-or-new-id properties)
+  [block properties* timestamps body encoded-content format pos-meta {:keys [block-pattern db date-formatter remove-properties? db-graph-mode? export-to-db-graph?]}]
+  (let [id (get-custom-id-or-new-id properties*)
+        block-tags (and export-to-db-graph? (get-in properties* [:properties :tags]))
+        ;; For export, remove tags from properties as they are being converted to classes
+        properties (if (seq block-tags)
+                     (-> properties*
+                         (update :properties #(dissoc % :tags))
+                         (update :properties-text-values #(dissoc % :tags))
+                         (update :properties-order (fn [v] (remove #(= :tags %) v)))
+                         (update :page-refs (fn [v] (remove #(= "tags" %) v))))
+                     properties*)
         ref-pages-in-properties (->> (:page-refs properties)
                                      (remove string/blank?))
         block (second block)
@@ -671,7 +681,8 @@
         db-based? (or db-graph-mode? export-to-db-graph?)
         block (-> block
                   (assoc :body body)
-                  (with-page-block-refs db date-formatter))
+                  (with-page-block-refs db date-formatter
+                    (cond-> {} (seq block-tags) (assoc :structured-tags block-tags))))
         block (if db-based? block
                   (-> block
                       (update :tags (fn [tags] (map #(assoc % :block/format format) tags)))
