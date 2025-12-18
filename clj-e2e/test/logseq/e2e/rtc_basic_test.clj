@@ -30,7 +30,7 @@
         (graph/new-graph graph-name true))
       (w/with-page @*page2
         (graph/wait-for-remote-graph graph-name)
-        (graph/switch-graph graph-name true)))
+        (graph/switch-graph graph-name true true)))
     (testing "logseq pages add/delete"
       (doseq [page-name page-names]
         (let [{:keys [_local-tx remote-tx]}

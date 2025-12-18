@@ -18,6 +18,10 @@
       (k/esc)
       (util/search-and-click page-name))))
 
+(defn get-page-name
+  []
+  (util/get-text "div[data-testid='page title'] .block-title-wrap"))
+
 (defn new-page
   [title]
   ;; Question: what's the best way to close all the popups?
@@ -42,17 +46,18 @@
   (k/esc))
 
 (defn- set-tag-extends
-  [extends & [in-retry?]]
-  (util/wait-timeout 500)
-  (w/click (loc/filter ".property-value" :has-text "root tag"))
-  (let [extends-visible? (mapv #(w/visible? (format "div:has(> button):has(div:text('%s'))" %)) extends)]
-    (if (every? identity extends-visible?)
-      (doseq [extend extends]
-        (w/click (format "div:has(> button):has(div:text('%s'))" extend)))
-      (if in-retry?
-        (throw (ex-info "parent-tag not found" {:extends extends :visible? extends-visible?}))
-        (do (k/esc)
-            (set-tag-extends extends true))))))
+  [extends & [retry-count]]
+  (let [retry-count (or retry-count 5)]
+    (util/wait-timeout 500)
+    (w/click (loc/filter ".property-value" :has-text "root tag"))
+    (let [extends-visible? (mapv #(w/visible? (format "div:has(> button):has(div:text('%s'))" %)) extends)]
+      (if (every? identity extends-visible?)
+        (doseq [extend extends]
+          (w/click (format "div:has(> button):has(div:text('%s'))" extend)))
+        (if (zero? retry-count)
+          (throw (ex-info "parent-tag not found" {:extends extends :visible? extends-visible?}))
+          (do (k/esc)
+              (set-tag-extends extends (dec retry-count))))))))
 
 (defn convert-to-tag
   [page-name & {:keys [extends]}]
