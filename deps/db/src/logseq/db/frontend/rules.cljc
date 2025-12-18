@@ -263,7 +263,7 @@
     '[(tags ?b ?tags)
       [?b :block/tags ?tag]
       [(contains? ?tags ?tag)]
-      (not [?b :block/link _])]
+      [(missing? $ ?b :block/link)]]
 
     :task
     '[(task ?b ?statuses)
