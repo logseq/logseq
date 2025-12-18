@@ -23,6 +23,7 @@
     (w/grant-permissions :clipboard-write :clipboard-read)
     (binding [custom-report/*pw-contexts* #{(.context (w/get-page))}
               custom-report/*pw-page->console-logs* (atom {})]
+      (w/grant-permissions :clipboard-write :clipboard-read)
       (w/navigate (pw-page/get-test-url port))
       (settings/developer-mode)
       (w/refresh)
@@ -50,6 +51,7 @@
               w/*page* (delay (throw (ex-info "Don't use *page*, use *page1* and *page2* instead" {})))]
       (run!
        #(w/with-page %
+          (w/grant-permissions :clipboard-write :clipboard-read)
           (w/navigate (pw-page/get-test-url port))
           (settings/developer-mode)
           (w/refresh)
