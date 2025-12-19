@@ -247,6 +247,7 @@
                (map (fn [id] (d/entity db [:block/uuid id])) tags)
                tags)
         class? (or class? (some (fn [t] (= :logseq.class/Tag (:db/ident t))) tags))
+        class-ident-namespace? (and class? class-ident-namespace (string? class-ident-namespace))
         title (sanitize-title title*)
         types (cond class?
                     #{:logseq.class/Tag}
@@ -258,7 +259,9 @@
                     (set (map :db/ident tags))
                     :else
                     #{:logseq.class/Page})
-        existing-page-id (first (ldb/page-exists? db title types))
+        ;; Check existing page only when not with custom ident namespace
+        existing-page-id (when (not class-ident-namespace?)
+                           (first (ldb/page-exists? db title types)))
         existing-page (some->> existing-page-id (d/entity db))]
     (if (and existing-page (not (:block/parent existing-page)))
       (let [tx-meta {:persist-op? persist-op?
@@ -269,7 +272,7 @@
           ;; Convert existing page to class
           (let [tx-data [(merge (db-class/build-new-class db
                                                           (select-keys existing-page [:block/title :block/uuid :block/created-at])
-                                                          (when (and class? class-ident-namespace (string? class-ident-namespace))
+                                                          (when class-ident-namespace?
                                                             {:ident-namespace class-ident-namespace}))
                                 (select-keys existing-page [:db/ident]))
                          [:db/retract [:block/uuid (:block/uuid existing-page)] :block/tags :logseq.class/Page]]]
