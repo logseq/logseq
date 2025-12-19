@@ -277,7 +277,7 @@
  :settings-page/tab-assets "Assets"
  :settings-page/tab-features "Features"
  :settings-page/tab-collaboration "Collaboration"
- :settings-page/tab-encryption "End-to-end encryption"
+ :settings-page/tab-encryption "Encryption"
  :settings-page/plugin-system "Plugins"
  :settings-page/enable-flashcards "Flashcards"
  :settings-page/network-proxy "Network proxy"
