@@ -300,7 +300,7 @@
           (shui/alert
            {:variant "warning"}
            (shui/alert-description
-            "⚠️ PDF annotations should be with internal asset(pdf) ref block to work properly."))
+            "Creating a local asset from an external one. PDF annotations require a local asset to work properly."))
 
           (let [title (util/node-path.basename url)]
             (edit-external-url-form asset-block {:url url :title title :on-saved on-saved!}))])))])
