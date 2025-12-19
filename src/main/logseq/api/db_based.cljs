@@ -7,6 +7,7 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [frontend.db :as db]
+            [frontend.db.conn :as db-conn]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
             [frontend.handler.common.page :as page-common-handler]
@@ -17,6 +18,7 @@
             [frontend.modules.layout.core]
             [frontend.state :as state]
             [frontend.util :as util]
+            [logseq.db.frontend.entity-util :as entity-util]
             [goog.object :as gobj]
             [logseq.api.block :as api-block]
             [logseq.db :as ldb]
@@ -271,6 +273,12 @@
           tag (db/entity eid)]
       (when (ldb/class? tag)
         (sdk-utils/result->js tag)))))
+
+(defn get-tags-by-name [name]
+  (when-let [tags (some->> (entity-util/get-pages-by-name (db-conn/get-db) name)
+                           (map #(some-> % (first) (db/entity)))
+                           (filter ldb/class?))]
+    (sdk-utils/result->js tags)))
 
 (defn tag-add-property [tag-id property-id-or-name]
   (p/let [tag (db/get-case-page tag-id)

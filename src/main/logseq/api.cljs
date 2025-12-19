@@ -204,6 +204,7 @@
 (def ^:export get_tag_objects db-based-api/get-tag-objects)
 (def ^:export create_tag db-based-api/create-tag)
 (def ^:export get_tag db-based-api/get-tag)
+(def ^:export get_tags_by_name db-based-api/get-tags-by-name)
 (def ^:export add_tag_extends db-based-api/add-tag-extends)
 (def ^:export remove_tag_extends db-based-api/remove-tag-extends)
 (def ^:export add_block_tag db-based-api/add-block-tag)
