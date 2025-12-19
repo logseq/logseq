@@ -425,6 +425,7 @@
   (let [{:keys [remote-t init-tx-data tx-data]}
         (remote-all-blocks->tx-data+t all-blocks graph-uuid)]
     (m/sp
+      (rtc-log-and-state/clean-cached-graph-local-and-remote-t graph-uuid)
       (rtc-log-and-state/update-local-t graph-uuid remote-t)
       (rtc-log-and-state/update-remote-t graph-uuid remote-t)
       (c.m/<?
