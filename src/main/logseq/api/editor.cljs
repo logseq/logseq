@@ -2,7 +2,6 @@
   "Editor related APIs"
   (:require [cljs-bean.core :as bean]
             [cljs.reader]
-            [clojure.string :as string]
             [frontend.commands :as commands]
             [frontend.config :as config]
             [frontend.date :as date]
