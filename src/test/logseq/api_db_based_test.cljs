@@ -50,5 +50,3 @@
     
     (let [result (db-based-api/get-tags-by-name "RegularPage")]
       (is (nil? result) "Should not return regular pages, only tags"))))
-
-#_(cljs.test/run-tests)
