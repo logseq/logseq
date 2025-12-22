@@ -34,8 +34,8 @@
     (let [result (db-based-api/get-tags-by-name "NonExistentTag")]
       (is (nil? result) "Should return nil for non-existent tags")))
 
-  (testing "get_tags_by_name returns multiple tags with same name"
-    ;; Create multiple pages with same name but different case-sensitivity handling
+  (testing "get_tags_by_name returns tags when they exist"
+    ;; Create a tag
     (test-helper/create-page! "MultiTag" {:redirect? false :class? true})
     
     (let [result (db-based-api/get-tags-by-name "MultiTag")
