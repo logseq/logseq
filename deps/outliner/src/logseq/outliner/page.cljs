@@ -259,9 +259,13 @@
                     (set (map :db/ident tags))
                     :else
                     #{:logseq.class/Page})
-        ;; Check existing page only when not with custom ident namespace
-        existing-page-id (when (not class-ident-namespace?)
-                           (first (ldb/page-exists? db title types)))
+        existing-names-page (ldb/page-exists? db title types)
+        existing-page-id (some->> existing-names-page
+                                  (filter #(try (when-let [e (and class-ident-namespace? (d/entity db %))]
+                                                  (let [ns' (namespace (:db/ident e))]
+                                                    (= (str ns') class-ident-namespace)))
+                                                (catch :default _ false)))
+                                  (first))
         existing-page (some->> existing-page-id (d/entity db))]
     (if (and existing-page (not (:block/parent existing-page)))
       (let [tx-meta {:persist-op? persist-op?
@@ -283,10 +287,10 @@
           ;; Just return existing page info
           {:page-uuid (:block/uuid existing-page)
            :title (:block/title existing-page)}))
-      (let [page           (gp-block/page-name->map title db true date-formatter
-                                                    {:class? class?
-                                                     :page-uuid (when (uuid? uuid') uuid')
-                                                     :skip-existing-page-check? true})
+      (let [page (gp-block/page-name->map title db true date-formatter
+                                          {:class? class?
+                                           :page-uuid (when (uuid? uuid') uuid')
+                                           :skip-existing-page-check? true})
             [page parents'] (if (and (text/namespace-page? title) split-namespace?)
                               (let [pages (split-namespace-pages db page date-formatter class?)]
                                 [(last pages) (butlast pages)])
@@ -302,16 +306,16 @@
               (outliner-validate/validate-page-title-characters (str (:block/title parent)) {:node parent})))
 
           (let [page-uuid (:block/uuid page)
-                page-txs  (build-page-tx db properties page (select-keys options [:whiteboard? :class? :tags :class-ident-namespace]))
-                txs      (concat
-                          ;; transact doesn't support entities
-                          (remove de/entity? parents')
-                          page-txs)
+                page-txs (build-page-tx db properties page (select-keys options [:whiteboard? :class? :tags :class-ident-namespace]))
+                txs (concat
+                     ;; transact doesn't support entities
+                     (remove de/entity? parents')
+                     page-txs)
                 tx-meta (cond-> {:persist-op? persist-op?
                                  :outliner-op :create-page}
-                          today-journal?
-                          (assoc :create-today-journal? true
-                                 :today-journal-name title))]
+                                today-journal?
+                                (assoc :create-today-journal? true
+                                       :today-journal-name title))]
             {:tx-meta tx-meta
              :tx-data txs
              :title title

@@ -222,9 +222,12 @@
    (when (text/namespace-page? title)
      (throw (ex-info "Tag title shouldn't include forward slash" {:title title})))
    (let [opts (bean/->clj opts)
+         custom-ident-namespace (:customIdentNamespace opts)
+         class-ident-namespace (or (some-> custom-ident-namespace (api-block/sanitize-user-property-name))
+                                   (api-block/resolve-class-prefix-for-db this))
          opts' (assoc opts
-                      :redirect? false
-                      :class-ident-namespace (api-block/resolve-class-prefix-for-db this))]
+                 :redirect? false
+                 :class-ident-namespace class-ident-namespace)]
      (p/let [tag (db-page-handler/<create-class! title opts')]
        (sdk-utils/result->js tag)))))
 
