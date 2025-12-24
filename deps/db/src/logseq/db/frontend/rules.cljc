@@ -260,10 +260,35 @@
             [?pv :logseq.property/value ?val])))]
 
     :tags
-    '[(tags ?b ?tags)
-      [?b :block/tags ?tag]
-      [(contains? ?tags ?tag)]
-      [(missing? $ ?b :block/link)]]
+    '[;; Case 1: input is number entity id
+      [(tag-spec->tag ?tag ?spec)
+       [(number? ?spec)]
+       [(identity ?spec) ?tag]]
+
+      ;; Case 2: input is :block/title
+      [(tag-spec->tag ?tag ?spec)
+       [?tag :block/title ?spec]]
+
+      ;; Case 3: input is db/ident
+      [(tag-spec->tag ?tag ?spec)
+       [?tag :db/ident ?spec]]
+
+      ;; --- Main rule -----------------------------------------------------------
+
+      [(tags ?b ?tags)
+       ;; enumerate user input set
+       [(identity ?tags) [?spec ...]]
+       (tag-spec->tag ?tag ?spec)
+
+       ;; tag/class attached to block
+       [?b :block/tags ?tc]
+
+       ;; direct or descendant
+       (or
+        [(= ?tag ?tc)]
+        (class-extends ?tag ?tc))
+
+       [(missing? $ ?b :block/link)]]]
 
     :task
     '[(task ?b ?statuses)
@@ -285,6 +310,8 @@
    ;; simple query helpers
    :task #{:ref-property-with-default}
    :priority #{:ref-property-with-default}
+   :tags #{:class-extends}
+
    :has-property-or-object-property #{:object-has-class-property}
    :object-has-class-property #{:class-extends}
    :has-simple-query-property #{:has-property-or-object-property}

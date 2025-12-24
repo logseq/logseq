@@ -43,9 +43,9 @@
     "@fastify/forwarded" "^3.0.0"
     ipaddr.js "^2.1.0"
 
-"@logseq/nbb-logseq@github:logseq/nbb-logseq#feat-db-v30":
-  version "1.2.173-feat-db-v30"
-  resolved "https://codeload.github.com/logseq/nbb-logseq/tar.gz/1ad8d923adfe1a3423337127b987d353910306ab"
+"@logseq/nbb-logseq@github:logseq/nbb-logseq#feat-db-v31":
+  version "1.2.173-feat-db-v31"
+  resolved "https://codeload.github.com/logseq/nbb-logseq/tar.gz/d5b76a675f484dbfb5fbff8235aec6ff84b2f980"
   dependencies:
     import-meta-resolve "^4.1.0"
 
