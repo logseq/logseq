@@ -188,14 +188,13 @@
 (defn ensure-ref-block!
   [pdf-current hl insert-opts]
   (if (config/db-based-graph? (state/get-current-repo))
-    (p/chain
-     (db-based-ensure-ref-block! pdf-current hl insert-opts)
-     (fn []
-       ;; try to move the asset block to the ref block
-       (let [ref-block (db-model/query-block-by-uuid (:id hl))
-             asset-block (:logseq.property.pdf/hl-image ref-block)]
-         (when asset-block
-           (editor-handler/move-blocks! [asset-block] ref-block {:sibling? false})))))
+    (p/let [ref-block (db-based-ensure-ref-block! pdf-current hl insert-opts)
+            asset-block (:logseq.property.pdf/hl-image ref-block)]
+      ;; try to move the asset block to the ref block
+      (p/do!
+       (when asset-block
+         (editor-handler/move-blocks! [asset-block] ref-block {:sibling? false}))
+       ref-block))
     (file-based-ensure-ref-block! pdf-current hl insert-opts)))
 
 (defn file-based-load-hls-data$
