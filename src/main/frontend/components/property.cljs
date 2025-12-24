@@ -184,6 +184,7 @@
                                          [:span.pt-1 (shui/tabler-icon "letter-t" {:size 15 :class "opacity-40"})])
                                        [:strong.font-normal (:block/title x)]]))
                            :value (:block/uuid x)
+                           :block/title (:block/title x)
                            :convert-page-to-property? convert?})) properties)
                  (util/distinct-by-last-wins :value))]
       [:div.ls-property-add.flex.flex-row.items-center.property-key
@@ -192,7 +193,7 @@
         (select/select (merge
                         {:items items
                          :grouped? true
-                         :extract-fn :label
+                         :extract-fn :block/title
                          :dropdown? false
                          :close-modal? false
                          :new-case-sensitive? true
