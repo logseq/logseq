@@ -8,8 +8,8 @@
             [frontend.util :as util]
             [frontend.util.page :as page-util]
             [goog.dom :as gdom]
-            [promesa.core :as p]
-            [logseq.db.sqlite.export :as sqlite-export]))
+            [logseq.db.sqlite.export :as sqlite-export]
+            [promesa.core :as p]))
 
 (defn- <export-edn-helper
   "Gets export-edn and validates export for smaller exports. Copied from component.export/<export-edn-helper"
@@ -41,10 +41,10 @@
                                       :group-by? group-by?})
           pull-data (with-out-str (pprint/pprint result))]
     (if (:export-edn-error result)
-        (notification/show! (:export-edn-error result) :error)
-        (do (.writeText js/navigator.clipboard pull-data)
-            (println pull-data)
-            (notification/show! "Copied view nodes' data!" :success)))))
+      (notification/show! (:export-edn-error result) :error)
+      (do (.writeText js/navigator.clipboard pull-data)
+          (println pull-data)
+          (notification/show! "Copied view nodes' data!" :success)))))
 
 (defn ^:export export-page-data []
   (if-let [page-id (page-util/get-current-page-id)]
@@ -77,8 +77,14 @@
       (str "." (string/lower-case (name extension)))))
 
 (defn export-repo-as-db-edn!
+  "Run db validation before exporting EDN"
   [repo]
-  (p/let [result (state/<invoke-db-worker :thread-api/export-edn
+  (p/let [validate-result (state/<invoke-db-worker :thread-api/validate-db
+                                                   (state/get-current-repo))
+          {:keys [errors]} validate-result
+          _ (when (seq errors)
+              (throw (ex-info "Graph validation failed" validate-result)))
+          result (state/<invoke-db-worker :thread-api/export-edn
                                           (state/get-current-repo)
                                           {:export-type :graph
                                            :graph-options {:include-timestamps? true}})
