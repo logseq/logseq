@@ -791,7 +791,7 @@
       `update-timestamps?`: whether to update `blocks` timestamps.
     ``"
   [repo db blocks target-block {:keys [_sibling? keep-uuid? keep-block-order?
-                                       outliner-op replace-empty-target? update-timestamps?
+                                       outliner-op outliner-real-op replace-empty-target? update-timestamps?
                                        insert-template?]
                                 :as opts
                                 :or {update-timestamps? true}}]
@@ -810,7 +810,8 @@
                                       b)
                                      b)
                                 dissoc-keys (concat [:block/tx-id]
-                                                    (when (contains? #{:insert-template-blocks :paste} outliner-op)
+                                                    (when (and (contains? #{:insert-template-blocks :paste} outliner-op)
+                                                               (not (contains? #{:paste-text} outliner-real-op)))
                                                       [:block/refs]))]
                             (apply dissoc b' dissoc-keys))
                           b))
