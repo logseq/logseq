@@ -2,6 +2,7 @@
   "Provides SQLite dbs for electron and manages files of those dbs"
   (:require ["fs-extra" :as fs]
             ["path" :as node-path]
+            [electron.backup-file :as backup-file]
             [logseq.cli.common.graph :as cli-common-graph]
             [logseq.common.config :as common-config]
             [logseq.db.common.sqlite :as common-sqlite]))
@@ -17,17 +18,27 @@
     (fs/ensureDirSync graph-dir)
     graph-dir))
 
-(defn save-db!
-  [db-name data]
-  (let [[_db-name db-path] (common-sqlite/get-db-full-path (cli-common-graph/get-db-graphs-dir) db-name)]
-    (fs/writeFileSync db-path data)))
-
 (defn get-db
   [db-name]
   (let [_ (ensure-graph-dir! db-name)
         [_db-name db-path] (common-sqlite/get-db-full-path (cli-common-graph/get-db-graphs-dir) db-name)]
     (when (fs/existsSync db-path)
       (fs/readFileSync db-path))))
+
+(defn save-db!
+  [db-name data]
+  (let [[db-name db-path] (common-sqlite/get-db-full-path (cli-common-graph/get-db-graphs-dir) db-name)
+        old-data (get-db db-name)
+        backups-path (common-sqlite/get-db-backups-path (cli-common-graph/get-db-graphs-dir) db-name)]
+    (when-not (= old-data data)
+      (when old-data
+        (backup-file/backup-file db-name nil nil
+                                 ".sqlite"
+                                 old-data
+                                 {:backups-dir backups-path
+                                  :truncate-daily? true
+                                  :keep-versions 12}))
+      (fs/writeFileSync db-path data))))
 
 (defn unlink-graph!
   [repo]
