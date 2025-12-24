@@ -320,7 +320,7 @@
   [repo {:keys [backup-now?]
          :or {backup-now? true}}]
   (when (ldb/get-key-value (db/get-db repo) :logseq.kv/graph-backup-folder)
-    (when (and (config/db-based-graph? repo) util/web-platform? (utils/nfsSupported))
+    (when (and (config/db-based-graph? repo) (not (util/capacitor?)))
       (cancel-db-backup!)
 
       (when backup-now? (backup-db-graph repo :backup-now))

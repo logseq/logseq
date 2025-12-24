@@ -178,14 +178,12 @@
                  (not util/nfs?))
         (state/pub-event! [:graph/dir-gone dir]))))
   (let [db-based? (config/db-based-graph? repo)]
-    (p/do!
-     (state/pub-event! [:graph/sync-context])
-     ;; FIXME: an ugly implementation for redirecting to page on new window is restored
-     (repo-handler/graph-ready! repo)
-     (when-not config/publishing?
-       (if db-based?
-         (export/auto-db-backup! repo {:backup-now? true})
-         (fs-watcher/load-graph-files! repo))))))
+    ;; FIXME: an ugly implementation for redirecting to page on new window is restored
+    (repo-handler/graph-ready! repo)
+
+    (when-not config/publishing?
+      (when-not db-based?
+        (fs-watcher/load-graph-files! repo)))))
 
 (defmethod handle :instrument [[_ {:keys [type payload] :as opts}]]
   (when-not (empty? (dissoc opts :type :payload))
@@ -196,8 +194,8 @@
   (let [[user-uuid graph-uuid tx-id] @sync/graphs-txid
         payload (merge
                  {:schema-version (str db-schema/version)
-                  :db-schema-version (when-let [db (frontend.db/get-db)]
-                                       (str (:kv/value (frontend.db/entity db :logseq.kv/schema-version))))
+                  :db-schema-version (when-let [db (db/get-db)]
+                                       (str (:kv/value (db/entity db :logseq.kv/schema-version))))
                   :user-id user-uuid
                   :graph-id graph-uuid
                   :tx-id tx-id
@@ -260,9 +258,12 @@
 
 (defmethod handle :graph/restored [[_ graph]]
   (when graph (assets-handler/ensure-assets-dir! graph))
+  (state/pub-event! [:graph/sync-context])
+  (when (config/db-based-graph? graph)
+    (export/auto-db-backup! graph {:backup-now? true}))
   (rtc-flows/trigger-rtc-start graph)
   (fsrs/update-due-cards-count)
-  (when-not (mobile-util/native-ios?)
+  (when-not (mobile-util/native-platform?)
     (state/pub-event! [:graph/ready graph])))
 
 (defmethod handle :whiteboard-link [[_ shapes]]
