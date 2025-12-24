@@ -363,7 +363,7 @@
               bytes-array (js/Uint8Array. buffer)
               checksum (db-asset/<get-file-array-buffer-checksum buffer)
               asset-id (d/squuid)
-              asset-name (gp-exporter/asset-path->name (:path file))
+              asset-name (some-> (:path file) gp-exporter/asset-path->name)
               assets-dir (path/path-join repo-dir common-config/local-assets-dir)
               asset-type (db-asset/asset-path->type (:path file))
               {:keys [with-edn-content pdf-annotation?]} (buffer-handler bytes-array)]
