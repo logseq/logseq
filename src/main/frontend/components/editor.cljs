@@ -255,18 +255,20 @@
           [:code (if util/mac? "Cmd+Enter" "Ctrl+Enter")]
           [:span " to display this tag inline instead of at the end of this node."]])])))
 
-(rum/defc page-search < rum/reactive
-  {:will-unmount (fn [state]
+(rum/defcs page-search < rum/reactive
+  {:init (fn [state]
+           (assoc state ::pos (state/get-editor-last-pos)))
+   :will-unmount (fn [state]
                    (reset! commands/*current-command nil)
                    state)}
   "Page or tag searching popup"
-  [id format]
+  [state id format]
   (let [action (state/sub :editor/action)
         db? (config/db-based-graph? (state/get-current-repo))
         embed? (and db? (= @commands/*current-command "Page embed"))
         tag? (= action :page-search-hashtag)
         db-tag? (and db? tag?)
-        pos (state/get-editor-last-pos)
+        pos (::pos state)
         input (gdom/getElement id)]
     (when input
       (let [current-pos (cursor/pos input)
@@ -382,9 +384,11 @@
                      (:block/title template))
       :class       "black"})))
 
-(rum/defc template-search < rum/reactive
-  [id _format]
-  (let [pos (state/get-editor-last-pos)
+(rum/defcs template-search < rum/reactive
+  {:init (fn [state]
+           (assoc state ::pos (state/get-editor-last-pos)))}
+  [state id _format]
+  (let [pos (::pos state)
         input (gdom/getElement id)]
     (when input
       (let [current-pos (cursor/pos input)
@@ -467,11 +471,13 @@
    [last-pos current-pos])
   [:<>])
 
-(rum/defc code-block-mode-picker < rum/reactive
-  [id format]
+(rum/defcs code-block-mode-picker < rum/reactive
+  {:init (fn [state]
+           (assoc state ::pos (state/get-editor-last-pos)))}
+  [state id format]
   (when-let [modes (some->> js/window.CodeMirror (.-modes) (js/Object.keys) (js->clj) (remove #(= "null" %)))]
     (when-let [^js input (gdom/getElement id)]
-      (let [pos          (state/get-editor-last-pos)
+      (let [pos          (::pos state)
             current-pos  (cursor/pos input)
             edit-content (or (state/sub-edit-content) "")
             q            (or (editor-handler/get-selected-text)
