@@ -2131,7 +2131,8 @@
                   keep-uuid?
                   revert-cut-txs
                   skip-empty-target?
-                  ops-only?]
+                  ops-only?
+                  outliner-real-op]
            :or {exclude-properties []}}]
   (let [editing-block (when-let [editing-block (state/get-edit-block)]
                         (some-> (db/entity [:block/uuid (:block/uuid editing-block)])
@@ -2177,6 +2178,7 @@
                                                 blocks)]
                                (outliner-op/insert-blocks! blocks' target-block' {:sibling? sibling?
                                                                                   :outliner-op :paste
+                                                                                  :outliner-real-op outliner-real-op
                                                                                   :replace-empty-target? replace-empty-target?
                                                                                   :keep-uuid? keep-uuid?}))))]
     (if ops-only?
