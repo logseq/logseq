@@ -75,7 +75,6 @@
 
     > .fake-bar {
       @apply w-full px-5 pt-1 sm:hidden;
-
       top: -45px;
     }
   }
@@ -87,10 +86,6 @@
     .menu-link {
       padding: 5px 15px;
       opacity: .8;
-
-      &:hover {
-        opacity: 1;
-      }
     }
   }
 
@@ -100,15 +95,6 @@
     a {
       .keyboard-shortcut {
         @apply opacity-0 invisible;
-      }
-
-      &:hover {
-        .keyboard-shortcut {
-          visibility: visible;
-          transition: opacity 1s;
-          transition-delay: 2s;
-          opacity: 1;
-        }
       }
     }
   }
@@ -132,7 +118,8 @@
       }
     }
 
-    &:hover, &.active, > .thumb {
+    &.active,
+    > .thumb {
       background-color: var(--lx-gray-04, var(--ls-quaternary-background-color, var(--rx-gray-04)));
     }
   }
@@ -164,7 +151,7 @@
 
       > .hd {
         @apply pl-2 pr-1 h-[32px] flex justify-between items-center select-none sticky top-[-4px];
-        @apply cursor-pointer z-[2] active:opacity-80 rounded-md;
+        @apply cursor-pointer z-[2] rounded-md;
 
         background-color: var(--left-sidebar-bg-color);
 
@@ -173,25 +160,10 @@
         }
 
         &.non-collapsable {
-          @apply cursor-default active:opacity-100;
+          @apply cursor-default;
 
           .wrap-th {
             @apply cursor-default;
-          }
-        }
-
-        &:not(.non-collapsable) {
-
-          &:hover {
-            background-color: var(--lx-gray-04, var(--ls-quaternary-background-color, var(--rx-gray-04)));
-
-            * {
-              @apply !opacity-100;
-            }
-
-            .more {
-              @apply opacity-80;
-            }
           }
         }
 
@@ -211,10 +183,6 @@
           > .b {
             @apply transition-opacity opacity-0 delay-300;
           }
-
-          &:hover > .b {
-            @apply opacity-80;
-          }
         }
       }
 
@@ -233,6 +201,7 @@
 
             .page-title {
               @apply whitespace-nowrap text-ellipsis flex-grow overflow-hidden pr-2;
+
               * {
                 display: inline !important;
               }
@@ -242,7 +211,7 @@
               @apply flex items-center;
             }
 
-            &:hover, &:has([data-popup-active]), &:active {
+            &[data-popup-active] {
               @apply bg-gray-04 opacity-100;
             }
           }
@@ -279,6 +248,59 @@
     }
   }
 
+  /* ================================
+   * Desktop hover-only behavior
+   * ================================ */
+  @media (hover: hover) and (pointer: fine) {
+    .dropdown-wrapper .menu-link:hover {
+      opacity: 1;
+    }
+
+    .sidebar-navigations a:hover .keyboard-shortcut {
+      visibility: visible;
+      transition: opacity 1s;
+      transition-delay: 2s;
+      opacity: 1;
+    }
+
+    a.item:hover {
+      background-color: var(--lx-gray-04, var(--ls-quaternary-background-color, var(--rx-gray-04)));
+    }
+
+    .sidebar-content-group-inner > .hd:not(.non-collapsable):hover {
+      background-color: var(--lx-gray-04, var(--ls-quaternary-background-color, var(--rx-gray-04)));
+
+      * {
+        @apply !opacity-100;
+      }
+
+      .more {
+        @apply opacity-80;
+      }
+    }
+
+    .sidebar-content-group-inner > .hd.enter-show-more:hover > .b {
+      @apply opacity-80;
+    }
+
+    .sidebar-content-group-inner > .bd ul li > a:first-of-type:hover {
+      @apply bg-gray-04 opacity-100;
+    }
+  }
+
+  /* ================================
+   * Mobile / touch devices
+   * ================================ */
+  @media (hover: none) and (pointer: coarse) {
+    a.item:active {
+      background-color: transparent;
+    }
+
+    .sidebar-content-group-inner > .bd ul li > a:first-of-type:active {
+      background-color: transparent;
+    }
+  }
+
   @screen sm {
     padding-top: 0;
     width: var(--ls-left-sidebar-width) !important;
@@ -288,6 +310,7 @@
     }
   }
 }
+
 
 .cp__sidebar-left-layout {
   @apply fixed top-0 left-0 w-[10px] z-[var(--ls-z-index-level-4)];

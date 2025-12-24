@@ -47,9 +47,8 @@
                       (set-matched! (= password-confirm password))))})
 
        [:div.flex.flex-col.gap-2
-        (shui/input
-         {:type "password-confirm"
-          :placeholder "Enter password again"
+        (shui/toggle-password
+         {:placeholder "Enter password again"
           :value password-confirm
           :on-change (fn [e] (set-password-confirm! (-> e .-target .-value)))
           :on-blur (fn [] (set-matched! (= password-confirm password)))})

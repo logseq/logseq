@@ -22,6 +22,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [logseq.api.block :as api-block]
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.entity-util :as entity-util]
@@ -31,7 +32,6 @@
             [logseq.outliner.property :as outliner-property]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [logseq.api.block :as api-block]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -184,6 +184,7 @@
                                          [:span.pt-1 (shui/tabler-icon "letter-t" {:size 15 :class "opacity-40"})])
                                        [:strong.font-normal (:block/title x)]]))
                            :value (:block/uuid x)
+                           :block/title (:block/title x)
                            :convert-page-to-property? convert?})) properties)
                  (util/distinct-by-last-wins :value))]
       [:div.ls-property-add.flex.flex-row.items-center.property-key
@@ -192,7 +193,7 @@
         (select/select (merge
                         {:items items
                          :grouped? true
-                         :extract-fn :label
+                         :extract-fn :block/title
                          :dropdown? false
                          :close-modal? false
                          :new-case-sensitive? true
@@ -485,16 +486,18 @@
             date? (= type :date)
             datetime? (= type :datetime)
             checkbox? (= type :checkbox)
+            number-type? (= type :number)
             property-key-cp' (property-key-cp block property (assoc (select-keys opts [:class-schema?])
                                                                     :block? block?
                                                                     :inline-text inline-text
                                                                     :page-cp page-cp))]
         [:div {:key (str "property-pair-" (:db/id block) "-" (:db/id property))
                :class (cond
-                        (or date? datetime? checkbox?)
+                        (or date? datetime? checkbox? number-type?)
                         "property-pair items-center"
                         :else
-                        "property-pair items-start")}
+                        "property-pair items-start")
+               :data-property-type (name type)}
          (if (seq sortable-opts)
            (dnd/sortable-item (assoc sortable-opts :class "property-key") property-key-cp')
            [:div.property-key property-key-cp'])
