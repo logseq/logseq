@@ -31,7 +31,6 @@
   (when enable-sync?
     (w/wait-for "button#rtc-sync" {:timeout 3000})
     (w/click "button#rtc-sync"))
-  (w/click "button:not([disabled]):text(\"Submit\")")
   (when enable-sync?
     (input-e2ee-password)
     (w/wait-for "button.cloud.on.idle" {:timeout 20000}))
