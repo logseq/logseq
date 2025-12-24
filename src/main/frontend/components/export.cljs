@@ -139,8 +139,7 @@
             "Export debug transit file"]
            [:p.text-sm.opacity-70.mb-0 "Exports to a .transit file to send to us for debugging. Any sensitive data will be removed in the exported file."]])
 
-        (when (and db-based? util/web-platform?
-                   (not (util/mobile?)))
+        (when (and db-based? (not (util/mobile?)))
           [:div
            [:hr]
            (auto-backup)])]])))
