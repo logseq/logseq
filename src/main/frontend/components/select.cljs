@@ -144,9 +144,23 @@
                                (not exact-match?)
                                (not (string/blank? @*input))
                                (not (exact-match-exclude-items @*input)))
-                        (->>
-                         (cons new-option search-result')
-                         (remove nil?))
+                        (let [current-input (exact-transform-fn @*input)
+                              matches? (some (fn [item]
+                                               (and (string? item)
+                                                    (string? current-input)
+                                                    (string/includes?
+                                                     (string/lower-case item)
+                                                     (string/lower-case current-input))))
+                                             (set (map (comp exact-transform-fn str extract-fn) search-result')))]
+                          (->>
+                           (if matches?
+                             (cons
+                              (first search-result')
+                              (cons
+                               new-option
+                               (rest search-result')))
+                             (cons new-option search-result'))
+                           (remove nil?)))
                         search-result')
         input-opts' (if (fn? input-opts) (input-opts (empty? search-result)) input-opts)
         input-container (or
