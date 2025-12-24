@@ -301,12 +301,16 @@ ul {
   }
 }
 
-.ls-properties-area .property-pair {
-  @apply flex flex-col items-start;
+.ls-properties-area  {
+    .property-pair {
+        &[data-property-type=default] {
+            @apply flex flex-col items-start;
 
-  .property-key {
-    margin-bottom: -6px;
-  }
+            .property-key {
+                margin-bottom: -6px;
+            }
+        }
+    }
 }
 
 body, #root {
@@ -381,4 +385,8 @@ div[data-radix-menu-content] {
 }
 .ls-foldable-title-control {
     margin-left: 0px;
+}
+
+.ls-number {
+    min-height: 20px;
 }
