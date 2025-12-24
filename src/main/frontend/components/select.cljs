@@ -138,16 +138,14 @@
                                     (not (contains? selected-choices (:value item))))
                                   search-result')
                          search-result')
+        new-option {:value @*input
+                    :label (str "+ New option: " @*input)}
         search-result (if (and show-new-when-not-exact-match?
                                (not exact-match?)
                                (not (string/blank? @*input))
                                (not (exact-match-exclude-items @*input)))
                         (->>
-                         (cons
-                          (first search-result')
-                          (cons {:value @*input
-                                 :label (str "+ New option: " @*input)}
-                                (rest search-result')))
+                         (cons new-option search-result')
                          (remove nil?))
                         search-result')
         input-opts' (if (fn? input-opts) (input-opts (empty? search-result)) input-opts)
