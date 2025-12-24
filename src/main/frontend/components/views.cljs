@@ -990,7 +990,7 @@
 (rum/defc table-row < rum/reactive db-mixins/query
   [table row props option]
   (let [block (db/sub-block (:db/id row))
-        block' (if (= :full (:block.temp/load-status block)) block row)
+        block' (if (contains? #{:self :full} (:block.temp/load-status block)) block row)
         row' (when block'
                (-> block'
                    (update :block/tags (fn [tags]
