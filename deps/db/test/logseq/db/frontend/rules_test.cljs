@@ -137,3 +137,39 @@
                   (map (comp :block/title first))
                   set))
           "property can be used multiple times to query a property value's property"))))
+
+(deftest tags-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Page1"
+                        :build/tags [:Person]}}
+                {:page {:block/title "Page2"
+                        :build/tags [:Person]}}
+                {:page {:block/title "Page3"
+                        :build/tags [:Employee]}}]})
+        person-eid (:db/id (d/entity @conn :user.class/Person))]
+    (d/transact! conn [{:db/ident :user.class/Employee
+                        :logseq.property.class/extends :user.class/Person}])
+    (testing "tags query with eid"
+      (is (= #{"Page1" "Page2" "Page3"}
+             (->> (d/q
+                   '[:find (pull ?b [:block/title])
+                     :in $ % ?tag-ids
+                     :where (tags ?b ?tag-ids)]
+                   @conn
+                   (rules/extract-rules rules/db-query-dsl-rules)
+                   #{person-eid})
+                  (map (comp :block/title first))
+                  set))))
+    (testing "tags query with db/ident"
+      (is (= #{"Page1" "Page2" "Page3"}
+             (->> (q-with-rules '[:find (pull ?b [:block/title]) :where (tags ?b #{:user.class/Person})]
+                                @conn)
+                  (map (comp :block/title first))
+                  set))))
+    (testing "tags query with block/title"
+      (is (= #{"Page1" "Page2" "Page3"}
+             (->> (q-with-rules '[:find (pull ?b [:block/title]) :where (tags ?b #{"Person"})]
+                                @conn)
+                  (map (comp :block/title first))
+                  set))))))
