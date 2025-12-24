@@ -13,7 +13,8 @@
      (form-core/input
       (merge
        option
-       {:type (if visible? "text" "password")}))
+       {:type (or (:type option)
+                  (if visible? "text" "password"))}))
      (when-not (string/blank? (:value option))
        (base-core/button
         {:variant :ghost
