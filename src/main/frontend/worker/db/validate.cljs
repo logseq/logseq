@@ -22,6 +22,14 @@
                      (fn [{:keys [entity dispatch-key]}]
                        (let [entity (d/entity db (:db/id entity))]
                          (cond
+                           (and (= "External URL" (:block/title entity))
+                                (nil? (:block/tags entity)))
+                           [[:db/retractEntity (:db/id entity)]]
+                           (and (:db/ident entity)
+                                (db-class/user-class-namespace? (str (:db/ident entity)))
+                                (not (ldb/class? entity)))
+                           [[:db/add (:db/id entity) :block/tags :logseq.class/Tag]
+                            [:db/retract (:db/id entity) :block/tags :logseq.class/Page]]
                            (and (ldb/property? entity)
                                 (:logseq.property.class/extends entity))
                            [[:db/retract (:db/id entity) :logseq.property.class/extends]]
