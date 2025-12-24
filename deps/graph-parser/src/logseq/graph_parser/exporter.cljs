@@ -892,14 +892,15 @@
 ;; {:url ["Complex" {:protocol "zotero", :link "select/library/items/6VCW9QFJ"}], :label [["Plain" "Dechow and Struppa - 2015 - Intertwingled.pdf"]], :full_text "[Dechow and Struppa - 2015 - Intertwingled.pdf](zotero://select/library/items/6VCW9QFJ)", :metadata ""}
 (defn- get-zotero-local-pdf-path
   [config m]
-  (let [link (:link (second (:url m)))
-        label (second (first (:label m)))
-        id (last (string/split link #"/"))]
-    (when (and link id label)
-      (when-let [zotero-data-dir (get-in config [:zotero/settings-v2 "default" :zotero-data-directory])]
-        {:link (str "zotero://" link)
-         :path (node-path/join zotero-data-dir "storage" id label)
-         :base label}))))
+  (when (= "zotero" (:protocol (second (:url m))))
+    (let [link (:link (second (:url m)))
+          label (second (first (:label m)))
+          id (last (string/split link #"/"))]
+      (when (and link id label)
+        (when-let [zotero-data-dir (get-in config [:zotero/settings-v2 "default" :zotero-data-directory])]
+          {:link (str "zotero://" link)
+           :path (node-path/join zotero-data-dir "storage" id label)
+           :base label})))))
 
 (defn- walk-ast-blocks
   "Walks each ast block in order to its full depth. Saves multiple ast types for
@@ -1048,10 +1049,11 @@
   "Given an asset's relative or full path, create a unique name for identifying an asset.
    Must handle to paths as ../assets/*, assets/* and with subdirectories"
   [path]
-  (or (re-find #"assets/.*$" path)
-      ;; pdf outside logseq graphs
-      (when (string/ends-with? path ".pdf")
-        path)))
+  (when (string? path)
+    (or (re-find #"assets/.*$" path)
+        ;; pdf outside logseq graphs
+        (when (string/ends-with? path ".pdf")
+          path))))
 
 (defn- update-asset-links-in-block-title [block-title asset-name-to-uuids ignored-assets]
   (reduce (fn [acc [asset-name asset-uuid]]
@@ -1213,11 +1215,13 @@
     (p/let [asset-maps* (p/all (map
                                 (fn [asset-link]
                                   (p/let [path* (-> asset-link second :url second)
+                                          zotero-asset? (when (map? path*)
+                                                          (= "zotero" (:protocol (second (:url (second asset-link))))))
                                           {:keys [path link base]} (if (map? path*)
                                                                      (get-zotero-local-pdf-path user-config (second asset-link))
                                                                      {:path path*})
-                                          asset-name (-> path asset-path->name)
-                                          asset-link-or-name (or link (-> path asset-path->name))
+                                          asset-name (some-> path asset-path->name)
+                                          asset-link-or-name (or link (some-> path asset-path->name))
                                           asset-data* (when asset-link-or-name (get @assets asset-link-or-name))
                                           _ (when (and asset-link-or-name
                                                        (not asset-data*)
@@ -1261,7 +1265,7 @@
                                           (swap! assets assoc-in [asset-link-or-name :asset-created?] true)
                                           {:asset-name-uuid [asset-link-or-name (:block/uuid new-asset)]
                                            :asset-tx asset-tx}))
-                                      (do
+                                      (when-not zotero-asset? ; no need to report warning for zotero managed pdf files
                                         (swap! ignored-assets conj
                                                {:reason "No asset data found for this asset path"
                                                 :path (-> asset-link second :url second)
