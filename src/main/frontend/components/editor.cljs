@@ -2,7 +2,6 @@
   (:require [clojure.string :as string]
             [dommy.core :as dom]
             [frontend.commands :as commands :refer [*matched-commands]]
-            [frontend.components.file-based.datetime :as datetime-comp]
             [frontend.components.icon :as icon-component]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
@@ -700,10 +699,6 @@
                                                              (state/get-editor-action))
                                                         (state/clear-editor-action!)))}})
 
-                 :datepicker
-                 (open-editor-popup! :datepicker
-                                     (datetime-comp/date-picker id format nil) {})
-
                  :input
                  (open-editor-popup! :input
                                      (editor-input id
@@ -756,7 +751,7 @@
 
       (or (contains?
            #{:commands :page-search :page-search-hashtag :block-search :template-search
-             :property-search :property-value-search :datepicker}
+             :property-search :property-value-search}
            action)
           (and (keyword? action)
                (= (namespace action) "editor.action")))
