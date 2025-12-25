@@ -395,7 +395,7 @@
       [left-menu
        (if (mobile-util/native-platform?)
          ;; back button for mobile
-         (when-not (or (state/home?) custom-home-page? (state/whiteboard-dashboard?))
+         (when-not (or (state/home?) custom-home-page?)
            (ui/with-shortcut :go/backward "bottom"
              [:button.it.navigation.nav-left.button.icon.opacity-70
               {:title (t :header/go-back) :on-click #(js/window.history.back)}

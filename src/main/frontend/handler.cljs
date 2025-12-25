@@ -10,7 +10,6 @@
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
             [frontend.components.user.login :as user.login]
-            [frontend.components.whiteboard :as whiteboard]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
             [frontend.db.react :as react]
@@ -114,7 +113,6 @@
   (state/set-page-blocks-cp! page/page-cp)
   (state/set-component! :block/->hiccup block/->hiccup)
   (state/set-component! :block/linked-references reference/references)
-  (state/set-component! :whiteboard/tldraw-preview whiteboard/tldraw-preview)
   (state/set-component! :block/single-block block/single-block-cp)
   (state/set-component! :block/container block/block-container)
   (state/set-component! :block/inline-title block/inline-title)
