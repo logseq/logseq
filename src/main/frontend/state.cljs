@@ -365,41 +365,6 @@
    ;; Then the default value is applied
    :file/name-format :legacy})
 
-(def file-default-config
-  "Default repo config for file graphs"
-  (merge common-default-config
-         ;; The "NOW" query returns tasks with "NOW" or "DOING" status.
-         ;; The "NEXT" query returns tasks with "NOW", "LATER", or "TODO" status.
-         {:default-queries
-          {:journals
-           [{:title "🔨 NOW"
-             :query '[:find (pull ?h [*])
-                      :in $ ?start ?today
-                      :where
-                      (task ?h #{"NOW" "DOING"})
-                      [?h :block/page ?p]
-                      [?p :block/journal-day ?d]
-                      [(>= ?d ?start)]
-                      [(<= ?d ?today)]]
-             :inputs [:14d :today]
-             :result-transform '(fn [result]
-                                  (sort-by (fn [h]
-                                             (get h :block/priority "Z")) result))
-             :group-by-page? false
-             :collapsed? false}
-            {:title "📅 NEXT"
-             :query '[:find (pull ?h [*])
-                      :in $ ?start ?next
-                      :where
-                      (task ?h #{"NOW" "LATER" "TODO"})
-                      [?h :block/page ?p]
-                      [?p :block/journal-day ?d]
-                      [(> ?d ?start)]
-                      [(< ?d ?next)]]
-             :inputs [:today :7d-after]
-             :group-by-page? false
-             :collapsed? false}]}}))
-
 (def db-default-config
   "Default repo config for DB graphs"
   (merge common-default-config
@@ -466,7 +431,7 @@ should be done through this fn in order to get global config and config defaults
    (get-config (get-current-repo)))
   ([repo-url]
    (merge-configs
-    (if (sqlite-util/db-based-graph? repo-url) db-default-config file-default-config)
+    db-default-config
     (get-global-config)
     (get-graph-config repo-url))))
 
@@ -583,12 +548,10 @@ should be done through this fn in order to get global config and config defaults
 (defn get-date-formatter
   []
   (let [repo (get-current-repo)]
-    (if (sqlite-util/db-based-graph? repo)
-      (when-let [conn (db-conn-state/get-conn repo)]
-        (get (entity-plus/entity-memoized @conn :logseq.class/Journal)
-             :logseq.property.journal/title-format
-             "MMM do, yyyy"))
-      (common-config/get-date-formatter (get-config)))))
+    (when-let [conn (db-conn-state/get-conn repo)]
+      (get (entity-plus/entity-memoized @conn :logseq.class/Journal)
+           :logseq.property.journal/title-format
+           "MMM do, yyyy"))))
 
 (defn custom-shortcuts []
   (merge (storage/get :ls-shortcuts)
@@ -690,7 +653,7 @@ Similar to re-frame subscriptions"
   ([] (sub-config (get-current-repo)))
   ([repo]
    (let [config (sub :config)]
-     (merge-configs (if (and (string? repo) (sqlite-util/db-based-graph? repo)) db-default-config file-default-config)
+     (merge-configs db-default-config
                     (get config ::global-config)
                     (get config repo)))))
 
@@ -715,10 +678,8 @@ Similar to re-frame subscriptions"
 (defn enable-journals?
   ([]
    (enable-journals? (get-current-repo)))
-  ([repo]
-   (if (sqlite-util/db-based-graph? repo) ; db graphs rely on journals for quick capture/sharing/assets, etc.
-     true
-     (not (false? (:feature/enable-journals? (sub-config repo)))))))
+  ([_repo]
+   true))
 
 (defn enable-flashcards?
   ([]
@@ -1822,8 +1783,7 @@ Similar to re-frame subscriptions"
 (defn sidebar-add-block!
   [repo db-id block-type]
   (when (not (util/sm-breakpoint?))
-    (let [page (and (sqlite-util/db-based-graph? repo)
-                    (= :page block-type)
+    (let [page (and (= :page block-type)
                     (some-> (db-conn-state/get-conn repo) deref (d/entity db-id)))]
       (if (and page
                ;; TODO: Use config/dev? when it's not a circular dep

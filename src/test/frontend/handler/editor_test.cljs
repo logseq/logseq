@@ -1,6 +1,5 @@
 (ns frontend.handler.editor-test
-  (:require [clojure.test :refer [deftest is testing are use-fixtures]]
-            [datascript.core :as d]
+  (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.handler.editor :as editor]
@@ -133,24 +132,6 @@
       (editor/handle-last-input))))
 
 (deftest handle-last-input-handler-test
-  (testing "Property autocompletion"
-    (handle-last-input-handler {:value "::"})
-    (is (= :property-search (state/get-editor-action))
-        "Autocomplete properties if only colons have been typed")
-
-    (handle-last-input-handler {:value "foo::bar\n::"})
-    (is (= :property-search (state/get-editor-action))
-        "Autocomplete properties if typing colons on a second line")
-
-    (handle-last-input-handler {:value "middle of line::"})
-    (is (= nil (state/get-editor-action))
-        "Don't autocomplete properties if typing colons in the middle of a line")
-
-    (handle-last-input-handler {:value "first \nfoo::bar"
-                                :cursor-pos (dec (count "first "))})
-    (is (= nil (state/get-editor-action))
-        "Don't autocomplete properties if typing in a block where properties already exist"))
-
   (testing "Command autocompletion"
     (handle-last-input-handler {:value "/"})
     (is (= :commands (state/get-editor-action))

@@ -164,8 +164,6 @@
    :editor/backward-kill-word               {:binding (if mac? false "alt+w")
                                              :fn      editor-handler/backward-kill-word}
 
-   :editor/replace-block-reference-at-point {:binding "mod+shift+r"
-                                             :fn      editor-handler/replace-block-reference-with-content-at-point}
    :editor/copy-embed                       {:binding "mod+shift+e"
                                              :fn      editor-handler/copy-current-block-embed}
 
@@ -607,7 +605,6 @@
           :editor/backward-word
           :editor/forward-kill-word
           :editor/backward-kill-word
-          :editor/replace-block-reference-at-point
           :editor/copy-embed
           :editor/paste-text-in-one-block-at-point
           :editor/insert-youtube-timestamp])
@@ -814,7 +811,6 @@
      :editor/backward-word
      :editor/forward-kill-word
      :editor/backward-kill-word
-     :editor/replace-block-reference-at-point
      :editor/copy-embed
      :editor/paste-text-in-one-block-at-point
      :editor/select-up

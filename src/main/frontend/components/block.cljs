@@ -594,7 +594,7 @@
 
    All page-names are sanitized except page-name-in-block"
   [state
-   {:keys [contents-page? whiteboard-page? other-position?
+   {:keys [contents-page? other-position?
            on-context-menu stop-event-propagation? with-tags? show-unique-title?]
     :or {with-tags? true
          show-unique-title? true}
@@ -604,7 +604,6 @@
         tag? (:tag? config)
         page-name (when (:block/title page-entity)
                     (util/page-name-sanity-lc (:block/title page-entity)))
-        config (assoc config :whiteboard-page? whiteboard-page?)
         untitled? (when page-name
                     (or (model/untitled-page? (:block/title page-entity))
                         (and (ldb/page? page-entity) (string/blank? (:block/title page-entity)))))
@@ -855,8 +854,7 @@
     (cond
       entity
       (let [page-name (some-> (:block/title entity) util/page-name-sanity-lc)
-            whiteboard-page? (model/whiteboard-page? entity)
-            inner (page-inner (assoc config :whiteboard-page? whiteboard-page?) entity children label)
+            inner (page-inner config entity children label)
             modal? (shui-dialog/has-modal?)]
         (if (and (not (util/mobile?))
                  (not= page-name (:id config))
@@ -1992,7 +1990,7 @@
 
      ;; children
      (let [area? (= :area (keyword (pu/lookup block :logseq.property.pdf/hl-type)))
-           hl-ref #(when (not (#{:default :whiteboard-shape} block-type))
+           hl-ref #(when (not (#{:default} block-type))
                      [:div.prefix-link
                       {:on-pointer-down
                        (fn [^js e]
@@ -2027,9 +2025,7 @@
                               (= 1 (count block-ast-title))
                               (= "Link" (ffirst block-ast-title)))
                          (assoc :node-ref-link-only? true))]
-           (conj
-            (map-inline config' block-ast-title)
-            (when (= block-type :whiteboard-shape) [:span.mr-1 (ui/icon "whiteboard-element" {:extension? true})])))
+           (map-inline config' block-ast-title))
 
          (when (and (seq block-ast-title) (ldb/class-instance?
                                            (entity-plus/entity-memoized (db/get-db) :logseq.class/Cards)
@@ -2626,7 +2622,6 @@
                                string/trim
                                block-ref/block-ref?)
         named? (some? (:block/name block))
-        repo (state/get-current-repo)
         table? (:table? config)
         raw-mode-block (state/sub :editor/raw-mode-block)
         type-block-editor? (and (contains? #{:code} (:logseq.property.node/display-type block))
@@ -2720,21 +2715,6 @@
                         (:property? config))
             (when (seq (:block/tags block))
               (tags-cp (assoc config :block/uuid (:block/uuid block)) block)))])]]]))
-
-(rum/defcs single-block-cp < mixins/container-id
-  [state _config block-uuid]
-  (let [uuid (if (string? block-uuid) (uuid block-uuid) block-uuid)
-        block (db/entity [:block/uuid uuid])
-        config {:id (str uuid)
-                :container-id (:container-id state)
-                :db/id (:db/id block)
-                :block/uuid uuid
-                :block? true
-                :editor-box (state/get-component :editor/box)
-                :in-whiteboard? true}]
-    (when (:block/title block)
-      [:div.single-block
-       (block-container config block)])))
 
 (defn non-dragging?
   [e]
@@ -3067,10 +3047,6 @@
                   (assoc config* :original-block original-block)
                   config*)
         ref? (:ref? config*)
-        ;; whiteboard block shape
-        in-whiteboard? (and (:in-whiteboard? config*)
-                            (= (:id config*)
-                               (str (:block/uuid block))))
         edit-input-id (str "edit-block-" (:block/uuid block))
         container-id (:container-id config*)
         table? (:table? config*)
@@ -3098,7 +3074,6 @@
         embed? (:embed? config)
         page-embed? (:page-embed? config)
         reference? (:reference? config)
-        whiteboard-block? (pu/shape-block? block)
         block-id (str "ls-block-" uuid)
         has-child? (first (:block/_parent (db/entity (:db/id block))))
         top? (:top? config)
@@ -3232,7 +3207,7 @@
          :on-mouse-leave (fn [_e]
                            (block-mouse-leave *control-show? block-id doc-mode?))}
 
-        (when (and (not in-whiteboard?) (not property?) (not (:table-block-title? config)))
+        (when (and (not property?) (not (:table-block-title? config)))
           (let [edit? (or editing?
                           (= uuid (:block/uuid (state/get-edit-block))))]
             (block-control (assoc config :hide-bullet? (:page-title? config))
@@ -3249,23 +3224,21 @@
           (when page-icon
             page-icon)
 
-          (if whiteboard-block?
-            (block-reference {} (str uuid) nil)
-            ;; Not embed self
-            [:div.flex.flex-col.w-full
-             (let [block (merge block (block/parse-title-and-body uuid (get block :block/format :markdown) pre-block? title))
-                   hide-block-refs-count? (or (and (:embed? config)
-                                                   (= (:block/uuid block) (:embed-id config)))
-                                              table?)]
-               (block-content-or-editor config
-                                        block
-                                        {:edit-input-id edit-input-id
-                                         :block-id block-id
-                                         :edit? editing?
-                                         :refs-count refs-count
-                                         :*hide-block-refs? *hide-block-refs?
-                                         :hide-block-refs-count? hide-block-refs-count?
-                                         :*show-query? *show-query?}))])]
+          ;; Not embed self
+          [:div.flex.flex-col.w-full
+           (let [block (merge block (block/parse-title-and-body uuid (get block :block/format :markdown) pre-block? title))
+                 hide-block-refs-count? (or (and (:embed? config)
+                                                 (= (:block/uuid block) (:embed-id config)))
+                                            table?)]
+             (block-content-or-editor config
+                                      block
+                                      {:edit-input-id edit-input-id
+                                       :block-id block-id
+                                       :edit? editing?
+                                       :refs-count refs-count
+                                       :*hide-block-refs? *hide-block-refs?
+                                       :hide-block-refs-count? hide-block-refs-count?
+                                       :*show-query? *show-query?}))]]
 
          (when (and (not collapsed?) (not (or table? property?)))
            (block-positioned-properties config block :block-below))]])
@@ -3314,12 +3287,12 @@
                                 (if advanced-query? result {:builder nil
                                                             :query (query-builder-component/sanitize-q query)}))])))
 
-     (when-not (or (:hide-children? config) in-whiteboard? (or table? property?))
+     (when-not (or (:hide-children? config) table? property?)
        (let [config' (-> (update config :level inc)
                          (dissoc :original-block :data))]
          (block-children config' block children collapsed?)))
 
-     (when-not (or in-whiteboard? table? property?)
+     (when-not (or table? property?)
        (dnd-separator-wrapper block block-id false))]))
 
 (rum/defc block-container-inner
@@ -4090,15 +4063,14 @@
           (let [blocks (remove nil? blocks)]
             (when (seq blocks)
               (let [alias? (:block/alias? page)
-                    page (db/entity (:db/id page))
-                    whiteboard? (model/whiteboard-page? page)]
+                    page (db/entity (:db/id page))]
                 [:div.my-2 {:key (str "page-" (:db/id page))}
                  (ui/foldable
                   [:div
                    (page-cp config page)
                    (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
                   (fn []
-                    (when-not whiteboard? (blocks-container config blocks)))
+                    (blocks-container config blocks))
                   {})])))))]
 
      :else

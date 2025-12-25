@@ -5,7 +5,6 @@
             [datascript.core :as d]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.graph-parser.db :as gp-db]))
 
@@ -83,7 +82,6 @@
         namespaces (gp-db/get-all-namespace-relation db)
         tags (set (map second tagged-pages))
         full-pages (ldb/get-all-pages db)
-        db-based? (entity-plus/db-based-graph? db)
         created-ats (map :block/created-at full-pages)
 
         ;; build up nodes
@@ -95,12 +93,10 @@
           (remove ldb/journal?)
           (not excluded-pages?)
           (remove (fn [p] (true?
-                           (if db-based?
-                             (get p :logseq.property/exclude-from-graph-view)
-                             (get-in p [:block/properties :exclude-from-graph-view]))))))
+                           (get p :logseq.property/exclude-from-graph-view)))))
         links (concat relation tagged-pages namespaces)
         linked (set (mapcat identity links))
-        build-in-pages (->> (if db-based? sqlite-create-graph/built-in-pages-names gp-db/built-in-pages-names)
+        build-in-pages (->> sqlite-create-graph/built-in-pages-names
                             (map string/lower-case)
                             set)
         nodes (cond->> full-pages'
@@ -174,10 +170,8 @@
   [db page-uuid theme show-journal]
   (let [dark? (= "dark" theme)
         page-entity (d/entity db [:block/uuid page-uuid])
-        db-based? (entity-plus/db-based-graph? db)
         page-id (:db/id page-entity)
-        tags (when db-based?
-               (set (map :db/id (:block/tags page-entity))))
+        tags (set (map :db/id (:block/tags page-entity)))
         tags (set (remove #(= page-id %) tags))
         ref-pages (get-page-referenced-pages db page-id)
         mentioned-pages (get-pages-that-mentioned-page db page-id show-journal)

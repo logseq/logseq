@@ -917,10 +917,6 @@ Some bindings in this fn:
                                              identity
                                              #(sort-by % (fn [m prop] (get-in m [:block/properties prop]))))}))))))))
 
-(defn query-contains-filter?
-  [query' filter-name]
-  (string/includes? query' (str "(" filter-name)))
-
 (comment
   (query "(and [[foo]] [[bar]])")
 

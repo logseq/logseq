@@ -29,9 +29,8 @@
 
 (defn delete-graph!
   [graph]
-  (let [key (db-conn/get-repo-path graph)
-        db-based? (config/db-based-graph? graph)]
+  (let [key (db-conn/get-repo-path graph)]
     (p/let [_ (persist-db/<unsafe-delete graph)]
       (if (util/electron?)
-        (ipc/ipc "deleteGraph" graph key db-based?)
+        (ipc/ipc "deleteGraph" graph key true)
         (idb/remove-item! key)))))
