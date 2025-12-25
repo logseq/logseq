@@ -548,7 +548,6 @@
   :editor/backward-word         "Move cursor backward a word"
   :editor/forward-kill-word     "Delete a word forwards"
   :editor/backward-kill-word    "Delete a word backwards"
-  :editor/replace-block-reference-at-point "Replace block reference with its content at point"
   :editor/paste-text-in-one-block-at-point "Paste text into one block at point"
   :editor/insert-youtube-timestamp "Insert youtube timestamp"
   :editor/cycle-todo              "Rotate the TODO state"

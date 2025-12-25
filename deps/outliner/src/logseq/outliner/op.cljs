@@ -174,14 +174,10 @@
   (let [opts' (assoc opts
                      :transact-opts {:conn conn}
                      :local-tx? true)
-        *result (atom nil)
-        db-based? (ldb/db-based-graph? @conn)]
+        *result (atom nil)]
     (outliner-tx/transact!
      opts'
      (doseq [[op args] ops]
-       (when-not db-based?
-         (assert (not (or (string/includes? (name op) "property") (string/includes? (name op) "closed-value")))
-                 (str "Property related ops are only for db based graphs, ops: " ops)))
        (case op
          ;; blocks
          :save-block

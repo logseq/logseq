@@ -7,9 +7,11 @@
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
-            [frontend.db.async :as db-async]
             [frontend.extensions.pdf.assets :as pdf-assets]
-            [frontend.extensions.pdf.toolbar :refer [pdf-toolbar *area-dashed? *area-mode? *highlight-mode? *highlights-ctx*]]
+            [frontend.extensions.pdf.toolbar :refer [*area-dashed? *area-mode?
+                                                     *highlight-mode?
+                                                     *highlights-ctx*
+                                                     pdf-toolbar]]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.extensions.pdf.windows :as pdf-windows]
             [frontend.handler.notification :as notification]
@@ -169,7 +171,7 @@
 
                            ;; colors
                            (let [pdf-current (state/get-current-pdf)]
-                             (if (and (config/db-based-graph?) (not (:block pdf-current)))
+                             (if-not (:block pdf-current)
                                (state/pub-event! [:asset/dialog-edit-external-url nil pdf-current])
                                (let [properties {:color action}]
                                  (if-not id
@@ -921,10 +923,7 @@
 
 (rum/defc ^:large-vars/data-var pdf-loader
   [{:keys [url hls-file identity filename block] :as pdf-current}]
-  (let [repo           (state/get-current-repo)
-        db-based?      (config/db-based-graph?)
-        file-based?    (not db-based?)
-        *doc-ref       (rum/use-ref nil)
+  (let [*doc-ref       (rum/use-ref nil)
         [loader-state, set-loader-state!] (rum/use-state {:error nil :pdf-document nil :status nil})
         [hls-state, set-hls-state!] (rum/use-state {:initial-hls nil :latest-hls nil :extra nil :loaded false :error nil})
         [doc-password, set-doc-password!] (rum/use-state nil) ;; use nil to handle empty string
@@ -933,38 +932,13 @@
         set-dirty-hls! (fn [latest-hls]                     ;; TODO: incremental
                          (set-hls-state! #(merge % {:initial-hls [] :latest-hls latest-hls})))
         set-hls-extra! (fn [extra]
-                         (if db-based?
-                           (when block
-                             (debounce-set-last-visit-scale! (:block pdf-current) (:scale extra))
-                             (debounce-set-last-visit-page! (:block pdf-current) (:page extra)))
-                           (set-hls-state! #(merge % {:extra extra}))))]
+                         (when block
+                           (debounce-set-last-visit-scale! (:block pdf-current) (:scale extra))
+                           (debounce-set-last-visit-page! (:block pdf-current) (:page extra))))]
 
     (hooks/use-effect!
      (fn []
-       (when file-based?
-          ;; ensure ref page
-         (when pdf-current
-           (pdf-assets/file-based-ensure-ref-page! pdf-current)))
-
-       (when file-based?
-         ;; load highlights
-         (when pdf-current
-           (let [pdf-block (:block pdf-current)]
-             (p/let [data (db-async/<get-pdf-annotations repo (:db/id pdf-block))
-                     highlights (map :logseq.property.pdf/hl-value data)]
-               (set-initial-page! (or
-                                   (:logseq.property.asset/last-visit-page pdf-block)
-                                   1))
-               (set-initial-scale! (get-last-visit-scale pdf-block))
-               (set-hls-state! {:initial-hls highlights :latest-hls highlights :loaded true})))))
-       #())
-     [pdf-current])
-
-    (hooks/use-effect!
-     (fn []
-       (-> (p/let [data (if db-based?
-                          (pdf-assets/db-based-load-hls-data$ pdf-current)
-                          (pdf-assets/file-based-load-hls-data$ pdf-current))
+       (-> (p/let [data (pdf-assets/db-based-load-hls-data$ pdf-current)
                    {:keys [highlights extra]} data]
              (set-initial-page! (or (when-let [page (:page extra)]
                                       (util/safe-parse-int page)) 1))
@@ -980,29 +954,6 @@
                 (set-hls-state! {:loaded true :error e})))))
        #())
      [hls-file pdf-current])
-
-    ;; cache highlights
-    (let [persist-hls-data!
-          (hooks/use-callback
-           (util/debounce
-            (fn [latest-hls extra]
-              (pdf-assets/file-based-persist-hls-data$
-               pdf-current latest-hls extra))
-            4000) [pdf-current])]
-
-      (hooks/use-effect!
-       (fn []
-         ;; persist highlights
-         (when file-based?
-           (when (= :completed (:status loader-state))
-             (-> (when-not (:error hls-state)
-                   (p/do! (persist-hls-data! (:latest-hls hls-state) (:extra hls-state))))
-                 (p/catch
-                  (fn [e]
-                    (js/console.error "[write hls error]" e))))))
-         #())
-
-       [(:latest-hls hls-state) (:extra hls-state)]))
 
     ;; load document
     (hooks/use-effect!

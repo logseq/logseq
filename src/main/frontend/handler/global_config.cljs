@@ -88,9 +88,7 @@
        (p/let [root-dir' (ipc/ipc "getLogseqDotDirRoot")]
          (reset! root-dir root-dir'))
        (restore-global-config!)
-       (create-global-config-file-if-not-exists repo)
-       ;; FIXME: should use a file watcher instead of dir watcher
-       (fs/watch-dir! (global-config-dir) {:global-dir true}))
+       (create-global-config-file-if-not-exists repo))
       (p/timeout 6000)
       (p/catch (fn [e]
                  (js/console.error "cannot start global-config" e)))))

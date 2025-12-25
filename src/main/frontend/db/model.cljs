@@ -11,7 +11,6 @@
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
-            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.content :as db-content]
@@ -122,20 +121,9 @@ independent of format as format specific heading characters are stripped"
            ffirst))))
 
 (defn get-page-format
-  [page-name]
+  [_page-name]
   {:post [(keyword? %)]}
-  (if (config/db-based-graph? (state/get-current-repo))
-    :markdown
-    (keyword
-     (or
-      (let [page (some->> page-name (ldb/get-page (conn/get-db)))]
-        (or
-         (get page :block/format :markdown)
-         (when-let [file (:block/file page)]
-           (when-let [path (:file/path (db-utils/entity (:db/id file)))]
-             (common-util/get-format path)))))
-      (state/get-preferred-format)
-      :markdown))))
+  :markdown)
 
 (defn page-alias-set
   [repo-url page-id]
@@ -394,16 +382,6 @@ independent of format as format specific heading characters are stripped"
   (when (string? page-name)
     (ldb/journal? (ldb/get-page (conn/get-db) page-name))))
 
-(defn get-all-referenced-blocks-uuid
-  "Get all uuids of blocks with any back link exists."
-  []
-  (when-let [db (conn/get-db)]
-    (d/q '[:find [?refed-uuid ...]
-           :where
-           ;; ?referee-b is block with ref towards ?refed-b
-           [?refed-b   :block/uuid ?refed-uuid]
-           [?referee-b :block/refs ?refed-b]] db)))
-
 (defn delete-files
   [files]
   (mapv (fn [path] [:db.fn/retractEntity [:file/path path]]) files))
@@ -421,47 +399,6 @@ independent of format as format specific heading characters are stripped"
   [page-name]
   (when (some->> page-name (ldb/get-page (conn/get-db)))
     (some? (parse-uuid page-name))))
-
-(defn get-all-whiteboards
-  [repo]
-  (if (config/db-based-graph?)
-    (d/q
-     '[:find [(pull ?page [:db/id
-                           :block/uuid
-                           :block/name
-                           :block/title
-                           :block/created-at
-                           :block/updated-at]) ...]
-       :where
-       [?page :block/name]
-       [?page :block/tags :logseq.class/Whiteboard]]
-     (conn/get-db repo))
-    (d/q
-     '[:find [(pull ?page [:db/id
-                           :block/uuid
-                           :block/name
-                           :block/title
-                           :block/created-at
-                           :block/updated-at]) ...]
-       :where
-       [?page :block/name]
-       [?page :block/type "whiteboard"]]
-     (conn/get-db repo))))
-
-(defn get-whiteboard-id-nonces
-  [repo page-id]
-  (let [db-based? (config/db-based-graph? repo)
-        key (if db-based?
-              :logseq.property.tldraw/shape
-              :logseq.tldraw.shape)
-        page (db-utils/entity page-id)]
-    (->> (:block/_page page)
-         (keep (fn [{:block/keys [uuid] :as b}]
-                 (when-let [shape (if db-based?
-                                    (get b key)
-                                    (get (:block/properties b) key))]
-                   {:id (str uuid)
-                    :nonce (:nonce shape)}))))))
 
 (defn get-all-classes
   [repo & {:keys [except-root-class? except-private-tags?

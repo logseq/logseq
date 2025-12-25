@@ -476,8 +476,6 @@
         (when block
           (when-let [page (some-> block-id get-block-page)]
             (cond
-              (db/whiteboard-page? page)
-              (route-handler/redirect-to-page! (:block/uuid page) {:block-id block-id})
               (model/parents-collapsed? (state/get-current-repo) block-id)
               (route-handler/redirect-to-page! block-id)
               :else
