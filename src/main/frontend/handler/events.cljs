@@ -16,7 +16,6 @@
             [frontend.db.model :as db-model]
             [frontend.db.react :as react]
             [frontend.extensions.fsrs :as fsrs]
-            [frontend.fs :as fs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.code :as code-handler]
             [frontend.handler.common.page :as page-common-handler]
@@ -57,9 +56,7 @@
 (defmethod handle :graph/added [[_ repo {:keys [empty-graph?]}]]
   (search-handler/rebuild-indices!)
   (plugin-handler/hook-plugin-app :graph-after-indexed {:repo repo :empty-graph? empty-graph?})
-  (route-handler/redirect-to-home!)
-  (when-let [dir-name (and (not (config/db-based-graph? repo)) (config/get-repo-dir repo))]
-    (fs/watch-dir! dir-name)))
+  (route-handler/redirect-to-home!))
 
 (defmethod handle :init/commands [_]
   (page-handler/init-commands!))
@@ -67,16 +64,13 @@
 (defn- graph-switch
   [graph]
   (react/clear-query-state!)
-  (let [db-based? (config/db-based-graph? graph)]
-    (state/set-current-repo! graph)
-    (page-handler/init-commands!)
-         ;; load config
-    (repo-config-handler/restore-repo-config! graph)
-    (when-not (= :draw (state/get-current-route))
-      (route-handler/redirect-to-home!))
-    (when-let [dir-name (and (not db-based?) (config/get-repo-dir graph))]
-      (fs/watch-dir! dir-name))
-    (graph-handler/settle-metadata-to-local! {:last-seen-at (js/Date.now)})))
+  (state/set-current-repo! graph)
+  (page-handler/init-commands!)
+  ;; load config
+  (repo-config-handler/restore-repo-config! graph)
+  (when-not (= :draw (state/get-current-route))
+    (route-handler/redirect-to-home!))
+  (graph-handler/settle-metadata-to-local! {:last-seen-at (js/Date.now)}))
 
 ;; Parameters for the `persist-db` function, to show the notification messages
 (defn- graph-switch-on-persisted
@@ -145,12 +139,6 @@
 ;; FIXME: config may not be loaded when the graph is ready.
 (defmethod handle :graph/ready
   [[_ repo]]
-  (when (config/local-file-based-graph? repo)
-    (p/let [dir               (config/get-repo-dir repo)
-            dir-exists?       (fs/dir-exists? dir)]
-      (when (and (not dir-exists?)
-                 (not util/nfs?))
-        (state/pub-event! [:graph/dir-gone dir]))))
   ;; FIXME: an ugly implementation for redirecting to page on new window is restored
   (repo-handler/graph-ready! repo))
 
@@ -164,7 +152,7 @@
                  {:schema-version (str db-schema/version)
                   :db-schema-version (when-let [db (db/get-db)]
                                        (str (:kv/value (db/entity db :logseq.kv/schema-version))))
-                  :db-based (config/db-based-graph? (state/get-current-repo))}
+                  :db-based true}
                  payload)]
     (Sentry/captureException error
                              (bean/->js {:tags payload

@@ -226,7 +226,7 @@
             storage (new-sqlite-storage db)
             client-ops-storage (when-not @*publishing?
                                  (new-sqlite-storage client-ops-db))
-            db-based? (sqlite-util/db-based-graph? repo)]
+            db-based? true]
       (swap! *sqlite-conns assoc repo {:db db
                                        :search search-db
                                        :client-ops client-ops-db})

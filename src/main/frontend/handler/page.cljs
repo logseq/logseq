@@ -352,34 +352,9 @@
      (:db/id page)
      :page)))
 
-(defn open-file-in-default-app []
-  (if-let [file-rpath (and (util/electron?) (page-util/get-page-file-rpath))]
-    (let [repo-dir (config/get-repo-dir (state/get-current-repo))
-          file-fpath (path/path-join repo-dir file-rpath)]
-      (js/window.apis.openPath file-fpath))
-    (notification/show! "No file found" :warning)))
-
-(defn copy-current-file
-  "FIXME: clarify usage, copy file or copy file path"
-  []
-  (if-let [file-rpath (and (util/electron?) (page-util/get-page-file-rpath))]
-    (let [repo-dir (config/get-repo-dir (state/get-current-repo))
-          file-fpath (path/path-join repo-dir file-rpath)]
-      (util/copy-to-clipboard! file-fpath))
-    (notification/show! "No file found" :warning)))
-
-(defn open-file-in-directory []
-  (if-let [file-rpath (and (util/electron?) (page-util/get-page-file-rpath))]
-    (let [repo-dir (config/get-repo-dir (state/get-current-repo))
-          file-fpath (path/path-join repo-dir file-rpath)]
-      (ipc/ipc "openFileInFolder" file-fpath))
-    (notification/show! "No file found" :warning)))
-
 (defn copy-page-url
   ([]
-   (let [id (if (config/db-based-graph? (state/get-current-repo))
-              (page-util/get-current-page-uuid)
-              (page-util/get-current-page-name))]
+   (let [id (page-util/get-current-page-uuid)]
      (copy-page-url id)))
   ([page-uuid]
    (if page-uuid
