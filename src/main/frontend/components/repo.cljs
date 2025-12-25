@@ -175,6 +175,7 @@
                (remove #(= (:url %) config/demo-repo) repos)
                 (util/mobile?)
                 (filter (fn [item]
+                          ;; use `config/db-based-graph?` to avoid loading old file graphs
                           (config/db-based-graph? (:url item)))))
         {remote-graphs true local-graphs false} (group-by (comp boolean :remote?) repos)
         {own-graphs true shared-graphs false}

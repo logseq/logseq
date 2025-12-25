@@ -63,12 +63,12 @@
      [accent-color])
 
     (hooks/use-effect!
-      (fn []
-        (when-let [{:keys [type global]} editor-font]
-          (doto js/document.documentElement
-            (.setAttribute "data-font" (or type "default"))
-            (.setAttribute "data-font-global" (boolean global)))))
-      [editor-font])
+     (fn []
+       (when-let [{:keys [type global]} editor-font]
+         (doto js/document.documentElement
+           (.setAttribute "data-font" (or type "default"))
+           (.setAttribute "data-font-global" (boolean global)))))
+     [editor-font])
 
     (hooks/use-effect!
      #(let [doc js/document.documentElement]
@@ -101,7 +101,6 @@
     (hooks/use-effect!
      (fn []
        (ui-handler/reset-custom-css!)
-       (ui-handler/set-file-graph-flag! (false? (config/db-based-graph? current-repo)))
        (pdf/reset-current-pdf!)
        (plugin-handler/hook-plugin-app :current-graph-changed {}))
      [current-repo])

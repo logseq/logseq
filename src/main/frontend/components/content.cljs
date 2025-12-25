@@ -7,14 +7,11 @@
             [frontend.components.editor :as editor]
             [frontend.components.export :as export]
             [frontend.components.page-menu :as page-menu]
-            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.handler.common.developer :as dev-common-handler]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.notification :as notification]
-            [frontend.handler.page :as page-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
             [frontend.modules.shortcut.core :as shortcut]
@@ -35,8 +32,7 @@
 
 (rum/defc custom-context-menu-content
   []
-  (let [repo (state/get-current-repo)
-        db-based? (config/db-based-graph? repo)]
+  (let [repo (state/get-current-repo)]
     [:<>
      (ui/menu-background-color #(property-handler/batch-set-block-property! repo
                                                                             (state/get-selection-block-ids)
@@ -88,12 +84,6 @@
        :on-click editor-handler/copy-block-refs}
       (t :content/copy-block-ref))
 
-     (when-not db-based?
-       (shui/dropdown-menu-item
-        {:key "copy block embeds"
-         :on-click editor-handler/copy-block-embeds}
-        (t :content/copy-block-emebed)))
-
      (shui/dropdown-menu-separator)
 
      (when (state/enable-flashcards?)
@@ -131,78 +121,10 @@
       (t :editor/collapse-block-children)
       (shui/dropdown-menu-shortcut (ui/keyboard-shortcut-from-config :editor/collapse-block-children)))]))
 
-(defonce *template-including-parent? (atom nil))
-
-(rum/defc template-checkbox
-  [template-including-parent?]
-  [:div.flex.flex-row.w-auto.items-center
-   [:p.text-medium.mr-2 (t :context-menu/template-include-parent-block)]
-   (ui/toggle template-including-parent?
-              #(swap! *template-including-parent? not))])
-
-(rum/defcs block-template < rum/reactive
-  shortcut/disable-all-shortcuts
-  (rum/local false ::edit?)
-  (rum/local "" ::input)
-  {:will-unmount (fn [state]
-                   (reset! *template-including-parent? nil)
-                   state)}
-  [state block-id]
-  (let [edit? (get state ::edit?)
-        input (get state ::input)
-        template-including-parent? (rum/react *template-including-parent?)
-        block-id (if (string? block-id) (uuid block-id) block-id)
-        block (db/entity [:block/uuid block-id])
-        has-children? (seq (:block/_parent block))
-        repo (state/get-current-repo)]
-    (when (and (nil? template-including-parent?) has-children?)
-      (reset! *template-including-parent? true))
-
-    (if @edit?
-      (let [submit! (fn []
-                      (let [title (string/trim @input)]
-                        (when (not (string/blank? title))
-                          (p/let [exists? (page-handler/<template-exists? title)]
-                            (if exists?
-                              (notification/show!
-                               [:p (t :context-menu/template-exists-warning)]
-                               :error)
-                              (p/do!
-                               (property-handler/set-block-property! repo block-id (pu/get-pid :logseq.property/template) title)
-                               (when (false? template-including-parent?)
-                                 (property-handler/set-block-property! repo block-id
-                                                                       (pu/get-pid :logseq.property/template-including-parent)
-                                                                       false))
-                               (shui/popup-hide!)))))))]
-        (state/clear-edit!)
-        [:<>
-         [:div.px-4.py-2.text-sm {:on-click (fn [e] (util/stop e))}
-          [:p (t :context-menu/input-template-name)]
-          [:input#new-template.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
-           {:auto-focus true
-            :on-key-down (fn [e]
-                           (util/stop-propagation e)
-                           (when (and (= "Enter" (util/ekey e))
-                                      (not (string/blank? (util/trim-safe @input))))
-                             (submit!)))
-            :on-change (fn [e]
-                         (reset! input (util/evalue e)))}]
-          (when has-children?
-            (template-checkbox template-including-parent?))
-          (ui/button (t :submit) :on-click submit!)]
-         (shui/dropdown-menu-separator)])
-      (shui/dropdown-menu-item
-       {:key "Make a Template"
-        :on-click (fn [e]
-                    (util/stop e)
-                    (reset! edit? true))}
-       (t :context-menu/make-a-template)))))
-
 (rum/defc ^:large-vars/cleanup-todo block-context-menu-content <
   shortcut/disable-all-shortcuts
   [_target block-id property-default-value?]
-  (let [repo (state/get-current-repo)
-        db? (config/db-based-graph? repo)]
+  (let [repo (state/get-current-repo)]
     (when-let [block (db/entity [:block/uuid block-id])]
       (let [heading (or (pu/lookup block :logseq.property/heading)
                         false)]
@@ -234,13 +156,6 @@
            :on-click (fn [_e]
                        (editor-handler/copy-block-ref! block-id ref/->block-ref))}
           (t :content/copy-block-ref))
-
-         (when-not db?
-           (shui/dropdown-menu-item
-            {:key      "Copy block embed"
-             :on-click (fn [_e]
-                         (editor-handler/copy-block-ref! block-id #(util/format "{{embed ((%s))}}" %)))}
-            (t :content/copy-block-emebed)))
 
          ;; TODO Logseq protocol mobile support
          (when (util/electron?)
@@ -277,9 +192,6 @@
             (shui/dropdown-menu-shortcut (ui/keyboard-shortcut-from-config :editor/delete))))
 
          (shui/dropdown-menu-separator)
-
-         (when-not db?
-           (block-template block-id))
 
          (cond
            (state/enable-flashcards?)

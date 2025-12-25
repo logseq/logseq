@@ -39,7 +39,7 @@
                                                             [:ui/theme
                                                              :ui/sidebar-collapsed-blocks])
                                     :repo-config (get-in @state/state [:config repo])
-                                    :db-graph? (config/db-based-graph? repo)})
+                                    :db-graph? true})
           html-str     (str "data:text/html;charset=UTF-8,"
                             (js/encodeURIComponent html))]
       (if (util/electron?)
@@ -67,24 +67,9 @@
       (.setAttribute anchor "download" (.-name zipfile))
       (.click anchor))))
 
-(defn file-based-export-repo-as-zip!
-  [repo]
-  (p/let [files (export-common-handler/<get-file-contents repo "md")
-          [owner repo-name] (util/get-git-owner-and-repo repo)
-          repo-name (str owner "-" repo-name)
-          files (map (fn [{:keys [path content]}] [path content]) files)]
-    (when (seq files)
-      (p/let [zipfile (zip/make-zip repo-name files repo)]
-        (when-let [anchor (gdom/getElement "download-as-zip")]
-          (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
-          (.setAttribute anchor "download" (.-name zipfile))
-          (.click anchor))))))
-
 (defn export-repo-as-zip!
   [repo]
-  (if (config/db-based-graph? repo)
-    (db-based-export-repo-as-zip! repo)
-    (file-based-export-repo-as-zip! repo)))
+  (db-based-export-repo-as-zip! repo))
 
 (defn- export-file-on-mobile [data path]
   (p/catch
@@ -312,7 +297,7 @@
 
 (defn backup-db-graph
   [repo]
-  (when (and (config/db-based-graph? repo) (not (util/capacitor?)))
+  (when-not (util/capacitor?)
     (web-backup-db-graph repo)))
 
 (defonce *backup-interval (atom nil))
@@ -324,7 +309,6 @@
 (defn auto-db-backup!
   [repo]
   (when (and
-         (config/db-based-graph? repo)
          util/web-platform?
          (not (util/capacitor?))
          (ldb/get-key-value (db/get-db repo) :logseq.kv/graph-backup-folder))

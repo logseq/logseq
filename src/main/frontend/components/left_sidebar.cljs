@@ -47,7 +47,6 @@
   (when-let [id (:db/id page)]
     (let [page (db/sub-block id)
           repo (state/get-current-repo)
-          db-based? (config/db-based-graph? repo)
           icon (icon/get-node-icon-cp page {:size 16})
           title (:block/title page)
           untitled? (db-model/untitled-page? title)
@@ -65,7 +64,7 @@
                               (when-not recent?
                                 (x-menu-item
                                  {:key "unfavorite"
-                                  :on-click #(page-handler/<unfavorite-page! (if db-based? (str (:block/uuid page)) title))}
+                                  :on-click #(page-handler/<unfavorite-page! (str (:block/uuid page)))}
                                  (ctx-icon "star-off")
                                  (t :page/unfavorite)
                                  (x-menu-shortcut (when-let [binding (shortcut-dh/shortcut-binding :command/toggle-favorite)]
@@ -200,7 +199,7 @@
       (when child [:div.bd child])]]))
 
 (rum/defc ^:large-vars/cleanup-todo sidebar-navigations
-  [{:keys [default-home route-match route-name srs-open? db-based?]}]
+  [{:keys [default-home route-match route-name srs-open?]}]
   (let [navs [:flashcards :all-pages :graph-view :tag/tasks :tag/assets]
         [checked-navs set-checked-navs!] (rum/use-state (or (storage/get :ls-sidebar-navigations)
                                                             [:flashcards :all-pages :graph-view]))]
@@ -286,17 +285,16 @@
             :icon "files"})
 
           (= (namespace nav) "tag")
-          (when db-based?
-            (let [name'' (name nav)
-                  class-ident (get {"assets" :logseq.class/Asset  "tasks" :logseq.class/Task} name'')]
-              (when-let [tag-uuid (and class-ident (:block/uuid (db/entity class-ident)))]
-                (sidebar-item
-                 {:class (str "tag-view-nav " name'')
-                  :title (tt (keyword "left-side-bar" name'')
-                             (keyword "right-side-bar" name''))
-                  :href (rfe/href :page {:name tag-uuid})
-                  :active (= (str tag-uuid) (get-in route-match [:path-params :name]))
-                  :icon "hash"}))))))])))
+          (let [name'' (name nav)
+                class-ident (get {"assets" :logseq.class/Asset  "tasks" :logseq.class/Task} name'')]
+            (when-let [tag-uuid (and class-ident (:block/uuid (db/entity class-ident)))]
+              (sidebar-item
+               {:class (str "tag-view-nav " name'')
+                :title (tt (keyword "left-side-bar" name'')
+                           (keyword "right-side-bar" name''))
+                :href (rfe/href :page {:name tag-uuid})
+                :active (= (str tag-uuid) (get-in route-match [:path-params :name]))
+                :icon "hash"})))))])))
 
 (rum/defc sidebar-favorites < rum/reactive
   []
@@ -347,7 +345,6 @@
         [el-rect set-el-rect!] (rum/use-state nil)
         ref-el (rum/use-ref nil)
         ref-open? (rum/use-ref left-sidebar-open?)
-        db-based? (config/db-based-graph? (state/get-current-repo))
         default-home (get-default-home-if-valid)
         route-name (get-in route-match [:data :name])
         on-contents-scroll #(when-let [^js el (.-target %)]
@@ -424,7 +421,6 @@
         (sidebar-navigations
          {:default-home default-home
           :route-match route-match
-          :db-based? db-based?
           :route-name route-name
           :srs-open? srs-open?})]
 

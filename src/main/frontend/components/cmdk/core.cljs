@@ -755,12 +755,10 @@
       (p/let [page (some-> (get-highlighted-page-uuid-or-name state) db/get-page)
               _ (db-async/<get-block repo (:block/uuid page) :children? false)
               page' (db/entity repo [:block/uuid (:block/uuid page)])
-              link (if (config/db-based-graph? repo)
-                     (some (fn [[k v]]
-                             (when (= :url (:logseq.property/type (db/entity repo k)))
-                               (:block/title v)))
-                           (:block/properties page'))
-                     (some #(re-find editor-handler/url-regex (val %)) (:block/properties page')))]
+              link (some (fn [[k v]]
+                           (when (= :url (:logseq.property/type (db/entity repo k)))
+                             (:block/title v)))
+                         (:block/properties page'))]
         (if link
           (js/window.open link)
           (notification/show! "No link found in this page's properties." :warning)))

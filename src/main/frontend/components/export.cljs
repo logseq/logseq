@@ -2,7 +2,6 @@
   (:require ["/frontend/utils" :as utils]
             [cljs-time.core :as t]
             [cljs.pprint :as pprint]
-            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.handler.block :as block-handler]
@@ -86,65 +85,44 @@
 (rum/defc export
   []
   (when-let [current-repo (state/get-current-repo)]
-    (let [db-based? (config/db-based-graph? current-repo)]
-      [:div.export
-       [:h1.title.mb-8 (t :export)]
+    [:div.export
+     [:h1.title.mb-8 (t :export)]
 
-       [:div.flex.flex-col.gap-4.ml-1
-        (when-not db-based?
-          [:div
-           [:a.font-medium {:on-click #(export/export-repo-as-edn! current-repo)}
-            (t :export-edn)]])
-        (when-not db-based?
-          [:div
-           [:a.font-medium {:on-click #(export/export-repo-as-json! current-repo)}
-            (t :export-json)]])
-        (when db-based?
-          [:div
-           [:a.font-medium {:on-click #(export/export-repo-as-sqlite-db! current-repo)}
-            (t :export-sqlite-db)]
-           [:p.text-sm.opacity-70.mb-0 "Primary way to backup graph's content to a single .sqlite file."]])
-        (when db-based?
-          [:div
-           [:a.font-medium {:on-click #(export/export-repo-as-zip! current-repo)}
-            (t :export-zip)]
-           [:p.text-sm.opacity-70.mb-0 "Primary way to backup graph's content and assets to a .zip file."]])
+     [:div.flex.flex-col.gap-4.ml-1
+      [:div
+       [:a.font-medium {:on-click #(export/export-repo-as-sqlite-db! current-repo)}
+        (t :export-sqlite-db)]
+       [:p.text-sm.opacity-70.mb-0 "Primary way to backup graph's content to a single .sqlite file."]]
+      [:div
+       [:a.font-medium {:on-click #(export/export-repo-as-zip! current-repo)}
+        (t :export-zip)]
+       [:p.text-sm.opacity-70.mb-0 "Primary way to backup graph's content and assets to a .zip file."]]
 
-        (when (and db-based? (not (util/mobile?)))
-          [:div
-           [:a.font-medium {:on-click #(db-export-handler/export-repo-as-db-edn! current-repo)}
-            (t :export-db-edn)]
-           [:p.text-sm.opacity-70.mb-0 "Exports to a readable and editable .edn file. Don't rely on this as a primary backup."]])
-        (when-not (mobile-util/native-platform?)
-          [:div
-           [:a.font-medium {:on-click #(export-text/export-repo-as-markdown! current-repo)}
-            (t :export-markdown)]])
+      (when-not (util/mobile?)
+        [:div
+         [:a.font-medium {:on-click #(db-export-handler/export-repo-as-db-edn! current-repo)}
+          (t :export-db-edn)]
+         [:p.text-sm.opacity-70.mb-0 "Exports to a readable and editable .edn file. Don't rely on this as a primary backup."]])
+      (when-not (mobile-util/native-platform?)
+        [:div
+         [:a.font-medium {:on-click #(export-text/export-repo-as-markdown! current-repo)}
+          (t :export-markdown)]])
 
-        (when (util/electron?)
-          [:div
-           [:a.font-medium {:on-click #(export/download-repo-as-html! current-repo)}
-            (t :export-public-pages)]])
+      (when (util/electron?)
+        [:div
+         [:a.font-medium {:on-click #(export/download-repo-as-html! current-repo)}
+          (t :export-public-pages)]])
 
-        (when-not (or (mobile-util/native-platform?) db-based?)
-          [:div
-           [:a.font-medium {:on-click #(export-opml/export-repo-as-opml! current-repo)}
-            (t :export-opml)]])
-        (when-not (or (mobile-util/native-platform?) db-based?)
-          [:div
-           [:a.font-medium {:on-click #(export/export-repo-as-roam-json! current-repo)}
-            (t :export-roam-json)]])
-        (when db-based?
-          [:div
-           [:a.font-medium {:on-click #(export/export-repo-as-debug-transit! current-repo)}
-            "Export debug transit file"]
-           [:p.text-sm.opacity-70.mb-0 "Exports to a .transit file to send to us for debugging. Any sensitive data will be removed in the exported file."]])
+      [:div
+       [:a.font-medium {:on-click #(export/export-repo-as-debug-transit! current-repo)}
+        "Export debug transit file"]
+       [:p.text-sm.opacity-70.mb-0 "Exports to a .transit file to send to us for debugging. Any sensitive data will be removed in the exported file."]]
 
-        (when (and db-based?
-                   util/web-platform?
-                   (not (util/mobile?)))
-          [:div
-           [:hr]
-           (auto-backup)])]])))
+      (when (and util/web-platform?
+                 (not (util/mobile?)))
+        [:div
+         [:hr]
+         (auto-backup)])]]))
 
 (def *export-block-type (atom :text))
 
@@ -282,15 +260,14 @@
                       :on-click #(do (reset! *export-block-type :png)
                                      (reset! *content nil)
                                      (get-image-blob top-level-uuids (merge options {:transparent-bg? false}) (fn [blob] (reset! *content blob))))))
-         (when (config/db-based-graph?)
-           (ui/button "EDN"
-                      :class "w-20"
-                      :on-click #(do (reset! *export-block-type :edn)
-                                     (p/let [result (<export-edn-helper top-level-uuids export-type)
-                                             pull-data (with-out-str (pprint/pprint result))]
-                                       (if (:export-edn-error result)
-                                         (notification/show! (:export-edn-error result) :error)
-                                         (reset! *content pull-data))))))])
+         (ui/button "EDN"
+                    :class "w-20"
+                    :on-click #(do (reset! *export-block-type :edn)
+                                   (p/let [result (<export-edn-helper top-level-uuids export-type)
+                                           pull-data (with-out-str (pprint/pprint result))]
+                                     (if (:export-edn-error result)
+                                       (notification/show! (:export-edn-error result) :error)
+                                       (reset! *content pull-data)))))])
       (if (= :png tp)
         [:div.flex.items-center.justify-center.relative
          (when (not @*content) [:div.absolute (ui/loading "")])

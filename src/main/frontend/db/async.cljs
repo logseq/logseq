@@ -4,7 +4,6 @@
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
             [datascript.core :as d]
-            [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.async.util :as db-async-util]
@@ -214,16 +213,6 @@
           (->> result
                db-model/sort-by-order-recursive
                db-utils/group-by-page))))))
-
-(defn <get-tag-pages
-  [graph tag-id]
-  (<q graph {:transact-db? false}
-      '[:find [(pull ?page [:db/id :block/uuid :block/name :block/title :block/created-at :block/updated-at]) ...]
-        :in $ ?tag-id
-        :where
-        [?page :block/tags ?tag-id]
-        [?page :block/name]]
-      tag-id))
 
 (defn <get-tag-objects
   [graph class-id]
