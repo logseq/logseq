@@ -137,7 +137,6 @@
         "@js-joda/core": "3.2.0",
         "@js-joda/locale_en-us": "3.1.1",
         "@js-joda/timezone": "2.5.0",
-        "@logseq/diff-merge": "^0.2.2",
         "@logseq/react-tweet-embed": "1.3.1-1",
         "@logseq/simple-wave-record": "^0.0.3",
         "@radix-ui/colors": "^0.1.8",

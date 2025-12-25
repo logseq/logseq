@@ -1,16 +1,35 @@
 (ns frontend.test.file
   "Provides util handler fns for file graph files"
   (:refer-clojure :exclude [load-file])
-  (:require [frontend.db :as db]
-            [frontend.db.file-based.model :as file-model]
+  (:require [datascript.core :as d]
+            [frontend.db :as db]
+            [frontend.db.conn :as conn]
+            [frontend.db.utils :as db-utils]
             [frontend.handler.common.config-edn :as config-edn-common-handler]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.schema.handler.global-config :as global-config-schema]
             [frontend.schema.handler.repo-config :as repo-config-schema]
+            [frontend.state :as state]
             [frontend.test.file.reset :as file-reset]
             [frontend.util :as util]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]))
+
+(defn- get-file-page-id
+  [file-path]
+  (when-let [repo (state/get-current-repo)]
+    (when-let [db (conn/get-db repo)]
+      (some->
+       (d/q
+        '[:find ?page
+          :in $ ?path
+          :where
+          [?file :file/path ?path]
+          [?page :block/name]
+          [?page :block/file ?file]]
+        db file-path)
+       db-utils/seq-flatten
+       first))))
 
 (defn reset-file!
   [repo file-path content opts]
@@ -57,7 +76,7 @@
                   :mtime mtime}
             result (if reset?
                      (do
-                       (when-let [page-id (file-model/get-file-page-id path)]
+                       (when-let [page-id (get-file-page-id path)]
                          (db/transact! repo
                                        [[:db/retract page-id :block/alias]
                                         [:db/retract page-id :block/tags]]
