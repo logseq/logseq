@@ -11,7 +11,6 @@
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
-            [frontend.extensions.zotero :as zotero]
             [frontend.handler.block :as block-handler]
             [frontend.handler.editor :as editor-handler :refer [get-state]]
             [frontend.handler.editor.lifecycle :as lifecycle]
@@ -730,11 +729,7 @@
                                        (property-search id) (property-value-search id))
                                      {})
 
-                 :zotero
-                 (open-editor-popup! :zotero
-                                     (zotero/zotero-search id) {})
-
-                  ;; TODO: try remove local model state
+                 ;; TODO: try remove local model state
                  false)]
        #(when pid
           (shui/popup-hide! pid))))

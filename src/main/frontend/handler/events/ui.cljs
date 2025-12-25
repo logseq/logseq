@@ -14,7 +14,6 @@
             [frontend.components.settings :as settings]
             [frontend.components.shell :as shell]
             [frontend.components.user.login :as login]
-            [frontend.components.whiteboard :as whiteboard]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.extensions.fsrs :as fsrs]
@@ -276,13 +275,6 @@
     (if (mobile-util/native-platform?)
       (route-handler/redirect! {:to :user-login})
       (login/open-login-modal!))))
-
-(defmethod events/handle :whiteboard/onboarding [[_ opts]]
-  (shui/dialog-open!
-   (fn [{:keys [close]}] (whiteboard/onboarding-welcome close))
-   (merge {:close-btn?      false
-           :center?         true
-           :close-backdrop? false} opts)))
 
 (defmethod events/handle :asset/dialog-edit-external-url [[_ asset-block pdf-current]]
   (shui/dialog-open!

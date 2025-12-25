@@ -130,8 +130,7 @@
               (async/<! (async/timeout 10))
               (create-page-with-exported-tree! block)
               (recur))
-            (let [result (async/<! (p->c (db-async/<get-all-referenced-blocks-uuid (state/get-current-repo))))]
-              (editor/set-blocks-id! result)
+            (let [_result (async/<! (p->c (db-async/<get-all-referenced-blocks-uuid (state/get-current-repo))))]
               (async/offer! imported-chan true)))))
 
       (catch :default e
