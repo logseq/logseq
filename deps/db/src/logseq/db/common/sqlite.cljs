@@ -4,8 +4,8 @@
   (:require ["path" :as node-path]
             [clojure.string :as string]
             [datascript.core :as d]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.common.config :as common-config]))
+            [logseq.common.config :as common-config]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (defn create-kvs-table!
   "Creates a sqlite table for use with datascript.storage if one doesn't exist"
@@ -40,3 +40,8 @@
   (let [db-name' (sanitize-db-name db-name)
         graph-dir (node-path/join graphs-dir db-name')]
     [db-name' (node-path/join graph-dir "db.sqlite")]))
+
+(defn get-db-backups-path
+  [graphs-dir db-name]
+  (let [db-name' (sanitize-db-name db-name)]
+    (node-path/join graphs-dir db-name' "backups")))

@@ -1301,12 +1301,21 @@ Similar to re-frame subscriptions"
   [item]
   (update-state! [:ui/navigation-item-collapsed? item] not))
 
+(declare sidebar-add-block!)
+(defn- sidebar-add-content-when-open!
+  []
+  (when (empty? (:sidebar/blocks @state))
+    (sidebar-add-block! (get-current-repo) "contents" :contents)))
+
 (defn toggle-sidebar-open?!
   []
+  (when-not (:ui/sidebar-open? @state)
+    (sidebar-add-content-when-open!))
   (swap! state update :ui/sidebar-open? not))
 
 (defn open-right-sidebar!
   []
+  (sidebar-add-content-when-open!)
   (swap! state assoc :ui/sidebar-open? true))
 
 (defn hide-right-sidebar!
