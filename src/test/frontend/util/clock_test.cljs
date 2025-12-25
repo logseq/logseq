@@ -1,7 +1,6 @@
-(ns frontend.util.file-based.clock-test
+(ns frontend.util.clock-test
   (:require [cljs.test :refer [deftest is]]
-            [frontend.util.file-based.clock :as clock]))
-
+            [frontend.util.clock :as clock]))
 
 (deftest test-seconds->days:hours:minutes:seconds
   (let [inputs [0, 1, 10, 60, 123 ,5432, 63953, 484882, 2394503]
