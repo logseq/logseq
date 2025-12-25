@@ -38,7 +38,6 @@
             [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.util.persist-var :as persist-var]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]))
@@ -193,10 +192,7 @@
                                    (reset! vector-search-flows/*infer-worker-ready true))))
                         nil))))
 
-     (util/<app-wake-up-from-sleep-loop (atom false))
-
-     (when-not (util/mobile?)
-       (persist-var/load-vars)))))
+     (util/<app-wake-up-from-sleep-loop (atom false)))))
 
 (defn stop! []
   (prn "stop!"))
