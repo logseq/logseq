@@ -1,4 +1,4 @@
-(ns frontend.worker.file.reset
+(ns frontend.test.file.reset
   "Fns for resetting a db file with parsed file content"
   (:require [clojure.string :as string]
             [datascript.core :as d]

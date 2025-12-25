@@ -8,9 +8,8 @@
             [frontend.db.conn :as conn]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.file-based.repo :as file-repo-handler]
-            [frontend.handler.file-based.status :as status]
             [frontend.state :as state]
+            [frontend.test.repo :as file-repo-handler]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.pipeline :as worker-pipeline]
             [logseq.db :as ldb]
@@ -19,6 +18,9 @@
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.text :as text]))
+
+(def bare-marker-pattern
+  #"(NOW|LATER|TODO|DOING|DONE|WAITING|WAIT|CANCELED|CANCELLED|IN-PROGRESS){1}\s+")
 
 (def node? (exists? js/process))
 
@@ -115,7 +117,7 @@
            (rest blocks**)]
           [nil blocks**])
         blocks
-        (mapv #(if-let [status (some-> (second (re-find status/bare-marker-pattern (:block/title %)))
+        (mapv #(if-let [status (some-> (second (re-find bare-marker-pattern (:block/title %)))
                                        file-to-db-statuses)]
                  (-> %
                      (assoc :block/tags [{:db/ident :logseq.class/Task}])
@@ -175,9 +177,7 @@ This can be called in synchronous contexts as no async fns should be invoked"
     (load-test-files-for-db-graph files)
     (file-repo-handler/parse-files-and-load-to-db!
      test-db
-     files
-   ;; Set :refresh? to avoid creating default files in after-parse
-     {:re-render? false :verbose false :refresh? true})))
+     files)))
 
 (defn initial-test-page-and-blocks
   [& {:keys [page-uuid]}]

@@ -21,7 +21,6 @@
             [frontend.handler.events :as events]
             [frontend.handler.events.rtc]
             [frontend.handler.events.ui]
-            [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
@@ -91,9 +90,7 @@
 
            (page-handler/init-commands!)
 
-           (watch-for-date!)
-           (when (and (not (config/db-based-graph? repo)) (util/electron?))
-             (file-handler/watch-for-current-graph-dir!))))
+           (watch-for-date!)))
         (p/catch (fn [error]
                    (log/error :exception error))))))
 
@@ -190,9 +187,7 @@
                             (p/do! (db-browser/start-inference-worker!)
                                    (db-browser/<connect-db-worker-and-infer-worker!)
                                    (reset! vector-search-flows/*infer-worker-ready true))))
-                        nil))))
-
-     (util/<app-wake-up-from-sleep-loop (atom false)))))
+                        nil)))))))
 
 (defn stop! []
   (prn "stop!"))

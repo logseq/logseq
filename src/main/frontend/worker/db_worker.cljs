@@ -21,8 +21,6 @@
             [frontend.worker.db.validate :as worker-db-validate]
             [frontend.worker.embedding :as embedding]
             [frontend.worker.export :as worker-export]
-            [frontend.worker.file :as file]
-            [frontend.worker.file.reset :as file-reset]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.pipeline :as worker-pipeline]
             [frontend.worker.rtc.asset-db-listener]
@@ -619,27 +617,6 @@
               (shared-service/broadcast-to-clients! :notification [(:message payload) (:type payload) (:clear? payload) (:uid payload) (:timeout payload)]))
             (throw e)))))))
 
-(def-thread-api :thread-api/file-writes-finished?
-  [repo]
-  (let [conn (worker-state/get-datascript-conn repo)
-        writes @file/*writes]
-    ;; Clean pages that have been deleted
-    (when conn
-      (swap! file/*writes (fn [writes]
-                            (->> writes
-                                 (remove (fn [[_ pid]] (d/entity @conn pid)))
-                                 (into {})))))
-    (if (empty? writes)
-      true
-      (do
-        (prn "Unfinished file writes:" @file/*writes)
-        false))))
-
-(def-thread-api :thread-api/page-file-saved
-  [request-id _page-id]
-  (file/dissoc-request! request-id)
-  nil)
-
 (def-thread-api :thread-api/sync-app-state
   [new-state]
   (when (and (contains? new-state :git/current-repo)
@@ -723,12 +700,6 @@
 (def-thread-api :thread-api/get-all-page-titles
   [repo]
   (get-all-page-titles-with-cache repo))
-
-(def-thread-api :thread-api/reset-file
-  [repo file-path content opts]
-  ;; (prn :debug :reset-file :file-path file-path :opts opts)
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (file-reset/reset-file! repo conn file-path content opts)))
 
 (def-thread-api :thread-api/gc-graph
   [repo]
@@ -837,18 +808,6 @@
     :delete-page (fn [repo conn [page-uuid]]
                    (delete-page! repo conn page-uuid))}))
 
-(defn- <ratelimit-file-writes!
-  []
-  (file/<ratelimit-file-writes!
-   (fn [col]
-     (when (seq col)
-       (let [repo (ffirst col)
-             conn (worker-state/get-datascript-conn repo)]
-         (if conn
-           (when-not (ldb/db-based-graph? @conn)
-             (file/write-files! conn col (worker-state/get-context)))
-           (js/console.error (str "DB is not found for " repo))))))))
-
 (defn- on-become-master
   [repo start-opts]
   (js/Promise.
@@ -943,7 +902,6 @@
     (log/add-handler worker-state/log-append!)
     (check-worker-scope!)
     (outliner-register-op-handlers!)
-    (<ratelimit-file-writes!)
     (js/setInterval #(.postMessage js/self "keepAliveResponse") (* 1000 25))
     (Comlink/expose proxy-object)
     (let [^js wrapped-main-thread* (Comlink/wrap js/self)
