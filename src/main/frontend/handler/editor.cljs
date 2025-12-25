@@ -10,7 +10,6 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.db.file-based.model :as file-model]
             [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]
             [frontend.diff :as diff]
@@ -1393,7 +1392,7 @@
            (log/error :save-block-failed error)))))))
 
 (defn delete-asset-of-block!
-  [{:keys [repo asset-block href full-text block-id local? delete-local?] :as _opts}]
+  [{:keys [repo asset-block full-text block-id local? delete-local?] :as _opts}]
   (let [block (db-model/query-block-by-uuid block-id)
         _ (or block (throw (ex-info (str block-id " not exists")
                                     {:block-id block-id})))
@@ -1403,17 +1402,8 @@
                   (string/replace text full-text ""))]
     (save-block! repo block content)
     (when (and local? delete-local?)
-      (if asset-block
-        (delete-block-aux! asset-block)
-        (when-let [href (if (util/electron?) href
-                            (second (re-find #"\((.+)\)$" full-text)))]
-          (let [block-file-rpath (file-model/get-block-file-path block)
-                asset-fpath (if (string/starts-with? href "assets://")
-                              (path/url-to-path href)
-                              (config/get-repo-fpath
-                               repo
-                               (path/resolve-relative-path block-file-rpath href)))]
-            (fs/unlink! repo asset-fpath nil)))))))
+      (when asset-block
+        (delete-block-aux! asset-block)))))
 
 (defn db-based-write-asset!
   [repo dir file file-rpath]
@@ -1666,10 +1656,6 @@
 (defn <get-matched-properties
   [q]
   (search/property-search q))
-
-(defn get-matched-property-values
-  [property q]
-  (search/property-value-search property q))
 
 (defn get-last-command
   [input]

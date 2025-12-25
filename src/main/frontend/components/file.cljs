@@ -9,7 +9,7 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.db.file-based.model :as file-model]
+            [frontend.db.model :as db-model]
             [frontend.fs :as fs]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -103,7 +103,7 @@
   (let [repo-dir (config/get-repo-dir (state/get-current-repo))
         rel-path (when (string/starts-with? path repo-dir)
                    (path/trim-dir-prefix repo-dir path))
-        title (file-model/get-file-page (or path rel-path))
+        title (db-model/get-file-page (or path rel-path))
         in-db? (when-not (path/absolute? path)
                  (boolean (db/get-file (or path rel-path))))
         file-path (cond

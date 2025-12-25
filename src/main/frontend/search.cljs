@@ -73,21 +73,6 @@
            (let [result (fuzzy/fuzzy-search properties q :limit limit)]
              (vec result))))))))
 
-;; file-based graph only
-(defn property-value-search
-  ([property q]
-   (property-value-search property q 100))
-  ([property q limit]
-   (when-let [repo (state/get-current-repo)]
-     (when q
-       (p/let [q (fuzzy/clean-str q)
-               result (db-async/<file-get-property-values repo (keyword property))]
-         (when (seq result)
-           (if (string/blank? q)
-             result
-             (let [result (fuzzy/fuzzy-search result q :limit limit)]
-               (vec result)))))))))
-
 (defn rebuild-indices!
   ([]
    (rebuild-indices! (state/get-current-repo)))
