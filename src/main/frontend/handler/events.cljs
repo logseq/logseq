@@ -17,7 +17,6 @@
             [frontend.db.react :as react]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.fs :as fs]
-            [frontend.fs.watcher-handler :as fs-watcher]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.code :as code-handler]
             [frontend.handler.common.page :as page-common-handler]
@@ -98,16 +97,7 @@
          (persist-db/export-current-graph!)
          (state/set-state! :db/async-queries {})
          (st/refresh!)
-         (if (config/db-based-graph?)
-           (graph-switch-on-persisted graph opts)
-           (p/let [writes-finished? (state/<invoke-db-worker :thread-api/file-writes-finished? (state/get-current-repo))]
-             (if (not writes-finished?) ; TODO: test (:sync-graph/init? @state/state)
-               (do
-                 (log/info :graph/switch {:file-writes-finished? writes-finished?})
-                 (notification/show!
-                  "Please wait seconds until all changes are saved for the current graph."
-                  :warning))
-               (graph-switch-on-persisted graph opts)))))]
+         (graph-switch-on-persisted graph opts))]
     (p/then switch-promise
             (fn [_]
               (export/backup-db-graph (state/get-current-repo))))))
@@ -161,13 +151,8 @@
       (when (and (not dir-exists?)
                  (not util/nfs?))
         (state/pub-event! [:graph/dir-gone dir]))))
-  (let [db-based? (config/db-based-graph? repo)]
-    ;; FIXME: an ugly implementation for redirecting to page on new window is restored
-    (repo-handler/graph-ready! repo)
-
-    (when-not config/publishing?
-      (when-not db-based?
-        (fs-watcher/load-graph-files! repo)))))
+  ;; FIXME: an ugly implementation for redirecting to page on new window is restored
+  (repo-handler/graph-ready! repo))
 
 (defmethod handle :instrument [[_ {:keys [type payload] :as opts}]]
   (when-not (empty? (dissoc opts :type :payload))

@@ -3,13 +3,11 @@
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]
+            [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.file-based.file :as file-handler]
             [frontend.state :as state]
             [goog.object :as gobj]
-            [logseq.graph-parser.utf8 :as utf8]
-            [logseq.common.path :as path]
-            [frontend.handler.db-based.editor :as db-editor-handler]))
+            [logseq.graph-parser.utf8 :as utf8]))
 
 (defn save-code-editor!
   []
@@ -48,28 +46,6 @@
             (and (not-empty (:file-path config))
                  (config/db-based-graph? repo))
             (db-editor-handler/save-file! (:file-path config) value)
-
-            (and (not-empty (:file-path config))
-                 (not (config/db-based-graph? repo)))
-            (let [path (:file-path config)
-                  repo-dir (config/get-repo-dir repo)
-                  rpath (when (string/starts-with? path repo-dir)
-                          (path/trim-dir-prefix repo-dir path))]
-              (if rpath
-                ;; in-db file
-                (let [db-content (db/get-file rpath)
-                      not-in-db? (nil? db-content)
-                      old-content (or db-content "")
-                      contents-matched? (= (string/trim value) (string/trim old-content))]
-                  (when (or
-                         (and not-in-db? (not-empty value))
-                         (not contents-matched?))
-                    (file-handler/alter-file (state/get-current-repo)
-                                             rpath
-                                             (str (string/trim value) "\n")
-                                             {:re-render-root? true})))
-                ;; global file
-                (file-handler/alter-global-file path (str (string/trim value) "\n") {})))
 
             :else
             nil))))))
