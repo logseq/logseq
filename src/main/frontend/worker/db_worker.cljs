@@ -24,7 +24,6 @@
             [frontend.worker.file :as file]
             [frontend.worker.file.reset :as file-reset]
             [frontend.worker.handler.page :as worker-page]
-            [frontend.worker.handler.page.file-based.rename :as file-worker-page-rename]
             [frontend.worker.pipeline :as worker-pipeline]
             [frontend.worker.rtc.asset-db-listener]
             [frontend.worker.rtc.client-op :as client-op]
@@ -809,12 +808,8 @@
       (p/all (map #(.unsafeUnlinkDB this (:name %)) dbs)))))
 
 (defn- rename-page!
-  [repo conn page-uuid new-name]
-  (let [config (worker-state/get-config repo)
-        f (if (sqlite-util/db-based-graph? repo)
-            (throw (ex-info "Rename page is a file graph only operation" {}))
-            file-worker-page-rename/rename!)]
-    (f repo conn config page-uuid new-name)))
+  []
+  (throw (ex-info "Rename page is a file graph only operation" {})))
 
 (defn- delete-page!
   [repo conn page-uuid]
@@ -837,8 +832,8 @@
   (outliner-op/register-op-handlers!
    {:create-page (fn [repo conn [title options]]
                    (create-page! repo conn title options))
-    :rename-page (fn [repo conn [page-uuid new-name]]
-                   (rename-page! repo conn page-uuid new-name))
+    :rename-page (fn [& _]
+                   (rename-page!))
     :delete-page (fn [repo conn [page-uuid]]
                    (delete-page! repo conn page-uuid))}))
 
