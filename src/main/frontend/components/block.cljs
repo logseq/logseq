@@ -1417,17 +1417,6 @@
           :map-inline map-inline
           :inline inline}))
 
-;;;; Macro component render functions
-(defn- macro-query-cp
-  [config arguments]
-  [:div.dsl-query.pr-3.sm:pr-0
-   (let [query (->> (string/join ", " arguments)
-                    (string/trim))
-         build-option (assoc (:block config) :file-version/query-macro-title query)]
-     (query/custom-query (wrap-query-components (assoc config :dsl-query? true))
-                         {:builder (query-builder-component/builder build-option {})
-                          :query query}))])
-
 (rum/defc macro-function-cp < rum/reactive
   [config arguments]
   (or
@@ -2793,7 +2782,7 @@
   [config repo block-id {:keys [show-page? indent? end-separator? _navigating-block disabled?]
                          :or {show-page? true}
                          :as opts}]
-  (let [from-property (when (and block-id (config/db-based-graph? repo))
+  (let [from-property (when block-id
                         (:logseq.property/created-from-property (db/entity [:block/uuid block-id])))
         parents (db/get-block-parents repo block-id {:depth 1000})
         parents (cond-> (remove nil? (concat parents [from-property]))
@@ -3759,12 +3748,8 @@
       ["Example" l]
       [:pre.pre-wrap-white-space
        (join-lines l)]
-      ["Quote" l]
-      (if (config/db-based-graph? (state/get-current-repo))
-        [:div.warning "#+BEGIN_QUOTE is deprecated. Use '/Quote' command instead."]
-        (->elem
-         :blockquote
-         (markup-elements-cp config l)))
+      ["Quote" _l]
+      [:div.warning "#+BEGIN_QUOTE is deprecated. Use '/Quote' command instead."]
       ["Raw_Html" content]
       (when (not html-export?)
         [:div.raw_html {:dangerouslySetInnerHTML
@@ -3783,19 +3768,10 @@
       ["Export" "latex" _options content]
       (if html-export?
         (latex/html-export content true false)
-        (if (config/db-based-graph? (state/get-current-repo))
-          [:div.warning "'#+BEGIN_EXPORT latex' is deprecated. Use '/Math block' command instead."]
-          (latex/latex content true false)))
+        [:div.warning "'#+BEGIN_EXPORT latex' is deprecated. Use '/Math block' command instead."])
 
-      ["Custom" "query" _options _result content]
-      (if (config/db-based-graph? (state/get-current-repo))
-        [:div.warning "#+BEGIN_QUERY is deprecated. Use '/Advanced Query' command instead."]
-        (try
-          (let [query (common-util/safe-read-map-string content)]
-            (query/custom-query (wrap-query-components config) query))
-          (catch :default e
-            (log/error :read-string-error e)
-            (ui/block-error "Invalid query:" {:content content}))))
+      ["Custom" "query" _options _result _content]
+      [:div.warning "#+BEGIN_QUERY is deprecated. Use '/Advanced Query' command instead."]
 
       ["Custom" "note" _options result _content]
       (ui/admonition "note" (markup-elements-cp config result))

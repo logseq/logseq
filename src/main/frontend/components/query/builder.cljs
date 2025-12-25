@@ -182,8 +182,7 @@
 
 (rum/defc tags
   [repo *tree opts loc]
-  (let [[values set-values!] (rum/use-state nil)
-        db-based? (config/db-based-graph? repo)]
+  (let [[values set-values!] (rum/use-state nil)]
     (hooks/use-effect!
      (fn []
        (let [result (db-model/get-all-readable-classes repo {:except-root-class? true})]
@@ -194,9 +193,8 @@
                             {:label (:block/title block)
                              :value (:block/uuid block)})))]
       (select items
-              (fn [{:keys [value label]}]
-                (append-tree! *tree opts loc [(if db-based? :tags :page-tags)
-                                              (if db-based? (str value) label)]))
+              (fn [{:keys [value _label]}]
+                (append-tree! *tree opts loc [:tags (str value)]))
               {:extract-fn :label}))))
 
 (rum/defc page-search
@@ -250,19 +248,18 @@
                                 (append-tree! *tree opts loc (vec (cons :task choices)))))}))
 
        "priority"
-       (select (if (config/db-based-graph? repo)
-                 (let [values (:property/closed-values (db/entity :logseq.property/priority))]
-                   (mapv db-property/property-value-content values))
-                 gp-db/built-in-priorities)
-               (constantly nil)
-               {:multiple-choices? true
-                :selected-choices #{}
-                :extract-chosen-fn :value
-                :prompt-key :select/default-select-multiple
-                :close-modal? false
-                :on-apply (fn [choices]
-                            (when (seq choices)
-                              (append-tree! *tree opts loc (vec (cons :priority choices)))))})
+       (select
+        (let [values (:property/closed-values (db/entity :logseq.property/priority))]
+          (mapv db-property/property-value-content values))
+        (constantly nil)
+        {:multiple-choices? true
+         :selected-choices #{}
+         :extract-chosen-fn :value
+         :prompt-key :select/default-select-multiple
+         :close-modal? false
+         :on-apply (fn [choices]
+                     (when (seq choices)
+                       (append-tree! *tree opts loc (vec (cons :priority choices)))))})
 
        "page"
        (page-search (fn [{:keys [value]}]
@@ -363,8 +360,7 @@
         (str "#" (uuid->page-title (second (second clause)))))
 
       (contains? #{:property :private-property :page-property} (keyword f))
-      (str (if (and (config/db-based-graph? (state/get-current-repo))
-                    (qualified-keyword? (second clause)))
+      (str (if (qualified-keyword? (second clause))
              (:block/title (db/entity (second clause)))
              (some-> (second clause) name))
            ": "
@@ -570,12 +566,7 @@
                                                          (str result))))
                                                  repo (state/get-current-repo)
                                                  block (db/entity [:block/uuid (:block/uuid block)])]
-                                             (if (config/db-based-graph? (state/get-current-repo))
-                                               (editor-handler/save-block! repo (:block/uuid block) q)
-                                               (let [content (string/replace (:block/title block)
-                                                                             #"\{\{query[^}]+\}\}"
-                                                                             (util/format "{{query %s}}" q))]
-                                                 (editor-handler/save-block! repo (:block/uuid block) content)))))))
+                                             (editor-handler/save-block! repo (:block/uuid block) q)))))
              (assoc state ::tree *tree)))
    :will-mount (fn [state]
                  (let [q-str (get-q (first (:rum/args state)))
