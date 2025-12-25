@@ -11,7 +11,6 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.extensions.fsrs :as fsrs]
-            [frontend.extensions.srs :as srs]
             [frontend.handler.common.developer :as dev-common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
@@ -100,9 +99,7 @@
      (when (state/enable-flashcards?)
        (shui/dropdown-menu-item
         {:key "Make a Card"
-         :on-click #(if (config/db-based-graph? (state/get-current-repo))
-                      (fsrs/batch-make-cards!)
-                      (srs/batch-make-cards!))}
+         :on-click (fsrs/batch-make-cards!)}
         (t :context-menu/make-a-flashcard)))
 
      (shui/dropdown-menu-item
@@ -285,17 +282,10 @@
            (block-template block-id))
 
          (cond
-           (srs/card-block? block)
-           (shui/dropdown-menu-item
-            {:key      "Preview Card"
-             :on-click #(srs/preview (:db/id block))}
-            (t :context-menu/preview-flashcard))
            (state/enable-flashcards?)
            (shui/dropdown-menu-item
             {:key      "Make a Card"
-             :on-click #(if (config/db-based-graph? (state/get-current-repo))
-                          (fsrs/batch-make-cards! [block-id])
-                          (srs/batch-make-cards! [block-id]))}
+             :on-click #(fsrs/batch-make-cards! [block-id])}
             (t :context-menu/make-a-flashcard))
            :else
            nil)
