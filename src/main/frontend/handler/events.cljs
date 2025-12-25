@@ -119,7 +119,7 @@
    (export/backup-db-graph (state/get-current-repo))
    (state/set-state! :db/async-queries {})
    (st/refresh!)
-   (if (config/db-based-graph?)
+   (if (config/db-based-graph? graph)
      (graph-switch-on-persisted graph opts)
      (p/let [writes-finished? (state/<invoke-db-worker :thread-api/file-writes-finished? (state/get-current-repo))]
        (if (not writes-finished?) ; TODO: test (:sync-graph/init? @state/state)
