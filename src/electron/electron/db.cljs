@@ -30,15 +30,14 @@
   (let [[db-name db-path] (common-sqlite/get-db-full-path (cli-common-graph/get-db-graphs-dir) db-name)
         old-data (get-db db-name)
         backups-path (common-sqlite/get-db-backups-path (cli-common-graph/get-db-graphs-dir) db-name)]
-    (when-not (= old-data data)
-      (when old-data
-        (backup-file/backup-file db-name nil nil
-                                 ".sqlite"
-                                 old-data
-                                 {:backups-dir backups-path
-                                  :truncate-daily? true
-                                  :keep-versions 12}))
-      (fs/writeFileSync db-path data))))
+    (when old-data
+      (backup-file/backup-file db-name nil nil
+                               ".sqlite"
+                               old-data
+                               {:backups-dir backups-path
+                                :truncate-daily? true
+                                :keep-versions 12}))
+    (fs/writeFileSync db-path data)))
 
 (defn unlink-graph!
   [repo]
