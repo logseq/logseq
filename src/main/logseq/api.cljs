@@ -14,7 +14,6 @@
             [logseq.api.db-based :as db-based-api]
             [logseq.api.db-based.cli :as cli-based-api]
             [logseq.api.editor :as api-editor]
-            [logseq.api.file-based :as file-based-api]
             [logseq.api.plugin :as api-plugin]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.sdk.assets :as sdk-assets]
@@ -228,16 +227,6 @@
 (def ^:export upsert_nodes cli-based-api/upsert-nodes)
 (def ^:export import_edn (ensure-db-graph cli-based-api/import-edn))
 (def ^:export export_edn (ensure-db-graph cli-based-api/export-edn))
-
-;; file based graph APIs
-(def ^:export get_current_graph_templates file-based-api/get_current_graph_templates)
-(def ^:export get_template file-based-api/get_template)
-(def ^:export insert_template file-based-api/insert_template)
-(def ^:export exist_template file-based-api/exist_template)
-(def ^:export create_template file-based-api/create_template)
-(def ^:export remove_template file-based-api/remove_template)
-(def ^:export get_pages_from_namespace file-based-api/get_pages_from_namespace)
-(def ^:export get_pages_tree_from_namespace file-based-api/get_pages_tree_from_namespace)
 
 (comment
   ;; Use the following code to generate export APIs from specific namespaces
