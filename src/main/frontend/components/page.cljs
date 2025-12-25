@@ -7,7 +7,6 @@
             [frontend.components.content :as content]
             [frontend.components.db-based.page :as db-page]
             [frontend.components.editor :as editor]
-            [frontend.components.file-based.hierarchy :as hierarchy]
             [frontend.components.icon :as icon-component]
             [frontend.components.library :as library]
             [frontend.components.objects :as objects]
@@ -723,10 +722,6 @@
                                              :journals? journals?
                                              :refs-count (:refs-count option)})
                  (str title "-refs"))])
-
-            (when-not block-or-whiteboard?
-              (when (and (not journal?) (not db-based?))
-                (hierarchy/structures (:block/title page))))
 
             (when-not (or whiteboard? unlinked-refs?
                           sidebar?

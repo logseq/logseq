@@ -6,7 +6,6 @@
             [frontend.common-keywords]
             [frontend.components.plugins :as plugins]
             [frontend.config :as config]
-            [frontend.fs.sync :as sync]
             [frontend.handler :as handler]
             [frontend.handler.db-based.rtc-background-tasks]
             [frontend.handler.db-based.vector-search-background-tasks]
@@ -62,10 +61,7 @@
 
     (.render ^js root (page/current-page))
 
-    (display-welcome-message)
-    ;; NO repo state here, better not add init logic here
-    (when config/dev?
-      (js/setTimeout #(sync/<sync-start) 1000))))
+    (display-welcome-message)))
 
 (comment
   (def d-entity-count (volatile! 0))
@@ -96,8 +92,6 @@
   ;; stop is called before any code is reloaded
   ;; this is controlled by :before-load in the config
   (handler/stop!)
-  (when config/dev?
-    (sync/<sync-stop))
   (js/console.log "stop"))
 
 (defn ^:export delay-remount

@@ -2169,44 +2169,6 @@ Similar to re-frame subscriptions"
 (defn get-auth-refresh-token []
   (:auth/refresh-token @state))
 
-(defn set-file-sync-manager [graph-uuid v]
-  (when (and graph-uuid v)
-    (set-state! [:file-sync/graph-state graph-uuid :file-sync/sync-manager] v)))
-
-(defn get-file-sync-manager [graph-uuid]
-  (get-in @state [:file-sync/graph-state graph-uuid :file-sync/sync-manager]))
-
-(defn clear-file-sync-state! [graph-uuid]
-  (set-state! [:file-sync/graph-state graph-uuid] nil))
-
-(defn clear-file-sync-progress! [graph-uuid]
-  (set-state! [:file-sync/graph-state
-               graph-uuid
-               :file-sync/progress]
-              nil))
-
-(defn set-file-sync-state [graph-uuid v]
-  (when v (s/assert :frontend.fs.sync/sync-state v))
-  (set-state! [:file-sync/graph-state graph-uuid :file-sync/sync-state] v))
-
-(defn get-current-file-sync-graph-uuid
-  []
-  (get-in @state [:file-sync/graph-state :current-graph-uuid]))
-
-(defn sub-current-file-sync-graph-uuid
-  []
-  (sub [:file-sync/graph-state :current-graph-uuid]))
-
-(defn get-file-sync-state
-  ([]
-   (get-file-sync-state (get-current-file-sync-graph-uuid)))
-  ([graph-uuid]
-   (get-in @state [:file-sync/graph-state graph-uuid :file-sync/sync-state])))
-
-(defn sub-file-sync-state
-  [graph-uuid]
-  (sub [:file-sync/graph-state graph-uuid :file-sync/sync-state]))
-
 (defn reset-parsing-state!
   []
   (set-state! [:graph/parsing-state (get-current-repo)] {}))

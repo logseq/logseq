@@ -16,10 +16,8 @@
             [frontend.handler.db-based.page :as db-page-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.file-based.native-fs :as nfs-handler]
             [frontend.handler.file-based.page :as file-page-handler]
             [frontend.handler.file-based.page-property :as file-page-property]
-            [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.property :as property-handler]
@@ -162,17 +160,6 @@
       (when (seq templates)
         (let [templates (map string/lower-case templates)]
           (contains? (set templates) (string/lower-case title)))))))
-
-(defn ls-dir-files!
-  ([ok-handler] (ls-dir-files! ok-handler nil))
-  ([ok-handler opts]
-   (nfs-handler/ls-dir-files-with-handler!
-    (fn [e]
-      (init-commands!)
-      (when ok-handler
-        (ok-handler e))
-      (graph-handler/settle-metadata-to-local! {:created-at (js/Date.now)}))
-    opts)))
 
 (defn file-based-save-filter!
   [page filter-state]
