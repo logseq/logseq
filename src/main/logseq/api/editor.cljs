@@ -2,7 +2,6 @@
   "Editor related APIs"
   (:require [cljs-bean.core :as bean]
             [cljs.reader]
-            [clojure.string :as string]
             [frontend.commands :as commands]
             [frontend.config :as config]
             [frontend.date :as date]
@@ -17,6 +16,8 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.shell :as shell]
+            [frontend.handler.assets :as assets-handler]
+            [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.modules.layout.core]
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.state :as state]
@@ -27,6 +28,7 @@
             [logseq.api.block :as api-block]
             [logseq.api.db-based :as db-based-api]
             [logseq.common.util.date-time :as date-time-util]
+            [logseq.common.path :as path]
             [logseq.db :as ldb]
             [logseq.outliner.core :as outliner-core]
             [logseq.sdk.core]
@@ -192,60 +194,46 @@
     block))
 
 (defn insert_block
-  [block-uuid-or-page-name content ^js opts]
+  [id content ^js opts]
   (this-as this
-           (when (string/blank? block-uuid-or-page-name)
-             (throw (js/Error. "Page title or block UUID shouldn't be empty.")))
-
-           (p/let [block? (util/uuid-string? (str block-uuid-or-page-name))
-                   block (<get-block (str block-uuid-or-page-name))]
-             (if (and block? (not block))
-               (throw (js/Error. "Block not exists"))
-               (p/let [{:keys [before start end sibling focus customUUID properties autoOrderedList schema]} (bean/->clj opts)
-                       [page-name block-uuid] (if (util/uuid-string? block-uuid-or-page-name)
-                                                [nil (uuid block-uuid-or-page-name)]
-                                                [block-uuid-or-page-name nil])
-                       page-name (when page-name (util/page-name-sanity-lc page-name))
-                       _ (when (and page-name
-                                    (nil? (ldb/get-page (db/get-db) page-name)))
-                           (page-handler/<create! block-uuid-or-page-name {}))
-                       custom-uuid (or customUUID (:id properties))
-                       custom-uuid (when custom-uuid (sdk-utils/uuid-or-throw-error custom-uuid))
-                       edit-block? (if (nil? focus) true focus)
-                       _ (when (and custom-uuid (db-model/query-block-by-uuid custom-uuid))
-                           (throw (js/Error.
-                                   (util/format "Custom block UUID already exists (%s)." custom-uuid))))
-                       block-uuid' (if (and (not sibling) before block-uuid)
-                                     (let [block (db/entity [:block/uuid block-uuid])
-                                           first-child (ldb/get-first-child (db/get-db) (:db/id block))]
-                                       (if first-child
-                                         (:block/uuid first-child)
-                                         block-uuid))
-                                     block-uuid)
-                       insert-at-first-child? (not= block-uuid' block-uuid)
-                       [sibling? before?] (if insert-at-first-child?
-                                            [true true]
-                                            [sibling before])
-                       db-based? (config/db-based-graph?)
-                       before? (if (and (false? sibling?) before? (not insert-at-first-child?))
-                                 false
-                                 before?)
-                       opts' {:block-uuid block-uuid'
-                              :sibling? sibling?
-                              :before? before?
-                              :start? start
-                              :end? end
-                              :edit-block? edit-block?
-                              :page page-name
-                              :custom-uuid custom-uuid
-                              :ordered-list? (if (boolean? autoOrderedList) autoOrderedList false)
-                              :properties (when (not db-based?)
-                                            (merge properties
-                                                   (when custom-uuid {:id custom-uuid})))}]
-                 (if db-based?
-                   (db-based-api/insert-block this content properties schema opts')
-                   (p/let [new-block (editor-handler/api-insert-new-block! content opts')]
-                     (bean/->js (sdk-utils/normalize-keyword-for-json new-block)))))))))
+    (p/let [block (<get-block id)]
+      (when-let [block-uuid (:block/uuid block)]
+        (p/let [{:keys [before start end sibling customUUID properties autoOrderedList schema]} (bean/->clj opts)
+                custom-uuid (or customUUID (:id properties))
+                custom-uuid (when custom-uuid (sdk-utils/uuid-or-throw-error custom-uuid))
+                _ (when (and custom-uuid (db-model/query-block-by-uuid custom-uuid))
+                    (throw (js/Error.
+                            (util/format "Custom block UUID already exists (%s)." custom-uuid))))
+                block-uuid' (if (and (not sibling) before block-uuid)
+                              (let [block (db/entity [:block/uuid block-uuid])
+                                    first-child (ldb/get-first-child (db/get-db) (:db/id block))]
+                                (if first-child
+                                  (:block/uuid first-child)
+                                  block-uuid))
+                              block-uuid)
+                insert-at-first-child? (not= block-uuid' block-uuid)
+                [sibling? before?] (if insert-at-first-child?
+                                     [true true]
+                                     [sibling before])
+                db-based? (config/db-based-graph?)
+                before? (if (and (false? sibling?) before? (not insert-at-first-child?))
+                          false
+                          before?)
+                opts' {:block-uuid block-uuid'
+                       :sibling? sibling?
+                       :before? before?
+                       :start? start
+                       :end? end
+                       :edit-block? false
+                       :custom-uuid custom-uuid
+                       :ordered-list? (if (boolean? autoOrderedList) autoOrderedList false)
+                       :properties (when (not db-based?)
+                                     (merge properties
+                                            (when custom-uuid {:id custom-uuid})))}]
+          (if db-based?
+            (db-based-api/insert-block this content properties schema opts')
+            (p/let [new-block (editor-handler/api-insert-new-block! content opts')]
+              (bean/->js (sdk-utils/normalize-keyword-for-json new-block)))))))))
 
 (def insert_batch_block
   (fn [block-uuid ^js batch-blocks-js ^js opts-js]
@@ -279,25 +267,25 @@
                          bean/->js))))))))))))
 
 (def remove_block
-  (fn [block-uuid ^js _opts]
-    (p/let [repo            (state/get-current-repo)
-            _ (<get-block block-uuid {:children? false})]
-      (editor-handler/delete-block-aux!
-       {:block/uuid (sdk-utils/uuid-or-throw-error block-uuid) :repo repo}))))
+  (fn [id ^js _opts]
+    (p/let [repo (state/get-current-repo)
+            block (<get-block id {:children? false})]
+      (when-let [block-uuid (:block/uuid block)]
+        (editor-handler/delete-block-aux!
+         {:block/uuid block-uuid :repo repo})))))
 
 (def update_block
-  (fn [block-uuid content ^js opts]
+  (fn [id content ^js opts]
     (this-as
      this
      (p/let [repo (state/get-current-repo)
              db-based? (config/db-based-graph?)
-             block (<get-block block-uuid {:children? false})
+             block (<get-block id {:children? false})
              opts' (bean/->clj opts)]
-       (when block
+       (when-let [block-uuid (:block/uuid block)]
          (if db-based?
            (db-based-api/update-block this block content opts')
-           (editor-handler/save-block! repo
-                                       (sdk-utils/uuid-or-throw-error block-uuid) content
+           (editor-handler/save-block! repo block-uuid content
                                        (if db-based? (dissoc opts' :properties) opts'))))))))
 
 (def move_block
@@ -335,9 +323,8 @@
       (get_block (:block/uuid block) opts))))
 
 (def get_previous_sibling_block
-  (fn [block-uuid ^js opts]
-    (p/let [id (sdk-utils/uuid-or-throw-error block-uuid)
-            block (<get-block id)
+  (fn [id ^js opts]
+    (p/let [block (<get-block id)
             ;; Load all children blocks
             _ (api-block/<sync-children-blocks! block)]
       (when block
@@ -345,9 +332,8 @@
           (get_block (:block/uuid sibling) opts))))))
 
 (def get_next_sibling_block
-  (fn [block-uuid ^js opts]
-    (p/let [id (sdk-utils/uuid-or-throw-error block-uuid)
-            block (<get-block id)
+  (fn [id ^js opts]
+    (p/let [block (<get-block id)
             ;; Load all children blocks
             _ (api-block/<sync-children-blocks! block)]
       (when block
@@ -355,11 +341,11 @@
           (get_block (:block/uuid sibling) opts))))))
 
 (def set_block_collapsed
-  (fn [block-uuid ^js opts]
-    (p/let [block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
-            block (<get-block block-uuid {:children? false})]
+  (fn [id ^js opts]
+    (p/let [block (<get-block id {:children? false})]
       (when block
-        (let [opts (bean/->clj opts)
+        (let [block-uuid (:block/uuid block)
+              opts (bean/->clj opts)
               opts (if (or (string? opts) (boolean? opts)) {:flag opts} opts)
               {:keys [flag]} opts
               flag (if (= "toggle" flag)
@@ -467,64 +453,59 @@
 
 ;; block properties
 (defn upsert_block_property
-  [block-uuid key ^js value ^js options]
-  (this-as
-   this
-   (p/let [key' (api-block/sanitize-user-property-name key)
-           opts (bean/->clj options)
-           block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
-           repo (state/get-current-repo)
-           block (<get-block block-uuid {:children? false})
-           db-based? (config/db-based-graph?)
-           value (bean/->clj value)]
-     (when block
-       (if db-based?
-         (db-based-api/upsert-block-property this block key' value opts)
-         (property-handler/set-block-property! repo block-uuid key' value))))))
+  [id key ^js value ^js options]
+  (this-as this
+    (p/let [key' (api-block/sanitize-user-property-name key)
+            opts (bean/->clj options)
+            repo (state/get-current-repo)
+            block (<get-block id {:children? false})
+            db-based? (config/db-based-graph?)
+            value (bean/->clj value)]
+      (when-let [block-uuid (:block/uuid block)]
+        (if db-based?
+          (db-based-api/upsert-block-property this block key' value opts)
+          (property-handler/set-block-property! repo block-uuid key' value))))))
 
 (defn remove_block_property
-  [block-uuid key]
+  [id key]
   (this-as this
-           (p/let [key (api-block/sanitize-user-property-name key)
-                   block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
-                   _block (<get-block block-uuid {:children? false})
-                   db-based? (config/db-based-graph?)
-                   key-ns? (namespace (keyword key))
-                   key (if (and db-based? (not key-ns?))
-                         (api-block/get-db-ident-from-property-name key this)
-                         key)]
-             (property-handler/remove-block-property!
-              (state/get-current-repo)
-              block-uuid key))))
+    (p/let [block (<get-block id {:children? false})]
+      (when-let [block-uuid (:block/uuid block)]
+        (let [db-based? (config/db-based-graph?)
+              key (api-block/sanitize-user-property-name key)
+              key (if db-based?
+                    (api-block/get-db-ident-from-property-name key this)
+                    key)]
+          (property-handler/remove-block-property!
+            (state/get-current-repo)
+            block-uuid key))))))
 
 (defn get_block_property
-  [block-uuid key]
+  [id key]
   (this-as this
-           (p/let [block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
-                   _block (<get-block block-uuid {:children? false})]
-             (when-let [properties (some-> block-uuid (db-model/get-block-by-uuid) (:block/properties))]
-               (when (seq properties)
-                 (let [property-name (api-block/sanitize-user-property-name key)
-                       ident (api-block/get-db-ident-from-property-name property-name this)
-                       property-value (or (get properties property-name)
-                                          (get properties (keyword property-name))
-                                          (get properties ident))
-                       property-value (if-let [property-id (:db/id property-value)]
-                                        (db/pull property-id) property-value)
-                       property-value (cond-> property-value
-                                        (map? property-value)
-                                        (assoc
-                                         :value (or (:logseq.property/value property-value)
-                                                    (:block/title property-value))
-                                         :ident ident))
-                       parsed-value (api-block/parse-property-json-value-if-need ident property-value)]
-                   (or parsed-value
-                       (bean/->js (sdk-utils/normalize-keyword-for-json property-value)))))))))
+    (p/let [block (<get-block id {:children? false})]
+      (when-let [properties (some-> block (:block/uuid) (db-model/get-block-by-uuid) (:block/properties))]
+        (when (seq properties)
+          (let [property-name (api-block/sanitize-user-property-name key)
+                ident (api-block/get-db-ident-from-property-name property-name this)
+                property-value (or (get properties property-name)
+                                 (get properties (keyword property-name))
+                                 (get properties ident))
+                property-value (if-let [property-id (:db/id property-value)]
+                                 (db/pull property-id) property-value)
+                property-value (cond-> property-value
+                                 (map? property-value)
+                                 (assoc
+                                   :value (or (:logseq.property/value property-value)
+                                            (:block/title property-value))
+                                   :ident ident))
+                parsed-value (api-block/parse-property-json-value-if-need ident property-value)]
+            (or parsed-value
+              (bean/->js (sdk-utils/normalize-keyword-for-json property-value)))))))))
 
 (def get_block_properties
-  (fn [block-uuid]
-    (p/let [block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
-            block (<get-block block-uuid {:children? false})]
+  (fn [id]
+    (p/let [block (<get-block id {:children? false})]
       (when block
         (let [properties (if (config/db-based-graph?)
                            (api-block/into-readable-db-properties (:block/properties block))
@@ -536,3 +517,17 @@
   (p/let [page (<get-block id-or-page-name {:children? false})]
     (when-let [id (:block/uuid page)]
       (get_block_properties id))))
+
+(defn open_pdf_viewer
+  [block-identity-or-file-url]
+  (p/let [[block href] (if (and (string? block-identity-or-file-url)
+                                (or (path/protocol-url? block-identity-or-file-url)
+                                    (path/absolute? block-identity-or-file-url)))
+                         [nil block-identity-or-file-url]
+                         (p/let [block (<get-block block-identity-or-file-url {:children? false})]
+                           [block (if block
+                                    (util/format "../assets/%s.pdf" (:block/uuid block))
+                                    block-identity-or-file-url)]))
+          href' (assets-handler/<make-asset-url href)]
+    (when-let [current (pdf-assets/inflate-asset href {:block block :href href'})]
+      (state/set-current-pdf! current))))

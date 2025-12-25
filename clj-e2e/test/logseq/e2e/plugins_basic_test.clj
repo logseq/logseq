@@ -335,3 +335,72 @@
           result (ls-api-call! :editor.get_tag_objects "logseq.class/Task")]
       (is (= (count result) 1))
       (is (= "task 1" (get (first result) "title"))))))
+
+(deftest create-and-get-tag-test
+  (testing "create and get tag with title or ident"
+    (let [title "book1"
+          title-ident (str :plugin.class._test_plugin/book1)
+          tag1 (ls-api-call! :editor.createTag title)
+          tag2 (ls-api-call! :editor.getTag title)
+          tag3 (ls-api-call! :editor.getTag title-ident)
+          tag4 (ls-api-call! :editor.getTag (get tag1 "uuid"))]
+      (is (= (get tag1 "ident") title-ident) "create tag with title from test as plugin")
+      (is (= (get tag2 "ident") title-ident) "get tag with title")
+      (is (= (get tag3 "title") title) "get tag with ident")
+      (is (= (get tag4 "title") title) "get tag with uuid")))
+
+  (testing "add and remove tag extends"
+    (let [tag1 (ls-api-call! :editor.createTag "tag1")
+          tag2 (ls-api-call! :editor.createTag "tag2")
+          tag3 (ls-api-call! :editor.createTag "tag3")
+          id1 (get tag1 "id")
+          id2 (get tag2 "id")
+          id3 (get tag3 "id")
+          _ (ls-api-call! :editor.addTagExtends id1 id2)
+          tag1 (ls-api-call! :editor.getTag id1)]
+      (is (= (get tag1 ":logseq.property.class/extends") [id2]) "tag1 extends tag2 with db id")
+      (let [_ (ls-api-call! :editor.addTagExtends id1 id3)
+            tag1 (ls-api-call! :editor.getTag id1)]
+        (is (= (get tag1 ":logseq.property.class/extends") [id2 id3]) "tag1 extends tag2,tag3 with db ids"))
+      )))
+
+(deftest get-tags-by-name-test
+  (testing "get tags by exact name"
+    (let [tag-name "product"
+          tag1 (ls-api-call! :editor.createTag tag-name)
+          result (ls-api-call! :editor.getTagsByName tag-name)]
+      (is (= 1 (count result)) "should return exactly one tag")
+      (is (= (get tag1 "uuid") (get (first result) "uuid")) "should return the created tag")
+      (is (= (get tag1 "title") (get (first result) "title")) "tag title should match")))
+
+  (testing "get tags by name is case-insensitive"
+    (let [tag-name "TestTag123"
+          _ (ls-api-call! :editor.createTag tag-name)
+          result-lower (ls-api-call! :editor.getTagsByName "testtag123")
+          result-upper (ls-api-call! :editor.getTagsByName "TESTTAG123")
+          result-mixed (ls-api-call! :editor.getTagsByName "TeStTaG123")]
+      (is (= 1 (count result-lower)) "should find tag with lowercase search")
+      (is (= 1 (count result-upper)) "should find tag with uppercase search")
+      (is (= 1 (count result-mixed)) "should find tag with mixed case search")
+      (is (= (get (first result-lower) "uuid") (get (first result-upper) "uuid")) "all searches should return same tag")
+      (is (= (get (first result-lower) "uuid") (get (first result-mixed) "uuid")) "all searches should return same tag")))
+
+  (testing "get tags by name returns empty array for non-existent tag"
+    (let [result (ls-api-call! :editor.getTagsByName "NonExistentTag12345")]
+      (is (empty? result) "should return empty array for non-existent tag")))
+
+  (testing "get tags by name filters out non-tag pages"
+    (let [page-name "regular-page"
+          _ (page/new-page page-name)
+          result (ls-api-call! :editor.getTagsByName page-name)]
+      (is (empty? result) "should not return regular pages, only tags")))
+
+  (testing "get tags by name with multiple tags having similar names"
+    (let [tag1 (ls-api-call! :editor.createTag "category")
+          tag2 (ls-api-call! :editor.createTag "Category")
+          result (ls-api-call! :editor.getTagsByName "category")]
+      ;; Due to case-insensitive name normalization, both tags should be the same
+      (is (>= (count result) 1) "should return at least one tag")
+      ;; Verify the result contains valid tag structure
+      (is (string? (get (first result) "uuid")) "returned tag should have uuid")
+      (is (string? (get (first result) "title")) "returned tag should have title"))))
