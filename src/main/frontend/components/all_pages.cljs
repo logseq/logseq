@@ -18,13 +18,6 @@
                                            :skip-async-load? true
                                            :with-tags? false} row))
          :type :string}
-        (when (not (config/db-based-graph? (state/get-current-repo)))
-          {:id :block/type
-           :name "Page type"
-           :cell (fn [_table row _column]
-                   (let [type (get row :block/type)]
-                     [:div.capitalize type]))
-           :type :string})
         {:id :block.temp/refs-count
          :name (t :page/backlinks)
          :cell (fn [_table row _column]

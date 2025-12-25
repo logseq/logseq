@@ -43,8 +43,7 @@
               (state/set-edit-content! (state/get-edit-input-id) new-content)
               (editor-handler/save-block-if-changed! block new-content))
 
-            (and (not-empty (:file-path config))
-                 (config/db-based-graph? repo))
+            (not-empty (:file-path config))
             (db-editor-handler/save-file! (:file-path config) value)
 
             :else

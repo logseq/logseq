@@ -30,9 +30,8 @@
                   (mldoc/->edn text format)
                   text format
                   {:page-name (:block/name (db/entity page-id))})
-          db-based? (config/db-based-graph? (state/get-current-repo))
           blocks' (cond->> (gp-block/with-parent-and-order page-id blocks)
-                    db-based?
+                    true
                     (map (fn [block]
                            (let [refs (:block/refs block)]
                              (-> block
@@ -199,9 +198,7 @@
        ;; Handle internal paste
          (let [revert-cut-txs (get-revert-cut-txs blocks)
                keep-uuid? (= (state/get-block-op-type) :cut)
-               blocks (if (config/db-based-graph? (state/get-current-repo))
-                        (map (fn [b] (dissoc b :block/properties)) blocks)
-                        blocks)]
+               blocks (map (fn [b] (dissoc b :block/properties)) blocks)]
            (if embed-block?
              (when-let [block-id (:block/uuid (first blocks))]
                (when-let [current-block (state/get-edit-block)]
