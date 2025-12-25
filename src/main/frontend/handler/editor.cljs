@@ -25,10 +25,8 @@
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.export.html :as export-html]
             [frontend.handler.export.text :as export-text]
-            [frontend.handler.file-based.status :as status]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
-            [frontend.handler.property.file :as property-file]
             [frontend.handler.property.util :as pu]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
@@ -577,9 +575,6 @@
                       (get block :block/format :markdown)
                       (db/get-page-format (:block/name block))
                       (state/get-preferred-format))
-              content (if (and (not db-based?) (seq properties))
-                        (property-file/insert-properties-when-file-based repo format content properties)
-                        content)
               new-block (cond->
                          (-> (select-keys block [:block/page])
                              (assoc :block/title content))
@@ -647,20 +642,6 @@
   []
   (distinct (seq (state/get-selection-blocks))))
 
-(defn set-marker
-  "The set-marker will set a new marker on the selected block.
-  if the `new-marker` is nil, it will generate it automatically."
-  ([block]
-   (set-marker block nil))
-  ([{:block/keys [marker title format] :as block} new-marker]
-   (let [[new-content _] (status/cycle-marker title marker new-marker format (state/get-preferred-workflow))]
-     (save-block-if-changed! block new-content))))
-
-(defn file-based-cycle-todo!
-  [block]
-  (when (not-empty (:block/title block))
-    (set-marker block)))
-
 (defn db-based-cycle-todo!
   [block]
   (let [status-value (if (ldb/class-instance? (db/entity :logseq.class/Task) block)
@@ -682,17 +663,14 @@
 (defn cycle-todos!
   []
   (when-let [blocks (seq (get-selected-blocks))]
-    (let [db-based? (config/db-based-graph? (state/get-current-repo))
-          ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
+    (let [ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
                                      (uuid id)) blocks))
                    (remove nil?))]
       (ui-outliner-tx/transact!
        {:outliner-op :cycle-todos}
        (doseq [id ids]
          (when-let [block (db/entity [:block/uuid id])]
-           (if db-based?
-             (db-based-cycle-todo! block)
-             (file-based-cycle-todo! block))))))))
+           (db-based-cycle-todo! block)))))))
 
 (defn cycle-todo!
   []
@@ -1349,15 +1327,13 @@
 (defn save-block!
   ([repo block-or-uuid content]
    (save-block! repo block-or-uuid content {}))
-  ([repo block-or-uuid content {:keys [properties] :as opts}]
+  ([repo block-or-uuid content opts]
    (let [block (if (or (uuid? block-or-uuid)
                        (string? block-or-uuid))
                  (db-model/query-block-by-uuid block-or-uuid) block-or-uuid)]
      (save-block!
-      {:block block :repo repo :opts (dissoc opts :properties)}
-      (if (seq properties)
-        (property-file/insert-properties-when-file-based repo (get block :block/format :markdown) content properties)
-        content))))
+      {:block block :repo repo :opts opts}
+      content)))
   ([{:keys [block repo opts] :as _state} value]
    (let [repo (or repo (state/get-current-repo))]
      (when (db/entity repo [:block/uuid (:block/uuid block)])
@@ -2000,11 +1976,7 @@
         new-content
         (if content-update-fn
           (content-update-fn (:block/title block))
-          (:block/title block))
-        new-content
-        (cond->> new-content
-          (not keep-uuid?) (property-file/remove-property-when-file-based repo format "id")
-          true             (property-file/remove-property-when-file-based repo format "custom_id"))]
+          (:block/title block))]
     (merge (apply dissoc block (conj (if-not keep-uuid? [:block/_refs] []) :block/pre-block? :block/meta))
            (cond->
             {:block/page {:db/id (:db/id page)}
@@ -2113,9 +2085,7 @@
   (->> (outliner-core/tree-vec-flatten tree-vec)
        (map (fn [block]
               (let [content (:content block)
-                    props (into [] (:properties block))
-                    content* (str (if (= :markdown format) "- " "* ")
-                                  (property-file/insert-properties-when-file-based repo format content props))
+                    content* (str (if (= :markdown format) "- " "* ") content)
                     ast (mldoc/->edn content* format)
                     blocks (->> (block/extract-blocks ast content* format {:page-name page-name})
                                 (map wrap-parse-block))
@@ -2195,8 +2165,6 @@
            (let [exclude-properties [:id :template :template-including-parent]
                  content-update-fn (fn [content]
                                      (->> content
-                                          (property-file/remove-property-when-file-based repo format "template")
-                                          (property-file/remove-property-when-file-based repo format "template-including-parent")
                                           template/resolve-dynamic-template!))
                  page (if (:block/name block) block
                           (when target (:block/page (db/entity (:db/id target)))))
@@ -2318,54 +2286,6 @@
 
 (declare delete-and-update)
 
-(defn- dwim-in-properties
-  [state]
-  (when-not (auto-complete?)
-    (let [{:keys [block]} (get-state)]
-      (when block
-        (let [input (state/get-input)
-              content (gobj/get input "value")
-              format (get (:block (get-state)) :block/format :markdown)
-              property-key (:raw-content (thingatpt/property-key-at-point input))
-              org? (= format :org)
-              move-to-pos (if org? 2 3)]
-          (if org?
-            (cond
-              (and property-key (not= property-key ""))
-              (case property-key
-                ;; When cursor in "PROPERTIES", add :|: in a new line and move cursor to |
-                "PROPERTIES"
-                (do (cursor/move-cursor-to-line-end input)
-                    (insert "\n:: ")
-                    (cursor/move-cursor-backward input move-to-pos))
-                ;; When cursor in "END", new block (respect the previous enter behavior)
-                "END"
-                (do
-                  (cursor/move-cursor-to-end input)
-                  (save-current-block!)
-                  (insert-new-block! state))
-                ;; cursor in other positions of :ke|y: or ke|y::, move to line end for inserting value.
-                (if (property-file/property-key-exist?-when-file-based format content property-key)
-                  (notification/show!
-                   (util/format "Property key \"%s\" already exists!" property-key)
-                   :error)
-                  (cursor/move-cursor-to-line-end input)))
-
-              ;; when cursor in empty property key
-              (and property-key (= property-key ""))
-              (do (delete-and-update
-                   input
-                   (cursor/line-beginning-pos input)
-                   (inc (cursor/line-end-pos input)))
-                  (property-file/goto-properties-end-when-file-based format input)
-                  (cursor/move-cursor-to-line-end input))
-              :else
-              ;;When cursor in other place of PROPERTIES drawer, add :|: in a new line and move cursor to |
-              (do
-                (insert "\n:: ")
-                (cursor/move-cursor-backward input move-to-pos)))
-            (insert "\n")))))))
-
 (defn toggle-list-checkbox
   [{:block/keys [title] :as block} item-content]
   (let [toggle-fn (fn [m x-mark]
@@ -2465,8 +2385,7 @@
                              (p/do!
                               (save-current-block!)
                               (route-handler/redirect-to-page! page-name))))
-              "list-item" (dwim-in-list)
-              "properties-drawer" (dwim-in-properties state))
+              "list-item" (dwim-in-list))
 
             (and (string/blank? content)
                  (own-order-number-list? block)

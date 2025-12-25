@@ -13,7 +13,6 @@
             [frontend.db.model :as db-model]
             [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
-            [frontend.handler.file-based.property.util :as property-util]
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.common.util :as common-util]
@@ -61,11 +60,7 @@
   :block/title"
   [& {:as opts}]
   (when-let [graph (state/get-current-repo)]
-    (if (config/db-based-graph? graph)
-      (db-model/get-all-properties graph opts)
-      (p/let [properties (file-async/<file-based-get-all-properties graph)
-              hidden-properties (set (map name (property-util/hidden-properties)))]
-        (remove #(hidden-properties (:block/title %)) properties)))))
+    (db-model/get-all-properties graph opts)))
 
 (defn <file-get-property-values
   "For file graphs, returns property value names for given property name"

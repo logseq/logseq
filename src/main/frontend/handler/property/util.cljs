@@ -25,12 +25,6 @@
   (let [repo (state/get-current-repo)]
     (db-property-util/get-pid repo db-ident)))
 
-(defn block->shape [block]
-  (get-block-property-value block :logseq.property.tldraw/shape))
-
-(defn page-block->tldr-page [block]
-  (get-block-property-value block :logseq.property.tldraw/page))
-
 (defn shape-block?
   [block]
   (let [repo (state/get-current-repo)

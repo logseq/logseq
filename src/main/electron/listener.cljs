@@ -7,7 +7,6 @@
             [electron.ipc :as ipc]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.fs.watcher-handler :as watcher-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.property.util :as pu]
             [frontend.handler.route :as route-handler]
@@ -16,8 +15,6 @@
             [frontend.handler.user :as user]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [logseq.common.path :as path]
-            [logseq.common.util :as common-util]
             [promesa.core :as p]))
 
 (defn- safe-api-call
@@ -28,15 +25,6 @@
 
 (defn ^:large-vars/cleanup-todo listen-to-electron!
   []
-  ;; TODO: move "file-watcher" to electron.ipc.channels
-  (safe-api-call "file-watcher"
-                 (fn [data]
-                   (let [{:keys [type payload]} (bean/->clj data)
-                         path (common-util/path-normalize (:path payload))
-                         dir (:dir payload)
-                         payload (assoc payload :path (path/relative-path dir path))]
-                     (watcher-handler/handle-changed! type payload))))
-
   (safe-api-call "notification"
                  (fn [data]
                    (let [{:keys [type payload]} (bean/->clj data)

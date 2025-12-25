@@ -16,8 +16,6 @@
             [frontend.handler.db-based.page :as db-page-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.file-based.page :as file-page-handler]
-            [frontend.handler.file-based.page-property :as file-page-property]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.property :as property-handler]
@@ -135,15 +133,11 @@
 
 (defn update-public-attribute!
   [repo page value]
-  (if (config/db-based-graph? repo)
-    (db-property-handler/set-block-property! [:block/uuid (:block/uuid page)] :logseq.property/publishing-public? value)
-    (file-page-property/add-property! page :public value)))
+  (db-property-handler/set-block-property! [:block/uuid (:block/uuid page)] :logseq.property/publishing-public? value))
 
 (defn get-page-ref-text
   [page]
-  (if (config/db-based-graph?)
-    (ref/->page-ref page)
-    (file-page-handler/get-page-ref-text page)))
+  (ref/->page-ref page))
 
 (defn init-commands!
   []
