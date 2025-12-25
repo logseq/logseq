@@ -39,7 +39,7 @@
   [filename]
   (let [base (-> filename
                  ;; drop extension (keep last '.' part)
-                 (string/replace #"\.[^./]+$" "")
+                 (string/replace #"\.[^.]+$" "")
                  (string/replace "_" ":"))
         ms   (.parse js/Date base)]
     (when-not (js/isNaN ms) ms)))
