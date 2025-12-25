@@ -9,7 +9,6 @@
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db.conn :as db-conn]
-            [frontend.db.file-based.model :as file-model]
             [frontend.db.query-react :as query-react]
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
@@ -835,7 +834,7 @@ Some bindings in this fn:
 
 (defn query-wrapper
   [where {:keys [blocks? block-attrs]}]
-  (let [block-attrs (or block-attrs (butlast file-model/file-graph-block-attrs))
+  (let [block-attrs (or block-attrs '[*])
         q (if blocks?                   ; FIXME: it doesn't need to be either blocks or pages
             `[:find (~'pull ~'?b ~block-attrs)
               :in ~'$ ~'%
