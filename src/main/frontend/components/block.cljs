@@ -83,8 +83,7 @@
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [shadow.loader :as loader]))
+            [rum.core :as rum]))
 
 ;; local state
 (defonce *dragging?
@@ -408,7 +407,6 @@
   [state config title href metadata full_text]
   (let [src (::src state)
         ^js js-url (:link-js-url config)
-        repo (state/get-current-repo)
         href (cond-> href
                (nil? js-url)
                (config/get-local-asset-absolute-path))]
@@ -3639,8 +3637,7 @@
             {:keys [lines language]} options
             attr (when language
                    {:data-lang language})
-            code (if lines (apply str lines) (:block/title block))
-            [inside-portal? set-inside-portal?] (rum/use-state nil)]
+            code (if lines (apply str lines) (:block/title block))]
         (cond
           html-export?
           (highlight/html-export attr code)
@@ -3652,57 +3649,47 @@
               :on-mouse-leave (fn [e]
                                 (when (dom/has-class? (.-target e) "code-editor")
                                   (dom/remove-class! (hooks/deref *actions-ref) "!opacity-100")))}
-             (cond
-               (nil? inside-portal?) nil
-
-               inside-portal?
-               (highlight/highlight (str (random-uuid))
-                                    {:class (str "language-" language)
-                                     :data-lang language}
-                                    code)
-
-               :else
-               [:div.ls-code-editor-wrap
-                [:div.code-block-actions
-                 {:ref *actions-ref}
-                 (shui/button
-                  {:variant :text
-                   :size :sm
-                   :class "select-language"
-                   :ref *mode-ref
-                   :containerid (str container-id)
-                   :blockid (str (:block/uuid block))
-                   :on-click (fn [^js e]
-                               (util/stop-propagation e)
-                               (let [target (.-target e)]
-                                 (shui/popup-show! target
-                                                   #(src-lang-picker block
-                                                                     (fn [lang ^js _e]
-                                                                       (when-let [^js cm (util/get-cm-instance (util/rec-get-node target "ls-block"))]
-                                                                         (if-let [mode (get-code-mode-by-lang lang)]
-                                                                           (.setOption cm "mode" mode)
-                                                                           (throw (ex-info "code mode not found"
-                                                                                           {:lang lang})))
-                                                                         (db/transact! [(ldb/kv :logseq.kv/latest-code-lang lang)])
-                                                                         (db-property-handler/set-block-property!
-                                                                          (:db/id block) :logseq.property.code/lang lang))))
-                                                   {:align :end})))}
-                  (or language "Choose language")
-                  (ui/icon "chevron-down"))
-                 (shui/button
-                  {:variant :text
-                   :size :sm
-                   :on-click (fn [^js e]
-                               (util/stop-propagation e)
-                               (when-let [^js cm (util/get-cm-instance (util/rec-get-node (.-target e) "ls-block"))]
-                                 (util/copy-to-clipboard! (.getValue cm))
-                                 (notification/show! "Copied!" :success)))}
-                  (ui/icon "copy")
-                  "Copy")]
-                (lazy-editor/editor config (str (d/squuid)) attr code options)
-                (let [options (:options options) block (:block config)]
-                  (when (and (= language "clojure") (contains? (set options) ":results"))
-                    (sci/eval-result code block)))])]))))))
+             [:div.ls-code-editor-wrap
+              [:div.code-block-actions
+               {:ref *actions-ref}
+               (shui/button
+                {:variant :text
+                 :size :sm
+                 :class "select-language"
+                 :ref *mode-ref
+                 :containerid (str container-id)
+                 :blockid (str (:block/uuid block))
+                 :on-click (fn [^js e]
+                             (util/stop-propagation e)
+                             (let [target (.-target e)]
+                               (shui/popup-show! target
+                                                 #(src-lang-picker block
+                                                                   (fn [lang ^js _e]
+                                                                     (when-let [^js cm (util/get-cm-instance (util/rec-get-node target "ls-block"))]
+                                                                       (if-let [mode (get-code-mode-by-lang lang)]
+                                                                         (.setOption cm "mode" mode)
+                                                                         (throw (ex-info "code mode not found"
+                                                                                         {:lang lang})))
+                                                                       (db/transact! [(ldb/kv :logseq.kv/latest-code-lang lang)])
+                                                                       (db-property-handler/set-block-property!
+                                                                        (:db/id block) :logseq.property.code/lang lang))))
+                                                 {:align :end})))}
+                (or language "Choose language")
+                (ui/icon "chevron-down"))
+               (shui/button
+                {:variant :text
+                 :size :sm
+                 :on-click (fn [^js e]
+                             (util/stop-propagation e)
+                             (when-let [^js cm (util/get-cm-instance (util/rec-get-node (.-target e) "ls-block"))]
+                               (util/copy-to-clipboard! (.getValue cm))
+                               (notification/show! "Copied!" :success)))}
+                (ui/icon "copy")
+                "Copy")]
+              (lazy-editor/editor config (str (d/squuid)) attr code options)
+              (let [options (:options options) block (:block config)]
+                (when (and (= language "clojure") (contains? (set options) ":results"))
+                  (sci/eval-result code block)))]]))))))
 
 (defn ^:large-vars/cleanup-todo markup-element-cp
   [{:keys [html-export?] :as config} item]

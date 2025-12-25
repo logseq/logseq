@@ -125,15 +125,11 @@
    [:editor/set-property-on-block-property :logseq.property/query :logseq.property.code/lang "clojure"]
    [:editor/exit]])
 
-(defn db-based-code-block
+(defn code-block-steps
   []
   [[:editor/input "" {:last-pattern command-trigger}]
    [:editor/upsert-type-block :code]
    [:editor/exit]])
-
-(defn code-block-steps
-  []
-  (db-based-code-block))
 
 (defn quote-block-steps
   []
