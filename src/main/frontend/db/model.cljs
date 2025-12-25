@@ -553,6 +553,31 @@ independent of format as format specific heading characters are stripped"
        (:block/_tags class))
      (remove ldb/hidden?))))
 
+(defn get-file-page
+  ([file-path]
+   (get-file-page file-path true))
+  ([file-path title?]
+   (when-let [repo (state/get-current-repo)]
+     (when-let [db (conn/get-db repo)]
+       (some->
+        (d/q
+         (if title?
+           '[:find ?page-name
+             :in $ ?path
+             :where
+             [?file :file/path ?path]
+             [?page :block/file ?file]
+             [?page :block/title ?page-name]]
+           '[:find ?page-name
+             :in $ ?path
+             :where
+             [?file :file/path ?path]
+             [?page :block/file ?file]
+             [?page :block/name ?page-name]])
+         db file-path)
+        db-utils/seq-flatten
+        first)))))
+
 (comment
   ;; For debugging
   (defn get-all-blocks
