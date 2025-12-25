@@ -116,8 +116,9 @@
   `:local-update-check`: event to notify to check if there're some new local-updates, then push to remote.
   `:online-users-updated`: online users info updated
   `:pull-remote-updates`: pull remote updates
-  `:inject-users-info`: notify server to inject users-info into the graph"
-  [repo get-ws-create-task *auto-push? *online-users]
+  `:inject-users-info`: notify server to inject users-info into the graph
+  `:assets-sync-loop-stopped`: assets-sync-loop stopped, rtc-loop should stop as well"
+  [repo get-ws-create-task *auto-push? *online-users *assets-sync-loop-stopped?]
   (let [remote-updates-flow (m/eduction
                              (map (fn [data]
                                     (case (:req-id data)
@@ -129,7 +130,14 @@
                                   (map (fn [data] {:type :local-update-check :value data}))
                                   (r.throttle/create-local-updates-check-flow repo *auto-push? 2000))
         inject-user-info-flow (create-inject-users-info-flow repo (m/watch *online-users))
-        mix-flow (c.m/mix remote-updates-flow local-updates-check-flow inject-user-info-flow)]
+        assets-sync-loop-stopped-flow (m/eduction
+                                       (keep (fn [v] (when v {:type :assets-sync-loop-stopped})))
+                                       (take 1)
+                                       (m/watch *assets-sync-loop-stopped?))
+        mix-flow (c.m/mix remote-updates-flow
+                          local-updates-check-flow
+                          inject-user-info-flow
+                          assets-sync-loop-stopped-flow)]
     (c.m/mix mix-flow (create-pull-remote-updates-flow 60000 mix-flow))))
 
 (defn- create-ws-state-flow
@@ -200,7 +208,7 @@
         (reset! *aes-key aes-key)))))
 
 (declare new-task--inject-users-info)
-(defn- create-rtc-loop
+(defn- ^:large-vars/cleanup-todo create-rtc-loop
   "Return a map with [:rtc-state-flow :rtc-loop-task :*rtc-auto-push? :onstarted-task]
   TODO: auto refresh token if needed"
   [graph-uuid schema-version repo conn date-formatter token user-uuid
@@ -214,6 +222,7 @@
         *assets-sync-loop-canceler (atom nil)
         *server-schema-version     (atom nil)
         *aes-key                   (atom nil)
+        *assets-sync-loop-stopped  (atom nil)
         started-dfv                (m/dfv)
         add-log-fn                 (fn [type message]
                                      (assert (map? message) message)
@@ -226,7 +235,7 @@
         {:keys [assets-sync-loop-task]}
         (r.asset/create-assets-sync-loop
          repo get-ws-create-task graph-uuid major-schema-version conn *auto-push? *aes-key)
-        mixed-flow                 (create-mixed-flow repo get-ws-create-task *auto-push? *online-users)]
+        mixed-flow (create-mixed-flow repo get-ws-create-task *auto-push? *online-users *assets-sync-loop-stopped)]
     (assert (some? *current-ws))
     {:rtc-state-flow       (create-rtc-state-flow (create-ws-state-flow *current-ws))
      :*rtc-auto-push?      *auto-push?
@@ -249,7 +258,9 @@
           (reset! *assets-sync-loop-canceler
                   (c.m/run-task :assets-sync-loop-task
                     assets-sync-loop-task
-                    :fail #(log/info :assets-sync-loop-task-stopped %)))
+                    :fail (fn [e]
+                            (log/info :assets-sync-loop-task-stopped e)
+                            (reset! *assets-sync-loop-stopped true))))
           (->>
            (let [event (m/?> mixed-flow)]
              (case (:type event)
@@ -285,7 +296,11 @@
                      add-log-fn))
 
                :inject-users-info
-               (m/? (new-task--inject-users-info token graph-uuid major-schema-version))))
+               (m/? (new-task--inject-users-info token graph-uuid major-schema-version))
+
+               :assets-sync-loop-stopped
+               ;; assets-sync-loop stopped, then we should stop the whole rtc-loop
+               (throw (ex-info "assets-sync-loop-stopped" {}))))
            (m/ap)
            (m/reduce {} nil)
            (m/?))
@@ -430,8 +445,7 @@
 (defn rtc-stop
   []
   (when-let [canceler (:canceler @*rtc-loop-metadata)]
-    (canceler)
-    (reset! *rtc-loop-metadata empty-rtc-loop-metadata)))
+    (canceler)))
 
 (defn rtc-toggle-auto-push
   []
@@ -519,11 +533,13 @@
                     *online-users *last-stop-exception]}
             (m/?< rtc-loop-metadata-flow)]
         (try
-          (when (and repo rtc-state-flow *rtc-auto-push? *rtc-lock')
+          (if-not (and repo rtc-state-flow *rtc-auto-push? *rtc-lock')
+            (m/amb)
             (m/?<
              (m/latest
               (fn [rtc-state rtc-auto-push? rtc-remote-profile?
-                   rtc-lock online-users pending-local-ops-count pending-asset-ops-count [local-tx remote-tx]]
+                   rtc-lock online-users pending-local-ops-count pending-asset-ops-count
+                   [local-tx remote-tx] last-stop-ex]
                 {:graph-uuid graph-uuid
                  :local-graph-schema-version (db-schema/schema-version->string local-graph-schema-version)
                  :remote-graph-schema-version (db-schema/schema-version->string remote-graph-schema-version)
@@ -537,14 +553,15 @@
                  :auto-push? rtc-auto-push?
                  :remote-profile? rtc-remote-profile?
                  :online-users online-users
-                 :last-stop-exception-ex-data (some-> *last-stop-exception deref ex-data)})
+                 :last-stop-exception-ex-data (some-> last-stop-ex ex-data)})
               rtc-state-flow
               (m/watch *rtc-auto-push?) (m/watch *rtc-remote-profile?)
               (m/watch *rtc-lock') (m/watch *online-users)
               (client-op/create-pending-block-ops-count-flow repo)
               (client-op/create-pending-asset-ops-count-flow repo)
-              (rtc-log-and-state/create-local&remote-t-flow graph-uuid))))
-          (catch Cancelled _))))))
+              (rtc-log-and-state/create-local&remote-t-flow graph-uuid)
+              (m/watch *last-stop-exception))))
+          (catch Cancelled _ (m/amb)))))))
 
 (def ^:private create-get-state-flow (c.m/throttle 300 create-get-state-flow*))
 

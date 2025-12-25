@@ -623,11 +623,11 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-ref-open-blocks-level
   []
-  (or
-   (when-let [value (:ref/default-open-blocks-level (get-config))]
-     (when (pos-int? value)
-       (min value 9)))
-   2))
+  (if-let [value (:ref/default-open-blocks-level (get-config))]
+    (if (and (int? value) (>= value 0))
+      (min value 9)
+      2)
+    2))
 
 (defn get-export-bullet-indentation
   []
@@ -1424,29 +1424,36 @@ Similar to re-frame subscriptions"
     (set-editor-last-pos! new-pos)))
 
 (defn set-theme-mode!
-  [mode]
-  (when (mobile-util/native-platform?)
-    (if (= mode "light")
-      (util/set-theme-light)
-      (util/set-theme-dark)))
-  (set-state! :ui/theme mode)
-  (storage/set :ui/theme mode))
+  ([mode] (set-theme-mode! mode (:ui/system-theme? @state)))
+  ([mode system-theme?]
+   (when (mobile-util/native-platform?)
+     (if (= mode "light")
+       (util/set-theme-light)
+       (util/set-theme-dark)))
+   (when (mobile-util/native-platform?)
+     (mobile-util/set-native-interface-style! mode system-theme?))
+   (set-state! :ui/theme mode)
+   (storage/set :ui/theme mode)))
 
 (defn sync-system-theme!
   []
-  (let [system-dark? (.-matches (js/window.matchMedia "(prefers-color-scheme: dark)"))]
-    (set-theme-mode! (if system-dark? "dark" "light"))
-    (set-state! :ui/system-theme? true)
-    (storage/set :ui/system-theme? true)))
+  (when (:ui/system-theme? @state)
+    (let [system-dark? (.-matches (js/window.matchMedia "(prefers-color-scheme: dark)"))]
+      (set-theme-mode! (if system-dark? "dark" "light") true)
+      (set-state! :ui/system-theme? true)
+      (storage/set :ui/system-theme? true))))
 
 (defn use-theme-mode!
   [theme-mode]
   (if (= theme-mode "system")
-    (sync-system-theme!)
     (do
-      (set-theme-mode! theme-mode)
+      (set-state! :ui/system-theme? true)
+      (storage/set :ui/system-theme? true)
+      (sync-system-theme!))
+    (do
       (set-state! :ui/system-theme? false)
-      (storage/set :ui/system-theme? false))))
+      (storage/set :ui/system-theme? false)
+      (set-theme-mode! theme-mode false))))
 
 (defn- toggle-theme
   [theme]
@@ -1468,6 +1475,8 @@ Similar to re-frame subscriptions"
   []
   (let [mode (or (storage/get :ui/theme) "light")
         system-theme? (storage/get :ui/system-theme?)]
+    (when (mobile-util/native-platform?)
+      (mobile-util/set-native-interface-style! mode system-theme?))
     (when (and (not system-theme?)
                (mobile-util/native-platform?))
       (if (= mode "light")
@@ -1995,7 +2004,7 @@ Similar to re-frame subscriptions"
             (when (and move-cursor? (not (block-component-editing?)))
               (cursor/move-cursor-to input pos))
 
-            (when (or (util/mobile?) (mobile-util/native-platform?))
+            (when (mobile-util/native-platform?)
               (set-state! :mobile/show-action-bar? false))))))))
 
 (defn get-git-auto-commit-enabled?
@@ -2149,7 +2158,7 @@ Similar to re-frame subscriptions"
   (sub :auth/id-token))
 
 (defn get-auth-refresh-token []
-  (str (:auth/refresh-token @state)))
+  (:auth/refresh-token @state))
 
 (defn set-file-sync-manager [graph-uuid v]
   (when (and graph-uuid v)
@@ -2287,10 +2296,11 @@ Similar to re-frame subscriptions"
   (swap! state assoc :ui/radix-color color)
   (storage/set :ui/radix-color color))
 
-(defn set-editor-font! [font]
-  (let [font (if (keyword? font) (name font) (str font))]
-    (swap! state assoc :ui/editor-font font)
-    (storage/set :ui/editor-font font)))
+(defn set-editor-font! [config]
+  (let [config' (:ui/editor-font @state)
+        config (if (map? config') (merge config' config) {})]
+    (swap! state assoc :ui/editor-font config)
+    (storage/set :ui/editor-font config)))
 
 (defn handbook-open?
   []

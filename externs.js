@@ -116,6 +116,8 @@ dummy.bounding = function() {};
 dummy.getPageView = function() {};
 dummy.convertToPdfPoint = function() {};
 dummy.scrollPageIntoView = function() {};
+dummy.textLayer = function() {};
+dummy.viewport = function() {};
 dummy.convertToViewportRectangle = function() {};
 dummy.init = function() {};
 dummy.commit = function() {};
@@ -143,6 +145,7 @@ dummy.ELEMENT = function() {};
 dummy.TEXT = function() {};
 dummy.isAbsolute = function() {};
 dummy._address = function() {};
+dummy.setInterfaceStyle = function() {};
 dummy.Consumer = {}
 
 var utils = {}

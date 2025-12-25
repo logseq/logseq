@@ -657,7 +657,7 @@ export interface IEditorProxy extends Record<string, any> {
    *
    * @param srcPage - the page name or uuid
    */
-  getPageBlocksTree: (srcPage: PageIdentity) => Promise<Array<BlockEntity>>
+  getPageBlocksTree: (srcPage: PageIdentity) => Promise<Array<BlockEntity> | null>
 
   /**
    * get all page/block linked references
@@ -785,8 +785,15 @@ export interface IEditorProxy extends Record<string, any> {
   getTag: (nameOrIdent: string) => Promise<PageEntity | null>
   addTagProperty: (tagId: BlockIdentity, propertyIdOrName: BlockIdentity) => Promise<void>
   removeTagProperty: (tagId: BlockIdentity, propertyIdOrName: BlockIdentity) => Promise<void>
+  addTagExtends: (tagId: BlockIdentity, parentTagIdOrName: BlockIdentity) => Promise<void>
+  removeTagExtends: (tagId: BlockIdentity, parentTagIdOrName: BlockIdentity) => Promise<void>
   addBlockTag: (blockId: BlockIdentity, tagId: BlockIdentity) => Promise<void>
   removeBlockTag: (blockId: BlockIdentity, tagId: BlockIdentity) => Promise<void>
+  /**
+   * @note Emoji icon name from https://learn.missiveapp.com/open/emoji-mart
+   * */
+  setBlockIcon: (blockId: BlockIdentity, iconType: 'tabler-icon' | 'emoji', iconName: string) => Promise<void>
+  removeBlockIcon: (blockId: BlockIdentity) => Promise<void>
 
   prependBlockInPage: (
     page: PageIdentity,

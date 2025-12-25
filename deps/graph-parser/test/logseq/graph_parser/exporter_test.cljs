@@ -182,7 +182,7 @@
       (is (< (-> end-time (- start-time) (/ 1000)) max-time)
           (str "Importing large graph takes less than " max-time "s")))
 
-    (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Created graph has no validation errors")
     (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")
     (is (= 0 (count @(:ignored-assets import-state))) "No ignored assets")
@@ -205,12 +205,12 @@
 
     (testing "whole graph"
 
-      (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+      (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
           "Created graph has no validation errors")
 
       ;; Counts
       ;; Includes journals as property values e.g. :logseq.property/deadline
-      (is (= 30 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
+      (is (= 31 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
 
       (is (= 5 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Asset]] @conn))))
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
@@ -231,7 +231,7 @@
                   #_(map #(select-keys % [:block/title :block/tags]))
                   count))
           "Correct number of pages with block content")
-      (is (= 12 (->> @conn
+      (is (= 14 (->> @conn
                      (d/q '[:find [?ident ...]
                             :where [?b :block/tags :logseq.class/Tag] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
                      count))
@@ -493,6 +493,10 @@
              (mapv :db/ident (:block/tags (db-test/find-block-by-content @conn #"with namespace tag"))))
           "Block tagged with namespace tag is only associated with leaf child tag")
 
+      (is (= #{:user.class/ai :user.class/block-tag :user.class/p1}
+             (set (map :db/ident (:block/tags (db-test/find-block-by-content @conn #"Block tags")))))
+          "Block with tags through tags property")
+
       (is (= []
              (->> (d/q '[:find (pull ?b [:block/title {:block/tags [:db/ident]}])
                          :where [?b :block/tags :logseq.class/Tag]]
@@ -617,7 +621,7 @@
           {:keys [import-state]}
           (import-file-graph-to-db file-graph-dir conn {:convert-all-tags? false})]
 
-    (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Created graph has no validation errors")
     (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")
     (is (= 0 (->> @conn
@@ -672,7 +676,7 @@
           files (mapv #(node-path/join file-graph-dir %) ["journals/2024_02_07.md" "pages/Interstellar.md"])
           conn (db-test/create-conn)
           _ (import-files-to-db files conn {:tag-classes ["movie"]})]
-    (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Created graph has no validation errors")
 
     (let [block (db-test/find-block-by-content @conn #"Inception")
@@ -703,7 +707,7 @@
           _ (import-files-to-db files conn {:property-classes ["type"]})
           _ (@#'gp-exporter/export-class-properties conn conn)]
 
-    (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Created graph has no validation errors")
 
     (is (= #{:user.class/Property :user.class/Movie :user.class/Class :user.class/Tool}
@@ -746,7 +750,7 @@
           conn (db-test/create-conn)
           _ (import-files-to-db files conn {:remove-inline-tags? false :convert-all-tags? true})]
 
-    (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Created graph has no validation errors")
     (is (string/starts-with? (:block/title (db-test/find-block-by-content @conn #"Inception"))
                              "Inception #Movie")
@@ -772,7 +776,7 @@
                                             ;; Also add this option to trigger some edge cases with namespace pages
                                             :property-classes ["type"]})]
 
-    (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Created graph has no validation errors")
 
     (is (= #{:user.class/Movie :user.class/CreativeWork :user.class/Thing :user.class/Feature
@@ -796,7 +800,7 @@
           _ (import-files-to-db files conn {:user-config {:property-pages/enabled? false
                                                           :property-pages/excludelist #{:prop-string}}})]
 
-    (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Created graph has no validation errors")))
 
 (deftest-async export-config-file-sets-title-format

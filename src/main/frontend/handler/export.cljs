@@ -203,13 +203,16 @@
 
 (defn export-repo-as-sqlite-db!
   [repo]
-  (p/let [data (persist-db/<export-db repo {:return-data? true})
-          filename (file-name repo "sqlite")
-          url (js/URL.createObjectURL (js/Blob. #js [data]))]
-    (when-let [anchor (gdom/getElement "download-as-sqlite-db")]
-      (.setAttribute anchor "href" url)
-      (.setAttribute anchor "download" filename)
-      (.click anchor))))
+  (->
+   (p/let [data (persist-db/<export-db repo {:return-data? true})
+           filename (file-name repo "sqlite")
+           url (js/URL.createObjectURL (js/Blob. #js [data]))]
+     (when-let [anchor (gdom/getElement "download-as-sqlite-db")]
+       (.setAttribute anchor "href" url)
+       (.setAttribute anchor "download" filename)
+       (.click anchor)))
+   (p/catch (fn [error]
+              (js/console.error error)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Export to roam json ;;
@@ -317,12 +320,12 @@
   [repo {:keys [backup-now?]
          :or {backup-now? true}}]
   (when (ldb/get-key-value (db/get-db repo) :logseq.kv/graph-backup-folder)
-    (when (and (config/db-based-graph? repo) util/web-platform? (utils/nfsSupported))
+    (when (and (config/db-based-graph? repo) (not (util/capacitor?)))
       (cancel-db-backup!)
 
       (when backup-now? (backup-db-graph repo :backup-now))
 
-    ;; run backup every hour
+      ;; run backup every hour
       (let [interval (js/setInterval #(backup-db-graph repo :auto)
                                      (* 1 60 60 1000))]
         (reset! *backup-interval interval)))))

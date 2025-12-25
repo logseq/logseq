@@ -2,8 +2,9 @@
   "App root"
   (:require ["../externals.js"]
             [frontend.components.journal :as journal]
+            [frontend.components.quick-add :as quick-add]
             [frontend.handler.common :as common-handler]
-            [frontend.handler.user :as user-handler]
+            [frontend.handler.editor :as editor-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.rum :as frum]
             [frontend.state :as state]
@@ -12,155 +13,61 @@
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.popup.core :as shui-popup]
-            [logseq.shui.silkhq :as silkhq]
             [logseq.shui.toaster.core :as shui-toaster]
             [logseq.shui.ui :as shui]
             [mobile.bottom-tabs :as bottom-tabs]
             [mobile.components.editor-toolbar :as editor-toolbar]
+            [mobile.components.favorites :as favorites]
+            [mobile.components.graphs :as graphs]
             [mobile.components.header :as mobile-header]
-            [mobile.components.left-sidebar :as mobile-left-sidebar]
-            [mobile.components.modal :as modal]
             [mobile.components.popup :as popup]
-            [mobile.components.search :as search]
             [mobile.components.selection-toolbar :as selection-toolbar]
-            [mobile.components.settings :as settings]
             [mobile.components.ui :as ui-component]
-            [mobile.components.ui-silk :as ui-silk]
             [mobile.state :as mobile-state]
+            [promesa.core :as p]
             [rum.core :as rum]))
 
-(defn- sidebar-not-allowed-to-open?
-  []
-  (or (seq @mobile-state/*modal-blocks)
-      (seq @mobile-state/*popup-data)
-      (:mobile/show-action-bar? @state/state)
-      (state/editing?)))
+(rum/defc component-with-restoring < rum/static rum/reactive
+  [component]
+  (let [db-restoring? (state/sub :db/restoring?)]
+    (if db-restoring?
+      [:div.space-y-2.mt-8.mx-0.opacity-75
+       (shui/skeleton {:class "h-10 w-full mb-6"})
+       (shui/skeleton {:class "h-6 w-full"})
+       (shui/skeleton {:class "h-6 w-full"})]
+      component)))
 
-(defn- setup-sidebar-touch-swipe!
-  []
-  (let [touch-start-x (atom 0)
-        touch-start-y (atom 0)
-        has-triggered? (atom false)
-        blocking-scroll? (atom false)
-        sidebar-initial-open? (atom false)
-        max-x (atom 0)
-        max-y (atom 0)
-        min-y (atom 0)
-        swipe-trigger-distance 50         ;; distance to actually open/close
-        horiz-intent-threshold 10         ;; start blocking scroll when horizontal intent is clear
-        max-vertical-drift 30
-        on-touch-start (fn [^js e]
-                         (when-not (sidebar-not-allowed-to-open?)
-                           (let [t (aget e "touches" 0)]
-                             (reset! sidebar-initial-open? (mobile-state/left-sidebar-open?))
-                             (reset! touch-start-x (.-pageX t))
-                             (reset! touch-start-y (.-pageY t))
-                             (reset! has-triggered? false)
-                             (reset! blocking-scroll? false)
-                             (reset! max-x 0)
-                             (reset! max-y (.-pageY t))
-                             (reset! min-y (.-pageY t)))))
-
-        on-touch-move (fn [^js e]
-                        (when-not (sidebar-not-allowed-to-open?)
-                          (let [t (aget e "touches" 0)
-                                _ (reset! max-x (max (.-pageX t) @max-x))
-                                _ (reset! max-y (max (.-pageY t) @max-y))
-                                _ (reset! min-y (min (.-pageY t) @min-y))
-                                dx (- (.-pageX t) @touch-start-x)
-                                dy (js/Math.abs (- @max-y @min-y))
-                                abs-dx (js/Math.abs dx)
-                                horizontal-intent (and (> abs-dx horiz-intent-threshold)
-                                                       (> abs-dx dy))
-                                open-swipe? (and (> dx swipe-trigger-distance)
-                                                 (< dy max-vertical-drift))
-                                close-swipe? (and (not @sidebar-initial-open?)
-                                                  (mobile-state/left-sidebar-open?)
-                                                  (> (- @max-x (.-pageX t)) swipe-trigger-distance)
-                                                  (< dy max-vertical-drift))]
-
-                             ;; Block vertical scroll as soon as horizontal intent is clear
-                            (when (or @blocking-scroll? (and horizontal-intent
-                                                             (not @sidebar-initial-open?)
-                                                             (mobile-state/left-sidebar-open?)))
-                              (reset! blocking-scroll? true)
-                              (.preventDefault e))
-
-                            (cond
-                              (and open-swipe? (not @has-triggered?))
-                              (do (reset! has-triggered? true)
-                                  (mobile-state/open-left-sidebar!))
-
-                              close-swipe?
-                              (mobile-state/close-left-sidebar!)))))
-
-        on-touch-end (fn [_]
-                       (reset! blocking-scroll? false))]
-
-    ;; passive:false so preventDefault works
-    (.addEventListener js/document "touchstart" on-touch-start #js {:passive false})
-    (.addEventListener js/document "touchmove"  on-touch-move  #js {:passive false})
-    (.addEventListener js/document "touchend"   on-touch-end   #js {:passive false})
-    (.addEventListener js/document "touchcancel" on-touch-end  #js {:passive false})
-
-    ;; cleanup
-    #(do
-       (.removeEventListener js/document "touchstart" on-touch-start)
-       (.removeEventListener js/document "touchmove"  on-touch-move)
-       (.removeEventListener js/document "touchend"   on-touch-end)
-       (.removeEventListener js/document "touchcancel" on-touch-end))))
-
-(rum/defc journals
-  []
-  (hooks/use-effect!
-   (fn []
-     (setup-sidebar-touch-swipe!)) [])
-  (ui-component/classic-app-container-wrap
-   [:div.pt-3
-    (journal/all-journals)]))
-
-(rum/defc home-inner
-  [*page db-restoring? current-tab]
-  [:div {:id "app-main-content"
-         :ref *page}
-
-   ;; main content
-   (if db-restoring?
-     [:div.space-y-2.mt-8.mx-0.opacity-75
-      (shui/skeleton {:class "h-10 w-full mb-6 bg-gray-200"})
-      (shui/skeleton {:class "h-6 w-full bg-gray-200"})
-      (shui/skeleton {:class "h-6 w-full bg-gray-200"})]
-     (if (= current-tab "search")
-       [:div]
-       (journals)))])
-
-(rum/defc home < rum/reactive
+(rum/defc home < rum/static
   {:did-mount (fn [state]
                 (ui/inject-document-devices-envs!)
                 state)}
-  [*page current-tab]
-  (let [db-restoring? (state/sub :db/restoring?)]
-    (home-inner *page db-restoring? current-tab)))
+  []
+  (component-with-restoring (journal/all-journals)))
 
 (defn use-theme-effects!
-  [current-repo]
-  (let [[theme] (frum/use-atom-in state/state :ui/theme)]
-    (hooks/use-effect!
-     (fn []
-       (state/sync-system-theme!)
-       (ui/setup-system-theme-effect!))
-     [])
-    (hooks/use-effect!
-     #(let [^js doc js/document.documentElement
-            ^js cls (.-classList doc)
-            ^js cls-body (.-classList js/document.body)]
-        (.setAttribute doc "data-theme" theme)
-        (if (= theme "dark")                               ;; for tailwind dark mode
-          (do (.add cls "dark") (.add cls "ion-palette-dark")
-              (doto cls-body (.remove "light-theme") (.add "dark-theme")))
-          (do (.remove cls "dark") (.remove cls "ion-palette-dark")
-              (doto cls-body (.remove "dark-theme") (.add "light-theme")))))
-     [theme]))
+  [current-repo theme]
+  (hooks/use-effect!
+   (fn []
+     (state/sync-system-theme!)
+     (ui/setup-system-theme-effect!)
+     (let [handler (fn [^js e]
+                     (when (:ui/system-theme? @state/state)
+                       (let [is-dark? (boolean (some-> e .-detail .-isDark))]
+                         (state/set-theme-mode! (if is-dark? "dark" "light") true))))]
+       (.addEventListener js/window "logseq:native-system-theme-changed" handler)
+       #(.removeEventListener js/window "logseq:native-system-theme-changed" handler)))
+   [])
+  (hooks/use-effect!
+   #(let [^js doc js/document.documentElement
+          ^js cls (.-classList doc)
+          ^js cls-body (.-classList js/document.body)]
+      (.setAttribute doc "data-theme" theme)
+      (if (= theme "dark")                               ;; for tailwind dark mode
+        (do (.add cls "dark")
+            (doto cls-body (.remove "light-theme") (.add "dark-theme")))
+        (do (.remove cls "dark")
+            (doto cls-body (.remove "dark-theme") (.add "light-theme")))))
+   [theme])
 
   (hooks/use-effect!
    (fn []
@@ -172,71 +79,112 @@
   (hooks/use-effect!
    (fn []
      (let [handle-size! (fn []
-                          (.setProperty (.-style js/document.body) "--ls-full-screen-height" (str js/window.screen.height "px")))]
+                          (.setProperty (.-style js/document.body)
+                                        "--ls-full-screen-height"
+                                        (str js/window.screen.height "px")))]
        (handle-size!)
        (.addEventListener js/window "orientationchange" handle-size!)
        #(.removeEventListener js/window "orientationchange" handle-size!)))
    []))
 
-(rum/defc app
-  [current-repo {:keys [login?]}]
-  (let [[tab] (mobile-state/use-tab)
-        *home (rum/use-ref nil)]
-    (use-screen-size-effects!)
-    (use-theme-effects! current-repo)
+(rum/defc capture <
+  {:did-mount (fn [state]
+                (p/do!
+                 (editor-handler/quick-add-ensure-new-block-exists!)
+                 (when (mobile-util/native-ios?)
+                   ;; FIXME: android doesn't open keyboard automatically
+                   (editor-handler/quick-add-open-last-block!)))
+                state)}
+  []
+  (quick-add/quick-add))
+
+(rum/defc other-page < rum/static
+  [route-view tab route-match]
+  (let [page-view? (= (get-in route-match [:data :name]) :page)]
+    [:div#main-content-container.pl-3.ls-layer
+     {:class (if page-view? "pr-2" "pr-3")}
+     (if route-view
+       (route-view route-match)
+       ;; NOTE: `case` caused IllegalArgumentException: Duplicate case test constant
+       (cond
+         (= tab "graphs") (graphs/page)
+         (= tab "go to") (favorites/favorites)
+         (= tab "search") nil
+         (= tab "capture") (component-with-restoring (capture))))]))
+
+(rum/defc main-content < rum/static
+  [tab route-match]
+  (let [view (get-in route-match [:data :view])
+        home? (and (= tab "home") (nil? view))
+        [quick-add-launched? set-quick-add-launched!] (hooks/use-state
+                                                       (= @mobile-state/*app-launch-url
+                                                          "logseq://mobile/go/quick-add"))]
     (hooks/use-effect!
      (fn []
-       (when (mobile-util/native-ios?)
+       (when (and (= tab "home") quick-add-launched?)
+         (set-quick-add-launched! false))
+       (fn []))
+     [tab])
+    ;; Two-layer structure:
+    ;; - Journals layer keeps its own scroll container and is always in the DOM.
+    ;; - Page/other-tab layer keeps its own independent scroll container.
+    ;; Both are absolutely positioned and stacked; we toggle visibility.
+    [:div.w-full.relative
+     ;; Journals scroll container (keep-alive)
+     [:div#app-main-home.pl-4.pr-3.absolute.inset-0
+      {:class (when-not home? "invisible pointer-events-none")}
+      (when-not quick-add-launched?
+        (home))]
+     ;; Other pages: search, settings, specific page, etc.
+     (when-not home?
+       (other-page view tab route-match))]))
+
+(rum/defc app
+  [current-repo route-match]
+  (let [[tab] (mobile-state/use-tab)
+        [theme] (frum/use-atom-in state/state :ui/theme)]
+    (use-screen-size-effects!)
+    (use-theme-effects! current-repo theme)
+    (hooks/use-effect!
+     (fn []
+       (when (mobile-util/native-platform?)
          (bottom-tabs/configure))
-       (when-let [element (util/mobile-page-scroll)]
-         (common-handler/listen-to-scroll! element))) [])
-    (silkhq/depth-sheet-stack
-     {:as-child true}
-     (silkhq/depth-sheet-scenery-outlets
-      (silkhq/scroll {:as-child true}
-                     (silkhq/scroll-view
-                      {:class "app-silk-index-scroll-view"
-                       :pageScroll true
-                       :nativePageScrollReplacement false}
-                      (silkhq/scroll-content
-                       {:class "app-silk-index-scroll-content"}
-                       [:div.app-silk-index-container
-                        {:data-tab (str tab)}
-                        (case (keyword tab)
-                          :home
-                          (home *home tab)
-                          :settings
-                          (settings/page)
-                          :search
-                          (search/search)
-                          "Not Found")])))
+       (when-let [element (util/app-scroll-container-node)]
+         (common-handler/listen-to-scroll! element)))
+     [])
+    [:<>
+     (mobile-header/header current-repo tab)
+     (main-content tab route-match)]))
 
-      (mobile-header/header tab login?)
-
-      (mobile-left-sidebar/left-sidebar)
-
-      ;; bottom tabs
-      (when-not (mobile-util/native-ios?)
-        (ui-silk/app-silk-tabs))
-
-      (ui-component/keep-keyboard-virtual-input)
-      (ui-component/install-notifications)
-      (ui-component/install-modals)
-
-      (shui-toaster/install-toaster)
-      (shui-dialog/install-modals)
-      (shui-popup/install-popups)
-      (modal/blocks-modal)
-      (popup/popup)))))
+(defonce hidden-input
+  [:input
+   {:id mobile-util/mobile-keyboard-anchor-id
+    :type "text"}])
 
 (rum/defc main < rum/reactive
   []
   (let [current-repo (state/sub :git/current-repo)
-        login? (and (state/sub :auth/id-token)
-                    (user-handler/logged-in?))
-        show-action-bar? (state/sub :mobile/show-action-bar?)]
-    [:<>
-     (app current-repo {:login? login?})
+        show-action-bar? (state/sub :mobile/show-action-bar?)
+        {:keys [open? content-fn opts]} (rum/react mobile-state/*popup-data)
+        show-popup? (and open? content-fn)
+        route-match (state/sub :route-match)]
+    [:main#app-container-wrapper.ls-fold-button-on-right
+     [:div#app-container {:class (when show-popup? "invisible")}
+      [:div#main-container.flex.flex-1.overflow-x-hidden
+       (app current-repo route-match)]]
+     (when show-popup?
+       [:div.ls-layer
+        (popup/popup opts content-fn)])
      (editor-toolbar/mobile-bar)
      (when show-action-bar?
-       (selection-toolbar/action-bar))]))
+       (selection-toolbar/action-bar))
+     (shui-popup/install-popups)
+     (ui-component/install-notifications)
+     (shui-toaster/install-toaster)
+     (shui-dialog/install-modals)
+     [:div.download
+      [:a#download.hidden]
+      [:a#download-as-transit-debug.hidden]
+      [:a#download-as-sqlite-db.hidden]
+      [:a#download-as-zip.hidden]]
+     hidden-input]))

@@ -409,7 +409,7 @@
         (swap! *txs-state concat [[:db/retract (:db/id block) :block/parent]
                                   [:db/retract (:db/id block) :block/order]
                                   [:db/retract (:db/id block) :block/page]])
-        (let [ids (cons (:db/id this) (ldb/get-block-full-children-ids db block-id))
+        (let [ids (cons (:db/id this) (ldb/get-block-full-children-ids db (:db/id block)))
               txs (map (fn [id] [:db.fn/retractEntity id]) ids)
               page-tx (let [block (d/entity db [:block/uuid block-id])]
                         (when (:block/pre-block? block)
@@ -791,7 +791,7 @@
       `update-timestamps?`: whether to update `blocks` timestamps.
     ``"
   [repo db blocks target-block {:keys [_sibling? keep-uuid? keep-block-order?
-                                       outliner-op replace-empty-target? update-timestamps?
+                                       outliner-op outliner-real-op replace-empty-target? update-timestamps?
                                        insert-template?]
                                 :as opts
                                 :or {update-timestamps? true}}]
@@ -810,7 +810,8 @@
                                       b)
                                      b)
                                 dissoc-keys (concat [:block/tx-id]
-                                                    (when (contains? #{:insert-template-blocks :paste} outliner-op)
+                                                    (when (and (contains? #{:insert-template-blocks :paste} outliner-op)
+                                                               (not (contains? #{:paste-text} outliner-real-op)))
                                                       [:block/refs]))]
                             (apply dissoc b' dissoc-keys))
                           b))
@@ -979,7 +980,7 @@
                        (not (ldb/page? block))
                        (assoc :block/page target-page))]
             children-page-tx (when (and not-same-page? (not (ldb/page? block)))
-                               (let [children-ids (ldb/get-block-full-children-ids db (:block/uuid block))]
+                               (let [children-ids (ldb/get-block-full-children-ids db (:db/id block))]
                                  (keep (fn [id]
                                          (let [child (d/entity db id)]
                                            (when-not (ldb/page? child)

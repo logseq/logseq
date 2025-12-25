@@ -241,7 +241,7 @@
      (state/exit-editing-and-set-selected-blocks! [cell])
      (set-focus-timeout! (js/setTimeout #(.focus cell) 100)))))
 
-(rum/defc ^:large-vars/cleanup-todo block-title
+(rum/defc ^:large-vars/cleanup-todo block-title < rum/static
   "Used on table view"
   [block* {:keys [create-new-block width row property]}]
   (let [*ref (hooks/use-ref nil)
@@ -352,7 +352,9 @@
                      (if (or (some #(= (:db/ident %) :block/tags) properties) (not add-tags-column?))
                        properties
                        (conj properties (db/entity :block/tags)))
-                     (remove nil?))
+                     (remove (fn [property]
+                               (or (nil? property)
+                                   (contains? #{:logseq.property/hide?} (:db/ident property))))))
         property-keys (set (map :db/ident properties'))]
     (->> (concat
           [{:id :select
@@ -811,8 +813,7 @@
 
 (defn- click-cell
   [node]
-  (when-let [trigger (or (dom/sel1 node ".jtrigger")
-                         (dom/sel1 node ".table-block-title"))]
+  (when-let [trigger (dom/sel1 node ".jtrigger")]
     (.click trigger)))
 
 (defn navigate-to-cell
@@ -989,13 +990,15 @@
 (rum/defc table-row < rum/reactive db-mixins/query
   [table row props option]
   (let [block (db/sub-block (:db/id row))
-        row' (some->
-              (if (:block.temp/load-status block) block row)
-              (update :block/tags (fn [tags]
-                                    (keep (fn [tag]
-                                            (when-let [id (:db/id tag)]
-                                              (db/entity id)))
-                                          tags))))]
+        block' (if (contains? #{:self :full} (:block.temp/load-status block)) block row)
+        row' (when block'
+               (-> block'
+                   (update :block/tags (fn [tags]
+                                         (keep (fn [tag]
+                                                 (when-let [id (:db/id tag)]
+                                                   (db/entity id)))
+                                               tags)))
+                   (assoc :block.temp/refs-count (:block.temp/refs-count row))))]
     (table-row-inner table row' props option)))
 
 (rum/defc search
@@ -1989,16 +1992,50 @@
 
       (when db-based? (filter-properties view-entity columns table option))
 
-      (search input {:on-change set-input!
-                     :set-input! set-input!})
+      [:div.view-action-search
+       (search input {:on-change set-input!
+                      :set-input! set-input!})]
 
       (when db-based?
-        [:div.text-muted-foreground.text-sm
-         (pv/property-value view-entity (db/entity :logseq.property.view/type) {})])
+        [:div.view-action-type.text-muted-foreground.text-sm
+         (pv/property-value view-entity (db/entity :logseq.property.view/type) {:icon? true})])
 
       (when db-based? (more-actions view-entity columns table option))
 
       (when (and db-based? add-new-object!) (new-record-button table view-entity))]]))
+
+(rum/defc group-item
+  [view-entity table' group group-by-property value option view-opts {:keys [list-view? group-by-page? readable-property-value]}]
+  (let [title [:div
+               {:class (when-not list-view? "my-2")}
+               (cond
+                 group-by-page?
+                 (if value
+                   (let [c (state/get-component :block/page-cp)]
+                     (c {:disable-preview? true} value))
+                   [:div.text-muted-foreground.text-sm
+                    "Pages"])
+
+                 (some? value)
+                 (let [icon (pu/get-block-property-value value :logseq.property/icon)]
+                   [:div.flex.flex-row.gap-1.items-center
+                    (when icon (icon-component/icon icon {:color? true}))
+                    (readable-property-value value)])
+                 :else
+                 (str "No " (:block/title group-by-property)))]
+        body-fn (fn []
+                  (let [render (view-cp view-entity
+                                        (assoc table' :rows group)
+                                        (assoc option
+                                                                      ;; disabled virtualization for nested view
+                                               :disable-virtualized? true)
+                                        view-opts)]
+                    (if (and list-view? (not (util/mobile?)))
+                      [:div.-ml-2 render]
+                      render)))]
+    (if (util/mobile?)
+      [:div.flex.flex-1.flex-col  title (body-fn)]
+      (ui/foldable title body-fn {:title-trigger? false}))))
 
 (rum/defc ^:large-vars/cleanup-todo view-inner < rum/static
   [view-entity {:keys [view-parent data full-data set-data! columns add-new-object! foldable-options input set-input! sorting set-sorting! filters set-filters! display-type group-by-property-ident config] :as option*}
@@ -2119,36 +2156,14 @@
                                                                        :else
                                                                        (str %))
                                         group-by-page? (or (= :block/page group-by-property-ident)
-                                                           (and (not db-based?) (contains? #{:linked-references :unlinked-references} display-type)))]
+                                                           (and (not db-based?) (contains? #{:linked-references :unlinked-references} display-type)))
+                                        key (str (:db/id view-entity) "-group-idx-" idx)]
                                     (rum/with-key
-                                      (ui/foldable
-                                       [:div
-                                        {:class (when-not list-view? "my-2")}
-                                        (cond
-                                          group-by-page?
-                                          (if value
-                                            (let [c (state/get-component :block/page-cp)]
-                                              (c {:disable-preview? true} value))
-                                            [:div.text-muted-foreground.text-sm
-                                             "Pages"])
-
-                                          (some? value)
-                                          (let [icon (pu/get-block-property-value value :logseq.property/icon)]
-                                            [:div.flex.flex-row.gap-1.items-center
-                                             (when icon (icon-component/icon icon {:color? true}))
-                                             (readable-property-value value)])
-                                          :else
-                                          (str "No " (:block/title group-by-property)))]
-                                       (fn []
-                                         (let [render (view-cp view-entity
-                                                               (assoc table' :rows group)
-                                                               (assoc option
-                                                                      ;; disabled virtualization for nested view
-                                                                      :disable-virtualized? true)
-                                                               view-opts)]
-                                           (if list-view? [:div.-ml-2 render] render)))
-                                       {:title-trigger? false})
-                                      (str (:db/id view-entity) "-group-idx-" idx))))}
+                                      (group-item view-entity table' group group-by-property value option view-opts
+                                                  {:list-view? list-view?
+                                                   :group-by-page? group-by-page?
+                                                   :readable-property-value readable-property-value})
+                                      key)))}
                  disable-virtualized?)])
              (view-cp view-entity table
                       (assoc option

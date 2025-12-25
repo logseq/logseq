@@ -31,7 +31,6 @@
   (when enable-sync?
     (w/wait-for "button#rtc-sync" {:timeout 3000})
     (w/click "button#rtc-sync"))
-  (w/click "button:not([disabled]):text(\"Submit\")")
   (when enable-sync?
     (input-e2ee-password)
     (w/wait-for "button.cloud.on.idle" {:timeout 20000}))
@@ -59,6 +58,15 @@
                              (format "div[data-testid='logseq_db_%s']" graph-name)
                              refresh-all-remote-graphs))
 
+(defn remove-local-graph
+  [graph-name]
+  (wait-for-remote-graph graph-name)
+  (let [action-btn
+        (.first (w/-query (format "div[data-testid='logseq_db_%s'] .graph-action-btn" graph-name)))]
+    (w/click action-btn)
+    (w/click ".delete-local-graph-menu-item")
+    (w/click "div[role='alertdialog'] button:text('ok')")))
+
 (defn remove-remote-graph
   [graph-name]
   (wait-for-remote-graph graph-name)
@@ -69,11 +77,11 @@
     (w/click "div[role='alertdialog'] button:text('ok')")))
 
 (defn switch-graph
-  [to-graph-name wait-sync?]
+  [to-graph-name wait-sync? need-input-password?]
   (goto-all-graphs)
   (w/click (.last (w/-query (format "div[data-testid='logseq_db_%1$s'] span:has-text('%1$s')" to-graph-name))))
   (when wait-sync?
-    (input-e2ee-password)
+    (when need-input-password? (input-e2ee-password))
     (w/wait-for "button.cloud.on.idle" {:timeout 20000}))
   (assert/assert-graph-loaded?))
 

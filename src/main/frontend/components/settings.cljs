@@ -241,25 +241,31 @@
      [:div {:style {:text-align "right"}}
       (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-wide-mode))])])
 
-(defn editor-font-family-row [t font]
+(defn editor-font-family-row [t {:keys [type global]}]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "font_family"}
     (t :settings-page/editor-font)]
-   [:div.col-span-2.flex.gap-2
-    (for [t [:default :serif :mono]
-          :let [t (name t)
-                tt (string/capitalize t)
-                active? (= font t)]]
-      (shui/button
-       {:variant :secondary
-        :class (when active? " border-primary border-[2px]")
-        :style {:width "4.4rem"}
-        :on-click #(state/set-editor-font! t)}
-       [:span.flex.flex-col
-        {:class (str "ls-font-" t)}
-        [:strong "Ag"]
-        [:small tt]]))]])
+   [:div.flex.flex-col.col-span-2
+    [:div.flex.gap-2
+     (for [t [:default :serif :mono]
+           :let [t (name t)
+                 tt (string/capitalize t)
+                 active? (= (or type "default") t)]]
+       (shui/button
+        {:variant :secondary
+         :class (when active? " border-primary border-[2px]")
+         :style {:width "4.4rem"}
+         :on-click #(state/set-editor-font! {:type t})}
+        [:span.flex.flex-col
+         {:class (str "ls-font-" t)}
+         [:strong "Ag"]
+         [:small tt]]))]
+    [:div.pt-3
+     [:label.w-full.flex.items-center.cursor-pointer
+      (shui/checkbox {:checked (boolean global)
+                      :on-checked-change #(state/set-editor-font! {:global %})})
+      [:span.pl-1.text-sm.opacity-70 "Set as global font family"]]]]])
 
 (rum/defcs switch-spell-check-row < rum/reactive
   [state t]
@@ -850,12 +856,10 @@
                (file-sync-handler/set-sync-diff-merge-enabled! (not enabled?)))
              true))
 
-(defn sync-switcher-row [repo enabled?]
+(defn sync-switcher-row [enabled?]
   (row-with-button-action
-   (cond-> {:left-label (t :settings-page/sync)
-            :action (sync-enabled-switcher enabled?)}
-     (config/db-based-graph? repo)
-     (merge {:action nil :desc "Not available yet for database graphs"}))))
+   {:left-label (t :settings-page/sync)
+    :action (sync-enabled-switcher enabled?)}))
 
 (defn sync-diff-merge-switcher-row [enabled?]
   (row-with-button-action
@@ -1124,7 +1128,7 @@
           (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/beta-features)]]
         [:div.flex.flex-col.gap-4
          {:class (when-not user-handler/alpha-or-beta-user? "opacity-50 pointer-events-none cursor-not-allowed")}
-         (sync-switcher-row current-repo enable-sync?)
+         (sync-switcher-row enable-sync?)
          (when (and enable-sync? (not (config/db-based-graph? current-repo)))
            (sync-diff-merge-switcher-row enable-sync-diff-merge?))
          [:div.text-sm
@@ -1264,7 +1268,7 @@
   []
   (let [user-uuid (user-handler/user-uuid)
         token (state/get-auth-id-token)
-        refresh-token (state/get-auth-refresh-token)
+        refresh-token (str (state/get-auth-refresh-token))
         [rsa-key-pair set-rsa-key-pair!] (hooks/use-state :not-inited)
         [init-key-err set-init-key-err!] (hooks/use-state nil)
         [get-key-err set-get-key-err!] (hooks/use-state nil)
@@ -1308,7 +1312,7 @@
           (let [on-submit (fn []
                             (-> (p/do!
                                  (set-reset-password-status! "Updating password ...")
-                                 (state/<invoke-db-worker :thread-api/reset-e2ee-password
+                                 (state/<invoke-db-worker :thread-api/change-e2ee-password
                                                           token refresh-token user-uuid current-password new-password)
                                  (set-reset-password-status! "Password updated successfully!"))
                                 (p/catch (fn [e]
@@ -1356,7 +1360,7 @@
                         (when (and new-val (not (storage/get ::storage-spec/http-server-enabled)))
                           (storage/set ::storage-spec/http-server-enabled true))
                         (-> (ipc/ipc :server/set-config {:mcp-enabled? new-val})
-                            ;; Dont start server if it's not running
+                            ;; Don't start server if it's not running
                             (p/then #(when (= "running" (state/sub [:electron/server :status]))
                                        (p/let [_ (p/delay 1000)]
                                          (ipc/ipc :server/do :restart))))
@@ -1403,7 +1407,8 @@
          :succ (constantly nil)))
      [])
     [:div.panel-wrap
-     (mcp-server-row t)
+     (when (util/electron?)
+       (mcp-server-row t))
      [:div.flex.flex-col.gap-2.mt-4
       [:div.font-medium.text-muted-foreground.text-sm "Semantic search:"]
 

@@ -178,32 +178,51 @@
 
 (defonce remove-nil? (partial remove nil?))
 
+(defn- not-clause? [c]
+  (and (seq? c) (= 'not (first c))))
+
+(defn- distinct-preserve-order [xs]
+  (let [seen (volatile! #{})]
+    (reduce (fn [acc x]
+              (if (contains? @seen x)
+                acc
+                (do (vswap! seen conj x)
+                    (conj acc x))))
+            [] xs)))
+
 (defn- build-and-or-not
   [e {:keys [current-filter vars] :as env} level fe]
   (let [raw-clauses (map (fn [form]
                            (build-query form (assoc env :current-filter fe) (inc level)))
                          (rest e))
+
+        ;; preserve order (no hash-order surprises)
         clauses (->> raw-clauses
                      (map :query)
                      remove-nil?
-                     (distinct))
+                     (distinct-preserve-order))
+
+        ;; for (and ...), ensure any (not ...) comes AFTER positive binders
+        clauses (if (= fe 'and)
+                  (let [[nots others] (reduce (fn [[ns os] c]
+                                                (if (not-clause? c)
+                                                  [(conj ns c) os]
+                                                  [ns (conj os c)]))
+                                              [[] []]
+                                              clauses)]
+                    (concat others nots))
+                  clauses)
+
         nested-and? (and (= fe 'and) (= current-filter 'and))]
+
     (when (seq clauses)
-      (let [result (build-and-or-not-result
-                    fe clauses current-filter nested-and?)
-            vars' (set/union (set @vars) (collect-vars result))
-            query (cond
-                    nested-and?
-                    result
-
-                    (and (zero? level) (contains? #{'and 'or} fe))
-                    result
-
-                    (and (= 'not fe) (some? current-filter))
-                    result
-
-                    :else
-                    [result])]
+      (let [result (build-and-or-not-result fe clauses current-filter nested-and?)
+            vars'  (set/union (set @vars) (collect-vars result))
+            query  (cond
+                     nested-and? result
+                     (and (zero? level) (contains? #{'and 'or} fe)) result
+                     (and (= 'not fe) (some? current-filter)) result
+                     :else [result])]
         (reset! vars vars')
         {:query query
          :rules (distinct (mapcat :rules raw-clauses))}))))
@@ -343,13 +362,38 @@
   [e {:keys [db-graph? private-property?]}]
   (let [k (if db-graph? (->db-keyword-property (nth e 1)) (->file-keyword-property (nth e 1)))
         v (nth e 2)
-        v' (if db-graph? (->db-property-value k v) (->file-property-value v))]
+        v' (if db-graph? (->db-property-value k v) (->file-property-value v))
+        property (when (qualified-keyword? k)
+                   (db-utils/entity k))
+        ref-type? (= :db.type/ref (:db/valueType property))]
     (if db-graph?
-      (if private-property?
-        {:query (list 'private-simple-query-property '?b k v')
-         :rules [:private-simple-query-property]}
-        {:query (list 'simple-query-property '?b k v')
-         :rules [:simple-query-property]})
+      (let [default-value (if ref-type?
+                            (when-let [value (:logseq.property/default-value property)]
+                              (or (:block/title value)
+                                  (:logseq.property/value value)))
+                            (:logseq.property/scalar-default-value property))
+            default-value? (and (some? v') (= default-value v'))
+            rule (if private-property?
+                   (cond
+                     (and ref-type? default-value?)
+                     :private-ref-property-with-default
+                     ref-type?
+                     :private-ref-property
+                     default-value?
+                     :private-scalar-property-with-default
+                     :else
+                     :private-scalar-property)
+                   (cond
+                     (and ref-type? default-value?)
+                     :ref-property-with-default
+                     ref-type?
+                     :ref-property
+                     default-value?
+                     :scalar-property-with-default
+                     :else
+                     :scalar-property))]
+        {:query (list (symbol (name rule)) '?b k v')
+         :rules [rule]})
       {:query (list 'property '?b k v')
        :rules [:property]})))
 
@@ -662,35 +706,69 @@ Some bindings in this fn:
               (string/replace #"^#" "#tag ")
               (string/replace tag-placeholder "#")))))
 
+(defn- lvar? [x]
+  (and (symbol? x) (= \? (first (name x)))))
+
+(defn- collect-vars-by-polarity
+  "Returns {:pos #{?vars} :neg #{?vars}}.
+   Vars inside (not ...) are counted as negative."
+  [form]
+  (let [pos (volatile! #{})
+        neg (volatile! #{})]
+    (letfn [(walk* [x positive?]
+              (cond
+                (lvar? x)
+                (vswap! (if positive? pos neg) conj x)
+
+                (and (seq? x) (= 'not (first x)))
+                (doseq [c (rest x)] (walk* c false))
+
+                (sequential? x)
+                (doseq [c x] (walk* c positive?))
+
+                (map? x)
+                (do (doseq [k (keys x)] (walk* k positive?))
+                    (doseq [v (vals x)] (walk* v positive?)))
+
+                :else nil))]
+      (walk* form true)
+      {:pos @pos :neg @neg})))
+
 (defn- add-bindings!
   [q {:keys [db-graph?]}]
-  (let [forms (set (flatten q))
-        syms ['?b '?p 'not]
-        [b? p? not?] (-> (set/intersection (set syms) forms)
-                         (map syms))]
-    (cond
-      not?
-      (cond
-        (and b? p?)
-        (concat [['?b :block/uuid] ['?p :block/name] ['?b :block/page '?p]] q)
+  (let [{:keys [pos neg]} (collect-vars-by-polarity q)
 
-        b?
-        (if db-graph?
-          ;; This keeps built-in properties from showing up in not results.
-          ;; May need to be revisited as more class and property filters are explored
-          (concat [['?b :block/uuid] '[(missing? $ ?b :logseq.property/built-in?)]] q)
-          (concat [['?b :block/uuid]] q))
+        appears?      (fn [v] (or (contains? pos v) (contains? neg v)))
+        needs-domain? (fn [v] (and (appears? v) (not (contains? pos v))))
 
-        p?
-        (concat [['?p :block/name]] q)
+        b-need? (needs-domain? '?b)
+        p-need? (needs-domain? '?p)
 
-        :else
-        q)
+        ;; CASE 1: both needed → link them, do NOT enumerate all blocks
+        bindings
+        (cond
+          (and b-need? p-need?)
+          [['?b :block/page '?p]]
 
-      (and b? p?)
-      (concat [['?b :block/page '?p]] q)
+          ;; CASE 2: only ?b needed → last-resort domain (true global negation)
+          b-need?
+          (if db-graph?
+            [['?b :block/uuid]
+             '[(missing? $ ?b :logseq.property/built-in?)]]
+            [['?b :block/uuid]])
 
-      :else
+          ;; CASE 3: only ?p needed
+          p-need?
+          [['?p :block/name]]
+
+          ;; CASE 4: both already positive → optional link (cheap + useful)
+          (and (contains? pos '?b) (contains? pos '?p))
+          [['?b :block/page '?p]]
+
+          :else
+          nil)]
+    (if (seq bindings)
+      (concat bindings q)   ;; IMPORTANT: bindings FIRST
       q)))
 
 (defn simplify-query

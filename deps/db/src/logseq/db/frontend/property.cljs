@@ -15,6 +15,10 @@
    :rtc/ignore-attr-when-init-download true
    :rtc/ignore-attr-when-syncing true})
 
+(def ^:private property-ignore-rtc-upload-sync
+  {:rtc/ignore-attr-when-init-upload true
+   :rtc/ignore-attr-when-syncing true})
+
 ;; Main property vars
 ;; ==================
 
@@ -44,7 +48,7 @@
      :logseq.property/type {:title "Property type"
                             :schema {:type :keyword
                                      :hide? true}}
-     :logseq.property/hide? {:title "Hide this property"
+     :logseq.property/hide? {:title "Hide this property or page"
                              :schema {:type :checkbox
                                       :hide? true}}
      :logseq.property/public? {:title "Property public?"
@@ -487,6 +491,16 @@
                                            :hide? true
                                            :public? false}
                                   :queryable? true}
+     :logseq.property.asset/external-url {:title "External URL"
+                                          :schema {:type :string
+                                                   :hide? false
+                                                   :public? true}
+                                          :queryable? true}
+     :logseq.property.asset/external-file-name {:title "External file name"
+                                                :schema {:type :string
+                                                         :hide? true
+                                                         :public? false}
+                                                :queryable? false}
      :logseq.property.asset/size {:title "File Size"
                                   :schema {:type :raw-number
                                            :hide? true
@@ -516,7 +530,9 @@
                                              {:type :map
                                               :hide? true
                                               :public? false}
-                                             :rtc property-ignore-rtc}
+                                             :properties
+                                             {:logseq.property/description "Metadata of asset in remote storage"}
+                                             :rtc property-ignore-rtc-upload-sync}
      :logseq.property.asset/resize-metadata {:title "Asset resize metadata"
                                              :schema {:type :map
                                                       :hide? true

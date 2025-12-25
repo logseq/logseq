@@ -55,7 +55,7 @@
   (let [width  (or width (min (- (util/get-width) 96)
                               560))
         height (or height (int (* width (/ 315 560))))
-        url (str "https://www.youtube.com/embed/" id "?enablejsapi=1")
+        url (str "https://logseq.com/youtube.html?v=" id "&enablejsapi=1")
         url (if start
               (str url "&start=" start)
               url)]
@@ -63,7 +63,8 @@
      {:id                (str "youtube-player-" id)
       :allow-full-screen "allowfullscreen"
       :allow             "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-      :referrerpolicy    "strict-origin-when-cross-origin"
+      :referrer-policy   "strict-origin-when-cross-origin"
+      :referer           "https://logseq.com"
       :frame-border      "0"
       :src               url
       :height            height

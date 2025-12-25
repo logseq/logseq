@@ -4,6 +4,7 @@
             [cljs.pprint :as pprint]
             [clojure.string :as string]
             [datascript.core :as d]
+            [electron.ipc :as ipc]
             [frontend.components.onboarding.setups :as setups]
             [frontend.components.repo :as repo]
             [frontend.components.svg :as svg]
@@ -330,16 +331,14 @@
                    [:dt.m-0 [:strong (str k)]]
                    [:dd {:class "text-warning"} v]])))]
      :warning false))
-  (let [{:keys [errors datom-count entities]} (db-validate/validate-db! db)]
+  (let [{:keys [errors]} (db-validate/validate-local-db! db {:verbose true})]
     (if errors
       (do
-        (log/error :import-errors {:msg (str "Import detected " (count errors) " invalid block(s):")
-                                   :counts (assoc (db-validate/graph-counts db entities) :datoms datom-count)})
+        (log/error :import-errors {:msg (str "Import detected " (count errors) " invalid block(s):")})
         (pprint/pprint errors)
         (notification/show! (str "Import detected " (count errors) " invalid block(s). These blocks may be buggy when you interact with them. See the javascript console for more.")
                             :warning false))
-      (log/info :import-valid {:msg "Valid import!"
-                               :counts (assoc (db-validate/graph-counts db entities) :datoms datom-count)}))))
+      (log/info :import-valid {:msg "Valid import!"}))))
 
 (defn- show-notification [{:keys [msg level ex-data]}]
   (if (= :error level)
@@ -364,7 +363,7 @@
               bytes-array (js/Uint8Array. buffer)
               checksum (db-asset/<get-file-array-buffer-checksum buffer)
               asset-id (d/squuid)
-              asset-name (gp-exporter/asset-path->name (:path file))
+              asset-name (some-> (:path file) gp-exporter/asset-path->name)
               assets-dir (path/path-join repo-dir common-config/local-assets-dir)
               asset-type (db-asset/asset-path->type (:path file))
               {:keys [with-edn-content pdf-annotation?]} (buffer-handler bytes-array)]
@@ -399,6 +398,9 @@
                    :notify-user show-notification
                    :set-ui-state state/set-state!
                    :<read-file (fn <read-file [file] (.text (:file-object file)))
+                   :<get-file-stat (fn <get-file-stat [path]
+                                     (when (util/electron?)
+                                       (ipc/ipc :stat path)))
                    ;; config file options
                    :default-config config/config-default-content
                    :<save-config-file (fn save-config-file [_ path content]
@@ -410,11 +412,11 @@
                    :<read-and-copy-asset #(read-and-copy-asset repo (config/get-repo-dir repo) %1 %2 %3)
                    ;; doc file options
                    ;; Write to frontend first as writing to worker first is poor ux with slow streaming changes
-                   :export-file (fn export-file [conn m opts]
-                                  (let [tx-reports
-                                        (gp-exporter/add-file-to-db-graph conn (:file/path m) (:file/content m) opts)]
-                                    (doseq [tx-report tx-reports]
-                                      (db-browser/transact! repo (:tx-data tx-report) (:tx-meta tx-report)))))}
+                   :<export-file (fn <export-file [conn m opts]
+                                   (p/let [tx-reports
+                                           (gp-exporter/<add-file-to-db-graph conn (:file/path m) (:file/content m) opts)]
+                                     (doseq [tx-report tx-reports]
+                                       (db-browser/transact! repo (:tx-data tx-report) (:tx-meta tx-report)))))}
           {:keys [files import-state]} (gp-exporter/export-file-graph repo db-conn config-file *files options)]
     (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
     (state/set-state! :graph/importing nil)

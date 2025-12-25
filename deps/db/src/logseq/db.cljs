@@ -103,17 +103,18 @@
                     {:tx-data tx-data}))))
 
 (defn- transact-sync
-  [repo-or-conn tx-data tx-meta]
+  [conn tx-data tx-meta]
   (try
-    (let [conn repo-or-conn
-          db @conn
+    (let [db @conn
           db-based? (entity-plus/db-based-graph? db)]
       (if (and db-based?
-               (not (:reset-conn! tx-meta))
-               (not (:initial-db? tx-meta))
-               (not (:rtc-download-graph? tx-meta))
-               (not (:skip-validate-db? tx-meta false))
-               (not (:logseq.graph-parser.exporter/new-graph? tx-meta)))
+               (not
+                (or (:batch-temp-conn? @conn)
+                    (:rtc-download-graph? tx-meta)
+                    (:reset-conn! tx-meta)
+                    (:initial-db? tx-meta)
+                    (:skip-validate-db? tx-meta false)
+                    (:logseq.graph-parser.exporter/new-graph? tx-meta))))
         (let [tx-report* (d/with db tx-data tx-meta)
               pipeline-f @*transact-pipeline-fn
               tx-report (if-let [f pipeline-f] (f tx-report*) tx-report*)
@@ -132,8 +133,13 @@
               ;; notify ui
               (when-let [f @*transact-invalid-callback]
                 (f tx-report errors))
-              (throw (ex-info "DB write failed with invalid data" {:tx-data tx-data
-                                                                   :pipeline-tx-data (:tx-data tx-report)}))))
+              (throw (ex-info "DB write failed with invalid data" {:tx-meta tx-meta
+                                                                   :tx-data tx-data
+                                                                   :errors errors
+                                                                   :pipeline-tx-data (map
+                                                                                      (fn [[e a v t]]
+                                                                                        [e a v t])
+                                                                                      (:tx-data tx-report))}))))
           tx-report)
         (d/transact! conn tx-data tx-meta)))
     (catch :default e
@@ -164,7 +170,7 @@
                                        (empty? m)))))
          delete-blocks-tx (when-not (string? repo-or-conn)
                             (delete-blocks/update-refs-history-and-macros @repo-or-conn tx-data tx-meta))
-         tx-data (distinct (concat tx-data delete-blocks-tx))]
+         tx-data (concat tx-data delete-blocks-tx)]
 
      ;; Ensure worker can handle the request sequentially (one by one)
      ;; Because UI assumes that the in-memory db has all the data except the last one transaction
@@ -177,6 +183,28 @@
        (if-let [transact-fn @*transact-fn]
          (transact-fn repo-or-conn tx-data tx-meta)
          (transact-sync repo-or-conn tx-data tx-meta))))))
+
+(defn transact-with-temp-conn!
+  "Validate db and store once for a batch transaction, the `temp` conn can still load data from disk,
+  however it can't write to the disk."
+  [conn tx-meta batch-tx-fn]
+  (let [temp-conn (d/conn-from-db @conn)
+        *batch-tx-data (volatile! [])]
+    ;; can read from disk, write is disallowed
+    (swap! temp-conn assoc
+           :skip-store? true
+           :batch-temp-conn? true)
+    (d/listen! temp-conn ::temp-conn-batch-tx
+               (fn [{:keys [tx-data]}]
+                 (vswap! *batch-tx-data into tx-data)))
+    (batch-tx-fn temp-conn)
+    (let [tx-data @*batch-tx-data]
+      (d/unlisten! temp-conn ::temp-conn-batch-tx)
+      (reset! temp-conn nil)
+      (vreset! *batch-tx-data nil)
+      (when (seq tx-data)
+        ;; transact tx-data to `conn` and validate db
+        (transact! conn tx-data tx-meta)))))
 
 (def page? common-entity-util/page?)
 (def internal-page? entity-util/internal-page?)

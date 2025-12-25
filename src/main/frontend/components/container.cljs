@@ -406,7 +406,7 @@
   (let [current-repo (state/sub :git/current-repo)
         theme (state/sub :ui/theme)
         accent-color (some-> (state/sub :ui/radix-color) (name))
-        editor-font (some-> (state/sub :ui/editor-font) (name))
+        editor-font (state/sub :ui/editor-font)
         system-theme? (state/sub :ui/system-theme?)
         light? (= "light" (state/sub :ui/theme))
         sidebar-open? (state/sub :ui/sidebar-open?)

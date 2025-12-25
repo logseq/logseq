@@ -7,6 +7,7 @@
             [logseq.db.common.sqlite-cli :as sqlite-cli]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.outliner.db-pipeline :as db-pipeline]
             [promesa.core :as p]))
 
 (defn- print-success [import-map]
@@ -24,6 +25,7 @@
     (cli-util/error "Command missing required option 'graph'"))
   (if (fs/existsSync (cli-util/get-graph-path graph))
     (let [conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))
+          _ (db-pipeline/add-listener conn)
           _ (cli-util/ensure-db-graph-for-command @conn)
           {:keys [init-tx block-props-tx misc-tx]}
           (sqlite-export/build-import import-map @conn {})

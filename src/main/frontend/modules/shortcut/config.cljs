@@ -609,10 +609,6 @@
                 :inactive (not (util/electron?))
                 :fn commit/show-commit-modal!}
 
-   :dev/fix-broken-graph {:binding []
-                          :db-graph? true
-                          :fn #(repo-handler/fix-broken-graph! (state/get-current-repo))}
-
    :dev/gc-graph {:binding []
                   :inactive (not (state/developer-mode?))
                   :fn #(repo-handler/gc-graph! (state/get-current-repo))}
@@ -896,7 +892,6 @@
           :dev/show-page-ast
           :dev/replace-graph-with-db-file
           :dev/validate-db
-          :dev/fix-broken-graph
           :dev/gc-graph
           :dev/rtc-stop
           :dev/rtc-start
@@ -1096,7 +1091,6 @@
      :dev/show-page-ast
      :dev/replace-graph-with-db-file
      :dev/validate-db
-     :dev/fix-broken-graph
      :dev/gc-graph
      :dev/rtc-stop
      :dev/rtc-start

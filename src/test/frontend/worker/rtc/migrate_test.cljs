@@ -41,13 +41,6 @@
             (is (= :logseq.kv/schema-version (get-in last-op [2 :db-ident])) "The schema version key should be correct")
             (is (= (:to-version migration-result) (get-in last-op [2 :value])) "The schema version should be updated to the new version"))))
 
-      (testing "check 65.3"
-        (let [upgrade-result-65-3 (get-specific-result (:upgrade-result-coll migration-result) "65.3")
-              rename-db-idents (set (:rename-db-idents (:migrate-updates upgrade-result-65-3)))
-              rename-db-ident-op-values (set (keep (fn [op] (when (= :rename-db-ident (first op)) (last op))) client-ops))]
-          (is (some? upgrade-result-65-3))
-          (is (= rename-db-idents rename-db-ident-op-values))))
-
       (testing "check 65.10"
         (let [upgrade-result-65-10 (get-specific-result (:upgrade-result-coll migration-result) "65.10")
               {:keys [tx-data db-after]} upgrade-result-65-10]

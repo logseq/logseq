@@ -39,6 +39,12 @@
    [:db/cardinality {:optional true} :keyword]
    [:db/valueType {:optional true} :keyword]
    [:db/index {:optional true} :boolean]
+   ;; TODO: remove :block/name special custom-decode later
+   [:block/name {:optional true} [:string {:decode/custom
+                                           (fn [v] (try (ldb/read-transit-str v)
+                                                        (catch :default _
+                                                          (log/warn :non-transit-block-name v)
+                                                          v)))}]]
    [:malli.core/default [:map-of :keyword
                          [:any {:decode/custom
                                 (fn [x] ; convert db-id to db-id-string(as temp-id)
@@ -419,6 +425,7 @@
   (let [{:keys [remote-t init-tx-data tx-data]}
         (remote-all-blocks->tx-data+t all-blocks graph-uuid)]
     (m/sp
+      (rtc-log-and-state/clean-cached-graph-local-and-remote-t graph-uuid)
       (rtc-log-and-state/update-local-t graph-uuid remote-t)
       (rtc-log-and-state/update-remote-t graph-uuid remote-t)
       (c.m/<?
@@ -514,7 +521,9 @@
                                                           :message "transacting graph data to local db"
                                                           :graph-uuid graph-uuid})
             (let [all-blocks (ldb/read-transit-str body)
-                  blocks* (m/? (task--decrypt-blocks graph-uuid (:blocks all-blocks)))
+                  blocks (:blocks all-blocks)
+                  e2ee-graph? (boolean (some (fn [block] (= :logseq.kv/graph-rtc-e2ee? (:db/ident block))) blocks))
+                  blocks* (if e2ee-graph? (m/? (task--decrypt-blocks graph-uuid blocks)) blocks)
                   all-blocks* (assoc all-blocks :blocks blocks*)]
               (worker-state/set-rtc-downloading-graph! true)
               (m/? (new-task--transact-remote-all-blocks! all-blocks* repo graph-uuid))

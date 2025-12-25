@@ -1,81 +1,168 @@
 (ns mobile.bottom-tabs
-  "iOS bottom tabs"
-  (:require ["stay-liquid" :refer [TabsBar]]
-            [cljs-bean.core :as bean]
+  "Native bottom tabs"
+  (:require [cljs-bean.core :as bean]
+            [clojure.string :as string]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
+            [mobile.navigation :as mobile-nav]
+            [mobile.search :as mobile-search]
             [mobile.state :as mobile-state]
             [promesa.core :as p]))
 
-(defn- tab-options
-  [theme visible?]
-  {:visible visible?
-   :initialId "home"
-   :items [{:id "home"
-            :title "Journals"
-            :systemIcon "house"}
+;; Capacitor plugin instance (nil if native side hasn't shipped it yet).
+(def ^js liquid-tabs
+  (.. js/Capacitor -Plugins -LiquidTabsPlugin))
 
-           {:id "search"
-            :title "Search"
-            :systemIcon "magnifyingglass"}
+(defn configure-tabs
+  "Configure the native tab bar.
 
-           {:id "quick-add"
-            :title "Quick add"
-            :systemIcon "plus"}
+   `tabs` is a vector of maps:
+   [{:id \"home\"   :title \"Home\"   :system-image \"house\"   :role \"normal\"}
+    {:id \"search\" :title \"Search\" :system-image \"magnifyingglass\" :role \"search\"}]"
+  [tabs]
+  (when liquid-tabs
+    ;; Returns the underlying JS Promise from Capacitor
+    (.configureTabs
+     liquid-tabs
+     (bean/->js {:tabs tabs}))))
 
-           {:id "settings"
-            :title "Settings"
-            :systemIcon "gear"}]
-   :selectedIconColor (if (= "light" theme)
-                        "rgb(0, 105, 182)"
-                        "#8ec2c2")
-   :unselectedIconColor "#8E8E93"
-   :titleOpacity 0.7})
+(defn select!
+  "Programmatically select a tab by id. Returns a JS Promise."
+  [id]
+  (when liquid-tabs
+    (.selectTab
+     liquid-tabs
+     #js {:id id})))
 
-(defn- configure-tabs
-  [theme visible?]
-  (.configure ^js TabsBar
-              (bean/->js
-               (tab-options theme visible?))))
+(defn update-native-search-results!
+  "Send native search result list to the iOS plugin."
+  [results]
+  (when (and (util/capacitor?) liquid-tabs (.-updateNativeSearchResults liquid-tabs))
+    (.updateNativeSearchResults liquid-tabs (clj->js {:results results}))))
+
+(defn add-tab-selected-listener!
+  "Listen to native tab selection.
+
+   `f` receives the tab id string and a boolean indicating reselect.
+   Returns the Capacitor listener handle; call `(.remove handle)` to unsubscribe."
+  [f]
+  (when (and (util/capacitor?) liquid-tabs)
+    (.addListener
+     liquid-tabs
+     "tabSelected"
+     (fn [^js data]
+      ;; data is like { id: string, reselected?: boolean }
+       (when-let [id (.-id data)]
+         (f id (boolean (.-reselected data))))))))
+
+(defn add-search-listener!
+  "Listen to native search query changes from the SwiftUI search tab.
+
+   `f` receives a query string.
+   Returns the Capacitor listener handle; call `(.remove handle)` to unsubscribe."
+  [f]
+  (when (and (util/capacitor?) liquid-tabs)
+    (.addListener
+     liquid-tabs
+     "searchChanged"
+     (fn [data]
+         ;; data is like { query: string }
+       (f (.-query data))))))
+
+(defn add-search-result-item-listener!
+  []
+  (when (and (util/capacitor?) liquid-tabs)
+    (.addListener
+     liquid-tabs
+     "openSearchResultBlock"
+     (fn [data]
+       (when-let [id (.-id data)]
+         (when-not (string/blank? id)
+           (route-handler/redirect-to-page! id {:push (mobile-util/native-android?)})))))))
+
+(defn add-keyboard-hack-listener!
+  "Listen for Backspace or Enter while the invisible keyboard field is focused."
+  []
+  (when (and (util/capacitor?) liquid-tabs)
+    (.addListener
+     liquid-tabs
+     "keyboardHackKey"
+     (fn [data]
+       ;; data is like { key: string }
+       (when-let [k (.-key data)]
+         (case k
+           "backspace"
+           (editor-handler/delete-block-when-zero-pos! nil)
+           "enter"
+           (when-let [input (state/get-input)]
+             (let [value (.-value input)]
+               (when (string/blank? value)
+                 (editor-handler/keydown-new-block-handler nil))))
+           nil))))))
+
+(defonce add-tab-listeners!
+  (when (and (util/capacitor?) liquid-tabs)
+    (let [*current-tab (atom nil)]
+      (add-tab-selected-listener!
+       (fn [tab reselected?]
+         (cond
+           reselected?
+           (do
+             (when (mobile-util/native-android?)
+               (mobile-nav/pop-to-root! tab))
+             (mobile-state/set-tab! tab)
+             (when (= "home" tab)
+               (util/scroll-to-top false)))
+
+           (not= @*current-tab tab)
+           (do
+             (reset! *current-tab tab)
+             (mobile-state/set-tab! tab))
+
+           (= @*current-tab tab "home")
+           (util/scroll-to-top false))))
+
+      (add-watch mobile-state/*tab ::select-tab
+                 (fn [_ _ _old new]
+                   (when (and new (not= @*current-tab new))
+                     (reset! *current-tab new)
+                     (select! new)))))
+
+    (add-search-listener!
+     (fn [q]
+       ;; wire up search handler
+       (js/console.log "Native search query" q)
+       (reset! mobile-state/*search-input q)
+       (p/let [result (mobile-search/search q)]
+         (update-native-search-results! result))))
+    (add-search-result-item-listener!)
+    (add-keyboard-hack-listener!)))
 
 (defn configure
   []
-  (p/do!
-   (configure-tabs (:ui/theme @state/state) true)
-   (.addListener ^js TabsBar
-                 "selected"
-                 (fn [^js data]
-                   (let [tab (.-id data)
-                         ;; interaction (.-interaction data)
-                         ]
-                     (when-not (= tab "quick-add")
-                       (mobile-state/set-tab! tab))
-                     (case tab
-                       "home"
-                       (util/scroll-to-top false)
-                       "quick-add"
-                       (editor-handler/show-quick-add)
-                       ;; TODO: support longPress detection
-                       ;; (if (= "longPress" interaction)
-                       ;;   (state/pub-event! [:mobile/start-audio-record])
-                       ;;   (editor-handler/show-quick-add))
-                       nil)))))
-
-  ;; Update selected icon color according to current theme
-  (add-watch state/state
-             :theme-changed
-             (fn [_ _ old new]
-               (when-not (= (:ui/theme old) (:ui/theme new))
-                 (configure-tabs (:ui/theme new) true)))))
-
-(defn hide!
-  []
-  (when (mobile-util/native-ios?)
-    (.hide ^js TabsBar)))
-
-(defn show!
-  []
-  (when (mobile-util/native-ios?)
-    (.show ^js TabsBar)))
+  (configure-tabs
+   (cond->
+    [{:id "home"
+      :title "Home"
+      :systemImage "house"
+      :role "normal"}
+     {:id "graphs"
+      :title "Graphs"
+      :systemImage "app.background.dotted"
+      :role "normal"}
+     {:id "capture"
+      :title "Capture"
+      :systemImage "tray"
+      :role "normal"}
+     {:id "go to"
+      :title "Go To"
+      :systemImage "square.stack.3d.down.right"
+      :role "normal"}]
+     (mobile-util/native-android?)
+     (conj {:id "search"
+            :title "Search"
+            :systemImage "search"
+            :role "search"}))))

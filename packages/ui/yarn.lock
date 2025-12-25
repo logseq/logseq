@@ -3786,11 +3786,6 @@
   resolved "https://registry.yarnpkg.com/@radix-ui/rect/-/rect-1.1.1.tgz#78244efe12930c56fd255d7923865857c41ac8cb"
   integrity sha512-HPwpGIzkl28mWyZqG52jiqDJ12waP11Pa1lGoiyUkIEuMLBP0oeK/C89esbXrxsky5we7dfd8U58nm0SgAWpVw==
 
-"@silk-hq/components@^0.9.10":
-  version "0.9.10"
-  resolved "https://registry.yarnpkg.com/@silk-hq/components/-/components-0.9.10.tgz#ed6baa898b4f36ce0e5ecadabfecef748546db74"
-  integrity sha512-dr6NRdGR2vovh4Uv27IhnkvpcUwHR9D7YZLCxTE6fyl4Zb6K6cGUlWVo3b3tgfCHVyirvrRvqWOF2nxMVlmVXg==
-
 "@sinclair/typebox@^0.27.8":
   version "0.27.8"
   resolved "https://registry.yarnpkg.com/@sinclair/typebox/-/typebox-0.27.8.tgz#6667fac16c436b5434a387a34dedb013198f6e6e"

@@ -1,15 +1,12 @@
 (ns frontend.modules.outliner.pipeline
   (:require [clojure.string :as string]
             [datascript.core :as d]
-            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.react :as react]
-            [frontend.fs :as fs]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.common.path :as path]
             [logseq.db :as ldb]))
 
 (defn- update-editing-block-title-if-changed!
@@ -37,7 +34,8 @@
         (let [ids (map (fn [id] (:db/id (db/entity [:block/uuid id]))) deleted-block-uuids)]
           (state/sidebar-remove-deleted-block! ids))
         (when-let [block-id (state/get-current-page)]
-          (when (contains? (set (map str deleted-block-uuids)) block-id)
+          (when (and (contains? (set (map str deleted-block-uuids)) block-id)
+                     (not (util/mobile?)))
             (let [parent (:block/parent (ldb/get-page (db/get-db) block-id))]
               (if parent
                 (route-handler/redirect-to-page! (:block/uuid parent))
@@ -78,21 +76,16 @@
             (when-not (= (:client-id tx-meta) (:client-id @state/state))
               (update-editing-block-title-if-changed! tx-data))
 
-            (when (seq deleted-assets)
-              (doseq [asset deleted-assets]
-                (fs/unlink! repo (path/path-join (config/get-current-repo-assets-root) (str (:block/uuid asset) "." (:ext asset))) {})))
+            ;; (when (seq deleted-assets)
+            ;;   (doseq [asset deleted-assets]
+            ;;     (fs/unlink! repo (path/path-join (config/get-current-repo-assets-root) (str (:block/uuid asset) "." (:ext asset))) {})))
 
             (state/set-state! :editor/start-pos nil)
 
             (when-not (:graph/importing @state/state)
 
-              (let [edit-block-f @(:editor/edit-block-fn @state/state)
-                    delete-blocks? (and (= (:outliner-op tx-meta) :delete-blocks)
-                                        (:local-tx? tx-meta)
-                                        (not (:mobile-action-bar? tx-meta)))]
+              (let [edit-block-f @(:editor/edit-block-fn @state/state)]
                 (state/set-state! :editor/edit-block-fn nil)
-                (when delete-blocks?
-                  (util/mobile-keep-keyboard-open))
                 (when-not (:skip-refresh? tx-meta)
                   (react/refresh! repo affected-keys))
                 (when edit-block-f

@@ -126,14 +126,17 @@
       (m/?
        (->> (fn [[asset-uuid url]]
               (m/sp
-                (let [r (c.m/<?
-                         (worker-state/<invoke-main-thread :thread-api/rtc-download-asset
-                                                           repo exported-aes-key (str asset-uuid)
-                                                           (get asset-uuid->asset-type asset-uuid) url))]
-                  (when-let [edata (:ex-data r)]
-                    ;; if download-url return 404, ignore this asset
-                    (when (not= 404 (:status (:data edata)))
-                      (throw (ex-info "download asset failed" r)))))))
+                (try
+                  (c.m/<?
+                   (worker-state/<invoke-main-thread :thread-api/rtc-download-asset
+                                                     repo exported-aes-key (str asset-uuid)
+                                                     (get asset-uuid->asset-type asset-uuid) url))
+                  (catch :default e
+                    (when-let [edata (ex-data e)]
+                      ;; if download-url return 404, ignore this asset
+                      (when (not= 404 (:status (:data edata)))
+                        (throw (ex-info "download asset error(not= 404)" e)))) ()))))
+
             (c.m/concurrent-exec-flow 5 (m/seed asset-uuid->url))
             (m/reduce (constantly nil)))))))
 
@@ -146,21 +149,31 @@
        (->> (fn [[asset-uuid url]]
               (m/sp
                 (let [[asset-type checksum] (get asset-uuid->asset-metadata asset-uuid)
-                      _ (prn :xxx exported-aes-key)
-                      r (c.m/<?
-                         (worker-state/<invoke-main-thread :thread-api/rtc-upload-asset
-                                                           repo exported-aes-key (str asset-uuid)
-                                                           asset-type checksum url))]
-                  (when (:ex-data r)
-                    (throw (ex-info "upload asset failed" r)))
-                  ;; asset might be deleted by the user before uploaded successfully
-                  (when (d/entity @conn [:block/uuid asset-uuid])
-                    (ldb/transact! conn
-                                   [{:block/uuid asset-uuid
-                                     :logseq.property.asset/remote-metadata {:checksum checksum :type asset-type}}]
-                                   ;; Don't generate rtc ops again, (block-ops & asset-ops)
-                                   {:persist-op? false}))
-                  (client-op/remove-asset-op repo asset-uuid))))
+                      r (try
+                          (c.m/<?
+                           (worker-state/<invoke-main-thread :thread-api/rtc-upload-asset
+                                                             repo exported-aes-key (str asset-uuid)
+                                                             asset-type checksum url))
+                          nil
+                          (catch :default e e))]
+                  (case (:type (ex-data r))
+                    :rtc.exception/read-asset-failed ;asset not found, ignore
+                    (client-op/remove-asset-op repo asset-uuid)
+
+                    :rtc.exception/upload-asset-failed  ;upload to remote failed, maybe try later
+                    nil
+
+                    ;; else
+                    (do
+                      ;; asset might be deleted by the user before uploaded successfully
+                      (when (d/entity @conn [:block/uuid asset-uuid])
+                        (ldb/transact!
+                         conn
+                         [{:block/uuid asset-uuid
+                           :logseq.property.asset/remote-metadata {:checksum checksum :type asset-type}}]
+                         ;; Don't generate rtc ops again, (block-ops & asset-ops)
+                         {:persist-op? false}))
+                      (client-op/remove-asset-op repo asset-uuid))))))
             (c.m/concurrent-exec-flow 3 (m/seed asset-uuid->url))
             (m/reduce (constantly nil)))))))
 
@@ -268,7 +281,8 @@
   (d/q '[:find [(pull ?b [:block/uuid
                           :logseq.property.asset/type
                           :logseq.property.asset/size
-                          :logseq.property.asset/checksum])
+                          :logseq.property.asset/checksum
+                          :logseq.property.asset/remote-metadata])
                 ...]
          :where
          [?b :block/uuid]
@@ -281,7 +295,13 @@
     (let [local-all-asset-file-paths
           (c.m/<? (worker-state/<invoke-main-thread :thread-api/get-all-asset-file-paths repo))
           local-all-asset-file-uuids (set (map (comp parse-uuid path/file-stem) local-all-asset-file-paths))
-          local-all-asset-uuids (set (map :block/uuid (get-all-asset-blocks @conn)))]
+          local-all-asset-uuids (into
+                                 #{}
+                                 ;; Only if the asset-block contains :logseq.property.asset/remote-metadata
+                                 ;; does the asset exist remotely.
+                                 (comp (filter :logseq.property.asset/remote-metadata)
+                                       (map :block/uuid))
+                                 (get-all-asset-blocks @conn))]
       (when-let [asset-update-ops
                  (not-empty
                   (map (fn [asset-uuid] {:op :update-asset :block/uuid asset-uuid})

@@ -93,27 +93,20 @@
 #?(:cljs (defonce ^js node-path utils/nodePath))
 #?(:cljs (defonce ^js sem-ver semver))
 #?(:cljs (defonce ^js full-path-extname pathCompleteExtname))
-#?(:cljs
-   (defn mobile-page-scroll
-     ([] (some-> (js/document.querySelector ".app-silk-index-scroll-content") (.-parentNode)))
-     ([el] (if el
-             (some-> (or (.closest el ".app-silk-scroll-content")
-                         (.closest el ".app-silk-index-scroll-content")) (.-parentNode))
-             (mobile-page-scroll)))))
 
 #?(:cljs (defn app-scroll-container-node
            ([]
-            (if (capacitor?)
-              (mobile-page-scroll)
-              (gdom/getElement "main-content-container")))
+            (or
+             (gdom/getElement "main-content-container")
+             (gdom/getElement "app-main-home")))
            ([el]
-            (if (capacitor?)
-              (mobile-page-scroll el)
-              (if (some-> el (.closest "#main-content-container"))
-                (app-scroll-container-node)
-                (or
-                 (gdom/getElementByClass "sidebar-item-list")
-                 (app-scroll-container-node)))))))
+            (if (or
+                 (some-> el (.closest "#main-content-container"))
+                 (some-> el (.closest "#app-main-home")))
+              (app-scroll-container-node)
+              (or
+               (gdom/getElementByClass "sidebar-item-list")
+               (app-scroll-container-node))))))
 #?(:cljs (defonce el-visible-in-viewport? utils/elementIsVisibleInViewport))
 #?(:cljs (defonce convert-to-roman utils/convertToRoman))
 #?(:cljs (defonce convert-to-letters utils/convertToLetters))
@@ -1371,13 +1364,44 @@
        (set! (.-src image) data-url))))
 
 #?(:cljs
-   (defn write-blob-to-clipboard
-     [blob]
-     (->> blob
-          (js-obj (.-type blob))
-          (js/ClipboardItem.)
-          (array)
-          (js/navigator.clipboard.write))))
+   (def native-clipboard (gobj/get CapacitorClipboard "Clipboard")))
+
+#?(:cljs
+   (do
+     ;; Helper: Blob -> data URL (returns a JS Promise)
+     (defn blob->data-url [blob]
+       (js/Promise.
+        (fn [resolve reject]
+          (let [reader (js/FileReader.)]
+            (set! (.-onload reader)
+                  (fn [_e]
+                    ;; result is a "data:<mime>;base64,..." string
+                    (resolve (.-result reader))))
+            (set! (.-onerror reader)
+                  (fn [_e]
+                    (reject (.-error reader))))
+            (.readAsDataURL reader blob)))))
+
+     (defn write-blob-to-clipboard [blob]
+       (if native-clipboard
+         ;; 1) Native (Capacitor) path – expects a data URL
+         (-> (blob->data-url blob)
+             (.then (fn [data-url]
+                        ;; Your Capacitor plugin signature: { image: <data-url> }
+                      (.write native-clipboard #js {:image data-url})))
+             (.then (fn []
+                      (js/console.log "Copied via native clipboard")))
+             (.catch (fn [err]
+                       (js/console.error "Native clipboard failed" err))))
+
+         ;; 2) Web Clipboard API path (desktop browsers etc.)
+         (let [item (js/ClipboardItem.
+                     (js-obj (.-type blob) blob))]
+           (-> (.write (.-clipboard js/navigator) (array item))
+               (.then (fn []
+                        (js/console.log "Copied via web clipboard")))
+               (.catch (fn [err]
+                         (js/console.error "Web clipboard failed" err)))))))))
 
 #?(:cljs
    (defn copy-image-to-clipboard
@@ -1459,23 +1483,6 @@ Arg *stop: atom, reset to true to stop the loop"
      [^js target]
      (when target
        (some-> target (.querySelector ".CodeMirror") (.-CodeMirror)))))
-
-#?(:cljs
-   (defn get-keep-keyboard-input-el
-     ([] (get-keep-keyboard-input-el ""))
-     ([t]
-      (js/document.getElementById (str "keep-keyboard-open-input" t)))))
-
-#?(:cljs
-   (defn mobile-keep-keyboard-open
-     ([]
-      (mobile-keep-keyboard-open true))
-     ([schedule?]
-      (when (mobile?)
-        (let [f #(when-let [node (or (get-keep-keyboard-input-el "in-modal")
-                                     (get-keep-keyboard-input-el))]
-                   (.focus node))]
-          (if schedule? (schedule f) (f)))))))
 
 #?(:cljs
    (defn rtc-test?

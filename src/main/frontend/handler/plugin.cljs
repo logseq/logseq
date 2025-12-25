@@ -71,8 +71,8 @@
   [theme]
   (when theme
     (cond-> theme
-            (util/electron?)
-            (update :url #(some-> % (string/replace-first "assets://" "file://"))))))
+      (util/electron?)
+      (update :url #(some-> % (string/replace-first "assets://" "file://"))))))
 
 (defn load-plugin-preferences
   []
@@ -108,7 +108,7 @@
                      (if-let [res (and res (bean/->clj res))]
                        (let [pkgs (:packages res)
                              pkgs (if (util/electron?) pkgs
-                                                       (some->> pkgs (filterv #(or (true? (:web %)) (not (true? (:effect %)))))))]
+                                      (some->> pkgs (filterv #(or (true? (:web %)) (not (true? (:effect %)))))))]
                          (state/set-state! :plugin/marketplace-pkgs pkgs)
                          (resolve pkgs))
                        (reject nil)))]
@@ -131,8 +131,8 @@
                           :plugin/marketplace-stats
                           (into {} (map (fn [[k stat]]
                                           [k (assoc stat
-                                               :total_downloads
-                                               (reduce (fn [a b] (+ a (get b 2))) 0 (:releases stat)))])
+                                                    :total_downloads
+                                                    (reduce (fn [a b] (+ a (get b 2))) 0 (:releases stat)))])
                                         res)))
                          (resolve nil))
                        (reject nil)))]
@@ -293,8 +293,8 @@
 (defn- normalize-plugin-metadata
   [metadata]
   (cond-> metadata
-          (not (string? (:author metadata)))
-          (assoc :author (or (get-in metadata [:author :name]) ""))))
+    (not (string? (:author metadata)))
+    (assoc :author (or (get-in metadata [:author :name]) ""))))
 
 (defn register-plugin
   [plugin-metadata]
@@ -821,8 +821,8 @@
                     :theme theme?
                     :web-pkg (cond-> package
 
-                                     (not github?)
-                                     (assoc :installedFromUserWebUrl url))}}))
+                               (not github?)
+                               (assoc :installedFromUserWebUrl url))}}))
       url)))
 
 ;; components
@@ -972,13 +972,13 @@
 (defn setup!
   "setup plugin core handler"
   []
-  (when (and config/lsp-enabled? (not (util/mobile?)))
+  (when config/lsp-enabled?
     (setup-global-apis-for-web!)
     (init-plugins!)))
 
 (comment
- {:pending (count (:plugin/updates-pending @state/state))
-  :auto-checking? (boolean (:plugin/updates-auto-checking? @state/state))
-  :coming (count (:plugin/updates-coming @state/state))
-  :installing (:plugin/installing @state/state)
-  :downloading? (boolean (:plugin/updates-downloading? @state/state))})
+  {:pending (count (:plugin/updates-pending @state/state))
+   :auto-checking? (boolean (:plugin/updates-auto-checking? @state/state))
+   :coming (count (:plugin/updates-coming @state/state))
+   :installing (:plugin/installing @state/state)
+   :downloading? (boolean (:plugin/updates-downloading? @state/state))})

@@ -336,18 +336,7 @@ These tasks are specific to database graphs. For these tasks there is a one time
 ```sh
   $ cd deps/db && yarn install && cd ../outliner && yarn install && cd ../graph-parser && yarn install && cd ../..
 ```
-
-* `dev:validate-db` - Validates a DB graph's datascript schema
-
-  ```sh
-  # One or more graphs can be validated e.g.
-  $ bb dev:validate-db test-db schema
-  Read graph test-db with 1572 datoms, 220 entities and 13 properties
-  Valid!
-  Read graph schema with 26105 datoms, 2320 entities and 3168 properties
-  Valid!
-  ```
-
+* `dev:db-cli` - Run a CLI command from deps/db using latest deps/db code
 * `dev:db-query` - Query a DB graph
 
   ```sh

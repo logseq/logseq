@@ -1,5 +1,6 @@
 (ns frontend.components.assets
   (:require
+   [cljs-bean.core :as bean]
    [clojure.set :refer [difference]]
    [clojure.string :as string]
    [electron.ipc :as ipc]
@@ -7,7 +8,10 @@
    [frontend.config :as config]
    [frontend.context.i18n :refer [t]]
    [frontend.handler.assets :as assets-handler]
+   [frontend.handler.db-based.property :as db-property-handler]
+   [frontend.handler.editor :as editor-handler]
    [frontend.handler.notification :as notification]
+   [frontend.handler.route :as route-handler]
    [frontend.state :as state]
    [frontend.ui :as ui]
    [frontend.util :as util]
@@ -221,3 +225,82 @@
        [:div.pt-4
         [:h2.font-bold.opacity-80 "Selected directories:"]
         (alias-directories)])]))
+
+(rum/defc edit-external-url-form
+  [asset-block {:keys [url title on-saved]}]
+  (let [[saving? set-saving?] (rum/use-state false)
+        create? (nil? asset-block)]
+    [:form.pt-3.flex.flex-col.gap-2
+     {:on-submit (fn [^js e]
+                   (.preventDefault e)
+                   (let [^js form-data (js/FormData. (.-currentTarget e))
+                         repo (state/get-current-repo)
+                         title (.get form-data "title")
+                         src (.get form-data "src")
+                         err-handle (fn [^js e]
+                                      (js/console.error e)
+                                      (notification/show! (str e)))]
+                     (if create?
+                       (-> (do (set-saving? true)
+                               (editor-handler/db-based-save-assets! repo [{:title title :src src}]))
+                           (p/then (fn [res]
+                                     (when-let [asset-block (some-> (seq res) (first))]
+                                       (when on-saved (on-saved asset-block)))))
+                           (p/catch err-handle)
+                           (p/finally #(set-saving? false)))
+                       ;; update asset block
+                       (-> (do (set-saving? true)
+                               (p/all
+                                [(editor-handler/save-block-if-changed! asset-block title)
+                                 (p/let [src (util/trim-safe src)
+                                         checksum (assets-handler/get-file-checksum src)]
+                                   (db-property-handler/set-block-properties!
+                                    (:db/id asset-block)
+                                    {:logseq.property.asset/external-url src
+                                     :logseq.property.asset/checksum checksum}))]))
+                           (p/then #(when on-saved (on-saved asset-block false)))
+                           (p/catch err-handle)
+                           (p/finally #(set-saving? false))))))}
+     [:label [:span.block.pb-2.text-sm.opacity-60 "Asset title:"]
+      (shui/input {:small true :default-value title :name "title"})]
+     [:label [:span.block.pb-2.text-sm.opacity-60 "Asset external url:"]
+      [:span.flex.items-center.gap-2
+       (shui/input {:small true :default-value url :name "src"})
+       (when (util/electron?)
+         (shui/button
+          {:size "sm" :variant :secondary :class "h-8"
+           :on-click (fn [^js e]
+                       (.preventDefault e)
+                       (p/let [^js ret (ipc/ipc :showOpenDialog {:properties ["openFile"]
+                                                                 :title "Select Asset File"})]
+                         (let [file-path (some-> ret (bean/->clj) :filePaths (first))]
+                           (when (not (string/blank? file-path))
+                             (let [^js input (-> (.-target e) (.closest "form") (.querySelector "input[name='src']"))]
+                               (set! (.-value input) file-path))))))}
+          "Select from disk"))]]
+     [:div.flex.justify-end.pt-3
+      (ui/button (if create? "Create" "Save") {:disabled saving?})]]))
+
+(rum/defc edit-external-url-content
+  [asset-block pdf-current]
+  [:div.edit-external-url-content
+   (let [on-saved! (fn [asset-block update?]
+                     (when-let [uuid' (and pdf-current (:block/uuid asset-block))]
+                       (when pdf-current (state/set-current-pdf! nil))
+                       (when (not update?) (route-handler/redirect-to-page! uuid')))
+                     (shui/dialog-close!))]
+     (if asset-block
+       [:div.pb-2.-mt-2
+        (let [url (:logseq.property.asset/external-url asset-block)
+              title (:block/title asset-block)]
+          (edit-external-url-form asset-block {:url url :title title :on-saved on-saved!}))]
+
+       (when-let [url (:url pdf-current)]
+         [:div.pb-2
+          (shui/alert
+           {:variant "warning"}
+           (shui/alert-description
+            "Creating a local asset from an external one. PDF annotations require a local asset to work properly."))
+
+          (let [title (util/node-path.basename url)]
+            (edit-external-url-form asset-block {:url url :title title :on-saved on-saved!}))])))])

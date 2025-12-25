@@ -10,7 +10,7 @@
 
 (defmethod events/handle :rtc/decrypt-user-e2ee-private-key [[_ encrypted-private-key]]
   (let [private-key-promise (p/deferred)
-        refresh-token (state/get-auth-refresh-token)]
+        refresh-token (str (state/get-auth-refresh-token))]
     (shui/dialog-close-all!)
     (->
      (p/let [{:keys [password]} (state/<invoke-db-worker :thread-api/get-e2ee-password refresh-token)

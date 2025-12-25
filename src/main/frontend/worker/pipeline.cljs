@@ -345,7 +345,8 @@
 
 (defn- revert-disallowed-changes
   [{:keys [tx-meta tx-data db-before db-after]}]
-  (when-not (rtc-tx-or-download-graph? tx-meta)
+  (when-not (or (rtc-tx-or-download-graph? tx-meta)
+                (:fix-db? tx-meta))
     (let [built-in-page? (fn [id]
                            (let [block (d/entity db-after id)]
                              (and (contains? sqlite-create-graph/built-in-pages-names
@@ -356,7 +357,7 @@
                       (let [[e a v _t added] datom]
                         (when added
                           (cond
-                          ;; using built-in pages as tags
+                            ;; using built-in pages as tags
                             (and (= a :block/tags) (built-in-page? v))
                             [[:db/retract v :db/ident]
                              [:db/retract v :logseq.property.class/extends]
@@ -517,8 +518,13 @@
         (or from-disk? new-graph?)
         {:tx-report tx-report}
 
+        ;; Rebuild refs for a new DB graph using EDN or when EDN data is imported.
+        ;; Ref rebuilding happens here because transact-pipeline doesn't rebuild refs
+        ;; for these cases
         (or (::gp-exporter/new-graph? tx-meta)
-            (and (::sqlite-export/imported-data? tx-meta) (:import-db? tx-meta)))
+            (and (::sqlite-export/imported-data? tx-meta)
+                 ;; Undo and redo must be handled by default in order to work
+                 (not (:undo? tx-meta)) (not (:redo? tx-meta))))
         (invoke-hooks-for-imported-graph conn tx-report)
 
         :else

@@ -49,7 +49,7 @@
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.common.view :as db-view]
             [logseq.db.frontend.class :as db-class]
-            [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.sqlite.gc :as sqlite-gc]
@@ -105,44 +105,6 @@
 (defn- <import-db
   [^js pool data]
   (.importDb ^js pool repo-path data))
-
-(defn- get-all-datoms-from-sqlite-db
-  [db]
-  (some->> (.exec db #js {:sql "select * from kvs"
-                          :rowMode "array"})
-           bean/->clj
-           (mapcat
-            (fn [[_addr content _addresses]]
-              (let [content' (sqlite-util/transit-read content)
-                    datoms (when (map? content')
-                             (:keys content'))]
-                datoms)))
-           distinct
-           (map (fn [[e a v t]]
-                  (d/datom e a v t)))))
-
-(defn- rebuild-db-from-datoms!
-  "Persistent-sorted-set has been broken, used addresses can't be found"
-  [datascript-conn sqlite-db]
-  (let [datoms (get-all-datoms-from-sqlite-db sqlite-db)
-        db (d/init-db [] db-schema/schema
-                      {:storage (storage/storage @datascript-conn)})
-        db (d/db-with db
-                      (map (fn [d]
-                             [:db/add (:e d) (:a d) (:v d) (:t d)]) datoms))]
-    (prn :debug :rebuild-db-from-datoms :datoms-count (count datoms))
-    (worker-util/post-message :notification ["The SQLite db will be exported to avoid any data-loss." :warning false])
-    (worker-util/post-message :export-current-db [])
-    (.exec sqlite-db #js {:sql "delete from kvs"})
-    (d/reset-conn! datascript-conn db)))
-
-(defn- fix-broken-graph
-  [graph]
-  (let [conn (worker-state/get-datascript-conn graph)
-        sqlite-db (worker-state/get-sqlite-conn graph)]
-    (when (and conn sqlite-db)
-      (rebuild-db-from-datoms! conn sqlite-db)
-      (worker-util/post-message :notification ["The graph has been successfully rebuilt." :success false]))))
 
 (defn upsert-addr-content!
   "Upsert addr+data-seq. Update sqlite-cli/upsert-addr-content! when making changes"
@@ -283,8 +245,19 @@
             conn (common-sqlite/get-storage-conn storage schema)
             _ (db-fix/check-and-fix-schema! repo conn)
             _ (when datoms
-                (let [data (map (fn [datom]
-                                  [:db/add (:e datom) (:a datom) (:v datom)]) datoms)]
+                (let [eid->datoms (group-by :e datoms)
+                      {properties true non-properties false} (group-by
+                                                              (fn [[_eid datoms]]
+                                                                (boolean
+                                                                 (some (fn [datom] (and (= (:a datom) :db/ident)
+                                                                                        (db-property/property? (:v datom))))
+                                                                       datoms)))
+                                                              eid->datoms)
+                      datoms (concat (mapcat second properties)
+                                     (mapcat second non-properties))
+                      data (map (fn [datom]
+                                  [:db/add (:e datom) (:a datom) (:v datom)])
+                                datoms)]
                   (d/transact! conn data {:initial-db? true})))
             client-ops-conn (when-not @*publishing? (common-sqlite/get-storage-conn
                                                      client-ops-storage
@@ -426,7 +399,9 @@
 (def-thread-api :thread-api/q
   [repo inputs]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (apply d/q (first inputs) @conn (rest inputs))))
+    (worker-util/profile
+     (str "Datalog query: " inputs)
+     (apply d/q (first inputs) @conn (rest inputs)))))
 
 (def-thread-api :thread-api/datoms
   [repo & args]
@@ -750,10 +725,6 @@
   [repo]
   (get-all-page-titles-with-cache repo))
 
-(def-thread-api :thread-api/fix-broken-graph
-  [graph]
-  (fix-broken-graph graph))
-
 (def-thread-api :thread-api/reset-file
   [repo file-path content opts]
   ;; (prn :debug :reset-file :file-path file-path :opts opts)
@@ -931,7 +902,8 @@
                                           [["Invalid DB!"] :error])
     (worker-util/post-message :capture-error
                               {:error (ex-info "Invalid DB" {})
-                               :payload {:errors (str errors)}})))
+                               :payload {}
+                               :extra {:errors (str errors)}})))
 
 (defn init
   "web worker entry"

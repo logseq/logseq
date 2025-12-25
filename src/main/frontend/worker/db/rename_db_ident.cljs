@@ -23,8 +23,8 @@
                                             [:block/uuid db-ident-or-block-uuid]))
                          old-db-ident (:db/ident ent)]]
                (do (when (some? ent)
-                     (when-not (ldb/class? ent)
-                       (throw (ex-info "Only entities of class type support :rename-db-ident" {:ent (into {} ent)})))
+                     (when-not (or (ldb/class? ent) (ldb/property? ent))
+                       (throw (ex-info "Only entities of class or property type support :rename-db-ident" {:ent (into {} ent)})))
                      (swap! *rename-db-idents-coll conj rename-db-ident))
                    (cons {:db/id (:db/id ent) :db/ident new-db-ident}
                          (some->> old-db-ident

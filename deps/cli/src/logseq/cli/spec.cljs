@@ -17,8 +17,6 @@
                          :desc "Include timestamps in export"}
    :file {:alias :f
           :desc "File to save export"}
-   :catch-validation-errors? {:alias :c
-                              :desc "Catch validation errors for dev"}
    :exclude-namespaces {:alias :e
                         :coerce #{}
                         :desc "Namespaces to exclude from properties and classes"}
@@ -29,7 +27,11 @@
    :export-type {:alias :t
                  :coerce :keyword
                  :desc "Export type"
-                 :default :graph}})
+                 :default :graph}
+   :validate {:alias :v
+              :desc "(Dev) Validate export with a temp graph built on exported EDN"}
+   :catch-validation-errors? {:alias :c
+                              :desc "(Dev) Catch validation errors and still write invalid EDN"}})
 
 (def import-edn
   {:api-server-token {:alias :a
@@ -89,6 +91,5 @@
             :coerce []
             :require true
             :desc "Local graph(s) to validate"}
-   :closed {:alias :c
-            :default true
-            :desc "Validate entities have no extra keys"}})
+   :open-schema {:alias :o
+                 :desc "Validate with open schema to allow extra keys/attributes in an entity map"}})

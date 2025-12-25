@@ -1,3 +1,14 @@
+## 0.4.2
+* Add `--help` to all commands as an alternative to `help [command]`
+* Add `--validate` option to `export-edn` command
+* Fix cli can't run in CI environments
+* Fix `import-edn` and `mcp-server` commands not building refs for new or edited nodes
+
+## 0.4.1
+* Add `--open-schema` option to `validate` command
+* Fix `append` command fails
+* Fix `import-edn` command hangs on unexpected errors
+
 ## 0.4.0
 * BREAKING CHANGE: Commands that call local graphs are invoked with `-g` instead of as an argument e.g. `logseq search foo -g db-name` instead of `logseq search db-name foo`
 * Add `import-edn` command for local and in-app graphs

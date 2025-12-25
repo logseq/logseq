@@ -1,4 +1,6 @@
 .cp__user-login {
+  @apply px-1;
+
   span.opacity-50, a.opacity-60 {
     @apply opacity-80;
   }

@@ -27,6 +27,7 @@
   (shui/popup-hide!)
   (let [route-fn (if push rfe/push-state rfe/replace-state)]
     (route-fn to path-params query-params))
+
   ;; force return nil for usage in render phase of React
   nil)
 
@@ -88,7 +89,7 @@
                     (and (ldb/built-in? page) (ldb/private-built-in-page? page))))
          (notification/show! "Cannot go to an internal page." :warning)
          (if-let [source (and (not ignore-alias?) (db/get-alias-source-page (state/get-current-repo) (:db/id page)))]
-           (redirect-to-page! (:block/uuid source) opts)
+           (redirect-to-page! (:block/uuid source) (assoc opts :ignore-alias? true))
            (do
            ;; Always skip onboarding when loading an existing whiteboard
              (when-not new-whiteboard? (state/set-onboarding-whiteboard! true))

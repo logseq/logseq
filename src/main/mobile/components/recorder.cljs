@@ -5,6 +5,7 @@
             [cljs-time.local :as tl]
             [clojure.string :as string]
             [frontend.date :as date]
+            [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.handler.editor :as editor-handler]
             [frontend.mobile.util :as mobile-util]
@@ -12,6 +13,8 @@
             [frontend.util :as util]
             [goog.functions :as gfun]
             [lambdaisland.glogi :as log]
+            [logseq.common.config :as common-config]
+            [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [mobile.init :as init]
@@ -62,9 +65,12 @@
                                            {:formatter-str audio-file-format})
                                           "."))]
       (p/let [file (js/File. [blob] filename #js {:type (.-type blob)})
-              result (editor-handler/db-based-save-assets! (state/get-current-repo)
-                                                           [file]
-                                                           {:last-edit-block @*last-edit-block})
+              capture? (= "capture" @mobile-state/*tab)
+              insert-opts (cond->
+                           {:last-edit-block @*last-edit-block}
+                            capture?
+                            (assoc :save-to-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)))
+              result (editor-handler/db-based-save-assets! (state/get-current-repo) [file] insert-opts)
               asset-entity (first result)]
         (when (nil? asset-entity)
           (log/error ::empty-asset-entity {}))
@@ -116,7 +122,7 @@
            (.on "record-end" (fn [^js blob]
                                (when @*save?
                                  (save-asset-audio! blob @*transcribe?))
-                               (mobile-state/close-popup!)))
+                               (shui/popup-hide!)))
            (.on "record-progress" (gfun/throttle
                                    (fn [time]
                                      (when @*recorder
@@ -172,15 +178,15 @@
 
 (defn- show-recorder
   []
-  (mobile-state/set-popup! {:open? true
-                            :content-fn (fn [] (audio-recorder-aux))
-                            :opts {:id :ls-audio-record
-                                   :default-height 300}}))
+  (shui/popup-show! nil
+                    (fn [] (audio-recorder-aux))
+                    {:id :ls-audio-record
+                     :default-height 300}))
 
 (defn record!
   [& {:keys [save-to-today?]}]
   (let [editing-id (state/get-edit-input-id)
-        quick-add? (mobile-state/quick-add-open?)]
+        quick-add? (= "capture" @mobile-state/*tab)]
     (set-last-edit-block! nil)
     (if-not (string/blank? editing-id)
       (p/do!

@@ -255,18 +255,20 @@
           [:code (if util/mac? "Cmd+Enter" "Ctrl+Enter")]
           [:span " to display this tag inline instead of at the end of this node."]])])))
 
-(rum/defc page-search < rum/reactive
-  {:will-unmount (fn [state]
+(rum/defcs page-search < rum/reactive
+  {:init (fn [state]
+           (assoc state ::pos (state/get-editor-last-pos)))
+   :will-unmount (fn [state]
                    (reset! commands/*current-command nil)
                    state)}
   "Page or tag searching popup"
-  [id format]
+  [state id format]
   (let [action (state/sub :editor/action)
         db? (config/db-based-graph? (state/get-current-repo))
         embed? (and db? (= @commands/*current-command "Page embed"))
         tag? (= action :page-search-hashtag)
         db-tag? (and db? tag?)
-        pos (state/get-editor-last-pos)
+        pos (::pos state)
         input (gdom/getElement id)]
     (when input
       (let [current-pos (cursor/pos input)
@@ -382,9 +384,11 @@
                      (:block/title template))
       :class       "black"})))
 
-(rum/defc template-search < rum/reactive
-  [id _format]
-  (let [pos (state/get-editor-last-pos)
+(rum/defcs template-search < rum/reactive
+  {:init (fn [state]
+           (assoc state ::pos (state/get-editor-last-pos)))}
+  [state id _format]
+  (let [pos (::pos state)
         input (gdom/getElement id)]
     (when input
       (let [current-pos (cursor/pos input)
@@ -467,11 +471,13 @@
    [last-pos current-pos])
   [:<>])
 
-(rum/defc code-block-mode-picker < rum/reactive
-  [id format]
+(rum/defcs code-block-mode-picker < rum/reactive
+  {:init (fn [state]
+           (assoc state ::pos (state/get-editor-last-pos)))}
+  [state id format]
   (when-let [modes (some->> js/window.CodeMirror (.-modes) (js/Object.keys) (js->clj) (remove #(= "null" %)))]
     (when-let [^js input (gdom/getElement id)]
-      (let [pos          (state/get-editor-last-pos)
+      (let [pos          (::pos state)
             current-pos  (cursor/pos input)
             edit-content (or (state/sub-edit-content) "")
             q            (or (editor-handler/get-selected-text)
@@ -743,9 +749,9 @@
     (shui-editor-popups id format action nil)))
 
 (defn- editor-on-hide
-  [state type e]
+  [state type e editing-another-block?]
   (let [action (state/get-editor-action)
-        [_id config] (:rum/args state)]
+        [_opts _id config] (:rum/args state)]
     (cond
       (and (= type :esc) (editor-handler/editor-commands-popup-exists?))
       nil
@@ -768,12 +774,11 @@
       ;; exit editing mode
       :else
       (let [select? (= type :esc)]
-        (when (.closest (.-target e) ".block-content")
-          (util/mobile-keep-keyboard-open))
         (when-let [container (gdom/getElement "app-container")]
           (dom/remove-class! container "blocks-selection-mode"))
         (p/do!
-         (editor-handler/escape-editing {:select? select?})
+         (editor-handler/escape-editing {:select? select?
+                                         :editing-another-block? editing-another-block?})
          (some-> config :on-escape-editing
                  (apply [(str uuid) (= type :esc)])))))))
 
@@ -795,7 +800,12 @@
       {:node @(::ref state)
        :on-hide (fn [_state e type]
                   (when-not (= type :esc)
-                    (editor-on-hide state type e)))})))
+                    (let [target (.-target e)
+                          block-container (.closest target ".ls-block")
+                          editing-another-block? (and block-container
+                                                      (not (dom/has-class? block-container "block-add-button"))
+                                                      (gdom/contains block-container target))]
+                      (editor-on-hide state type e editing-another-block?))))})))
   (mixins/event-mixin setup-key-listener!)
   lifecycle/lifecycle
   [state {:keys [format block parent-block]} id config]
@@ -815,9 +825,10 @@
                                     (if-let [on-key-down (:on-key-down config)]
                                       (on-key-down e)
                                       (when (= (util/ekey e) "Escape")
-                                        (editor-on-hide state :esc e))))
+                                        (editor-on-hide state :esc e false))))
                :auto-focus true
-               :auto-capitalize "off"
+               :auto-capitalize (if (util/mobile?) "sentences" "off")
+               :auto-correct (if (util/mobile?) "true" "false")
                :class heading-class}
                (some? parent-block)
                (assoc :parentblockid (str (:block/uuid parent-block)))

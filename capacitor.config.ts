@@ -1,4 +1,5 @@
 import { CapacitorConfig } from '@capacitor/cli'
+import { KeyboardResize } from '@capacitor/keyboard'
 import * as fs from 'fs'
 
 const version = fs.readFileSync('static/package.json', 'utf8').match(/"version": "(.*?)"/)?.at(1) ?? '0.0.0'
@@ -27,7 +28,8 @@ const config: CapacitorConfig = {
     },
 
     Keyboard: {
-      resize: 'none'
+      resize: KeyboardResize.None,
+      resizeOnFullScreen: true,
     },
 
     SafeArea: {
@@ -41,11 +43,11 @@ const config: CapacitorConfig = {
     }
   },
   android: {
-    appendUserAgent: `Logseq/${version} (Android)`
+    appendUserAgent: `Logseq/${version} (Android)`,
   },
   ios: {
     scheme: 'Logseq',
-    appendUserAgent: `Logseq/${version} (iOS)`
+    appendUserAgent: `Logseq/${version} (iOS)`,
   }
 }
 

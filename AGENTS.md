@@ -1,5 +1,4 @@
 ## Repository Layout
-- Use clojure-mcp `clojure_inspect_project` to get project structure.
 - `src/`: Core source code
   - `src/main/`: The core logic of the application
     - `src/main/mobile/`: Mobile app code
@@ -21,10 +20,7 @@
 - Run single focused unit-test:
   - Add the `:focus` keyword to the test case: `(deftest ^:focus test-name ...)`
   - `bb dev:test -i focus`
-- Run e2e basic tests:
-  - `bb dev:e2e-basic-test`
-- Run e2e rtc extra tests:
-  - `bb dev:e2e-rtc-extra-test`
+- E2E tests files are located in `/clj-e2e`
 
 ## Common used cljs keywords
 - All commonly used ClojureScript keywords are defined using `logseq.common.defkeywords/defkeyword`.
@@ -37,16 +33,3 @@
 - Linters and unit-tests must pass
 - Check the review notes listed in `prompts/review.md`.
 
-# *IMPORTANT RULES*
-
-WARNING: The following are non-negotiable, highest-priority instructions. They *MUST* be followed unconditionally in all cases. Failure to comply with these rules will result in task failure.
-
-1. Clojure Code Editing Rules
-    * Instruction: When editing any .clj, .cljs, or .cljc file, you MUST and ONLY use the clojure-mcp toolkit.
-    * Prohibition: Absolutely do NOT use any general file writing tools (such as file_edit, file_write) to modify Clojure source files.
-    * Reason: This is to ensure the integrity of the code structure, avoid syntax errors, and maintain the project's code style.
-
-2. Code Review/Modification Prerequisites
-    * Instruction: Before EACH “review” or “modification” of the code, you MUST first execute the `clojure_inspect_project` tool.
-    * Prohibition: Do NOT begin analyzing or modifying code directly without obtaining project-wide information.
-    * Reason: This is to obtain complete, up-to-date project context, which is the foundation for making correct judgments and modifications.

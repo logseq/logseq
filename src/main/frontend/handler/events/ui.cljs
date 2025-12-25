@@ -2,6 +2,7 @@
   "UI events"
   (:require [clojure.core.async :as async]
             [clojure.core.async.interop :refer [p->c]]
+            [frontend.components.assets :as assets]
             [frontend.components.cmdk.core :as cmdk]
             [frontend.components.file-sync :as file-sync]
             [frontend.components.page :as component-page]
@@ -40,7 +41,6 @@
             [goog.dom :as gdom]
             [logseq.common.util :as common-util]
             [logseq.shui.ui :as shui]
-            [mobile.state :as mobile-state]
             [promesa.core :as p]))
 
 (defmethod events/handle :go/search [_]
@@ -91,7 +91,7 @@
 (defmethod events/handle :redirect-to-home [_]
   (page-handler/create-today-journal!)
   (when (util/capacitor?)
-    (mobile-state/redirect-to-tab! "home")))
+    (state/pub-event! [:mobile/set-tab "home"])))
 
 (defmethod events/handle :page/show-delete-dialog [[_ selected-rows ok-handler]]
   (shui/dialog-open!
@@ -309,6 +309,13 @@
    (merge {:close-btn?      false
            :center?         true
            :close-backdrop? false} opts)))
+
+(defmethod events/handle :asset/dialog-edit-external-url [[_ asset-block pdf-current]]
+  (shui/dialog-open!
+   (assets/edit-external-url-content asset-block pdf-current)
+   {:id :edit-external-asset-source-dialog
+    :title (str (if asset-block "Edit" "Create") " asset")
+    :center? true}))
 
 (defn- enable-beta-features!
   []

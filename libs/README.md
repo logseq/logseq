@@ -22,10 +22,8 @@ import "@logseq/libs"
 
 #### Community templates
 
-1. https://github.com/pengx17/logseq-plugin-template-react
-2. https://github.com/pengx17/logseq-plugin-template-svelte
-3. https://github.com/tiensonqin/logseq-cljs-playground
-4. https://github.com/YU000jp/logseq-plugin-sample-kit-typescript
+1. https://github.com/logseq/cljs-plugin-example
+2. https://github.com/YU000jp/logseq-plugin-sample-kit-typescript
 
 #### Feedback
 If you have any feedback or encounter any issues, feel free to join Logseq's discord group.
