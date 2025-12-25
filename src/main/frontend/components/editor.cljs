@@ -31,7 +31,6 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
-            [logseq.graph-parser.property :as gp-property]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -426,41 +425,6 @@
           :item-render (fn [property] property)
           :class       "black"})))))
 
-(rum/defc property-value-search-aux
-  [id property q]
-  (let [[values set-values!] (rum/use-state nil)]
-    (hooks/use-effect!
-     (fn []
-       (p/let [result (editor-handler/get-matched-property-values property q)]
-         (set-values! result)))
-     [property q])
-    (ui/auto-complete
-     values
-     {:on-chosen (editor-handler/property-value-on-chosen-handler id q)
-      :on-enter (fn [_state]
-                  ((editor-handler/property-value-on-chosen-handler id q) nil))
-      :empty-placeholder [:div.px-4.py-2.text-sm (str "Create a new property value: " q)]
-      :header [:div.px-4.py-2.text-sm.font-medium "Matched property values: "]
-      :item-render (fn [property-value] property-value)
-      :class       "black"})))
-
-(rum/defc property-value-search < rum/reactive
-  [id]
-  (let [property (:property (state/get-editor-action-data))
-        input (gdom/getElement id)]
-    (when (and input
-               (not (string/blank? property)))
-      (let [current-pos (cursor/pos input)
-            edit-content (state/sub-edit-content)
-            start-idx (string/last-index-of (subs edit-content 0 current-pos)
-                                            gp-property/colons)
-            q (or
-               (when (>= current-pos (+ start-idx 2))
-                 (subs edit-content (+ start-idx 2) current-pos))
-               "")
-            q (string/triml q)]
-        (property-value-search-aux id property q)))))
-
 (rum/defc code-block-mode-keyup-listener
   [_q _edit-content last-pos current-pos]
   (hooks/use-effect!
@@ -723,10 +687,9 @@
                  (open-editor-popup! :template-search
                                      (template-search id format) {})
 
-                 (:property-search :property-value-search)
+                 :property-search
                  (open-editor-popup! action
-                                     (if (= :property-search action)
-                                       (property-search id) (property-value-search id))
+                                     (property-search id)
                                      {})
 
                  ;; TODO: try remove local model state
@@ -756,7 +719,7 @@
 
       (or (contains?
            #{:commands :page-search :page-search-hashtag :block-search :template-search
-             :property-search :property-value-search :datepicker}
+             :property-search :datepicker}
            action)
           (and (keyword? action)
                (= (namespace action) "editor.action")))
