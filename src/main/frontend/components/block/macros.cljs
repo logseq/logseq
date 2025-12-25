@@ -2,7 +2,6 @@
   "Logseq macros that render and evaluate in blocks"
   (:require [clojure.walk :as walk]
             [datascript.core :as d]
-            [frontend.config :as config]
             [frontend.db.conn :as db-conn]
             [frontend.extensions.sci :as sci]
             [frontend.handler.common :as common-handler]
@@ -43,27 +42,18 @@
                     (first f)
                     (list 'map (second f) 'result)))
                  f))
-             ast*)
-        db-based-graph? (config/db-based-graph? repo)
-        ;; These keyword aliases should be the same as those used in the query-table for sorting
-        special-file-graph-keywords
-        {:block :block/title
-         :page :block/name
-         :created-at :block/created-at
-         :updated-at :block/updated-at}]
+             ast*)]
     (walk/postwalk
      (fn [f]
        (cond
          (keyword? f)
-         (if-let [kw (and (not db-based-graph?) (get special-file-graph-keywords f))]
-           kw
-           (let [vals (map #(get-in % [:block/properties f]) result)
-                 int? (some integer? vals)]
-             `(~'fn [~'b]
-                    (~'let [~'result-str (~'get-in ~'b [:block/properties ~f])
-                            ~'result-num (~'parseFloat ~'result-str)
-                            ~'result (if (~'isNaN ~'result-num) ~'result-str ~'result-num)]
-                           (~'or ~'result (~'when ~int? 0))))))
+         (let [vals (map #(get-in % [:block/properties f]) result)
+               int? (some integer? vals)]
+           `(~'fn [~'b]
+                  (~'let [~'result-str (~'get-in ~'b [:block/properties ~f])
+                          ~'result-num (~'parseFloat ~'result-str)
+                          ~'result (if (~'isNaN ~'result-num) ~'result-str ~'result-num)]
+                         (~'or ~'result (~'when ~int? 0)))))
 
          :else
          f))
@@ -78,11 +68,9 @@
                        query-result*)
         repo (state/get-current-repo)
         db (db-conn/get-db repo)
-        query-result' (if (config/db-based-graph? repo)
-                        (->> query-result
-                             (map #(d/entity db (:db/id %)))
-                             (map #(hash-map :block/properties (properties-by-name db %))))
-                        query-result)
+        query-result' (->> query-result
+                           (map #(d/entity db (:db/id %)))
+                           (map #(hash-map :block/properties (properties-by-name db %))))
         fn-string (-> (gstring/format "(fn [result] %s)" (first arguments))
                       (common-handler/safe-read-string "failed to parse function")
                       (normalize-query-function repo query-result')

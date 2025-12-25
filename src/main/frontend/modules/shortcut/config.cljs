@@ -503,10 +503,6 @@
                         :inactive (not (state/developer-mode?))
                         :fn :frontend.handler.common.developer/show-page-data}
 
-   :dev/show-page-ast {:binding []
-                       :inactive (not (state/developer-mode?))
-                       :fn :frontend.handler.common.developer/show-page-ast}
-
    :misc/export-block-data {:binding []
                             :fn :frontend.handler.db-based.export/export-block-data}
 
@@ -722,7 +718,6 @@
           :dev/show-block-data
           :dev/show-block-ast
           :dev/show-page-data
-          :dev/show-page-ast
           :dev/replace-graph-with-db-file
           :dev/validate-db
           :dev/gc-graph
@@ -886,7 +881,6 @@
      :dev/show-block-data
      :dev/show-block-ast
      :dev/show-page-data
-     :dev/show-page-ast
      :dev/replace-graph-with-db-file
      :dev/validate-db
      :dev/gc-graph

@@ -1018,21 +1018,6 @@
                             (string/join "\n\n"))]
       (util/copy-to-clipboard! copy-str))))
 
-(defn copy-block-embeds
-  []
-  (when-let [blocks (seq (get-selected-blocks))]
-    (let [ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
-                                     (uuid id)) blocks))
-                   (remove nil?))
-          ids-str (if (config/db-based-graph? (state/get-current-repo))
-                    (some->> ids
-                             (map (fn [id] (ref/->block-ref id)))
-                             (string/join "\n\n"))
-                    (some->> ids
-                             (map (fn [id] (util/format "{{embed ((%s))}}" id)))
-                             (string/join "\n\n")))]
-      (util/copy-to-clipboard! ids-str))))
-
 (defn get-selected-toplevel-block-uuids
   []
   (when-let [blocks (seq (get-selected-blocks))]

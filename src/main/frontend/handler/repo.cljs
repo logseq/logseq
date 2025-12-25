@@ -35,33 +35,31 @@
 (defn remove-repo!
   [{:keys [url] :as repo} & {:keys [switch-graph?]
                              :or {switch-graph? true}}]
-  (let [current-repo (state/get-current-repo)
-        db-based? (config/db-based-graph? url)]
-    (when (or (config/local-file-based-graph? url) db-based?)
-      (p/do!
-       (idb/clear-local-db! url)     ; clear file handles
-       (db/remove-conn! url)
-       (db-persist/delete-graph! url)
-       (search/remove-db! url)
-       (state/delete-repo! repo)
-       (when switch-graph?
-         (if (= current-repo url)
-           (do
-             (state/set-current-repo! nil)
-             (when-let [graph (:url (first (state/get-repos)))]
-               (notification/show! (str "Removed graph "
-                                        (pr-str (text-util/get-graph-name-from-path url))
-                                        ". Redirecting to graph "
-                                        (pr-str (text-util/get-graph-name-from-path graph)))
-                                   :success)
-               (state/pub-event! [:graph/switch graph {:persist? false}])))
-           (notification/show! (str "Removed graph " (pr-str (text-util/get-graph-name-from-path url))) :success)))))))
+  (let [current-repo (state/get-current-repo)]
+    (p/do!
+     (idb/clear-local-db! url)     ; clear file handles
+     (db/remove-conn! url)
+     (db-persist/delete-graph! url)
+     (search/remove-db! url)
+     (state/delete-repo! repo)
+     (when switch-graph?
+       (if (= current-repo url)
+         (do
+           (state/set-current-repo! nil)
+           (when-let [graph (:url (first (state/get-repos)))]
+             (notification/show! (str "Removed graph "
+                                      (pr-str (text-util/get-graph-name-from-path url))
+                                      ". Redirecting to graph "
+                                      (pr-str (text-util/get-graph-name-from-path graph)))
+                                 :success)
+             (state/pub-event! [:graph/switch graph {:persist? false}])))
+         (notification/show! (str "Removed graph " (pr-str (text-util/get-graph-name-from-path url))) :success))))))
 
 (defn start-repo-db-if-not-exists!
   [repo & {:as opts}]
   (state/set-current-repo! repo)
   (db/start-db-conn! repo (assoc opts
-                                 :db-graph? (config/db-based-graph? repo)
+                                 :db-graph? true
                                  :listen-handler (fn [conn]
                                                    (undo-redo/listen-db-changes! repo conn)))))
 
