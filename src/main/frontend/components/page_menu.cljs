@@ -7,11 +7,8 @@
             [frontend.db :as db]
             [frontend.handler.common.developer :as dev-common-handler]
             [frontend.handler.db-based.page :as db-page-handler]
-            [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.shell :as shell]
-            [frontend.handler.user :as user-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -37,9 +34,7 @@
          {:title [:h3.text-lg.leading-6.font-medium.flex.gap-2.items-center
                   [:span.top-1.relative
                    (shui/tabler-icon "alert-triangle")]
-                  (if (config/db-based-graph? (state/get-current-repo))
-                    (t :page/db-delete-confirmation)
-                    (t :page/delete-confirmation))]
+                  (t :page/db-delete-confirmation)]
           :content [:p.opacity-60 (str "- " (:block/title page))]
           :outside-cancel? true})
         (p/then #(delete-page! page))
@@ -49,24 +44,16 @@
   [page]
   (when-let [page-name (and page (db/page? page) (:block/name page))]
     (let [repo (state/sub :git/current-repo)
-          db-based? (config/db-based-graph? repo)
-          page-title (if db-based? (str (:block/uuid page)) (:block/title page))
+          page-title (str (:block/uuid page))
           whiteboard? (ldb/whiteboard? page)
           block? (and page (util/uuid-string? page-name) (not whiteboard?))
           contents? (= page-name "contents")
-          public? (if db-based?
-                    (:logseq.property/publishing-public? page)
-                    (get-in page [:block/properties :public]))
+          public? (:logseq.property/publishing-public? page)
           _favorites-updated? (state/sub :favorites/updated?)
           favorited? (page-handler/favorited? page-title)
           developer-mode? (state/sub [:ui/developer-mode?])
           file-rpath (when (util/electron?) (page-util/get-page-file-rpath page-name))
-          _ (state/sub :auth/id-token)
-          file-sync-graph-uuid (and (user-handler/logged-in?)
-                                    (file-sync-handler/enable-sync?)
-                                    ;; FIXME: Sync state is not cleared when switching to a new graph
-                                    (file-sync-handler/current-graph-sync-on?)
-                                    (file-sync-handler/get-current-graph-uuid))]
+          _ (state/sub :auth/id-token)]
       (when (not block?)
         (->>
          [(when-not config/publishing?
@@ -79,30 +66,14 @@
                            (page-handler/<unfavorite-page! page-title)
                            (page-handler/<favorite-page! page-title)))}})
 
-          (when (and (or (util/electron?) file-sync-graph-uuid) (not db-based?))
-            {:title   (t :page/version-history)
-             :options {:on-click
-                       (fn []
-                         (cond
-                           file-sync-graph-uuid
-                           (state/pub-event! [:graph/pick-page-histories file-sync-graph-uuid page-name])
-
-                           (util/electron?)
-                           (shell/get-file-latest-git-log page 100)
-
-                           :else
-                           nil))
-                       :class "cp__btn_history_version"}})
-
           (when (or (util/electron?)
                     (mobile-util/native-platform?))
             {:title   (t :page/copy-page-url)
-             :options {:on-click #(page-handler/copy-page-url (if db-based? (:block/uuid page) page-title))}})
+             :options {:on-click #(page-handler/copy-page-url (:block/uuid page))}})
 
           (when-not (or contents?
                         config/publishing?
-                        (and db-based?
-                             (:logseq.property/built-in? page)))
+                        (:logseq.property/built-in? page))
             {:title   (t :page/delete)
              :options {:on-click #(delete-page-confirm! page)}})
 
@@ -135,25 +106,18 @@
                           page
                           (if public? false true)))}})
 
-          (when (and (util/electron?) file-rpath
-                     (not (file-sync-handler/synced-file-graph? repo)))
-            {:title   (t :page/open-backup-directory)
-             :options {:on-click
-                       (fn []
-                         (ipc/ipc "openFileBackupDir" (config/get-local-dir repo) file-rpath))}})
-
           (when config/lsp-enabled?
             (for [[_ {:keys [label] :as cmd} action pid] (state/get-plugins-commands-with-type :page-menu-item)]
               {:title label
                :options {:on-click #(commands/exec-plugin-simple-command!
                                      pid (assoc cmd :page page-name) action)}}))
 
-          (when (and db-based? (ldb/internal-page? page) (not (:logseq.property/built-in? page)))
+          (when (and (ldb/internal-page? page) (not (:logseq.property/built-in? page)))
             {:title (t :page/convert-to-tag)
              :options {:on-click (fn []
                                    (db-page-handler/convert-page-to-tag! page))}})
 
-          (when (and db-based? (ldb/class? page) (not (:logseq.property/built-in? page)))
+          (when (and (ldb/class? page) (not (:logseq.property/built-in? page)))
             {:title (t :page/convert-tag-to-page)
              :options {:on-click (fn []
                                    (db-page-handler/convert-tag-to-page! page))}})
@@ -161,16 +125,6 @@
           (when developer-mode?
             {:title   (t :dev/show-page-data)
              :options {:on-click (fn []
-                                   (dev-common-handler/show-entity-data (:db/id page)))}})
-
-          (when (and developer-mode?
-                     ;; Remove when we have an easy way to fetch file content for a DB graph
-                     (not db-based?))
-            {:title   (t :dev/show-page-ast)
-             :options {:on-click (fn []
-                                   (let [page (db/pull '[:block/format {:block/file [:file/content]}] (:db/id page))]
-                                     (dev-common-handler/show-content-ast
-                                      (get-in page [:block/file :file/content])
-                                      (get page :block/format :markdown))))}})]
+                                   (dev-common-handler/show-entity-data (:db/id page)))}})]
          (flatten)
          (remove nil?))))))
