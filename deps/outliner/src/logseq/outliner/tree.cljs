@@ -6,7 +6,7 @@
             [logseq.db.common.property-util :as db-property-util]))
 
 (defprotocol INode
-  (-save [this *txs-state conn repo date-formatter opts])
+  (-save [this *txs-state conn opts])
   (-del [this *txs-state db]))
 
 (defn- blocks->vec-tree-aux

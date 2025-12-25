@@ -1,16 +1,14 @@
 (ns frontend.worker.handler.page
   "Page operations"
-  (:require [logseq.common.config :as common-config]
-            [logseq.common.util :as common-util]
+  (:require [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.graph-parser.block :as gp-block]
             [logseq.outliner.page :as outliner-page]))
 
 (defn rtc-create-page!
-  [conn config title {:keys [uuid old-db-id]}]
+  [conn title date-formatter {:keys [uuid old-db-id]}]
   (assert (uuid? uuid) (str "rtc-create-page! `uuid` is not a uuid " uuid))
-  (let [date-formatter    (common-config/get-date-formatter config)
-        title (outliner-page/sanitize-title title)
+  (let [title (outliner-page/sanitize-title title)
         page-name (common-util/page-name-sanity-lc title)
         page              (cond-> (gp-block/page-name->map title @conn true date-formatter
                                                            {:page-uuid uuid
@@ -32,11 +30,11 @@
    * :persist-op?              - when true, add an update-page op
    * :properties               - properties to add to the page
   TODO: Add other options"
-  [repo conn config title & {:as options}]
+  [conn title & {:as options}]
   (outliner-page/create! conn title options))
 
 (defn delete!
   "Deletes a page. Returns true if able to delete page. If unable to delete,
   calls error-handler fn and returns false"
-  [repo conn page-uuid & {:as options}]
+  [conn page-uuid & {:as options}]
   (outliner-page/delete! conn page-uuid options))
