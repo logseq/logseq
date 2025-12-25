@@ -25,7 +25,6 @@
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.export.html :as export-html]
             [frontend.handler.export.text :as export-text]
-            [frontend.handler.file-based.editor :as file-editor-handler]
             [frontend.handler.file-based.status :as status]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
@@ -259,9 +258,7 @@
 
 (defn wrap-parse-block
   [block]
-  (if (config/db-based-graph? (state/get-current-repo))
-    (db-editor-handler/wrap-parse-block block)
-    (file-editor-handler/wrap-parse-block block)))
+  (db-editor-handler/wrap-parse-block block))
 
 (defn- save-block-inner!
   [block value opts]
@@ -653,30 +650,6 @@
              (when-let [id (:block/uuid new-block)]
                (db/entity [:block/uuid id])))))))))
 
-(defn check
-  [{:block/keys [marker title repeated? uuid] :as block}]
-  (let [new-content (string/replace-first title marker "DONE")
-        new-content (if repeated?
-                      (file-editor-handler/update-timestamps-content! block title)
-                      new-content)
-        input-id (state/get-edit-input-id)]
-    (if (and input-id
-             (string/ends-with? input-id (str uuid)))
-      (state/set-edit-content! input-id new-content)
-      (save-block-if-changed! block new-content))))
-
-(defn uncheck
-  [{:block/keys [title uuid] :as block}]
-  (let [marker (if (= :now (state/get-preferred-workflow))
-                 "LATER"
-                 "TODO")
-        new-content (string/replace-first title "DONE" marker)
-        input-id (state/get-edit-input-id)]
-    (if (and input-id
-             (string/ends-with? input-id (str uuid)))
-      (state/set-edit-content! input-id new-content)
-      (save-block-if-changed! block new-content))))
-
 (defn get-selected-blocks
   []
   (distinct (seq (state/get-selection-blocks))))
@@ -999,21 +972,12 @@
       (let [input-id (state/get-edit-input-id)]
         (state/set-edit-content! input-id new-content)))))
 
-(defn set-blocks-id!
-  "Persist block uuid to file if the uuid is valid, and it's not persisted in file.
-   Accepts a list of uuids."
-  [block-ids]
-  (let [repo (state/get-current-repo)]
-    (when-not (config/db-based-graph? repo)
-      (file-editor-handler/set-blocks-id! block-ids))))
-
 (defn copy-block-ref!
   ([block-id]
    (copy-block-ref! block-id #(str %)))
   ([block-id tap-clipboard]
    (p/do!
     (save-current-block!)
-    (set-blocks-id! [block-id])
     (util/copy-to-clipboard! (tap-clipboard block-id)))))
 
 (defn select-block!
@@ -1112,7 +1076,6 @@
                                        :markdown
                                        (str (string/join (repeat (dec level) "\t")) "- " (ref/->block-ref id))))))
                             (string/join "\n\n"))]
-      (set-blocks-id! (map :id blocks))
       (util/copy-to-clipboard! copy-str))))
 
 (defn copy-block-embeds
@@ -1128,7 +1091,6 @@
                     (some->> ids
                              (map (fn [id] (util/format "{{embed ((%s))}}" id)))
                              (string/join "\n\n")))]
-      (set-blocks-id! ids)
       (util/copy-to-clipboard! ids-str))))
 
 (defn get-selected-toplevel-block-uuids
@@ -1646,9 +1608,7 @@
   "Paste asset and insert link to current editing block"
   [id ^js files format uploading? drop-or-paste?]
   (let [repo (state/get-current-repo)]
-    (if (config/db-based-graph? repo)
-      (db-upload-assets! repo id ^js files format uploading? drop-or-paste?)
-      (file-editor-handler/file-upload-assets! repo id ^js files format uploading? *asset-uploading? *asset-uploading-process drop-or-paste?))))
+    (db-upload-assets! repo id ^js files format uploading? drop-or-paste?)))
 
 ;; Editor should track some useful information, like editor modes.
 ;; For example:
@@ -3348,11 +3308,6 @@
       :else
       (js/document.execCommand "copy"))))
 
-(defn whiteboard?
-  []
-  (and (db-model/whiteboard-page? (state/get-current-page))
-       (.closest (.-activeElement js/document) ".logseq-tldraw")))
-
 (defn shortcut-cut
   "shortcut cut action:
   * when in selection mode, cut selected blocks
@@ -3367,9 +3322,6 @@
                            (gdom/getElement (state/get-edit-input-id))))
     (keydown-backspace-handler true e)
 
-    (whiteboard?)
-    (.cut (state/active-tldraw-app))
-
     :else
     nil))
 
@@ -3378,9 +3330,6 @@
   (cond
     (state/selection?)
     (shortcut-delete-selection e)
-
-    (and (whiteboard?) (not (state/editing?)))
-    (.deleteShapes (.-api ^js (state/active-tldraw-app)))
 
     :else
     nil))
@@ -3553,20 +3502,15 @@
               :or {semantic? false
                    ignore-children? false}}]
    (when block-id
-     (let [repo (state/get-current-repo)]
-       (if-let [block (db/entity [:block/uuid block-id])]
-         (let [db-based? (config/db-based-graph? repo)]
-           (or (if ignore-children? false (db-model/has-children? block-id))
-               (and db-based? (db-collapsable? block))
-               (and (not db-based?)
-                    (or (file-editor-handler/valid-dsl-query-block? block)
-                        (file-editor-handler/valid-custom-query-block? block)))
-               (and
-                (:outliner/block-title-collapse-enabled? (state/get-config))
-                (block-with-title? (get block :block/format :markdown)
-                                   (:block/title block)
-                                   semantic?))))
-         false)))))
+     (if-let [block (db/entity [:block/uuid block-id])]
+       (or (if ignore-children? false (db-model/has-children? block-id))
+           (db-collapsable? block)
+           (and
+            (:outliner/block-title-collapse-enabled? (state/get-config))
+            (block-with-title? (get block :block/format :markdown)
+                               (:block/title block)
+                               semantic?)))
+       false))))
 
 (defn <all-blocks-with-level
   "Return all blocks associated with correct level
@@ -3701,9 +3645,6 @@
             doall)
        (and clear-selection? (clear-selection!)))
 
-     (whiteboard?)
-     (.setCollapsed (.-api ^js (state/active-tldraw-app)) false)
-
      :else
      ;; expand one level
      (p/let [blocks-with-level (<all-blocks-with-level {})
@@ -3737,9 +3678,6 @@
                        collapse-block!)))
             doall)
        (and clear-selection? (clear-selection!)))
-
-     (whiteboard?)
-     (.setCollapsed (.-api ^js (state/active-tldraw-app)) true)
 
      :else
      ;; collapse by one level from outside
@@ -3896,11 +3834,6 @@
       (contains? #{"INPUT" "TEXTAREA"} target-element)
       nil
 
-      (whiteboard?)
-      (do
-        (util/stop e)
-        (.selectAll (.-api ^js (state/active-tldraw-app))))
-
       :else
       (do
         (util/stop e)
@@ -4013,9 +3946,7 @@
 (defn batch-set-heading!
   [block-ids heading]
   (let [repo (state/get-current-repo)]
-    (if (config/db-based-graph? repo)
-      (db-editor-handler/batch-set-heading! repo block-ids heading)
-      (file-editor-handler/batch-set-heading! block-ids heading))))
+    (db-editor-handler/batch-set-heading! repo block-ids heading)))
 
 (defn set-heading!
   [block-id heading]

@@ -18,7 +18,6 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.utils :as shortcut-utils]
@@ -563,7 +562,6 @@
   (let [item (state->highlighted-item state)
         !input (::input state)
         create-class? (string/starts-with? @!input "#")
-        create-whiteboard? (= :whiteboard (:source-create item))
         create-page? (= :page (:source-create item))
         class (when create-class? (get-class-from-input @!input))]
     (if (and (= (:text item) "Configure tag") (:class item))
@@ -572,7 +570,6 @@
                        create-class?
                        (db-page-handler/<create-class! class
                                                        {:redirect? false})
-                       create-whiteboard? (whiteboard-handler/<create-new-whiteboard-and-redirect! @!input)
                        create-page? (page-handler/<create! @!input {:redirect? true}))]
         (shui/dialog-close! :ls-dialog-cmdk)
         (when (and create-class? result)

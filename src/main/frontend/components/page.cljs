@@ -172,7 +172,7 @@
                                     (date/journal-title->int (date/today))))
                        (state/pub-event! [:journal/insert-template page-name]))))
                  state)}
-  [state block* {:keys [sidebar? whiteboard? hide-add-button? journals?] :as config}]
+  [state block* {:keys [sidebar? hide-add-button? journals?] :as config}]
   (when-let [id (:db/id block*)]
     (let [block (db/sub-block id)
           block-id (:block/uuid block)
@@ -218,7 +218,7 @@
               config (common-handler/config-with-document-mode hiccup-config)
               blocks (if block? [block] (db/sort-by-order children block))]
           [:div.relative
-           (page-blocks-inner block blocks config sidebar? whiteboard? block-id)
+           (page-blocks-inner block blocks config sidebar? block-id)
            (when more?
              (shui/button {:variant :ghost
                            :class "text-muted-foreground w-full"
@@ -269,14 +269,14 @@
          {:default-collapsed? false})]])))
 
 (rum/defc page-title-editor < rum/reactive
-  [page {:keys [*input-value *title-value *edit? untitled? page-name old-name whiteboard-page?]}]
+  [page {:keys [*input-value *title-value *edit? page-name old-name]}]
   (let [input-ref (rum/create-ref)
         tag-idents (map :db/ident (:block/tags page))
         collide? #(and (not= (util/page-name-sanity-lc page-name)
                              (util/page-name-sanity-lc @*title-value))
                        (db/page-exists? page-name tag-idents)
                        (db/page-exists? @*title-value tag-idents))
-        rollback-fn #(let [old-name (if untitled? "" old-name)]
+        rollback-fn #(let [old-name old-name]
                        (reset! *title-value old-name)
                        (gobj/set (rum/deref input-ref) "value" old-name)
                        (reset! *edit? true)
@@ -286,19 +286,12 @@
                     (swap! *title-value common-util/unquote-string)
                     (gobj/set (rum/deref input-ref) "value" @*title-value))
                   (cond
-                    (or (= old-name @*title-value) (and whiteboard-page? (string/blank? @*title-value)))
-                    (reset! *edit? false)
-
                     (string/blank? @*title-value)
-                    (do (when-not untitled? (notification/show! (t :page/illegal-page-name) :warning))
+                    (do (notification/show! (t :page/illegal-page-name) :warning)
                         (rollback-fn))
 
                     (collide?)
                     (do (notification/show! (t :page/page-already-exists @*title-value) :error)
-                        (rollback-fn))
-
-                    (and (date/valid-journal-title? @*title-value) whiteboard-page?)
-                    (do (notification/show! (t :page/whiteboard-to-journal-error) :error)
                         (rollback-fn))
 
                     :else
@@ -322,14 +315,11 @@
       :on-key-down   (fn [^js e]
                        (when (= (gobj/get e "key") "Enter")
                          (blur-fn e)))
-      :placeholder   (when untitled? (t :untitled))
       :on-key-up     (fn [^js e]
                        ;; Esc
                        (when (= 27 (.-keyCode e))
                          (reset! *title-value old-name)
-                         (reset! *edit? false)))
-      :on-focus (fn []
-                  (when untitled? (reset! *title-value "")))}]))
+                         (reset! *edit? false)))}]))
 
 (rum/defcs ^:large-vars/cleanup-todo page-title-cp < rum/reactive db-mixins/query
   (rum/local false ::edit?)
@@ -350,8 +340,7 @@
               *edit? (get state ::edit?)
               *input-value (get state ::input-value)
               hls-page? (pdf-utils/hls-file? title)
-              whiteboard-page? (model/whiteboard-page? page)
-              untitled? (and whiteboard-page? (parse-uuid title)) ;; normal page cannot be untitled right?
+              ;; normal page cannot be untitled right?
               title (if hls-page?
                       [:a.asset-ref (pdf-utils/fix-local-asset-pagename title)]
                       (if fmt-journal?
@@ -360,7 +349,7 @@
               old-name title]
           [:div.ls-page-title.flex.flex-1.flex-row.flex-wrap.w-full.relative.items-center.gap-2
            [:h1.page-title.flex-1.cursor-pointer.gap-1
-            {:class (when-not whiteboard-page? "title")
+            {:class "title"
              :on-pointer-down (fn [e]
                                 (when (util/right-click? e)
                                   (state/set-state! :page-title/context {:page (:block/title page)
@@ -377,7 +366,7 @@
                                         (not journal?)
                                         (not config/publishing?)
                                         (not (ldb/built-in? page)))
-                               (reset! *input-value (if untitled? "" old-name))
+                               (reset! *input-value old-name)
                                (reset! *edit? true)))))}
             (when-not (config/db-based-graph?)
               (when (get-in page [:block/properties :icon])
@@ -389,8 +378,6 @@
                                        :*input-value *input-value
                                        :page-name (:block/title page)
                                        :old-name old-name
-                                       :untitled? untitled?
-                                       :whiteboard-page? whiteboard-page?
                                        :preview? preview?})
               [:span.title.block
                {:on-click (fn []
@@ -402,8 +389,7 @@
                 :style      {:opacity (when @*edit? 0)}}
                (let [nested? (and (string/includes? title page-ref/left-brackets)
                                   (string/includes? title page-ref/right-brackets))]
-                 (cond untitled? [:span.opacity-50 (t :untitled)]
-                       nested? (component-block/map-inline {} (gp-mldoc/inline->edn title (mldoc/get-default-config
+                 (cond nested? (component-block/map-inline {} (gp-mldoc/inline->edn title (mldoc/get-default-config
                                                                                            (get page :block/format :markdown))))
                        :else title))])]])))))
 
@@ -449,10 +435,10 @@
        "Set property"))]])
 
 (rum/defc db-page-title
-  [page {:keys [whiteboard-page? sidebar? journals? container-id tag-dialog?]}]
+  [page {:keys [sidebar? journals? container-id tag-dialog?]}]
   (let [with-actions? (not config/publishing?)]
     [:div.ls-page-title.flex.flex-1.w-full.content.items-start.title
-     {:class (when-not whiteboard-page? "title")
+     {:class "title"
       "data-testid" "page title"
       :on-pointer-down (fn [e]
                          (when (util/right-click? e)
@@ -628,18 +614,15 @@
         journal? (db/journal-page? title)
         db-based? (config/db-based-graph? repo)
         fmt-journal? (boolean (date/journal-title->int title))
-        whiteboard? (:whiteboard? option) ;; in a whiteboard portal shape?
-        whiteboard-page? (model/whiteboard-page? page) ;; is this page a whiteboard?
         today? (and
                 journal?
                 (= title (date/journal-name)))
         *control-show? (::control-show? state)
         *all-collapsed? (::all-collapsed? state)
-        block-or-whiteboard? (or block? whiteboard?)
         home? (= :home (state/get-current-route))
         show-tabs? (and db-based? (or class-page? (ldb/property? page)) (not tag-dialog?))]
     (if page
-      (when (or title block-or-whiteboard?)
+      (when (or title block?)
         [:div.flex-1.page.relative.cp__page-inner-wrap
          (merge (if (seq (:block/tags page))
                   (let [page-names (map :block/title (:block/tags page))]
@@ -651,53 +634,49 @@
                  :class (util/classnames [{:is-journals (or journal? fmt-journal?)
                                            :is-node-page (or class-page? property-page?)}])})
 
-         (if (and whiteboard-page? (not sidebar?))
-           [:div ((state/get-component :whiteboard/tldraw-preview) (:block/uuid page))] ;; FIXME: this is not reactive
-           [:div.relative.grid.gap-4.sm:gap-8.page-inner.mb-16
-            (when-not (or block? sidebar?)
-              [:div.flex.flex-row.space-between
-               (when (and (or (mobile-util/native-platform?) (util/mobile?)) (not db-based?))
-                 [:div.flex.flex-row.pr-2
-                  {:style {:margin-left -15}
-                   :on-mouse-over (fn [e]
-                                    (page-mouse-over e *control-show? *all-collapsed?))
-                   :on-mouse-leave (fn [e]
-                                     (page-mouse-leave e *control-show?))}
-                  (page-blocks-collapse-control title *control-show? *all-collapsed?)])
-               (when (and (not whiteboard?) (ldb/page? page))
-                 (if db-based?
-                   (db-page-title page
-                                  {:whiteboard-page? whiteboard-page?
-                                   :sidebar? sidebar?
-                                   :journals? journals?
-                                   :container-id (:container-id state)
-                                   :tag-dialog? tag-dialog?})
-                   (page-title-cp page {:journal? journal?
-                                        :fmt-journal? fmt-journal?
-                                        :preview? preview?})))
-               (lsp-pagebar-slot)])
+         [:div.relative.grid.gap-4.sm:gap-8.page-inner.mb-16
+          (when-not (or block? sidebar?)
+            [:div.flex.flex-row.space-between
+             (when (and (or (mobile-util/native-platform?) (util/mobile?)) (not db-based?))
+               [:div.flex.flex-row.pr-2
+                {:style {:margin-left -15}
+                 :on-mouse-over (fn [e]
+                                  (page-mouse-over e *control-show? *all-collapsed?))
+                 :on-mouse-leave (fn [e]
+                                   (page-mouse-leave e *control-show?))}
+                (page-blocks-collapse-control title *control-show? *all-collapsed?)])
+             (when (ldb/page? page)
+               (if db-based?
+                 (db-page-title page
+                                {:sidebar? sidebar?
+                                 :journals? journals?
+                                 :container-id (:container-id state)
+                                 :tag-dialog? tag-dialog?})
+                 (page-title-cp page {:journal? journal?
+                                      :fmt-journal? fmt-journal?
+                                      :preview? preview?})))
+             (lsp-pagebar-slot)])
 
-            (when (and block? (not sidebar?))
-              (component-block/breadcrumb {} repo (:block/uuid page) {}))
+          (when (and block? (not sidebar?))
+            (component-block/breadcrumb {} repo (:block/uuid page) {}))
 
-            (when (and db-based? (ldb/library? page))
-              (library/add-pages page))
+          (when (and db-based? (ldb/library? page))
+            (library/add-pages page))
 
-            (when (and db-based? sidebar? (ldb/page? page))
-              [:div.-mb-8
-               (sidebar-page-properties config page)])
+          (when (and db-based? sidebar? (ldb/page? page))
+            [:div.-mb-8
+             (sidebar-page-properties config page)])
 
-            (when show-tabs?
-              (tabs page {:current-page? option :sidebar? sidebar?}))
+          (when show-tabs?
+            (tabs page {:current-page? option :sidebar? sidebar?}))
 
-            (when (not tag-dialog?)
-              [:div.ls-page-blocks
-               {:style {:margin-left (if (or whiteboard? (util/mobile?)) 0 -20)}
-                :class (when-not (or sidebar? (util/capacitor?))
-                         "mt-4")}
-               (page-blocks-cp page (merge option {:sidebar? sidebar?
-                                                   :container-id (:container-id state)
-                                                   :whiteboard? whiteboard?}))])])
+          (when (not tag-dialog?)
+            [:div.ls-page-blocks
+             {:style {:margin-left (if (util/mobile?) 0 -20)}
+              :class (when-not (or sidebar? (util/capacitor?))
+                       "mt-4")}
+             (page-blocks-cp page (merge option {:sidebar? sidebar?
+                                                 :container-id (:container-id state)}))])]
 
          (when-not preview?
            [:div.flex.flex-col.gap-8
@@ -715,7 +694,7 @@
               (class-component/class-children page))
 
             ;; referenced blocks
-            (when-not (or whiteboard? tag-dialog? linked-refs? (and block? (not db-based?)))
+            (when-not (or tag-dialog? linked-refs? (and block? (not db-based?)))
               [:div.fade-in.delay {:key "page-references"}
                (rum/with-key
                  (reference/references page {:sidebar? sidebar?
@@ -723,7 +702,7 @@
                                              :refs-count (:refs-count option)})
                  (str title "-refs"))])
 
-            (when-not (or whiteboard? unlinked-refs?
+            (when-not (or unlinked-refs?
                           sidebar?
                           tag-dialog?
                           home?

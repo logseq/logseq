@@ -841,19 +841,6 @@
      ;;  [:p (t :settings-page/clear-cache-warning)])
      ]))
 
-(rum/defc whiteboards-enabled-switcher
-  [enabled?]
-  (ui/toggle enabled?
-             (fn []
-               (let [value (not enabled?)]
-                 (config-handler/set-config! :feature/enable-whiteboards? value)))
-             true))
-
-(defn whiteboards-switcher-row [enabled?]
-  (row-with-button-action
-   {:left-label (t :settings-page/enable-whiteboards)
-    :action (whiteboards-enabled-switcher enabled?)}))
-
 (rum/defc settings-account-usage-description [pro-account? graph-usage]
   (let [count-usage (count graph-usage)
         count-limit (if pro-account? 10 1)
@@ -1038,7 +1025,6 @@
         enable-journals? (state/enable-journals? current-repo)
         enable-flashcards? (state/enable-flashcards? current-repo)
         db-based? (config/db-based-graph? current-repo)
-        enable-whiteboards? (state/enable-whiteboards? current-repo)
         logged-in? (user-handler/logged-in?)]
     [:div.panel-wrap.is-features.mb-8
      (journal-row enable-journals?)
@@ -1055,7 +1041,6 @@
             :on-key-press  (fn [e]
                              (when (= "Enter" (util/ekey e))
                                (update-home-page e)))}]]]])
-     (when-not db-based? (whiteboards-switcher-row enable-whiteboards?))
      (when (and web-platform? config/feature-plugin-system-on?)
        (plugin-system-switcher-row))
      (when (util/electron?)

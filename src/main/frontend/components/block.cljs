@@ -50,7 +50,6 @@
             [frontend.handler.property.util :as pu]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.mixins :as mixins]
             [frontend.mobile.haptics :as haptics]
             [frontend.mobile.intent :as mobile-intent]
@@ -570,11 +569,6 @@
            (:db/id page)
            :page))
 
-        (and (util/meta-key? e) (whiteboard-handler/inside-portal? (.-target e)))
-        (whiteboard-handler/add-new-block-portal-shape!
-         page-name
-         (whiteboard-handler/closest-shape (.-target e)))
-
         (nil? page)
         (state/pub-event! [:page/create page-name])
 
@@ -932,19 +926,6 @@
        [:a.asset-ref {:target "_blank" :href real-path-url}
         title-or-path])]))
 
-(defonce excalidraw-loaded? (atom false))
-(rum/defc excalidraw < rum/reactive
-  {:init (fn [state]
-           (p/let [_ (loader/load :excalidraw)]
-             (reset! excalidraw-loaded? true))
-           state)}
-  [file block-uuid]
-  (let [loaded? (rum/react excalidraw-loaded?)
-        draw-component (when loaded?
-                         (resolve 'frontend.extensions.excalidraw/draw))]
-    (when draw-component
-      (draw-component {:file file :block-uuid block-uuid}))))
-
 (rum/defcs asset-cp < rum/reactive
   (rum/local nil ::file-exists?)
   {:will-mount (fn [state]
@@ -1108,7 +1089,6 @@
   [config block]
   (let [current-page (state/get-current-page)
         block (db/sub-block (:db/id block))
-        whiteboard-page? (model/whiteboard-page? block)
         page-name (:block/name block)]
     [:div.color-level.embed.embed-page.bg-base-2
      {:class (when (:sidebar? config) "in-sidebar")
@@ -1121,31 +1101,29 @@
                   page-name)
             (not= (util/page-name-sanity-lc (get config :id ""))
                   page-name))
-       (if whiteboard-page?
-         ((state/get-component :whiteboard/tldraw-preview) (:block/uuid block))
-         (let [blocks (ldb/get-children block)
-               config' (assoc config
-                              :db/id (:db/id block)
-                              :id page-name
-                              :embed? true
-                              :page-embed? true
-                              :ref? false)]
-           (blocks-container config' blocks))))]))
+       (let [blocks (ldb/get-children block)
+             config' (assoc config
+                            :db/id (:db/id block)
+                            :id page-name
+                            :embed? true
+                            :page-embed? true
+                            :ref? false)]
+         (blocks-container config' blocks)))]))
 
 (rum/defc page-embed
   [config page-name]
-  (let [page-name (util/page-name-sanity-lc (string/trim page-name))]
-    (let [[block set-block!] (hooks/use-state nil)]
-      (hooks/use-effect!
-       (fn []
-         (p/let [block (db-async/<get-block (state/get-current-repo)
-                                            page-name
-                                            {:children? true
-                                             :skip-refresh? true})]
-           (set-block! block)))
-       [])
-      (when block
-        (page-embed-aux config block)))))
+  (let [page-name (util/page-name-sanity-lc (string/trim page-name))
+        [block set-block!] (hooks/use-state nil)]
+    (hooks/use-effect!
+     (fn []
+       (p/let [block (db-async/<get-block (state/get-current-repo)
+                                          page-name
+                                          {:children? true
+                                           :skip-refresh? true})]
+         (set-block! block)))
+     [])
+    (when block
+      (page-embed-aux config block))))
 
 (defn- get-label-text
   [label]
@@ -1811,12 +1789,6 @@
        (:db/id block)
        :block)
       (util/stop e))
-
-    (and (util/meta-key? e) (whiteboard-handler/inside-portal? (.-target e)))
-    (do (whiteboard-handler/add-new-block-portal-shape!
-         uuid
-         (whiteboard-handler/closest-shape (.-target e)))
-        (util/stop e))
 
     :else
     (when uuid
@@ -3676,9 +3648,7 @@
           :else
           (let [language (if (contains? #{"edn" "clj" "cljc" "cljs" "clojurescript"} language) "clojure" language)]
             [:div.ui-fenced-code-editor.flex.w-full
-             {:ref (fn [el]
-                     (set-inside-portal? (and el (whiteboard-handler/inside-portal? el))))
-              :on-mouse-over #(dom/add-class! (hooks/deref *actions-ref) "!opacity-100")
+             {:on-mouse-over #(dom/add-class! (hooks/deref *actions-ref) "!opacity-100")
               :on-mouse-leave (fn [e]
                                 (when (dom/has-class? (.-target e) "code-editor")
                                   (dom/remove-class! (hooks/deref *actions-ref) "!opacity-100")))}

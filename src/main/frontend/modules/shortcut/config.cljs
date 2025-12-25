@@ -23,7 +23,6 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.window :as window-handler]
             [frontend.modules.shortcut.before :as m]
             [frontend.state :as state]
@@ -65,90 +64,6 @@
 
    :pdf/find                                {:binding "alt+f"
                                              :fn      pdf-utils/open-finder}
-
-   :whiteboard/select                       {:binding ["1" "w s"]
-                                             :fn      #(.selectTool ^js (state/active-tldraw-app) "select")}
-
-   :whiteboard/pan                          {:binding ["2" "w p"]
-                                             :fn      #(.selectTool ^js (state/active-tldraw-app) "move")}
-
-   :whiteboard/portal                       {:binding ["3" "w b"]
-                                             :fn      #(.selectTool ^js (state/active-tldraw-app) "logseq-portal")}
-
-   :whiteboard/pencil                       {:binding ["4" "w d"]
-                                             :fn      #(.selectTool ^js (state/active-tldraw-app) "pencil")}
-
-   :whiteboard/highlighter                  {:binding ["5" "w h"]
-                                             :fn      #(.selectTool ^js (state/active-tldraw-app) "highlighter")}
-
-   :whiteboard/eraser                       {:binding ["6" "w e"]
-                                             :fn      #(.selectTool ^js (state/active-tldraw-app) "erase")}
-
-   :whiteboard/connector                    {:binding ["7" "w c"]
-                                             :fn      #(.selectTool ^js (state/active-tldraw-app) "line")}
-
-   :whiteboard/text                         {:binding ["8" "w t"]
-                                             :fn      #(.selectTool ^js (state/active-tldraw-app) "text")}
-
-   :whiteboard/rectangle                    {:binding ["9" "w r"]
-                                             :fn      #(.selectTool ^js (state/active-tldraw-app) "box")}
-
-   :whiteboard/ellipse                      {:binding ["o" "w o"]
-                                             :fn      #(.selectTool ^js (state/active-tldraw-app) "ellipse")}
-
-   :whiteboard/reset-zoom                   {:binding "shift+0"
-                                             :fn      #(.resetZoom (.-api ^js (state/active-tldraw-app)))}
-
-   :whiteboard/zoom-to-fit                  {:binding "shift+1"
-                                             :fn      #(.zoomToFit (.-api ^js (state/active-tldraw-app)))}
-
-   :whiteboard/zoom-to-selection            {:binding "shift+2"
-                                             :fn      #(.zoomToSelection (.-api ^js (state/active-tldraw-app)))}
-
-   :whiteboard/zoom-out                     {:binding "shift+dash"
-                                             :fn      #(.zoomOut (.-api ^js (state/active-tldraw-app)) false)}
-
-   :whiteboard/zoom-in                      {:binding "shift+equals"
-                                             :fn      #(.zoomIn (.-api ^js (state/active-tldraw-app)) false)}
-
-   :whiteboard/send-backward                {:binding "open-square-bracket"
-                                             :fn      #(.sendBackward ^js (state/active-tldraw-app))}
-
-   :whiteboard/send-to-back                 {:binding "shift+open-square-bracket"
-                                             :fn      #(.sendToBack ^js (state/active-tldraw-app))}
-
-   :whiteboard/bring-forward                {:binding "close-square-bracket"
-                                             :fn      #(.bringForward ^js (state/active-tldraw-app))}
-
-   :whiteboard/bring-to-front               {:binding "shift+close-square-bracket"
-                                             :fn      #(.bringToFront ^js (state/active-tldraw-app))}
-
-   :whiteboard/lock                         {:binding "mod+l"
-                                             :fn      #(.setLocked ^js (state/active-tldraw-app) true)}
-
-   :whiteboard/unlock                       {:binding "mod+shift+l"
-                                             :fn      #(.setLocked ^js (state/active-tldraw-app) false)}
-
-   :whiteboard/group                        {:binding "mod+g"
-                                             :fn      #(.doGroup (.-api ^js (state/active-tldraw-app)))}
-
-   :whiteboard/ungroup                      {:binding "mod+shift+g"
-                                             :fn      #(.unGroup (.-api ^js (state/active-tldraw-app)))}
-
-   :whiteboard/toggle-grid                  {:binding "t g"
-                                             :fn      #(.toggleGrid (.-api ^js (state/active-tldraw-app)))}
-
-   :whiteboard/clone-right                  {:binding (if mac? "ctrl+shift+right" "alt+right")
-                                             :fn      #(.clone (.-api ^js (state/active-tldraw-app)) "right")}
-
-   :whiteboard/clone-left                   {:binding (if mac? "ctrl+shift+left" "alt+left")
-                                             :fn      #(.clone (.-api ^js (state/active-tldraw-app)) "left")}
-
-   :whiteboard/clone-up                     {:binding (if mac? "ctrl+shift+up" "alt+up")
-                                             :fn      #(.clone (.-api ^js (state/active-tldraw-app)) "up")}
-
-   :whiteboard/clone-down                   {:binding (if mac? "ctrl+shift+down" "alt+down")
-                                             :fn      #(.clone (.-api ^js (state/active-tldraw-app)) "down")}
 
    :auto-complete/complete                  {:binding "enter"
                                              :fn      ui-handler/auto-complete-complete}
@@ -208,11 +123,6 @@
 
    :editor/new-line                         {:binding "shift+enter"
                                              :fn      editor-handler/keydown-new-line-handler}
-
-   :editor/new-whiteboard                   {:binding "n w"
-                                             :fn      (fn []
-                                                        (when-not (config/db-based-graph? (state/get-current-repo))
-                                                          (whiteboard-handler/<create-new-whiteboard-and-redirect!)))}
 
    :editor/follow-link                      {:binding "mod+o"
                                              :fn      editor-handler/follow-link-under-cursor!}
@@ -504,9 +414,6 @@
    :go/all-graphs                           {:binding "g shift+g"
                                              :fn      route-handler/redirect-to-all-graphs}
 
-   :go/whiteboards                          {:binding "g w"
-                                             :fn      route-handler/redirect-to-whiteboard-dashboard!}
-
    :go/keyboard-shortcuts                   {:binding "g s"
                                              :fn      #(state/pub-event! [:modal/keymap])}
 
@@ -667,7 +574,8 @@
        ::dicts/commands dicts/abbreviated-commands}]
   (assert (= (::commands keyboard-commands) (::dicts/commands keyboard-commands))
           (str "Keyboard commands must have an english label"
-               (data/diff (::commands keyboard-commands) (::commands keyboard-commands)))))
+               (data/diff (::commands keyboard-commands)
+                          (::dicts/commands keyboard-commands)))))
 
 (defn- resolve-fn
   "Converts a keyword fn to the actual fn. The fn to be resolved needs to be
@@ -735,10 +643,6 @@
 
     :shortcut.handler/pdf
     (-> (build-category-map {:ns :pdf})
-        (with-meta {:before m/enable-when-not-editing-mode!}))
-
-    :shortcut.handler/whiteboard
-    (-> (build-category-map {:ns :whiteboard})
         (with-meta {:before m/enable-when-not-editing-mode!}))
 
     :shortcut.handler/auto-complete
@@ -849,7 +753,6 @@
           :go/flashcards
           :go/graph-view
           :go/all-graphs
-          :go/whiteboards
           :go/keyboard-shortcuts
           :go/tomorrow
           :go/next-journal
@@ -866,7 +769,6 @@
           :editor/open-file-in-directory
           :editor/copy-current-file
           :editor/copy-page-url
-          :editor/new-whiteboard
           :editor/set-tags
           :editor/add-property-deadline
           :editor/add-property-status
@@ -952,7 +854,6 @@
      :go/all-pages
      :go/graph-view
      :go/all-graphs
-     :go/whiteboards
      :go/flashcards
      :go/tomorrow
      :go/next-journal
@@ -1022,37 +923,6 @@
      :ui/toggle-settings
      :ui/toggle-contents
      :ui/customize-appearance]
-
-    :shortcut.category/whiteboard
-    [:editor/new-whiteboard
-     :whiteboard/select
-     :whiteboard/pan
-     :whiteboard/portal
-     :whiteboard/pencil
-     :whiteboard/highlighter
-     :whiteboard/eraser
-     :whiteboard/connector
-     :whiteboard/text
-     :whiteboard/rectangle
-     :whiteboard/ellipse
-     :whiteboard/reset-zoom
-     :whiteboard/zoom-to-fit
-     :whiteboard/zoom-to-selection
-     :whiteboard/zoom-out
-     :whiteboard/zoom-in
-     :whiteboard/send-backward
-     :whiteboard/send-to-back
-     :whiteboard/bring-forward
-     :whiteboard/bring-to-front
-     :whiteboard/lock
-     :whiteboard/unlock
-     :whiteboard/group
-     :whiteboard/ungroup
-     :whiteboard/toggle-grid
-     :whiteboard/clone-left
-     :whiteboard/clone-right
-     :whiteboard/clone-top
-     :whiteboard/clone-bottom]
 
     :shortcut.category/others
     [:pdf/previous-page

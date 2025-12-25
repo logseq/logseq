@@ -195,15 +195,6 @@
           export-edn)
         export-edn))))
 
-(defn- get-zoom-level
-  [page-uuid]
-  (let [uuid (:block/uuid (db/get-page page-uuid))
-        whiteboard-camera (->> (str "logseq.tldraw.camera:" uuid)
-                               (.getItem js/sessionStorage)
-                               (js/JSON.parse)
-                               (js->clj))]
-    (or (get whiteboard-camera "zoom") 1)))
-
 (defn- get-image-blob
   [block-uuids-or-page-name {:keys [transparent-bg? x y width height zoom]} callback]
   (let [top-block-id (if (coll? block-uuids-or-page-name) (first block-uuids-or-page-name) block-uuids-or-page-name)
@@ -214,7 +205,7 @@
                    "#main-content-container"
                    (str "[blockid='" top-block-id "']"))
         container  (js/document.querySelector selector)
-        scale (if page? (/ 1 (or zoom (get-zoom-level top-block-id))) 1)
+        scale (if page? (/ 1 (or zoom 1)) 1)
         options #js {:allowTaint true
                      :useCORS true
                      :backgroundColor (or background "transparent")

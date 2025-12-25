@@ -443,11 +443,6 @@
   resolved "https://registry.yarnpkg.com/@emoji-mart/react/-/react-1.1.1.tgz#ddad52f93a25baf31c5383c3e7e4c6e05554312a"
   integrity sha512-NMlFNeWgv1//uPsvLxvGQoIerPuVdXwK/EUek8OOkJ6wVOWPUizRBJU0hDqWZCOROVpfBgCemaC3m6jDOXi03g==
 
-"@excalidraw/excalidraw@0.16.1":
-  version "0.16.1"
-  resolved "https://registry.yarnpkg.com/@excalidraw/excalidraw/-/excalidraw-0.16.1.tgz#a928945d567a1f5c0aa75bd1b1c05b50329eb27a"
-  integrity sha512-4zirHk7dNx6SVq2jQmYOLliqAa1h3WPVqHM5qtJyhD769VsOqwlkopAcnZMb3G1PeIMm6cf2F31quS5MVqvoOQ==
-
 "@glidejs/glide@^3.6.0":
   version "3.7.1"
   resolved "https://registry.yarnpkg.com/@glidejs/glide/-/glide-3.7.1.tgz#cd3fb256006d9c7aec2f95873d268410df2ab0ce"

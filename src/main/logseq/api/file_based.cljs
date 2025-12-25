@@ -77,5 +77,3 @@
   (when-let [repo (and ns (state/get-current-repo))]
     (when-let [pages (file-model/get-namespace-hierarchy repo ns)]
       (bean/->js (sdk-utils/normalize-keyword-for-json pages)))))
-
-(def set_blocks_id #(editor-handler/set-blocks-id! (map uuid %)))

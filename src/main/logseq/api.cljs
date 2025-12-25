@@ -238,7 +238,6 @@
 (def ^:export remove_template file-based-api/remove_template)
 (def ^:export get_pages_from_namespace file-based-api/get_pages_from_namespace)
 (def ^:export get_pages_tree_from_namespace file-based-api/get_pages_tree_from_namespace)
-(def ^:export set_blocks_id file-based-api/set_blocks_id)
 
 (comment
   ;; Use the following code to generate export APIs from specific namespaces

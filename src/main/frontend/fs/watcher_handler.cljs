@@ -73,7 +73,7 @@
             repo-dir (config/get-local-dir repo)
             {:keys [mtime ctime]} stat
             ext (keyword (path/file-ext path))]
-        (when (contains? #{:org :md :markdown :css :js :edn :excalidraw :tldr} ext)
+        (when (contains? #{:org :md :markdown :css :js :edn} ext)
           (p/let [db-content (db-async/<get-file repo path)
                   exists-in-db? (not (nil? db-content))
                   db-content (or db-content "")]
