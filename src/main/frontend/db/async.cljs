@@ -236,23 +236,6 @@
           [?b :block/tags ?class-id]]
         class-ids)))
 
-(defn <get-whiteboards
-  [graph]
-  (p/let [result (if (config/db-based-graph? graph)
-                   (<q graph {:transact-db? false}
-                       '[:find [(pull ?page [:db/id :block/uuid :block/name :block/title :block/created-at :block/updated-at]) ...]
-                         :where
-                         [?page :block/tags :logseq.class/Whiteboard]
-                         [?page :block/name]])
-                   (<q graph {:transact-db? false}
-                       '[:find [(pull ?page [:db/id :block/uuid :block/name :block/title :block/created-at :block/updated-at]) ...]
-                         :where
-                         [?page :block/type "whiteboard"]
-                         [?page :block/name]]))]
-    (->> result
-         (sort-by :block/updated-at)
-         reverse)))
-
 (defn <get-views
   [graph class-id view-feature-type]
   (<q graph {:transact-db? true}
