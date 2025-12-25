@@ -3,14 +3,13 @@
   (:require [clojure.string :as string]
             [frontend.common.missionary :as c.m]
             [frontend.components.block :as component-block]
-            [frontend.config :as config]
+            [frontend.components.macro :as component-macro]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
             [frontend.db.query-dsl :as query-dsl]
-            [frontend.extensions.srs :as srs]
             [frontend.handler.block :as block-handler]
             [frontend.handler.property :as property-handler]
             [frontend.modules.shortcut.core :as shortcut]
@@ -305,14 +304,12 @@
   "Return a task that update `:srs/cards-due-count` periodically."
   (m/sp
     (let [repo (state/get-current-repo)]
-      (if (config/db-based-graph? repo)
-        (m/?
-         (m/reduce
-          (fn [_ _]
-            (p/let [due-cards (<get-due-card-block-ids repo nil)]
-              (state/set-state! :srs/cards-due-count (count due-cards))))
-          (c.m/clock (* 3600 1000))))
-        (srs/update-cards-due-count!)))))
+      (m/?
+       (m/reduce
+        (fn [_ _]
+          (p/let [due-cards (<get-due-card-block-ids repo nil)]
+            (state/set-state! :srs/cards-due-count (count due-cards))))
+        (c.m/clock (* 3600 1000)))))))
 
 (defn update-due-cards-count
   []
@@ -343,6 +340,49 @@
         block-ids
         :block/tags
         (:db/id (db/entity :logseq.class/Card)))))))
+
+;;; register cloze macro
+
+(def ^:private cloze-cue-separator "\\\\")
+
+(defn- cloze-parse
+  "Parse the cloze content, and return [answer cue]."
+  [content]
+  (let [parts (string/split content cloze-cue-separator -1)]
+    (if (<= (count parts) 1)
+      [content nil]
+      (let [cue (string/trim (last parts))]
+        ;; If there are more than one separator, only the last component is considered the cue.
+        [(string/trimr (string/join cloze-cue-separator (drop-last parts))) cue]))))
+
+(rum/defcs cloze-macro-show < rum/reactive
+  {:init (fn [state]
+           (let [config (first (:rum/args state))
+                 shown? (atom (:show-cloze? config))]
+             (assoc state :shown? shown?)))}
+  [state config options]
+  (let [shown?* (:shown? state)
+        shown? (rum/react shown?*)
+        toggle! #(swap! shown?* not)
+        [answer cue] (cloze-parse (string/join ", " (:arguments options)))]
+    (if (or shown? (:show-cloze? config))
+      [:a.cloze-revealed {:on-click toggle!}
+       (util/format "[%s]" answer)]
+      [:a.cloze {:on-click toggle!}
+       (if (string/blank? cue)
+         "[...]"
+         (str "(" cue ")"))])))
+
+(def cloze-macro-name
+  "cloze syntax: {{cloze: ...}}"
+  "cloze")
+
+;; TODO: support {{cards ...}}
+;; (def query-macro-name
+;;   "{{cards ...}}"
+;;   "cards")
+
+(component-macro/register cloze-macro-name cloze-macro-show)
 
 (comment
   (defn- cards-in-time-range
