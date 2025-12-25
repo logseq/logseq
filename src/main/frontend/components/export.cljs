@@ -63,14 +63,14 @@
            {:variant :default
             :on-click (fn []
                         (->
-                         (p/let [result (export/backup-db-graph repo :set-folder)]
+                         (p/let [result (export/backup-db-graph repo)]
                            (case result
                              true
                              (notification/show! "Backup successful!" :success)
                              :graph-not-changed
                              (notification/show! "Graph has not been updated since last export." :success)
                              nil)
-                           (export/auto-db-backup! repo {:backup-now? false}))
+                           (export/auto-db-backup! repo))
                          (p/catch (fn [error]
                                     (println "Failed to backup.")
                                     (js/console.error error)))))}
@@ -139,7 +139,9 @@
             "Export debug transit file"]
            [:p.text-sm.opacity-70.mb-0 "Exports to a .transit file to send to us for debugging. Any sensitive data will be removed in the exported file."]])
 
-        (when (and db-based? (not (util/mobile?)))
+        (when (and db-based?
+                   util/web-platform?
+                   (not (util/mobile?)))
           [:div
            [:hr]
            (auto-backup)])]])))
