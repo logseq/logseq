@@ -3,7 +3,6 @@
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
-            [electron.ipc :as ipc]
             [frontend.commands :as commands]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -11,7 +10,6 @@
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.conn :as conn]
-            [frontend.fs :as fs]
             [frontend.handler.common.page :as page-common-handler]
             [frontend.handler.db-based.page :as db-page-handler]
             [frontend.handler.db-based.property :as db-property-handler]
@@ -31,7 +29,6 @@
             [goog.functions :refer [debounce]]
             [goog.object :as gobj]
             [logseq.common.config :as common-config]
-            [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
@@ -44,49 +41,32 @@
 (defn <unfavorite-page!
   [page-name]
   (p/do!
-   (let [repo (state/get-current-repo)]
-     (if (config/db-based-graph? repo)
-       (when-let [page-block-uuid (:block/uuid (db/get-page page-name))]
-         (page-common-handler/<db-unfavorite-page! page-block-uuid))
-       (page-common-handler/file-unfavorite-page! page-name)))
+   (when-let [page-block-uuid (:block/uuid (db/get-page page-name))]
+     (page-common-handler/<db-unfavorite-page! page-block-uuid))
    (state/update-favorites-updated!)))
 
 (defn <favorite-page!
   [page-name]
   (p/do!
-   (let [repo (state/get-current-repo)]
-     (if (config/db-based-graph? repo)
-       (when-let [page-block-uuid (:block/uuid (db/get-page page-name))]
-         (page-common-handler/<db-favorite-page! page-block-uuid))
-       (page-common-handler/file-favorite-page! page-name)))
+   (when-let [page-block-uuid (:block/uuid (db/get-page page-name))]
+     (page-common-handler/<db-favorite-page! page-block-uuid))
    (state/update-favorites-updated!)))
 
 (defn favorited?
   [page-name]
-  (let [repo (state/get-current-repo)]
-    (if (config/db-based-graph? repo)
-      (boolean
-       (when-let [page-block-uuid (:block/uuid (db/get-page page-name))]
-         (page-common-handler/db-favorited? page-block-uuid)))
-      (page-common-handler/file-favorited? page-name))))
+  (boolean
+   (when-let [page-block-uuid (:block/uuid (db/get-page page-name))]
+     (page-common-handler/db-favorited? page-block-uuid))))
 
 (defn get-favorites
   "return page-block entities"
   []
   (when-let [db (conn/get-db)]
-    (let [repo (state/get-current-repo)]
-      (if (config/db-based-graph? repo)
-        (when-let [page (ldb/get-page db common-config/favorites-page-name)]
-          (let [blocks (ldb/sort-by-order (:block/_parent page))]
-            (keep (fn [block]
-                    (when-let [block-db-id (:db/id (:block/link block))]
-                      (d/entity db block-db-id))) blocks)))
-        (let [page-names (->> (:favorites (state/sub-config))
-                              (remove string/blank?)
-                              (filter string?)
-                              (mapv util/safe-page-name-sanity-lc)
-                              (distinct))]
-          (keep (fn [page-name] (db/get-page page-name)) page-names))))))
+    (when-let [page (ldb/get-page db common-config/favorites-page-name)]
+      (let [blocks (ldb/sort-by-order (:block/_parent page))]
+        (keep (fn [block]
+                (when-let [block-db-id (:db/id (:block/link block))]
+                  (d/entity db block-db-id))) blocks)))))
 
 (defn toggle-favorite! []
   ;; NOTE: in journals or settings, current-page is nil
@@ -146,19 +126,6 @@
 (def rebuild-slash-commands-list!
   (debounce init-commands! 1500))
 
-(defn <template-exists?
-  [title]
-  (when title
-    (p/let [result (db-async/<get-all-templates (state/get-current-repo))
-            templates (keys result)]
-      (when (seq templates)
-        (let [templates (map string/lower-case templates)]
-          (contains? (set templates) (string/lower-case title)))))))
-
-(defn file-based-save-filter!
-  [page filter-state]
-  (property-handler/add-page-property! page :filters filter-state))
-
 (defn db-based-save-filter!
   [page filter-page-id {:keys [include? add?]}]
   (let [repo (state/get-current-repo)
@@ -190,7 +157,7 @@
       (cursor/move-cursor-forward input (+ 2 (count current-selected))))))
 
 (defn- tag-on-chosen-handler
-  [input id pos format current-pos edit-content q db-based?]
+  [input id pos format current-pos edit-content q]
   (fn [chosen-result ^js e]
     (util/stop e)
     (state/clear-editor-action!)
@@ -204,9 +171,8 @@
             target (first (:block/_alias chosen-result))
             chosen-result (if (and target (not (ldb/class? chosen-result)) (ldb/class? target)) target chosen-result)
             chosen (:block/title chosen-result)
-            class? (and db-based?
-                        (or (string/includes? chosen (str (t :new-tag) " "))
-                            (ldb/class? chosen-result)))
+            class? (or (string/includes? chosen (str (t :new-tag) " "))
+                       (ldb/class? chosen-result))
             inline-tag? (and class? (= (.-identifier e) "auto-complete/meta-complete")
                              (not= chosen "Page"))
             chosen (-> chosen
@@ -234,12 +200,12 @@
                                        {:last-pattern last-pattern
                                         :end-pattern (when wrapped? page-ref/right-brackets)
                                         :command :page-ref})
-       (when (and db-based? (not tag-in-page-auto-complete?))
+       (when-not tag-in-page-auto-complete?
          (db-page-handler/tag-on-chosen-handler chosen chosen-result class? edit-content current-pos last-pattern))
        (when input (.focus input))))))
 
 (defn- page-on-chosen-handler
-  [id format q db-based?]
+  [id format q]
   (fn [chosen-result e]
     (util/stop e)
     (state/clear-editor-action!)
@@ -267,11 +233,10 @@
                               (or multiple-pages-same-name? (not (ldb/page? chosen-result))))
                        (ref/->page-ref (:block/uuid chosen-result))
                        (get-page-ref-text chosen'))
-            result (when db-based?
-                     (when-not (de/entity? chosen-result)
-                       (<create! chosen'
-                                 {:redirect? false
-                                  :split-namespace? true})))
+            result (when-not (de/entity? chosen-result)
+                     (<create! chosen'
+                               {:redirect? false
+                                :split-namespace? true}))
             ref-text' (if result
                         (let [title (:block/title result)]
                           (ref/->page-ref title))
@@ -299,11 +264,10 @@
            (when hashtag?
              (common-util/safe-subs edit-content pos current-pos))
            (when (> (count edit-content) current-pos)
-             (common-util/safe-subs edit-content pos current-pos)))
-        db-based? (config/db-based-graph? (state/get-current-repo))]
+             (common-util/safe-subs edit-content pos current-pos)))]
     (if hashtag?
-      (tag-on-chosen-handler input id pos format current-pos edit-content q db-based?)
-      (page-on-chosen-handler id format q db-based?))))
+      (tag-on-chosen-handler input id pos format current-pos edit-content q)
+      (page-on-chosen-handler id format q))))
 
 (defn create-today-journal!
   []
@@ -317,32 +281,16 @@
                (not config/publishing?))
       (when-let [title (date/today)]
         (state/set-today! title)
-        (when (or (config/db-based-graph? repo)
-                  (config/local-file-based-graph? repo))
-          (let [today-page (util/page-name-sanity-lc title)
-                format (state/get-preferred-format repo)
-                db-based? (config/db-based-graph? repo)
-                create-f (fn []
-                           (p/let [result (<create! title {:redirect? false
-                                                           :split-namespace? false
-                                                           :today-journal? true})]
-                             (when-not db-based? (state/pub-event! [:journal/insert-template today-page]))
-                             (ui-handler/re-render-root!)
-                             (plugin-handler/hook-plugin-app :today-journal-created {:title today-page})
-                             result))]
-            (when-not (db/get-page today-page)
-              (if db-based?
-                (create-f)
-                (p/let [file-name (date/journal-title->default title)
-                        file-rpath (str (config/get-journals-directory) "/" file-name "."
-                                        (config/get-file-extension format))
-                        repo-dir (config/get-repo-dir repo)
-                        file-exists? (fs/file-exists? repo-dir file-rpath)
-                        file-content (when file-exists?
-                                       (fs/read-file repo-dir file-rpath))]
-                  (when (or (not file-exists?)
-                            (and file-exists? (string/blank? file-content)))
-                    (create-f)))))))))))
+        (let [today-page (util/page-name-sanity-lc title)
+              create-f (fn []
+                         (p/let [result (<create! title {:redirect? false
+                                                         :split-namespace? false
+                                                         :today-journal? true})]
+                           (ui-handler/re-render-root!)
+                           (plugin-handler/hook-plugin-app :today-journal-created {:title today-page})
+                           result))]
+          (when-not (db/get-page today-page)
+            (create-f)))))))
 
 (defn open-today-in-sidebar
   []

@@ -82,8 +82,7 @@
                :as opts}]
    (when (or (uuid? page-name)
              (and (string? page-name) (not (string/blank? page-name))))
-     (let [page (db/get-page page-name)
-           whiteboard? (db/whiteboard-page? page)]
+     (let [page (db/get-page page-name)]
        (if (and (not config/dev?)
                 (or (and (ldb/hidden? page) (not (ldb/property? page)))
                     (and (ldb/built-in? page) (ldb/private-built-in-page? page))))
@@ -97,9 +96,7 @@
                       (default-page-route (str page-name))
 
                        block-id
-                       (assoc :query-params (if whiteboard?
-                                              {:block-id block-id}
-                                              {:anchor (str "ls-block-" block-id)}))
+                       (assoc :query-params {:anchor (str "ls-block-" block-id)})
 
                        anchor
                        (assoc :query-params {:anchor anchor})

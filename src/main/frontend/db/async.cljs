@@ -32,25 +32,6 @@
                        [?file :file/path ?path]])]
     (->> result seq reverse (map #(vector (:file/path %) (or (:file/last-modified-at %) 0))))))
 
-(defn <get-all-templates
-  [graph]
-  (p/let [result (<q graph
-                     {:transact-db? true}
-                     '[:find ?t (pull ?b [*])
-                       :where
-                       [?b :block/properties ?p]
-                       [(get ?p :template) ?t]])]
-    (->> result
-         (map (fn [[template b]]
-                [template (assoc b :block/title template)]))
-         (into {}))))
-
-(defn <get-template-by-name
-  [name]
-  (let [repo (state/get-current-repo)]
-    (p/let [templates (<get-all-templates repo)]
-      (get templates name))))
-
 (defn <get-all-properties
   "Returns all public properties as property maps including their
   :block/title and :db/ident. For file graphs the map only contains
