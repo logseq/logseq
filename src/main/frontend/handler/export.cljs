@@ -264,8 +264,8 @@
     (db/transact! [(ldb/kv :logseq.kv/graph-backup-folder folder-name)])
     [folder-name handle]))
 
-(defn backup-db-graph
-  [repo _backup-type]
+(defn- web-backup-db-graph
+  [repo]
   (when (and repo (= repo (state/get-current-repo)))
     (when-let [backup-folder (ldb/get-key-value (db/get-db repo) :logseq.kv/graph-backup-folder)]
       ;; ensure file handle exists
@@ -310,6 +310,11 @@
            (notification/show! "DB backup failed, please go to Export and specify a backup folder." :error)
            false))))))
 
+(defn backup-db-graph
+  [repo]
+  (when (and (config/db-based-graph? repo) (not (util/capacitor?)))
+    (web-backup-db-graph repo)))
+
 (defonce *backup-interval (atom nil))
 (defn cancel-db-backup!
   []
@@ -317,15 +322,15 @@
     (js/clearInterval i)))
 
 (defn auto-db-backup!
-  [repo {:keys [backup-now?]
-         :or {backup-now? true}}]
-  (when (ldb/get-key-value (db/get-db repo) :logseq.kv/graph-backup-folder)
-    (when (and (config/db-based-graph? repo) (not (util/capacitor?)))
-      (cancel-db-backup!)
+  [repo]
+  (when (and
+         (config/db-based-graph? repo)
+         util/web-platform?
+         (not (util/capacitor?))
+         (ldb/get-key-value (db/get-db repo) :logseq.kv/graph-backup-folder))
+    (cancel-db-backup!)
 
-      (when backup-now? (backup-db-graph repo :backup-now))
-
-      ;; run backup every hour
-      (let [interval (js/setInterval #(backup-db-graph repo :auto)
-                                     (* 1 60 60 1000))]
-        (reset! *backup-interval interval)))))
+    ;; run backup every hour
+    (let [interval (js/setInterval #(backup-db-graph repo)
+                                   (* 1 60 60 1000))]
+      (reset! *backup-interval interval))))

@@ -50,7 +50,7 @@
   (let [tx (@*last-synced-graph->tx repo)
         db (db/get-db repo)]
     (or (nil? tx)
-        (> tx (:max-tx db)))))
+        (> (:max-tx db) tx))))
 
 (defn export-current-graph!
   [& {:keys [succ-notification? force-save?]}]
