@@ -30,10 +30,11 @@
   (util/input graph-name)
   (when enable-sync?
     (w/wait-for "button#rtc-sync" {:timeout 3000})
-    (w/click "button#rtc-sync"))
-  (when enable-sync?
+    (w/click "button#rtc-sync")
     (input-e2ee-password)
     (w/wait-for "button.cloud.on.idle" {:timeout 20000}))
+  (when-not enable-sync?
+    (w/click "button:not([disabled]):text(\"Submit\")"))
   ;; new graph can blocks the ui because the db need to be created and restored,
   ;; I have no idea why `search-and-click` failed to auto-wait sometimes.
   (util/wait-timeout 1000))
