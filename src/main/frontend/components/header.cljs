@@ -124,17 +124,16 @@
         page-menu (if (and working-page? (ldb/page? page))
                     (page-menu/page-menu page)
                     (when-not config/publishing?
-                      (when (config/db-based-graph?)
-                        (let [block-id-str (str (:block/uuid page))
-                              favorited? (page-handler/favorited? block-id-str)]
-                          [{:title   (if favorited?
-                                       (t :page/unfavorite)
-                                       (t :page/add-to-favorites))
-                            :options {:on-click
-                                      (fn []
-                                        (if favorited?
-                                          (page-handler/<unfavorite-page! block-id-str)
-                                          (page-handler/<favorite-page! block-id-str)))}}]))))
+                      (let [block-id-str (str (:block/uuid page))
+                            favorited? (page-handler/favorited? block-id-str)]
+                        [{:title   (if favorited?
+                                     (t :page/unfavorite)
+                                     (t :page/add-to-favorites))
+                          :options {:on-click
+                                    (fn []
+                                      (if favorited?
+                                        (page-handler/<unfavorite-page! block-id-str)
+                                        (page-handler/<favorite-page! block-id-str)))}}])))
         page-menu-and-hr (concat page-menu [{:hr true}])
         login? (and (state/sub :auth/id-token) (user-handler/logged-in?))
         items (fn []
@@ -375,8 +374,7 @@
                                                  (state/set-left-sidebar-open!
                                                   (not (:ui/left-sidebar-open? @state/state))))})
         custom-home-page? (and (state/custom-home-page?)
-                               (= (state/sub-default-home-page) (state/get-current-page)))
-        db-based? (config/db-based-graph? current-repo)]
+                               (= (state/sub-default-home-page) (state/get-current-page)))]
     [:div.cp__header.drag-region#head
      {:class           (util/classnames [{:electron-mac   electron-mac?
                                           :native-ios     (mobile-util/native-ios?)
@@ -419,7 +417,6 @@
        (when (and current-repo
                   (ldb/get-graph-rtc-uuid (db/get-db))
                   (user-handler/logged-in?)
-                  db-based?
                   (user-handler/rtc-group?))
          [:<>
           (recent-slider)
@@ -432,8 +429,7 @@
        (when (user-handler/logged-in?)
          (rtc-indicator/uploading-detail))
 
-       (when db-based?
-         (semantic-search-progressing current-repo))
+       (semantic-search-progressing current-repo)
 
        (when (and (not= (state/get-current-route) :home)
                   (not custom-home-page?))

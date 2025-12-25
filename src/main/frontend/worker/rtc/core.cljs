@@ -419,9 +419,7 @@
     (let [repo (worker-state/get-current-repo)
           token (worker-state/get-id-token)
           conn (worker-state/get-datascript-conn repo)]
-      (if-not (and repo
-                   (sqlite-util/db-based-graph? repo)
-                   conn token)
+      (if-not (and repo conn token)
         (log/info :skip-new-task--rtc-start
                   {:repo repo
                    :some?-conn (some? conn)
