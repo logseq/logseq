@@ -87,7 +87,7 @@
                              (.slice (.toISOString (js/Date. ts)) 0 10)
                              (str "unparseable-day:" f))]
               (cond
-                ;; Phase 1: hourly buckets (newest 3 hours)
+                ;; Phase 1: hourly buckets (newest 6 hours)
                 (< (count hour-seen) keep-hourly)
                 (if (contains? hour-seen hour-key)
                   (recur (rest xs) kept kept-count hour-seen day-seen)
