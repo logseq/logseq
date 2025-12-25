@@ -15,7 +15,6 @@
             ["semver" :as semver]
             [frontend.loader :refer [load]]
             [cljs-bean.core :as bean]
-            [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [clojure.pprint]
             [dommy.core :as d]
@@ -29,7 +28,6 @@
             [promesa.core :as p]
             [rum.core :as rum]
             [clojure.core.async :as async]
-            [frontend.pubsub :as pubsub]
             [datascript.impl.entity :as de]
             [logseq.common.config :as common-config]))
   #?(:cljs (:import [goog.async Debouncer]))
@@ -1431,24 +1429,6 @@
           (reset! last-mem ret)
           ret)
         @last-mem))))
-
-#?(:cljs
-   (do
-     (defn <app-wake-up-from-sleep-loop
-       "start a async/go-loop to check the app awake from sleep.
-Use (async/tap `pubsub/app-wake-up-from-sleep-mult`) to receive messages.
-Arg *stop: atom, reset to true to stop the loop"
-       [*stop]
-       (let [*last-activated-at (volatile! (tc/to-epoch (t/now)))]
-         (async/go-loop []
-           (if @*stop
-             (println :<app-wake-up-from-sleep-loop :stop)
-             (let [now-epoch (tc/to-epoch (t/now))]
-               (when (< @*last-activated-at (- now-epoch 10))
-                 (async/>! pubsub/app-wake-up-from-sleep-ch {:last-activated-at @*last-activated-at :now now-epoch}))
-               (vreset! *last-activated-at now-epoch)
-               (async/<! (async/timeout 5000))
-               (recur))))))))
 
 ;; from rum
 #?(:cljs
