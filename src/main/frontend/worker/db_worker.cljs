@@ -606,7 +606,7 @@
     (try
       (worker-util/profile
        "apply outliner ops"
-       (outliner-op/apply-ops! repo conn ops (worker-state/get-date-formatter repo) opts))
+       (outliner-op/apply-ops! conn ops opts))
       (catch :default e
         (let [data (ex-data e)
               {:keys [type payload]} (when (map? data) data)]
@@ -783,30 +783,29 @@
   (throw (ex-info "Rename page is a file graph only operation" {})))
 
 (defn- delete-page!
-  [repo conn page-uuid]
+  [conn page-uuid]
   (let [error-handler (fn [{:keys [msg]}]
                         (worker-util/post-message :notification
                                                   [[:div [:p msg]] :error]))]
-    (worker-page/delete! repo conn page-uuid {:error-handler error-handler})))
+    (worker-page/delete! conn page-uuid {:error-handler error-handler})))
 
 (defn- create-page!
-  [repo conn title options]
-  (let [config (worker-state/get-config repo)]
-    (try
-      (worker-page/create! repo conn config title options)
-      (catch :default e
-        (js/console.error e)
-        (throw e)))))
+  [conn title options]
+  (try
+    (worker-page/create! conn title options)
+    (catch :default e
+      (js/console.error e)
+      (throw e))))
 
 (defn- outliner-register-op-handlers!
   []
   (outliner-op/register-op-handlers!
-   {:create-page (fn [repo conn [title options]]
-                   (create-page! repo conn title options))
+   {:create-page (fn [conn [title options]]
+                   (create-page! conn title options))
     :rename-page (fn [& _]
                    (rename-page!))
-    :delete-page (fn [repo conn [page-uuid]]
-                   (delete-page! repo conn page-uuid))}))
+    :delete-page (fn [conn [page-uuid]]
+                   (delete-page! conn page-uuid))}))
 
 (defn- on-become-master
   [repo start-opts]

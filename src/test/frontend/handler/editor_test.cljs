@@ -202,7 +202,7 @@
           page-uuid (:block/uuid (db/get-page "foo"))
           block-uuid (:block/uuid (model/get-block-by-page-name-and-block-route-name repo (str page-uuid) "foo"))]
       (editor/save-block! repo block-uuid "# bar")
-      (is (= "# bar" (:block/title (model/query-block-by-uuid block-uuid))))
+      (is (= "bar" (:block/title (model/query-block-by-uuid block-uuid))))
 
       (editor/save-block! repo block-uuid "# bar")
-      (is (= "# bar" (:block/title (model/query-block-by-uuid block-uuid)))))))
+      (is (= "bar" (:block/title (model/query-block-by-uuid block-uuid)))))))

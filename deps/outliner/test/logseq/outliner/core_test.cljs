@@ -13,7 +13,7 @@
           property-value (:user.property/default (db-test/find-block-by-content @conn "b1"))
           _ (assert (:db/id property-value))
           block (db-test/find-block-by-content @conn "b1")]
-      (outliner-core/delete-blocks! nil conn nil [block] {})
+      (outliner-core/delete-blocks! conn [block] {})
       (is (nil? (db-test/find-block-by-content @conn "b1")))
       (is (nil? (db-test/find-block-by-content @conn "test block"))))))
 
@@ -32,7 +32,7 @@
                                 :block/parent (:db/id page1)}])
           b3 (db-test/find-block-by-content @conn "b3")
           b4 (db-test/find-block-by-content @conn "b4")]
-      (outliner-core/delete-blocks! nil conn nil [b3 b4 page2] {})
+      (outliner-core/delete-blocks! conn [b3 b4 page2] {})
       (is (some? (db-test/find-block-by-content @conn "b3")))
       (is (some? (db-test/find-block-by-content @conn "b4")))
       (let [page2' (ldb/get-page @conn "page2")]

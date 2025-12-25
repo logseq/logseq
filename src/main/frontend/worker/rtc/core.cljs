@@ -267,7 +267,7 @@
                (:remote-update :remote-asset-block-update)
                (try
                  (m/? (r.remote-update/task--apply-remote-update
-                       graph-uuid repo conn date-formatter event @*aes-key add-log-fn))
+                       graph-uuid repo conn event @*aes-key add-log-fn))
                  (catch :default e
                    (if (= :rtc.exception/local-graph-too-old (:type (ex-data e)))
                      (m/? (r.client/new-task--pull-remote-data

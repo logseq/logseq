@@ -96,9 +96,8 @@
                                                                                                                                               (:block/uuid e)))))))]
                                                                           blocks))))]
                                      (when (seq template-blocks)
-                                       ;; FIXME: outliner core apis shouldn't use `repo`
                                        (let [result (outliner-core/insert-blocks
-                                                     repo db template-blocks object
+                                                     db template-blocks object
                                                      {:sibling? false
                                                       :keep-uuid? journal-template?
                                                       :outliner-op :insert-template-blocks})]

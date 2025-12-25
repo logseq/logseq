@@ -39,7 +39,7 @@
       (do (assert (and (pos? (:t apply-ops-resp)) (pos? (:t-query-end apply-ops-resp))) apply-ops-resp)
           (m/?
            (r.remote-update/task--apply-remote-update
-            graph-uuid repo conn date-formatter {:type :remote-update :value apply-ops-resp} aes-key add-log-fn))))))
+            graph-uuid repo conn {:type :remote-update :value apply-ops-resp} aes-key add-log-fn))))))
 
 (defn- new-task--init-request
   [get-ws-create-task graph-uuid major-schema-version repo conn *last-calibrate-t *server-schema-version add-log-fn]
@@ -543,7 +543,7 @@
               (do (assert (and (pos? (:t r)) (pos? (:t-query-end r))) r)
                   (m/?
                    (r.remote-update/task--apply-remote-update
-                    graph-uuid repo conn date-formatter {:type :remote-update :value r} aes-key add-log-fn))
+                    graph-uuid repo conn {:type :remote-update :value r} aes-key add-log-fn))
                   (add-log-fn :rtc.log/push-local-update {:remote-t (:t r) :remote-t-query-end (:t-query-end r)})))))))))
 
 (defn new-task--pull-remote-data

@@ -32,11 +32,7 @@
   [conn ops opts]
   (when (seq ops)
     (if util/node-test?
-      (outliner-op/apply-ops! (state/get-current-repo)
-                              conn
-                              ops
-                              (state/get-date-formatter)
-                              opts)
+      (outliner-op/apply-ops! conn ops opts)
       (let [opts' (assoc opts
                          :client-id (:client-id @state/state)
                          :local-tx? true)

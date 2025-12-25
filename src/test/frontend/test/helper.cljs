@@ -249,6 +249,5 @@ This can be called in synchronous contexts as no async fns should be invoked"
   [title & {:as opts}]
   (let [repo (state/get-current-repo)
         conn (db/get-db repo false)
-        config (state/get-config repo)
-        [page-name _page-uuid] (worker-page/create! repo conn config title opts)]
+        [page-name _page-uuid] (worker-page/create! conn title opts)]
     page-name))
