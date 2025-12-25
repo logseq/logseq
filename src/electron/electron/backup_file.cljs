@@ -27,8 +27,10 @@
 (defn- truncate-old-versioned-files!
   "reserve the latest `keep-versions` version files"
   [dir keep-versions]
-  (let [files (fs/readdirSync dir (clj->js {:withFileTypes true}))
-        files (mapv #(.-name %) files)
+  (let [entries (fs/readdirSync dir (clj->js {:withFileTypes true}))
+        files   (->> entries
+                     (filter #(.-isFile %))
+                     (mapv #(.-name %)))
         old-versioned-files (drop keep-versions (reverse (sort files)))]
     (doseq [file old-versioned-files]
       (fs-extra/removeSync (node-path/join dir file)))))
