@@ -79,15 +79,15 @@
             kept
             (let [f (first xs)
                   ts (parse-backup-ts f)
-                  ;; derive keys; if unparseable, treat as unique bucket
+                  ;; derive keys; if unparsable, treat as unique bucket
                   hour-key (if ts
                              (.toISOString (js/Date. (-> ts
                                                          (js/Math.floor)
                                                          (- (mod ts 3600000)))))
-                             (str "unparseable-hour:" f))
+                             (str "unparsable-hour:" f))
                   day-key  (if ts
                              (.slice (.toISOString (js/Date. ts)) 0 10)
-                             (str "unparseable-day:" f))]
+                             (str "unparsable-day:" f))]
               (cond
                 ;; Phase 1: hourly buckets (newest 6 hours)
                 (< (count hour-seen) keep-hourly)
