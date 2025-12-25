@@ -7,17 +7,14 @@
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
-            [frontend.handler.file-based.property.util :as property-util]
             [frontend.handler.property.util :as pu]
             [frontend.mobile.haptics :as haptics]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.util.file-based.drawer :as drawer]
             [goog.object :as gobj]
             [logseq.db :as ldb]
-            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.block :as gp-block]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op]
@@ -124,13 +121,6 @@
                            :container-id container-id :direction direction :event event :pos pos}))
     (mark-last-input-time! repo)))
 
-(defn sanity-block-content
-  [repo format content]
-  (if (sqlite-util/db-based-graph? repo)
-    content
-    (-> (property-util/remove-built-in-properties format content)
-        (drawer/remove-logbook))))
-
 (defn block-unique-title
   "Multiple pages/objects may have the same `:block/title`.
    Notice: this doesn't prevent for pages/objects that have the same tag or created by different clients."
@@ -205,8 +195,7 @@
                             content
 
                             :else
-                            (subs content 0 pos))
-               content (sanity-block-content repo (get block :block/format :markdown) content)]
+                            (subs content 0 pos))]
            (state/clear-selection!)
            (edit-block-aux repo block content text-range (assoc opts :pos pos))))))))
 

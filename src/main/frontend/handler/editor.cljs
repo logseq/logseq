@@ -41,7 +41,6 @@
             [frontend.template :as template]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
-            [frontend.util.file-based.drawer :as drawer]
             [frontend.util.keycode :as keycode]
             [frontend.util.list :as list]
             [frontend.util.ref :as ref]
@@ -66,7 +65,6 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.property :as gp-property]
-            [logseq.graph-parser.text :as text]
             [logseq.graph-parser.utf8 :as utf8]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.property :as outliner-property]
@@ -287,17 +285,12 @@
   ([block value
     {:keys [force?]
      :as opts}]
-   (let [{:block/keys [uuid format repo title]} block
-         format (or format :markdown)
+   (let [{:block/keys [uuid format repo]} block
          repo (or repo (state/get-current-repo))
-         format (or format (state/get-preferred-format))
          block-id (let [properties (:block/properties block)]
                     (when (and (not (config/db-based-graph? repo)) (map? properties))
                       (get properties :id)))
-         content (if (config/db-based-graph? repo)
-                   (:block/title (db/entity (:db/id block)))
-                   (-> (property-file/remove-built-in-properties-when-file-based repo format title)
-                       (drawer/remove-logbook)))]
+         content (:block/title (db/entity (:db/id block)))]
      (cond
        (another-block-with-same-id-exists? uuid block-id)
        (notification/show!
@@ -710,32 +703,11 @@
       (when-let [edit-block (state/get-edit-block)]
         (let [edit-input-id (state/get-edit-input-id)
               current-input (gdom/getElement edit-input-id)]
-          (if (config/db-based-graph? (state/get-current-repo))
-            (when-let [block (db/entity (:db/id edit-block))]
-              (let [pos (state/get-edit-pos)]
-                (p/do!
-                 (ui-outliner-tx/transact!
-                  {:outliner-op :cycle-todos}
-                  (db-based-cycle-todo! block))
-
-                 ;; FIXME: don't change current editor's position
-                 )))
-            (let [content (state/get-edit-content)
-                  format (or (db/get-page-format (state/get-current-page))
-                             (state/get-preferred-format))
-                  [new-content marker] (status/cycle-marker content nil nil format (state/get-preferred-workflow))
-                  new-pos (commands/compute-pos-delta-when-change-marker
-                           content marker (cursor/pos current-input))]
-              (state/set-edit-content! edit-input-id new-content)
-              (cursor/move-cursor-to current-input new-pos))))))))
-
-(defn set-priority
-  [{:block/keys [priority title] :as block} new-priority]
-  (when-not (config/db-based-graph? (state/get-current-repo))
-    (let [new-content (string/replace-first title
-                                            (util/format "[#%s]" priority)
-                                            (util/format "[#%s]" new-priority))]
-      (save-block-if-changed! block new-content))))
+          (when-let [block (db/entity (:db/id edit-block))]
+            (let [pos (state/get-edit-pos)]
+              (ui-outliner-tx/transact!
+               {:outliner-op :cycle-todos}
+               (db-based-cycle-todo! block)))))))))
 
 (defn delete-block-aux!
   [{:block/keys [uuid] :as _block}]
@@ -755,19 +727,10 @@
           {:prev-block sibling-entity
            :new-value (:block/title sibling-entity)
            :edit-block-f #(edit-block! sibling-entity :max)}
-          (let [db? (config/db-based-graph? repo)
-                original-content (if (= (:db/id sibling-entity) (:db/id (state/get-edit-block)))
+          (let [original-content (if (= (:db/id sibling-entity) (:db/id (state/get-edit-block)))
                                    (state/get-edit-content)
                                    (:block/title sibling-entity))
-                value' (if db?
-                         original-content
-                         (-> (property-file/remove-built-in-properties-when-file-based repo format original-content)
-                             (drawer/remove-logbook)))
-                value (if db?
-                        value
-                        (->> value
-                             (property-file/remove-properties-when-file-based repo format)
-                             (drawer/remove-logbook)))
+                value' original-content
                 new-value (str value' value)
                 tail-len (count value)
                 pos (max
@@ -1452,15 +1415,6 @@
          (catch :default error
            (js/console.error error)
            (log/error :save-block-failed error)))))))
-
-(defn- clean-content!
-  [repo format content]
-  (if (config/db-based-graph? repo)
-    content
-    (some->> (text/remove-level-spaces content format (config/get-block-pattern format))
-             (drawer/remove-logbook)
-             (property-file/remove-properties-when-file-based repo format)
-             string/trim)))
 
 (defn delete-asset-of-block!
   [{:keys [repo asset-block href full-text block-id local? delete-local?] :as _opts}]
@@ -2629,8 +2583,7 @@
              (when (and
                     uuid
                     (not (state/block-component-editing?))
-                    (not= (clean-content! repo format title)
-                          (string/trim value)))
+                    (not= title (string/trim value)))
                (save-block! repo uuid value))
 
              (cond
@@ -2699,7 +2652,7 @@
     (when sibling-block
       (let [content (:block/title block)
             value (state/get-edit-content)]
-        (when (and value (not= (clean-content! repo format content) (string/trim value)))
+        (when (and value (not= content (string/trim value)))
           (save-block! repo uuid value)))
       (let [sibling-block-id (dom/attr sibling-block "blockid")]
         (cond
@@ -3869,19 +3822,15 @@
 
 (defn replace-block-reference-with-content-at-point
   []
-  (let [repo (state/get-current-repo)]
-    (when-let [{:keys [start end link]} (thingatpt/block-ref-at-point)]
-      (when-let [block (db/entity [:block/uuid link])]
-        (let [block-content (:block/title block)
-              format (get block :block/format :markdown)
-              block-content-without-prop (-> (property-file/remove-properties-when-file-based repo format block-content)
-                                             (drawer/remove-logbook))]
-          (when-let [input (state/get-input)]
-            (when-let [current-block-content (gobj/get input "value")]
-              (let [block-content* (str (subs current-block-content 0 start)
-                                        block-content-without-prop
-                                        (subs current-block-content end))]
-                (state/set-block-content-and-last-pos! input block-content* 1)))))))))
+  (when-let [{:keys [start end link]} (thingatpt/block-ref-at-point)]
+    (when-let [block (db/entity [:block/uuid link])]
+      (let [block-content (:block/title block)]
+        (when-let [input (state/get-input)]
+          (when-let [current-block-content (gobj/get input "value")]
+            (let [block-content* (str (subs current-block-content 0 start)
+                                      block-content
+                                      (subs current-block-content end))]
+              (state/set-block-content-and-last-pos! input block-content* 1))))))))
 
 (defn copy-current-ref
   [block-id]
@@ -3903,13 +3852,9 @@
 (defn replace-ref-with-text!
   [block ref-id]
   (when (and block ref-id)
-    (let [repo (state/get-current-repo)
-          match (ref/->block-ref ref-id)
+    (let [match (ref/->block-ref ref-id)
           ref-block (db/entity [:block/uuid ref-id])
-          block-ref-content (->> (or (:block/title ref-block) "")
-                                 (property-file/remove-built-in-properties-when-file-based repo
-                                                                                           (get ref-block :block/format :markdown))
-                                 (drawer/remove-logbook))
+          block-ref-content (or (:block/title ref-block) "")
           content (string/replace-first (:block/title block) match
                                         block-ref-content)]
       (save-block! (state/get-current-repo)
