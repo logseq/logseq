@@ -390,34 +390,6 @@
                "")]
         (template-search-aux id q)))))
 
-(rum/defc property-search
-  [id]
-  (let [input (gdom/getElement id)
-        [matched-properties set-matched-properties!] (rum/use-state nil)
-        [q set-q!] (rum/use-state "")]
-    (when input
-      (hooks/use-effect!
-       (fn []
-         (.addEventListener input "input" (fn [_e]
-                                            (set-q! (or (:searching-property (editor-handler/get-searching-property input)) "")))))
-       [])
-      (hooks/use-effect!
-       (fn []
-         (p/let [matched-properties (editor-handler/<get-matched-properties q)]
-           (set-matched-properties! matched-properties)))
-       [q])
-      (let [q-property (string/replace (string/lower-case q) #"\s+" "-")
-            non-exist-handler (fn [_state]
-                                ((editor-handler/property-on-chosen-handler id q-property) nil))]
-        (ui/auto-complete
-         matched-properties
-         {:on-chosen (editor-handler/property-on-chosen-handler id q-property)
-          :on-enter non-exist-handler
-          :empty-placeholder [:div.px-4.py-2.text-sm (str "Create a new property: " q-property)]
-          :header [:div.px-4.py-2.text-sm.font-medium "Matched properties: "]
-          :item-render (fn [property] property)
-          :class       "black"})))))
-
 (rum/defc code-block-mode-keyup-listener
   [_q _edit-content last-pos current-pos]
   (hooks/use-effect!
@@ -680,11 +652,6 @@
                  (open-editor-popup! :template-search
                                      (template-search id format) {})
 
-                 :property-search
-                 (open-editor-popup! action
-                                     (property-search id)
-                                     {})
-
                  ;; TODO: try remove local model state
                  false)]
        #(when pid
@@ -712,7 +679,7 @@
 
       (or (contains?
            #{:commands :page-search :page-search-hashtag :block-search :template-search
-             :property-search :datepicker}
+             :datepicker}
            action)
           (and (keyword? action)
                (= (namespace action) "editor.action")))

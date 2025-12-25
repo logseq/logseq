@@ -51,16 +51,9 @@
 (defn- watch-for-date!
   []
   (let [f (fn []
-            (let [repo (state/get-current-repo)]
-              (when (or
-                     (config/db-based-graph? repo)
-                     (and (not (state/nfs-refreshing?))
-                          (not (contains? (:file/unlinked-dirs @state/state)
-                                          (config/get-repo-dir repo)))))
-                ;; Don't create the journal file until user writes something
-                (page-handler/create-today-journal!))))]
+            (page-handler/create-today-journal!))]
     (f)
-    (js/setInterval f 5000)))
+    (js/setInterval f 3000)))
 
 (defn restore-and-setup!
   [repo]
@@ -109,7 +102,6 @@
   (state/set-page-blocks-cp! page/page-cp)
   (state/set-component! :block/->hiccup block/->hiccup)
   (state/set-component! :block/linked-references reference/references)
-  (state/set-component! :block/single-block block/single-block-cp)
   (state/set-component! :block/container block/block-container)
   (state/set-component! :block/inline-title block/inline-title)
   (state/set-component! :block/breadcrumb block/breadcrumb)

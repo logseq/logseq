@@ -171,10 +171,7 @@
            ;; fullpath will be encoded
            (path/prepend-protocol "file:" full-path))
 
-         ;(mobile-util/native-platform?)
-         ;(mobile-util/convert-file-src full-path)
-
-         (config/db-based-graph? (state/get-current-repo))  ; memory fs
+         :else
          (p/let [binary (fs/read-file-raw repo-dir path {})
                  blob (js/Blob. (array binary) (clj->js {:type "image"}))]
            (when blob (js/URL.createObjectURL blob))))))))

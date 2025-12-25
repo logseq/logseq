@@ -2,7 +2,6 @@
   (:require ["/frontend/utils" :as utils]
             [clojure.string :as string]
             [frontend.commands :as commands]
-            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.extensions.html-parser :as html-parser]
             [frontend.format.block :as block]
@@ -245,8 +244,7 @@
 (defn- paste-text-or-blocks-aux
   [input e text html]
   (if (or (editing-display-type-block?)
-          (thingatpt/markdown-src-at-point input)
-          (thingatpt/org-admonition&src-at-point input))
+          (thingatpt/markdown-src-at-point input))
     (when-not (mobile-util/native-ios?)
       (util/stop e)
       (paste-text-in-one-block-at-point))
