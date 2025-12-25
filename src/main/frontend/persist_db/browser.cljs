@@ -87,7 +87,6 @@
                  :export-bullet-indentation (state/get-export-bullet-indentation)
                  :preferred-format (state/get-preferred-format)
                  :journals-directory (config/get-journals-directory)
-                 :whiteboards-directory (config/get-whiteboards-directory)
                  :pages-directory (config/get-pages-directory)}]
     (state/<invoke-db-worker :thread-api/transact repo tx-data tx-meta context)))
 

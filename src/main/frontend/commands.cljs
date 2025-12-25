@@ -7,7 +7,6 @@
             [frontend.extensions.video.youtube :as youtube]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.db-based.property.util :as db-pu]
-            [frontend.handler.draw :as draw]
             [frontend.handler.file-based.property :as file-property-handler]
             [frontend.handler.file-based.status :as file-based-status]
             [frontend.handler.notification :as notification]
@@ -431,14 +430,6 @@
        ["Calculator"
         (calc-steps)
         "Insert a calculator" :icon/calculator]
-       (when-not db?
-         ["Draw" (fn []
-                   (let [file (draw/file-name)
-                         path (str common-config/default-draw-directory "/" file)
-                         text (ref/->page-ref path)]
-                     (p/let [_ (draw/create-draw-with-default-content path)]
-                       (println "draw file created, " path))
-                     text)) "Draw a graph with Excalidraw"])
 
        ["Upload an asset"
         [[:editor/click-hidden-file-input :id]]

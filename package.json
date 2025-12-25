@@ -102,10 +102,9 @@
         "cljs:lint": "clojure -M:clj-kondo --parallel --lint src --cache false",
         "ios:dev": "cross-env PLATFORM=ios gulp cap",
         "android:dev": "cross-env PLATFORM=android gulp cap",
-        "tldraw:build": "yarn --cwd packages/tldraw install",
         "amplify:build": "yarn --cwd packages/amplify install",
         "ui:build": "yarn --cwd packages/ui install",
-        "postinstall": "yarn tldraw:build && yarn ui:build"
+        "postinstall": "yarn ui:build"
     },
     "dependencies": {
         "@aparajita/capacitor-secure-storage": "^7.1.6",
@@ -131,7 +130,6 @@
         "@dnd-kit/sortable": "^7.0.2",
         "@emoji-mart/data": "^1.1.2",
         "@emoji-mart/react": "^1.1.1",
-        "@excalidraw/excalidraw": "0.16.1",
         "@glidejs/glide": "^3.6.0",
         "@highlightjs/cdn-assets": "10.4.1",
         "@huggingface/transformers": "^3.6.3",

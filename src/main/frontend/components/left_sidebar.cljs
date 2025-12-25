@@ -16,7 +16,6 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.recent :as recent-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.state :as state]
@@ -201,14 +200,10 @@
       (when child [:div.bd child])]]))
 
 (rum/defc ^:large-vars/cleanup-todo sidebar-navigations
-  [{:keys [default-home route-match route-name srs-open? db-based? enable-whiteboards?]}]
-  (let [navs (cond-> [:flashcards :all-pages :graph-view]
-               db-based?
-               (concat [:tag/tasks :tag/assets])
-               (not db-based?)
-               (#(cons :whiteboards %)))
+  [{:keys [default-home route-match route-name srs-open? db-based?]}]
+  (let [navs [:flashcards :all-pages :graph-view :tag/tasks :tag/assets]
         [checked-navs set-checked-navs!] (rum/use-state (or (storage/get :ls-sidebar-navigations)
-                                                            [:whiteboards :flashcards :all-pages :graph-view]))]
+                                                            [:flashcards :all-pages :graph-view]))]
 
     (hooks/use-effect!
      (fn []
@@ -259,18 +254,6 @@
 
       (for [nav checked-navs]
         (cond
-          (= nav :whiteboards)
-          (when enable-whiteboards?
-            (when (not db-based?)
-              (sidebar-item
-               {:class "whiteboard"
-                :title (t :right-side-bar/whiteboards)
-                :href (rfe/href :whiteboards)
-                :on-click-handler (fn [_e] (whiteboard-handler/onboarding-show))
-                :active (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
-                :icon "writing"
-                :shortcut :go/whiteboards})))
-
           (= nav :flashcards)
           (when (state/enable-flashcards? (state/get-current-repo))
             (let [num (state/sub :srs/cards-due-count)]
@@ -358,7 +341,7 @@
          (page-name page true)])])))
 
 (rum/defc ^:large-vars/cleanup-todo sidebar-container
-  [route-match close-modal-fn left-sidebar-open? enable-whiteboards? srs-open?
+  [route-match close-modal-fn left-sidebar-open? srs-open?
    *closing? close-signal touching-x-offset]
   (let [[local-closing? set-local-closing?] (rum/use-state false)
         [el-rect set-el-rect!] (rum/use-state nil)
@@ -442,7 +425,6 @@
          {:default-home default-home
           :route-match route-match
           :db-based? db-based?
-          :enable-whiteboards? enable-whiteboards?
           :route-name route-name
           :srs-open? srs-open?})]
 
@@ -507,7 +489,6 @@
         *closing? (::closing? s)
         *touch-state (::touch-state s)
         *close-signal (::close-signal s)
-        enable-whiteboards? (state/enable-whiteboards?)
         touch-point-fn (fn [^js e] (some-> (gobj/get e "touches") (aget 0) (#(hash-map :x (.-clientX %) :y (.-clientY %)))))
         srs-open? (= :srs (state/sub :modal/id))
         touching-x-offset (and (some-> @*touch-state :after)
@@ -539,7 +520,7 @@
         (reset! *touch-state nil))}
 
      ;; sidebar contents
-     (sidebar-container route-match close-fn left-sidebar-open? enable-whiteboards? srs-open? *closing?
+     (sidebar-container route-match close-fn left-sidebar-open? srs-open? *closing?
                         @*close-signal (and touch-pending? touching-x-offset))
 
      ;; resizer
