@@ -7,7 +7,6 @@
             [frontend.common.missionary :as c.m]
             [frontend.components.block :as component-block]
             [frontend.components.export :as export]
-            [frontend.components.file-sync :as fs-sync]
             [frontend.components.page-menu :as page-menu]
             [frontend.components.plugins :as plugins]
             [frontend.components.right-sidebar :as sidebar]
@@ -435,12 +434,6 @@
 
        (when db-based?
          (semantic-search-progressing current-repo))
-
-       (when (and current-repo
-                  (not (config/demo-graph? current-repo))
-                  (not db-based?)
-                  (user-handler/alpha-or-beta-user?))
-         (fs-sync/indicator))
 
        (when (and (not= (state/get-current-route) :home)
                   (not custom-home-page?))

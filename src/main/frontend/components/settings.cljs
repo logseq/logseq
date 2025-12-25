@@ -5,7 +5,6 @@
             [frontend.colors :as colors]
             [frontend.common.missionary :as c.m]
             [frontend.components.assets :as assets]
-            [frontend.components.file-sync :as fs]
             [frontend.components.shortcut :as shortcut]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
@@ -16,7 +15,6 @@
             [frontend.handler.config :as config-handler]
             [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.handler.db-based.vector-search-flows :as vector-search-flows]
-            [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
@@ -843,34 +841,6 @@
      ;;  [:p (t :settings-page/clear-cache-warning)])
      ]))
 
-(rum/defc sync-enabled-switcher
-  [enabled?]
-  (ui/toggle enabled?
-             (fn []
-               (file-sync-handler/set-sync-enabled! (not enabled?)))
-             true))
-
-(rum/defc sync-diff-merge-enabled-switcher
-  [enabled?]
-  (ui/toggle enabled?
-             (fn []
-               (file-sync-handler/set-sync-diff-merge-enabled! (not enabled?)))
-             true))
-
-(defn sync-switcher-row [enabled?]
-  (row-with-button-action
-   {:left-label (t :settings-page/sync)
-    :action (sync-enabled-switcher enabled?)}))
-
-(defn sync-diff-merge-switcher-row [enabled?]
-  (row-with-button-action
-   {:left-label (str (t :settings-page/sync-diff-merge) " (Experimental!)") ;; Not included in i18n to avoid outdating translations
-    :action (sync-diff-merge-enabled-switcher enabled?)
-    :desc (ui/tooltip [:span.inline-flex.px-1 (svg/info)]
-                      [:div
-                       [:div (t :settings-page/sync-diff-merge-desc)]
-                       [:div (t :settings-page/sync-diff-merge-warn)]])}))
-
 (rum/defc whiteboards-enabled-switcher
   [enabled?]
   (ui/toggle enabled?
@@ -928,9 +898,7 @@
 
 (rum/defc ^:large-vars/cleanup-todo settings-account < rum/reactive
   []
-  (let [current-graph-uuid (state/sub-current-file-sync-graph-uuid)
-        graph-usage (state/get-remote-graph-usage)
-        current-graph-is-remote? ((set (map :uuid graph-usage)) current-graph-uuid)
+  (let [graph-usage (state/get-remote-graph-usage)
         logged-in? (user-handler/logged-in?)
         user-info (state/get-user-info)
         paid-user? (#{"active" "on_trial" "cancelled"} (:LemonStatus user-info))
@@ -963,16 +931,7 @@
                                          :on-click user-handler/upgrade})
               :else nil)]
            (settings-account-usage-graphs pro-account? graph-usage)
-           (settings-account-usage-description pro-account? graph-usage)
-           (if current-graph-is-remote?
-             (ui/button "Deactivate syncing" {:class "p-1 h-8 justify-center"
-                                              :disabled true
-                                              :background "gray"
-                                              :icon "cloud-off"})
-             (ui/button "Activate syncing" {:class "p-1 h-8 justify-center"
-                                            :background "blue"
-                                            :icon "cloud"
-                                            :on-click #(fs/maybe-onboarding-show :sync-initiate)}))]]
+           (settings-account-usage-description pro-account? graph-usage)]]
          (when has-subscribed?
            [:<>
             [:div "Billing"]
@@ -1078,8 +1037,6 @@
   (let [current-repo (state/get-current-repo)
         enable-journals? (state/enable-journals? current-repo)
         enable-flashcards? (state/enable-flashcards? current-repo)
-        enable-sync? (state/enable-sync?)
-        enable-sync-diff-merge? (state/enable-sync-diff-merge?)
         db-based? (config/db-based-graph? current-repo)
         enable-whiteboards? (state/enable-whiteboards? current-repo)
         logged-in? (user-handler/logged-in?)]
@@ -1120,34 +1077,7 @@
                                   :on-click (fn []
                                               (state/close-settings!)
                                               (state/pub-event! [:user/login]))})
-           [:p.text-sm.opacity-50 (t :settings-page/login-prompt)]])])
-
-     (when-not web-platform?
-       [:<>
-        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
-         [:label.flex.font-medium.leading-5.self-start.mt-1
-          (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/beta-features)]]
-        [:div.flex.flex-col.gap-4
-         {:class (when-not user-handler/alpha-or-beta-user? "opacity-50 pointer-events-none cursor-not-allowed")}
-         (sync-switcher-row enable-sync?)
-         (when (and enable-sync? (not (config/db-based-graph? current-repo)))
-           (sync-diff-merge-switcher-row enable-sync-diff-merge?))
-         [:div.text-sm
-          (t :settings-page/sync-desc-1)
-          [:a.mx-1 {:href "https://blog.logseq.com/how-to-setup-and-use-logseq-sync/"
-                    :target "_blank"}
-           (t :settings-page/sync-desc-2)]
-          (t :settings-page/sync-desc-3)]]])]))
-
-     ;; (when-not web-platform?
-     ;;   [:<>
-     ;;    [:hr]
-;;    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
-     ;;     [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/alpha-features)]]
-     ;;    [:div.flex.flex-col.gap-4
-     ;;     {:class (when-not user-handler/alpha-user? "opacity-50 pointer-events-none cursor-not-allowed")}
-     ;;     ;; features
-     ;;     ]])
+           [:p.text-sm.opacity-50 (t :settings-page/login-prompt)]])])]))
 
 (def DEFAULT-ACTIVE-TAB-STATE (if config/ENABLE-SETTINGS-ACCOUNT-TAB [:account :account] [:general :general]))
 

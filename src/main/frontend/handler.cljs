@@ -22,7 +22,6 @@
             [frontend.handler.events :as events]
             [frontend.handler.events.rtc]
             [frontend.handler.events.ui]
-            [frontend.handler.file-based.events]
             [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.page :as page-handler]

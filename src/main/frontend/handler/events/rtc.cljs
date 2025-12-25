@@ -3,6 +3,7 @@
   (:require [frontend.common.crypt :as crypt]
             [frontend.components.e2ee :as e2ee]
             [frontend.handler.events :as events]
+            [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [lambdaisland.glogi :as log]
             [logseq.shui.ui :as shui]
@@ -39,3 +40,9 @@
                   (p/reject! password-promise (ex-info "cancelled" {}))
                   (shui/dialog-close!))})
     password-promise))
+
+(defmethod events/handle :rtc/storage-exceed-limit [[_]]
+  (notification/show! "Sync storage exceed limit" :warning false))
+
+(defmethod events/handle :rtc/graph-count-exceed-limit [[_]]
+  (notification/show! "Sync graph count exceed limit" :warning false))

@@ -4,7 +4,7 @@
   (:require [cljs-http.client :as http]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
-            [cljs.core.async :as async :refer [<! go]]
+            [cljs.core.async :as async :refer [<! go timeout]]
             [clojure.set :as set]
             [clojure.string :as string]
             [frontend.common.missionary :as c.m]
@@ -346,6 +346,116 @@
               {:keys [status]} (c.m/<? (http/put presigned-url {:body avatar-str :with-credentials? false}))]
           (when-not (http/unexceptional-status? status)
             (throw (ex-info "failed to upload avatar" {:resp resp}))))))))
+
+(defn- guard-ex
+  [x]
+  (when (instance? ExceptionInfo x) x))
+
+(defn- get-json-body [body]
+  (or (and (not (string? body)) body)
+      (when (string/blank? body) nil)
+      (try (js->clj (js/JSON.parse body) :keywordize-keys true)
+           (catch :default e
+             (prn :invalid-json body)
+             e))))
+
+(defn- get-resp-json-body [resp]
+  (-> resp (:body) (get-json-body)))
+
+(defn- <request-once [api-name body token]
+  (go
+    (let [resp (http/post (str "https://" config/API-DOMAIN "/file-sync/" api-name)
+                          {:oauth-token token
+                           :body (js/JSON.stringify (clj->js body))
+                           :with-credentials? false})]
+      {:resp (<! resp)
+       :api-name api-name
+       :body body})))
+
+(defn- <request*
+  "max retry count is 5.
+  *stop: volatile var, stop retry-request when it's true,
+          and return :stop"
+  ([api-name body token] (<request* api-name body token 0))
+  ([api-name body token retry-count]
+   (go
+     (let [resp (<! (<request-once api-name body token))]
+       (if (and
+            (= 401 (get-in resp [:resp :status]))
+            (= "Unauthorized" (:message (get-json-body (get-in resp [:resp :body])))))
+         (if (> retry-count 5)
+           (throw (js/Error. :file-sync-request))
+           (do (println "will retry after" (min 60000 (* 1000 retry-count)) "ms")
+               (<! (timeout (min 60000 (* 1000 retry-count))))
+               (<! (<request* api-name body token (inc retry-count)))))
+         (:resp resp))))))
+
+(defn <request [api-name & args]
+  (go (apply <request* api-name args)))
+
+(defn storage-exceed-limit?
+  [exp]
+  (some->> (ex-data exp)
+           :err
+           ((juxt :status (comp :message :body)))
+           ((fn [[status msg]] (and (= 403 status) (= msg "storage-limit"))))))
+
+(defn graph-count-exceed-limit?
+  [exp]
+  (some->> (ex-data exp)
+           :err
+           ((juxt :status (comp :message :body)))
+           ((fn [[status msg]] (and (= 403 status) (= msg "graph-count-exceed-limit"))))))
+
+(defn- fire-file-sync-storage-exceed-limit-event!
+  [exp]
+  (when (storage-exceed-limit? exp)
+    (state/pub-event! [:rtc/storage-exceed-limit])
+    true))
+
+(defn- fire-file-sync-graph-count-exceed-limit-event!
+  [exp]
+  (when (graph-count-exceed-limit? exp)
+    (state/pub-event! [:rtc/graph-count-exceed-limit])
+    true))
+
+(defprotocol IToken
+  (<get-token [this]))
+
+(deftype RemoteAPI [*stopped?]
+  Object
+
+  (<request [this api-name body]
+    (go
+      (let [token-or-exp (<! (<get-token this))]
+        (or (guard-ex token-or-exp)
+            (let [resp (<! (<request api-name body token-or-exp *stopped?))]
+              (if (http/unexceptional-status? (:status resp))
+                (get-resp-json-body resp)
+                (let [exp (ex-info "request failed"
+                                   {:err          resp
+                                    :body         (:body resp)
+                                    :api-name     api-name
+                                    :request-body body})]
+                  (fire-file-sync-storage-exceed-limit-event! exp)
+                  (fire-file-sync-graph-count-exceed-limit-event! exp)
+                  exp)))))))
+
+  IToken
+  (<get-token [_this]
+    (frontend.handler.user/<wrap-ensure-id&access-token
+     (state/get-auth-id-token))))
+
+(defprotocol IRemoteAPI
+  (<user-info [this] "user info"))
+
+(extend-type RemoteAPI
+  IRemoteAPI
+  (<user-info [this]
+    (frontend.handler.user/<wrap-ensure-id&access-token
+     (<! (.<request this "user_info" {})))))
+
+(def remoteapi (->RemoteAPI nil))
 
 (comment
   ;; We probably need this for some new features later

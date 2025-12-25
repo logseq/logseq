@@ -7,10 +7,7 @@
             [electron.ipc :as ipc]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.db.file-based.model :as file-model]
-            [frontend.fs.sync :as sync]
             [frontend.fs.watcher-handler :as watcher-handler]
-            [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.property.util :as pu]
             [frontend.handler.route :as route-handler]
@@ -38,14 +35,7 @@
                          path (common-util/path-normalize (:path payload))
                          dir (:dir payload)
                          payload (assoc payload :path (path/relative-path dir path))]
-                     (watcher-handler/handle-changed! type payload)
-                     (when (file-sync-handler/enable-sync?)
-                       (sync/file-watch-handler type payload)))))
-
-  (safe-api-call "file-sync-progress"
-                 (fn [data]
-                   (let [payload (bean/->clj data)]
-                     (state/set-state! [:file-sync/graph-state (:graphUUID payload) :file-sync/progress (:file payload)] payload))))
+                     (watcher-handler/handle-changed! type payload))))
 
   (safe-api-call "notification"
                  (fn [data]
@@ -80,7 +70,7 @@
                  ;;  :page-name : the title of the page.
                  ;;  :block-id : uuid.
                  (fn [data]
-                   (let [{:keys [page-name block-id file]} (bean/->clj data)]
+                   (let [{:keys [page-name block-id]} (bean/->clj data)]
                      (cond
                        page-name
                        (when (db/get-page page-name)
@@ -92,12 +82,7 @@
                            (if (pu/shape-block? block)
                              (route-handler/redirect-to-page! (get-in block [:block/page :block/uuid]) {:block-id block-id})
                              (route-handler/redirect-to-page! block-id))
-                           (notification/show! (str "Open link failed. Block-id `" block-id "` doesn't exist in the graph.") :error false)))
-
-                       file
-                       (if-let [db-page-name (file-model/get-file-page file false)]
-                         (route-handler/redirect-to-page! db-page-name)
-                         (notification/show! (str "Open link failed. File `" file "` doesn't exist in the graph.") :error false))))))
+                           (notification/show! (str "Open link failed. Block-id `" block-id "` doesn't exist in the graph.") :error false)))))))
 
   (safe-api-call "foundInPage"
                  (fn [data]
