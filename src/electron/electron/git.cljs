@@ -1,14 +1,14 @@
 (ns electron.git
   (:require ["dugite" :refer [GitProcess]]
-            [goog.object :as gobj]
+            ["fs-extra" :as fs]
+            ["os" :as os]
+            ["path" :as node-path]
+            [clojure.string :as string]
+            [electron.logger :as logger]
             [electron.state :as state]
             [electron.utils :as utils]
-            [electron.logger :as logger]
-            [promesa.core :as p]
-            [clojure.string :as string]
-            ["fs-extra" :as fs]
-            ["path" :as node-path]
-            ["os" :as os]))
+            [goog.object :as gobj]
+            [promesa.core :as p]))
 
 (def log-error (partial logger/error "[Git]"))
 
@@ -111,27 +111,30 @@
 
 (defn add-all-and-commit-single-graph!
   [graph-path message]
-  (let [message (if (string/blank? message)
-                  "Auto saved by Logseq"
-                  message)]
-    (->
-     (p/let [_ (init! graph-path)
-             _ (add-all! graph-path)]
-       (commit! graph-path message))
-     (p/catch (fn [error]
-                (when (and
-                       (string? error)
-                       (not (string/blank? error)))
-                  (if (string/starts-with? error "Author identity unknown")
-                    (utils/send-to-renderer "setGitUsernameAndEmail" {:type "git"})
-                    (utils/send-to-renderer "notification" {:type "error"
-                                                            :payload (str error "\nIf you don't want to see those errors or don't need git, you can disable the \"Git auto commit\" feature on Settings > Version control.")}))))))))
+  ;; Don't run git on db graphs
+  (when (string/includes? graph-path "logseq_local_")
+    (let [message (if (string/blank? message)
+                    "Auto saved by Logseq"
+                    message)]
+      (->
+       (p/let [_ (init! graph-path)
+               _ (add-all! graph-path)]
+         (commit! graph-path message))
+       (p/catch (fn [error]
+                  (when (and
+                         (string? error)
+                         (not (string/blank? error)))
+                    (if (string/starts-with? error "Author identity unknown")
+                      (utils/send-to-renderer "setGitUsernameAndEmail" {:type "git"})
+                      (utils/send-to-renderer "notification" {:type "error"
+                                                              :payload (str error "\nIf you don't want to see those errors or don't need git, you can disable the \"Git auto commit\" feature on Settings > Version control.")})))))))))
 
 (defn add-all-and-commit!
   ([]
    (add-all-and-commit! nil))
   ([message]
-   (doseq [path (state/get-all-graph-paths)] (add-all-and-commit-single-graph! path message))))
+   (doseq [path (state/get-all-graph-paths)]
+     (add-all-and-commit-single-graph! path message))))
 
 (defn short-status!
   [graph-path]
