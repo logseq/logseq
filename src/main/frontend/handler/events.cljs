@@ -113,22 +113,25 @@
      (repo-handler/refresh-repos!))))
 
 (defmethod handle :graph/switch [[_ graph opts]]
-  (p/do!
-   (export/cancel-db-backup!)
-   (persist-db/export-current-graph!)
-   (export/backup-db-graph (state/get-current-repo))
-   (state/set-state! :db/async-queries {})
-   (st/refresh!)
-   (if (config/db-based-graph? graph)
-     (graph-switch-on-persisted graph opts)
-     (p/let [writes-finished? (state/<invoke-db-worker :thread-api/file-writes-finished? (state/get-current-repo))]
-       (if (not writes-finished?) ; TODO: test (:sync-graph/init? @state/state)
-         (do
-           (log/info :graph/switch {:file-writes-finished? writes-finished?})
-           (notification/show!
-            "Please wait seconds until all changes are saved for the current graph."
-            :warning))
-         (graph-switch-on-persisted graph opts))))))
+  (let [switch-promise
+        (p/do!
+         (export/cancel-db-backup!)
+         (persist-db/export-current-graph!)
+         (state/set-state! :db/async-queries {})
+         (st/refresh!)
+         (if (config/db-based-graph?)
+           (graph-switch-on-persisted graph opts)
+           (p/let [writes-finished? (state/<invoke-db-worker :thread-api/file-writes-finished? (state/get-current-repo))]
+             (if (not writes-finished?) ; TODO: test (:sync-graph/init? @state/state)
+               (do
+                 (log/info :graph/switch {:file-writes-finished? writes-finished?})
+                 (notification/show!
+                  "Please wait seconds until all changes are saved for the current graph."
+                  :warning))
+               (graph-switch-on-persisted graph opts)))))]
+    (p/then switch-promise
+            (fn [_]
+              (export/backup-db-graph (state/get-current-repo))))))
 
 (defmethod handle :graph/open-new-window [[_ev target-repo]]
   (ui-handler/open-new-window-or-tab! target-repo))
