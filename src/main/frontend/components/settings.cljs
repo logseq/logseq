@@ -801,7 +801,8 @@
        (tooltip-row t enable-tooltip?))
      (timetracking-row t enable-timetracking?)
      (enable-all-pages-public-row t enable-all-pages-public?)
-     (auto-push-row t current-repo enable-git-auto-push?)]))
+     (when-not db-graph?
+       (auto-push-row t current-repo enable-git-auto-push?))]))
 
 (rum/defc settings-git
   []
@@ -1505,7 +1506,7 @@
 
                (when db-based?
                  [:ai (t :settings-page/tab-ai) (t :settings-page/ai) (ui/icon "wand")])
-               (when (util/electron?)
+               (when (and (util/electron?) (not db-based?))
                  [:version-control "git" (t :settings-page/tab-version-control) (ui/icon "history")])
 
                ;; (when (util/electron?)

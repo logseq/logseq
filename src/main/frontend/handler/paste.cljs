@@ -40,7 +40,8 @@
                                  (update :block/title (fn [title]
                                                         (let [title' (db-content/replace-tags-with-id-refs title refs)]
                                                           (db-content/title-ref->id-ref title' refs)))))))))]
-      (editor-handler/paste-blocks blocks' {:keep-uuid? true}))))
+      (editor-handler/paste-blocks blocks' {:keep-uuid? true
+                                            :outliner-real-op :paste-text}))))
 
 (defn- paste-segmented-text
   [format text]
