@@ -423,11 +423,10 @@
      (count (get-all-update-kv-value-ops* @conn)))))
 
 (defn rtc-db-graph?
-  "Is db-graph & RTC enabled"
+  "Is RTC enabled"
   [repo]
-  (and (sqlite-util/db-based-graph? repo)
-       (or (exists? js/process)
-           (some? (get-graph-uuid repo)))))
+  (or (exists? js/process)
+      (some? (get-graph-uuid repo))))
 
 (defn create-pending-block-ops-count-flow
   [repo]

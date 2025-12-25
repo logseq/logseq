@@ -55,9 +55,7 @@
 
                      :else
                      repo-name)]
-    (if (config/db-based-graph? repo-name')
-      (string/replace-first repo-name' config/db-version-prefix "")
-      repo-name')))
+    (string/replace-first repo-name' config/db-version-prefix "")))
 
 (defn remove-conn!
   [repo]
@@ -84,9 +82,7 @@
    (start! repo {}))
   ([repo {:keys [listen-handler]}]
    (let [db-name (db-conn-state/get-repo-path repo)
-         db-conn (if (config/db-based-graph? repo)
-                   (d/create-conn db-schema/schema)
-                   (gp-db/start-conn))]
+         db-conn (d/create-conn db-schema/schema)]
      (destroy-all!)
      (swap! conns assoc db-name db-conn)
      (when listen-handler

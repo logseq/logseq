@@ -391,7 +391,7 @@
          (:resp resp))))))
 
 (defn <request [api-name & args]
-  (go (apply <request* api-name args)))
+  (apply <request* api-name args))
 
 (defn storage-exceed-limit?
   [exp]
