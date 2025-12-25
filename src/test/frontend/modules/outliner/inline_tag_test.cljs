@@ -14,8 +14,7 @@
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"} :blocks [{:block/title "test"}]}])
         block (db-test/find-block-by-content @conn "test")
-        _ (outliner-core/save-block! "logseq_db_test" conn
-                                     "MMM do, yyyy"
+        _ (outliner-core/save-block! conn
                                      {:block/uuid (:block/uuid block)
                                       :block/refs '({:block/name "audio", :block/title "audio", :block/uuid #uuid "6852be3e-6e80-4245-b72c-0d586f1fd007", :block/created-at 1750253118663, :block/updated-at 1750253118663, :block/tags [:logseq.class/Page]}),
                                       :block/tags '({:block/name "audio", :block/title "audio", :block/uuid #uuid "6852be3e-6e80-4245-b72c-0d586f1fd007", :block/created-at 1750253118663, :block/updated-at 1750253118663, :block/tags [:logseq.class/Tag]}),
@@ -33,8 +32,7 @@
           block (db-test/find-block-by-content @conn "test")]
       (doseq [class-ident db-class/page-classes]
         (let [class (d/entity @conn class-ident)]
-          (outliner-core/save-block! "logseq_db_test" conn
-                                     "MMM do, yyyy"
+          (outliner-core/save-block! conn
                                      {:block/uuid (:block/uuid block)
                                       :block/tags [(select-keys class [:block/name :block/title :block/uuid :db/ident])],
                                       :block/title (common-util/format "test #[[%s]]" (str (:block/uuid class))),
@@ -51,7 +49,7 @@
       (doseq [class-ident db-class/page-classes]
         (let [class (d/entity @conn class-ident)
               new-block-id (random-uuid)
-              _ (outliner-core/insert-blocks! "logseq_db_test" conn
+              _ (outliner-core/insert-blocks! conn
                                               [{:block/uuid new-block-id
                                                 :block/tags [(select-keys class [:block/name :block/title :block/uuid :db/ident])],
                                                 :block/title (common-util/format "test #[[%s]]" (str (:block/uuid class))),

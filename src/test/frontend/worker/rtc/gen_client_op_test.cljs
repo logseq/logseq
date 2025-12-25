@@ -128,9 +128,7 @@
           conn (conn/get-db repo false)
           [page-uuid block-uuid1 block-uuid2] (repeatedly random-uuid)]
       (testing "add page"
-        (worker-page/create! repo conn (worker-state/get-config repo)
-                             "TEST-PAGE"
-                             {:uuid page-uuid})
+        (worker-page/create! conn "TEST-PAGE" {:uuid page-uuid})
         (is (some? (d/pull @conn '[*] [:block/uuid page-uuid])))
         (is (= {page-uuid #{:update-page :update}}
                (ops-coll=>block-uuid->op-types (client-op/get&remove-all-block-ops repo)))))
@@ -138,10 +136,10 @@
         (let [target-entity (d/entity @conn [:block/uuid page-uuid])]
           (batch-tx/with-batch-tx-mode conn
             {:persist-op? true}
-            (outliner-core/insert-blocks! repo conn [{:block/uuid block-uuid1
-                                                      :block/title "block1"}
-                                                     {:block/uuid block-uuid2
-                                                      :block/title "block2"}]
+            (outliner-core/insert-blocks! conn [{:block/uuid block-uuid1
+                                                 :block/title "block1"}
+                                                {:block/uuid block-uuid2
+                                                 :block/title "block2"}]
                                           target-entity
                                           {:sibling? false :keep-uuid? true}))
           (is (=
@@ -152,7 +150,7 @@
       (testing "delete a block"
         (batch-tx/with-batch-tx-mode conn
           {:persist-op? true}
-          (outliner-core/delete-blocks! repo conn nil [(d/entity @conn [:block/uuid block-uuid1])] {}))
+          (outliner-core/delete-blocks! conn [(d/entity @conn [:block/uuid block-uuid1])] {}))
 
         (is (=
              {block-uuid1 #{:remove}}

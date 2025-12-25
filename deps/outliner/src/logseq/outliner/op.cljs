@@ -169,7 +169,7 @@
           (reset! *result {:error (str "Unexpected Import EDN error: " (pr-str (ex-message e)))}))))))
 
 (defn ^:large-vars/cleanup-todo apply-ops!
-  [repo conn ops date-formatter opts]
+  [conn ops opts]
   (assert (ops-validator ops) ops)
   (let [opts' (assoc opts
                      :transact-opts {:conn conn}
@@ -181,37 +181,37 @@
        (case op
          ;; blocks
          :save-block
-         (apply outliner-core/save-block! repo conn date-formatter args)
+         (apply outliner-core/save-block! conn args)
 
          :insert-blocks
          (let [[blocks target-block-id opts] args]
            (when-let [target-block (d/entity @conn target-block-id)]
-             (let [result (outliner-core/insert-blocks! repo conn blocks target-block opts)]
+             (let [result (outliner-core/insert-blocks! conn blocks target-block opts)]
                (reset! *result result))))
 
          :delete-blocks
          (let [[block-ids opts] args
                blocks (keep #(d/entity @conn %) block-ids)]
-           (outliner-core/delete-blocks! repo conn date-formatter blocks (merge opts opts')))
+           (outliner-core/delete-blocks! conn blocks (merge opts opts')))
 
          :move-blocks
          (let [[block-ids target-block-id opts] args
                blocks (keep #(d/entity @conn %) block-ids)
                target-block (d/entity @conn target-block-id)]
            (when (and target-block (seq blocks))
-             (outliner-core/move-blocks! repo conn blocks target-block opts)))
+             (outliner-core/move-blocks! conn blocks target-block opts)))
 
          :move-blocks-up-down
          (let [[block-ids up?] args
                blocks (keep #(d/entity @conn %) block-ids)]
            (when (seq blocks)
-             (outliner-core/move-blocks-up-down! repo conn blocks up?)))
+             (outliner-core/move-blocks-up-down! conn blocks up?)))
 
          :indent-outdent-blocks
          (let [[block-ids indent? opts] args
                blocks (keep #(d/entity @conn %) block-ids)]
            (when (seq blocks)
-             (outliner-core/indent-outdent-blocks! repo conn blocks indent? opts)))
+             (outliner-core/indent-outdent-blocks! conn blocks indent? opts)))
 
          ;; properties
          :upsert-property
@@ -260,6 +260,6 @@
          (apply ldb/transact! conn args)
 
          (when-let [handler (get @*op-handlers op)]
-           (reset! *result (handler repo conn args))))))
+           (reset! *result (handler conn args))))))
 
     @*result))
