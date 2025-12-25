@@ -7,6 +7,7 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [frontend.db :as db]
+            [frontend.db.conn :as db-conn]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
             [frontend.handler.common.page :as page-common-handler]
@@ -17,6 +18,7 @@
             [frontend.modules.layout.core]
             [frontend.state :as state]
             [frontend.util :as util]
+            [logseq.db.frontend.entity-util :as entity-util]
             [goog.object :as gobj]
             [logseq.api.block :as api-block]
             [logseq.db :as ldb]
@@ -220,9 +222,12 @@
    (when (text/namespace-page? title)
      (throw (ex-info "Tag title shouldn't include forward slash" {:title title})))
    (let [opts (bean/->clj opts)
+         custom-ident-namespace (:customIdentNamespace opts)
+         class-ident-namespace (or (some-> custom-ident-namespace (api-block/sanitize-user-property-name))
+                                   (api-block/resolve-class-prefix-for-db this))
          opts' (assoc opts
-                      :redirect? false
-                      :class-ident-namespace (api-block/resolve-class-prefix-for-db this))]
+                 :redirect? false
+                 :class-ident-namespace class-ident-namespace)]
      (p/let [tag (db-page-handler/<create-class! title opts')]
        (sdk-utils/result->js tag)))))
 
@@ -255,21 +260,28 @@
                                                 (:db/id extend))))
 
 (defn get-tag [class-uuid-or-ident-or-title]
-  (this-as
-   this
-   (let [title-or-ident (-> (if-not (string? class-uuid-or-ident-or-title)
-                              (str class-uuid-or-ident-or-title)
-                              class-uuid-or-ident-or-title)
-                            (string/replace #"^:+" ""))
-         eid (if (text/namespace-page? title-or-ident)
-               (keyword title-or-ident)
-               (if (util/uuid-string? title-or-ident)
-                 (when-let [id (sdk-utils/uuid-or-throw-error title-or-ident)]
-                   [:block/uuid id])
-                 (keyword (api-block/resolve-class-prefix-for-db this) title-or-ident)))
-         tag (db/entity eid)]
-     (when (ldb/class? tag)
-       (sdk-utils/result->js tag)))))
+  (this-as this
+    (let [eid (if (number? class-uuid-or-ident-or-title)
+                class-uuid-or-ident-or-title
+                (let [title-or-ident (-> (if-not (string? class-uuid-or-ident-or-title)
+                                           (str class-uuid-or-ident-or-title)
+                                           class-uuid-or-ident-or-title)
+                                         (string/replace #"^:+" ""))]
+                  (if (text/namespace-page? title-or-ident)
+                    (keyword title-or-ident)
+                    (if (util/uuid-string? title-or-ident)
+                      (when-let [id (sdk-utils/uuid-or-throw-error title-or-ident)]
+                        [:block/uuid id])
+                      (keyword (api-block/resolve-class-prefix-for-db this) title-or-ident)))))
+          tag (db/entity eid)]
+      (when (ldb/class? tag)
+        (sdk-utils/result->js tag)))))
+
+(defn get-tags-by-name [name]
+  (when-let [tags (some->> (entity-util/get-pages-by-name (db-conn/get-db) name)
+                           (map #(some-> % (first) (db/entity)))
+                           (filter ldb/class?))]
+    (sdk-utils/result->js tags)))
 
 (defn tag-add-property [tag-id property-id-or-name]
   (p/let [tag (db/get-case-page tag-id)
