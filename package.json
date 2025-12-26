@@ -1,6 +1,6 @@
 {
-    "name": "logseq",
-    "version": "0.0.1",
+    "name": "LogseqOG",
+    "version": "1.0.0",
     "private": true,
     "main": "static/electron.js",
     "devDependencies": {
