@@ -54,20 +54,6 @@
              (fuzzy/fuzzy-search templates q {:limit limit
                                               :extract-fn extract-fn}))))))))
 
-(defn property-search
-  ([q]
-   (property-search q 100))
-  ([q limit]
-   (when q
-     (p/let [q (fuzzy/clean-str q)
-             properties* (db-async/<get-all-properties)
-             properties (map :block/title properties*)]
-       (when (seq properties)
-         (if (string/blank? q)
-           properties
-           (let [result (fuzzy/fuzzy-search properties q :limit limit)]
-             (vec result))))))))
-
 (defn rebuild-indices!
   ([]
    (rebuild-indices! (state/get-current-repo)))
@@ -77,11 +63,6 @@
        (p/do!
         (protocol/rebuild-pages-indice! engine)
         (protocol/rebuild-blocks-indice! engine))))))
-
-(defn reset-indice!
-  [repo]
-  (when-let [engine (get-engine repo)]
-    (protocol/truncate-blocks! engine)))
 
 (defn remove-db!
   [repo]

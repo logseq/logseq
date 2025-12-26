@@ -12,7 +12,6 @@
             ["os" :as os]
             ["path" :as node-path]
             [cljs-bean.core :as bean]
-            [cljs.reader :as reader]
             [clojure.string :as string]
             [electron.backup-file :as backup-file]
             [electron.configs :as cfgs]
@@ -29,7 +28,6 @@
             [electron.window :as win]
             [logseq.cli.common.graph :as cli-common-graph]
             [logseq.common.graph :as common-graph]
-            [logseq.db :as ldb]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
@@ -232,32 +230,6 @@
 
 (defmethod handle :getGraphs [_window [_]]
   (get-graphs))
-
-(defn- read-txid-info!
-  [root]
-  (try
-    (let [txid-path (.join node-path root "logseq/graphs-txid.edn")]
-      (when (fs/existsSync txid-path)
-        (when-let [sync-meta (and (not (string/blank? root))
-                                  (.toString (.readFileSync fs txid-path)))]
-          (reader/read-string sync-meta))))
-    (catch :default e
-      (logger/error "[read txid meta] #" root (.-message e)))))
-
-(defmethod handle :inflateGraphsInfo [_win [_ graphs]]
-  (let [graphs (ldb/read-transit-str graphs)]
-    (-> (if (seq graphs)
-          (for [{:keys [root] :as graph} graphs]
-            (if-let [sync-meta (read-txid-info! root)]
-              (assoc graph
-                     :sync-meta sync-meta
-                     :GraphUUID (second sync-meta))
-              graph))
-          [])
-        ldb/write-transit-str)))
-
-(defmethod handle :readGraphTxIdInfo [_win [_ root]]
-  (read-txid-info! root))
 
 (defmethod handle :deleteGraph [_window [_ graph graph-name _db-based?]]
   (when graph-name

@@ -64,5 +64,4 @@
             :ui/shortcut-tooltip?
             :copy/export-block-text-indent-style
             :copy/export-block-text-remove-options
-            :copy/export-block-text-other-options
-            :file-sync/onboarding-state]))
+            :copy/export-block-text-other-options]))

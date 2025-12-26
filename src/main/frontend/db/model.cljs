@@ -5,7 +5,6 @@
             [datascript.core :as d]
             [frontend.common.graph-view :as graph-view]
             [frontend.config :as config]
-            [frontend.date :as date]
             [frontend.db.conn :as conn]
             [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
@@ -185,10 +184,11 @@ independent of format as format specific heading characters are stripped"
   ([db block-id]
    (ldb/has-children? db block-id)))
 
-(defn top-block?
-  [block]
-  (= (:db/id (:block/parent block))
-     (:db/id (:block/page block))))
+(comment
+  (defn top-block?
+    [block]
+    (= (:db/id (:block/parent block))
+       (:db/id (:block/page block)))))
 
 (defn get-block-parent
   ([block-id]
@@ -318,30 +318,6 @@ independent of format as format specific heading characters are stripped"
   [page-name-or-uuid]
   (when page-name-or-uuid
     (ldb/get-case-page (conn/get-db) page-name-or-uuid)))
-
-(defn get-redirect-page-name
-  "Given any readable page-name, return the exact page-name in db. If page
-   doesn't exists yet, will return the passed `page-name`. Accepts both
-   sanitized or unsanitized names.
-   alias?: if true, alias is allowed to be returned; otherwise, it would be deref."
-  ([page-name] (get-redirect-page-name page-name false))
-  ([page-name alias?]
-   (when page-name
-     (let [page-entity (ldb/get-page (conn/get-db) page-name)]
-       (cond
-         alias?
-         (or (:block/name page-entity) page-name)
-
-         (nil? page-entity)
-         (if-let [journal-name (date/journal-title->custom-format page-name)]
-           (util/page-name-sanity-lc journal-name)
-           page-name)
-
-         :else
-         (let [source-page (get-alias-source-page (state/get-current-repo) (:db/id page-entity))]
-           (or (:block/name source-page)
-               (:block/name page-entity)
-               page-name)))))))
 
 (defn get-latest-journals
   ([n]
