@@ -626,7 +626,7 @@ jobs:
           draft: false
           prerelease: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.is-pre-release) || (github.event_name == 'schedule')}}
           body: |
-            This is a nightly release of the Logseq desktop app.
+            This is a nightly release of the Logseq OG desktop app.
             It's unstable compared to the official releases, **use it with caution**!
           files: |
             ./SHA256SUMS.txt
