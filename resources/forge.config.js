@@ -3,9 +3,10 @@ const fs = require('fs')
 
 module.exports = {
   packagerConfig: {
-    name: 'Logseq',
+    name: 'Logseq OG',
     icon: './icons/logseq_big_sur.icns',
-    buildVersion: "90",
+    buildVersion: "91",
+    appBundleId: "com.logseq.logseq-og",
     protocols: [
       {
         "protocol": "logseq",
@@ -31,7 +32,7 @@ module.exports = {
     {
       'name': '@electron-forge/maker-squirrel',
       'config': {
-        'name': 'Logseq',
+        'name': 'Logseq OG',
         'setupIcon': './icons/logseq.ico',
         'loadingGif': './icons/installing.gif',
         'certificateFile': process.env.CODE_SIGN_CERTIFICATE_FILE,
@@ -42,11 +43,11 @@ module.exports = {
     {
       'name': '@electron-forge/maker-wix',
       'config': {
-        name: 'Logseq',
+        name: 'Logseq OG',
         icon: path.join(__dirname, './icons/logseq.ico'),
         language: 1033,
         manufacturer: 'Logseq',
-        appUserModelId: 'com.logseq.logseq',
+        appUserModelId: 'com.logseq.logseq-og',
         upgradeCode: "3778eb84-a0ce-4109-9120-5d4315e0d7de",
         ui: {
           enabled: false,
@@ -75,7 +76,7 @@ module.exports = {
       config: {
         format: 'ULFO',
         icon: './icons/logseq_big_sur.icns',
-        name: 'Logseq'
+        name: 'Logseq OG'
       }
     },
     {
@@ -98,7 +99,7 @@ module.exports = {
       config: {
         repository: {
           owner: 'logseq',
-          name: 'logseq'
+          name: 'og'
         },
         prerelease: true
       }
