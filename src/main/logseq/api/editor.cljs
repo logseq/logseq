@@ -15,7 +15,6 @@
             [frontend.handler.export :as export-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.property :as property-handler]
-            [frontend.handler.shell :as shell]
             [frontend.modules.layout.core]
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.state :as state]
@@ -29,7 +28,6 @@
             [logseq.db :as ldb]
             [logseq.sdk.core]
             [logseq.sdk.experiments]
-            [logseq.sdk.git]
             [logseq.sdk.utils :as sdk-utils]
             [promesa.core :as p]))
 
@@ -421,11 +419,6 @@
   []
   (when-let [repo (state/get-current-repo)]
     (export-handler/export-repo-as-zip! repo)))
-
-(defn exec_git_command
-  [^js args]
-  (when-let [args (and args (seq (bean/->clj args)))]
-    (shell/run-git-command! args)))
 
 ;; block properties
 (defn upsert_block_property

@@ -80,10 +80,8 @@
   (.destroy win))
 
 (defn close-handler
-  [^js win close-watcher-f e]
+  [^js win e]
   (.preventDefault e)
-  (when-let [dir (state/get-window-graph-path win)]
-    (close-watcher-f win dir))
   (state/close-window! win)
   (let [web-contents (. win -webContents)]
     (.send web-contents "persist-zoom-level" (.getZoomLevel web-contents)))
@@ -91,8 +89,8 @@
 
 (defn on-close-actions!
   ;; TODO merge with the on close in core
-  [^js win close-watcher-f] ;; injected watcher related func
-  (.on win "close" (fn [e] (close-handler win close-watcher-f e))))
+  [^js win]
+  (.on win "close" (fn [e] (close-handler win e))))
 
 (defn switch-to-window!
   [^js win]
