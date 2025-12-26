@@ -9,6 +9,7 @@
             [frontend.handler.db-based.page :as db-page-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.publish :as publish-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -96,6 +97,10 @@
                                      (export/export-blocks [(:block/uuid page)] {:whiteboard? whiteboard?
                                                                                  :export-type :page}))
                                    {:class "w-auto md:max-w-4xl max-h-[80vh] overflow-y-auto"})}})
+
+          (when (and page (not config/publishing?))
+            {:title   "Publish page"
+             :options {:on-click #(publish-handler/publish-page! page)}})
 
           (when (util/electron?)
             {:title   (t (if public? :page/make-private :page/make-public))
