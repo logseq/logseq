@@ -639,9 +639,8 @@ prop-d:: [[nada]]"}])
                 (dsl-query "(or [[tag2]] [[page not exists]])")))
         "OR query with nonexistent page should return meaningful results")
 
-    (comment
-      ;; FIXME:
-      (is (= (if js/process.env.DB_GRAPH #{"b1" "bar" "b3"} #{"b1" "foo:: bar" "b3"})
+    (when js/process.env.DB_GRAPH
+      (is (= #{"b1" "bar" "b3"}
              (->> (dsl-query "(not [[page 2]])")
                 ;; Only filter to page1 to get meaningful results
                   (filter #(= "page1" (get-in % [:block/page :block/name])))
