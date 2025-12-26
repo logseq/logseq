@@ -1,0 +1,25 @@
+name = "logseq-publish"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+[[durable_objects.bindings]]
+name = "PUBLISH_META_DO"
+class_name = "PublishMetaDO"
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["PublishMetaDO"]
+
+[[r2_buckets]]
+binding = "PUBLISH_R2"
+bucket_name = "logseq-publish-dev"
+
+[vars]
+COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/POOL_ID/.well-known/jwks.json"
+COGNITO_ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/POOL_ID"
+COGNITO_CLIENT_ID = "CLIENT_ID"
+R2_ACCOUNT_ID = "YOUR_ACCOUNT_ID"
+R2_BUCKET = "logseq-publish-dev"
+R2_ACCESS_KEY_ID = "R2_ACCESS_KEY_ID"
+R2_SECRET_ACCESS_KEY = "R2_SECRET_ACCESS_KEY"
+DEV_SKIP_AUTH = "true"
