@@ -4,7 +4,6 @@
             [cljs.reader]
             [clojure.string :as string]
             [frontend.commands :as commands]
-            [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
@@ -258,8 +257,7 @@
   (fn [block-uuid content ^js opts]
     (this-as
      this
-     (p/let [repo (state/get-current-repo)
-             block (<get-block block-uuid {:children? false})
+     (p/let [block (<get-block block-uuid {:children? false})
              opts' (bean/->clj opts)]
        (when block
          (db-based-api/update-block this block content opts'))))))
@@ -452,9 +450,7 @@
                    key (if (not key-ns?)
                          (api-block/get-db-ident-from-property-name key this)
                          key)]
-             (property-handler/remove-block-property!
-              (state/get-current-repo)
-              block-uuid key))))
+             (property-handler/remove-block-property! block-uuid key))))
 
 (defn get_block_property
   [block-uuid key]

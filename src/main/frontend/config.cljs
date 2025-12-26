@@ -2,14 +2,11 @@
   "App config and fns built on top of configuration"
   (:require [clojure.set :as set]
             [clojure.string :as string]
-            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
-            [goog.crypt :as crypt]
             [goog.crypt.Md5]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
-            [logseq.common.util :as common-util]
             [logseq.db.sqlite.util :as sqlite-util]
             [shadow.resource :as rc]))
 
@@ -29,31 +26,25 @@
 (def ENABLE-SETTINGS-ACCOUNT-TAB false)
 
 (if ENABLE-FILE-SYNC-PRODUCTION
-  (do (def FILE-SYNC-PROD? true)
-      (def LOGIN-URL
+  (do (def LOGIN-URL
         "https://logseq-prod.auth.us-east-1.amazoncognito.com/login?client_id=3c7np6bjtb4r1k1bi9i049ops5&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
       (def API-DOMAIN "api.logseq.com")
-      (def WS-URL "wss://ws.logseq.com/file-sync?graphuuid=%s")
       (def COGNITO-IDP "https://cognito-idp.us-east-1.amazonaws.com/")
       (def COGNITO-CLIENT-ID "69cs1lgme7p8kbgld8n5kseii6")
       (def REGION "us-east-1")
       (def USER-POOL-ID "us-east-1_dtagLnju8")
       (def IDENTITY-POOL-ID "us-east-1:d6d3b034-1631-402b-b838-b44513e93ee0")
-      (def OAUTH-DOMAIN "logseq-prod.auth.us-east-1.amazoncognito.com")
-      (def CONNECTIVITY-TESTING-S3-URL "https://logseq-connectivity-testing-prod.s3.us-east-1.amazonaws.com/logseq-connectivity-testing"))
+      (def OAUTH-DOMAIN "logseq-prod.auth.us-east-1.amazoncognito.com"))
 
-  (do (def FILE-SYNC-PROD? false)
-      (def LOGIN-URL
+  (do (def LOGIN-URL
         "https://logseq-test2.auth.us-east-2.amazoncognito.com/login?client_id=3ji1a0059hspovjq5fhed3uil8&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
       (def API-DOMAIN "api-dev.logseq.com")
-      (def WS-URL "wss://ws-dev.logseq.com/file-sync?graphuuid=%s")
       (def COGNITO-IDP "https://cognito-idp.us-east-2.amazonaws.com/")
       (def COGNITO-CLIENT-ID "1qi1uijg8b6ra70nejvbptis0q")
       (def REGION "us-east-2")
       (def USER-POOL-ID "us-east-2_kAqZcxIeM")
       (def IDENTITY-POOL-ID "us-east-2:cc7d2ad3-84d0-4faf-98fe-628f6b52c0a5")
-      (def OAUTH-DOMAIN "logseq-test2.auth.us-east-2.amazoncognito.com")
-      (def CONNECTIVITY-TESTING-S3-URL "https://logseq-connectivity-testing-prod.s3.us-east-1.amazonaws.com/logseq-connectivity-testing")))
+      (def OAUTH-DOMAIN "logseq-test2.auth.us-east-2.amazoncognito.com")))
 
 (goog-define ENABLE-RTC-SYNC-PRODUCTION false)
 (if ENABLE-RTC-SYNC-PRODUCTION
@@ -85,10 +76,6 @@
 ;; ============
 
 (def app-name common-config/app-name)
-(def website
-  (if dev?
-    "http://localhost:3000"
-    (util/format "https://%s.com" app-name)))
 
 ;; FIXME:
 (def app-website
@@ -289,13 +276,6 @@
      (+ 3 (count label))]
     ["" 0]))
 
-(defn get-file-extension
-  [format]
-  (case (keyword format)
-    :markdown
-    "md"
-    (name format)))
-
 (defonce default-journals-directory "journals")
 (defonce default-pages-directory "pages")
 
@@ -317,37 +297,21 @@
    (or (nil? repo-url) (= repo-url demo-repo)
        (string/ends-with? repo-url demo-repo))))
 
-(defonce recycle-dir ".recycle")
 (def config-file "config.edn")
 (def custom-css-file "custom.css")
 (def export-css-file "export.css")
 (def custom-js-file "custom.js")
 (def config-default-content (rc/inline "templates/config.edn"))
-(def config-default-content-md5 (let [md5 (new crypt/Md5)]
-                                  (.update md5 (crypt/stringToUtf8ByteArray config-default-content))
-                                  (crypt/byteArrayToHex (.digest md5))))
 
 ;; NOTE: repo-url is the unique identifier of a repo.
-;; - `local` => in-memory demo graph
-;; - `logseq_local_/absolute/path/to/graph` => local graph, native fs backend
-;; - `logseq_local_x:/absolute/path/to/graph` => local graph, native fs backend, on Windows
-;; - `logseq_local_GraphName` => local graph, browser fs backend
 ;; - `logseq_db_GraphName` => db based graph, sqlite as backend
 ;; - Use `""` while writing global files
 
-(defonce idb-db-prefix "logseq-db/")
-(defonce local-db-prefix "logseq_local_")
-(defonce local-handle "handle")
 (defonce db-version-prefix common-config/db-version-prefix)
 
 (defn db-graph-name
   [repo-with-prefix]
   (string/replace-first repo-with-prefix db-version-prefix ""))
-
-(defn local-file-based-graph?
-  [s]
-  (and (string? s)
-       (string/starts-with? s local-db-prefix)))
 
 (defn db-based-graph?
   ([]
@@ -363,78 +327,18 @@
 
 (defn get-local-dir
   [repo]
-  (if (db-based-graph? repo)
-    (path/path-join (get-in @state/state [:system/info :home-dir])
-                    "logseq"
-                    "graphs"
-                    (string/replace repo db-version-prefix ""))
-    (string/replace repo local-db-prefix "")))
-
-;; FIXME(andelf): this is not the reverse op of get-repo-dir, should be fixed
-(defn get-local-repo
-  [dir]
-  (str local-db-prefix dir))
+  (path/path-join (get-in @state/state [:system/info :home-dir])
+                  "logseq"
+                  "graphs"
+                  (string/replace repo db-version-prefix "")))
 
 (defn get-repo-dir
   [repo-url]
   (when repo-url
-    (let [db-based? (db-based-graph? repo-url)]
-      (cond
-        (and (util/electron?) db-based-graph?)
-        (get-local-dir repo-url)
-
-        db-based?
-        (str "memory:///"
-             (string/replace-first repo-url db-version-prefix ""))
-
-        (and (util/electron?) (local-file-based-graph? repo-url))
-        (get-local-dir repo-url)
-
-        (and (mobile-util/native-platform?) (local-file-based-graph? repo-url))
-        (let [dir (get-local-dir repo-url)]
-          (if (string/starts-with? dir "file://")
-            dir
-            (path/path-join "file://" dir)))
-
-    ;; Special handling for demo graph
-        (= repo-url demo-repo)
-        "memory:///local"
-
-    ;; nfs, browser-fs-access
-    ;; Format: logseq_local_{dir-name}
-        (or (local-file-based-graph? repo-url)
-            (and publishing? (not db-based?)))
-        (string/replace-first repo-url local-db-prefix "")
-
-     ;; unit test
-        (= repo-url "test-db")
-        "/test-db"
-
-        :else
-        (do
-          (js/console.error "Unknown Repo URL type:" repo-url)
-          (str "/"
-               (->> (take-last 2 (string/split repo-url #"/"))
-                    (string/join "_"))))))))
-
-(defn get-string-repo-dir
-  [repo-dir]
-  (if (mobile-util/native-ios?)
-    (str (if (mobile-util/in-iCloud-container-path? repo-dir)
-           "iCloud"
-           (cond (mobile-util/native-iphone?)
-                 "On My iPhone"
-
-                 (mobile-util/native-ipad?)
-                 "On My iPad"
-
-                 :else
-                 "Local"))
-         (->> (string/split repo-dir "Documents/")
-              last
-              common-util/safe-decode-uri-component
-              (str "/" (string/capitalize app-name) "/")))
-    (get-repo-dir (get-local-repo repo-dir))))
+    (if (util/electron?)
+      (get-local-dir repo-url)
+      (str "memory:///"
+           (string/replace-first repo-url db-version-prefix "")))))
 
 (defn get-repo-fpath
   [repo-url path]
@@ -460,26 +364,6 @@
    (when-let [repo-dir (get-repo-dir repo)]
      (path/path-join repo-dir app-name  export-css-file))))
 
-(defn expand-relative-assets-path
-  "Resolve all relative links in custom.css to assets:// URL"
-  ;; ../assets/xxx -> {assets|file}://{current-graph-root-path}/xxx
-  [source]
-  (when-not (string/blank? source)
-    (let [protocol (and (string? source)
-                        (not (string/blank? source))
-                        (if (util/electron?) "assets://" "file://"))
-          ;; BUG: use "assets" as fake current directory
-          assets-link-fn (fn [_]
-                           (let [graph-root (get-repo-dir (state/get-current-repo))
-                                 full-path (if (util/safe-re-find #"^(file|assets):" graph-root)
-                                             (path/path-join graph-root "assets")
-                                             (path/path-join protocol graph-root "assets"))]
-                             (str (cond-> full-path
-                                    (mobile-util/native-platform?)
-                                    (mobile-util/convert-file-src))
-                                  "/")))]
-      (string/replace source #"\.\./assets/" assets-link-fn))))
-
 (defn get-current-repo-assets-root
   []
   (when-let [repo-dir (get-repo-dir (state/get-current-repo))]
@@ -498,7 +382,3 @@
      (path/path-join app-name custom-js-file)
      (when-let [repo-dir (get-repo-dir repo)]
        (path/path-join repo-dir app-name custom-js-file)))))
-
-(defn get-block-hidden-properties
-  []
-  (:block-hidden-properties (state/get-config)))

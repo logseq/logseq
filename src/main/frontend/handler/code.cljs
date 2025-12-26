@@ -1,7 +1,6 @@
 (ns frontend.handler.code
   "Codemirror editor related."
   (:require [clojure.string :as string]
-            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.editor :as editor-handler]
@@ -19,7 +18,6 @@
             ds (.-dataset textarea)
             value (gobj/get textarea "value")
             default-value (or (.-v ds) (gobj/get textarea "defaultValue"))
-            repo (state/get-current-repo)
             block (or (:code-block config) (:block config))]
         (when (not= value default-value)
           ;; update default value for the editor initial state

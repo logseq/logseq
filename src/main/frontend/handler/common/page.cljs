@@ -48,7 +48,7 @@
                      (wrap-tags title)
                      title)
              parsed-result (db-editor-handler/wrap-parse-block {:block/title title})
-             has-tags? (and (seq (:block/tags parsed-result)))
+             has-tags? (seq (:block/tags parsed-result))
              title' (if has-tags?
                       (some-> (first
                                (common-util/split-first (str "#" page-ref/left-brackets) (:block/title parsed-result)))
@@ -87,35 +87,6 @@
 
 ;; favorite fns
 ;; ============
-(defn file-favorited?
-  [page-name]
-  (let [favorites (->> (:favorites (state/get-config))
-                       (filter string?)
-                       (map string/lower-case)
-                       (set))]
-    (contains? favorites (string/lower-case page-name))))
-
-(defn file-favorite-page!
-  [page-name]
-  (when-not (string/blank? page-name)
-    (let [favorites (->
-                     (cons
-                      page-name
-                      (or (:favorites (state/get-config)) []))
-                     (distinct)
-                     (vec))]
-      (config-handler/set-config! :favorites favorites))))
-
-(defn file-unfavorite-page!
-  [page-name]
-  (when-not (string/blank? page-name)
-    (let [old-favorites (:favorites (state/get-config))
-          new-favorites (->> old-favorites
-                             (remove #(= (string/lower-case %) (string/lower-case page-name)))
-                             (vec))]
-      (when-not (= old-favorites new-favorites)
-        (config-handler/set-config! :favorites new-favorites)))))
-
 (defn- find-block-in-favorites-page
   [page-block-uuid]
   (let [db (conn/get-db)]

@@ -203,7 +203,7 @@
               config (common-handler/config-with-document-mode hiccup-config)
               blocks (if block? [block] (db/sort-by-order children block))]
           [:div.relative
-           (page-blocks-inner block blocks config sidebar? block-id)
+           (page-blocks-inner block blocks config sidebar? false block-id)
            (when more?
              (shui/button {:variant :ghost
                            :class "text-muted-foreground w-full"

@@ -1,9 +1,6 @@
 (ns frontend.idb
   "This system component provides indexedDB functionality"
-  (:require ["/frontend/idbkv" :as idb-keyval]
-            [clojure.string :as string]
-            [frontend.config :as config]
-            [promesa.core :as p]))
+  (:require ["/frontend/idbkv" :as idb-keyval]))
 
 ;; offline db
 
@@ -40,26 +37,6 @@
   [key]
   (when (and key @store)
     (idb-keyval/get key @store)))
-
-(defn get-keys
-  []
-  (when @store
-    (idb-keyval/keys @store)))
-
-(defn get-nfs-dbs
-  []
-  (p/let [ks (get-keys)]
-    (->> (filter (fn [k] (string/starts-with? k (str config/idb-db-prefix config/local-db-prefix))) ks)
-         (map #(string/replace-first % config/idb-db-prefix "")))))
-
-(defn clear-local-db!
-  [repo]
-  (when repo
-    (p/let [ks (get-keys)
-            ks (filter (fn [k] (string/starts-with? k (str config/local-handle "/" repo))) ks)]
-      (when (seq ks)
-        (p/all (map (fn [key]
-                      (remove-item! key)) ks))))))
 
 (defn start
   "This component's only responsibility is to create a Store object"

@@ -163,8 +163,7 @@
                                                              (db-property-handler/delete-property-value! (:db/id view-entity)
                                                                                                          :logseq.property.table/pinned-columns
                                                                                                          (:db/id property))
-                                                             (property-handler/set-block-property! (state/get-current-repo)
-                                                                                                   (:db/id view-entity)
+                                                             (property-handler/set-block-property! (:db/id view-entity)
                                                                                                    :logseq.property.table/pinned-columns
                                                                                                    (:db/id property)))
                                                            (shui/popup-hide! id))}
@@ -1545,38 +1544,37 @@
 (defn- db-set-table-state!
   [entity {:keys [set-sorting! set-filters! set-visible-columns!
                   set-ordered-columns! set-sized-columns!]}]
-  (let [repo (state/get-current-repo)]
-    {:set-sorting!
-     (fn [sorting]
+  {:set-sorting!
+   (fn [sorting]
+     (p/do!
+      (property-handler/set-block-property! (:db/id entity) :logseq.property.table/sorting sorting)
+      (set-sorting! sorting)))
+   :set-filters!
+   (fn [filters]
+     (let [filters (-> (update filters :filters table-filters->persist-state)
+                       (update :or? boolean))]
        (p/do!
-        (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/sorting sorting)
-        (set-sorting! sorting)))
-     :set-filters!
-     (fn [filters]
-       (let [filters (-> (update filters :filters table-filters->persist-state)
-                         (update :or? boolean))]
-         (p/do!
-          (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/filters filters)
-          (set-filters! filters))))
-     :set-visible-columns!
-     (fn [columns]
-       (let [hidden-columns (vec (keep (fn [[column visible?]]
-                                         (when (false? visible?)
-                                           column)) columns))]
-         (p/do!
-          (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/hidden-columns hidden-columns)
-          (set-visible-columns! columns))))
-     :set-ordered-columns!
-     (fn [ordered-columns]
-       (let [ids (vec (remove #{:select} ordered-columns))]
-         (p/do!
-          (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/ordered-columns ids)
-          (set-ordered-columns! ordered-columns))))
-     :set-sized-columns!
-     (fn [sized-columns]
+        (property-handler/set-block-property! (:db/id entity) :logseq.property.table/filters filters)
+        (set-filters! filters))))
+   :set-visible-columns!
+   (fn [columns]
+     (let [hidden-columns (vec (keep (fn [[column visible?]]
+                                       (when (false? visible?)
+                                         column)) columns))]
        (p/do!
-        (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/sized-columns sized-columns)
-        (set-sized-columns! sized-columns)))}))
+        (property-handler/set-block-property! (:db/id entity) :logseq.property.table/hidden-columns hidden-columns)
+        (set-visible-columns! columns))))
+   :set-ordered-columns!
+   (fn [ordered-columns]
+     (let [ids (vec (remove #{:select} ordered-columns))]
+       (p/do!
+        (property-handler/set-block-property! (:db/id entity) :logseq.property.table/ordered-columns ids)
+        (set-ordered-columns! ordered-columns))))
+   :set-sized-columns!
+   (fn [sized-columns]
+     (p/do!
+      (property-handler/set-block-property! (:db/id entity) :logseq.property.table/sized-columns sized-columns)
+      (set-sized-columns! sized-columns)))})
 
 (rum/defc lazy-item
   [data idx {:keys [properties list-view? scrolling?]} item-render]

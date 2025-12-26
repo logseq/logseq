@@ -23,7 +23,6 @@
 ;; TODO: move to frontend.handler.editor.commands
 
 (defonce hashtag "#")
-(defonce colon ":")
 (defonce command-trigger "/")
 (defonce command-ask "\\")
 (defonce *current-command (atom nil))

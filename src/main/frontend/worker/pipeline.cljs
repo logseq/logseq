@@ -59,7 +59,7 @@
             blocks)))
 
 (defn- insert-tag-templates
-  [repo tx-report]
+  [tx-report]
   (let [db (:db-after tx-report)
         journal-id (:db/id (d/entity db :logseq.class/Journal))
         journal-page (some (fn [d] (when (and (= :block/journal-day (:a d)) (:added d))
@@ -393,7 +393,7 @@
       (distinct tx-data'))))
 
 (defn- compute-extra-tx-data
-  [repo tx-report]
+  [tx-report]
   (let [{:keys [db-before db-after tx-data tx-meta]} tx-report
         db db-after
         revert-tx-data (revert-disallowed-changes tx-report)
@@ -405,7 +405,7 @@
         commands-tx (when-not (or (:undo? tx-meta) (:redo? tx-meta) (rtc-tx-or-download-graph? tx-meta))
                       (commands/run-commands tx-report))
         insert-templates-tx (when-not (rtc-tx-or-download-graph? tx-meta)
-                              (insert-tag-templates repo tx-report))
+                              (insert-tag-templates tx-report))
         created-by-tx (add-created-by-ref-hook db-before db-after tx-data tx-meta)]
     (concat revert-tx-data
             toggle-page-and-block-tx-data
@@ -429,7 +429,7 @@
   "Compute extra tx-data and block/refs, should ensure it's a pure function and
   doesn't call `d/transact!` or `ldb/transact!`."
   [repo {:keys [db-after tx-meta] :as tx-report}]
-  (let [extra-tx-data (compute-extra-tx-data repo tx-report)
+  (let [extra-tx-data (compute-extra-tx-data tx-report)
         tx-report* (if (seq extra-tx-data)
                      (let [result (d/with db-after extra-tx-data)]
                        (assoc tx-report
@@ -466,7 +466,7 @@
                          (:db-after tx-report)))))
 
 (defn- invoke-hooks-default
-  [repo conn {:keys [tx-meta] :as tx-report} context]
+  [{:keys [tx-meta] :as tx-report} context]
   (try
     (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
           deleted-blocks (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report))
@@ -494,7 +494,7 @@
       (throw e))))
 
 (defn invoke-hooks
-  [repo conn {:keys [tx-meta] :as tx-report} context]
+  [conn {:keys [tx-meta] :as tx-report} context]
   (let [{:keys [from-disk? new-graph? transact-new-graph-refs?]} tx-meta]
     (when-not transact-new-graph-refs?
       (cond
@@ -511,4 +511,4 @@
         (invoke-hooks-for-imported-graph conn tx-report)
 
         :else
-        (invoke-hooks-default repo conn tx-report context)))))
+        (invoke-hooks-default tx-report context)))))

@@ -4,7 +4,7 @@
             [frontend.db.model :as model]
             [frontend.handler.editor :as editor]
             [frontend.state :as state]
-            [frontend.test.helper :as test-helper :refer [load-test-files]]
+            [frontend.test.helper :as test-helper]
             [frontend.util.cursor :as cursor]))
 
 (use-fixtures :each test-helper/start-and-destroy-db)

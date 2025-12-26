@@ -18,9 +18,7 @@
             [logseq.clj-fractional-indexing :as index]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [logseq.db.common.property-util :as db-property-util]
             [logseq.db.frontend.property :as db-property]
-            [logseq.graph-parser.whiteboard :as gp-whiteboard]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.transaction :as outliner-tx]
             [missionary.core :as m]))

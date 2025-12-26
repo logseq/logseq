@@ -7,8 +7,6 @@
             [frontend.worker.fixtures :as worker-fixtures]
             [frontend.worker.rtc.malli-schema :as rtc-schema]
             [frontend.worker.rtc.remote-update :as r.remote]
-            [frontend.worker.state :as worker-state]
-            [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.transaction :as outliner-tx]))
@@ -311,7 +309,6 @@ result:
 - 1"
     (let [repo (state/get-current-repo)
           conn (conn/get-db repo false)
-          date-formatter (common-config/get-date-formatter (worker-state/get-config repo))
           opts {:persist-op? false
                 :transact-opts {:repo repo
                                 :conn conn}}

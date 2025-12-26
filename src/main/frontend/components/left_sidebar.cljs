@@ -46,7 +46,6 @@
   [page recent?]
   (when-let [id (:db/id page)]
     (let [page (db/sub-block id)
-          repo (state/get-current-repo)
           icon (icon/get-node-icon-cp page {:size 16})
           title (:block/title page)
           untitled? (db-model/untitled-page? title)

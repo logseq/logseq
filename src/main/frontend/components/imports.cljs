@@ -43,8 +43,6 @@
 ;; Can't name this component as `frontend.components.import` since shadow-cljs
 ;; will complain about it.
 
-(defonce *opml-imported-pages (atom nil))
-
 (defn- finished-cb
   []
   (notification/show! "Import finished!" :success)
@@ -132,26 +130,6 @@
 
       :else
       (notification/show! "Please choose an EDN or a JSON file."
-                          :error))))
-
-(defn- opml-import-handler
-  [e]
-  (let [file      (first (array-seq (.-files (.-target e))))
-        file-name (gobj/get file "name")]
-    (if (string/ends-with? file-name ".opml")
-      (do
-        (state/set-state! :graph/importing :opml)
-        (let [reader (js/FileReader.)]
-          (set! (.-onload reader)
-                (fn [e]
-                  (let [text (.. e -target -result)]
-                    (import-handler/import-from-opml! text
-                                                      (fn [pages]
-                                                        (reset! *opml-imported-pages pages)
-                                                        (state/set-state! :graph/importing nil)
-                                                        (finished-cb))))))
-          (.readAsText reader file)))
-      (notification/show! "Please choose a OPML file."
                           :error))))
 
 (rum/defcs set-graph-name-dialog

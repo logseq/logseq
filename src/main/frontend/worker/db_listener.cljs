@@ -22,7 +22,7 @@
   (when repo (worker-state/set-db-latest-tx-time! repo))
   (when-not (:rtc-download-graph? tx-meta)
     (let [{:keys [from-disk?]} tx-meta
-          result (worker-pipeline/invoke-hooks repo conn tx-report (worker-state/get-context))
+          result (worker-pipeline/invoke-hooks conn tx-report (worker-state/get-context))
           tx-report' (:tx-report result)]
       (when result
         (let [data (merge

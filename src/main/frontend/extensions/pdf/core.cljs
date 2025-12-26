@@ -905,8 +905,7 @@
   [asset last-visit-page]
   (when (and (number? last-visit-page)
              (> last-visit-page 0))
-    (debounced-set-property! (state/get-current-repo)
-                             (:db/id asset)
+    (debounced-set-property! (:db/id asset)
                              :logseq.property.asset/last-visit-page
                              last-visit-page)))
 
@@ -915,11 +914,6 @@
   (when (or (number? last-visit-scale)
             (string? last-visit-scale))
     (debounced-set-storage! (str "pdf-last-visit-scale/" (:db/id asset)) (or last-visit-scale "auto"))))
-
-(defn- get-last-visit-scale
-  [asset]
-  (or (storage/get (str "pdf-last-visit-scale/" (:db/id asset)))
-      "auto"))
 
 (rum/defc ^:large-vars/data-var pdf-loader
   [{:keys [url hls-file identity filename block] :as pdf-current}]

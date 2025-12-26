@@ -175,7 +175,7 @@
             color' (let [colors (:property/closed-values (db/entity :logseq.property.pdf/hl-color))]
                      (some (fn [color-block] (when (= (:block/title color-block) color)
                                                (:db/id color-block))) colors))]
-        (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block) k color')))))
+        (property-handler/set-block-property! (:block/uuid block) k color')))))
 
 (defn unlink-hl-area-image$
   [^js _viewer current hl]

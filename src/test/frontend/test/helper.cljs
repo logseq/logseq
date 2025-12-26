@@ -43,7 +43,7 @@
         (d/transact! conn (sqlite-create-graph/build-db-initial-data "")))
       (d/listen! conn ::listen-db-changes!
                  (fn [tx-report]
-                   (worker-pipeline/invoke-hooks test-db' conn tx-report {}))))))
+                   (worker-pipeline/invoke-hooks conn tx-report {}))))))
 
 (defn destroy-test-db!
   []

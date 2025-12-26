@@ -2,7 +2,6 @@
   "DSL query builder."
   (:require [clojure.string :as string]
             [frontend.components.select :as component-select]
-            [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
@@ -20,7 +19,6 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
-            [logseq.graph-parser.db :as gp-db]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -144,7 +142,7 @@
      (select (map #(hash-map :db/ident (:db/ident %)
                              :value (:block/title %))
                   properties)
-             (fn [{value :value db-ident :db/ident}]
+             (fn [{db-ident :db/ident}]
                (reset! *mode "property-value")
                (reset! *property db-ident)))]))
 
@@ -211,7 +209,7 @@
     (select result on-chosen {:loading? loading?})))
 
 (defn- db-based-query-filter-picker
-  [state *find *tree loc clause opts]
+  [state *tree loc clause opts]
   (let [*mode (::mode state)
         *property (::property state)
         *private-property? (::private-property? state)
@@ -290,7 +288,7 @@
   (rum/local nil ::mode)                ; pick mode
   (rum/local nil ::property)
   (rum/local false ::private-property?)
-  [state *find *tree loc clause opts]
+  [state *tree loc clause opts]
   (let [*mode (::mode state)
         filters query-builder/db-based-block-filters
         filters-and-ops (concat filters query-builder/operators)
@@ -298,7 +296,7 @@
     [:div.query-builder-picker
      (if @*mode
        (when-not (operator? @*mode)
-         (db-based-query-filter-picker state *find *tree loc clause opts))
+         (db-based-query-filter-picker state *tree loc clause opts))
        [:div
         (select
          (map name filters-and-ops)
@@ -315,7 +313,7 @@
          {:input-default-placeholder "Add filter/operator"})])]))
 
 (rum/defc add-filter
-  [*find *tree loc clause]
+  [*tree loc clause]
   (shui/button
    {:class "jtrigger !px-1 h-6 add-filter text-muted-foreground"
     :size :sm
@@ -324,7 +322,7 @@
     :on-click (fn [^js e]
                 (shui/popup-show! (.-target e)
                                   (fn [{:keys [id]}]
-                                    (picker *find *tree loc clause {:toggle-fn #(shui/popup-hide! id)}))
+                                    (picker *tree loc clause {:toggle-fn #(shui/popup-hide! id)}))
                                   {:align :start}))}
    (ui/icon "plus" {:size 14})
    (when (= [0] loc) "Filter")))
@@ -509,7 +507,7 @@
      (when parens? [:div.clause-bracket ")"])
 
      (when (not= loc [0])
-       (add-filter *find *tree loc []))]))
+       (add-filter *tree loc []))]))
 
 (rum/defc clause-tree < rum/reactive
   [*tree *find]
@@ -588,4 +586,4 @@
       (when (and (seq @*tree)
                  (not= @*tree [:and]))
         (clause-tree *tree *find))
-      (add-filter *find *tree [0] [])]]))
+      (add-filter *tree [0] [])]]))

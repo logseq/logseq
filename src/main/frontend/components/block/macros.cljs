@@ -27,7 +27,7 @@
        (into {})))
 
 (defn- normalize-query-function
-  [ast* repo result]
+  [ast* result]
   (let [ast (walk/prewalk
              (fn [f]
                (if (and (list? f)
@@ -73,7 +73,7 @@
                            (map #(hash-map :block/properties (properties-by-name db %))))
         fn-string (-> (gstring/format "(fn [result] %s)" (first arguments))
                       (common-handler/safe-read-string "failed to parse function")
-                      (normalize-query-function repo query-result')
+                      (normalize-query-function query-result')
                       (str))
         f (sci/eval-string fn-string)]
     (when (fn? f)
