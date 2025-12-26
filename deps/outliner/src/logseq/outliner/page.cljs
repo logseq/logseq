@@ -247,6 +247,7 @@
                (map (fn [id] (d/entity db [:block/uuid id])) tags)
                tags)
         class? (or class? (some (fn [t] (= :logseq.class/Tag (:db/ident t))) tags))
+        class-ident-namespace? (and class? class-ident-namespace (string? class-ident-namespace))
         title (sanitize-title title*)
         types (cond class?
                     #{:logseq.class/Tag}
@@ -258,29 +259,38 @@
                     (set (map :db/ident tags))
                     :else
                     #{:logseq.class/Page})
-        existing-page-id (first (ldb/page-exists? db title types))
+        existing-names-page (ldb/page-exists? db title types)
+        existing-page-id (some->> existing-names-page
+                                  (filter #(try (when-let [e (and class-ident-namespace? (d/entity db %))]
+                                                  (let [ns' (namespace (:db/ident e))]
+                                                    (= (str ns') class-ident-namespace)))
+                                                (catch :default _ false)))
+                                  (first))
         existing-page (some->> existing-page-id (d/entity db))]
     (if (and existing-page (not (:block/parent existing-page)))
       (let [tx-meta {:persist-op? persist-op?
                      :outliner-op :save-block}]
-        (when (and class?
-                   (not (ldb/class? existing-page))
-                   (ldb/internal-page? existing-page))
+        (if (and class?
+                 (not (ldb/class? existing-page))
+                 (ldb/internal-page? existing-page))
           ;; Convert existing page to class
           (let [tx-data [(merge (db-class/build-new-class db
                                                           (select-keys existing-page [:block/title :block/uuid :block/created-at])
-                                                          (when (and class? class-ident-namespace (string? class-ident-namespace))
+                                                          (when class-ident-namespace?
                                                             {:ident-namespace class-ident-namespace}))
                                 (select-keys existing-page [:db/ident]))
                          [:db/retract [:block/uuid (:block/uuid existing-page)] :block/tags :logseq.class/Page]]]
             {:tx-meta tx-meta
              :tx-data tx-data
              :page-uuid (:block/uuid existing-page)
-             :title (:block/title existing-page)})))
-      (let [page           (gp-block/page-name->map title db true date-formatter
-                                                    {:class? class?
-                                                     :page-uuid (when (uuid? uuid') uuid')
-                                                     :skip-existing-page-check? true})
+             :title (:block/title existing-page)})
+          ;; Just return existing page info
+          {:page-uuid (:block/uuid existing-page)
+           :title (:block/title existing-page)}))
+      (let [page (gp-block/page-name->map title db true date-formatter
+                                          {:class? class?
+                                           :page-uuid (when (uuid? uuid') uuid')
+                                           :skip-existing-page-check? true})
             [page parents'] (if (and (text/namespace-page? title) split-namespace?)
                               (let [pages (split-namespace-pages db page date-formatter class?)]
                                 [(last pages) (butlast pages)])
@@ -296,11 +306,11 @@
               (outliner-validate/validate-page-title-characters (str (:block/title parent)) {:node parent})))
 
           (let [page-uuid (:block/uuid page)
-                page-txs  (build-page-tx db properties page (select-keys options [:whiteboard? :class? :tags :class-ident-namespace]))
-                txs      (concat
-                          ;; transact doesn't support entities
-                          (remove de/entity? parents')
-                          page-txs)
+                page-txs (build-page-tx db properties page (select-keys options [:whiteboard? :class? :tags :class-ident-namespace]))
+                txs (concat
+                     ;; transact doesn't support entities
+                     (remove de/entity? parents')
+                     page-txs)
                 tx-meta (cond-> {:persist-op? persist-op?
                                  :outliner-op :create-page}
                           today-journal?
@@ -315,5 +325,5 @@
   [conn title opts]
   (let [{:keys [tx-meta tx-data title' page-uuid]} (create @conn title opts)]
     (when (seq tx-data)
-      (ldb/transact! conn tx-data tx-meta)
-      [title' page-uuid])))
+      (ldb/transact! conn tx-data tx-meta))
+    [title' page-uuid]))

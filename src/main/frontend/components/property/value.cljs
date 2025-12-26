@@ -1279,6 +1279,13 @@
      (fn []
        #(set-property-value! @*value))
      [])
+
+    (hooks/use-effect!
+     (fn []
+       (set-value! number-value)
+       #())
+     [number-value])
+
     [:div.ls-number.flex.flex-1.jtrigger
      {:ref *ref
       :on-click #(do
@@ -1291,6 +1298,7 @@
          :class (str "ls-number-input h-6 px-0 py-0 border-none bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-base"
                      (when table-view? " text-sm"))
          :value value
+         :type "number"
          :on-change (fn [e]
                       (set-value! (util/evalue e))
                       (reset! *value (util/evalue e)))
