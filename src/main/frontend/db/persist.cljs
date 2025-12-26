@@ -17,10 +17,11 @@
                            (str config/db-version-prefix name)))
                   repos)
           electron-disk-graphs (when (util/electron?) (ipc/ipc "getGraphs"))]
-    (distinct (concat
-               repos'
-               (map (fn [repo-name] {:name repo-name})
-                    (some-> electron-disk-graphs bean/->clj))))))
+    (distinct
+     (concat
+      repos'
+      (map (fn [repo-name] {:name repo-name})
+           (some-> electron-disk-graphs bean/->clj))))))
 
 (defn delete-graph!
   [graph]
