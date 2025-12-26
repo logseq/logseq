@@ -19,7 +19,6 @@
             [logseq.sdk.assets :as sdk-assets]
             [logseq.sdk.core]
             [logseq.sdk.experiments]
-            [logseq.sdk.git]
             [logseq.sdk.ui :as sdk-ui]
             [logseq.sdk.utils :as sdk-utils]
             [promesa.core :as p]))
@@ -101,7 +100,6 @@
 (def ^:export download_graph_db api-editor/download_graph_db)
 (def ^:export download_graph_pages api-editor/download_graph_pages)
 (def ^:export edit_block api-editor/edit_block)
-(def ^:export exec_git_command api-editor/exec_git_command)
 (def ^:export exit_editing_mode api-editor/exit_editing_mode)
 (def ^:export get_all_pages api-editor/get_all_pages)
 (def ^:export get_block api-editor/get_block)

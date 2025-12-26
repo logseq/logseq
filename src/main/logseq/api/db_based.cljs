@@ -25,7 +25,6 @@
             [logseq.outliner.core :as outliner-core]
             [logseq.sdk.core]
             [logseq.sdk.experiments]
-            [logseq.sdk.git]
             [logseq.sdk.utils :as sdk-utils]
             [promesa.core :as p]))
 
