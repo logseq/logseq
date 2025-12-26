@@ -3327,10 +3327,11 @@
 
 (defn toggle-open-block-children! [block-id]
   (p/let [blocks (<all-blocks-with-level {:incremental? false
-                                          :collapse? true
+                                          :expanded? true
                                           :root-block block-id})
-          all-expanded? (empty? blocks)]
-    (if all-expanded?
+          children-blocks (remove #(= block-id (:block/uuid %)) blocks)
+          any-expanded? (seq (filter (complement util/collapsed?) children-blocks))]
+    (if any-expanded?
       (collapse-all! block-id {:collapse-self? false})
       (expand-all! block-id))))
 
