@@ -87,12 +87,12 @@
 (defn set-block-own-order-list-type!
   [block type]
   (when-let [uuid (:block/uuid block)]
-    (property-handler/set-block-property! (state/get-current-repo) uuid (pu/get-pid :logseq.property/order-list-type) (name type))))
+    (property-handler/set-block-property! uuid (pu/get-pid :logseq.property/order-list-type) (name type))))
 
 (defn remove-block-own-order-list-type!
   [block]
   (when-let [uuid (:block/uuid block)]
-    (property-handler/remove-block-property! (state/get-current-repo) uuid (pu/get-pid :logseq.property/order-list-type))))
+    (property-handler/remove-block-property! uuid (pu/get-pid :logseq.property/order-list-type))))
 
 (defn own-order-number-list?
   [block]
@@ -108,11 +108,10 @@
   (when (seq blocks)
     (let [has-ordered?    (some own-order-number-list? blocks)
           blocks-uuids    (some->> blocks (map :block/uuid) (remove nil?))
-          order-list-prop (pu/get-pid :logseq.property/order-list-type)
-          repo (state/get-current-repo)]
+          order-list-prop (pu/get-pid :logseq.property/order-list-type)]
       (if has-ordered?
-        (property-handler/batch-remove-block-property! repo blocks-uuids order-list-prop)
-        (property-handler/batch-set-block-property! repo blocks-uuids order-list-prop "number")))))
+        (property-handler/batch-remove-block-property! blocks-uuids order-list-prop)
+        (property-handler/batch-set-block-property! blocks-uuids order-list-prop "number")))))
 
 (defn get-selection-and-format
   []
@@ -265,13 +264,6 @@
     (ui-outliner-tx/transact!
      opts'
      (outliner-save-block! block'))))
-
-;; id: block dom id, "ls-block-counter-uuid"
-(defn- another-block-with-same-id-exists?
-  [current-id block-id]
-  (when-let [id (and (string? block-id) (parse-uuid block-id))]
-    (and (not= current-id id)
-         (db/entity [:block/uuid id]))))
 
 (defn save-block-if-changed!
   ([block value]
@@ -630,9 +622,8 @@
                       :logseq.property/status.done
                       :logseq.property/status.done
                       nil
-                      :logseq.property/status.todo)
-        repo (state/get-current-repo)]
-    (property-handler/set-block-property! repo (:block/uuid block)
+                      :logseq.property/status.todo)]
+    (property-handler/set-block-property! (:block/uuid block)
                                           :logseq.property/status
                                           (:db/id (db/entity next-status)))))
 
@@ -673,7 +664,7 @@
          (outliner-op/delete-blocks! blocks {}))))))
 
 (defn- move-to-prev-block
-  [repo sibling-block format value]
+  [repo sibling-block value]
   (when (and repo sibling-block)
     (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
       (when-let [sibling-entity (db/entity [:block/uuid (uuid sibling-block-id)])]
@@ -715,7 +706,7 @@
        (ldb/page? block2))))
 
 (defn delete-block-inner!
-  [repo {:keys [block-id value format config block-container current-block next-block delete-concat?]}]
+  [repo {:keys [block-id value config block-container current-block next-block delete-concat?]}]
   (when (and block-id (not (one-page-another-block current-block next-block)))
     (when-let [block-e (db/entity [:block/uuid block-id])]
       (let [prev-block (db-model/get-prev (db/get-db) (:db/id block-e))
@@ -742,7 +733,7 @@
                        {:container (util/rec-get-blocks-container block-parent)})
                       (util/get-prev-block-non-collapsed-non-embed block-parent))
                     {:keys [prev-block new-content edit-block-f]}
-                    (move-to-prev-block repo sibling-or-parent-block format value)
+                    (move-to-prev-block repo sibling-or-parent-block value)
                     concat-prev-block? (boolean (and prev-block new-content))
                     transact-opts {:outliner-op :delete-blocks}]
                 (cond
@@ -843,7 +834,6 @@
       (p/do!
        (when (and sibling-block (not mobile?))
          (let [{:keys [edit-block-f]} (move-to-prev-block repo sibling-block
-                                                          (get block :block/format :markdown)
                                                           "")]
            (state/set-state! :editor/edit-block-fn edit-block-f)))
        (let [journals (and mobile? (filter ldb/journal? blocks'))
@@ -951,7 +941,7 @@
                                                     [k v'])) b)
                                            (into {}))
                                       (assoc :db/id (:db/id b)))))))]
-        (common-handler/copy-to-clipboard-without-id-property! repo (get block :block/format :markdown) content (when html? html) copied-blocks))
+        (common-handler/copy-to-clipboard-without-id-property! repo content (when html? html) copied-blocks))
       (state/set-block-op-type! :copy)
       ;; (notification/show! "Copied!" :success)
       )))
@@ -1163,7 +1153,7 @@
           [_top-level-block-uuids md-content] (compose-copied-blocks-contents repo [block-id])
           html (export-html/export-blocks-as-html repo [block-id] nil)
           sorted-blocks (tree/get-sorted-block-and-children repo (:db/id block))]
-      (common-handler/copy-to-clipboard-without-id-property! repo (get block :block/format :markdown) md-content html sorted-blocks)
+      (common-handler/copy-to-clipboard-without-id-property! repo md-content html sorted-blocks)
       (state/set-block-op-type! :cut)
       (delete-block-aux! block))))
 
@@ -1292,13 +1282,6 @@
      (when (db/entity repo [:block/uuid (:block/uuid block)])
        (save-block-aux! block value opts)))))
 
-(defn save-blocks!
-  [blocks]
-  (ui-outliner-tx/transact!
-   {:outliner-op :save-block}
-   (doseq [[block value] blocks]
-     (save-block-if-changed! block value))))
-
 (defonce *auto-save-timeout (atom nil))
 (defn- clear-block-auto-save-timeout!
   []
@@ -1306,10 +1289,9 @@
     (js/clearTimeout @*auto-save-timeout)))
 
 (defn save-current-block!
-  "skip-properties? if set true, when editing block is likely be properties, skip saving"
   ([]
    (save-current-block! {}))
-  ([{:keys [force? skip-properties? current-block] :as opts}]
+  ([{:keys [force? current-block] :as opts}]
    (clear-block-auto-save-timeout!)
    ;; non English input method
    (when-not (or (state/editor-in-composition?)
@@ -1761,8 +1743,7 @@
 (defn resize-image!
   [config block-id _metadata _full_text size]
   (let [asset (:asset-block config)]
-    (property-handler/set-block-property! (state/get-current-repo)
-                                          (if asset (:db/id asset) block-id)
+    (property-handler/set-block-property! (if asset (:db/id asset) block-id)
                                           :logseq.property.asset/resize-metadata
                                           size)))
 
@@ -1822,7 +1803,7 @@
              ;; Only trigger at beginning of a line, before whitespace or after a reference
            (or (re-find #"(?m)^#" (str (.-value input)))
                (start-of-new-word? input pos)
-               (and (= page-ref/right-brackets (common-util/safe-subs (str (.-value input)) (- pos 3) (dec pos))))))
+               (= page-ref/right-brackets (common-util/safe-subs (str (.-value input)) (- pos 3) (dec pos)))))
       (do
         (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
         (state/set-editor-last-pos! pos)
@@ -1852,9 +1833,6 @@
                         :postfix-fn   (fn [s] (util/replace-first block-ref/right-parens s ""))
                         :forward-pos 3
                         :command :block-ref})
-
-      ;; Save it so it'll be parsed correctly in the future
-      (property-handler/file-persist-block-id! (state/get-current-repo) (:block/uuid chosen))
 
       (when-let [input (gdom/getElement id)]
         (.focus input)))))
@@ -1963,7 +1941,7 @@
 
 (defn- block-tree->blocks
   "keep-uuid? - maintain the existing :uuid in tree vec"
-  [repo tree-vec format keep-uuid? page-name]
+  [tree-vec format keep-uuid? page-name]
   (->> (outliner-core/tree-vec-flatten tree-vec)
        (map (fn [block]
               (let [content (:content block)
@@ -1982,12 +1960,11 @@
   "`tree-vec`: a vector of blocks.
    A block element: {:content :properties :children [block-1, block-2, ...]}"
   [tree-vec format {:keys [target-block keep-uuid?] :as opts}]
-  (let [repo (state/get-current-repo)
-        page-id (or (:db/id (:block/page target-block))
+  (let [page-id (or (:db/id (:block/page target-block))
                     (when (ldb/page? target-block)
                       (:db/id target-block)))
         page-name (some-> page-id (db/entity) :block/name)
-        blocks (block-tree->blocks repo tree-vec format keep-uuid? page-name)
+        blocks (block-tree->blocks tree-vec format keep-uuid? page-name)
         blocks (gp-block/with-parent-and-order page-id blocks)]
 
     (ui-outliner-tx/transact!
@@ -2263,8 +2240,7 @@
                 :down util/get-next-block-non-collapsed)
             current-block (util/rec-get-node input-or-active-element "ls-block")
             sibling-block (f current-block {:up-down? true})
-            {:block/keys [uuid title format]} (state/get-edit-block)
-            format (or format :markdown)
+            {:block/keys [uuid title]} (state/get-edit-block)
             sibling-block (or (when (property-value-node? sibling-block)
                                 (first (dom/by-class sibling-block "ls-block")))
                               sibling-block)
@@ -2332,8 +2308,7 @@
   [direction {:keys [block]}]
   (let [up? (= :left direction)
         pos (if up? :max 0)
-        {:block/keys [format uuid] :as block} (or block (state/get-edit-block))
-        format (or format :markdown)
+        {:block/keys [uuid] :as block} (or block (state/get-edit-block))
         repo (state/get-current-repo)
         editing-block (state/get-editor-block-container)
         f (if up? util/get-prev-block-non-collapsed util/get-next-block-non-collapsed)
@@ -3556,8 +3531,7 @@
 
 (defn batch-set-heading!
   [block-ids heading]
-  (let [repo (state/get-current-repo)]
-    (db-editor-handler/batch-set-heading! repo block-ids heading)))
+  (db-editor-handler/batch-set-heading! block-ids heading))
 
 (defn set-heading!
   [block-id heading]
@@ -3580,25 +3554,24 @@
 
 (defn run-query-command!
   []
-  (let [repo (state/get-current-repo)]
-    (when-let [block (some-> (state/get-edit-block)
-                             :db/id
-                             (db/entity))]
-      (p/do!
-       (save-current-block!)
-       (state/clear-edit!)
-       (p/let [query-block (or (:logseq.property/query block)
-                               (p/do!
-                                (property-handler/set-block-property! repo (:db/id block) :logseq.property/query "")
-                                (:logseq.property/query (db/entity (:db/id block)))))
-               current-query (:block/title (db/entity (:db/id block)))]
-         (p/do!
-          (ui-outliner-tx/transact!
-           {:outliner-op :save-block}
-           (property-handler/set-block-property! repo (:db/id block) :block/tags :logseq.class/Query)
-           (save-block-inner! block "" {})
-           (when query-block
-             (save-block-inner! query-block current-query {})))))))))
+  (when-let [block (some-> (state/get-edit-block)
+                           :db/id
+                           (db/entity))]
+    (p/do!
+     (save-current-block!)
+     (state/clear-edit!)
+     (p/let [query-block (or (:logseq.property/query block)
+                             (p/do!
+                              (property-handler/set-block-property! (:db/id block) :logseq.property/query "")
+                              (:logseq.property/query (db/entity (:db/id block)))))
+             current-query (:block/title (db/entity (:db/id block)))]
+       (p/do!
+        (ui-outliner-tx/transact!
+         {:outliner-op :save-block}
+         (property-handler/set-block-property! (:db/id block) :block/tags :logseq.class/Query)
+         (save-block-inner! block "" {})
+         (when query-block
+           (save-block-inner! query-block current-query {}))))))))
 
 (defn quick-add-ensure-new-block-exists!
   []

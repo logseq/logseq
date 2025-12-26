@@ -8,7 +8,6 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.persist :as db-persist]
-            [frontend.db.react :as react]
             [frontend.db.restore :as db-restore]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.graph :as graph-handler]
@@ -16,7 +15,6 @@
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.idb :as idb]
             [frontend.persist-db :as persist-db]
             [frontend.search :as search]
             [frontend.state :as state]
@@ -37,7 +35,6 @@
                              :or {switch-graph? true}}]
   (let [current-repo (state/get-current-repo)]
     (p/do!
-     (idb/clear-local-db! url)     ; clear file handles
      (db/remove-conn! url)
      (db-persist/delete-graph! url)
      (search/remove-db! url)
@@ -78,32 +75,6 @@
      (ui-handler/add-style-if-exists!))
    (when-not config/publishing?
      (state/set-db-restoring! false))))
-
-(defn rebuild-index!
-  [url]
-  (when-not (state/unlinked-dir? (config/get-repo-dir url))
-    (when url
-      (search/reset-indice! url)
-      (db/remove-conn! url)
-      (react/clear-query-state!)
-      (-> (p/do! (db-persist/delete-graph! url))
-          (p/catch (fn [error]
-                     (prn "Delete repo failed, error: " error)))))))
-
-(defn re-index!
-  [nfs-rebuild-index! ok-handler]
-  (when-let [repo (state/get-current-repo)]
-    (state/reset-parsing-state!)
-    (let [dir (config/get-repo-dir repo)]
-      (when-not (state/unlinked-dir? dir)
-        (route-handler/redirect-to-home!)
-        (let [local? (config/local-file-based-graph? repo)]
-          (if local?
-            (nfs-rebuild-index! repo ok-handler)
-            (rebuild-index! repo))
-          (js/setTimeout
-           (route-handler/redirect-to-home!)
-           500))))))
 
 (defn get-repos
   []

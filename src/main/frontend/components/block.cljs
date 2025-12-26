@@ -66,7 +66,6 @@
             [goog.dom :as gdom]
             [goog.functions :refer [debounce]]
             [goog.object :as gobj]
-            [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
@@ -212,8 +211,7 @@
             src
             (fn [width height]
               (when (nil? (:logseq.property.asset/width asset-block))
-                (property-handler/set-block-properties! (state/get-current-repo)
-                                                        (:block/uuid asset-block)
+                (property-handler/set-block-properties! (:block/uuid asset-block)
                                                         {:logseq.property.asset/width width
                                                          :logseq.property.asset/height height}))))))
        (fn []))
@@ -803,12 +801,6 @@
        children)]))
 
 (declare block-reference)
-(declare block-reference-preview)
-
-(rum/defc invalid-node-ref
-  [id]
-  [:span.warning.mr-1 {:title "Node ref invalid"}
-   (ref/->block-ref (str id))])
 
 (defn inline-text
   ([format v]
@@ -1055,71 +1047,6 @@
 (declare blocks-container)
 
 (declare block-container)
-
-(rum/defc block-embed
-  [config block-uuid]
-  (let [[block set-block!] (hooks/use-state (db/entity [:block/uuid block-uuid]))]
-    (hooks/use-effect!
-     (fn []
-       (p/let [block (db-async/<get-block (state/get-current-repo)
-                                          block-uuid
-                                          {:children? false
-                                           :skip-refresh? true})]
-         (set-block! block)))
-     [])
-    (when block
-      [:div.color-level.embed-block.bg-base-2
-       {:style {:z-index 2}
-        :on-pointer-down (fn [e] (.stopPropagation e))}
-       [:div.px-3.pt-1.pb-2
-        (let [config' (assoc config
-                             :db/id (:db/id block)
-                             :id (str block-uuid)
-                             :embed-id block-uuid
-                             :embed? true
-                             :embed-parent (:block config)
-                             :ref? false)]
-          (block-container config' block))]])))
-
-(rum/defc page-embed-aux < rum/reactive db-mixins/query
-  [config block]
-  (let [current-page (state/get-current-page)
-        block (db/sub-block (:db/id block))
-        page-name (:block/name block)]
-    [:div.color-level.embed.embed-page.bg-base-2
-     {:class (when (:sidebar? config) "in-sidebar")
-      :on-pointer-down #(.stopPropagation %)}
-     [:section.flex.items-center.p-1.embed-header
-      [:div.mr-3 svg/page]
-      (page-cp config block)]
-     (when (and
-            (not= (util/page-name-sanity-lc (or current-page ""))
-                  page-name)
-            (not= (util/page-name-sanity-lc (get config :id ""))
-                  page-name))
-       (let [blocks (ldb/get-children block)
-             config' (assoc config
-                            :db/id (:db/id block)
-                            :id page-name
-                            :embed? true
-                            :page-embed? true
-                            :ref? false)]
-         (blocks-container config' blocks)))]))
-
-(rum/defc page-embed
-  [config page-name]
-  (let [page-name (util/page-name-sanity-lc (string/trim page-name))
-        [block set-block!] (hooks/use-state nil)]
-    (hooks/use-effect!
-     (fn []
-       (p/let [block (db-async/<get-block (state/get-current-repo)
-                                          page-name
-                                          {:children? true
-                                           :skip-refresh? true})]
-         (set-block! block)))
-     [])
-    (when block
-      (page-embed-aux config block))))
 
 (defn- get-label-text
   [label]
@@ -1422,31 +1349,6 @@
    [:span.warning
     (util/format "{{function %s}}" (first arguments))]))
 
-(defn- macro-embed-cp
-  [config arguments]
-  (let [a (first arguments)
-        {:keys [link-depth]} config
-        link-depth (or link-depth 0)]
-    (cond
-      (nil? a)                                              ; empty embed
-      nil
-
-      (> link-depth max-depth-of-links)
-      [:p.warning.text-sm "Embed depth is too deep"]
-
-      (page-ref/page-ref? a)
-      (let [page-name (text/get-page-name a)]
-        (when-not (string/blank? page-name)
-          (page-embed (assoc config :link-depth (inc link-depth)) page-name)))
-
-      (block-ref/string-block-ref? a)
-      (when-let [s (-> a block-ref/get-string-block-ref-id string/trim)]
-        (when-let [id (some-> s parse-uuid)]
-          (block-embed (assoc config :link-depth (inc link-depth)) id)))
-
-      :else                                                 ;TODO: maybe collections?
-      nil)))
-
 (defn- macro-vimeo-cp
   [_config arguments]
   (when-let [url (first arguments)]
@@ -1536,6 +1438,14 @@
     [:span.warning.mr-1 {:title "Empty URL"}
      (macro->text "video" arguments)]))
 
+(defn- macro-else-cp
+  [name config arguments]
+  (let [macro-content (or
+                       (get (state/get-macros) name)
+                       (get (state/get-macros) (keyword name)))
+        format (get-in config [:block :block/format] :markdown)]
+    (render-macro config name arguments macro-content format)))
+
 (defn- macro-cp
   [config options]
   (let [{:keys [name arguments]} options
@@ -1612,7 +1522,7 @@
       ((get @macro/macros name) config options)
 
       :else
-      nil)))
+      (macro-else-cp name config arguments))))
 
 (defn- emphasis-cp
   [config kind data]
@@ -2231,7 +2141,6 @@
 
                    (let [cursor-range (if mobile? mobile-range (get-cursor-range))
                          block (db/entity (:db/id block))
-                         {:block/keys [title format]} block
                          content (:block/title block)]
 
                      (state/set-editing!

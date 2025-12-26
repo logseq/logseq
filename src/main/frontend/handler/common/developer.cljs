@@ -2,7 +2,6 @@
   "Common fns for developer related functionality"
   (:require [cljs.pprint :as pprint]
             [datascript.impl.entity :as de]
-            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.format.mldoc :as mldoc]
             [frontend.handler.db-based.rtc :as rtc-handler]

@@ -71,7 +71,7 @@
 
 ;; Copied from handler.export
 (defn- file-name [repo extension]
-  (-> (string/replace repo config/local-db-prefix "")
+  (-> repo
       (string/replace #"^/+" "")
       (str "_" (quot (util/time-ms) 1000))
       (str "." (string/lower-case (name extension)))))

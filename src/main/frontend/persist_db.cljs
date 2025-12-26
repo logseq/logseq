@@ -1,7 +1,6 @@
 (ns frontend.persist-db
   "Backend of DB based graph"
-  (:require [frontend.config :as config]
-            [frontend.db :as db]
+  (:require [frontend.db :as db]
             [frontend.persist-db.browser :as browser]
             [frontend.persist-db.protocol :as protocol]
             [frontend.state :as state]

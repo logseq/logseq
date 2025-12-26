@@ -112,7 +112,7 @@
          (state/update-favorites-updated!))))))
 
 (defn update-public-attribute!
-  [repo page value]
+  [page value]
   (db-property-handler/set-block-property! [:block/uuid (:block/uuid page)] :logseq.property/publishing-public? value))
 
 (defn get-page-ref-text
@@ -128,12 +128,11 @@
 
 (defn db-based-save-filter!
   [page filter-page-id {:keys [include? add?]}]
-  (let [repo (state/get-current-repo)
-        property-id (if include?
+  (let [property-id (if include?
                       :logseq.property.linked-references/includes
                       :logseq.property.linked-references/excludes)]
     (if add?
-      (property-handler/set-block-property! repo (:db/id page) property-id filter-page-id)
+      (property-handler/set-block-property! (:db/id page) property-id filter-page-id)
       (db-property-handler/delete-property-value! (:db/id page) property-id filter-page-id))))
 
 ;; Editor

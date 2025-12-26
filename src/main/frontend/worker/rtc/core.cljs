@@ -25,7 +25,6 @@
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.db.frontend.schema :as db-schema]
-            [logseq.db.sqlite.util :as sqlite-util]
             [malli.core :as ma]
             [missionary.core :as m])
   (:import [missionary Cancelled]))
@@ -211,7 +210,7 @@
 (defn- ^:large-vars/cleanup-todo create-rtc-loop
   "Return a map with [:rtc-state-flow :rtc-loop-task :*rtc-auto-push? :onstarted-task]
   TODO: auto refresh token if needed"
-  [graph-uuid schema-version repo conn date-formatter token user-uuid
+  [graph-uuid schema-version repo conn token user-uuid
    & {:keys [auto-push? debug-ws-url] :or {auto-push? true}}]
   (let [major-schema-version       (db-schema/major-version schema-version)
         ws-url                     (or debug-ws-url (ws-util/get-ws-url token))
@@ -230,7 +229,7 @@
         {:keys [*current-ws] get-ws-create-task0 :get-ws-create-task}
         (gen-get-ws-create-map--memoized ws-url)
         get-ws-create-task (r.client/ensure-register-graph-updates--memoized
-                            get-ws-create-task0 graph-uuid major-schema-version repo conn date-formatter
+                            get-ws-create-task0 graph-uuid major-schema-version repo conn
                             *last-calibrate-t *online-users *server-schema-version *aes-key add-log-fn)
         {:keys [assets-sync-loop-task]}
         (r.asset/create-assets-sync-loop
@@ -271,19 +270,19 @@
                  (catch :default e
                    (if (= :rtc.exception/local-graph-too-old (:type (ex-data e)))
                      (m/? (r.client/new-task--pull-remote-data
-                           repo conn graph-uuid major-schema-version date-formatter get-ws-create-task @*aes-key
+                           repo conn graph-uuid major-schema-version get-ws-create-task @*aes-key
                            add-log-fn))
                      (throw e))))
 
                :local-update-check
                (try
                  (m/? (r.client/new-task--push-local-ops
-                       repo conn graph-uuid major-schema-version date-formatter
+                       repo conn graph-uuid major-schema-version
                        get-ws-create-task *remote-profile? @*aes-key add-log-fn))
                  (catch :default e
                    (if (= :rtc.exception/local-graph-too-old (:type (ex-data e)))
                      (m/? (r.client/new-task--pull-remote-data
-                           repo conn graph-uuid major-schema-version date-formatter get-ws-create-task @*aes-key
+                           repo conn graph-uuid major-schema-version get-ws-create-task @*aes-key
                            add-log-fn))
                      (throw e))))
 
@@ -292,7 +291,7 @@
 
                :pull-remote-updates
                (m/? (r.client/new-task--pull-remote-data
-                     repo conn graph-uuid major-schema-version date-formatter get-ws-create-task @*aes-key
+                     repo conn graph-uuid major-schema-version get-ws-create-task @*aes-key
                      add-log-fn))
 
                :inject-users-info
@@ -367,8 +366,7 @@
          :user-uuid user-uuid
          :graph-uuid graph-uuid
          :schema-version schema-version
-         :remote-schema-version remote-schema-version
-         :date-formatter (common-config/get-date-formatter (worker-state/get-config repo))}))
+         :remote-schema-version remote-schema-version}))
     (ex-info "Not found db-conn" {:type :rtc.exception/not-found-db-conn
                                   :repo repo})))
 
@@ -376,12 +374,12 @@
 (defn- new-task--rtc-start*
   [repo token]
   (m/sp
-    (let [{:keys [conn user-uuid graph-uuid schema-version remote-schema-version date-formatter] :as r}
+    (let [{:keys [conn user-uuid graph-uuid schema-version remote-schema-version] :as r}
           (validate-rtc-start-conditions repo token)]
       (if (instance? ExceptionInfo r)
         r
         (let [{:keys [rtc-state-flow *rtc-auto-push? *rtc-remote-profile? rtc-loop-task *online-users onstarted-task]}
-              (create-rtc-loop graph-uuid schema-version repo conn date-formatter token user-uuid)
+              (create-rtc-loop graph-uuid schema-version repo conn token user-uuid)
               *last-stop-exception (atom nil)
               canceler (c.m/run-task :rtc-loop-task
                          rtc-loop-task
@@ -702,10 +700,9 @@
     (def graph-uuid "ff7186c1-5903-4bc8-b4e9-ca23525b9983")
     (def repo "logseq_db_4-23")
     (def conn (worker-state/get-datascript-conn repo))
-    (def date-formatter "MMM do, yyyy")
     (def debug-ws-url "wss://ws-dev.logseq.com/rtc-sync?token=???")
     (let [{:keys [rtc-state-flow *rtc-auto-push? rtc-loop-task]}
-          (create-rtc-loop user-uuid graph-uuid repo conn date-formatter nil {:debug-ws-url debug-ws-url})
+          (create-rtc-loop user-uuid graph-uuid repo conn nil {:debug-ws-url debug-ws-url})
           c (c.m/run-task rtc-loop-task :rtc-loop-task)]
       (def cancel c)
       (def rtc-state-flow rtc-state-flow)

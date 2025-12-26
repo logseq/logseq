@@ -7,7 +7,6 @@
             [frontend.db :as db]
             [frontend.fs.protocol :as protocol]
             [frontend.util :as util]
-            [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.common.path :as path]
             [promesa.core :as p]))
