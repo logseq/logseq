@@ -7,5 +7,7 @@
   ;; for config.edn
   logseq/common
   {:local/root "../deps/common"}
+  logseq/publish
+  {:local/root "../deps/publish"}
   logseq/publishing
   {:local/root "../deps/publishing"}}}

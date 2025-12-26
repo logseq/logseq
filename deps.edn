@@ -38,6 +38,7 @@
   logseq/common                         {:local/root "deps/common"}
   logseq/graph-parser                   {:local/root "deps/graph-parser"}
   logseq/outliner                       {:local/root "deps/outliner"}
+  logseq/publish                        {:local/root "deps/publish"}
   logseq/publishing                     {:local/root "deps/publishing"}
   logseq/cli                            {:local/root "deps/cli"}
   logseq/shui                           {:local/root "deps/shui"}
