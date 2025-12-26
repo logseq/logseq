@@ -3,7 +3,7 @@ const fs = require('fs')
 
 module.exports = {
   packagerConfig: {
-    name: 'Logseq OG',
+    name: 'LogseqOG',
     icon: './icons/logseq_big_sur.icns',
     buildVersion: "91",
     appBundleId: "com.logseq.logseq-og",
@@ -32,7 +32,7 @@ module.exports = {
     {
       'name': '@electron-forge/maker-squirrel',
       'config': {
-        'name': 'Logseq OG',
+        'name': 'LogseqOG',
         'setupIcon': './icons/logseq.ico',
         'loadingGif': './icons/installing.gif',
         'certificateFile': process.env.CODE_SIGN_CERTIFICATE_FILE,
@@ -43,7 +43,7 @@ module.exports = {
     {
       'name': '@electron-forge/maker-wix',
       'config': {
-        name: 'Logseq OG',
+        name: 'LogseqOG',
         icon: path.join(__dirname, './icons/logseq.ico'),
         language: 1033,
         manufacturer: 'Logseq',
@@ -76,7 +76,7 @@ module.exports = {
       config: {
         format: 'ULFO',
         icon: './icons/logseq_big_sur.icns',
-        name: 'Logseq OG'
+        name: 'LogseqOG'
       }
     },
     {
