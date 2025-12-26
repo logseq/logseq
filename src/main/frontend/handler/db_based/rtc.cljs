@@ -145,7 +145,7 @@
 (defn <get-remote-graphs
   []
   (->
-   (p/let [_ (state/set-state! [:file-sync/remote-graphs :loading] true)
+   (p/let [_ (state/set-state! :rtc/loading-graphs? true)
            _ (js/Promise. user-handler/task--ensure-id&access-token)
            token (state/get-auth-id-token)
            graphs (state/<invoke-db-worker :thread-api/rtc-get-graphs token)
@@ -164,7 +164,7 @@
      (repo-handler/refresh-repos!))
    (p/finally
      (fn []
-       (state/set-state! [:file-sync/remote-graphs :loading] false)))))
+       (state/set-state! :rtc/loading-graphs? false)))))
 
 (defn <rtc-invite-email
   [graph-uuid email]

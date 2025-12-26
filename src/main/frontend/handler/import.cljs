@@ -7,49 +7,14 @@
             [clojure.walk :as walk]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.format.block :as block]
-            [frontend.format.mldoc :as mldoc]
             [frontend.handler.editor :as editor]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.whiteboard :as gp-whiteboard]
             [medley.core :as medley]
             [promesa.core :as p]))
-
-;;; import OPML files
-(defn import-from-opml!
-  [data finished-ok-handler]
-  #_:clj-kondo/ignore
-  (when-let [repo (state/get-current-repo)]
-    (let [config (gp-mldoc/default-config :markdown)
-          [headers parsed-blocks] (mldoc/opml->edn config data)
-          ;; add empty pos metadata
-          parsed-blocks (map (fn [b] [b {}]) parsed-blocks)
-          page-name (:title headers)
-          parsed-blocks (->>
-                         (block/extract-blocks parsed-blocks "" :markdown {:page-name page-name})
-                         (mapv editor/wrap-parse-block))]
-      (p/do!
-       (when (not (db/page-exists? page-name))
-         (page-handler/<create! page-name {:redirect? false}))
-       (let [page-block (db/get-page page-name)
-             children (:block/_parent page-block)
-             blocks (db/sort-by-order children)
-             last-block (last blocks)
-             snd-last-block (last (butlast blocks))
-             [target-block sibling?] (if (and last-block (seq (:block/title last-block)))
-                                       [last-block true]
-                                       (if snd-last-block
-                                         [snd-last-block true]
-                                         [page-block false]))]
-         (editor/paste-blocks
-          parsed-blocks
-          {:target-block target-block
-           :sibling? sibling?})
-         (finished-ok-handler [page-name]))))))
 
 (defn create-page-with-exported-tree!
   "Create page from the per page object generated in `export-repo-as-edn-v2!`

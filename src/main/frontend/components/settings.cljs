@@ -19,7 +19,6 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.property :as property-handler]
-            [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
             [frontend.mobile.util :as mobile-util]
@@ -722,7 +721,7 @@
 
 (rum/defc ^:large-vars/cleanup-todo settings-account < rum/reactive
   []
-  (let [graph-usage (state/get-remote-graph-usage)
+  (let [graph-usage []
         logged-in? (user-handler/logged-in?)
         user-info (state/get-user-info)
         paid-user? (#{"active" "on_trial" "cancelled"} (:LemonStatus user-info))

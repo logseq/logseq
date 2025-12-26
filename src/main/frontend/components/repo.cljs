@@ -137,7 +137,28 @@
                                   (p/do!
                                    (rtc-flows/trigger-rtc-start repo)
                                    (rtc-handler/<get-remote-graphs)))))))}
-              "Use Logseq sync (Alpha testing)"))
+              "Use Logseq sync (Beta testing)"))
+
+           (when (and remote? manager?)
+             (shui/dropdown-menu-item
+              {:key "delete-remotely"
+               :class "delete-remote-graph-menu-item"
+               :on-click (fn []
+                           (let [prompt-str (str "Are you sure you want to permanently delete the graph \"" graph-name "\" from our server?")]
+                             (-> (shui/dialog-confirm!
+                                  [:p.font-medium.-my-4 prompt-str
+                                   [:span.my-2.flex.font-normal.opacity-75
+                                    [:small "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."]]])
+                                 (p/then
+                                  (fn []
+                                    (let [<delete-graph rtc-handler/<rtc-delete-graph!]
+                                      (state/set-state! :rtc/loading-graphs? true)
+                                      (when (= (state/get-current-repo) repo)
+                                        (state/<invoke-db-worker :thread-api/rtc-stop))
+                                      (p/do! (<delete-graph GraphUUID GraphSchemaVersion)
+                                             (state/set-state! :rtc/loading-graphs? false)
+                                             (rtc-handler/<get-remote-graphs))))))))}
+              "Delete from server"))
 
            (when (and remote? (not manager?))
              (shui/dropdown-menu-item
@@ -168,7 +189,7 @@
         repos (state/sub [:me :repos])
         repos (util/distinct-by :url repos)
         remotes (state/sub :rtc/graphs)
-        remotes-loading? (state/sub [:file-sync/remote-graphs :loading])
+        remotes-loading? (state/sub :rtc/loading-graphs?)
         repos (if (and login? (seq remotes))
                 (repo-handler/combine-local-&-remote-graphs repos remotes) repos)
         repos (cond->>
@@ -295,7 +316,7 @@
         repos (state/sub [:me :repos])
         rtc-graphs (state/sub :rtc/graphs)
         downloading-graph-id (state/sub :rtc/downloading-graph-uuid)
-        remotes-loading? (state/sub [:file-sync/remote-graphs :loading])
+        remotes-loading? (state/sub :rtc/loading-graphs?)
         repos (sort-repos-with-metadata-local repos)
         repos (distinct
                (if (and (seq rtc-graphs) login?)
