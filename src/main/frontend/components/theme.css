@@ -36,22 +36,6 @@
   }
 }
 
-html.is-file-graph {
-  #main-content-container {
-    @apply pt-2;
-  }
-
-  .page-inner {
-    @apply sm:gap-2;
-  }
-
-  .sidebar-item {
-    .ls-page-blocks {
-      @apply pt-4;
-    }
-  }
-}
-
 .hide-scrollbar {
   -ms-overflow-style: none; /* IE and Edge */
   scrollbar-width: none !important; /* Firefox */

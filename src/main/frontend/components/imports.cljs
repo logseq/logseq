@@ -15,7 +15,6 @@
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.db-based.import :as db-import-handler]
-            [frontend.handler.file-based.import :as file-import-handler]
             [frontend.handler.import :as import-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
@@ -44,8 +43,6 @@
 ;; Can't name this component as `frontend.components.import` since shadow-cljs
 ;; will complain about it.
 
-(defonce *opml-imported-pages (atom nil))
-
 (defn- finished-cb
   []
   (notification/show! "Import finished!" :success)
@@ -54,26 +51,6 @@
   (if util/web-platform?
     (js/window.location.reload)
     (js/setTimeout ui-handler/re-render-root! 500)))
-
-(defn- roam-import-handler
-  [e]
-  (let [file      (first (array-seq (.-files (.-target e))))
-        file-name (gobj/get file "name")]
-    (if (string/ends-with? file-name ".json")
-      (do
-        (state/set-state! :graph/importing :roam-json)
-        (let [reader (js/FileReader.)]
-          (set! (.-onload reader)
-                (fn [e]
-                  (let [text (.. e -target -result)]
-                    (file-import-handler/import-from-roam-json!
-                     text
-                     #(do
-                        (state/set-state! :graph/importing nil)
-                        (finished-cb))))))
-          (.readAsText reader file)))
-      (notification/show! "Please choose a JSON file."
-                          :error))))
 
 (defn- lsq-import-handler
   [e & {:keys [sqlite? debug-transit? graph-name db-edn?]}]
@@ -153,26 +130,6 @@
 
       :else
       (notification/show! "Please choose an EDN or a JSON file."
-                          :error))))
-
-(defn- opml-import-handler
-  [e]
-  (let [file      (first (array-seq (.-files (.-target e))))
-        file-name (gobj/get file "name")]
-    (if (string/ends-with? file-name ".opml")
-      (do
-        (state/set-state! :graph/importing :opml)
-        (let [reader (js/FileReader.)]
-          (set! (.-onload reader)
-                (fn [e]
-                  (let [text (.. e -target -result)]
-                    (import-handler/import-from-opml! text
-                                                      (fn [pages]
-                                                        (reset! *opml-imported-pages pages)
-                                                        (state/set-state! :graph/importing nil)
-                                                        (finished-cb))))))
-          (.readAsText reader file)))
-      (notification/show! "Please choose a OPML file."
                           :error))))
 
 (rum/defcs set-graph-name-dialog
@@ -489,8 +446,7 @@
 
 (rum/defc ^:large-vars/cleanup-todo importer < rum/reactive
   [{:keys [query-params]}]
-  (let [support-file-based? (config/local-file-based-graph? (state/get-current-repo))
-        importing? (state/sub :graph/importing)]
+  (let [importing? (state/sub :graph/importing)]
     [:<>
      (import-indicator importing?)
      (when-not importing?
@@ -552,41 +508,7 @@
              :type "file"
              :on-change (fn [e]
                           (shui/dialog-open!
-                           #(set-graph-name-dialog e {:db-edn? true})))}]]
-
-          (when (and (util/electron?) support-file-based?)
-            [:label.action-input.flex.items-center.mx-2.my-2
-             [:span.as-flex-center [:i (svg/logo 28)]]
-             [:span.flex.flex-col
-              [[:strong "EDN / JSON to plain text graph"]
-               [:small (t :on-boarding/importing-lsq-desc)]]]
-             [:input.absolute.hidden
-              {:id "import-lsq"
-               :type "file"
-               :on-change lsq-import-handler}]])
-
-          (when (and (util/electron?) support-file-based?)
-            [:label.action-input.flex.items-center.mx-2.my-2
-             [:span.as-flex-center [:i (svg/roam-research 28)]]
-             [:div.flex.flex-col
-              [[:strong "RoamResearch"]
-               [:small (t :on-boarding/importing-roam-desc)]]]
-             [:input.absolute.hidden
-              {:id "import-roam"
-               :type "file"
-               :on-change roam-import-handler}]])
-
-          (when (and (util/electron?) support-file-based?)
-            [:label.action-input.flex.items-center.mx-2.my-2
-             [:span.as-flex-center.ml-1 (ui/icon "sitemap" {:size 26})]
-             [:span.flex.flex-col
-              [[:strong "OPML"]
-               [:small (t :on-boarding/importing-opml-desc)]]]
-
-             [:input.absolute.hidden
-              {:id "import-opml"
-               :type "file"
-               :on-change opml-import-handler}]])]
+                           #(set-graph-name-dialog e {:db-edn? true})))}]]]
 
          (when (= "picker" (:from query-params))
            [:section.e

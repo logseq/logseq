@@ -99,20 +99,6 @@
   [(gobj/get input "value")
    (pos input)])
 
-(defn line-beginning-pos
-  [input]
-  (let [[content pos'] (get-input-content&pos input)]
-    (if (zero? pos') 0
-        (let [last-newline-pos (string/last-index-of content \newline (dec pos'))]
-          (if (= nil last-newline-pos) 0 ;; no newline found (first line)
-              (inc last-newline-pos))))))
-
-(defn line-end-pos
-  [input]
-  (let [[content pos'] (get-input-content&pos input)]
-    (or (string/index-of content \newline pos')
-        (count content))))
-
 (defn beginning-of-line?
   [input]
   (let [[content pos'] (get-input-content&pos input)]
@@ -121,14 +107,20 @@
           (when-let [pre-char (subs content (dec pos') pos')]
             (= pre-char \newline))))))
 
-(defn move-cursor-to-line-end
-  [input]
-  (move-cursor-to input (line-end-pos input)))
-
 (comment
+  (defn line-end-pos
+    [input]
+    (let [[content pos'] (get-input-content&pos input)]
+      (or (string/index-of content \newline pos')
+          (count content))))
+
   (defn move-cursor-to-line-beginning
     [input]
-    (move-cursor-to input (line-beginning-pos input))))
+    (move-cursor-to input (line-beginning-pos input)))
+
+  (defn move-cursor-to-line-end
+    [input]
+    (move-cursor-to input (line-end-pos input))))
 
 (defn move-cursor-to-start
   [input]
@@ -138,14 +130,6 @@
   [input]
   (let [pos' (count (gobj/get input "value"))]
     (move-cursor-to input pos')))
-
-(defn move-cursor-to-thing
-  ([input thing]
-   (move-cursor-to-thing input thing (pos input)))
-  ([input thing from]
-   (let [[content _pos] (get-input-content&pos input)
-         pos' (string/index-of content thing from)]
-     (move-cursor-to input pos'))))
 
 (defn move-cursor-forward-by-word
   [input]

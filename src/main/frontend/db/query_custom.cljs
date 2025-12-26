@@ -1,34 +1,16 @@
 (ns frontend.db.query-custom
   "Handles executing custom queries a.k.a. advanced queries"
-  (:require [clojure.walk :as walk]
-            [frontend.config :as config]
-            [frontend.db.file-based.model :as file-model]
-            [frontend.db.query-dsl :as query-dsl]
+  (:require [frontend.db.query-dsl :as query-dsl]
             [frontend.db.query-react :as query-react]
             [frontend.state :as state]
             [frontend.util.datalog :as datalog-util]
-            [logseq.db.file-based.rules :as file-rules]
             [logseq.db.frontend.rules :as rules]))
-
-;; FIXME: what if users want to query other attributes than block-attrs?
-(defn- replace-star-with-block-attrs!
-  [l]
-  (let [block-attrs (butlast file-model/file-graph-block-attrs)]
-    (walk/postwalk
-     (fn [f]
-       (if (and (list? f)
-                (= 'pull (first f))
-                (= '?b (second f))
-                (= '[*] (nth f 2)))
-         `(~'pull ~'?b ~block-attrs)
-         f))
-     l)))
 
 (defn- add-rules-to-query
   "Searches query's :where for rules and adds them to query if used"
-  [{:keys [query] :as query-m} {:keys [db-graph?]}]
+  [{:keys [query] :as query-m}]
   (let [{:keys [where in]} (datalog-util/query-vec->map query)
-        query-dsl-rules (if db-graph? rules/db-query-dsl-rules file-rules/query-dsl-rules)
+        query-dsl-rules rules/db-query-dsl-rules
         rules-found (datalog-util/find-rules-in-where where (-> query-dsl-rules keys set))]
     (if (seq rules-found)
       (if (and (= '% (last in)) (vector? (last (:inputs query-m))))
@@ -41,8 +23,7 @@
                          (dec (count inputs))
                          (->> (rules/extract-rules query-dsl-rules
                                                    rules-found
-                                                   (when db-graph?
-                                                     {:deps rules/rules-dependencies}))
+                                                   {:deps rules/rules-dependencies})
                               (into (last inputs))
                               ;; user could give rules that we already have
                               distinct
@@ -62,8 +43,7 @@
                       (into (or rules [])
                             (rules/extract-rules query-dsl-rules
                                                  rules-found
-                                                 (when db-graph?
-                                                   {:deps rules/rules-dependencies})))))))
+                                                 {:deps rules/rules-dependencies}))))))
       query-m)))
 
 (defn custom-query
@@ -74,13 +54,11 @@
   ([query query-opts]
    (custom-query (state/get-current-repo) query query-opts))
   ([repo query query-opts]
-   (let [db-graph? (config/db-based-graph? repo)
-         query' (if db-graph? query (replace-star-with-block-attrs! query))
-         query-opts (if (:query-string query-opts) query-opts
+   (let [query-opts (if (:query-string query-opts) query-opts
                         (assoc query-opts :query-string (str query)))]
-     (if (or (list? (:query query'))
-             (not= :find (first (:query query')))) ; dsl query
-       [nil (query-dsl/custom-query repo query' query-opts)]
+     (if (or (list? (:query query))
+             (not= :find (first (:query query)))) ; dsl query
+       [nil (query-dsl/custom-query repo query query-opts)]
        (query-react/react-query repo
-                                (add-rules-to-query query' {:db-graph? db-graph?})
+                                (add-rules-to-query query)
                                 query-opts)))))

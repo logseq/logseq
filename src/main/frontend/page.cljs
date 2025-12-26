@@ -1,20 +1,19 @@
 (ns frontend.page
   "Provides root component for both Logseq app and publishing build"
-  (:require [logseq.shui.ui :as shui]
-            [rum.core :as rum]
-            [frontend.state :as state]
-            [frontend.config :as config]
-            [frontend.ui :as ui]
-            [frontend.components.container :as container]
-            [frontend.handler.search :as search-handler]
-            [frontend.handler.notification :as notification]
-            [frontend.components.onboarding.quick-tour :as quick-tour]
-            [frontend.handler.plugin :as plugin-handler]
+  (:require [frontend.components.container :as container]
             [frontend.components.plugins :as plugin]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.handler.export :as export]
+            [frontend.handler.notification :as notification]
+            [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.search :as search-handler]
+            [frontend.state :as state]
+            [frontend.ui :as ui]
             [frontend.util :as util]
-            [reitit.frontend.easy :as rfe]))
+            [logseq.shui.ui :as shui]
+            [reitit.frontend.easy :as rfe]
+            [rum.core :as rum]))
 
 (defn- setup-fns!
   []
@@ -32,8 +31,7 @@
   of broken conditions"
   []
   ;; This layout emulates most of container/sidebar
-  (let [current-repo (state/get-current-repo)
-        db-based? (config/db-based-graph? current-repo)]
+  (let [current-repo (state/get-current-repo)]
     [:div#main-container.cp__sidebar-main-layout.flex-1.flex
      [:div.#app-container
       [:div#left-container
@@ -68,21 +66,20 @@
               [:div.text-xs.toned-down "Quit the app and then reopen it."]]
              [:div (ui/icon "command" {:class "rounded-md p-1 mr-2 bg-quaternary"})
               (ui/icon (if (util/electron?) "letter-q" "letter-r") {:class "rounded-md p-1 bg-quaternary"})]]
-            (when db-based?
-              [:div.flex.flex-row.justify-between.align-items.mb-4.items-center.separator-top.py-4
-               [:div.flex.flex-col.items-start.mr-2
-                [:div.text-2xs.font-bold.uppercase.toned-down (t :page/step "3")]
-                [:div [:span.highlighted.font-bold "Export "] [:span.toned-down " current graph as SQLite db"]]
-                [:div.text-xs.toned-down "You can send it to help@logseq.com for debugging."]
-                [:a#download-as-sqlite-db.hidden]]
-               [:div
-                (ui/button "Export graph"
-                           :small? true
-                           :on-click #(export/export-repo-as-sqlite-db! current-repo))]])
+            [:div.flex.flex-row.justify-between.align-items.mb-4.items-center.separator-top.py-4
+             [:div.flex.flex-col.items-start.mr-2
+              [:div.text-2xs.font-bold.uppercase.toned-down (t :page/step "3")]
+              [:div [:span.highlighted.font-bold "Export "] [:span.toned-down " current graph as SQLite db"]]
+              [:div.text-xs.toned-down "You can send it to help@logseq.com for debugging."]
+              [:a#download-as-sqlite-db.hidden]]
+             [:div
+              (ui/button "Export graph"
+                         :small? true
+                         :on-click #(export/export-repo-as-sqlite-db! current-repo))]]
 
             [:div.flex.flex-row.justify-between.align-items.mb-4.items-center.separator-top.py-4
              [:div.flex.flex-col.items-start
-              [:div.text-2xs.font-bold.uppercase.toned-down (t :page/step (if db-based? "4" "3"))]
+              [:div.text-2xs.font-bold.uppercase.toned-down (t :page/step "4")]
               [:div [:span.highlighted.font-bold "Clear"] [:span.toned-down " local storage"]]
               [:div.text-xs.toned-down "This does delete minor preferences like dark/light theme preference."]]
              [:div
@@ -92,17 +89,13 @@
                                      (.clear js/localStorage)
                                      (notification/show! "Cleared!" :success)))]]]
            [:div
-            (when-not db-based?
-              [:p "If you think you have experienced data loss, check for backup files under
-          the folder logseq/bak/."])
-            (when db-based?
-              [:p "You can also go to "
-               [:a {:title "All graphs"
-                    :on-click (fn []
-                                (set! (.-href js/window.location) (rfe/href :graphs))
-                                (.reload js/window.location))}
-                "All graphs"]
-               " to switch to another graph."])
+            [:p "You can also go to "
+             [:a {:title "All graphs"
+                  :on-click (fn []
+                              (set! (.-href js/window.location) (rfe/href :graphs))
+                              (.reload js/window.location))}
+              "All graphs"]
+             " to switch to another graph."]
             [:p "If these troubleshooting steps have not solved your problem, please "
              [:a.underline
               {:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"}
@@ -117,7 +110,7 @@
    [:p {:class "text-gray-500 mb-8"} "Oops! The page you're looking for doesn't exist."]
    (shui/button {:on-click #(rfe/push-state :home)
                  :variant :outline}
-     (shui/tabler-icon "home") "Go back home")])
+                (shui/tabler-icon "home") "Go back home")])
 
 (rum/defc current-page < rum/reactive
   {:did-mount    (fn [state]
@@ -126,7 +119,6 @@
                    (state/load-app-user-cfgs)
                    (ui/inject-document-devices-envs!)
                    (ui/inject-dynamic-style-node!)
-                   (quick-tour/init)
                    (plugin-handler/host-mounted!)
                    (assoc state ::teardown (setup-fns!)))
    :will-unmount (fn [state]
@@ -137,13 +129,13 @@
     (let [route-name (get-in route-match [:data :name])]
       (when-let [view (:view (:data route-match))]
         (ui/catch-error-and-notify
-          (helpful-default-error-screen)
-          [:<>
-           (if (= :draw route-name)
-             (view route-match)
-             (container/root-container
-               route-match
-               (view route-match)))
-           (when config/lsp-enabled?
-             (plugin/hook-daemon-renderers))])))
+         (helpful-default-error-screen)
+         [:<>
+          (if (= :draw route-name)
+            (view route-match)
+            (container/root-container
+             route-match
+             (view route-match)))
+          (when config/lsp-enabled?
+            (plugin/hook-daemon-renderers))])))
     (not-found)))

@@ -277,7 +277,7 @@
                   (->> (state/get-repos)
                        (remove (fn [{:keys [url]}]
                                 ;; Can't replace current graph as ui wouldn't reload properly
-                                 (or (= url current-repo) (not (config/db-based-graph? url)))))
+                                 (= url current-repo)))
                        (map (fn [{:keys [url] :as original-graph}]
                               {:value (text-util/get-graph-name-from-path url)
                                :id (config/get-repo-dir url)

@@ -443,11 +443,6 @@
   resolved "https://registry.yarnpkg.com/@emoji-mart/react/-/react-1.1.1.tgz#ddad52f93a25baf31c5383c3e7e4c6e05554312a"
   integrity sha512-NMlFNeWgv1//uPsvLxvGQoIerPuVdXwK/EUek8OOkJ6wVOWPUizRBJU0hDqWZCOROVpfBgCemaC3m6jDOXi03g==
 
-"@excalidraw/excalidraw@0.16.1":
-  version "0.16.1"
-  resolved "https://registry.yarnpkg.com/@excalidraw/excalidraw/-/excalidraw-0.16.1.tgz#a928945d567a1f5c0aa75bd1b1c05b50329eb27a"
-  integrity sha512-4zirHk7dNx6SVq2jQmYOLliqAa1h3WPVqHM5qtJyhD769VsOqwlkopAcnZMb3G1PeIMm6cf2F31quS5MVqvoOQ==
-
 "@glidejs/glide@^3.6.0":
   version "3.7.1"
   resolved "https://registry.yarnpkg.com/@glidejs/glide/-/glide-3.7.1.tgz#cd3fb256006d9c7aec2f95873d268410df2ab0ce"
@@ -853,11 +848,6 @@
   version "2.5.0"
   resolved "https://registry.yarnpkg.com/@js-joda/timezone/-/timezone-2.5.0.tgz#b422ff400c25ae311384239c62724eecee2e442b"
   integrity sha512-HHFVhGUKIOtITiT+sbQRdYuO5Q+a8FDj/vQSGUSxe6+5w2in5JsavfRsAN2tU/NCdBeFx/6q8evHMtOrXfdn2g==
-
-"@logseq/diff-merge@^0.2.2":
-  version "0.2.2"
-  resolved "https://registry.yarnpkg.com/@logseq/diff-merge/-/diff-merge-0.2.2.tgz#583bd8c8c66d5ff05ea70906475efaa078e839a3"
-  integrity sha512-0WeKNhq8PsjvunOqNEd9aSM4tgiClwhonXgXzrQ4KYj8VoyLaEAyEWWGOAoE7mwR+aqwM+bMB4MxuNFywnUb8A==
 
 "@logseq/react-tweet-embed@1.3.1-1":
   version "1.3.1-1"
@@ -2610,11 +2600,6 @@ character-reference-invalid@^1.0.0:
   resolved "https://registry.yarnpkg.com/character-reference-invalid/-/character-reference-invalid-1.1.4.tgz#083329cda0eae272ab3dbbf37e9a382c13af1560"
   integrity sha512-mKKUkUbhPpQlCOfIuZkvSEgktjPFIsZKRRbC6KWVEMvlzblj3i3asQv5ODsrwt0N3pHAEvjP8KTQPHkp0+6jOg==
 
-check-password-strength@2.0.7:
-  version "2.0.7"
-  resolved "https://registry.yarnpkg.com/check-password-strength/-/check-password-strength-2.0.7.tgz#d8fd6c1a274267c7ddd9cd15c71a3cfb6ad35baa"
-  integrity sha512-VyklBkB6dOKnCIh63zdVr7QKVMN9/npwUqNAXxWrz8HabVZH/n/d+lyNm1O/vbXFJlT/Hytb5ouYKYGkoeZirQ==
-
 chevrotain@7.1.1:
   version "7.1.1"
   resolved "https://registry.yarnpkg.com/chevrotain/-/chevrotain-7.1.1.tgz#5122814eafd1585a9601f9180a7be9c42d5699c6"
@@ -3695,11 +3680,6 @@ didyoumean@^1.2.2:
   version "1.2.2"
   resolved "https://registry.yarnpkg.com/didyoumean/-/didyoumean-1.2.2.tgz#989346ffe9e839b4555ecf5666edea0d3e8ad037"
   integrity sha512-gxtyfqMg7GKyhQmb056K7M3xszy/myH8w+B4RT+QXBQsvAOdc3XymqDDPHx1BgPgsdAA5SIifona89YtRATDzw==
-
-diff@5.0.0:
-  version "5.0.0"
-  resolved "https://registry.yarnpkg.com/diff/-/diff-5.0.0.tgz#7ed6ad76d859d030787ec35855f5b1daf31d852b"
-  integrity sha512-/VTCrvm5Z0JGty/BWHljh+BAiw3IK+2j87NGMu8Nwc/f48WoDAC395uomO9ZD117ZOBaHmkX1oyLvkVM/aIT3w==
 
 diff@^4.0.1:
   version "4.0.2"

@@ -4,22 +4,17 @@
   (:require ["/frontend/utils" :as utils]
             [clojure.string :as string]
             [clojure.zip :as z]
-            [frontend.config :as config]
             [frontend.db :as db]
-            [frontend.extensions.zip :as zip]
+            [frontend.db.conn :as conn]
             [frontend.format.mldoc :as mldoc]
             [frontend.handler.export.common :as common]
             [frontend.handler.export.zip-helper :refer [get-level goto-last
                                                         goto-level]]
             [frontend.util :as util]
-            [goog.dom :as gdom]
             [hiccups.runtime :as h]
             [logseq.cli.common.export.common :as cli-export-common :refer
              [*state* raw-text simple-asts->string space]]
-            [logseq.cli.common.util :refer-macros [concatv mapcatv removev]]
-            [logseq.common.path :as path]
-            [promesa.core :as p]
-            [frontend.db.conn :as conn]))
+            [logseq.cli.common.util :refer-macros [concatv mapcatv removev]]))
 
 ;;; *opml-state*
 (def ^:private ^:dynamic
@@ -438,50 +433,21 @@
   {:pre [(or (coll? root-block-uuids-or-page-uuid)
              (uuid? root-block-uuids-or-page-uuid))]}
   (util/profile
-   :export-blocks-as-opml
-   (let [content
-         (if (uuid? root-block-uuids-or-page-uuid)
+    :export-blocks-as-opml
+    (let [content
+          (if (uuid? root-block-uuids-or-page-uuid)
            ;; page
-           (common/get-page-content root-block-uuids-or-page-uuid)
-           (common/root-block-uuids->content repo root-block-uuids-or-page-uuid))
-         title (if (uuid? root-block-uuids-or-page-uuid)
-                 (:block/title (db/entity [:block/uuid root-block-uuids-or-page-uuid]))
-                 "untitled")
-         first-block (and (coll? root-block-uuids-or-page-uuid)
-                          (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)]))
-         format (get first-block :block/format :markdown)]
-     (binding [cli-export-common/*current-repo* repo
-               cli-export-common/*current-db* (conn/get-db repo)
-               cli-export-common/*content-config* (common/get-content-config)]
-       (export-helper content format options :title title)))))
-
-(defn- export-files-as-opml
-  "options see also `export-blocks-as-opml`"
-  [repo files options]
-  (binding [cli-export-common/*current-repo* repo
-            cli-export-common/*current-db* (conn/get-db repo)
-            cli-export-common/*content-config* (common/get-content-config)]
-    (mapv
-     (fn [{:keys [path content title format]}]
-       (when (and title (not (string/blank? content)))
-         (util/profile (print-str :export-files-as-opml path)
-                       [path (export-helper content format options :title title)])))
-     files)))
-
-(defn export-repo-as-opml!
-  [repo]
-  (p/let [files (common/<get-file-contents repo "opml")]
-    (when (seq files)
-      (let [repo' (if (config/db-based-graph? repo)
-                    (string/replace repo config/db-version-prefix "")
-                    (path/basename repo))
-            files (->> (export-files-as-opml repo files nil)
-                       (clojure.core/remove nil?))
-            zip-file-name (str repo' "_opml_" (quot (util/time-ms) 1000))]
-        (p/let [zipfile (zip/make-zip zip-file-name files repo')]
-          (when-let [anchor (gdom/getElement "export-as-opml")]
-            (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
-            (.setAttribute anchor "download" (.-name zipfile))
-            (.click anchor)))))))
+            (common/get-page-content root-block-uuids-or-page-uuid)
+            (common/root-block-uuids->content repo root-block-uuids-or-page-uuid))
+          title (if (uuid? root-block-uuids-or-page-uuid)
+                  (:block/title (db/entity [:block/uuid root-block-uuids-or-page-uuid]))
+                  "untitled")
+          first-block (and (coll? root-block-uuids-or-page-uuid)
+                           (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)]))
+          format (get first-block :block/format :markdown)]
+      (binding [cli-export-common/*current-repo* repo
+                cli-export-common/*current-db* (conn/get-db repo)
+                cli-export-common/*content-config* (common/get-content-config)]
+        (export-helper content format options :title title)))))
 
 ;;; export fns (ends)

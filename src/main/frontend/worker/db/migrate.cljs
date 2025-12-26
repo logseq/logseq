@@ -128,19 +128,6 @@
                                  (fix db))]
             (concat common-fix additional-fix)))})
 
-(comment
-  (defn- rename-classes
-    [classes-to-rename]
-    (fn [db]
-      (when (ldb/db-based-graph? db)
-        (mapv (fn [[old new]]
-                (merge {:db/id (:db/id (d/entity db old))
-                        :db/ident new}
-                       (when-let [new-title (get-in db-class/built-in-classes [new :title])]
-                         {:block/title new-title
-                          :block/name (common-util/page-name-sanity-lc new-title)})))
-              classes-to-rename)))))
-
 (defn- add-quick-add-page
   [_db]
   (let [page (-> (-> (sqlite-util/build-new-page common-config/quick-add-page-name)
@@ -284,7 +271,7 @@
 
 (defn- upgrade-version!
   "Return tx-data"
-  [conn db-based? version {:keys [properties classes rename-db-idents fix] :as migrate-updates}]
+  [conn version {:keys [properties classes rename-db-idents fix] :as migrate-updates}]
   (let [version (db-schema/parse-schema-version version)
         db @conn
         new-properties (->> (select-keys db-property/built-in-properties properties)
@@ -311,9 +298,7 @@
           (rename-db-ident/rename-db-idents-migration-tx-data db rename-db-idents))
         fixes (when (fn? fix)
                 (fix db))
-        tx-data (if db-based?
-                  (concat new-class-idents new-properties new-classes rename-db-idents-tx-data fixes)
-                  fixes)
+        tx-data (concat new-class-idents new-properties new-classes rename-db-idents-tx-data fixes)
         tx-data' (concat
                   [(sqlite-util/kv :logseq.kv/schema-version version)]
                   tx-data)
@@ -328,38 +313,36 @@
   "Migrate 'frontend' datascript schema and data. To add a new migration,
   add an entry to schema-version->updates and bump db-schema/version"
   [conn & {:keys [target-version] :or {target-version db-schema/version}}]
-  (when (ldb/db-based-graph? @conn)
-    (let [db @conn
-          version-in-db (db-schema/parse-schema-version (or (:kv/value (d/entity db :logseq.kv/schema-version)) 0))
-          compare-result (db-schema/compare-schema-version target-version version-in-db)]
-      (cond
-        (zero? compare-result)
-        nil
+  (let [db @conn
+        version-in-db (db-schema/parse-schema-version (or (:kv/value (d/entity db :logseq.kv/schema-version)) 0))
+        compare-result (db-schema/compare-schema-version target-version version-in-db)]
+    (cond
+      (zero? compare-result)
+      nil
 
-        (neg? compare-result) ; outdated client, db version could be synced from server
-        (worker-util/post-message :notification ["Your app is using an outdated version that is incompatible with your current graph. Please update your app before editing this graph." :error false])
+      (neg? compare-result) ; outdated client, db version could be synced from server
+      (worker-util/post-message :notification ["Your app is using an outdated version that is incompatible with your current graph. Please update your app before editing this graph." :error false])
 
-        (pos? compare-result)
-        (try
-          (let [db-based? (ldb/db-based-graph? @conn)
-                updates (keep (fn [[v updates]]
-                                (let [v* (db-schema/parse-schema-version v)]
-                                  (when (and (neg? (db-schema/compare-schema-version version-in-db v*))
-                                             (not (pos? (db-schema/compare-schema-version v* target-version))))
-                                    [v updates])))
-                              schema-version->updates)
-                result-ks [:tx-data :db-before :db-after :migrate-updates]
-                *upgrade-result-coll (atom [])]
-            (println "DB schema migrated from" version-in-db)
-            (doseq [[v m] updates]
-              (let [r (upgrade-version! conn db-based? v m)]
-                (swap! *upgrade-result-coll conj (select-keys r result-ks))))
-            (swap! *upgrade-result-coll conj
-                   (select-keys (ensure-built-in-data-exists! conn) result-ks))
-            {:from-version version-in-db
-             :to-version target-version
-             :upgrade-result-coll @*upgrade-result-coll})
-          (catch :default e
-            (prn :error (str "DB migration failed to migrate to " target-version " from " version-in-db ":"))
-            (js/console.error e)
-            (throw e)))))))
+      (pos? compare-result)
+      (try
+        (let [updates (keep (fn [[v updates]]
+                              (let [v* (db-schema/parse-schema-version v)]
+                                (when (and (neg? (db-schema/compare-schema-version version-in-db v*))
+                                           (not (pos? (db-schema/compare-schema-version v* target-version))))
+                                  [v updates])))
+                            schema-version->updates)
+              result-ks [:tx-data :db-before :db-after :migrate-updates]
+              *upgrade-result-coll (atom [])]
+          (println "DB schema migrated from" version-in-db)
+          (doseq [[v m] updates]
+            (let [r (upgrade-version! conn v m)]
+              (swap! *upgrade-result-coll conj (select-keys r result-ks))))
+          (swap! *upgrade-result-coll conj
+                 (select-keys (ensure-built-in-data-exists! conn) result-ks))
+          {:from-version version-in-db
+           :to-version target-version
+           :upgrade-result-coll @*upgrade-result-coll})
+        (catch :default e
+          (prn :error (str "DB migration failed to migrate to " target-version " from " version-in-db ":"))
+          (js/console.error e)
+          (throw e))))))

@@ -18,7 +18,6 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.utils :as shortcut-utils]
@@ -477,8 +476,6 @@
         (when block
           (when-let [page (some-> block-id get-block-page)]
             (cond
-              (db/whiteboard-page? page)
-              (route-handler/redirect-to-page! (:block/uuid page) {:block-id block-id})
               (model/parents-collapsed? (state/get-current-repo) block-id)
               (route-handler/redirect-to-page! block-id)
               :else
@@ -563,7 +560,6 @@
   (let [item (state->highlighted-item state)
         !input (::input state)
         create-class? (string/starts-with? @!input "#")
-        create-whiteboard? (= :whiteboard (:source-create item))
         create-page? (= :page (:source-create item))
         class (when create-class? (get-class-from-input @!input))]
     (if (and (= (:text item) "Configure tag") (:class item))
@@ -572,7 +568,6 @@
                        create-class?
                        (db-page-handler/<create-class! class
                                                        {:redirect? false})
-                       create-whiteboard? (whiteboard-handler/<create-new-whiteboard-and-redirect! @!input)
                        create-page? (page-handler/<create! @!input {:redirect? true}))]
         (shui/dialog-close! :ls-dialog-cmdk)
         (when (and create-class? result)
@@ -758,12 +753,10 @@
       (p/let [page (some-> (get-highlighted-page-uuid-or-name state) db/get-page)
               _ (db-async/<get-block repo (:block/uuid page) :children? false)
               page' (db/entity repo [:block/uuid (:block/uuid page)])
-              link (if (config/db-based-graph? repo)
-                     (some (fn [[k v]]
-                             (when (= :url (:logseq.property/type (db/entity repo k)))
-                               (:block/title v)))
-                           (:block/properties page'))
-                     (some #(re-find editor-handler/url-regex (val %)) (:block/properties page')))]
+              link (some (fn [[k v]]
+                           (when (= :url (:logseq.property/type (db/entity repo k)))
+                             (:block/title v)))
+                         (:block/properties page'))]
         (if link
           (js/window.open link)
           (notification/show! "No link found in this page's properties." :warning)))

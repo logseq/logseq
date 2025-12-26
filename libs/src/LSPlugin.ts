@@ -283,8 +283,6 @@ export type ExternalCommandType =
   | 'logseq.editor/up'
   | 'logseq.editor/expand-block-children'
   | 'logseq.editor/collapse-block-children'
-  | 'logseq.editor/open-file-in-default-app'
-  | 'logseq.editor/open-file-in-directory'
   | 'logseq.editor/select-all-blocks'
   | 'logseq.editor/toggle-open-blocks'
   | 'logseq.editor/zoom-in'

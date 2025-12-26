@@ -1,10 +1,9 @@
 (ns frontend.db.name-sanity-test
   (:require [cljs.test :refer [deftest testing is]]
             [clojure.string :as string]
-            [logseq.graph-parser.extract :as extract]
-            [frontend.worker.handler.page.file-based.rename :as worker-page-rename]
+            [frontend.common.file.util :as wfu]
             [frontend.util.fs :as fs-util]
-            [frontend.common.file.util :as wfu]))
+            [logseq.graph-parser.extract :as extract]))
 
 (defn- test-page-name
   "Check if page name can be preserved after escaping"
@@ -15,7 +14,7 @@
           url-single  (js/encodeURIComponent file-name)
           url-double  (js/encodeURIComponent url-single)
           file-name'  (js/decodeURIComponent url-single)
-          file-name'' ( js/decodeURIComponent (js/decodeURIComponent url-double))]
+          file-name'' (js/decodeURIComponent (js/decodeURIComponent url-double))]
       (is (= page-name page-name'))
       (is (not (fs-util/include-reserved-chars? file-name)))
       (is (not (contains? fs-util/windows-reserved-filebodies file-name)))
@@ -45,7 +44,3 @@
   (test-page-name "CON.")
   (test-page-name ".NET.")
   (mapv test-page-name fs-util/windows-reserved-filebodies))
-
-(deftest new-path-computation-tests
-  (is (= (#'worker-page-rename/compute-new-file-path "/data/app/dsal dsalfjk aldsaf.jkl" "ddd") "/data/app/ddd.jkl"))
-  (is (= (#'worker-page-rename/compute-new-file-path "c://data/a sdfpp/dsal dsalf% * _ dsaf.mnk" "c d / f") "c://data/a sdfpp/c d / f.mnk")))

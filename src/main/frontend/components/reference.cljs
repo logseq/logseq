@@ -2,7 +2,6 @@
   (:require [frontend.common.missionary :as c.m]
             [frontend.components.reference-filters :as filters]
             [frontend.components.views :as views]
-            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
@@ -67,9 +66,8 @@
        [])
       (when (> refs-total-count 0)
         (ui/catch-error
-         (ui/component-error (if (config/db-based-graph? (state/get-current-repo))
-                               "Linked References: Unexpected error."
-                               "Linked References: Unexpected error. Please re-index your graph first."))
+         (ui/component-error
+          "Linked References: Unexpected error.")
          [:div.references
           (references-cp entity (assoc config :refs-total-count refs-total-count))])))))
 

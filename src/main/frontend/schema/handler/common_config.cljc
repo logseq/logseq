@@ -87,7 +87,4 @@
                                                [:insert-today? :boolean]
                                                [:redirect-page? :boolean]
                                                [:default-page :string]])]
-    [:file-sync/ignore-files [:vector :string]]
-    [:dwim/settings [:map-of :keyword :boolean]]
-    [:file/name-format [:enum :legacy :triple-lowbar]]
     [:journal/file-name-format :string]]))

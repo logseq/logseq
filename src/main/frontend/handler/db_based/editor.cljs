@@ -91,7 +91,7 @@
              (ui-handler/add-style-if-exists!))))))
 
 (defn batch-set-heading!
-  [repo block-ids heading]
+  [block-ids heading]
   (ui-outliner-tx/transact!
    {:outliner-op :save-block}
    (doseq [id block-ids]
@@ -99,5 +99,5 @@
            raw-title (:block/raw-title e)
            new-raw-title (commands/clear-markdown-heading raw-title)]
        (when (not= new-raw-title raw-title)
-         (property-handler/set-block-property! repo id :block/title new-raw-title))))
-   (property-handler/batch-set-block-property! repo block-ids :logseq.property/heading heading)))
+         (property-handler/set-block-property! id :block/title new-raw-title))))
+   (property-handler/batch-set-block-property! block-ids :logseq.property/heading heading)))

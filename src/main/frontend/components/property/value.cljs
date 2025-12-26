@@ -110,10 +110,8 @@
         clear-overlay! (fn []
                          (shui/popup-hide-all!))
         on-chosen! (fn [_e icon]
-                     (let [repo (state/get-current-repo)
-                           blocks (get-operating-blocks block)]
+                     (let [blocks (get-operating-blocks block)]
                        (property-handler/batch-set-block-property!
-                        repo
                         (map :db/id blocks)
                         :logseq.property/icon
                         (when icon (select-keys icon [:type :id :color]))))
@@ -183,8 +181,7 @@
   ([block property-id property-value] (<add-property! block property-id property-value {}))
   ([block property-id property-value {:keys [selected? exit-edit? class-schema? entity-id?]
                                       :or {exit-edit? true}}]
-   (let [repo (state/get-current-repo)
-         class? (ldb/class? block)
+   (let [class? (ldb/class? block)
          property (db/entity property-id)
          many? (db-property/many? property)
          checkbox? (= :checkbox (:logseq.property/type property))
@@ -200,10 +197,10 @@
                                           (= property-value (:db/id (db/entity :logseq.property.view/type.list))))]
             (ui-outliner-tx/transact!
              {:outliner-op :set-block-property}
-             (property-handler/batch-set-block-property! repo block-ids property-id property-value {:entity-id? entity-id?})
+             (property-handler/batch-set-block-property! block-ids property-id property-value {:entity-id? entity-id?})
              (when (and set-query-list-view?
                         (nil? (:logseq.property.view/group-by-property block)))
-               (property-handler/batch-set-block-property! repo block-ids :logseq.property.view/group-by-property
+               (property-handler/batch-set-block-property! block-ids :logseq.property.view/group-by-property
                                                            (:db/id (db/entity :block/page))
                                                            {:entity-id? entity-id?})))))
         (when (seq (:view/selected-blocks @state/state))
@@ -443,8 +440,7 @@
 (defn- delete-block-property!
   [block property]
   (editor-handler/move-cross-boundary-up-down :up {})
-  (property-handler/remove-block-property! (state/get-current-repo)
-                                           (:db/id block)
+  (property-handler/remove-block-property! (:db/id block)
                                            (:db/ident property)))
 
 (rum/defc date-picker
@@ -520,7 +516,6 @@
 (rum/defc property-value-date-picker
   [block property value opts]
   (let [multiple-values? (db-property/many? property)
-        repo (state/get-current-repo)
         datetime? (= :datetime (:logseq.property/type property))]
     (date-picker value
                  (merge opts
@@ -530,7 +525,7 @@
                          :multiple-values? multiple-values?
                          :on-change (fn [value]
                                       (let [blocks (get-operating-blocks block)]
-                                        (property-handler/batch-set-block-property! repo (map :block/uuid blocks)
+                                        (property-handler/batch-set-block-property! (map :block/uuid blocks)
                                                                                     (:db/ident property)
                                                                                     (if datetime?
                                                                                       value
@@ -539,7 +534,7 @@
                          :on-delete (fn [e]
                                       (util/stop-propagation e)
                                       (let [blocks (get-operating-blocks block)]
-                                        (property-handler/batch-set-block-property! repo (map :block/uuid blocks)
+                                        (property-handler/batch-set-block-property! (map :block/uuid blocks)
                                                                                     (:db/ident property)
                                                                                     nil))
                                       (shui/popup-hide!))}))))
@@ -643,7 +638,6 @@
                 (let [blocks (get-operating-blocks block)
                       block-ids (map :block/uuid blocks)]
                   (property-handler/batch-remove-block-property!
-                   (state/get-current-repo)
                    block-ids
                    (:db/ident property)))
                 (when-not (false? (:exit-edit? opts))

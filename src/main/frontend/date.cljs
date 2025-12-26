@@ -20,7 +20,6 @@
 (def custom-formatter (tf/formatter "yyyy-MM-dd'T'HH:mm:ssZZ"))
 
 (def ^:private mmm-do-yyyy-formatter (tf/formatter "MMM do, yyyy"))
-(def ^:private yyyy-MM-dd-formatter (tf/formatter "yyyy-MM-dd"))
 (def ^:private yyyy-MM-dd-HH-mm-formatter (tf/formatter "yyyy-MM-dd HH:mm"))
 
 (defn journal-title-formatters
@@ -50,14 +49,6 @@
 (defn get-date-time-string-2 []
   (tf/unparse custom-formatter-2 (tl/local-now)))
 
-(def custom-formatter-3 (tf/formatter "yyyy-MM-dd E HH:mm"))
-(defn get-date-time-string-3 []
-  (tf/unparse custom-formatter-3 (tl/local-now)))
-
-(def custom-formatter-4 (tf/formatter "yyyy-MM-dd E HH:mm:ss"))
-(defn get-date-time-string-4 []
-  (tf/unparse custom-formatter-4 (tl/local-now)))
-
 (defn journal-name
   ([]
    (journal-name (tl/local-now)))
@@ -70,14 +61,6 @@
                                          :date date
                                          :format formatter})
          (throw e))))))
-
-(defn journal-name-s [s]
-  (try
-    (journal-name (tf/parse yyyy-MM-dd-formatter s))
-    (catch :default _e
-      (log/error :parse-journal-date {:message  "Unable to parse date to journal name, skipping."
-                                      :date-str s})
-      nil)))
 
 (defn start-of-day [date]
   (t/date-time (t/year date) (t/month date) (t/day date)))
@@ -93,20 +76,6 @@
 (defn yesterday
   []
   (journal-name (t/minus (start-of-day (tl/local-now)) (t/days 1))))
-
-(defn get-local-date
-  []
-  (let [date (js/Date.)
-        year (.getFullYear date)
-        month (inc (.getMonth date))
-        day (.getDate date)
-        hour (.getHours date)
-        minute (.getMinutes date)]
-    {:year year
-     :month month
-     :day day
-     :hour hour
-     :minute minute}))
 
 (defn get-current-time
   []
@@ -149,18 +118,6 @@
   (journal-title-> journal-title #(tc/to-long %)))
 
 (def default-journal-filename-formatter common-date/default-journal-filename-formatter)
-
-(defn journal-title->default
-  "Journal title to filename format"
-  [journal-title]
-  (let [formatter (if-let [format (state/get-journal-file-name-format)]
-                    (tf/formatter format)
-                    (tf/formatter default-journal-filename-formatter))]
-    (journal-title-> journal-title #(tf/unparse formatter %))))
-
-(defn journal-title->custom-format
-  [journal-title]
-  (journal-title-> journal-title #(date-time-util/format % (state/get-date-formatter))))
 
 (defn int->local-time-2
   [n]

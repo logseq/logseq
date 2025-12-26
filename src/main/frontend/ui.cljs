@@ -367,25 +367,6 @@
            items (if clear-all (cons clear-all notifications) notifications)]
        (doall items)))))
 
-(rum/defc humanity-time-ago
-  [input opts]
-  (let [time-fn (fn []
-                  (try
-                    (util/human-time input)
-                    (catch :default e
-                      (js/console.error e)
-                      input)))
-        [time set-time] (rum/use-state (time-fn))]
-
-    (hooks/use-effect!
-     (fn []
-       (let [timer (js/setInterval
-                    #(set-time (time-fn)) (* 1000 30))]
-         #(js/clearInterval timer)))
-     [])
-
-    [:span.ui__humanity-time (merge {} opts) time]))
-
 (defn checkbox
   [option]
   (let [on-change' (:on-change option)

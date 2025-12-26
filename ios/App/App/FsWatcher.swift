@@ -98,7 +98,7 @@ extension URL {
     }
 
     func shouldNotifyWithContent() -> Bool {
-        let allowedPathExtensions: Set = ["md", "markdown", "org", "js", "edn", "css", "excalidraw"]
+        let allowedPathExtensions: Set = ["md", "markdown", "org", "js", "edn", "css"]
         if allowedPathExtensions.contains(self.pathExtension.lowercased()) {
             return true
         }

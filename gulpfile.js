@@ -66,10 +66,6 @@ const common = {
   syncAssetFiles (...params) {
     return gulp.series(
       () => gulp.src([
-        './node_modules/@excalidraw/excalidraw/dist/excalidraw-assets/**',
-        '!**/*/i18n-*.js',
-      ]).pipe(gulp.dest(path.join(outputPath, 'js', 'excalidraw-assets'))),
-      () => gulp.src([
         'node_modules/katex/dist/katex.min.js',
         'node_modules/katex/dist/contrib/mhchem.min.js',
         'node_modules/html2canvas/dist/html2canvas.min.js',

@@ -361,8 +361,7 @@
       (is (= (get tag1 ":logseq.property.class/extends") [id2]) "tag1 extends tag2 with db id")
       (let [_ (ls-api-call! :editor.addTagExtends id1 id3)
             tag1 (ls-api-call! :editor.getTag id1)]
-        (is (= (get tag1 ":logseq.property.class/extends") [id2 id3]) "tag1 extends tag2,tag3 with db ids"))
-      )))
+        (is (= (get tag1 ":logseq.property.class/extends") [id2 id3]) "tag1 extends tag2,tag3 with db ids")))))
 
 (deftest get-tags-by-name-test
   (testing "get tags by exact name"

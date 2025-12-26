@@ -47,9 +47,7 @@
   "Replace `[[internal-id]]` with `[[page name]]`"
   [item eid]
   (if-let [db (conn/get-db)]
-    (if (entity-plus/db-based-graph? db)
-      (db-content/update-block-content db item eid)
-      item)
+    (db-content/update-block-content db item eid)
     item))
 
 (defn pull
