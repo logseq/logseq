@@ -106,8 +106,6 @@
   (case name
     :home
     "Logseq"
-    :whiteboards
-    (t :whiteboards)
     :graphs
     "Graphs"
     :graph
