@@ -529,21 +529,20 @@ tags:: tag1, tag2
       (is (nil? (:block/tags updated-page))
           "Page's tags are deleted")))
 
-  (comment
-    ;; FIXME:
-    (testing "save deletes orphaned pages when a block's refs change"
-      (let [conn (db/get-db test-db false)
-            pages (set (map first (d/q '[:find ?bn :where [?b :block/name ?bn]] @conn)))
-            _ (assert (set/subset? #{"blarg" "bar"} pages) "Pages from block exist")
-            block-with-refs (ffirst (d/q '[:find (pull ?b [* {:block/refs [*]}])
-                                           :where [?b :block/title "block #blarg #bar"]]
-                                         @conn))
-            _ (save-block! (-> block-with-refs
-                               (assoc :block/title "block"
-                                      :block/refs [])))
-            updated-pages (set (map first (d/q '[:find ?bn :where [?b :block/name ?bn]] @conn)))]
-        (is (not (contains? updated-pages "blarg"))
-            "Deleted, orphaned page no longer exists")))))
+  ;; FIXME:
+  (testing "save deletes orphaned pages when a block's refs change"
+    (let [conn (db/get-db test-db false)
+          pages (set (map first (d/q '[:find ?bn :where [?b :block/name ?bn]] @conn)))
+          _ (assert (set/subset? #{"blarg" "bar"} pages) "Pages from block exist")
+          block-with-refs (ffirst (d/q '[:find (pull ?b [* {:block/refs [*]}])
+                                         :where [?b :block/title "block #blarg #bar"]]
+                                       @conn))
+          _ (save-block! (-> block-with-refs
+                             (assoc :block/title "block"
+                                    :block/refs [])))
+          updated-pages (set (map first (d/q '[:find ?bn :where [?b :block/name ?bn]] @conn)))]
+      (is (not (contains? updated-pages "blarg"))
+          "Deleted, orphaned page no longer exists"))))
 
 ;;; Fuzzy tests
 
