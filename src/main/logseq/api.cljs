@@ -132,6 +132,7 @@
 (def ^:export set_block_collapsed api-editor/set_block_collapsed)
 (def ^:export update_block api-editor/update_block)
 (def ^:export upsert_block_property api-editor/upsert_block_property)
+(def ^:export open_pdf_viewer api-editor/open_pdf_viewer)
 
 ;; ui
 (def ^:export show_msg sdk-ui/-show_msg)
@@ -200,6 +201,7 @@
 (def ^:export get_tag_objects db-based-api/get-tag-objects)
 (def ^:export create_tag db-based-api/create-tag)
 (def ^:export get_tag db-based-api/get-tag)
+(def ^:export get_tags_by_name db-based-api/get-tags-by-name)
 (def ^:export add_tag_extends db-based-api/add-tag-extends)
 (def ^:export remove_tag_extends db-based-api/remove-tag-extends)
 (def ^:export add_block_tag db-based-api/add-block-tag)

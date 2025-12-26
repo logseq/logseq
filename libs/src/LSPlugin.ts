@@ -697,15 +697,13 @@ export interface IEditorProxy extends Record<string, any> {
    * @param opts
    */
   insertBlock: (
-    srcBlock: BlockIdentity,
+    srcBlock: BlockIdentity | EntityID,
     content: string,
     opts?: Partial<{
       before: boolean
       sibling: boolean
       start: boolean
       end: boolean
-      isPageBlock: boolean
-      focus: boolean
       customUUID: string
       properties: {}
     }>
@@ -723,30 +721,20 @@ export interface IEditorProxy extends Record<string, any> {
   ) => Promise<Array<BlockEntity> | null>
 
   updateBlock: (
-    srcBlock: BlockIdentity,
+    srcBlock: BlockIdentity | EntityID,
     content: string,
     opts?: Partial<{ properties: {} }>
   ) => Promise<void>
 
-  removeBlock: (srcBlock: BlockIdentity) => Promise<void>
+  removeBlock: (srcBlock: BlockIdentity | EntityID) => Promise<void>
 
   getBlock: (
     srcBlock: BlockIdentity | EntityID,
     opts?: Partial<{ includeChildren: boolean }>
   ) => Promise<BlockEntity | null>
 
-  /**
-   * @example
-   *
-   * ```ts
-   *  logseq.Editor.setBlockCollapsed('uuid', true)
-   *  logseq.Editor.setBlockCollapsed('uuid', 'toggle')
-   * ```
-   * @param uuid
-   * @param opts
-   */
   setBlockCollapsed: (
-    uuid: BlockUUID,
+    srcBlock: BlockIdentity | EntityID,
     opts: { flag: boolean | 'toggle' } | boolean | 'toggle'
   ) => Promise<void>
 
@@ -780,7 +768,8 @@ export interface IEditorProxy extends Record<string, any> {
   getAllProperties: () => Promise<PageEntity[] | null>
   getTagObjects: (nameOrIdent: string) => Promise<BlockEntity[] | null>
   createTag: (tagName: string, opts?: Partial<{ uuid: string }>) => Promise<PageEntity | null>
-  getTag: (nameOrIdent: string) => Promise<PageEntity | null>
+  getTag: (nameOrIdent: string | EntityID) => Promise<PageEntity | null>
+  getTagsByName: (tagName: string) => Promise<Array<PageEntity> | null>
   addTagProperty: (tagId: BlockIdentity, propertyIdOrName: BlockIdentity) => Promise<void>
   removeTagProperty: (tagId: BlockIdentity, propertyIdOrName: BlockIdentity) => Promise<void>
   addTagExtends: (tagId: BlockIdentity, parentTagIdOrName: BlockIdentity) => Promise<void>
@@ -806,11 +795,11 @@ export interface IEditorProxy extends Record<string, any> {
   ) => Promise<BlockEntity | null>
 
   getPreviousSiblingBlock: (
-    srcBlock: BlockIdentity
+    srcBlock: BlockIdentity | EntityID
   ) => Promise<BlockEntity | null>
 
   getNextSiblingBlock: (
-    srcBlock: BlockIdentity
+    srcBlock: BlockIdentity | EntityID
   ) => Promise<BlockEntity | null>
 
   moveBlock: (
@@ -843,17 +832,15 @@ export interface IEditorProxy extends Record<string, any> {
 
   // block property related APIs
   upsertBlockProperty: (
-    block: BlockIdentity,
+    block: BlockIdentity | EntityID,
     key: string,
     value: any
   ) => Promise<void>
 
-  removeBlockProperty: (block: BlockIdentity, key: string) => Promise<void>
-
-  getBlockProperty: (block: BlockIdentity, key: string) => Promise<BlockEntity | unknown>
-
-  getBlockProperties: (block: BlockIdentity) => Promise<Record<string, any> | null>
-  getPageProperties: (page: PageIdentity) => Promise<Record<string, any> | null>
+  removeBlockProperty: (block: BlockIdentity | EntityID, key: string) => Promise<void>
+  getBlockProperty: (block: BlockIdentity | EntityID, key: string) => Promise<BlockEntity | null>
+  getBlockProperties: (block: BlockIdentity | EntityID) => Promise<Record<string, any> | null>
+  getPageProperties: (page: PageIdentity | EntityID) => Promise<Record<string, any> | null>
 
   scrollToBlockInPage: (
     pageName: BlockPageName,
@@ -862,6 +849,7 @@ export interface IEditorProxy extends Record<string, any> {
   ) => void
 
   openInRightSidebar: (id: BlockUUID | EntityID) => void
+  openPDFViewer: (assetBlockIdOrFileUrl: string | EntityID) => Promise<void>
 
   /**
    * @example https://github.com/logseq/logseq-plugin-samples/tree/master/logseq-a-translator
