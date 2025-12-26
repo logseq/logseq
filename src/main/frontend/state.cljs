@@ -517,11 +517,12 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-date-formatter
   []
-  (let [repo (get-current-repo)]
-    (when-let [conn (db-conn-state/get-conn repo)]
-      (get (entity-plus/entity-memoized @conn :logseq.class/Journal)
-           :logseq.property.journal/title-format
-           "MMM do, yyyy"))))
+  (or
+   (when-let [repo (get-current-repo)]
+     (when-let [conn (db-conn-state/get-conn repo)]
+       (get (entity-plus/entity-memoized @conn :logseq.class/Journal)
+            :logseq.property.journal/title-format)))
+   "MMM do, yyyy"))
 
 (defn custom-shortcuts []
   (merge (storage/get :ls-shortcuts)
