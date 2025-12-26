@@ -5,48 +5,33 @@
             [frontend.state :as state]))
 
 (defn remove-block-property!
-  [repo block-id property-id-or-key]
+  [block-id property-id-or-key]
   (assert (some? property-id-or-key) "remove-block-property! remove-block-property! is nil")
   (let [eid (if (uuid? block-id) [:block/uuid block-id] block-id)]
     (db-property-handler/remove-block-property! eid property-id-or-key)))
 
 (defn set-block-property!
-  [repo block-id key v]
+  [block-id key v]
   (assert (some? key) "set-block-property! key is nil")
   (let [eid (if (uuid? block-id) [:block/uuid block-id] block-id)]
     (if (or (nil? v) (and (coll? v) (empty? v)))
       (db-property-handler/remove-block-property! eid key)
       (db-property-handler/set-block-property! eid key v))))
 
-(defn add-page-property!
-  "Sanitized page-name, unsanitized key / value"
-  [page-entity key value]
-  (assert (some? key) "key is nil")
-  (when page-entity
-    (let [repo (state/get-current-repo)]
-      (set-block-property! repo (:block/uuid page-entity) key value))))
-
-(defn remove-id-property
-  [repo format content]
-  content)
-
-(defn file-persist-block-id!
-  [repo block-id])
-
 (defn batch-remove-block-property!
-  [repo block-ids key]
+  [block-ids key]
   (assert (some? key) "key is nil")
   (db-property-handler/batch-remove-property! block-ids key))
 
 (defn batch-set-block-property!
-  [repo block-ids key value & {:as opts}]
+  [block-ids key value & {:as opts}]
   (assert (some? key) "key is nil")
   (if (nil? value)
     (db-property-handler/batch-remove-property! block-ids key)
     (db-property-handler/batch-set-property! block-ids key value opts)))
 
 (defn set-block-properties!
-  [repo block-id properties]
+  [block-id properties]
   (assert (uuid? block-id))
   (db-property-handler/set-block-properties! block-id properties))
 

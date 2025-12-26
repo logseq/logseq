@@ -102,7 +102,6 @@
              :options {:on-click
                        (fn []
                          (page-handler/update-public-attribute!
-                          repo
                           page
                           (if public? false true)))}})
 

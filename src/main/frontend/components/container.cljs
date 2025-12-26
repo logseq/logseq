@@ -17,7 +17,6 @@
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
-            [frontend.db.model :as db-model]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]

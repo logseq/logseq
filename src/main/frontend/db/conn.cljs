@@ -37,9 +37,6 @@
     (mobile-util/native-platform?)
     (text-util/get-graph-name-from-path repo-url)
 
-    (config/local-file-based-graph? repo-url)
-    (config/get-local-dir repo-url)
-
     :else
     (db-conn-state/get-repo-path repo-url)))
 
