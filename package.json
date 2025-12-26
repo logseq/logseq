@@ -184,6 +184,7 @@
         "react-transition-group": "4.3.0",
         "react-virtuoso": "4.12.5",
         "remove-accents": "0.4.2",
+        "sanitize-filename": "1.6.3",
         "send-intent": "^7.0.0",
         "shepherd.js": "^9.1.0",
         "tailwind-capitalize-first-letter": "^1.0.4",
