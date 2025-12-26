@@ -50,10 +50,6 @@
   []
   (redirect! {:to :graphs}))
 
-(defn redirect-to-whiteboard-dashboard!
-  []
-  (redirect! {:to :whiteboards}))
-
 ;; Named block links only works on web (and publishing)
 (if util/web-platform?
   (defn- default-page-route [page-name-or-block-uuid]

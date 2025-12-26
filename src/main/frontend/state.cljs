@@ -73,12 +73,9 @@
       :route-match                           nil
       :today                                 nil
       :system/events                         (async/chan 1000)
-      :file/unlinked-dirs                    #{}
       :reactive/custom-queries               (async/chan 1000)
       :notification/show?                    false
       :notification/content                  nil
-      :repo/loading-files?                   {}
-      :nfs/refreshing?                       nil
       :instrument/disabled?                  (storage/get "instrument-disabled")
       ;; TODO: how to detect the network reliably?
       ;; NOTE: prefer to use flows/network-online-event-flow
@@ -257,9 +254,6 @@
 
       ;; all notification contents as k-v pairs
       :notification/contents                 {}
-      :graph/syncing?                        false
-      ;; graph -> state
-      :graph/parsing-state                   {}
 
       :copy/export-block-text-indent-style   (or (storage/get :copy/export-block-text-indent-style)
                                                  "dashes")
@@ -288,24 +282,9 @@
       :auth/access-token                     nil
       :auth/id-token                         nil
 
-      ;; file-sync
-      :file-sync/jstour-inst                   nil
-      :file-sync/onboarding-state            (or (storage/get :file-sync/onboarding-state)
-                                                 {:welcome false})
-      :file-sync/remote-graphs               {:loading false :graphs nil}
-      :file-sync/set-remote-graph-password-result {}
-
-      ;; graph-uuid -> {:graphs-txid {}
-      ;;                :file-sync/sync-manager {}
-      ;;                :file-sync/sync-state {}
-      ;;                ;; {file-path -> payload}
-      ;;                :file-sync/progress {}
-      ;;                :file-sync/start-time {}
-      ;;                :file-sync/last-synced-at {}}
-      :file-sync/graph-state                 {:current-graph-uuid nil}
       ;; graph-uuid -> ...
-
       :rtc/state                             (atom {})
+      :rtc/loading-graphs?                   nil
       ;; only latest rtc-log stored here, when a log stream is needed,
       ;; use missionary to create a rtc-log-flow, use (missionary.core/watch <atom>)
       :rtc/log                               (atom nil)
@@ -323,9 +302,7 @@
       :ui/container-id                       (atom 0)
       :ui/cached-key->container-id           (atom {})
       :feature/enable-sync?                  (storage/get :logseq-sync-enabled)
-      :feature/enable-sync-diff-merge?       ((fnil identity true) (storage/get :logseq-sync-diff-merge-enabled))
 
-      :file/rename-event-chan                (async/chan 100)
       :ui/find-in-page                       nil
       :graph/importing                       nil
       :graph/importing-state                 {}
@@ -469,12 +446,6 @@ should be done through this fn in order to get global config and config defaults
 (defn get-custom-js-link
   []
   (:custom-js-url (get-config)))
-
-(defn get-default-journal-template
-  []
-  (when-let [template (get-in (get-config) [:default-templates :journals])]
-    (when-not (string/blank? template)
-      (string/trim template))))
 
 (defn all-pages-public?
   []
@@ -686,10 +657,6 @@ Similar to re-frame subscriptions"
   ([repo]
    (not (false? (:feature/enable-flashcards? (sub-config repo))))))
 
-(defn enable-git-auto-push?
-  [repo]
-  (not (false? (:git-auto-push (sub-config repo)))))
-
 (defn graph-settings
   []
   (:graph/settings (sub-config)))
@@ -848,22 +815,14 @@ Similar to re-frame subscriptions"
   []
   (:git/current-repo @state))
 
-(defn get-remote-file-graphs
-  []
-  (get-in @state [:file-sync/remote-graphs :graphs]))
-
 (defn get-rtc-graphs
   []
   (:rtc/graphs @state))
 
-(defn get-remote-graph-info-by-uuid
-  [uuid]
-  (when-let [graphs (seq (get-in @state [:file-sync/remote-graphs :graphs]))]
-    (some #(when (= (:GraphUUID %) (str uuid)) %) graphs)))
-
-(defn get-remote-graph-usage
-  []
-  (when-let [graphs (seq (get-in @state [:file-sync/remote-graphs :graphs]))]
+;; TODO: rtc version
+(comment
+  (defn get-remote-graph-usage
+    [graphs]
     (->> graphs
          (map #(hash-map :uuid (:GraphUUID %)
                          :name (:GraphName %)
@@ -872,24 +831,6 @@ Similar to re-frame subscriptions"
                          :used-percent (/ (:GraphStorageUsage %) (:GraphStorageLimit %) 0.01)))
          (map #(assoc % :free-gbs (- (:limit-gbs %) (:used-gbs %))))
          (vec))))
-
-(defn delete-remote-graph!
-  [repo]
-  (let [remove-repo! (fn [repos]
-                       (remove #(and
-                                 (:GraphUUID repo)
-                                 (:GraphUUID %)
-                                 (= (:GraphUUID repo) (:GraphUUID %))) repos))]
-    (if (:rtc-graph? repo)
-      (swap! state update :rtc/graphs remove-repo!)
-      (swap! state update-in [:file-sync/remote-graphs :graphs] remove-repo!))))
-
-(defn add-remote-graph!
-  [repo]
-  (swap! state update-in [:file-sync/remote-graphs :graphs]
-         (fn [repos]
-           (->> (conj repos repo)
-                (distinct)))))
 
 (defn get-repos
   []
@@ -915,14 +856,6 @@ Similar to re-frame subscriptions"
     (storage/set :git/current-repo repo)
     (storage/remove :git/current-repo))
   (ipc/ipc "setCurrentGraph" repo))
-
-(defn set-preferred-format!
-  [format]
-  (swap! state assoc-in [:me :preferred_format] (name format)))
-
-(defn set-preferred-workflow!
-  [workflow]
-  (swap! state assoc-in [:me :preferred_workflow] (name workflow)))
 
 (defn set-preferred-language!
   [language]
@@ -1342,11 +1275,6 @@ Similar to re-frame subscriptions"
   (set-state! :editor/action-data nil)
   (set-state! :view/selected-blocks nil))
 
-(defn into-code-editor-mode!
-  []
-  (set-state! :editor/cursor-range nil)
-  (swap! state assoc :editor/code-mode? true))
-
 (defn set-editor-last-pos!
   [new-pos]
   (update-state! :editor/last-saved-cursor
@@ -1698,15 +1626,6 @@ Similar to re-frame subscriptions"
   []
   (:editor/in-composition? @state))
 
-(defn set-loading-files!
-  [repo value]
-  (when repo
-    (set-state! [:repo/loading-files? repo] value)))
-
-(defn loading-files?
-  [repo]
-  (get-in @state [:repo/loading-files? repo]))
-
 (defn set-editor-last-input-time!
   [repo time]
   (set-state! :editor/last-input-time time :path-in-sub-atom repo))
@@ -1724,14 +1643,6 @@ Similar to re-frame subscriptions"
 
        ;; not in editing mode
        (not (get-edit-input-id))))))
-
-(defn set-nfs-refreshing!
-  [value]
-  (set-state! :nfs/refreshing? value))
-
-(defn nfs-refreshing?
-  []
-  (:nfs/refreshing? @state))
 
 (defn set-search-result!
   [value]
@@ -1924,14 +1835,6 @@ Similar to re-frame subscriptions"
             (when (mobile-util/native-platform?)
               (set-state! :mobile/show-action-bar? false))))))))
 
-(defn get-git-auto-commit-enabled?
-  []
-  (false? (sub [:electron/user-cfgs :git/disable-auto-commit?])))
-
-(defn get-git-commit-on-close-enabled?
-  []
-  (sub [:electron/user-cfgs :git/commit-on-close?]))
-
 (defn set-last-key-code!
   [key-code]
   (set-state! :editor/last-key-code key-code))
@@ -2077,11 +1980,8 @@ Similar to re-frame subscriptions"
 (defn get-auth-refresh-token []
   (:auth/refresh-token @state))
 
-(defn reset-parsing-state!
-  []
-  (set-state! [:graph/parsing-state (get-current-repo)] {}))
-
 (defn set-parsing-state!
+  "Leave for tests"
   [m]
   (update-state! [:graph/parsing-state (get-current-repo)]
                  (if (fn? m) m
@@ -2092,28 +1992,6 @@ Similar to re-frame subscriptions"
     (when (and  (not (contains? #{"system"} type))
                 (every? not-empty (vals agent-opts)))
       (str protocol "://" host ":" port))))
-
-(defn get-sync-graph-by-id
-  [graph-uuid]
-  (when graph-uuid
-    (let [graph (first (filter #(= graph-uuid (:GraphUUID %))
-                               (get-repos)))]
-      (when (:url graph)
-        graph))))
-
-(defn unlinked-dir?
-  [dir]
-  (contains? (:file/unlinked-dirs @state) dir))
-
-(defn get-file-rename-event-chan
-  []
-  (:file/rename-event-chan @state))
-
-(defn offer-file-rename-event-chan!
-  [v]
-  {:pre [(map? v)
-         (= #{:repo :old-path :new-path} (set (keys v)))]}
-  (async/offer! (get-file-rename-event-chan) v))
 
 (defn get-current-pdf
   []

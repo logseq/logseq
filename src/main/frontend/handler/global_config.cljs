@@ -31,11 +31,6 @@
   []
   (path/path-join @root-dir "config" "config.edn"))
 
-(defn safe-global-config-path
-  "Fetch config path in a general context, not just for global config"
-  []
-  (when @root-dir (global-config-path)))
-
 (defn set-global-config-state!
   [content]
   (let [config (edn/read-string content)]

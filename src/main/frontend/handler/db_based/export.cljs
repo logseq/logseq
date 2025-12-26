@@ -2,7 +2,6 @@
   "Handles DB graph exports and imports across graphs"
   (:require [cljs.pprint :as pprint]
             [clojure.string :as string]
-            [frontend.config :as config]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [frontend.util :as util]

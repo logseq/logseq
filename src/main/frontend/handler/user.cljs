@@ -11,25 +11,12 @@
             [frontend.config :as config]
             [frontend.debug :as debug]
             [frontend.flows :as flows]
-            [frontend.handler.config :as config-handler]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [goog.crypt :as crypt]
             [goog.crypt.Hmac]
             [goog.crypt.Sha256]
             [missionary.core :as m]))
-
-(defn set-preferred-format!
-  [format]
-  (when format
-    (config-handler/set-config! :preferred-format format)
-    (state/set-preferred-format! format)))
-
-(defn set-preferred-workflow!
-  [workflow]
-  (when workflow
-    (config-handler/set-config! :preferred-workflow workflow)
-    (state/set-preferred-workflow! workflow)))
 
 ;;; userinfo, token, login/logout, ...
 
@@ -210,11 +197,6 @@
         ;; refresh remote graph list by pub login event
         (when (user-uuid) (state/pub-event! [:user/fetch-info-and-graphs]))))))
 
-(defn has-refresh-token?
-  "Has refresh-token"
-  []
-  (boolean (js/localStorage.getItem "refresh-token")))
-
 (defn login-callback
   [session]
   (set-tokens!
@@ -288,13 +270,6 @@
         (when (or (nil? (state/get-auth-id-token))
                   (-> (state/get-auth-id-token) parse-jwt expired?))
           (throw (ex-info "empty or expired token and refresh failed" {:type :expired-token})))))))
-
-(defn <user-uuid
-  []
-  (go
-    (if-some [exp (<! (<ensure-id&access-token))]
-      exp
-      (user-uuid))))
 
 ;;; user groups
 

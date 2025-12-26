@@ -158,12 +158,6 @@
         [?refed-b   :block/uuid ?refed-uuid]
         [?referee-b :block/refs ?refed-b]]))
 
-(defn <get-file
-  [graph path]
-  (when (and graph path)
-    (p/let [result (<pull graph [:file/path path])]
-      (:file/content result))))
-
 (defn <get-date-scheduled-or-deadlines
   [journal-title]
   (when-let [date (date/journal-title->int journal-title)]
@@ -228,16 +222,6 @@
     (some-> (first result)
             :db/id
             db/entity)))
-
-(defn <get-pdf-annotations
-  [graph pdf-id]
-  (p/let [result (<q graph {:transact-db? true}
-                     '[:find [(pull ?b [*]) ...]
-                       :in $ ?pdf-id
-                       :where
-                       [?b :logseq.property/asset ?pdf-id]]
-                     pdf-id)]
-    result))
 
 (defn <get-block-properties-history
   [graph block-id]

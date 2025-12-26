@@ -58,7 +58,6 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.utf8 :as utf8]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.property :as outliner-property]
@@ -848,37 +847,6 @@
               (doseq [journal journals]
                 (outliner-op/delete-page! (:block/uuid journal)))))))))))
 
-(defn set-block-timestamp!
-  [block-id key value]
-  (let [key (string/lower-case (str key))
-        block-id (if (string? block-id) (uuid block-id) block-id)
-        value (str value)]
-    (when-let [block (db/entity [:block/uuid block-id])]
-      (let [{:block/keys [title]} block
-            content (or title (state/get-edit-content))
-            new-content (-> (text-util/remove-timestamp content key)
-                            (text-util/add-timestamp key value))]
-        (when (not= content new-content)
-          (let [input-id (state/get-edit-input-id)]
-            (if (and input-id
-                     (string/ends-with? input-id (str block-id)))
-              (state/set-edit-content! input-id new-content)
-              (save-block-if-changed! block new-content))))))))
-
-(defn set-editing-block-timestamp!
-  "Almost the same as set-block-timestamp! except for:
-   - it doesn't save the block
-   - it extracts current content from current input"
-  [key value]
-  (let [key (string/lower-case (str key))
-        value (str value)
-        content (state/get-edit-content)
-        new-content (-> (text-util/remove-timestamp content key)
-                        (text-util/add-timestamp key value))]
-    (when (not= content new-content)
-      (let [input-id (state/get-edit-input-id)]
-        (state/set-edit-content! input-id new-content)))))
-
 (defn copy-block-ref!
   ([block-id]
    (copy-block-ref! block-id #(str %)))
@@ -1582,10 +1550,6 @@
   [q]
   (search/template-search q))
 
-(defn <get-matched-properties
-  [q]
-  (search/property-search q))
-
 (defn get-last-command
   [input]
   (try
@@ -2038,44 +2002,6 @@
     (when-let [db-id (:db/id template-block)]
       (insert-template! element-id db-id
                         {:replace-empty-target? true}))))
-
-(defn get-searching-property
-  [input]
-  (let [value (.-value input)
-        pos (util/get-selection-start input)
-        postfix (subs value pos)
-        end-index (when-let [idx (string/index-of postfix gp-property/colons)]
-                    (+ (max 0 (count (subs value 0 pos))) idx))
-        start-index (or (when-let [p (string/last-index-of (subs value 0 pos) "\n")]
-                          (inc p))
-                        0)]
-    {:end-index end-index
-     :searching-property (when (and start-index end-index (>= end-index start-index))
-                           (subs value start-index end-index))}))
-
-(defn property-on-chosen-handler
-  [element-id q]
-  (fn [property]
-    (when-let [input (gdom/getElement element-id)]
-      (let [{:keys [end-index searching-property]} (get-searching-property input)]
-        (cursor/move-cursor-to input (+ end-index 2))
-        (commands/insert! element-id (str (or property q) gp-property/colons " ")
-                          {:last-pattern (str searching-property gp-property/colons)})
-        (state/clear-editor-action!)
-        (js/setTimeout (fn []
-                         (let [pos (let [input (gdom/getElement element-id)]
-                                     (cursor/get-caret-pos input))]
-                           (state/set-editor-action-data! {:property (or property q)
-                                                           :pos pos})
-                           (state/set-editor-action! :property-value-search)))
-                       50)))))
-
-(defn property-value-on-chosen-handler
-  [element-id q]
-  (fn [property-value]
-    (commands/insert! element-id (str gp-property/colons " " (or property-value q))
-                      {:last-pattern (str gp-property/colons " " q)})
-    (state/clear-editor-action!)))
 
 (declare indent-outdent)
 

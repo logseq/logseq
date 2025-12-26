@@ -1,6 +1,5 @@
 (ns ^:no-doc frontend.handler.block
   (:require [clojure.string :as string]
-            [clojure.walk :as walk]
             [datascript.impl.entity :as de]
             [dommy.core :as dom]
             [frontend.config :as config]
@@ -15,40 +14,11 @@
             [frontend.util :as util]
             [goog.object :as gobj]
             [logseq.db :as ldb]
-            [logseq.graph-parser.block :as gp-block]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op]
             [promesa.core :as p]))
 
 ;;  Fns
-
-;; TODO: reduced version
-(defn- walk-block
-  [block check? transform]
-  (let [result (atom nil)]
-    (walk/postwalk
-     (fn [x]
-       (if (check? x)
-         (reset! result (transform x))
-         x))
-     (:block.temp/ast-body block))
-    @result))
-
-(defn get-timestamp
-  [block typ]
-  (walk-block block
-              (fn [x]
-                (and (gp-block/timestamp-block? x)
-                     (= typ (first (second x)))))
-              #(second (second %))))
-
-(defn get-scheduled-ast
-  [block]
-  (get-timestamp block "Scheduled"))
-
-(defn get-deadline-ast
-  [block]
-  (get-timestamp block "Deadline"))
 
 (defn select-block!
   [block-uuid]

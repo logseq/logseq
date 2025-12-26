@@ -11,7 +11,6 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.rum :refer [use-mounted]]
             [frontend.state :as state]
-            [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.shui.hooks :as hooks]
@@ -38,7 +37,7 @@
 
 (rum/defc ^:large-vars/cleanup-todo container < rum/static
   [{:keys [route theme accent-color editor-font on-click current-repo db-restoring?
-           settings-open? sidebar-open? system-theme? sidebar-blocks-len onboarding-state preferred-language]} child]
+           settings-open? sidebar-open? system-theme? sidebar-blocks-len preferred-language]} child]
   (let [mounted-fn (use-mounted)
         [restored-sidebar? set-restored-sidebar?] (rum/use-state false)]
 
@@ -144,10 +143,6 @@
            :id :app-settings})
          (shui/dialog-close! :app-settings)))
      [settings-open?])
-
-    (hooks/use-effect!
-     #(storage/set :file-sync/onboarding-state onboarding-state)
-     [onboarding-state])
 
     [:div#root-container.theme-container
      {:on-click on-click

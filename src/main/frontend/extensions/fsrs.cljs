@@ -1,6 +1,7 @@
 (ns frontend.extensions.fsrs
   "Flashcards functions based on FSRS, only works in db-based graphs"
   (:require [clojure.string :as string]
+            [frontend.commands :as commands]
             [frontend.common.missionary :as c.m]
             [frontend.components.block :as component-block]
             [frontend.components.macro :as component-macro]
@@ -24,6 +25,9 @@
             [promesa.core :as p]
             [rum.core :as rum]
             [tick.core :as tick]))
+
+(commands/register-slash-command ["Cloze"
+                                  [[:editor/input "{{cloze }}" {:backward-pos 2}]]])
 
 (def ^:private instant->inst-ms (comp inst-ms tick/inst))
 (defn- inst-ms->instant [ms] (tick/instant (js/Date. ms)))

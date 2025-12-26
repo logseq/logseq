@@ -1,8 +1,7 @@
 (ns frontend.handler.repo
   "System-component-like ns that manages user's repos/graphs"
   (:refer-clojure :exclude [clone])
-  (:require [cljs-bean.core :as bean]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.config :as config]
             [frontend.date :as date]
@@ -22,7 +21,6 @@
             [frontend.util :as util]
             [frontend.util.text :as text-util]
             [logseq.common.config :as common-config]
-            [logseq.db :as ldb]
             [logseq.db.frontend.schema :as db-schema]
             [promesa.core :as p]))
 
@@ -78,26 +76,14 @@
 
 (defn get-repos
   []
-  (p/let [nfs-dbs (db-persist/get-all-graphs)
-          nfs-dbs (map (fn [db]
-                         (let [graph-name (:name db)]
-                           {:url graph-name
-                            :metadata (:metadata db)
-                            :root (config/get-local-dir graph-name)
-                            :nfs? true}))
-                       nfs-dbs)
-          nfs-dbs (and (seq nfs-dbs)
-                       (cond (util/electron?)
-                             (p/chain
-                              (ipc/ipc :inflateGraphsInfo (ldb/write-transit-str nfs-dbs))
-                              ldb/read-transit-str)
-
-                                        ;(mobile-util/native-platform?)
-                                        ;(util-fs/inflate-graphs-info nfs-dbs)
-
-                             :else
-                             nfs-dbs))]
-    (seq (bean/->clj nfs-dbs))))
+  (p/let [dbs (db-persist/get-all-graphs)]
+    (map (fn [db]
+           (let [graph-name (:name db)]
+             {:url graph-name
+              :metadata (:metadata db)
+              :root (config/get-local-dir graph-name)
+              :nfs? true}))
+         dbs)))
 
 (defn combine-local-&-remote-graphs
   [local-repos remote-repos]
@@ -126,23 +112,12 @@
                                       (last (string/split (:root repo) #"/")))]
                    [(:remote? repo) (string/lower-case graph-name)])) repos''))))
 
-(defn get-detail-graph-info
-  [url]
-  (when-let [graphs (seq (and url (combine-local-&-remote-graphs
-                                   (state/get-repos)
-                                   (state/get-remote-file-graphs))))]
-    (first (filter #(when-let [url' (:url %)]
-                      (= url url')) graphs))))
-
 (defn refresh-repos!
   []
   (p/let [repos (get-repos)
           repos' (combine-local-&-remote-graphs
                   repos
-                  (concat
-                   (state/get-rtc-graphs)
-                   (when-not (or (util/mobile?) util/web-platform?)
-                     (state/get-remote-file-graphs))))]
+                  (state/get-rtc-graphs))]
     (state/set-repos! repos')
     repos'))
 

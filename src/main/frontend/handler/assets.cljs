@@ -94,32 +94,6 @@
       (some-> (resolve-asset-real-path-url (state/get-current-repo) path)
               (common-util/safe-decode-uri-component)))))
 
-(defn get-matched-alias-by-ext
-  [ext]
-  (when-let [ext (and (alias-enabled?)
-                      (string? ext)
-                      (not (string/blank? ext))
-                      (util/safe-lower-case ext))]
-
-    (let [alias (medley/find-first
-                 (fn [{:keys [exts]}]
-                   (some #(string/ends-with? ext %) exts))
-                 (get-alias-dirs))]
-      alias)))
-
-(defn get-asset-file-link
-  "Link text for inserting to markdown/org"
-  [format url file-name image?]
-  (let [pdf?   (and url (string/ends-with? (string/lower-case url) ".pdf"))
-        media? (and url (or (config/ext-of-audio? url)
-                            (config/ext-of-video? url)))]
-    (case (keyword format)
-      :markdown (util/format (str (when (or image? media? pdf?) "!") "[%s](%s)") file-name url)
-      :org (if image?
-             (util/format "[[%s]]" url)
-             (util/format "[[%s][%s]]" url file-name))
-      nil)))
-
 (defn <make-data-url
   [path]
   (let [repo-dir (config/get-repo-dir (state/get-current-repo))]

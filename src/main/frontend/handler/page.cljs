@@ -276,7 +276,6 @@
                ;; We should implement an app-wide check rather than list them all here
                (not (:graph/loading? @state/state))
                (not (:graph/importing @state/state))
-               (not (state/loading-files? repo))
                (not config/publishing?))
       (when-let [title (date/today)]
         (state/set-today! title)
