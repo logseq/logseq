@@ -190,11 +190,13 @@
         repos (util/distinct-by :url repos)
         remotes (state/sub :rtc/graphs)
         remotes-loading? (state/sub :rtc/loading-graphs?)
-        repos (if (and login? (seq remotes))
-                (repo-handler/combine-local-&-remote-graphs repos remotes) repos)
+        repos (->> (if (and login? (seq remotes))
+                     (repo-handler/combine-local-&-remote-graphs repos remotes)
+                     repos)
+                   (util/distinct-by :url))
         repos (cond->>
                (remove #(= (:url %) config/demo-repo) repos)
-                (util/mobile?)
+                true
                 (filter (fn [item]
                           ;; use `config/db-based-graph?` to avoid loading old file graphs
                           (config/db-based-graph? (:url item)))))
@@ -318,9 +320,12 @@
         downloading-graph-id (state/sub :rtc/downloading-graph-uuid)
         remotes-loading? (state/sub :rtc/loading-graphs?)
         repos (sort-repos-with-metadata-local repos)
-        repos (distinct
+        repos (->>
                (if (and (seq rtc-graphs) login?)
-                 (repo-handler/combine-local-&-remote-graphs repos rtc-graphs) repos))
+                 (repo-handler/combine-local-&-remote-graphs repos rtc-graphs)
+                 repos)
+
+               (util/distinct-by :url))
         items-fn #(repos-dropdown-links repos current-repo downloading-graph-id opts)
         header-fn #(when (> (count repos) 1) ; show switch to if there are multiple repos
                      [:div.font-medium.md:text-sm.md:opacity-50.p-2.flex.flex-row.justify-between.items-center
