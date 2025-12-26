@@ -10,6 +10,7 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.schema :as db-schema]
@@ -298,7 +299,8 @@
                               :or {retract-attributes? true}}]
     (assert (ds/outliner-txs-state? *txs-state)
             "db should be satisfied outliner-tx-state?")
-    (let [data (if (de/entity? this)
+    (let [db-graph? (entity-plus/db-based-graph? db)
+          data (if (de/entity? this)
                  (assoc (.-kv ^js this) :db/id (:db/id this))
                  this)
           data' (->> (dissoc data :block/properties)
@@ -309,7 +311,7 @@
                   (dissoc :block/children :block/meta :block/unordered
                           :block.temp/ast-title :block.temp/ast-body :block/level :block.temp/load-status
                           :block.temp/has-children?)
-                  (fix-tag-ids db {:db-graph? true}))
+                  (fix-tag-ids db {:db-graph? db-graph?}))
                (not collapse-or-expand?)
                block-with-updated-at)
           db-id (:db/id this)
@@ -366,7 +368,7 @@
           (update-page-when-save-block *txs-state block-entity m))
         ;; Remove orphaned refs from block
         (when (and (:block/title m) (not= (:block/title m) (:block/title block-entity)))
-          (remove-orphaned-refs-when-save db *txs-state block-entity m {:db-graph? true})))
+          (remove-orphaned-refs-when-save db *txs-state block-entity m {:db-graph? db-graph?})))
 
       ;; handle others txs
       (let [other-tx (:db/other-tx m)]
