@@ -18,7 +18,6 @@
             [logseq.api.db-based :as db-based-api]
             [logseq.sdk.core]
             [logseq.sdk.experiments]
-            [logseq.sdk.git]
             [logseq.sdk.utils :as sdk-utils]
             [reitit.frontend.easy :as rfe]))
 
