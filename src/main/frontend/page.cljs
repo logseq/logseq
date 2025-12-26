@@ -1,7 +1,6 @@
 (ns frontend.page
   "Provides root component for both Logseq app and publishing build"
   (:require [frontend.components.container :as container]
-            [frontend.components.onboarding.quick-tour :as quick-tour]
             [frontend.components.plugins :as plugin]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -120,7 +119,6 @@
                    (state/load-app-user-cfgs)
                    (ui/inject-document-devices-envs!)
                    (ui/inject-dynamic-style-node!)
-                   (quick-tour/init)
                    (plugin-handler/host-mounted!)
                    (assoc state ::teardown (setup-fns!)))
    :will-unmount (fn [state]

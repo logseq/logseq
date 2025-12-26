@@ -5,7 +5,6 @@
             [frontend.components.datepicker :as datepicker]
             [frontend.components.icon :as icon-component]
             [frontend.components.svg :as svg]
-            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]

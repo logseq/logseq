@@ -9,7 +9,6 @@
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.fixture :as r.fixture]
             [frontend.worker.rtc.gen-client-op :as subject]
-            [frontend.worker.state :as worker-state]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.batch-tx :as batch-tx]
             [logseq.outliner.core :as outliner-core]

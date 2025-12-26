@@ -70,7 +70,7 @@
                                 (assoc :logseq/last-rating rating))
             prop-fsrs-due (:due prop-card-map)]
         (property-handler/set-block-properties!
-         repo (:block/uuid block-entity)
+         (:block/uuid block-entity)
          {:logseq.property.fsrs/state prop-fsrs-state
           :logseq.property.fsrs/due prop-fsrs-due})))))
 
@@ -332,11 +332,9 @@
 (defn batch-make-cards!
   ([] (batch-make-cards! (state/get-selection-block-ids)))
   ([block-ids]
-   (let [repo (state/get-current-repo)
-         blocks (get-operating-blocks block-ids)]
+   (let [blocks (get-operating-blocks block-ids)]
      (when-let [block-ids (not-empty (map :block/uuid blocks))]
        (property-handler/batch-set-block-property!
-        repo
         block-ids
         :block/tags
         (:db/id (db/entity :logseq.class/Card)))))))

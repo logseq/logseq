@@ -387,37 +387,16 @@
      [:select.form-select.is-small
       {:value     preferred-date-format
        :on-change (fn [e]
-                    (let [repo (state/get-current-repo)
-                          format (util/evalue e)]
+                    (let [format (util/evalue e)]
                       (when-not (string/blank? format)
                         (p/do!
-                         (property-handler/set-block-property! repo
-                                                               :logseq.class/Journal
+                         (property-handler/set-block-property! :logseq.class/Journal
                                                                :logseq.property.journal/title-format
                                                                format)
                          (notification/show! "Please refresh the app for this change to take effect"))
                         (shui/dialog-close-all!))))}
       (for [format (sort (date/journal-title-formatters))]
         [:option {:key format} format])]]]])
-
-(defn workflow-row [t preferred-workflow]
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
-   [:label.block.text-sm.font-medium.leading-5.opacity-70
-    {:for "preferred_workflow"}
-    (t :settings-page/preferred-workflow)]
-   [:div.mt-1.sm:mt-0.sm:col-span-2
-    [:div.max-w-lg.rounded-md
-     [:select.form-select.is-small
-      {:value     (name preferred-workflow)
-       :on-change (fn [e]
-                    (-> (util/evalue e)
-                        string/lower-case
-                        keyword
-                        (#(if (= % :now) :now :todo))
-                        user-handler/set-preferred-workflow!))}
-      (for [workflow [:now :todo]]
-        [:option {:key (name workflow) :value (name workflow)}
-         (if (= workflow :now) "NOW/LATER" "TODO/DOING")])]]]])
 
 (defn outdenting-row [t logical-outdenting?]
   (toggle "preferred_outdenting"
@@ -507,31 +486,6 @@
           (fn []
             (let [value (not enable-all-pages-public?)]
               (config-handler/set-config! :publishing/all-pages-public? value)))))
-
-(defn zotero-settings-row []
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
-   [:label.block.text-sm.font-medium.leading-5.opacity-70
-    {:for "zotero_settings"}
-    "Zotero"]
-   [:div.mt-1.sm:mt-0.sm:col-span-2
-    [:div
-     (ui/button
-      (t :settings)
-      :class "text-sm"
-      :style {:margin-top "0px"}
-      :on-click
-      (fn []
-        (state/close-settings!)
-        (route-handler/redirect! {:to :zotero-setting})))]]])
-
-(defn auto-push-row [_t current-repo enable-git-auto-push?]
-  (when (and current-repo (string/starts-with? current-repo "https://"))
-    (toggle "enable_git_auto_push"
-            "Enable Git auto push"
-            enable-git-auto-push?
-            (fn []
-              (let [value (not enable-git-auto-push?)]
-                (config-handler/set-config! :git-auto-push value))))))
 
 (defn usage-diagnostics-row [t instrument-disabled?]
   (toggle "usage-diagnostics"
@@ -675,25 +629,8 @@
      (when current-repo (edit-custom-css))
      (when current-repo (edit-export-css))]))
 
-(defn file-format-row [t preferred-format]
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
-   [:label.block.text-sm.font-medium.leading-5.opacity-70
-    {:for "preferred_format"}
-    (t :settings-page/preferred-file-format)]
-   [:div.mt-1.sm:mt-0.sm:col-span-2
-    [:div.max-w-lg.rounded-md
-     [:select.form-select.is-small
-      {:value     (name preferred-format)
-       :on-change (fn [e]
-                    (let [format (-> (util/evalue e)
-                                     (string/lower-case)
-                                     keyword)]
-                      (user-handler/set-preferred-format! format)))}
-      (for [format (map name [:org :markdown])]
-        [:option {:key format :value format} (string/capitalize format)])]]]])
-
 (rum/defcs settings-editor < rum/reactive
-  [_state current-repo]
+  [_state]
   (let [preferred-date-format (state/get-date-formatter)
         enable-timetracking? (state/enable-timetracking?)
         enable-all-pages-public? (state/all-pages-public?)
@@ -1360,7 +1297,7 @@
          (settings-general current-repo)
 
          :editor
-         (settings-editor current-repo)
+         (settings-editor)
 
          :keymap
          (shortcut/shortcut-keymap-x)

@@ -216,21 +216,10 @@
     (fs-extra/ensureDirSync dir)
     dir))
 
-(defn get-file-based-graphs
-  "Returns all graph names in the cache directory (starting with `logseq_local_`)"
-  []
-  (let [dir (get-file-graphs-dir)]
-    (->> (common-graph/readdir dir)
-         (remove #{dir})
-         (map #(node-path/basename % ".transit"))
-         (map cli-common-graph/graph-name->path))))
-
 (defn get-graphs
   "Returns all graph names"
   []
-  (let [db-graphs (cli-common-graph/get-db-based-graphs)
-        file-graphs (get-file-based-graphs)]
-    (distinct (concat db-graphs file-graphs))))
+  (distinct (cli-common-graph/get-db-based-graphs)))
 
 ;; TODO support alias mechanism
 (defn get-graph-name

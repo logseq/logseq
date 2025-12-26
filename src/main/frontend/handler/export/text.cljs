@@ -11,7 +11,6 @@
             [goog.dom :as gdom]
             [logseq.cli.common.export.common :as cli-export-common]
             [logseq.cli.common.export.text :as cli-export-text]
-            [logseq.common.path :as path]
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
