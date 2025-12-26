@@ -1,0 +1,6 @@
+{:deps
+ {}
+ :aliases
+ {:clj-kondo
+  {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2024.09.27"}}
+   :main-opts  ["-m" "clj-kondo.main"]}}}
