@@ -30,3 +30,7 @@ echo
 curl -sS "${BASE_URL}/pages"
 
 echo
+
+curl -sS "${BASE_URL}/p/${PAGE_UUID}"
+
+echo

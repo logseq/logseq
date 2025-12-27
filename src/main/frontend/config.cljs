@@ -25,12 +25,12 @@
 ;; when it launches (when pro plan launches) it should be removed
 (def ENABLE-SETTINGS-ACCOUNT-TAB false)
 
+(def PUBLISH-API-BASE "http://localhost:8787")
+
 (if ENABLE-FILE-SYNC-PRODUCTION
   (do (def LOGIN-URL
         "https://logseq-prod.auth.us-east-1.amazoncognito.com/login?client_id=3c7np6bjtb4r1k1bi9i049ops5&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
       (def API-DOMAIN "api.logseq.com")
-      (def PUBLISH-API-DOMAIN "publish.logseq.com")
-      (def PUBLISH-API-BASE (str "https://" PUBLISH-API-DOMAIN))
       (def COGNITO-IDP "https://cognito-idp.us-east-1.amazonaws.com/")
       (def COGNITO-CLIENT-ID "69cs1lgme7p8kbgld8n5kseii6")
       (def REGION "us-east-1")
@@ -41,8 +41,6 @@
   (do (def LOGIN-URL
         "https://logseq-test2.auth.us-east-2.amazoncognito.com/login?client_id=3ji1a0059hspovjq5fhed3uil8&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
       (def API-DOMAIN "api-dev.logseq.com")
-      (def PUBLISH-API-DOMAIN "publish-dev.logseq.com")
-      (def PUBLISH-API-BASE (str "https://" PUBLISH-API-DOMAIN))
       (def COGNITO-IDP "https://cognito-idp.us-east-2.amazonaws.com/")
       (def COGNITO-CLIENT-ID "1qi1uijg8b6ra70nejvbptis0q")
       (def REGION "us-east-2")
