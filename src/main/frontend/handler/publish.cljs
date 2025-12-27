@@ -69,18 +69,16 @@
             graph-uuid (some-> (ldb/get-graph-rtc-uuid (db/get-db)) str)
             _ (when-not graph-uuid
                 (throw (ex-info "Missing graph UUID" {:repo (state/get-current-repo)})))
-            publish-graph graph-uuid
-            publish-meta {:page-uuid (:page-uuid payload)
-                          :block-count (:block-count payload)
-                          :schema-version (:schema-version payload)
-                          :publish/format :transit
-                          :publish/compression :none
-                          :publish/content-hash content-hash
-                          :publish/content-length (count body)
-                          :publish/graph publish-graph
-                          :publish/created-at (util/time-ms)}
-            publish-body (assoc payload
-                                :publish/meta publish-meta)
+            publish-meta {:graph graph-uuid
+                          :page_uuid (str (:page-uuid payload))
+                          :block_count (:block-count payload)
+                          :schema_version (:schema-version payload)
+                          :format :transit
+                          :compression :none
+                          :content_hash content-hash
+                          :content_length (count body)
+                          :created_at (util/time-ms)}
+            publish-body (assoc payload :meta publish-meta)
             headers (assoc headers "x-publish-meta" (js/JSON.stringify (clj->js publish-meta)))
             resp (js/fetch (publish-endpoint)
                            (clj->js {:method "POST"
@@ -103,7 +101,19 @@
           (notification/show! "Publishing page..." :success)
           (-> (<post-publish! payload)
               (p/then (fn [_resp]
-                        (notification/show! "Page published." :success)))
+                        (let [graph-uuid (some-> (ldb/get-graph-rtc-uuid db*) str)
+                              page-uuid (some-> (:block/uuid page) str)
+                              url (when (and graph-uuid page-uuid)
+                                    (str config/PUBLISH-API-BASE "/p/" graph-uuid "/" page-uuid))]
+                          (when url
+                            (notification/show!
+                             [:div.inline
+                              [:span "Published to: "]
+                              [:a {:target "_blank"
+                                   :href url}
+                               url]]
+                             :success
+                             false)))))
               (p/catch (fn [error]
                          (js/console.error error)
                          (notification/show! "Publish failed." :error)))))
