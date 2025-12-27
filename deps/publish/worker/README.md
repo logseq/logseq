@@ -18,16 +18,20 @@ metadata in a Durable Object backed by SQLite.
 
 ### Routes
 
-- `GET /p/:page-uuid`
+- `GET /p/:graph-uuid/:page-uuid`
   - Returns server-rendered HTML for the page
 - `POST /pages`
   - Requires `Authorization: Bearer <JWT>`
   - Requires `x-publish-meta` header (JSON)
   - Body is transit payload (stored in R2 as-is)
-- `GET /pages/:page-uuid`
+- `GET /pages/:graph-uuid/:page-uuid`
   - Returns metadata for the page
-- `GET /pages/:page-uuid/transit`
+- `GET /pages/:graph-uuid/:page-uuid/transit`
   - Returns JSON with a signed R2 URL and `etag`
+- `DELETE /pages/:graph-uuid/:page-uuid`
+  - Deletes a published page
+- `DELETE /pages/:graph-uuid`
+  - Deletes all pages for a graph
 - `GET /pages`
   - Lists metadata entries (from the index DO)
 

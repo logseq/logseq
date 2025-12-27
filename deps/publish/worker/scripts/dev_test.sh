@@ -19,11 +19,11 @@ curl -sS -X POST "${BASE_URL}/pages" \
 
 echo
 
-curl -sS "${BASE_URL}/pages/${PAGE_UUID}"
+curl -sS "${BASE_URL}/pages/${GRAPH_UUID}/${PAGE_UUID}"
 
 echo
 
-curl -sS "${BASE_URL}/pages/${PAGE_UUID}/transit"
+curl -sS "${BASE_URL}/pages/${GRAPH_UUID}/${PAGE_UUID}/transit"
 
 echo
 
@@ -31,6 +31,6 @@ curl -sS "${BASE_URL}/pages"
 
 echo
 
-curl -sS "${BASE_URL}/p/${PAGE_UUID}"
+curl -sS "${BASE_URL}/p/${GRAPH_UUID}/${PAGE_UUID}"
 
 echo
