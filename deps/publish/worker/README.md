@@ -18,6 +18,8 @@ metadata in a Durable Object backed by SQLite.
 
 ### Routes
 
+- `GET /p/:page-uuid`
+  - Returns server-rendered HTML for the page
 - `POST /pages`
   - Requires `Authorization: Bearer <JWT>`
   - Requires `x-publish-meta` header (JSON)
@@ -36,3 +38,6 @@ metadata in a Durable Object backed by SQLite.
 - For local testing, run `wrangler dev` and use `deps/publish/worker/scripts/dev_test.sh`.
 - If you switch schema versions, clear local DO state with
   `deps/publish/worker/scripts/clear_dev_state.sh`.
+- Build the SSR bundle with `clojure -M:cljs release publish-ssr` before running the worker.
+- Build the worker bundle with `clojure -M:cljs release publish-worker` before running the worker.
+- For dev, you can run `clojure -M:cljs watch publish-worker` in one terminal.

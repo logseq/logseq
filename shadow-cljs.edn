@@ -1,6 +1,7 @@
 ;; shadow-cljs configuration
 {:deps true
  :nrepl {:port 8701}
+ :source-paths ["src/publish-ssr" "src/main" "src/electron" "src/resources"]
 
  ;; :ssl   {:password "logseq"}
 
@@ -216,4 +217,16 @@
                 :entries [logseq.shui.storybook]
                 :output-dir "packages/ui/.storybook/cljs"
                 :devtools {:enabled true}
-                :compiler-options {:optimizations :simple}}}}
+                :compiler-options {:optimizations :simple}}
+
+  :publish-ssr {:target :npm-module
+                :entries [frontend.publish.ssr]
+                :output-dir "deps/publish/worker/dist/ssr"
+                :compiler-options {:optimizations :simple}}
+
+  :publish-worker {:target :esm
+                   :output-dir "deps/publish/worker/dist/worker"
+                   :modules {:main {:exports {default logseq.publish.worker/worker
+                                              PublishMetaDO logseq.publish.worker/PublishMetaDO}}}
+                   :js-options {:js-provider :import}
+                   :devtools {:enabled false}}}}
