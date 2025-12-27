@@ -1,6 +1,12 @@
 name = "logseq-publish"
-main = "src/index.js"
-compatibility_date = "2024-11-01"
+main = "dist/worker/main.js"
+compatibility_date = "2025-02-04"
+
+# Workers Logs
+# Docs: https://developers.cloudflare.com/workers/observability/logs/workers-logs/
+# Configuration: https://developers.cloudflare.com/workers/observability/logs/workers-logs/#enable-workers-logs
+[observability]
+enabled = true
 
 [[durable_objects.bindings]]
 name = "PUBLISH_META_DO"
