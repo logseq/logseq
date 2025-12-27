@@ -284,6 +284,26 @@
                      (js/logseq.api.relaunch))))
         true)]]]))
 
+(rum/defcs git-path-row < rum/reactive
+  [state t]
+  (let [git-path (or (state/sub [:electron/user-cfgs :git/path]) "")]
+    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
+     [:label.block.text-sm.font-medium.leading-5.opacity-70.flex.items-center
+      {:for "git-path"}
+      (t :settings-page/git-path)
+      (ui/tooltip [:span.flex.px-2 (svg/info)]
+                  [:span.block.w-64 (t :settings-page/git-path-hint)])]
+     [:div.mt-1.sm:mt-0.sm:col-span-2
+      [:div.max-w-lg.rounded-md
+       [:input#git-path.form-input.is-small.transition.duration-150.ease-in-out
+        {:default-value git-path
+         :on-blur       (fn [event]
+                          (let [value (-> (util/evalue event)
+                                          string/trim)]
+                            (p/do!
+                             (state/set-state! [:electron/user-cfgs :git/path] value)
+                             (ipc/ipc :userAppCfgs :git/path value))))}]]]]))
+
 (rum/defcs switch-git-auto-commit-row < rum/reactive
   [state t]
   (let [enabled? (state/get-git-auto-commit-enabled?)]
@@ -821,6 +841,7 @@
     [:span.text-sm.opacity-50.my-4
      (t :settings-page/git-desc-3)]]
    [:br]
+   (git-path-row t)
    (switch-git-auto-commit-row t)
    (switch-git-commit-on-close-row t)
    (git-auto-commit-seconds t)])
