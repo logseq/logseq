@@ -1,6 +1,7 @@
 (ns frontend.handler.publish
   "Prepare publish payloads for pages."
-  (:require [frontend.config :as config]
+  (:require [cljs-bean.core :as bean]
+            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
@@ -13,8 +14,8 @@
   (p/let [encoder (js/TextEncoder.)
           data (.encode encoder text)
           digest (.digest (.-subtle js/crypto) "SHA-256" data)
-          bytes (js/Uint8Array. digest)]
-    (->> bytes
+          data (js/Uint8Array. digest)]
+    (->> data
          (map (fn [b]
                 (.padStart (.toString b 16) 2 "0")))
          (apply str))))
@@ -60,7 +61,7 @@
   "Prepares and uploads the publish payload for a page."
   [page]
   (let [repo (state/get-current-repo)]
-    (if-let [db* (and repo (db/get-db repo))]
+    (when-let [db* (and repo (db/get-db repo))]
       (if (and page (:db/id page))
         (p/let [graph-uuid (some-> (ldb/get-graph-rtc-uuid db*) str)
                 payload (state/<invoke-db-worker :thread-api/build-publish-page-payload
@@ -69,24 +70,30 @@
                                                  graph-uuid)]
           (if payload
             (-> (<post-publish! payload)
-                (p/then (fn [_resp]
-                          (let [graph-uuid (or (:graph-uuid payload)
-                                               (some-> (ldb/get-graph-rtc-uuid db*) str))
-                                page-uuid (str (:block/uuid page))
-                                url (when (and graph-uuid page-uuid)
-                                      (str config/PUBLISH-API-BASE "/page/" graph-uuid "/" page-uuid))]
-                            (when url
-                              (notification/show!
-                               [:div.inline
-                                [:span "Published to: "]
-                                [:a {:target "_blank"
-                                     :href url}
-                                 url]]
-                               :success
-                               false)))))
+                (p/then (fn [resp]
+                          (p/let [json (.json resp)
+                                  data (bean/->clj json)]
+                            (js/console.dir data)
+                            (let [short-url (:short_url data)
+                                  graph-uuid (or (:graph-uuid payload)
+                                                 (some-> (ldb/get-graph-rtc-uuid db*) str))
+                                  page-uuid (str (:block/uuid page))
+                                  fallback-url (when (and graph-uuid page-uuid)
+                                                 (str config/PUBLISH-API-BASE "/page/" graph-uuid "/" page-uuid))
+                                  url (or (when short-url
+                                            (str config/PUBLISH-API-BASE short-url))
+                                          fallback-url)]
+                              (when url
+                                (notification/show!
+                                 [:div.inline
+                                  [:span "Published to: "]
+                                  [:a {:target "_blank"
+                                       :href url}
+                                   url]]
+                                 :success
+                                 false))))))
                 (p/catch (fn [error]
                            (js/console.error error)
                            (notification/show! "Publish failed." :error))))
-            (notification/show! "Publish failed: invalid page." :error)))
-        (notification/show! "Publish failed: invalid page." :error))
-      (notification/show! "Publish failed: missing database." :error))))
+            (notification/show! "Publish failed." :error)))
+        (notification/show! "Publish failed: invalid page." :error)))))
