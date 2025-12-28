@@ -599,10 +599,16 @@
                                                  distinct)]
                                 (when (seq targets)
                                   (map (fn [target-entity]
-                                         (let [target-uuid (some-> (:block/uuid target-entity) str)]
+                                         (let [target-uuid (some-> (:block/uuid target-entity) str)
+                                               target-title (entity->title target-entity)
+                                               target-name (or (:block/name target-entity)
+                                                               target-title)
+                                               target-name (when target-name
+                                                             (string/lower-case (str target-name)))]
                                            {:graph_uuid graph-uuid
                                             :target_page_uuid target-uuid
-                                            :target_page_title (entity->title target-entity)
+                                            :target_page_title target-title
+                                            :target_page_name target-name
                                             :source_page_uuid (str page-uuid)
                                             :source_page_title page-title
                                             :source_block_uuid block-uuid
@@ -947,10 +953,12 @@
                          (let [page-uuid (aget page "page_uuid")
                                page-title (aget page "page_title")
                                updated-at (aget page "updated_at")
-                               href (str "/page/" graph-uuid "/" page-uuid)]
+                               href (str "/page/" graph-uuid "/" page-uuid)
+                               short-id (aget page "short_id")]
                            {:page-uuid page-uuid
                             :page-title page-title
                             :href href
+                            :short-id short-id
                             :updated-at updated-at})))
                   (sort-by (fn [row]
                              (or (:updated-at row) 0)))
@@ -967,6 +975,9 @@
                ".graph-meta{color:#6b4f2b;font-size:13px;margin:0 0 24px;}"
                ".page-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px;}"
                ".page-item{padding:12px 14px;border:1px solid #e6dccb;border-radius:12px;background:#fffdf8;display:flex;justify-content:space-between;gap:12px;align-items:center;}"
+               ".page-links{display:flex;flex-direction:column;gap:4px;min-width:0;}"
+               ".short-link{color:#6b4f2b;font-size:12px;text-decoration:none;}"
+               ".short-link:hover{text-decoration:underline;}"
                ".page-link{color:#1a5fb4;text-decoration:none;overflow-wrap:anywhere;}"
                ".page-link:hover{text-decoration:underline;}"
                ".page-ref{color:#1a5fb4;text-decoration:none;overflow-wrap:anywhere;}"
@@ -977,10 +988,13 @@
                [:h1 "Published pages"]
                (if (seq rows)
                  [:ul.page-list
-                  (for [{:keys [page-uuid page-title href updated-at]} rows]
+                  (for [{:keys [page-uuid page-title href updated-at short-id]} rows]
                     [:li.page-item
-                     [:div
-                      [:a.page-link {:href href} (or page-title page-uuid)]]
+                     [:div.page-links
+                      [:a.page-link {:href href} (or page-title page-uuid)]
+                      (when short-id
+                        [:a.short-link {:href (str "/s/" short-id)}
+                         (str "/s/" short-id)])]
                      [:span.page-meta (or (format-timestamp updated-at) "—")]])]
                  [:p "No pages have been published yet."])]]]]
     (str "<!doctype html>" (render-hiccup doc))))
@@ -1020,6 +1034,53 @@
                  [:p "No published nodes use this tag yet."])]]]]
     (str "<!doctype html>" (render-hiccup doc))))
 
+(defn render-tag-name-html
+  [tag-name tag-title tag-items]
+  (let [rows tag-items
+        title (or tag-title tag-name)
+        doc [:html
+             [:head
+              [:meta {:charset "utf-8"}]
+              [:meta {:name "viewport" :content "width=device-width,initial-scale=1"}]
+              [:title (str "Tag - " title)]
+              [:style
+               "body{margin:0;background:#fbf8f3;color:#1b1b1b;font-family:Georgia,serif;}"
+               ".wrap{max-width:880px;margin:0 auto;padding:40px 24px;}"
+               "h1{font-size:26px;margin:0 0 8px;font-weight:600;}"
+               ".tag-sub{color:#6b4f2b;font-size:13px;margin:0 0 18px;}"
+               ".page-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px;}"
+               ".page-item{padding:12px 14px;border:1px solid #e6dccb;border-radius:12px;background:#fffdf8;display:flex;justify-content:space-between;gap:12px;align-items:center;}"
+               ".page-links{display:flex;flex-direction:column;gap:4px;min-width:0;}"
+               ".page-ref{color:#1a5fb4;text-decoration:none;overflow-wrap:anywhere;}"
+               ".page-ref:hover{text-decoration:underline;}"
+               ".short-link{color:#6b4f2b;font-size:12px;text-decoration:none;}"
+               ".short-link:hover{text-decoration:underline;}"
+               ".page-meta{color:#6b4f2b;font-size:12px;white-space:nowrap;}"]]
+             [:body
+              [:main.wrap
+               [:h1 title]
+               [:p.tag-sub (str "Tag: " tag-name)]
+               (if (seq rows)
+                 [:ul.page-list
+                  (for [row rows
+                        :let [graph-id (tag-item-val row :graph_uuid)
+                              page-uuid (tag-item-val row :source_page_uuid)
+                              page-title (tag-item-val row :source_page_title)
+                              short-id (tag-item-val row :short_id)
+                              href (when (and graph-id page-uuid)
+                                     (str "/page/" graph-id "/" page-uuid))]]
+                    [:li.page-item
+                     [:div.page-links
+                      (if href
+                        [:a.page-ref {:href href} (or page-title page-uuid)]
+                        [:span (or page-title page-uuid)])
+                      (when short-id
+                        [:a.short-link {:href (str "/s/" short-id)}
+                         (str "/s/" short-id)])]
+                     [:span.page-meta (or (format-timestamp (tag-item-val row :updated_at)) "—")]])]
+                 [:p "No published pages use this tag yet."])]]]]
+    (str "<!doctype html>" (render-hiccup doc))))
+
 (defn render-ref-html
   [graph-uuid ref-name ref-title ref-items]
   (let [rows ref-items
@@ -1033,15 +1094,14 @@
                "body{margin:0;background:#fbf8f3;color:#1b1b1b;font-family:Georgia,serif;}"
                ".wrap{max-width:880px;margin:0 auto;padding:40px 24px;}"
                "h1{font-size:26px;margin:0 0 8px;font-weight:600;}"
-               ".graph-meta{color:#6b4f2b;font-size:13px;margin:0 0 24px;}"
                ".tag-sub{color:#6b4f2b;font-size:13px;margin:0 0 18px;}"
                ".page-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px;}"
-               ".page-item{padding:12px 14px;border:1px solid #e6dccb;border-radius:12px;background:#fffdf8;display:flex;justify-content:space-between;gap:12px;align-items:flex-start;}"
-               ".tagged-main{display:flex;flex-direction:column;gap:4px;min-width:0;}"
-               ".tagged-block{font-size:13px;color:#2e2a23;white-space:pre-wrap;}"
-               ".tagged-sub{font-size:12px;color:#6b4f2b;}"
+               ".page-item{padding:12px 14px;border:1px solid #e6dccb;border-radius:12px;background:#fffdf8;display:flex;justify-content:space-between;gap:12px;align-items:center;}"
+               ".page-links{display:flex;flex-direction:column;gap:4px;min-width:0;}"
                ".page-ref{color:#1a5fb4;text-decoration:none;overflow-wrap:anywhere;}"
                ".page-ref:hover{text-decoration:underline;}"
+               ".short-link{color:#6b4f2b;font-size:12px;text-decoration:none;}"
+               ".short-link:hover{text-decoration:underline;}"
                ".page-meta{color:#6b4f2b;font-size:12px;white-space:nowrap;}"]]
              [:body
               [:main.wrap
@@ -1049,11 +1109,26 @@
                [:p.tag-sub (str "Reference: " ref-name)]
                (if (seq rows)
                  [:ul.page-list
-                  (for [item rows]
-                    (render-tagged-item graph-uuid item))]
-                 [:p "No published nodes reference this yet."])]]]]
+                  (for [row rows
+                        :let [graph-id (or (tag-item-val row :graph_uuid) graph-uuid)
+                              page-uuid (tag-item-val row :source_page_uuid)
+                              page-title (tag-item-val row :source_page_title)
+                              short-id (tag-item-val row :short_id)
+                              href (when (and graph-id page-uuid)
+                                     (str "/page/" graph-id "/" page-uuid))]]
+                    [:li.page-item
+                     [:div.page-links
+                      (if href
+                        [:a.page-ref {:href href} (or page-title page-uuid)]
+                        [:span (or page-title page-uuid)])
+                      (when short-id
+                        [:a.short-link {:href (str "/s/" short-id)}
+                         (str "/s/" short-id)])]
+                     [:span.page-meta (or (format-timestamp (tag-item-val row :updated_at)) "—")]])]
+                 [:p "No published pages reference this yet."])]]]]
     (str "<!doctype html>" (render-hiccup doc))))
 
+(declare short-id-for-page)
 (defn handle-post-pages [request env]
   (js-await [auth-header (.get (.-headers request) "authorization")
              token (when (and auth-header (string/starts-with? auth-header "Bearer "))
@@ -1080,10 +1155,8 @@
                                                (get payload "page-title")
                                                (when page-eid
                                                  (entity->title (get payload-entities page-eid))))
-                                refs (or (:refs payload)
-                                         (get payload "refs")
-                                         (when (and page-eid page-title)
-                                           (page-refs-from-payload payload page-eid page_uuid page-title graph)))
+                                refs (when (and page-eid page-title)
+                                       (page-refs-from-payload payload page-eid page_uuid page-title graph))
                                 tagged-nodes (when (and page-eid page-title)
                                                (page-tagged-nodes-from-payload payload page-eid page_uuid page-title graph))]
                             (cond
@@ -1107,6 +1180,7 @@
                                          do-stub (.get do-ns do-id)
                                          page-tags (or (:page-tags payload)
                                                        (get payload "page-tags"))
+                                         short-id (short-id-for-page graph-uuid page_uuid)
                                          payload (clj->js {:page_uuid page_uuid
                                                            :page_title page-title
                                                            :page_tags (when page-tags
@@ -1120,6 +1194,7 @@
                                                            :owner_sub (aget claims "sub")
                                                            :created_at created_at
                                                            :updated_at (.now js/Date)
+                                                           :short_id short-id
                                                            :refs refs
                                                            :tagged_nodes tagged-nodes})
                                          meta-resp (.fetch do-stub "https://publish/pages"
@@ -1137,6 +1212,8 @@
                                                     (json-response {:page_uuid page_uuid
                                                                     :graph_uuid graph-uuid
                                                                     :r2_key r2-key
+                                                                    :short_id short-id
+                                                                    :short_url (str "/s/" short-id)
                                                                     :updated_at (.now js/Date)})))))))))))
 
 (declare handle-tag-page-html)
@@ -1267,6 +1344,21 @@
                                           #js {"content-type" "text/html; charset=utf-8"}
                                           (cors-headers))}))))))
 
+(defn bytes->base64url [bytes]
+  (let [binary (apply str (map #(js/String.fromCharCode %) (array-seq bytes)))
+        b64 (js/btoa binary)]
+    (-> b64
+        (string/replace #"\+" "-")
+        (string/replace #"/" "_")
+        (string/replace #"=+$" ""))))
+
+(defn short-id-for-page [graph-uuid page-uuid]
+  (js-await [payload (.encode text-encoder (str graph-uuid ":" page-uuid))
+             digest (.digest js/crypto.subtle "SHA-256" payload)]
+            (let [bytes (js/Uint8Array. digest)
+                  encoded (bytes->base64url bytes)]
+              (subs encoded 0 10))))
+
 (defn handle-tag-name-json [tag-name env]
   (if-not tag-name
     (bad-request "missing tag name")
@@ -1294,7 +1386,7 @@
                            rows (or (aget data "pages") #js [])
                            title (or tag-name "Tag")]
                           (js/Response.
-                           (render-tag-html "all" tag-name title rows)
+                           (render-tag-name-html tag-name title rows)
                            #js {:headers (merge-headers
                                           #js {"content-type" "text/html; charset=utf-8"}
                                           (cors-headers))}))))))
@@ -1512,6 +1604,30 @@
           (handle-ref-name-json ref-name env)
           (handle-ref-name-html ref-name env)))
 
+      (and (string/starts-with? path "/s/") (= method "GET"))
+      (let [parts (string/split path #"/")
+            short-id (nth parts 2 nil)]
+        (if (string/blank? short-id)
+          (bad-request "missing short id")
+          (js-await [^js do-ns (aget env "PUBLISH_META_DO")
+                     do-id (.idFromName do-ns "index")
+                     do-stub (.get do-ns do-id)
+                     resp (.fetch do-stub (str "https://publish/short/" short-id)
+                                  #js {:method "GET"})]
+                    (if-not (.-ok resp)
+                      (not-found)
+                      (js-await [data (.json resp)
+                                 row (aget data "page")]
+                                (if-not row
+                                  (not-found)
+                                  (let [graph-uuid (aget row "graph_uuid")
+                                        page-uuid (aget row "page_uuid")
+                                        location (str "/page/" graph-uuid "/" page-uuid)]
+                                    (js/Response. nil #js {:status 302
+                                                           :headers (merge-headers
+                                                                     #js {"location" location}
+                                                                     (cors-headers))}))))))))
+
       (and (string/starts-with? path "/pages/") (= method "GET"))
       (let [parts (string/split path #"/")]
         (cond
@@ -1560,17 +1676,22 @@
       (when-not (contains? col-names "page_title")
         (sql-exec sql "ALTER TABLE pages ADD COLUMN page_title TEXT;"))
       (when-not (contains? col-names "page_tags")
-        (sql-exec sql "ALTER TABLE pages ADD COLUMN page_tags TEXT;")))
+        (sql-exec sql "ALTER TABLE pages ADD COLUMN page_tags TEXT;"))
+      (when-not (contains? col-names "short_id")
+        (sql-exec sql "ALTER TABLE pages ADD COLUMN short_id TEXT;")))
     (let [cols (get-sql-rows (sql-exec sql "PRAGMA table_info(page_refs);"))
           col-names (set (map #(aget % "name") cols))]
       (when (seq col-names)
         (when-not (contains? col-names "target_page_title")
-          (sql-exec sql "ALTER TABLE page_refs ADD COLUMN target_page_title TEXT;"))))
+          (sql-exec sql "ALTER TABLE page_refs ADD COLUMN target_page_title TEXT;"))
+        (when-not (contains? col-names "target_page_name")
+          (sql-exec sql "ALTER TABLE page_refs ADD COLUMN target_page_name TEXT;"))))
     (sql-exec sql
               (str "CREATE TABLE IF NOT EXISTS page_refs ("
                    "graph_uuid TEXT NOT NULL,"
                    "target_page_uuid TEXT NOT NULL,"
                    "target_page_title TEXT,"
+                   "target_page_name TEXT,"
                    "source_page_uuid TEXT NOT NULL,"
                    "source_page_title TEXT,"
                    "source_block_uuid TEXT,"
@@ -1605,10 +1726,13 @@
 
 (defn row->meta [row]
   (let [data (js->clj row :keywordize-keys false)
-        page-tags (parse-page-tags (get data "page_tags"))]
+        page-tags (parse-page-tags (get data "page_tags"))
+        short-id (get data "short_id")]
     (assoc data
            "graph" (get data "graph_uuid")
            "page_tags" page-tags
+           "short_id" short-id
+           "short_url" (when short-id (str "/s/" short-id))
            "content_hash" (get data "content_hash")
            "content_length" (get data "content_length"))))
 
@@ -1631,8 +1755,9 @@
                                "r2_key,"
                                "owner_sub,"
                                "created_at,"
-                               "updated_at"
-                               ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                               "updated_at,"
+                               "short_id"
+                               ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                                " ON CONFLICT(graph_uuid, page_uuid) DO UPDATE SET"
                                " page_uuid=excluded.page_uuid,"
                                " page_title=excluded.page_title,"
@@ -1643,7 +1768,8 @@
                                " content_length=excluded.content_length,"
                                " r2_key=excluded.r2_key,"
                                " owner_sub=excluded.owner_sub,"
-                               " updated_at=excluded.updated_at;")
+                               " updated_at=excluded.updated_at,"
+                               " short_id=excluded.short_id;")
                           (aget body "page_uuid")
                           (aget body "page_title")
                           (aget body "page_tags")
@@ -1655,7 +1781,8 @@
                           (aget body "r2_key")
                           (aget body "owner_sub")
                           (aget body "created_at")
-                          (aget body "updated_at"))
+                          (aget body "updated_at")
+                          (aget body "short_id"))
                 (let [refs (aget body "refs")
                       tagged-nodes (aget body "tagged_nodes")
                       graph-uuid (aget body "graph")
@@ -1673,13 +1800,14 @@
                       (doseq [ref refs]
                         (sql-exec sql
                                   (str "INSERT OR REPLACE INTO page_refs ("
-                                       "graph_uuid, target_page_uuid, target_page_title, source_page_uuid, "
+                                       "graph_uuid, target_page_uuid, target_page_title, target_page_name, source_page_uuid, "
                                        "source_page_title, source_block_uuid, source_block_content, "
                                        "source_block_format, updated_at"
-                                       ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);")
+                                       ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);")
                                   (aget ref "graph_uuid")
                                   (aget ref "target_page_uuid")
                                   (aget ref "target_page_title")
+                                  (aget ref "target_page_name")
                                   (aget ref "source_page_uuid")
                                   (aget ref "source_page_title")
                                   (aget ref "source_block_uuid")
@@ -1716,10 +1844,15 @@
                            (js/decodeURIComponent raw))
                 rows (get-sql-rows
                       (sql-exec sql
-                                (str "SELECT graph_uuid, source_page_uuid, source_page_title, "
-                                     "MAX(updated_at) AS updated_at "
-                                     "FROM page_tags WHERE tag_title = ? "
-                                     "GROUP BY graph_uuid, source_page_uuid, source_page_title "
+                                (str "SELECT page_tags.graph_uuid, page_tags.source_page_uuid, page_tags.source_page_title, "
+                                     "pages.short_id, "
+                                     "MAX(page_tags.updated_at) AS updated_at "
+                                     "FROM page_tags "
+                                     "LEFT JOIN pages "
+                                     "ON pages.graph_uuid = page_tags.graph_uuid "
+                                     "AND pages.page_uuid = page_tags.source_page_uuid "
+                                     "WHERE page_tags.tag_title = ? "
+                                     "GROUP BY page_tags.graph_uuid, page_tags.source_page_uuid, page_tags.source_page_title, pages.short_id "
                                      "ORDER BY updated_at DESC;")
                                 tag-name))]
             (json-response {:pages (map (fn [row]
@@ -1731,21 +1864,38 @@
                            (js/decodeURIComponent raw))
                 rows (get-sql-rows
                       (sql-exec sql
-                                (str "SELECT graph_uuid, source_page_uuid, source_page_title, "
-                                     "MAX(updated_at) AS updated_at "
-                                     "FROM page_refs WHERE target_page_title = ? "
-                                     "GROUP BY graph_uuid, source_page_uuid, source_page_title "
+                                (str "SELECT page_refs.graph_uuid, page_refs.source_page_uuid, page_refs.source_page_title, "
+                                     "pages.short_id, "
+                                     "MAX(page_refs.updated_at) AS updated_at "
+                                     "FROM page_refs "
+                                     "LEFT JOIN pages "
+                                     "ON pages.graph_uuid = page_refs.graph_uuid "
+                                     "AND pages.page_uuid = page_refs.source_page_uuid "
+                                     "WHERE (lower(page_refs.target_page_title) = lower(?)) "
+                                     "OR (page_refs.target_page_name = lower(?)) "
+                                     "GROUP BY page_refs.graph_uuid, page_refs.source_page_uuid, page_refs.source_page_title, pages.short_id "
                                      "ORDER BY updated_at DESC;")
+                                ref-name
                                 ref-name))]
             (json-response {:pages (map (fn [row]
                                           (js->clj row :keywordize-keys false))
                                         rows)}))
 
+          (= (nth parts 1 nil) "short")
+          (let [short-id (nth parts 2 nil)
+                rows (get-sql-rows
+                      (sql-exec sql
+                                (str "SELECT page_uuid, graph_uuid, page_title, short_id "
+                                     "FROM pages WHERE short_id = ? LIMIT 1;")
+                                short-id))
+                row (first rows)]
+            (json-response {:page (when row (js->clj row :keywordize-keys false))}))
+
           (= (nth parts 4 nil) "refs")
           (let [rows (get-sql-rows
                       (sql-exec sql
                                 (str "SELECT graph_uuid, target_page_uuid, source_page_uuid, "
-                                     "target_page_title, source_page_title, source_block_uuid, source_block_content, "
+                                     "target_page_title, target_page_name, source_page_title, source_block_uuid, source_block_content, "
                                      "source_block_format, updated_at "
                                      "FROM page_refs WHERE graph_uuid = ? AND target_page_uuid = ? "
                                      "ORDER BY updated_at DESC;")
@@ -1772,7 +1922,7 @@
           (and graph-uuid page_uuid)
           (let [rows (get-sql-rows
                       (sql-exec sql
-                                (str "SELECT page_uuid, page_title, page_tags, graph_uuid, schema_version, block_count, "
+                                (str "SELECT page_uuid, page_title, page_tags, short_id, graph_uuid, schema_version, block_count, "
                                      "content_hash, content_length, r2_key, owner_sub, created_at, updated_at "
                                      "FROM pages WHERE graph_uuid = ? AND page_uuid = ? LIMIT 1;")
                                 graph-uuid
@@ -1785,7 +1935,7 @@
           graph-uuid
           (let [rows (get-sql-rows
                       (sql-exec sql
-                                (str "SELECT page_uuid, page_title, page_tags, graph_uuid, schema_version, block_count, "
+                                (str "SELECT page_uuid, page_title, page_tags, short_id, graph_uuid, schema_version, block_count, "
                                      "content_hash, content_length, r2_key, owner_sub, created_at, updated_at "
                                      "FROM pages WHERE graph_uuid = ? ORDER BY updated_at DESC;")
                                 graph-uuid))]
@@ -1794,7 +1944,7 @@
           :else
           (let [rows (get-sql-rows
                       (sql-exec sql
-                                (str "SELECT page_uuid, page_title, page_tags, graph_uuid, schema_version, block_count, "
+                                (str "SELECT page_uuid, page_title, page_tags, short_id, graph_uuid, schema_version, block_count, "
                                      "content_hash, content_length, r2_key, owner_sub, created_at, updated_at "
                                      "FROM pages ORDER BY updated_at DESC;")))]
             (json-response {:pages (map row->meta rows)}))))
