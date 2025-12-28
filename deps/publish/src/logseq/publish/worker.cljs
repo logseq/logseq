@@ -1583,12 +1583,12 @@
                                                      (aget meta "checksum")))
                                content-type (or (get meta :content_type)
                                                 (asset-content-type asset-type))
-                               put? (not (and existing-checksum checksum (= existing-checksum checksum)))]
-                              (when put?
-                                (.put r2 r2-key body
-                                      #js {:httpMetadata #js {:contentType content-type}
-                                           :customMetadata #js {:checksum (or checksum "")
-                                                                :owner_sub (aget claims "sub")}}))
+                               put? (not (and existing-checksum checksum (= existing-checksum checksum)))
+                               _ (when put?
+                                   (.put r2 r2-key body
+                                         #js {:httpMetadata #js {:contentType content-type}
+                                              :customMetadata #js {:checksum (or checksum "")
+                                                                   :owner_sub (aget claims "sub")}}))]
                               (json-response {:asset_uuid asset-uuid
                                               :graph_uuid graph-uuid
                                               :asset_type asset-type
