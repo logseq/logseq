@@ -1,6 +1,7 @@
 name = "logseq-publish"
 main = "dist/worker/main.js"
 compatibility_date = "2025-02-04"
+compatibility_flags = ["nodejs_compat"]
 
 # Workers Logs
 # Docs: https://developers.cloudflare.com/workers/observability/logs/workers-logs/
