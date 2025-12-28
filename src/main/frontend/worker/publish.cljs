@@ -14,6 +14,16 @@
   (or (:block/title entity)
       "Untitled"))
 
+(defn- page-tags
+  [page-entity]
+  (let [tags (:block/tags page-entity)]
+    (->> tags
+         (remove (fn [tag]
+                   (contains? #{:logseq.class/Page} (:db/ident tag))))
+         (map (fn [tag]
+                {:tag_uuid (:block/uuid tag)
+                 :tag_title (:block/title tag)})))))
+
 (defn- publish-ref-eid [value]
   (cond
     (number? value) (when (pos? value) value)
@@ -65,6 +75,10 @@
         block-eids (map :db/id blocks)
         ref-eids (->> blocks (mapcat :block/refs) (keep :db/id))
         tag-eids (->> blocks (mapcat :block/tags) (keep :db/id))
+        page-tag-eids (->> (if-let [tags (:block/tags page-entity)]
+                             (if (sequential? tags) tags [tags])
+                             [])
+                           (keep :db/id))
         page-eids (->> blocks (map :block/page) (keep :db/id))
         property-eids (->> (cons page-entity blocks)
                            (map db-property/properties)
@@ -82,16 +96,17 @@
                                              props)))
                            (remove nil?))]
     {:blocks blocks
-     :eids (->> (concat [page-id] block-eids ref-eids tag-eids page-eids property-eids)
+     :eids (->> (concat [page-id] block-eids ref-eids tag-eids page-tag-eids page-eids property-eids)
                 (remove nil?)
                 distinct)}))
 
 (defn- build-publish-page-payload
-  [db page-entity]
+  [db page-entity graph-uuid]
   (let [{:keys [blocks eids]} (publish-collect-page-eids db page-entity)
-        graph-uuid (ldb/get-graph-rtc-uuid db)
+        graph-uuid (or graph-uuid (ldb/get-graph-rtc-uuid db))
         refs (when graph-uuid
                (publish-refs-from-blocks db blocks page-entity graph-uuid))
+        tags (page-tags page-entity)
         datoms (->>
                 (mapcat (fn [eid]
                           (map (fn [d] [(:e d) (:a d) (:v d) (:tx d) (:added d)])
@@ -106,12 +121,13 @@
      :block-count (count blocks)
      :schema-version (db-schema/schema-version->string db-schema/version)
      :refs refs
+     :page-tags tags
      :datoms datoms}))
 
 (def-thread-api :thread-api/build-publish-page-payload
-  [repo eid]
+  [repo eid graph-uuid]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (let [db @conn
           page-entity (d/entity db eid)]
       (when (and page-entity (:db/id page-entity))
-        (build-publish-page-payload db page-entity)))))
+        (build-publish-page-payload db page-entity graph-uuid)))))
