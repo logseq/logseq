@@ -30,7 +30,6 @@
   expound/expound                       {:mvn/version "0.8.6"}
   com.lambdaisland/glogi                {:git/url "https://github.com/lambdaisland/glogi"
                                          :git/sha "30328a045141717aadbbb693465aed55f0904976"}
-  binaryage/devtools                    {:mvn/version "1.0.5"}
   camel-snake-kebab/camel-snake-kebab   {:mvn/version "0.4.3"}
   instaparse/instaparse                 {:mvn/version "1.4.10"}
   org.clojars.mmb90/cljs-cache          {:mvn/version "0.1.4"}
@@ -38,7 +37,6 @@
   logseq/common                         {:local/root "deps/common"}
   logseq/graph-parser                   {:local/root "deps/graph-parser"}
   logseq/outliner                       {:local/root "deps/outliner"}
-  logseq/publish                        {:local/root "deps/publish"}
   logseq/publishing                     {:local/root "deps/publishing"}
   logseq/cli                            {:local/root "deps/cli"}
   logseq/shui                           {:local/root "deps/shui"}
@@ -57,9 +55,9 @@
                   :extra-deps  {org.clojure/tools.namespace      {:mvn/version "0.2.11"}
                                 cider/cider-nrepl                {:mvn/version "0.55.1"}
                                 org.clojars.knubie/cljs-run-test {:mvn/version "1.0.1"}
-                                tortue/spy                       {:mvn/version "2.14.0"}}
+                                tortue/spy                       {:mvn/version "2.14.0"}
+                                binaryage/devtools               {:mvn/version "1.0.5"}}
                   :main-opts   ["-m" "shadow.cljs.devtools.cli"]}
-
            :test {:extra-paths ["src/test/"]
                   :extra-deps  {org.clojure/test.check           {:mvn/version "1.1.1"}
                                 pjstadig/humane-test-output      {:mvn/version "0.11.0"}
