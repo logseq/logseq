@@ -158,7 +158,11 @@
                  do-stub (.get do-ns do-id)
                  meta-resp (.fetch do-stub (str "https://publish/pages/" graph-uuid "/" page-uuid))]
                 (if-not (.-ok meta-resp)
-                  (publish-common/not-found)
+                  (js/Response.
+                   (publish-render/render-404-html)
+                   #js {:headers (publish-common/merge-headers
+                                  #js {"content-type" "text/html; charset=utf-8"}
+                                  (publish-common/cors-headers))})
                   (js-await [meta (.json meta-resp)
                              r2-key (aget meta "r2_key")]
                             (if-not r2-key
@@ -189,7 +193,11 @@
                  do-stub (.get do-ns do-id)
                  refs-resp (.fetch do-stub (str "https://publish/pages/" graph-uuid "/" page-uuid "/refs"))]
                 (if-not (.-ok refs-resp)
-                  (publish-common/not-found)
+                  (js/Response.
+                   (publish-render/render-404-html)
+                   #js {:headers (publish-common/merge-headers
+                                  #js {"content-type" "text/html; charset=utf-8"}
+                                  (publish-common/cors-headers))})
                   (js-await [refs (.json refs-resp)]
                             (publish-common/json-response (js->clj refs :keywordize-keys true) 200)))))))
 
@@ -215,7 +223,11 @@
              do-stub (.get do-ns do-id)
              meta-resp (.fetch do-stub "https://publish/pages" #js {:method "GET"})]
             (if-not (.-ok meta-resp)
-              (publish-common/not-found)
+              (js/Response.
+               (publish-render/render-404-html)
+               #js {:headers (publish-common/merge-headers
+                              #js {"content-type" "text/html; charset=utf-8"}
+                              (publish-common/cors-headers))})
               (js-await [meta (.json meta-resp)]
                         (publish-common/json-response (js->clj meta :keywordize-keys true) 200)))))
 
@@ -228,7 +240,11 @@
                meta-resp (.fetch do-stub (str "https://publish/pages/" graph-uuid)
                                  #js {:method "GET"})]
               (if-not (.-ok meta-resp)
-                (publish-common/not-found)
+                (js/Response.
+                 (publish-render/render-404-html)
+                 #js {:headers (publish-common/merge-headers
+                                #js {"content-type" "text/html; charset=utf-8"}
+                                (publish-common/cors-headers))})
                 (js-await [meta (.json meta-resp)]
                           (publish-common/json-response (js->clj meta :keywordize-keys true) 200))))))
 
@@ -241,7 +257,11 @@
                meta-resp (.fetch do-stub (str "https://publish/pages/" graph-uuid)
                                  #js {:method "GET"})]
               (if-not (.-ok meta-resp)
-                (publish-common/not-found)
+                (js/Response.
+                 (publish-render/render-404-html)
+                 #js {:headers (publish-common/merge-headers
+                                #js {"content-type" "text/html; charset=utf-8"}
+                                (publish-common/cors-headers))})
                 (js-await [meta (.json meta-resp)
                            pages (or (aget meta "pages") #js [])]
                           (js/Response.
@@ -259,7 +279,11 @@
                resp (.fetch do-stub (str "https://publish/tag/" (js/encodeURIComponent tag-name))
                             #js {:method "GET"})]
               (if-not (.-ok resp)
-                (publish-common/not-found)
+                (js/Response.
+                 (publish-render/render-404-html)
+                 #js {:headers (publish-common/merge-headers
+                                #js {"content-type" "text/html; charset=utf-8"}
+                                (publish-common/cors-headers))})
                 (js-await [data (.json resp)]
                           (publish-common/json-response (js->clj data :keywordize-keys true) 200))))))
 
@@ -272,7 +296,11 @@
                resp (.fetch do-stub (str "https://publish/tag/" (js/encodeURIComponent tag-name))
                             #js {:method "GET"})]
               (if-not (.-ok resp)
-                (publish-common/not-found)
+                (js/Response.
+                 (publish-render/render-404-html)
+                 #js {:headers (publish-common/merge-headers
+                                #js {"content-type" "text/html; charset=utf-8"}
+                                (publish-common/cors-headers))})
                 (js-await [data (.json resp)
                            rows (or (aget data "pages") #js [])
                            title (or tag-name "Tag")]
@@ -563,4 +591,8 @@
           (handle-delete-page request env)))
 
       :else
-      (publish-common/not-found))))
+      (js/Response.
+       (publish-render/render-404-html)
+       #js {:headers (publish-common/merge-headers
+                      #js {"content-type" "text/html; charset=utf-8"}
+                      (publish-common/cors-headers))}))))
