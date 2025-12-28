@@ -677,3 +677,21 @@
                      [:span.page-meta (or (format-timestamp (tag-item-val row :updated_at)) "—")]])]
                  [:p "No published pages reference this yet."])]]]]
     (str "<!doctype html>" (render-hiccup doc))))
+
+(defn render-not-published-html
+  [graph-uuid]
+  (let [title "Page not published"
+        doc [:html
+             [:head
+              [:meta {:charset "utf-8"}]
+              [:meta {:name "viewport" :content "width=device-width,initial-scale=1"}]
+              [:title title]
+              [:link {:rel "stylesheet" :href "/static/publish.css"}]]
+             [:body
+              [:main.wrap
+               [:div.page-toolbar
+                (when graph-uuid
+                  [:a.toolbar-btn {:href (str "/graph/" graph-uuid)} "Home"])]
+               [:h1 title]
+               [:p.tag-sub "This page hasn't been published yet."]]]]]
+    (str "<!doctype html>" (render-hiccup doc))))

@@ -401,8 +401,16 @@
                                            #js {:headers (publish-common/merge-headers
                                                           #js {"content-type" "text/html; charset=utf-8"}
                                                           (publish-common/cors-headers))})
-                                          (publish-common/not-found)))
-                              (publish-common/not-found)))
+                                          (js/Response.
+                                           (publish-render/render-not-published-html graph-uuid)
+                                           #js {:headers (publish-common/merge-headers
+                                                          #js {"content-type" "text/html; charset=utf-8"}
+                                                          (publish-common/cors-headers))}))))
+                            (js/Response.
+                             (publish-render/render-not-published-html graph-uuid)
+                             #js {:headers (publish-common/merge-headers
+                                            #js {"content-type" "text/html; charset=utf-8"}
+                                            (publish-common/cors-headers))}))
                   (js-await [meta (.json meta-resp)
                              index-id (.idFromName do-ns "index")
                              index-stub (.get do-ns index-id)
