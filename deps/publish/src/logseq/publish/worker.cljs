@@ -5,6 +5,8 @@
             [datascript.transit :as dt]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.property.type :as db-property-type]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [shadow.cljs.modern :refer (defclass)])
   (:require-macros [logseq.publish.async :refer [js-await]]))
@@ -288,6 +290,111 @@
       (:block/name entity)
       "Untitled"))
 
+(defn page-entity?
+  [entity]
+  (and (nil? (:block/page entity))
+       (or (:block/name entity)
+           (:block/title entity))))
+
+(defn property-title
+  [prop-key property-title-by-ident]
+  (cond
+    (string? prop-key) prop-key
+    (keyword? prop-key) (or (get property-title-by-ident prop-key)
+                            (name prop-key))
+    :else (str prop-key)))
+
+(defn property-value-empty?
+  [value]
+  (cond
+    (nil? value) true
+    (string? value) (string/blank? value)
+    (coll? value) (empty? value)
+    :else false))
+
+(defn nodes-join
+  [nodes-list sep]
+  (reduce (fn [acc nodes]
+            (if (empty? nodes)
+              acc
+              (if (seq acc)
+                (into (conj acc sep) nodes)
+                (into [] nodes))))
+          []
+          nodes-list))
+
+(defn property-type
+  [prop-key property-type-by-ident]
+  (or (get property-type-by-ident prop-key)
+      (get-in db-property/built-in-properties [prop-key :schema :type])))
+
+(defn entity->link-node
+  [entity ctx]
+  (let [title (entity->title entity)
+        uuid (:block/uuid entity)
+        graph-uuid (:graph-uuid ctx)]
+    (if (and uuid graph-uuid (page-entity? entity))
+      [[:a.page-ref {:href (str "/p/" graph-uuid "/" uuid)} title]]
+      [title])))
+
+(declare content->nodes)
+(defn property-value->nodes
+  [value prop-key ctx entities]
+  (let [prop-type (property-type prop-key (:property-type-by-ident ctx))
+        ref-type? (contains? db-property-type/all-ref-property-types prop-type)]
+    (cond
+      (nil? value)
+      []
+
+      (string? value)
+      (content->nodes value (:uuid->title ctx) (:graph-uuid ctx))
+
+      (keyword? value)
+      [(name value)]
+
+      (map? value)
+      (if-let [eid (:db/id value)]
+        (property-value->nodes eid prop-key ctx entities)
+        [(pr-str value)])
+
+      (set? value)
+      (nodes-join (map #(property-value->nodes % prop-key ctx entities) value) ", ")
+
+      (sequential? value)
+      (nodes-join (map #(property-value->nodes % prop-key ctx entities) value) ", ")
+
+      (number? value)
+      (if (and ref-type? (get entities value))
+        (entity->link-node (get entities value) ctx)
+        [(str value)])
+
+      :else
+      [(str value)])))
+
+(defn entity-properties
+  [entity]
+  (let [props (db-property/properties entity)
+        inline-props (:block/properties entity)
+        props (if (map? inline-props)
+                (merge props inline-props)
+                props)]
+    (into {}
+          (remove (fn [[_ v]] (property-value-empty? v)))
+          props)))
+
+(defn render-properties
+  [props ctx entities]
+  (when (seq props)
+    [:dl.properties
+     (for [[k v] (sort-by (fn [[prop-key _]]
+                            (string/lower-case
+                             (property-title prop-key (:property-title-by-ident ctx))))
+                          props)]
+       [:div.property
+        [:dt.property-name (property-title k (:property-title-by-ident ctx))]
+        [:dd.property-value
+         (into [:span] (property-value->nodes v k ctx entities))]])]))
+
 (def ref-regex
   (js/RegExp. "\\[\\[([0-9a-fA-F-]{36})\\]\\]|\\(\\(([0-9a-fA-F-]{36})\\)\\)" "g"))
 
@@ -496,7 +603,10 @@
        (map (fn [block]
               (let [child-id (:db/id block)
                     nested (render-block-tree children-by-parent child-id ctx)
-                    has-children? (boolean nested)]
+                    has-children? (boolean nested)
+                    properties (render-properties (entity-properties block)
+                                                  ctx
+                                                  (:entities ctx))]
                 [:li.block
                  [:div.block-content
                   (when has-children?
@@ -504,6 +614,8 @@
                      {:type "button" :aria-expanded "true"}
                      "▾"])
                   (block-content-nodes block ctx)]
+                 (when properties
+                   [:div.block-properties properties])
                  (when nested
                    [:div.block-children nested])]))
             (sort-blocks children))])))
@@ -565,6 +677,18 @@
                                acc))
                            {}
                            entities)
+        property-title-by-ident (reduce (fn [acc [_e entity]]
+                                          (if-let [ident (:db/ident entity)]
+                                            (assoc acc ident (entity->title entity))
+                                            acc))
+                                        {}
+                                        entities)
+        property-type-by-ident (reduce (fn [acc [_e entity]]
+                                         (if-let [ident (:db/ident entity)]
+                                           (assoc acc ident (:logseq.property/type entity))
+                                           acc))
+                                       {}
+                                       entities)
         children-by-parent (->> entities
                                 (reduce (fn [acc [e entity]]
                                           (if (and (= (:block/page entity) page-eid)
@@ -578,7 +702,13 @@
                                            {}))
         ctx {:uuid->title uuid->title
              :name->uuid name->uuid
-             :graph-uuid graph-uuid}
+             :graph-uuid graph-uuid
+             :property-title-by-ident property-title-by-ident
+             :property-type-by-ident property-type-by-ident
+             :entities entities}
+        page-properties (render-properties (entity-properties page-entity)
+                                           ctx
+                                           entities)
         blocks (render-block-tree children-by-parent page-eid ctx)
         linked-by-page (when refs-data
                          (->> (get refs-data "refs")
@@ -607,6 +737,13 @@
                ".block{margin:6px 0;}"
                ".block-content{white-space:pre-wrap;line-height:1.6;display:flex;gap:8px;align-items:flex-start;}"
                ".block-text{flex:1;}"
+               ".page-properties{margin:0 0 24px;padding:12px 16px;border:1px solid #e6dccb;border-radius:12px;background:#fffdf8;}"
+               ".properties{margin:0;display:grid;grid-template-columns:140px 1fr;gap:6px 16px;}"
+               ".property{display:contents;}"
+               ".property-name{margin:0;color:#6b4f2b;font-weight:600;font-size:13px;}"
+               ".property-value{margin:0;color:#2e2a23;}"
+               ".block-properties{margin:6px 0 0 22px;}"
+               ".block-properties .properties{grid-template-columns:120px 1fr;font-size:13px;}"
                ".block-toggle{border:none;background:transparent;cursor:pointer;font-size:14px;line-height:1;margin-top:3px;color:#6b7280;}"
                ".block.is-collapsed >.block-content >.block-toggle {transform: rotate(-90deg);}"
                ".block-toggle:focus{outline:2px solid #c7b38f;outline-offset:2px;border-radius:4px;}"
@@ -622,6 +759,8 @@
              [:body
               [:main.wrap
                [:h1 page-title]
+               (when page-properties
+                 [:section.page-properties page-properties])
                [:div.page-toolbar
                 [:button.toolbar-btn
                  {:type "button"
