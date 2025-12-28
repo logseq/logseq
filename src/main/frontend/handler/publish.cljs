@@ -1,65 +1,12 @@
 (ns frontend.handler.publish
   "Prepare publish payloads for pages."
-  (:require [datascript.core :as d]
-            [frontend.config :as config]
+  (:require [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.db :as ldb]
-            [logseq.db.common.entity-util :as entity-util]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.schema :as db-schema]
             [promesa.core :as p]))
-
-(defn- datom->vec
-  [datom]
-  [(:e datom) (:a datom) (:v datom) (:tx datom) (:added datom)])
-
-(defn- collect-page-eids
-  [db page-entity]
-  (let [page-id (:db/id page-entity)
-        blocks (ldb/get-page-blocks db page-id)
-        block-eids (map :db/id blocks)
-        ref-eids (->> blocks (mapcat :block/refs) (keep :db/id))
-        tag-eids (->> blocks (mapcat :block/tags) (keep :db/id))
-        page-eids (->> blocks (map :block/page) (keep :db/id))
-        property-eids (->> (cons page-entity blocks)
-                           (map db-property/properties)
-                           (mapcat (fn [props]
-                                     (concat
-                                      (keep (fn [k]
-                                              (when (keyword? k)
-                                                (:db/id (d/entity db k))))
-                                            (keys props))
-                                      (mapcat (fn [v]
-                                                (cond
-                                                  (nil? v) []
-                                                  (set? v) (keep :db/id v)
-                                                  (sequential? v) (keep :db/id v)
-                                                  :else (keep :db/id [v])))
-                                              (vals props)))))
-                           (remove nil?))]
-    {:blocks blocks
-     :eids (->> (concat [page-id] block-eids ref-eids tag-eids page-eids property-eids)
-                (remove nil?)
-                distinct)}))
-
-(defn build-page-publish-datoms
-  "Builds a datom snapshot for a single page.
-
-  References/backlinks are intentionally ignored at this stage.
-  "
-  [db page-entity]
-  (let [{:keys [blocks eids]} (collect-page-eids db page-entity)
-        datoms (mapcat (fn [eid]
-                         (map datom->vec (d/datoms db :eavt eid)))
-                       eids)]
-    {:page (entity-util/entity->map page-entity)
-     :page-uuid (:block/uuid page-entity)
-     :block-count (count blocks)
-     :schema-version (db-schema/schema-version->string db-schema/version)
-     :datoms (vec datoms)}))
 
 (defn- <sha256-hex
   [text]
@@ -83,7 +30,8 @@
                   token (assoc "authorization" (str "Bearer " token)))]
     (p/let [body (ldb/write-transit-str payload)
             content-hash (<sha256-hex body)
-            graph-uuid (some-> (ldb/get-graph-rtc-uuid (db/get-db)) str)
+            graph-uuid (or (:graph-uuid payload)
+                           (some-> (ldb/get-graph-rtc-uuid (db/get-db)) str))
             _ (when-not graph-uuid
                 (throw (ex-info "Missing graph UUID" {:repo (state/get-current-repo)})))
             publish-meta {:graph graph-uuid
@@ -114,24 +62,27 @@
   (let [repo (state/get-current-repo)]
     (if-let [db* (and repo (db/get-db repo))]
       (if (and page (:db/id page))
-        (let [payload (build-page-publish-datoms db* page)]
-          (-> (<post-publish! payload)
-              (p/then (fn [_resp]
-                        (let [graph-uuid (some-> (ldb/get-graph-rtc-uuid db*) str)
-                              page-uuid (some-> (:block/uuid page) str)
-                              url (when (and graph-uuid page-uuid)
-                                    (str config/PUBLISH-API-BASE "/p/" graph-uuid "/" page-uuid))]
-                          (when url
-                            (notification/show!
-                             [:div.inline
-                              [:span "Published to: "]
-                              [:a {:target "_blank"
-                                   :href url}
-                               url]]
-                             :success
-                             false)))))
-              (p/catch (fn [error]
-                         (js/console.error error)
-                         (notification/show! "Publish failed." :error)))))
+        (p/let [payload (state/<invoke-db-worker :thread-api/build-publish-page-payload repo (:db/id page))]
+          (if payload
+            (-> (<post-publish! payload)
+                (p/then (fn [_resp]
+                          (let [graph-uuid (or (:graph-uuid payload)
+                                               (some-> (ldb/get-graph-rtc-uuid db*) str))
+                                page-uuid (str (:block/uuid page))
+                                url (when (and graph-uuid page-uuid)
+                                      (str config/PUBLISH-API-BASE "/p/" graph-uuid "/" page-uuid))]
+                            (when url
+                              (notification/show!
+                               [:div.inline
+                                [:span "Published to: "]
+                                [:a {:target "_blank"
+                                     :href url}
+                                 url]]
+                               :success
+                               false)))))
+                (p/catch (fn [error]
+                           (js/console.error error)
+                           (notification/show! "Publish failed." :error))))
+            (notification/show! "Publish failed: invalid page." :error)))
         (notification/show! "Publish failed: invalid page." :error))
       (notification/show! "Publish failed: missing database." :error))))

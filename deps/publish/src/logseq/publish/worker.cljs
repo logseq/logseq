@@ -288,6 +288,7 @@
   [entity]
   (or (:block/title entity)
       (:block/name entity)
+      (str (:logseq.property/value entity))
       "Untitled"))
 
 (defn page-entity?
@@ -311,6 +312,18 @@
     (string? value) (string/blank? value)
     (coll? value) (empty? value)
     :else false))
+
+(defn format-datetime
+  [value]
+  (let [date (cond
+               (instance? js/Date value) value
+               (number? value) (js/Date. value)
+               (string? value) (js/Date. value)
+               :else nil)]
+    (when date
+      (-> (.toISOString date)
+          (string/replace "T" " ")
+          (string/replace "Z" "")))))
 
 (defn nodes-join
   [nodes-list sep]
@@ -347,7 +360,11 @@
       []
 
       (string? value)
-      (content->nodes value (:uuid->title ctx) (:graph-uuid ctx))
+      (if (= prop-type :datetime)
+        (if-let [formatted (format-datetime value)]
+          [formatted]
+          (content->nodes value (:uuid->title ctx) (:graph-uuid ctx)))
+        (content->nodes value (:uuid->title ctx) (:graph-uuid ctx)))
 
       (keyword? value)
       [(name value)]
@@ -355,32 +372,68 @@
       (map? value)
       (if-let [eid (:db/id value)]
         (property-value->nodes eid prop-key ctx entities)
-        [(pr-str value)])
+        (if-let [content (db-property/property-value-content value)]
+          (property-value->nodes content prop-key ctx entities)
+          [(pr-str value)]))
 
-      (set? value)
-      (nodes-join (map #(property-value->nodes % prop-key ctx entities) value) ", ")
-
-      (sequential? value)
+      (or (set? value) (sequential? value))
       (nodes-join (map #(property-value->nodes % prop-key ctx entities) value) ", ")
 
       (number? value)
-      (if (and ref-type? (get entities value))
+      (cond
+        (= prop-type :datetime)
+        (if-let [formatted (format-datetime value)]
+          [formatted]
+          [(str value)])
+
+        (and ref-type? (get entities value))
         (entity->link-node (get entities value) ctx)
+
+        :else
         [(str value)])
 
       :else
       [(str value)])))
 
-(defn entity-properties
+(defn built-in-tag?
   [entity]
+  (when-let [ident (:db/ident entity)]
+    (= "logseq.class" (namespace ident))))
+
+(defn filter-tags
+  [values entities]
+  (let [values (if (sequential? values) values [values])]
+    (->> values
+         (remove (fn [value]
+                   (cond
+                     (keyword? value) (= "logseq.class" (namespace value))
+                     :else
+                     (let [entity (cond
+                                    (map? value) value
+                                    (number? value) (get entities value)
+                                    :else nil)]
+                       (and entity (built-in-tag? entity))))))
+         vec)))
+
+(defn entity-properties
+  [entity ctx entities]
   (let [props (db-property/properties entity)
         inline-props (:block/properties entity)
         props (if (map? inline-props)
                 (merge props inline-props)
-                props)]
-    (into {}
-          (remove (fn [[_ v]] (property-value-empty? v)))
-          props)))
+                props)
+        props (->> props
+                   (remove (fn [[k _]]
+                             (true? (get (:property-hidden-by-ident ctx) k))))
+                   (map (fn [[k v]]
+                          (if (= k :block/tags)
+                            [k (filter-tags v entities)]
+                            [k v])))
+                   (remove (fn [[_ v]] (property-value-empty? v)))
+                   (remove (fn [[k v]]
+                             (and (= k :block/tags) (property-value-empty? v)))))
+        props (into {} props)]
+    props))
 
 (defn render-properties
   [props ctx entities]
@@ -604,16 +657,16 @@
               (let [child-id (:db/id block)
                     nested (render-block-tree children-by-parent child-id ctx)
                     has-children? (boolean nested)
-                    properties (render-properties (entity-properties block)
+                    properties (render-properties (entity-properties block ctx (:entities ctx))
                                                   ctx
                                                   (:entities ctx))]
                 [:li.block
                  [:div.block-content
+                  (block-content-nodes block ctx)
                   (when has-children?
                     [:button.block-toggle
                      {:type "button" :aria-expanded "true"}
-                     "▾"])
-                  (block-content-nodes block ctx)]
+                     "▾"])]
                  (when properties
                    [:div.block-properties properties])
                  (when nested
@@ -668,12 +721,8 @@
         name->uuid (reduce (fn [acc [_e entity]]
                              (if-let [uuid-value (:block/uuid entity)]
                                (let [uuid-str (str uuid-value)
-                                     name (:block/name entity)
                                      title (:block/title entity)]
-                                 (cond-> acc
-                                   name (assoc name uuid-str)
-                                   title (assoc title uuid-str)
-                                   title (assoc (common-util/page-name-sanity-lc title) uuid-str)))
+                                 (assoc acc title uuid-str))
                                acc))
                            {}
                            entities)
@@ -689,10 +738,17 @@
                                            acc))
                                        {}
                                        entities)
+        property-hidden-by-ident (reduce (fn [acc [_e entity]]
+                                           (if-let [ident (:db/ident entity)]
+                                             (assoc acc ident (true? (:logseq.property/hide? entity)))
+                                             acc))
+                                         {}
+                                         entities)
         children-by-parent (->> entities
                                 (reduce (fn [acc [e entity]]
                                           (if (and (= (:block/page entity) page-eid)
-                                                   (not= e page-eid))
+                                                   (not= e page-eid)
+                                                   (not (:logseq.property/created-from-property entity)))
                                             (let [parent (or (:block/parent entity) page-eid)]
                                               (update acc parent (fnil conj []) entity))
                                             acc))
@@ -705,8 +761,9 @@
              :graph-uuid graph-uuid
              :property-title-by-ident property-title-by-ident
              :property-type-by-ident property-type-by-ident
+             :property-hidden-by-ident property-hidden-by-ident
              :entities entities}
-        page-properties (render-properties (entity-properties page-entity)
+        page-properties (render-properties (entity-properties page-entity ctx entities)
                                            ctx
                                            entities)
         blocks (render-block-tree children-by-parent page-eid ctx)
@@ -744,7 +801,7 @@
                ".property-value{margin:0;color:#2e2a23;}"
                ".block-properties{margin:6px 0 0 22px;}"
                ".block-properties .properties{grid-template-columns:120px 1fr;font-size:13px;}"
-               ".block-toggle{border:none;background:transparent;cursor:pointer;font-size:14px;line-height:1;margin-top:3px;color:#6b7280;}"
+               ".block-toggle{border:none;background:transparent;cursor:pointer;font-size:14px;line-height:1;margin-top:3px;margin-left:auto;color:#6b7280;}"
                ".block.is-collapsed >.block-content >.block-toggle {transform: rotate(-90deg);}"
                ".block-toggle:focus{outline:2px solid #c7b38f;outline-offset:2px;border-radius:4px;}"
                ".block-children{margin-left:16px;}"
@@ -797,8 +854,10 @@
                                                payload-entities)
                                 page-title (when page-eid
                                              (entity->title (get payload-entities page-eid)))
-                                refs (when (and page-eid page-title)
-                                       (page-refs-from-payload payload page-eid page_uuid page-title graph))]
+                                refs (or (:refs payload)
+                                         (get payload "refs")
+                                         (when (and page-eid page-title)
+                                           (page-refs-from-payload payload page-eid page_uuid page-title graph)))]
                             (cond
                               (not (valid-meta? meta))
                               (bad-request "missing publish metadata")
