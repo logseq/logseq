@@ -391,6 +391,73 @@
 (defn inline->nodes-seq [ctx items]
   (mapcat #(inline->nodes ctx %) items))
 
+(defn block-content-nodes [block ctx]
+  (let [raw (or (:block/content block)
+                (:block/title block)
+                (:block/name block)
+                "")
+        format (keyword (or (:block/format block) :markdown))
+        ctx (assoc ctx :format format)
+        ast (inline-ast raw format)
+        content (if (seq ast)
+                  (inline->nodes-seq ctx ast)
+                  (content->nodes raw (:uuid->title ctx) (:graph-uuid ctx)))]
+    (into [:span.block-text] content)))
+
+(defn block-content-from-ref [ref ctx]
+  (let [raw (or (get ref "source_block_content") "")
+        format (keyword (or (get ref "source_block_format") "markdown"))
+        ctx (assoc ctx :format format)
+        ast (inline-ast raw format)
+        content (if (seq ast)
+                  (inline->nodes-seq ctx ast)
+                  (content->nodes raw (:uuid->title ctx) (:graph-uuid ctx)))]
+    (into [:span.block-text] content)))
+
+(defn ref-eid [value]
+  (cond
+    (number? value) value
+    (map? value) (:db/id value)
+    :else nil))
+
+(defn refs-contain? [refs target-eid]
+  (when refs
+    (some #(= target-eid (ref-eid %))
+          (if (sequential? refs) refs [refs]))))
+
+(defn page-refs-from-payload [payload page-eid page-uuid page-title graph-uuid]
+  (let [entities (datoms->entities (:datoms payload))
+        refs (->> entities
+                  (mapcat (fn [[_e entity]]
+                            (when (and (= (:block/page entity) page-eid)
+                                       (not= (:block/uuid entity) page-uuid))
+                              (let [block-uuid (some-> (:block/uuid entity) str)
+                                    block-content (or (:block/content entity)
+                                                      (:block/title entity)
+                                                      (:block/name entity)
+                                                      "")
+                                    block-format (name (or (:block/format entity) :markdown))
+                                    refs (:block/refs entity)
+                                    refs (if (sequential? refs) refs (when refs [refs]))
+                                    targets (->> refs
+                                                 (map ref-eid)
+                                                 (keep #(get entities %))
+                                                 (keep :block/uuid)
+                                                 (map str)
+                                                 distinct)]
+                                (when (seq targets)
+                                  (map (fn [target]
+                                         {:graph_uuid graph-uuid
+                                          :target_page_uuid target
+                                          :source_page_uuid (str page-uuid)
+                                          :source_page_title page-title
+                                          :source_block_uuid block-uuid
+                                          :source_block_content block-content
+                                          :source_block_format block-format
+                                          :updated_at (.now js/Date)})
+                                       targets)))))))]
+    (vec refs)))
+
 (defn render-hiccup [node]
   (cond
     (nil? node) ""
@@ -433,32 +500,40 @@
     (when (seq children)
       [:ul.blocks
        (map (fn [block]
-              (let [raw (or (:block/content block)
-                            (:block/title block)
-                            (:block/name block)
-                            "")
-                    format (keyword (or (:block/format block) :markdown))
-                    ctx (assoc ctx :format format)
-                    ast (inline-ast raw format)
-                    content (if (seq ast)
-                              (inline->nodes-seq ctx ast)
-                              (content->nodes raw (:uuid->title ctx) (:graph-uuid ctx)))
-                    child-id (:db/id block)
+              (let [child-id (:db/id block)
                     nested (render-block-tree children-by-parent child-id ctx)
                     has-children? (boolean nested)]
                 [:li.block
                  [:div.block-content
-                  (into [:span.block-text] content)
                   (when has-children?
                     [:button.block-toggle
                      {:type "button" :aria-expanded "true"}
-                     "▾"])]
+                     "▾"])
+                  (block-content-nodes block ctx)]
                  (when nested
                    [:div.block-children nested])]))
             (sort-blocks children))])))
 
+(defn linked-references
+  [ctx graph-uuid linked-by-page]
+  [:section.linked-refs
+   [:h2 "Linked references"]
+   (for [{:keys [page_uuid page_title blocks]} linked-by-page]
+     (let [ref-page-uuid page_uuid
+           ref-page-title page_title
+           href (when (and graph-uuid ref-page-uuid)
+                  (str "/p/" graph-uuid "/" ref-page-uuid))]
+       [:div.ref-page
+        (if href
+          [:a.page-ref {:href href} ref-page-title]
+          [:div.ref-title ref-page-title])
+        (when (seq blocks)
+          [:ul.ref-blocks
+           (for [block blocks]
+             [:li.ref-block [:div.block-content (block-content-from-ref block ctx)]])])]))])
+
 (defn render-page-html
-  [transit page_uuid-str]
+  [transit page_uuid-str refs-data]
   (let [payload (read-transit-safe transit)
         meta (get-publish-meta payload)
         graph-uuid (when meta
@@ -511,6 +586,17 @@
              :name->uuid name->uuid
              :graph-uuid graph-uuid}
         blocks (render-block-tree children-by-parent page-eid ctx)
+        linked-by-page (when refs-data
+                         (->> (get refs-data "refs")
+                              (group-by #(get % "source_page_uuid"))
+                              (map (fn [[_ items]]
+                                     {:page_title (get (first items) "source_page_title")
+                                      :page_uuid (get (first items) "source_page_uuid")
+                                      :blocks items}))
+                              (sort-by (fn [{:keys [page_title]}]
+                                         (string/lower-case (or page_title ""))))))
+        linked-refs (when (seq linked-by-page)
+                      (linked-references ctx graph-uuid linked-by-page))
         doc [:html
              [:head
               [:meta {:charset "utf-8"}]
@@ -532,6 +618,11 @@
                ".block-toggle:focus{outline:2px solid #c7b38f;outline-offset:2px;border-radius:4px;}"
                ".block-children{margin-left:16px;}"
                ".block.is-collapsed > .block-children { display: none; }"
+               ".linked-refs{margin-top:36px;}"
+               ".linked-refs h2{font-size:18px;margin:0 0 16px;color:#4b3b24;}"
+               ".ref-page{margin:0 0 16px;}"
+               ".ref-blocks{margin:8px 0 0 18px;padding:0;list-style:disc;}"
+               ".ref-block{margin:6px 0;}"
                ".page-ref{color:#1a5fb4;text-decoration:none;}"
                ".page-ref:hover{text-decoration:underline;}"]]
              [:body
@@ -542,7 +633,8 @@
                  {:type "button"
                   :onclick "window.toggleTopBlocks(this)"}
                  "Collapse all"]]
-               (when blocks blocks)]
+               (when blocks blocks)
+               (when linked-refs linked-refs)]
               [:script
                "document.addEventListener('click',function(e){var btn=e.target.closest('.block-toggle');if(!btn)return;var li=btn.closest('li.block');if(!li)return;var collapsed=li.classList.toggle('is-collapsed');btn.setAttribute('aria-expanded',String(!collapsed));});"
                "window.toggleTopBlocks=function(btn){var list=document.querySelector('.blocks');if(!list){return;}var collapsed=list.classList.toggle('collapsed-all');list.querySelectorAll(':scope > .block').forEach(function(el){if(collapsed){el.classList.add('is-collapsed');}else{el.classList.remove('is-collapsed');}});if(btn){btn.textContent=collapsed?'Expand all':'Collapse all';}};"]]]]
@@ -563,7 +655,17 @@
                 (js-await [body (.arrayBuffer request)]
                           (let [{:keys [content_hash content_length graph page_uuid schema_version block_count created_at] :as meta}
                                 (or (parse-meta-header request)
-                                    (meta-from-body body))]
+                                    (meta-from-body body))
+                                payload (read-transit-safe (.decode text-decoder body))
+                                payload-entities (datoms->entities (:datoms payload))
+                                page-eid (some (fn [[e entity]]
+                                                 (when (= (:block/uuid entity) (uuid page_uuid))
+                                                   e))
+                                               payload-entities)
+                                page-title (when page-eid
+                                             (entity->title (get payload-entities page-eid)))
+                                refs (when (and page-eid page-title)
+                                       (page-refs-from-payload payload page-eid page_uuid page-title graph))]
                             (cond
                               (not (valid-meta? meta))
                               (bad-request "missing publish metadata")
@@ -592,7 +694,8 @@
                                                            :r2_key r2-key
                                                            :owner_sub (aget claims "sub")
                                                            :created_at created_at
-                                                           :updated_at (.now js/Date)})
+                                                           :updated_at (.now js/Date)
+                                                           :refs refs})
                                          meta-resp (.fetch do-stub "https://publish/pages"
                                                            #js {:method "POST"
                                                                 :headers #js {"content-type" "application/json"}
@@ -663,6 +766,22 @@
                                                           :expires_in 300
                                                           :etag etag}
                                                          200))))))))))
+
+(defn handle-get-page-refs [request env]
+  (let [url (js/URL. (.-url request))
+        parts (string/split (.-pathname url) #"/")
+        graph-uuid (nth parts 2 nil)
+        page_uuid (nth parts 3 nil)]
+    (if (or (nil? graph-uuid) (nil? page_uuid))
+      (bad-request "missing graph uuid or page uuid")
+      (js-await [^js do-ns (aget env "PUBLISH_META_DO")
+                 do-id (.idFromName do-ns "index")
+                 do-stub (.get do-ns do-id)
+                 refs-resp (.fetch do-stub (str "https://publish/pages/" graph-uuid "/" page_uuid "/refs"))]
+                (if-not (.-ok refs-resp)
+                  (not-found)
+                  (js-await [refs (.json refs-resp)]
+                            (json-response (js->clj refs :keywordize-keys true) 200)))))))
 
 (defn handle-list-pages [env]
   (js-await [^js do-ns (aget env "PUBLISH_META_DO")
@@ -753,13 +872,19 @@
                 (if-not (.-ok meta-resp)
                   (not-found)
                   (js-await [meta (.json meta-resp)
+                             refs-resp (let [index-id (.idFromName do-ns "index")
+                                             index-stub (.get do-ns index-id)]
+                                         (.fetch index-stub (str "https://publish/pages/" graph-uuid "/" page_uuid "/refs")))
+                             refs-json (when (and refs-resp (.-ok refs-resp))
+                                         (js-await [raw (.json refs-resp)]
+                                                   (js->clj raw :keywordize-keys false)))
                              r2 (aget env "PUBLISH_R2")
                              object (.get r2 (aget meta "r2_key"))]
                             (if-not object
                               (json-response {:error "missing transit blob"} 404)
                               (js-await [buffer (.arrayBuffer object)
                                          transit (.decode text-decoder buffer)
-                                         html (render-page-html transit page_uuid)]
+                                         html (render-page-html transit page_uuid refs-json)]
                                         (js/Response.
                                          html
                                          #js {:headers (merge-headers
@@ -788,6 +913,7 @@
         (cond
           (= (count parts) 3) (handle-list-graph-pages request env)
           (= (nth parts 4 nil) "transit") (handle-get-page-transit request env)
+          (= (nth parts 4 nil) "refs") (handle-get-page-refs request env)
           :else (handle-get-page request env)))
 
       (and (string/starts-with? path "/pages/") (= method "DELETE"))
@@ -821,7 +947,19 @@
                    "created_at INTEGER,"
                    "updated_at INTEGER,"
                    "PRIMARY KEY (graph_uuid, page_uuid)"
-                   ");"))))
+                   ");")))
+  (sql-exec sql
+            (str "CREATE TABLE IF NOT EXISTS page_refs ("
+                 "graph_uuid TEXT NOT NULL,"
+                 "target_page_uuid TEXT NOT NULL,"
+                 "source_page_uuid TEXT NOT NULL,"
+                 "source_page_title TEXT,"
+                 "source_block_uuid TEXT,"
+                 "source_block_content TEXT,"
+                 "source_block_format TEXT,"
+                 "updated_at INTEGER,"
+                 "PRIMARY KEY (graph_uuid, target_page_uuid, source_block_uuid)"
+                 ");")))
 
 (defn row->meta [row]
   (let [data (js->clj row :keywordize-keys false)]
@@ -868,7 +1006,31 @@
                           (aget body "owner_sub")
                           (aget body "created_at")
                           (aget body "updated_at"))
-                (json-response {:ok true}))
+                (let [refs (aget body "refs")
+                      graph-uuid (aget body "graph")
+                      page-uuid (aget body "page_uuid")]
+                  (when (and graph-uuid page-uuid)
+                    (sql-exec sql
+                              "DELETE FROM page_refs WHERE graph_uuid = ? AND source_page_uuid = ?;"
+                              graph-uuid
+                              page-uuid)
+                    (when (seq refs)
+                      (doseq [ref refs]
+                        (sql-exec sql
+                                  (str "INSERT OR REPLACE INTO page_refs ("
+                                       "graph_uuid, target_page_uuid, source_page_uuid, "
+                                       "source_page_title, source_block_uuid, source_block_content, "
+                                       "source_block_format, updated_at"
+                                       ") VALUES (?, ?, ?, ?, ?, ?, ?, ?);")
+                                  (aget ref "graph_uuid")
+                                  (aget ref "target_page_uuid")
+                                  (aget ref "source_page_uuid")
+                                  (aget ref "source_page_title")
+                                  (aget ref "source_block_uuid")
+                                  (aget ref "source_block_content")
+                                  (aget ref "source_block_format")
+                                  (aget ref "updated_at")))))
+                  (json-response {:ok true})))
 
       (= "GET" (.-method request))
       (let [url (js/URL. (.-url request))
@@ -876,6 +1038,20 @@
             graph-uuid (nth parts 2 nil)
             page_uuid (nth parts 3 nil)]
         (cond
+          (= (nth parts 4 nil) "refs")
+          (let [rows (get-sql-rows
+                      (sql-exec sql
+                                (str "SELECT graph_uuid, target_page_uuid, source_page_uuid, "
+                                     "source_page_title, source_block_uuid, source_block_content, "
+                                     "source_block_format, updated_at "
+                                     "FROM page_refs WHERE graph_uuid = ? AND target_page_uuid = ? "
+                                     "ORDER BY updated_at DESC;")
+                                graph-uuid
+                                page_uuid))]
+            (json-response {:refs (map (fn [row]
+                                         (js->clj row :keywordize-keys false))
+                                       rows)}))
+
           (and graph-uuid page_uuid)
           (let [rows (get-sql-rows
                       (sql-exec sql

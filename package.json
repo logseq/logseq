@@ -86,7 +86,7 @@
         "cljs:mobile-watch": "clojure -M:cljs watch mobile db-worker --config-merge \"{:output-dir \\\"./static/mobile/js\\\" :asset-path \\\"/static/mobile/js\\\" :release {:asset-path \\\"http://localhost\\\"}}\"",
         "cljs:release-mobile": "clojure -M:cljs release mobile db-worker --config-merge \"{:output-dir \\\"./static/mobile/js\\\" :asset-path \\\"/static/mobile/js\\\" :release {:asset-path \\\"http://localhost\\\"}}\"",
         "cljs:dev-watch": "clojure -M:cljs watch app db-worker inference-worker electron mobile",
-        "cljs:app-watch": "clojure -M:cljs watch app db-worker inference-worker",
+        "cljs:app-watch": "clojure -M:cljs watch app db-worker inference-worker publish-worker",
         "cljs:electron-watch": "clojure -M:cljs watch app db-worker inference-worker electron --config-merge \"{:asset-path \\\"./js\\\"}\"",
         "cljs:release": "clojure -M:cljs release app db-worker inference-worker publishing electron",
         "cljs:release-electron": "clojure -M:cljs release app db-worker inference-worker electron --debug && clojure -M:cljs release publishing",
