@@ -492,6 +492,9 @@
       (or (= "Plain" type) (= "Spaces" type))
       (content->nodes data uuid->title graph-uuid)
 
+      (= "Break_Line" type)
+      [[:br]]
+
       (= "Emphasis" type)
       (let [[[kind] items] data
             tag (case kind
@@ -559,6 +562,29 @@
                   (inline->nodes-seq ctx ast)
                   (content->nodes raw (:uuid->title ctx) (:graph-uuid ctx)))]
     (into [:span.block-text] content)))
+
+(defn block-raw-content [block]
+  (or (:block/content block)
+      (:block/title block)
+      (:block/name block)
+      ""))
+
+(defn block-display-node [block ctx]
+  (let [display-type (:logseq.property.node/display-type block)]
+    (case display-type
+      :code
+      (let [lang (:logseq.property.code/lang block)
+            attrs (cond-> {:class "code-block"}
+                    (string? lang) (assoc :data-lang lang))]
+        [:div attrs [:code (block-raw-content block)]])
+
+      :math
+      [:div.math-block (block-raw-content block)]
+
+      :quote
+      [:blockquote.quote-block (block-content-nodes block ctx)]
+
+      (block-content-nodes block ctx))))
 
 (defn block-content-from-ref [ref ctx]
   (let [raw (or (get ref "source_block_content") "")
@@ -720,7 +746,7 @@
                                                   (:entities ctx))]
                 [:li.block
                  [:div.block-content
-                  (block-content-nodes block ctx)
+                  (block-display-node block ctx)
                   (when has-children?
                     [:button.block-toggle
                      {:type "button" :aria-expanded "true"}
@@ -885,6 +911,10 @@
               [:meta {:charset "utf-8"}]
               [:meta {:name "viewport" :content "width=device-width,initial-scale=1"}]
               [:title page-title]
+              [:link {:rel "stylesheet"
+                      :href "https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css"}]
+              [:script {:defer true
+                        :src "https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js"}]
               [:style
                "body{margin:0;background:#fbf8f3;color:#1b1b1b;font-family:Georgia,serif;}"
                ".wrap{max-width:880px;margin:0 auto;padding:40px 24px;}"
@@ -896,6 +926,13 @@
                ".block{margin:6px 0;}"
                ".block-content{white-space:pre-wrap;line-height:1.6;display:flex;gap:8px;align-items:flex-start;}"
                ".block-text{flex:1;}"
+               ".code-block{flex:1;position:relative;border-radius:10px;overflow:hidden;border:1px solid #e6dccb;background:#1f2933;}"
+               ".code-block[data-lang]:before{content:attr(data-lang);position:absolute;top:8px;right:10px;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#c7b38f;z-index:2;}"
+               ".code-block .cm-editor{height:auto;background:#1f2933;color:#f8f4ec;font-size:13px;line-height:1.5;}"
+               ".code-block .cm-scroller{font-family:\"SFMono-Regular\",Consolas,\"Liberation Mono\",Menlo,monospace;padding:12px;}"
+               ".code-block .cm-gutters{background:#1f2933;color:#8a7a63;border-right:1px solid rgba(199,179,143,0.25);}"
+               ".math-block{flex:1;padding:10px 12px;border-radius:10px;background:#f1e8d9;font-family:\"Times New Roman\",serif;}"
+               ".quote-block{flex:1;margin:0;padding:8px 12px;border-left:4px solid #c7b38f;background:#fff8ec;border-radius:8px;}"
                ".page-properties{margin:0 0 24px;padding:12px 16px;border:1px solid #e6dccb;border-radius:12px;background:#fffdf8;}"
                ".properties{margin:0;display:grid;grid-template-columns:140px 1fr;gap:6px 16px;}"
                ".property{display:contents;}"
@@ -943,7 +980,33 @@
                (when linked-refs linked-refs)]
               [:script
                "document.addEventListener('click',function(e){var btn=e.target.closest('.block-toggle');if(!btn)return;var li=btn.closest('li.block');if(!li)return;var collapsed=li.classList.toggle('is-collapsed');btn.setAttribute('aria-expanded',String(!collapsed));});"
-               "window.toggleTopBlocks=function(btn){var list=document.querySelector('.blocks');if(!list){return;}var collapsed=list.classList.toggle('collapsed-all');list.querySelectorAll(':scope > .block').forEach(function(el){if(collapsed){el.classList.add('is-collapsed');}else{el.classList.remove('is-collapsed');}});if(btn){btn.textContent=collapsed?'Expand all':'Collapse all';}};"]]]]
+               "window.toggleTopBlocks=function(btn){var list=document.querySelector('.blocks');if(!list){return;}var collapsed=list.classList.toggle('collapsed-all');list.querySelectorAll(':scope > .block').forEach(function(el){if(collapsed){el.classList.add('is-collapsed');}else{el.classList.remove('is-collapsed');}});if(btn){btn.textContent=collapsed?'Expand all':'Collapse all';}};"
+               "document.addEventListener('DOMContentLoaded',function(){if(!window.katex){return;}document.querySelectorAll('.math-block').forEach(function(el){var tex=el.textContent;try{window.katex.render(tex,el,{displayMode:true,throwOnError:false});}catch(e){}});});"]]
+             [:script {:type "module"}
+              "import {EditorState, EditorView, basicSetup, defaultHighlightStyle, syntaxHighlighting, javascript, python, html, css, json, markdown, sql, clojure} from 'https://esm.sh/codemirror@6.0.1?bundle';\n"
+              "document.querySelectorAll('.code-block').forEach((block)=>{\n"
+              "  const codeEl = block.querySelector('code');\n"
+              "  const doc = codeEl ? codeEl.textContent : '';\n"
+              "  block.textContent='';\n"
+              "  const lang = (block.dataset.lang || '').toLowerCase();\n"
+              "  const langExt = (()=>{\n"
+              "    if (!lang) return null;\n"
+              "    if (['js','javascript','ts','typescript'].includes(lang)) return javascript({typescript: lang.startsWith('t')});\n"
+              "    if (['py','python'].includes(lang)) return python();\n"
+              "    if (['html','htm'].includes(lang)) return html();\n"
+              "    if (['css','scss'].includes(lang)) return css();\n"
+              "    if (['json'].includes(lang)) return json();\n"
+              "    if (['md','markdown'].includes(lang)) return markdown();\n"
+              "    if (['sql'].includes(lang)) return sql();\n"
+              "    if (['clj','cljc','cljs','clojure'].includes(lang)) return clojure();\n"
+              "    return null;\n"
+              "  })();\n"
+              "  const state = EditorState.create({\n"
+              "    doc,\n"
+              "    extensions: [basicSetup, syntaxHighlighting(defaultHighlightStyle), EditorView.editable.of(false), EditorView.lineWrapping].concat(langExt ? [langExt] : [])\n"
+              "  });\n"
+              "  new EditorView({state, parent: block});\n"
+              "});"]]]
     (str "<!doctype html>" (render-hiccup doc))))
 
 (defn render-graph-html
