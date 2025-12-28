@@ -339,6 +339,51 @@ a:hover {
   letter-spacing: 0.12em;
 }
 
+.password-card {
+  margin: 20px auto 0;
+  max-width: 460px;
+  padding: 24px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: #fff7ee;
+  box-shadow: 0 14px 24px rgba(217, 125, 63, 0.12);
+  text-align: center;
+}
+
+.password-form {
+  margin-top: 18px;
+  display: grid;
+  gap: 12px;
+}
+
+.password-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+}
+
+.password-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(31, 26, 20, 0.2);
+  font-size: 15px;
+  font-family: inherit;
+}
+
+.password-input:focus {
+  outline: 2px solid rgba(217, 125, 63, 0.4);
+  border-color: rgba(217, 125, 63, 0.6);
+}
+
+.password-error {
+  margin: 8px 0 0;
+  color: #b42318;
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .not-found {
   text-align: center;
   padding: 32px 16px 8px;
