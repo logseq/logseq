@@ -33,7 +33,7 @@
   []
   #js {"access-control-allow-origin" "*"
        "access-control-allow-methods" "GET,POST,OPTIONS"
-       "access-control-allow-headers" "content-type,authorization,x-publish-meta,if-none-match"
+       "access-control-allow-headers" "content-type,authorization,x-publish-meta,x-asset-meta,if-none-match"
        "access-control-expose-headers" "etag"})
 
 (defn merge-headers [base extra]
@@ -60,6 +60,24 @@
 
 (defn not-found []
   (json-response {:error "not found"} 404))
+
+(defn asset-content-type [ext]
+  (case (string/lower-case (or ext ""))
+    ("png") "image/png"
+    ("jpg" "jpeg") "image/jpeg"
+    ("gif") "image/gif"
+    ("webp") "image/webp"
+    ("svg") "image/svg+xml"
+    ("bmp") "image/bmp"
+    ("avif") "image/avif"
+    ("mp4") "video/mp4"
+    ("webm") "video/webm"
+    ("mov") "video/quicktime"
+    ("mp3") "audio/mpeg"
+    ("wav") "audio/wav"
+    ("ogg") "audio/ogg"
+    ("pdf") "application/pdf"
+    "application/octet-stream"))
 
 (defn normalize-meta [meta]
   (when meta
@@ -569,9 +587,42 @@
       (:block/name block)
       ""))
 
+(defn- asset-url [block ctx]
+  (let [asset-type (:logseq.property.asset/type block)
+        asset-uuid (:block/uuid block)
+        external-url (:logseq.property.asset/external-url block)
+        graph-uuid (:graph-uuid ctx)]
+    (cond
+      (string? external-url) external-url
+      (and asset-uuid asset-type graph-uuid)
+      (str "/asset/" graph-uuid "/" asset-uuid "." asset-type)
+      :else nil)))
+
+(defn- asset-node [block ctx]
+  (let [asset-type (:logseq.property.asset/type block)
+        asset-url (asset-url block ctx)
+        title (or (:block/title block) (str asset-type))
+        ext (string/lower-case (or asset-type ""))]
+    (when asset-url
+      (cond
+        (contains? #{"png" "jpg" "jpeg" "gif" "webp" "svg" "bmp" "avif"} ext)
+        [:img.asset-image {:src asset-url :alt title}]
+
+        (contains? #{"mp4" "webm" "mov"} ext)
+        [:video.asset-video {:src asset-url :controls true}]
+
+        (contains? #{"mp3" "wav" "ogg"} ext)
+        [:audio.asset-audio {:src asset-url :controls true}]
+
+        :else
+        [:a.asset-link {:href asset-url :target "_blank"} title]))))
+
 (defn block-display-node [block ctx]
-  (let [display-type (:logseq.property.node/display-type block)]
+  (let [display-type (:logseq.property.node/display-type block)
+        asset-node (when (:logseq.property.asset/type block)
+                     (asset-node block ctx))]
     (case display-type
+      :asset asset-node
       :code
       (let [lang (:logseq.property.code/lang block)
             attrs (cond-> {:class "code-block"}
@@ -584,7 +635,8 @@
       :quote
       [:blockquote.quote-block (block-content-nodes block ctx)]
 
-      (block-content-nodes block ctx))))
+      (or asset-node
+          (block-content-nodes block ctx)))))
 
 (defn block-content-from-ref [ref ctx]
   (let [raw (or (get ref "source_block_content") "")
@@ -696,6 +748,9 @@
                               entities)]
     (vec (distinct (concat page-entries block-entries)))))
 
+(def ^:private void-tags
+  #{"area" "base" "br" "col" "embed" "hr" "img" "input" "link" "meta" "param" "source" "track" "wbr"})
+
 (defn render-hiccup [node]
   (cond
     (nil? node) ""
@@ -720,11 +775,13 @@
                              (map (fn [[k v]]
                                     (str " " (name k) "=\"" (escape-html (str v)) "\""))
                                   attrs)))]
-      (str "<" tag (or attrs-str "") ">"
-           (if (#{"style" "script"} tag)
-             (apply str (map #(if (string? %) % (render-hiccup %)) children))
-             (apply str (map render-hiccup children)))
-           "</" tag ">"))
+      (if (contains? void-tags tag)
+        (str "<" tag (or attrs-str "") ">")
+        (str "<" tag (or attrs-str "") ">"
+             (if (#{"style" "script"} tag)
+               (apply str (map #(if (string? %) % (render-hiccup %)) children))
+               (apply str (map render-hiccup children)))
+             "</" tag ">")))
     (seq? node) (apply str (map render-hiccup node))
     :else (escape-html (str node))))
 
@@ -933,6 +990,10 @@
                ".code-block .cm-gutters{background:#1f2933;color:#8a7a63;border-right:1px solid rgba(199,179,143,0.25);}"
                ".math-block{flex:1;padding:10px 12px;border-radius:10px;background:#f1e8d9;font-family:\"Times New Roman\",serif;}"
                ".quote-block{flex:1;margin:0;padding:8px 12px;border-left:4px solid #c7b38f;background:#fff8ec;border-radius:8px;}"
+               ".asset-image{max-width:100%;border-radius:10px;border:1px solid #e6dccb;}"
+               ".asset-video,.asset-audio{width:100%;}"
+               ".asset-link{color:#1a5fb4;text-decoration:none;}"
+               ".asset-link:hover{text-decoration:underline;}"
                ".page-properties{margin:0 0 24px;padding:12px 16px;border:1px solid #e6dccb;border-radius:12px;background:#fffdf8;}"
                ".properties{margin:0;display:grid;grid-template-columns:140px 1fr;gap:6px 16px;}"
                ".property{display:contents;}"
@@ -1486,6 +1547,53 @@
                                           #js {"content-type" "text/html; charset=utf-8"}
                                           (cors-headers))}))))))
 
+(defn parse-asset-meta-header [request]
+  (let [meta-header (.get (.-headers request) "x-asset-meta")]
+    (when meta-header
+      (try
+        (normalize-meta (js/JSON.parse meta-header))
+        (catch :default _
+          nil)))))
+
+(defn handle-post-asset [request env]
+  (js-await [auth-header (.get (.-headers request) "authorization")
+             token (when (and auth-header (string/starts-with? auth-header "Bearer "))
+                     (subs auth-header 7))
+             dev-skip? (= "true" (aget env "DEV_SKIP_AUTH"))
+             claims (cond
+                      dev-skip? #js {:sub "dev"}
+                      (nil? token) nil
+                      :else (verify-jwt token env))]
+            (let [claims (if dev-skip? #js {:sub "dev"} claims)]
+              (if (and (not dev-skip?) (nil? claims))
+                (unauthorized)
+                (let [meta (parse-asset-meta-header request)
+                      graph-uuid (get meta :graph)
+                      asset-uuid (get meta :asset_uuid)
+                      asset-type (get meta :asset_type)
+                      checksum (get meta :checksum)]
+                  (if (or (nil? meta) (string/blank? graph-uuid) (string/blank? asset-uuid) (string/blank? asset-type))
+                    (bad-request "missing asset metadata")
+                    (js-await [body (.arrayBuffer request)
+                               r2 (aget env "PUBLISH_R2")
+                               r2-key (str "publish/assets/" graph-uuid "/" asset-uuid "." asset-type)
+                               ^js existing (.head r2 r2-key)
+                               existing-checksum (when existing
+                                                   (when-let [meta (.-customMetadata existing)]
+                                                     (aget meta "checksum")))
+                               content-type (or (get meta :content_type)
+                                                (asset-content-type asset-type))
+                               put? (not (and existing-checksum checksum (= existing-checksum checksum)))]
+                              (when put?
+                                (.put r2 r2-key body
+                                      #js {:httpMetadata #js {:contentType content-type}
+                                           :customMetadata #js {:checksum (or checksum "")
+                                                                :owner_sub (aget claims "sub")}}))
+                              (json-response {:asset_uuid asset-uuid
+                                              :graph_uuid graph-uuid
+                                              :asset_type asset-type
+                                              :asset_url (str "/asset/" graph-uuid "/" asset-uuid "." asset-type)}))))))))
+
 (defn handle-tag-page-html [graph-uuid tag-uuid env]
   (if (or (nil? graph-uuid) (nil? tag-uuid))
     (bad-request "missing graph uuid or tag uuid")
@@ -1636,6 +1744,9 @@
       (and (string/starts-with? path "/page/") (= method "GET"))
       (handle-page-html request env)
 
+      (and (= path "/assets") (= method "POST"))
+      (handle-post-asset request env)
+
       (and (= path "/pages") (= method "POST"))
       (handle-post-pages request env)
 
@@ -1666,6 +1777,32 @@
         (if (= (nth parts 3 nil) "json")
           (handle-ref-name-json ref-name env)
           (handle-ref-name-html ref-name env)))
+
+      (and (string/starts-with? path "/asset/") (= method "GET"))
+      (let [parts (string/split path #"/")
+            graph-uuid (nth parts 2 nil)
+            file-name (nth parts 3 nil)]
+        (if (or (string/blank? graph-uuid) (string/blank? file-name))
+          (bad-request "missing asset id")
+          (let [ext-idx (string/last-index-of file-name ".")
+                asset-uuid (when (and ext-idx (pos? ext-idx))
+                             (subs file-name 0 ext-idx))
+                asset-type (when (and ext-idx (pos? ext-idx))
+                             (subs file-name (inc ext-idx)))]
+            (if (or (string/blank? asset-uuid) (string/blank? asset-type))
+              (bad-request "invalid asset id")
+              (js-await [r2 (aget env "PUBLISH_R2")
+                         r2-key (str "publish/assets/" graph-uuid "/" asset-uuid "." asset-type)
+                         ^js object (.get r2 r2-key)]
+                        (if-not object
+                          (not-found)
+                          (let [headers (merge-headers
+                                         #js {"content-type" (or (some-> object .-httpMetadata .-contentType)
+                                                                 (asset-content-type asset-type))
+                                              "cache-control" "public, max-age=31536000, immutable"}
+                                         (cors-headers))]
+                            (js/Response. (.-body object)
+                                          #js {:headers headers}))))))))
 
       (and (string/starts-with? path "/s/") (= method "GET"))
       (let [parts (string/split path #"/")
