@@ -73,12 +73,19 @@
   (let [page-id (:db/id page-entity)
         blocks (ldb/get-page-blocks db page-id)
         block-eids (map :db/id blocks)
-        ref-eids (->> blocks (mapcat :block/refs) (keep :db/id))
-        tag-eids (->> blocks (mapcat :block/tags) (keep :db/id))
+        ref-eids (->> blocks
+                      (mapcat :block/refs)
+                      (map publish-ref-eid)
+                      (remove nil?))
+        tag-eids (->> blocks
+                      (mapcat :block/tags)
+                      (map publish-ref-eid)
+                      (remove nil?))
         page-tag-eids (->> (if-let [tags (:block/tags page-entity)]
                              (if (sequential? tags) tags [tags])
                              [])
-                           (keep :db/id))
+                           (map publish-ref-eid)
+                           (remove nil?))
         page-eids (->> blocks (map :block/page) (keep :db/id))
         property-eids (->> (cons page-entity blocks)
                            (map db-property/properties)
