@@ -1,16 +1,19 @@
 import katexPkg from "https://esm.sh/katex@0.16.10?bundle";
-import { EditorState } from "https://esm.sh/@codemirror/state@6.4.1?bundle";
-import { EditorView } from "https://esm.sh/@codemirror/view@6.28.2?bundle";
-import { basicSetup } from "https://esm.sh/@codemirror/basic-setup@0.20.0?bundle";
-import { defaultHighlightStyle, syntaxHighlighting } from "https://esm.sh/@codemirror/language@6.10.2?bundle";
-import { javascript } from "https://esm.sh/@codemirror/lang-javascript@6.2.2?bundle";
-import { python } from "https://esm.sh/@codemirror/lang-python@6.1.6?bundle";
-import { html } from "https://esm.sh/@codemirror/lang-html@6.4.9?bundle";
-import { css } from "https://esm.sh/@codemirror/lang-css@6.2.1?bundle";
-import { json } from "https://esm.sh/@codemirror/lang-json@6.0.1?bundle";
-import { markdown } from "https://esm.sh/@codemirror/lang-markdown@6.2.5?bundle";
-import { sql } from "https://esm.sh/@codemirror/lang-sql@6.6.2?bundle";
-import { clojure } from "https://esm.sh/@nextjournal/lang-clojure@1.0.0?bundle";
+import {
+  EditorState,
+  EditorView,
+  basicSetup,
+  defaultHighlightStyle,
+  syntaxHighlighting,
+  javascript,
+  python,
+  html,
+  css,
+  json,
+  markdown,
+  sql,
+  clojure,
+} from "https://esm.sh/@codemirror/basic-setup@0.20.0?bundle";
 
 const katex = katexPkg.default || katexPkg;
 
