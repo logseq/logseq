@@ -119,11 +119,18 @@
                   assets)))))
 
 (defn- <post-publish!
-  [payload]
+  [payload {:keys [password]}]
   (let [token (state/get-auth-id-token)
         headers (cond-> {"content-type" "application/transit+json"}
                   token (assoc "authorization" (str "Bearer " token)))]
-    (p/let [body (ldb/write-transit-str payload)
+    (p/let [page-password (some-> password string/trim)
+            page-password (when (and (string? page-password)
+                                     (not (string/blank? page-password)))
+                            page-password)
+            page-password-hash (when page-password (<sha256-hex page-password))
+            payload (cond-> payload
+                      page-password-hash (assoc :page-password-hash page-password-hash))
+            body (ldb/write-transit-str payload)
             content-hash (<sha256-hex body)
             graph-uuid (or (:graph-uuid payload)
                            (some-> (ldb/get-graph-rtc-uuid (db/get-db)) str))
@@ -153,7 +160,7 @@
 
 (defn publish-page!
   "Prepares and uploads the publish payload for a page."
-  [page]
+  [page & [{:keys [password]}]]
   (let [repo (state/get-current-repo)]
     (when-let [db* (and repo (db/get-db repo))]
       (if (and page (:db/id page))
@@ -164,7 +171,7 @@
                                                  graph-uuid)]
           (if payload
             (-> (p/let [_ (<upload-assets! repo graph-uuid payload)]
-                  (<post-publish! payload))
+                  (<post-publish! payload {:password password}))
                 (p/then (fn [resp]
                           (p/let [json (.json resp)
                                   data (bean/->clj json)]

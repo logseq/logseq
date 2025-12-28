@@ -696,6 +696,37 @@
                [:p.tag-sub "This page hasn't been published yet."]]]]]
     (str "<!doctype html>" (render-hiccup doc))))
 
+(defn render-password-html
+  [graph-uuid page-uuid wrong?]
+  (let [title "Protected page"
+        doc [:html
+             [:head
+              [:meta {:charset "utf-8"}]
+              [:meta {:name "viewport" :content "width=device-width,initial-scale=1"}]
+              [:title title]
+              [:link {:rel "stylesheet" :href "/static/publish.css"}]]
+             [:body
+              [:main.wrap
+               [:div.page-toolbar
+                (when graph-uuid
+                  [:a.toolbar-btn {:href (str "/graph/" graph-uuid)} "Home"])]
+               [:div.password-card
+                [:h1 title]
+                [:p.tag-sub "This page is password protected."]
+                (when wrong?
+                  [:p.password-error "Incorrect password."])
+                [:form.password-form {:method "GET"}
+                 (when page-uuid
+                   [:input {:type "hidden" :name "page" :value page-uuid}])
+                 [:label.password-label {:for "publish-password"} "Enter password"]
+                 [:input.password-input {:id "publish-password"
+                                         :name "password"
+                                         :type "password"
+                                         :placeholder "Password"
+                                         :required true}]
+                 [:button.toolbar-btn {:type "submit"} "Unlock"]]]]]]]
+    (str "<!doctype html>" (render-hiccup doc))))
+
 (defn render-404-html
   []
   (let [title "Page not found"

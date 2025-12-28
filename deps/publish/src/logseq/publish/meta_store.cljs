@@ -22,6 +22,7 @@
                                   "owner_sub TEXT,"
                                   "created_at INTEGER,"
                                   "updated_at INTEGER,"
+                                  "password_hash TEXT,"
                                   "PRIMARY KEY (graph_uuid, page_uuid)"
                                   ");"))
     (let [cols (publish-common/get-sql-rows (publish-common/sql-exec sql "PRAGMA table_info(pages);"))
@@ -31,7 +32,9 @@
       (when-not (contains? col-names "page_tags")
         (publish-common/sql-exec sql "ALTER TABLE pages ADD COLUMN page_tags TEXT;"))
       (when-not (contains? col-names "short_id")
-        (publish-common/sql-exec sql "ALTER TABLE pages ADD COLUMN short_id TEXT;")))
+        (publish-common/sql-exec sql "ALTER TABLE pages ADD COLUMN short_id TEXT;"))
+      (when-not (contains? col-names "password_hash")
+        (publish-common/sql-exec sql "ALTER TABLE pages ADD COLUMN password_hash TEXT;")))
     (let [cols (publish-common/get-sql-rows (publish-common/sql-exec sql "PRAGMA table_info(page_refs);"))
           col-names (set (map #(aget % "name") cols))]
       (when (seq col-names)
@@ -109,8 +112,9 @@
                                               "owner_sub,"
                                               "created_at,"
                                               "updated_at,"
-                                              "short_id"
-                                              ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                                              "short_id,"
+                                              "password_hash"
+                                              ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                                               " ON CONFLICT(graph_uuid, page_uuid) DO UPDATE SET"
                                               " page_uuid=excluded.page_uuid,"
                                               " page_title=excluded.page_title,"
@@ -122,7 +126,8 @@
                                               " r2_key=excluded.r2_key,"
                                               " owner_sub=excluded.owner_sub,"
                                               " updated_at=excluded.updated_at,"
-                                              " short_id=excluded.short_id;")
+                                              " short_id=excluded.short_id,"
+                                              " password_hash=excluded.password_hash;")
                                          (aget body "page_uuid")
                                          (aget body "page_title")
                                          (aget body "page_tags")
@@ -135,7 +140,8 @@
                                          (aget body "owner_sub")
                                          (aget body "created_at")
                                          (aget body "updated_at")
-                                         (aget body "short_id"))
+                                         (aget body "short_id")
+                                         (aget body "password_hash"))
                 (let [refs (aget body "refs")
                       tagged-nodes (aget body "tagged_nodes")
                       graph-uuid (aget body "graph")
@@ -243,6 +249,18 @@
                                                short-id))
                 row (first rows)]
             (publish-common/json-response {:page (when row (js->clj row :keywordize-keys false))}))
+
+          (= (nth parts 4 nil) "password")
+          (let [rows (publish-common/get-sql-rows
+                      (publish-common/sql-exec sql
+                                               (str "SELECT password_hash "
+                                                    "FROM pages WHERE graph_uuid = ? AND page_uuid = ? LIMIT 1;")
+                                               graph-uuid
+                                               page-uuid))
+                row (first rows)]
+            (if-not row
+              (publish-common/not-found)
+              (publish-common/json-response {:password_hash (aget row "password_hash")})))
 
           (= (nth parts 4 nil) "refs")
           (let [rows (publish-common/get-sql-rows
