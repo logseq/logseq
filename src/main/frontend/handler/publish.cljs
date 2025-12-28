@@ -70,7 +70,7 @@
                                                (some-> (ldb/get-graph-rtc-uuid db*) str))
                                 page-uuid (str (:block/uuid page))
                                 url (when (and graph-uuid page-uuid)
-                                      (str config/PUBLISH-API-BASE "/p/" graph-uuid "/" page-uuid))]
+                                      (str config/PUBLISH-API-BASE "/page/" graph-uuid "/" page-uuid))]
                             (when url
                               (notification/show!
                                [:div.inline

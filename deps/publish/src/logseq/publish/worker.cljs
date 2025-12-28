@@ -347,7 +347,7 @@
         uuid (:block/uuid entity)
         graph-uuid (:graph-uuid ctx)]
     (if (and uuid graph-uuid (page-entity? entity))
-      [[:a.page-ref {:href (str "/p/" graph-uuid "/" uuid)} title]]
+      [[:a.page-ref {:href (str "/page/" graph-uuid "/" uuid)} title]]
       [title])))
 
 (declare content->nodes)
@@ -471,7 +471,7 @@
                 uuid (or (aget m 1) (aget m 2))
                 title (get uuid->title uuid uuid)
                 href (when graph-uuid
-                       (str "/p/" graph-uuid "/" uuid))
+                       (str "/page/" graph-uuid "/" uuid))
                 node (if href
                        [:a.page-ref {:href href} title]
                        title)
@@ -527,7 +527,7 @@
                           (string? link-value) [link-value]
                           :else [""])
             href (cond
-                   page-uuid (str "/p/" graph-uuid "/" page-uuid)
+                   page-uuid (str "/page/" graph-uuid "/" page-uuid)
                    (string? link-value) link-value
                    :else nil)]
         (if href
@@ -538,7 +538,7 @@
       (let [s (or (second data) "")
             page-uuid (page-ref->uuid s name->uuid)]
         (if page-uuid
-          [[:a.page-ref {:href (str "/p/" graph-uuid "/" page-uuid)} (str "#" s)]]
+          [[:a.page-ref {:href (str "/page/" graph-uuid "/" page-uuid)} (str "#" s)]]
           [(str "#" s)]))
 
       :else
@@ -681,7 +681,7 @@
      (let [ref-page-uuid page_uuid
            ref-page-title page_title
            href (when (and graph-uuid ref-page-uuid)
-                  (str "/p/" graph-uuid "/" ref-page-uuid))]
+                  (str "/page/" graph-uuid "/" ref-page-uuid))]
        [:div.ref-page
         (if href
           [:a.page-ref {:href href} ref-page-title]
@@ -786,9 +786,9 @@
               [:style
                "body{margin:0;background:#fbf8f3;color:#1b1b1b;font-family:Georgia,serif;}"
                ".wrap{max-width:880px;margin:0 auto;padding:40px 24px;}"
-               "h1{font-size:30px;margin:0 0 36px;font-weight:600;}"
-               ".page-toolbar{display:flex;gap:12px;align-items:center;margin:0 0 16px;}"
-               ".toolbar-btn{border:1px solid #e1d7c7;background:#fff7ea;color:#5c4a2f;padding:6px 10px;border-radius:999px;font-size:12px;cursor:pointer;}"
+               "h1{font-size:30px;margin:24px 0 36px;font-weight:600;}"
+               ".page-toolbar{display:flex;gap:12px;align-items:center;margin:0 0 16px;flex-wrap:wrap;}"
+               ".toolbar-btn{border:1px solid #e1d7c7;background:#fff7ea;color:#5c4a2f;padding:6px 10px;border-radius:999px;font-size:12px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;}"
                ".toolbar-btn:hover{background:#f6e8d4;}"
                ".blocks{margin:0;padding-left:18px;}"
                ".block{margin:6px 0;}"
@@ -815,19 +815,72 @@
                ".page-ref:hover{text-decoration:underline;}"]]
              [:body
               [:main.wrap
-               [:h1 page-title]
-               (when page-properties
-                 [:section.page-properties page-properties])
                [:div.page-toolbar
+                (when graph-uuid
+                  [:a.toolbar-btn {:href (str "/graph/" graph-uuid)} "Home"])
                 [:button.toolbar-btn
                  {:type "button"
                   :onclick "window.toggleTopBlocks(this)"}
                  "Collapse all"]]
+
+               [:h1 page-title]
+
+               (when page-properties
+                 [:section.page-properties page-properties])
+
                (when blocks blocks)
                (when linked-refs linked-refs)]
               [:script
                "document.addEventListener('click',function(e){var btn=e.target.closest('.block-toggle');if(!btn)return;var li=btn.closest('li.block');if(!li)return;var collapsed=li.classList.toggle('is-collapsed');btn.setAttribute('aria-expanded',String(!collapsed));});"
                "window.toggleTopBlocks=function(btn){var list=document.querySelector('.blocks');if(!list){return;}var collapsed=list.classList.toggle('collapsed-all');list.querySelectorAll(':scope > .block').forEach(function(el){if(collapsed){el.classList.add('is-collapsed');}else{el.classList.remove('is-collapsed');}});if(btn){btn.textContent=collapsed?'Expand all':'Collapse all';}};"]]]]
+    (str "<!doctype html>" (render-hiccup doc))))
+
+(defn format-timestamp
+  [ts]
+  (when (number? ts)
+    (.toLocaleString (js/Date. ts))))
+
+(defn render-graph-html
+  [graph-uuid pages]
+  (let [rows (->> pages
+                  (map (fn [page]
+                         (let [page-uuid (aget page "page_uuid")
+                               page-title (aget page "page_title")
+                               updated-at (aget page "updated_at")
+                               href (str "/page/" graph-uuid "/" page-uuid)]
+                           {:page-uuid page-uuid
+                            :page-title page-title
+                            :href href
+                            :updated-at updated-at})))
+                  (sort-by (fn [row]
+                             (or (:updated-at row) 0)))
+                  reverse)
+        doc [:html
+             [:head
+              [:meta {:charset "utf-8"}]
+              [:meta {:name "viewport" :content "width=device-width,initial-scale=1"}]
+              [:title (str "Published pages - " graph-uuid)]
+              [:style
+               "body{margin:0;background:#fbf8f3;color:#1b1b1b;font-family:Georgia,serif;}"
+               ".wrap{max-width:880px;margin:0 auto;padding:40px 24px;}"
+               "h1{font-size:26px;margin:0 0 20px;font-weight:600;}"
+               ".graph-meta{color:#6b4f2b;font-size:13px;margin:0 0 24px;}"
+               ".page-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px;}"
+               ".page-item{padding:12px 14px;border:1px solid #e6dccb;border-radius:12px;background:#fffdf8;display:flex;justify-content:space-between;gap:12px;align-items:center;}"
+               ".page-link{color:#1a5fb4;text-decoration:none;overflow-wrap:anywhere;}"
+               ".page-link:hover{text-decoration:underline;}"
+               ".page-meta{color:#6b4f2b;font-size:12px;white-space:nowrap;}"]]
+             [:body
+              [:main.wrap
+               [:h1 "Published pages"]
+               (if (seq rows)
+                 [:ul.page-list
+                  (for [{:keys [page-uuid page-title href updated-at]} rows]
+                    [:li.page-item
+                     [:div
+                      [:a.page-link {:href href} (or page-title page-uuid)]]
+                     [:span.page-meta (or (format-timestamp updated-at) "—")]])]
+                 [:p "No pages have been published yet."])]]]]
     (str "<!doctype html>" (render-hiccup doc))))
 
 (defn handle-post-pages [request env]
@@ -852,8 +905,10 @@
                                                  (when (= (:block/uuid entity) (uuid page_uuid))
                                                    e))
                                                payload-entities)
-                                page-title (when page-eid
-                                             (entity->title (get payload-entities page-eid)))
+                                page-title (or (:page-title payload)
+                                               (get payload "page-title")
+                                               (when page-eid
+                                                 (entity->title (get payload-entities page-eid))))
                                 refs (or (:refs payload)
                                          (get payload "refs")
                                          (when (and page-eid page-title)
@@ -878,6 +933,7 @@
                                                                  page_uuid))
                                          do-stub (.get do-ns do-id)
                                          payload (clj->js {:page_uuid page_uuid
+                                                           :page_title page-title
                                                            :graph graph-uuid
                                                            :schema_version schema_version
                                                            :block_count block_count
@@ -985,21 +1041,42 @@
               (js-await [meta (.json meta-resp)]
                         (json-response (js->clj meta :keywordize-keys true) 200)))))
 
+(defn handle-list-graph-pages-by-uuid [graph-uuid env]
+  (if-not graph-uuid
+    (bad-request "missing graph uuid")
+    (js-await [^js do-ns (aget env "PUBLISH_META_DO")
+               do-id (.idFromName do-ns "index")
+               do-stub (.get do-ns do-id)
+               meta-resp (.fetch do-stub (str "https://publish/pages/" graph-uuid)
+                                 #js {:method "GET"})]
+              (if-not (.-ok meta-resp)
+                (not-found)
+                (js-await [meta (.json meta-resp)]
+                          (json-response (js->clj meta :keywordize-keys true) 200))))))
+
+(defn handle-graph-html [graph-uuid env]
+  (if-not graph-uuid
+    (bad-request "missing graph uuid")
+    (js-await [^js do-ns (aget env "PUBLISH_META_DO")
+               do-id (.idFromName do-ns "index")
+               do-stub (.get do-ns do-id)
+               meta-resp (.fetch do-stub (str "https://publish/pages/" graph-uuid)
+                                 #js {:method "GET"})]
+              (if-not (.-ok meta-resp)
+                (not-found)
+                (js-await [meta (.json meta-resp)
+                           pages (or (aget meta "pages") #js [])]
+                          (js/Response.
+                           (render-graph-html graph-uuid pages)
+                           #js {:headers (merge-headers
+                                          #js {"content-type" "text/html; charset=utf-8"}
+                                          (cors-headers))}))))))
+
 (defn handle-list-graph-pages [request env]
   (let [url (js/URL. (.-url request))
         parts (string/split (.-pathname url) #"/")
         graph-uuid (nth parts 2 nil)]
-    (if-not graph-uuid
-      (bad-request "missing graph uuid")
-      (js-await [^js do-ns (aget env "PUBLISH_META_DO")
-                 do-id (.idFromName do-ns "index")
-                 do-stub (.get do-ns do-id)
-                 meta-resp (.fetch do-stub (str "https://publish/pages/" graph-uuid)
-                                   #js {:method "GET"})]
-                (if-not (.-ok meta-resp)
-                  (not-found)
-                  (js-await [meta (.json meta-resp)]
-                            (json-response (js->clj meta :keywordize-keys true) 200)))))))
+    (handle-list-graph-pages-by-uuid graph-uuid env)))
 
 (defn handle-delete-page [request env]
   (let [url (js/URL. (.-url request))
@@ -1091,7 +1168,7 @@
       (= method "OPTIONS")
       (js/Response. nil #js {:status 204 :headers (cors-headers)})
 
-      (and (string/starts-with? path "/p/") (= method "GET"))
+      (and (string/starts-with? path "/page/") (= method "GET"))
       (handle-page-html request env)
 
       (and (= path "/pages") (= method "POST"))
@@ -1099,6 +1176,13 @@
 
       (and (= path "/pages") (= method "GET"))
       (handle-list-pages env)
+
+      (and (string/starts-with? path "/graph/") (= method "GET"))
+      (let [parts (string/split path #"/")
+            graph-uuid (nth parts 2 nil)]
+        (if (= (nth parts 3 nil) "json")
+          (handle-list-graph-pages-by-uuid graph-uuid env)
+          (handle-graph-html graph-uuid env)))
 
       (and (string/starts-with? path "/pages/") (= method "GET"))
       (let [parts (string/split path #"/")]
@@ -1123,12 +1207,14 @@
 
 (defn init-schema! [sql]
   (let [cols (get-sql-rows (sql-exec sql "PRAGMA table_info(pages);"))
+        col-names (set (map #(aget % "name") cols))
         drop? (some #(contains? #{"page_id" "graph"} (aget % "name")) cols)]
     (when drop?
       (sql-exec sql "DROP TABLE IF EXISTS pages;"))
     (sql-exec sql
               (str "CREATE TABLE IF NOT EXISTS pages ("
                    "page_uuid TEXT NOT NULL,"
+                   "page_title TEXT,"
                    "graph_uuid TEXT NOT NULL,"
                    "schema_version TEXT,"
                    "block_count INTEGER,"
@@ -1139,19 +1225,21 @@
                    "created_at INTEGER,"
                    "updated_at INTEGER,"
                    "PRIMARY KEY (graph_uuid, page_uuid)"
-                   ");")))
-  (sql-exec sql
-            (str "CREATE TABLE IF NOT EXISTS page_refs ("
-                 "graph_uuid TEXT NOT NULL,"
-                 "target_page_uuid TEXT NOT NULL,"
-                 "source_page_uuid TEXT NOT NULL,"
-                 "source_page_title TEXT,"
-                 "source_block_uuid TEXT,"
-                 "source_block_content TEXT,"
-                 "source_block_format TEXT,"
-                 "updated_at INTEGER,"
-                 "PRIMARY KEY (graph_uuid, target_page_uuid, source_block_uuid)"
-                 ");")))
+                   ");"))
+    (when (and (not drop?) (not (contains? col-names "page_title")))
+      (sql-exec sql "ALTER TABLE pages ADD COLUMN page_title TEXT;"))
+    (sql-exec sql
+              (str "CREATE TABLE IF NOT EXISTS page_refs ("
+                   "graph_uuid TEXT NOT NULL,"
+                   "target_page_uuid TEXT NOT NULL,"
+                   "source_page_uuid TEXT NOT NULL,"
+                   "source_page_title TEXT,"
+                   "source_block_uuid TEXT,"
+                   "source_block_content TEXT,"
+                   "source_block_format TEXT,"
+                   "updated_at INTEGER,"
+                   "PRIMARY KEY (graph_uuid, target_page_uuid, source_block_uuid)"
+                   ");"))))
 
 (defn row->meta [row]
   (let [data (js->clj row :keywordize-keys false)]
@@ -1169,6 +1257,7 @@
                 (sql-exec sql
                           (str "INSERT INTO pages ("
                                "page_uuid,"
+                               "page_title,"
                                "graph_uuid,"
                                "schema_version,"
                                "block_count,"
@@ -1178,9 +1267,10 @@
                                "owner_sub,"
                                "created_at,"
                                "updated_at"
-                               ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                               ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                                " ON CONFLICT(graph_uuid, page_uuid) DO UPDATE SET"
                                " page_uuid=excluded.page_uuid,"
+                               " page_title=excluded.page_title,"
                                " schema_version=excluded.schema_version,"
                                " block_count=excluded.block_count,"
                                " content_hash=excluded.content_hash,"
@@ -1189,6 +1279,7 @@
                                " owner_sub=excluded.owner_sub,"
                                " updated_at=excluded.updated_at;")
                           (aget body "page_uuid")
+                          (aget body "page_title")
                           (aget body "graph")
                           (aget body "schema_version")
                           (aget body "block_count")
@@ -1247,7 +1338,7 @@
           (and graph-uuid page_uuid)
           (let [rows (get-sql-rows
                       (sql-exec sql
-                                (str "SELECT page_uuid, graph_uuid, schema_version, block_count, "
+                                (str "SELECT page_uuid, page_title, graph_uuid, schema_version, block_count, "
                                      "content_hash, content_length, r2_key, owner_sub, created_at, updated_at "
                                      "FROM pages WHERE graph_uuid = ? AND page_uuid = ? LIMIT 1;")
                                 graph-uuid
@@ -1260,7 +1351,7 @@
           graph-uuid
           (let [rows (get-sql-rows
                       (sql-exec sql
-                                (str "SELECT page_uuid, graph_uuid, schema_version, block_count, "
+                                (str "SELECT page_uuid, page_title, graph_uuid, schema_version, block_count, "
                                      "content_hash, content_length, r2_key, owner_sub, created_at, updated_at "
                                      "FROM pages WHERE graph_uuid = ? ORDER BY updated_at DESC;")
                                 graph-uuid))]
@@ -1269,7 +1360,7 @@
           :else
           (let [rows (get-sql-rows
                       (sql-exec sql
-                                (str "SELECT page_uuid, graph_uuid, schema_version, block_count, "
+                                (str "SELECT page_uuid, page_title, graph_uuid, schema_version, block_count, "
                                      "content_hash, content_length, r2_key, owner_sub, created_at, updated_at "
                                      "FROM pages ORDER BY updated_at DESC;")))]
             (json-response {:pages (map row->meta rows)}))))
