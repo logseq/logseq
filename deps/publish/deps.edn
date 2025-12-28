@@ -12,7 +12,8 @@
   logseq/graph-parser                   {:local/root "../graph-parser"}
   logseq/db                             {:local/root "../db"}
   missionary/missionary                 {:mvn/version "b.46"}
-  com.cognitect/transit-cljs            {:mvn/version "0.8.280"}}
+  com.cognitect/transit-cljs            {:mvn/version "0.8.280"}
+  hiccups/hiccups                       {:mvn/version "0.3.0"}}
  :aliases
  {:cljs {:extra-deps  {org.clojure/tools.namespace      {:mvn/version "0.2.11"}
                        cider/cider-nrepl                {:mvn/version "0.55.1"}

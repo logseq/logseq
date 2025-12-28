@@ -1,0 +1,338 @@
+(ns logseq.publish.meta-store
+  (:require [clojure.string :as string]
+            [logseq.publish.common :as publish-common])
+  (:require-macros [logseq.publish.async :refer [js-await]]))
+
+(defn init-schema! [sql]
+  (let [cols (publish-common/get-sql-rows (publish-common/sql-exec sql "PRAGMA table_info(pages);"))
+        drop? (some #(contains? #{"page_id" "graph"} (aget % "name")) cols)]
+    (when drop?
+      (publish-common/sql-exec sql "DROP TABLE IF EXISTS pages;"))
+    (publish-common/sql-exec sql
+                             (str "CREATE TABLE IF NOT EXISTS pages ("
+                                  "page_uuid TEXT NOT NULL,"
+                                  "page_title TEXT,"
+                                  "page_tags TEXT,"
+                                  "graph_uuid TEXT NOT NULL,"
+                                  "schema_version TEXT,"
+                                  "block_count INTEGER,"
+                                  "content_hash TEXT NOT NULL,"
+                                  "content_length INTEGER,"
+                                  "r2_key TEXT NOT NULL,"
+                                  "owner_sub TEXT,"
+                                  "created_at INTEGER,"
+                                  "updated_at INTEGER,"
+                                  "PRIMARY KEY (graph_uuid, page_uuid)"
+                                  ");"))
+    (let [cols (publish-common/get-sql-rows (publish-common/sql-exec sql "PRAGMA table_info(pages);"))
+          col-names (set (map #(aget % "name") cols))]
+      (when-not (contains? col-names "page_title")
+        (publish-common/sql-exec sql "ALTER TABLE pages ADD COLUMN page_title TEXT;"))
+      (when-not (contains? col-names "page_tags")
+        (publish-common/sql-exec sql "ALTER TABLE pages ADD COLUMN page_tags TEXT;"))
+      (when-not (contains? col-names "short_id")
+        (publish-common/sql-exec sql "ALTER TABLE pages ADD COLUMN short_id TEXT;")))
+    (let [cols (publish-common/get-sql-rows (publish-common/sql-exec sql "PRAGMA table_info(page_refs);"))
+          col-names (set (map #(aget % "name") cols))]
+      (when (seq col-names)
+        (when-not (contains? col-names "target_page_title")
+          (publish-common/sql-exec sql "ALTER TABLE page_refs ADD COLUMN target_page_title TEXT;"))
+        (when-not (contains? col-names "target_page_name")
+          (publish-common/sql-exec sql "ALTER TABLE page_refs ADD COLUMN target_page_name TEXT;"))))
+    (publish-common/sql-exec sql
+                             (str "CREATE TABLE IF NOT EXISTS page_refs ("
+                                  "graph_uuid TEXT NOT NULL,"
+                                  "target_page_uuid TEXT NOT NULL,"
+                                  "target_page_title TEXT,"
+                                  "target_page_name TEXT,"
+                                  "source_page_uuid TEXT NOT NULL,"
+                                  "source_page_title TEXT,"
+                                  "source_block_uuid TEXT,"
+                                  "source_block_content TEXT,"
+                                  "source_block_format TEXT,"
+                                  "updated_at INTEGER,"
+                                  "PRIMARY KEY (graph_uuid, target_page_uuid, source_block_uuid)"
+                                  ");"))
+    (publish-common/sql-exec sql
+                             (str "CREATE TABLE IF NOT EXISTS page_tags ("
+                                  "graph_uuid TEXT NOT NULL,"
+                                  "tag_page_uuid TEXT NOT NULL,"
+                                  "tag_title TEXT,"
+                                  "source_page_uuid TEXT NOT NULL,"
+                                  "source_page_title TEXT,"
+                                  "source_block_uuid TEXT NOT NULL,"
+                                  "source_block_content TEXT,"
+                                  "source_block_format TEXT,"
+                                  "updated_at INTEGER,"
+                                  "PRIMARY KEY (graph_uuid, tag_page_uuid, source_block_uuid)"
+                                  ");"))))
+
+(defn parse-page-tags [value]
+  (cond
+    (nil? value) #js []
+    (array? value) value
+    (string? value) (try
+                      (js/JSON.parse value)
+                      (catch :default _
+                        #js []))
+    :else #js []))
+
+(defn row->meta [row]
+  (let [data (js->clj row :keywordize-keys false)
+        page-tags (parse-page-tags (get data "page_tags"))
+        short-id (get data "short_id")]
+    (assoc data
+           "graph" (get data "graph_uuid")
+           "page_tags" page-tags
+           "short_id" short-id
+           "short_url" (when short-id (str "/s/" short-id))
+           "content_hash" (get data "content_hash")
+           "content_length" (get data "content_length"))))
+
+(defn do-fetch [^js self request]
+  (let [sql (.-sql self)]
+    (init-schema! sql)
+    (cond
+      (= "POST" (.-method request))
+      (js-await [body (.json request)]
+                (publish-common/sql-exec sql
+                                         (str "INSERT INTO pages ("
+                                              "page_uuid,"
+                                              "page_title,"
+                                              "page_tags,"
+                                              "graph_uuid,"
+                                              "schema_version,"
+                                              "block_count,"
+                                              "content_hash,"
+                                              "content_length,"
+                                              "r2_key,"
+                                              "owner_sub,"
+                                              "created_at,"
+                                              "updated_at,"
+                                              "short_id"
+                                              ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                                              " ON CONFLICT(graph_uuid, page_uuid) DO UPDATE SET"
+                                              " page_uuid=excluded.page_uuid,"
+                                              " page_title=excluded.page_title,"
+                                              " page_tags=excluded.page_tags,"
+                                              " schema_version=excluded.schema_version,"
+                                              " block_count=excluded.block_count,"
+                                              " content_hash=excluded.content_hash,"
+                                              " content_length=excluded.content_length,"
+                                              " r2_key=excluded.r2_key,"
+                                              " owner_sub=excluded.owner_sub,"
+                                              " updated_at=excluded.updated_at,"
+                                              " short_id=excluded.short_id;")
+                                         (aget body "page_uuid")
+                                         (aget body "page_title")
+                                         (aget body "page_tags")
+                                         (aget body "graph")
+                                         (aget body "schema_version")
+                                         (aget body "block_count")
+                                         (aget body "content_hash")
+                                         (aget body "content_length")
+                                         (aget body "r2_key")
+                                         (aget body "owner_sub")
+                                         (aget body "created_at")
+                                         (aget body "updated_at")
+                                         (aget body "short_id"))
+                (let [refs (aget body "refs")
+                      tagged-nodes (aget body "tagged_nodes")
+                      graph-uuid (aget body "graph")
+                      page-uuid (aget body "page_uuid")]
+                  (when (and graph-uuid page-uuid)
+                    (publish-common/sql-exec sql
+                                             "DELETE FROM page_refs WHERE graph_uuid = ? AND source_page_uuid = ?;"
+                                             graph-uuid
+                                             page-uuid)
+                    (publish-common/sql-exec sql
+                                             "DELETE FROM page_tags WHERE graph_uuid = ? AND source_page_uuid = ?;"
+                                             graph-uuid
+                                             page-uuid)
+                    (when (seq refs)
+                      (doseq [ref refs]
+                        (publish-common/sql-exec sql
+                                                 (str "INSERT OR REPLACE INTO page_refs ("
+                                                      "graph_uuid, target_page_uuid, target_page_title, target_page_name, source_page_uuid, "
+                                                      "source_page_title, source_block_uuid, source_block_content, "
+                                                      "source_block_format, updated_at"
+                                                      ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);")
+                                                 (aget ref "graph_uuid")
+                                                 (aget ref "target_page_uuid")
+                                                 (aget ref "target_page_title")
+                                                 (aget ref "target_page_name")
+                                                 (aget ref "source_page_uuid")
+                                                 (aget ref "source_page_title")
+                                                 (aget ref "source_block_uuid")
+                                                 (aget ref "source_block_content")
+                                                 (aget ref "source_block_format")
+                                                 (aget ref "updated_at"))))
+                    (when (seq tagged-nodes)
+                      (doseq [tag tagged-nodes]
+                        (publish-common/sql-exec sql
+                                                 (str "INSERT OR REPLACE INTO page_tags ("
+                                                      "graph_uuid, tag_page_uuid, tag_title, source_page_uuid, "
+                                                      "source_page_title, source_block_uuid, source_block_content, "
+                                                      "source_block_format, updated_at"
+                                                      ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);")
+                                                 (aget tag "graph_uuid")
+                                                 (aget tag "tag_page_uuid")
+                                                 (aget tag "tag_title")
+                                                 (aget tag "source_page_uuid")
+                                                 (aget tag "source_page_title")
+                                                 (aget tag "source_block_uuid")
+                                                 (aget tag "source_block_content")
+                                                 (aget tag "source_block_format")
+                                                 (aget tag "updated_at")))))
+                  (publish-common/json-response {:ok true})))
+
+      (= "GET" (.-method request))
+      (let [url (js/URL. (.-url request))
+            parts (string/split (.-pathname url) #"/")
+            graph-uuid (nth parts 2 nil)
+            page-uuid (nth parts 3 nil)]
+        (cond
+          (= (nth parts 1 nil) "tag")
+          (let [tag-name (when-let [raw (nth parts 2 nil)]
+                           (js/decodeURIComponent raw))
+                rows (publish-common/get-sql-rows
+                      (publish-common/sql-exec sql
+                                               (str "SELECT page_tags.graph_uuid, page_tags.source_page_uuid, page_tags.source_page_title, "
+                                                    "pages.short_id, "
+                                                    "MAX(page_tags.updated_at) AS updated_at "
+                                                    "FROM page_tags "
+                                                    "LEFT JOIN pages "
+                                                    "ON pages.graph_uuid = page_tags.graph_uuid "
+                                                    "AND pages.page_uuid = page_tags.source_page_uuid "
+                                                    "WHERE page_tags.tag_title = ? "
+                                                    "GROUP BY page_tags.graph_uuid, page_tags.source_page_uuid, page_tags.source_page_title, pages.short_id "
+                                                    "ORDER BY updated_at DESC;")
+                                               tag-name))]
+            (publish-common/json-response {:pages (map (fn [row]
+                                                         (js->clj row :keywordize-keys false))
+                                                       rows)}))
+
+          (= (nth parts 1 nil) "ref")
+          (let [ref-name (when-let [raw (nth parts 2 nil)]
+                           (js/decodeURIComponent raw))
+                rows (publish-common/get-sql-rows
+                      (publish-common/sql-exec sql
+                                               (str "SELECT page_refs.graph_uuid, page_refs.source_page_uuid, page_refs.source_page_title, "
+                                                    "pages.short_id, "
+                                                    "MAX(page_refs.updated_at) AS updated_at "
+                                                    "FROM page_refs "
+                                                    "LEFT JOIN pages "
+                                                    "ON pages.graph_uuid = page_refs.graph_uuid "
+                                                    "AND pages.page_uuid = page_refs.source_page_uuid "
+                                                    "WHERE (lower(page_refs.target_page_title) = lower(?)) "
+                                                    "OR (page_refs.target_page_name = lower(?)) "
+                                                    "GROUP BY page_refs.graph_uuid, page_refs.source_page_uuid, page_refs.source_page_title, pages.short_id "
+                                                    "ORDER BY updated_at DESC;")
+                                               ref-name
+                                               ref-name))]
+            (publish-common/json-response {:pages (map (fn [row]
+                                                         (js->clj row :keywordize-keys false))
+                                                       rows)}))
+
+          (= (nth parts 1 nil) "short")
+          (let [short-id (nth parts 2 nil)
+                rows (publish-common/get-sql-rows
+                      (publish-common/sql-exec sql
+                                               (str "SELECT page_uuid, graph_uuid, page_title, short_id "
+                                                    "FROM pages WHERE short_id = ? LIMIT 1;")
+                                               short-id))
+                row (first rows)]
+            (publish-common/json-response {:page (when row (js->clj row :keywordize-keys false))}))
+
+          (= (nth parts 4 nil) "refs")
+          (let [rows (publish-common/get-sql-rows
+                      (publish-common/sql-exec sql
+                                               (str "SELECT graph_uuid, target_page_uuid, source_page_uuid, "
+                                                    "target_page_title, target_page_name, source_page_title, source_block_uuid, source_block_content, "
+                                                    "source_block_format, updated_at "
+                                                    "FROM page_refs WHERE graph_uuid = ? AND target_page_uuid = ? "
+                                                    "ORDER BY updated_at DESC;")
+                                               graph-uuid
+                                               page-uuid))]
+            (publish-common/json-response {:refs (map (fn [row]
+                                                        (js->clj row :keywordize-keys false))
+                                                      rows)}))
+
+          (= (nth parts 4 nil) "tagged_nodes")
+          (let [rows (publish-common/get-sql-rows
+                      (publish-common/sql-exec sql
+                                               (str "SELECT graph_uuid, tag_page_uuid, tag_title, source_page_uuid, "
+                                                    "source_page_title, source_block_uuid, source_block_content, "
+                                                    "source_block_format, updated_at "
+                                                    "FROM page_tags WHERE graph_uuid = ? AND tag_page_uuid = ? "
+                                                    "ORDER BY updated_at DESC;")
+                                               graph-uuid
+                                               page-uuid))]
+            (publish-common/json-response {:tagged_nodes (map (fn [row]
+                                                                (js->clj row :keywordize-keys false))
+                                                              rows)}))
+
+          (and graph-uuid page-uuid)
+          (let [rows (publish-common/get-sql-rows
+                      (publish-common/sql-exec sql
+                                               (str "SELECT page_uuid, page_title, page_tags, short_id, graph_uuid, schema_version, block_count, "
+                                                    "content_hash, content_length, r2_key, owner_sub, created_at, updated_at "
+                                                    "FROM pages WHERE graph_uuid = ? AND page_uuid = ? LIMIT 1;")
+                                               graph-uuid
+                                               page-uuid))
+                row (first rows)]
+            (if-not row
+              (publish-common/not-found)
+              (publish-common/json-response (row->meta row))))
+
+          graph-uuid
+          (let [rows (publish-common/get-sql-rows
+                      (publish-common/sql-exec sql
+                                               (str "SELECT page_uuid, page_title, page_tags, short_id, graph_uuid, schema_version, block_count, "
+                                                    "content_hash, content_length, r2_key, owner_sub, created_at, updated_at "
+                                                    "FROM pages WHERE graph_uuid = ? ORDER BY updated_at DESC;")
+                                               graph-uuid))]
+            (publish-common/json-response {:pages (map row->meta rows)}))
+
+          :else
+          (let [rows (publish-common/get-sql-rows
+                      (publish-common/sql-exec sql
+                                               (str "SELECT page_uuid, page_title, page_tags, short_id, graph_uuid, schema_version, block_count, "
+                                                    "content_hash, content_length, r2_key, owner_sub, created_at, updated_at "
+                                                    "FROM pages ORDER BY updated_at DESC;")))]
+            (publish-common/json-response {:pages (map row->meta rows)}))))
+
+      (= "DELETE" (.-method request))
+      (let [url (js/URL. (.-url request))
+            parts (string/split (.-pathname url) #"/")
+            graph-uuid (nth parts 2 nil)
+            page-uuid (nth parts 3 nil)]
+        (cond
+          (and graph-uuid page-uuid)
+          (do
+            (publish-common/sql-exec sql
+                                     "DELETE FROM pages WHERE graph_uuid = ? AND page_uuid = ?;"
+                                     graph-uuid
+                                     page-uuid)
+            (publish-common/sql-exec sql
+                                     "DELETE FROM page_refs WHERE graph_uuid = ? AND source_page_uuid = ?;"
+                                     graph-uuid
+                                     page-uuid)
+            (publish-common/sql-exec sql
+                                     "DELETE FROM page_tags WHERE graph_uuid = ? AND source_page_uuid = ?;"
+                                     graph-uuid
+                                     page-uuid)
+            (publish-common/json-response {:ok true}))
+
+          graph-uuid
+          (do
+            (publish-common/sql-exec sql "DELETE FROM pages WHERE graph_uuid = ?;" graph-uuid)
+            (publish-common/sql-exec sql "DELETE FROM page_refs WHERE graph_uuid = ?;" graph-uuid)
+            (publish-common/sql-exec sql "DELETE FROM page_tags WHERE graph_uuid = ?;" graph-uuid)
+            (publish-common/json-response {:ok true}))
+
+          :else
+          (publish-common/bad-request "missing graph uuid or page uuid")))
+
+      :else
+      (publish-common/json-response {:error "method not allowed"} 405))))
