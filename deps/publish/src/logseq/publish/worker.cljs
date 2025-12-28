@@ -758,14 +758,16 @@
 
 (defn render-tagged-item
   [graph-uuid item]
-  (let [source-page-uuid (tag-item-val item :source_page_uuid)
+  (let [item-graph-uuid (tag-item-val item :graph_uuid)
+        graph-uuid (or item-graph-uuid graph-uuid)
+        source-page-uuid (tag-item-val item :source_page_uuid)
         source-page-title (tag-item-val item :source_page_title)
         source-block-uuid (tag-item-val item :source_block_uuid)
         source-block-content (tag-item-val item :source_block_content)
         updated-at (tag-item-val item :updated_at)
         page? (and source-page-uuid (= source-page-uuid source-block-uuid))
         href (when (and graph-uuid source-page-uuid)
-               (str "/p/" graph-uuid "/" source-page-uuid))]
+               (str "/page/" graph-uuid "/" source-page-uuid))]
     [:li.tagged-item
      [:div.tagged-main
       (if href
@@ -967,6 +969,8 @@
                ".page-item{padding:12px 14px;border:1px solid #e6dccb;border-radius:12px;background:#fffdf8;display:flex;justify-content:space-between;gap:12px;align-items:center;}"
                ".page-link{color:#1a5fb4;text-decoration:none;overflow-wrap:anywhere;}"
                ".page-link:hover{text-decoration:underline;}"
+               ".page-ref{color:#1a5fb4;text-decoration:none;overflow-wrap:anywhere;}"
+               ".page-ref:hover{text-decoration:underline;}"
                ".page-meta{color:#6b4f2b;font-size:12px;white-space:nowrap;}"]]
              [:body
               [:main.wrap
@@ -1012,26 +1016,7 @@
                (if (seq rows)
                  [:ul.page-list
                   (for [item rows]
-                    (let [source-page-uuid (tag-item-val item :source_page_uuid)
-                          source-page-title (tag-item-val item :source_page_title)
-                          source-block-uuid (tag-item-val item :source_block_uuid)
-                          source-block-content (tag-item-val item :source_block_content)
-                          updated-at (tag-item-val item :updated_at)
-                          page? (and source-page-uuid (= source-page-uuid source-block-uuid))
-                          href (when (and graph-uuid source-page-uuid)
-                                 (str "/p/" graph-uuid "/" source-page-uuid))]
-                      [:li.page-item
-                       [:div.tagged-main
-                        (if href
-                          [:a.page-link {:href href} (or source-page-title source-page-uuid)]
-                          [:span (or source-page-title source-page-uuid)])
-                        (when (and source-block-content (not page?))
-                          [:div.tagged-block source-block-content])
-                        [:div.tagged-sub
-                         (if page?
-                           (str "Page: " source-page-uuid)
-                           (str "Block: " source-block-uuid))]]
-                       [:span.page-meta (or (format-timestamp updated-at) "—")]]))]
+                    (render-tagged-item graph-uuid item))]
                  [:p "No published nodes use this tag yet."])]]]]
     (str "<!doctype html>" (render-hiccup doc))))
 
@@ -1248,6 +1233,38 @@
                                           #js {"content-type" "text/html; charset=utf-8"}
                                           (cors-headers))}))))))
 
+(defn handle-tag-name-json [tag-name env]
+  (if-not tag-name
+    (bad-request "missing tag name")
+    (js-await [^js do-ns (aget env "PUBLISH_META_DO")
+               do-id (.idFromName do-ns "index")
+               do-stub (.get do-ns do-id)
+               resp (.fetch do-stub (str "https://publish/tag/" (js/encodeURIComponent tag-name))
+                            #js {:method "GET"})]
+              (if-not (.-ok resp)
+                (not-found)
+                (js-await [data (.json resp)]
+                          (json-response (js->clj data :keywordize-keys true) 200))))))
+
+(defn handle-tag-name-html [tag-name env]
+  (if-not tag-name
+    (bad-request "missing tag name")
+    (js-await [^js do-ns (aget env "PUBLISH_META_DO")
+               do-id (.idFromName do-ns "index")
+               do-stub (.get do-ns do-id)
+               resp (.fetch do-stub (str "https://publish/tag/" (js/encodeURIComponent tag-name))
+                            #js {:method "GET"})]
+              (if-not (.-ok resp)
+                (not-found)
+                (js-await [data (.json resp)
+                           rows (or (aget data "pages") #js [])
+                           title (or tag-name "Tag")]
+                          (js/Response.
+                           (render-tag-html "all" tag-name title rows)
+                           #js {:headers (merge-headers
+                                          #js {"content-type" "text/html; charset=utf-8"}
+                                          (cors-headers))}))))))
+
 (defn handle-tag-page-html [graph-uuid tag-uuid env]
   (if (or (nil? graph-uuid) (nil? tag-uuid))
     (bad-request "missing graph uuid or tag uuid")
@@ -1410,6 +1427,15 @@
         (if (= (nth parts 3 nil) "json")
           (handle-list-graph-pages-by-uuid graph-uuid env)
           (handle-graph-html graph-uuid env)))
+
+      (and (string/starts-with? path "/tag/") (= method "GET"))
+      (let [parts (string/split path #"/")
+            raw-name (nth parts 2 nil)
+            tag-name (when raw-name
+                       (js/decodeURIComponent raw-name))]
+        (if (= (nth parts 3 nil) "json")
+          (handle-tag-name-json tag-name env)
+          (handle-tag-name-html tag-name env)))
 
       (and (string/starts-with? path "/pages/") (= method "GET"))
       (let [parts (string/split path #"/")]
@@ -1603,6 +1629,21 @@
             graph-uuid (nth parts 2 nil)
             page_uuid (nth parts 3 nil)]
         (cond
+          (= (nth parts 1 nil) "tag")
+          (let [tag-name (when-let [raw (nth parts 2 nil)]
+                           (js/decodeURIComponent raw))
+                rows (get-sql-rows
+                      (sql-exec sql
+                                (str "SELECT graph_uuid, source_page_uuid, source_page_title, "
+                                     "MAX(updated_at) AS updated_at "
+                                     "FROM page_tags WHERE tag_title = ? "
+                                     "GROUP BY graph_uuid, source_page_uuid, source_page_title "
+                                     "ORDER BY updated_at DESC;")
+                                tag-name))]
+            (json-response {:pages (map (fn [row]
+                                          (js->clj row :keywordize-keys false))
+                                        rows)}))
+
           (= (nth parts 4 nil) "refs")
           (let [rows (get-sql-rows
                       (sql-exec sql
