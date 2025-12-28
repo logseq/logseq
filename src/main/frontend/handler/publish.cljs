@@ -8,6 +8,7 @@
             [frontend.util :as util]
             [logseq.db :as ldb]
             [logseq.db.common.entity-util :as entity-util]
+            [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.schema :as db-schema]
             [promesa.core :as p]))
 
@@ -22,9 +23,25 @@
         block-eids (map :db/id blocks)
         ref-eids (->> blocks (mapcat :block/refs) (keep :db/id))
         tag-eids (->> blocks (mapcat :block/tags) (keep :db/id))
-        page-eids (->> blocks (map :block/page) (keep :db/id))]
+        page-eids (->> blocks (map :block/page) (keep :db/id))
+        property-eids (->> (cons page-entity blocks)
+                           (map db-property/properties)
+                           (mapcat (fn [props]
+                                     (concat
+                                      (keep (fn [k]
+                                              (when (keyword? k)
+                                                (:db/id (d/entity db k))))
+                                            (keys props))
+                                      (mapcat (fn [v]
+                                                (cond
+                                                  (nil? v) []
+                                                  (set? v) (keep :db/id v)
+                                                  (sequential? v) (keep :db/id v)
+                                                  :else (keep :db/id [v])))
+                                              (vals props)))))
+                           (remove nil?))]
     {:blocks blocks
-     :eids (->> (concat [page-id] block-eids ref-eids tag-eids page-eids)
+     :eids (->> (concat [page-id] block-eids ref-eids tag-eids page-eids property-eids)
                 (remove nil?)
                 distinct)}))
 
