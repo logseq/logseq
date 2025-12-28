@@ -98,7 +98,6 @@
     (if-let [db* (and repo (db/get-db repo))]
       (if (and page (:db/id page))
         (let [payload (build-page-publish-datoms db* page)]
-          (notification/show! "Publishing page..." :success)
           (-> (<post-publish! payload)
               (p/then (fn [_resp]
                         (let [graph-uuid (some-> (ldb/get-graph-rtc-uuid db*) str)
