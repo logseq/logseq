@@ -27,38 +27,36 @@
   (let [page-uuid (:block/uuid page-entity)
         page-title (publish-entity-title page-entity)
         graph-uuid (str graph-uuid)]
-    (vec
-     (remove nil?
-             (mapcat (fn [block]
-                       (let [block-uuid (:block/uuid block)
-                             block-uuid-str (some-> block-uuid str)]
-                         (when (and block-uuid-str
-                                    (not= block-uuid page-uuid))
-                           (let [block-content (or (:block/content block)
-                                                   (:block/title block)
-                                                   (:block/name block)
-                                                   "")
-                                 block-format (name (or (:block/format block) :markdown))
-                                 refs (:block/refs block)
-                                 refs (if (sequential? refs) refs (when refs [refs]))
-                                 targets (->> refs
-                                              (map publish-ref-eid)
-                                              (keep #(when % (d/entity db %)))
-                                              (keep :block/uuid)
-                                              (map str)
-                                              distinct)]
-                             (when (seq targets)
-                               (map (fn [target]
-                                      {:graph_uuid graph-uuid
-                                       :target_page_uuid target
-                                       :source_page_uuid (str page-uuid)
-                                       :source_page_title page-title
-                                       :source_block_uuid block-uuid-str
-                                       :source_block_content block-content
-                                       :source_block_format block-format
-                                       :updated_at (common-util/time-ms)})
-                                    targets))))))
-                     blocks)))))
+    (mapcat (fn [block]
+              (let [block-uuid (:block/uuid block)
+                    block-uuid-str (some-> block-uuid str)]
+                (when (and block-uuid-str
+                           (not= block-uuid page-uuid))
+                  (let [block-content (or (:block/content block)
+                                          (:block/title block)
+                                          (:block/name block)
+                                          "")
+                        block-format (name (or (:block/format block) :markdown))
+                        refs (:block/refs block)
+                        refs (if (sequential? refs) refs (when refs [refs]))
+                        targets (->> refs
+                                     (map publish-ref-eid)
+                                     (keep #(when % (d/entity db %)))
+                                     (keep :block/uuid)
+                                     (map str)
+                                     distinct)]
+                    (when (seq targets)
+                      (map (fn [target]
+                             {:graph_uuid graph-uuid
+                              :target_page_uuid target
+                              :source_page_uuid (str page-uuid)
+                              :source_page_title page-title
+                              :source_block_uuid block-uuid-str
+                              :source_block_content block-content
+                              :source_block_format block-format
+                              :updated_at (common-util/time-ms)})
+                           targets))))))
+            blocks)))
 
 (defn- publish-collect-page-eids
   [db page-entity]
@@ -71,18 +69,17 @@
         property-eids (->> (cons page-entity blocks)
                            (map db-property/properties)
                            (mapcat (fn [props]
-                                     (concat
-                                      (keep (fn [k]
-                                              (when (keyword? k)
-                                                (:db/id (d/entity db k))))
-                                            (keys props))
-                                      (mapcat (fn [v]
-                                                (cond
-                                                  (nil? v) []
-                                                  (set? v) (keep publish-ref-eid v)
-                                                  (sequential? v) (keep publish-ref-eid v)
-                                                  :else (keep publish-ref-eid [v])))
-                                              (vals props)))))
+                                     (mapcat (fn [[k v]]
+                                               (let [property (d/entity db k)
+                                                     pid (:db/id property)
+                                                     ref-type? (= :db.type/ref (:db/valueType property))
+                                                     many? (= :db.cardinality/many (:db/cardinality property))]
+                                                 (cons pid
+                                                       (when ref-type?
+                                                         (if many?
+                                                           (map :db/id v)
+                                                           (list (:db/id v)))))))
+                                             props)))
                            (remove nil?))]
     {:blocks blocks
      :eids (->> (concat [page-id] block-eids ref-eids tag-eids page-eids property-eids)
@@ -104,6 +101,7 @@
                           (contains? #{:block/tx-id :logseq.property.user/email :logseq.property.embedding/hnsw-label-updated-at} a))))]
     {:page (common-entity-util/entity->map page-entity)
      :page-uuid (:block/uuid page-entity)
+     :page-title (publish-entity-title page-entity)
      :graph-uuid (some-> graph-uuid str)
      :block-count (count blocks)
      :schema-version (db-schema/schema-version->string db-schema/version)
