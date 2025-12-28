@@ -11,6 +11,35 @@
 (def publish-css (resource/inline "logseq/publish/publish.css"))
 (def publish-js (resource/inline "logseq/publish/publish.js"))
 
+(defn- request-password
+  [request]
+  (let [url (js/URL. (.-url request))
+        query (.get (.-searchParams url) "password")
+        header (.get (.-headers request) "x-publish-password")]
+    (or header query)))
+
+(defn- fetch-page-password-hash
+  [graph-uuid page-uuid env]
+  (js-await [^js do-ns (aget env "PUBLISH_META_DO")
+             do-id (.idFromName do-ns "index")
+             do-stub (.get do-ns do-id)
+             resp (.fetch do-stub (str "https://publish/pages/" graph-uuid "/" page-uuid "/password")
+                          #js {:method "GET"})]
+            (when (.-ok resp)
+              (js-await [data (.json resp)]
+                        (aget data "password_hash")))))
+
+(defn- check-page-password
+  [request graph-uuid page-uuid env]
+  (js-await [stored-hash (fetch-page-password-hash graph-uuid page-uuid env)]
+            (if (string/blank? stored-hash)
+              {:allowed? true :provided? false}
+              (let [provided (request-password request)]
+                (if (string? provided)
+                  (js-await [hashed (publish-common/sha256-hex provided)]
+                            {:allowed? (= hashed stored-hash) :provided? true})
+                  {:allowed? false :provided? false})))))
+
 (defn handle-post-pages [request env]
   (js-await [auth-header (.get (.-headers request) "authorization")
              token (when (and auth-header (string/starts-with? auth-header "Bearer "))
@@ -37,6 +66,8 @@
                                                (get payload "page-title")
                                                (when page-eid
                                                  (publish-model/entity->title (get payload-entities page-eid))))
+                                page-password-hash (or (:page-password-hash payload)
+                                                       (get payload "page-password-hash"))
                                 refs (when (and page-eid page-title)
                                        (publish-index/page-refs-from-payload payload page-eid page_uuid page-title graph))
                                 tagged-nodes (when (and page-eid page-title)
@@ -67,6 +98,7 @@
                                                            :page_title page-title
                                                            :page_tags (when page-tags
                                                                         (js/JSON.stringify (clj->js page-tags)))
+                                                           :password_hash page-password-hash
                                                            :graph graph-uuid
                                                            :schema_version schema_version
                                                            :block_count block_count
@@ -136,15 +168,18 @@
                  meta-resp (.fetch do-stub (str "https://publish/pages/" graph-uuid "/" page-uuid))]
                 (if-not (.-ok meta-resp)
                   (handle-tag-page-html graph-uuid page-uuid env)
-                  (js-await [meta (.json meta-resp)
-                             etag (aget meta "content_hash")
-                             if-none-match (publish-common/normalize-etag (.get (.-headers request) "if-none-match"))]
-                            (if (and etag if-none-match (= etag if-none-match))
-                              (js/Response. nil #js {:status 304
-                                                     :headers (publish-common/merge-headers
-                                                               #js {:etag etag}
-                                                               (publish-common/cors-headers))})
-                              (publish-common/json-response (js->clj meta :keywordize-keys true) 200))))))))
+                  (js-await [{:keys [allowed?]} (check-page-password request graph-uuid page-uuid env)]
+                            (if-not allowed?
+                              (publish-common/json-response {:error "password required"} 401)
+                              (js-await [meta (.json meta-resp)
+                                         etag (aget meta "content_hash")
+                                         if-none-match (publish-common/normalize-etag (.get (.-headers request) "if-none-match"))]
+                                        (if (and etag if-none-match (= etag if-none-match))
+                                          (js/Response. nil #js {:status 304
+                                                                 :headers (publish-common/merge-headers
+                                                                           #js {:etag etag}
+                                                                           (publish-common/cors-headers))})
+                                          (publish-common/json-response (js->clj meta :keywordize-keys true) 200))))))))))
 
 (defn handle-get-page-transit [request env]
   (let [url (js/URL. (.-url request))
@@ -163,23 +198,26 @@
                    #js {:headers (publish-common/merge-headers
                                   #js {"content-type" "text/html; charset=utf-8"}
                                   (publish-common/cors-headers))})
-                  (js-await [meta (.json meta-resp)
-                             r2-key (aget meta "r2_key")]
-                            (if-not r2-key
-                              (publish-common/json-response {:error "missing transit"} 404)
-                              (js-await [etag (aget meta "content_hash")
-                                         if-none-match (publish-common/normalize-etag (.get (.-headers request) "if-none-match"))
-                                         signed-url (when-not (and etag if-none-match (= etag if-none-match))
-                                                      (publish-common/presign-r2-url r2-key env))]
-                                        (if (and etag if-none-match (= etag if-none-match))
-                                          (js/Response. nil #js {:status 304
-                                                                 :headers (publish-common/merge-headers
-                                                                           #js {:etag etag}
-                                                                           (publish-common/cors-headers))})
-                                          (publish-common/json-response {:url signed-url
-                                                                         :expires_in 300
-                                                                         :etag etag}
-                                                                        200))))))))))
+                  (js-await [{:keys [allowed?]} (check-page-password request graph-uuid page-uuid env)]
+                            (if-not allowed?
+                              (publish-common/json-response {:error "password required"} 401)
+                              (js-await [meta (.json meta-resp)
+                                         r2-key (aget meta "r2_key")]
+                                        (if-not r2-key
+                                          (publish-common/json-response {:error "missing transit"} 404)
+                                          (js-await [etag (aget meta "content_hash")
+                                                     if-none-match (publish-common/normalize-etag (.get (.-headers request) "if-none-match"))
+                                                     signed-url (when-not (and etag if-none-match (= etag if-none-match))
+                                                                  (publish-common/presign-r2-url r2-key env))]
+                                                    (if (and etag if-none-match (= etag if-none-match))
+                                                      (js/Response. nil #js {:status 304
+                                                                             :headers (publish-common/merge-headers
+                                                                                       #js {:etag etag}
+                                                                                       (publish-common/cors-headers))})
+                                                      (publish-common/json-response {:url signed-url
+                                                                                     :expires_in 300
+                                                                                     :etag etag}
+                                                                                    200))))))))))))
 
 (defn handle-get-page-refs [request env]
   (let [url (js/URL. (.-url request))
@@ -188,18 +226,21 @@
         page-uuid (nth parts 3 nil)]
     (if (or (nil? graph-uuid) (nil? page-uuid))
       (publish-common/bad-request "missing graph uuid or page uuid")
-      (js-await [^js do-ns (aget env "PUBLISH_META_DO")
-                 do-id (.idFromName do-ns "index")
-                 do-stub (.get do-ns do-id)
-                 refs-resp (.fetch do-stub (str "https://publish/pages/" graph-uuid "/" page-uuid "/refs"))]
-                (if-not (.-ok refs-resp)
-                  (js/Response.
-                   (publish-render/render-404-html)
-                   #js {:headers (publish-common/merge-headers
-                                  #js {"content-type" "text/html; charset=utf-8"}
-                                  (publish-common/cors-headers))})
-                  (js-await [refs (.json refs-resp)]
-                            (publish-common/json-response (js->clj refs :keywordize-keys true) 200)))))))
+      (js-await [{:keys [allowed?]} (check-page-password request graph-uuid page-uuid env)]
+                (if-not allowed?
+                  (publish-common/json-response {:error "password required"} 401)
+                  (js-await [^js do-ns (aget env "PUBLISH_META_DO")
+                             do-id (.idFromName do-ns "index")
+                             do-stub (.get do-ns do-id)
+                             refs-resp (.fetch do-stub (str "https://publish/pages/" graph-uuid "/" page-uuid "/refs"))]
+                            (if-not (.-ok refs-resp)
+                              (js/Response.
+                               (publish-render/render-404-html)
+                               #js {:headers (publish-common/merge-headers
+                                              #js {"content-type" "text/html; charset=utf-8"}
+                                              (publish-common/cors-headers))})
+                              (js-await [refs (.json refs-resp)]
+                                        (publish-common/json-response (js->clj refs :keywordize-keys true) 200)))))))))
 
 (defn handle-get-page-tagged-nodes [request env]
   (let [url (js/URL. (.-url request))
@@ -208,14 +249,17 @@
         page-uuid (nth parts 3 nil)]
     (if (or (nil? graph-uuid) (nil? page-uuid))
       (publish-common/bad-request "missing graph uuid or page uuid")
-      (js-await [^js do-ns (aget env "PUBLISH_META_DO")
-                 do-id (.idFromName do-ns "index")
-                 do-stub (.get do-ns do-id)
-                 tags-resp (.fetch do-stub (str "https://publish/pages/" graph-uuid "/" page-uuid "/tagged_nodes"))]
-                (if-not (.-ok tags-resp)
-                  (publish-common/not-found)
-                  (js-await [tags (.json tags-resp)]
-                            (publish-common/json-response (js->clj tags :keywordize-keys true) 200)))))))
+      (js-await [{:keys [allowed?]} (check-page-password request graph-uuid page-uuid env)]
+                (if-not allowed?
+                  (publish-common/json-response {:error "password required"} 401)
+                  (js-await [^js do-ns (aget env "PUBLISH_META_DO")
+                             do-id (.idFromName do-ns "index")
+                             do-stub (.get do-ns do-id)
+                             tags-resp (.fetch do-stub (str "https://publish/pages/" graph-uuid "/" page-uuid "/tagged_nodes"))]
+                            (if-not (.-ok tags-resp)
+                              (publish-common/not-found)
+                              (js-await [tags (.json tags-resp)]
+                                        (publish-common/json-response (js->clj tags :keywordize-keys true) 200)))))))))
 
 (defn handle-list-pages [env]
   (js-await [^js do-ns (aget env "PUBLISH_META_DO")
@@ -439,30 +483,38 @@
                              #js {:headers (publish-common/merge-headers
                                             #js {"content-type" "text/html; charset=utf-8"}
                                             (publish-common/cors-headers))}))
-                  (js-await [meta (.json meta-resp)
-                             index-id (.idFromName do-ns "index")
-                             index-stub (.get do-ns index-id)
-                             refs-resp (.fetch index-stub (str "https://publish/pages/" graph-uuid "/" page-uuid "/refs"))
-                             refs-json (when (and refs-resp (.-ok refs-resp))
-                                         (js-await [raw (.json refs-resp)]
-                                                   (js->clj raw :keywordize-keys false)))
-                             tags-resp (.fetch index-stub (str "https://publish/pages/" graph-uuid "/" page-uuid "/tagged_nodes")
-                                               #js {:method "GET"})
-                             tagged-nodes (when (and tags-resp (.-ok tags-resp))
-                                            (js-await [raw (.json tags-resp)]
-                                                      (js->clj (or (aget raw "tagged_nodes") #js [])
-                                                               :keywordize-keys true)))
-                             r2 (aget env "PUBLISH_R2")
-                             object (.get r2 (aget meta "r2_key"))]
-                            (if-not object
-                              (publish-common/json-response {:error "missing transit blob"} 404)
-                              (js-await [buffer (.arrayBuffer object)
-                                         transit (.decode publish-common/text-decoder buffer)]
-                                        (js/Response.
-                                         (publish-render/render-page-html transit page-uuid refs-json tagged-nodes)
-                                         #js {:headers (publish-common/merge-headers
-                                                        #js {"content-type" "text/html; charset=utf-8"}
-                                                        (publish-common/cors-headers))})))))))))
+                  (js-await [{:keys [allowed? provided?]} (check-page-password request graph-uuid page-uuid env)]
+                            (if-not allowed?
+                              (js/Response.
+                               (publish-render/render-password-html graph-uuid page-uuid provided?)
+                               #js {:status 401
+                                    :headers (publish-common/merge-headers
+                                              #js {"content-type" "text/html; charset=utf-8"}
+                                              (publish-common/cors-headers))})
+                              (js-await [meta (.json meta-resp)
+                                         index-id (.idFromName do-ns "index")
+                                         index-stub (.get do-ns index-id)
+                                         refs-resp (.fetch index-stub (str "https://publish/pages/" graph-uuid "/" page-uuid "/refs"))
+                                         refs-json (when (and refs-resp (.-ok refs-resp))
+                                                     (js-await [raw (.json refs-resp)]
+                                                               (js->clj raw :keywordize-keys false)))
+                                         tags-resp (.fetch index-stub (str "https://publish/pages/" graph-uuid "/" page-uuid "/tagged_nodes")
+                                                           #js {:method "GET"})
+                                         tagged-nodes (when (and tags-resp (.-ok tags-resp))
+                                                        (js-await [raw (.json tags-resp)]
+                                                                  (js->clj (or (aget raw "tagged_nodes") #js [])
+                                                                           :keywordize-keys true)))
+                                         r2 (aget env "PUBLISH_R2")
+                                         object (.get r2 (aget meta "r2_key"))]
+                                        (if-not object
+                                          (publish-common/json-response {:error "missing transit blob"} 404)
+                                          (js-await [buffer (.arrayBuffer object)
+                                                     transit (.decode publish-common/text-decoder buffer)]
+                                                    (js/Response.
+                                                     (publish-render/render-page-html transit page-uuid refs-json tagged-nodes)
+                                                     #js {:headers (publish-common/merge-headers
+                                                                    #js {"content-type" "text/html; charset=utf-8"}
+                                                                    (publish-common/cors-headers))})))))))))))
 
 (defn handle-fetch [request env]
   (let [url (js/URL. (.-url request))

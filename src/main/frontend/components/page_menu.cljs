@@ -16,8 +16,42 @@
             [frontend.util.page :as page-util]
             [logseq.common.path :as path]
             [logseq.db :as ldb]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [rum.core :as rum]))
+
+(rum/defc publish-page-dialog
+  [page]
+  (let [[password set-password!] (hooks/use-state "")
+        [publishing? set-publishing!] (hooks/use-state false)
+        submit! (fn []
+                  (when-not publishing?
+                    (set-publishing! true)
+                    (-> (publish-handler/publish-page! page {:password password})
+                        (p/finally (fn []
+                                     (set-publishing! false)
+                                     (shui/dialog-close!))))))]
+    [:div.flex.flex-col.gap-4.p-2
+     [:div.text-lg.font-medium "Publish page"]
+     [:div.text-sm.opacity-70
+      "Optionally protect this page with a password. Leave empty for public access."]
+     (shui/toggle-password
+      {:placeholder "Optional password"
+       :value password
+       :on-change (fn [e]
+                    (set-password! (util/evalue e)))})
+     [:div.flex.justify-end.gap-2
+      (shui/button
+       {:variant "ghost"
+        :on-click #(shui/dialog-close!)}
+       "Cancel")
+      (shui/button
+       {:on-click submit!
+        :disabled publishing?}
+       (if publishing?
+         "Publishing..."
+         "Publish"))]]))
 
 (defn- delete-page!
   [page]
@@ -100,7 +134,8 @@
 
           (when (and page (not config/publishing?))
             {:title   "Publish page"
-             :options {:on-click #(publish-handler/publish-page! page)}})
+             :options {:on-click #(shui/dialog-open! (fn [] (publish-page-dialog page))
+                                                     {:class "w-auto max-w-md"})}})
 
           (when (util/electron?)
             {:title   (t (if public? :page/make-private :page/make-public))
