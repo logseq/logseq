@@ -339,6 +339,20 @@ a:hover {
   letter-spacing: 0.12em;
 }
 
+.not-found {
+  text-align: center;
+  padding: 32px 16px 8px;
+}
+
+.not-found-eyebrow {
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 14px;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+  margin: 0 0 12px;
+}
+
 .page-list {
   list-style: none;
   padding: 0;
