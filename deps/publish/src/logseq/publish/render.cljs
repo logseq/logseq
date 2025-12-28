@@ -695,3 +695,20 @@
                [:h1 title]
                [:p.tag-sub "This page hasn't been published yet."]]]]]
     (str "<!doctype html>" (render-hiccup doc))))
+
+(defn render-404-html
+  []
+  (let [title "Page not found"
+        doc [:html
+             [:head
+              [:meta {:charset "utf-8"}]
+              [:meta {:name "viewport" :content "width=device-width,initial-scale=1"}]
+              [:title title]
+              [:link {:rel "stylesheet" :href "/static/publish.css"}]]
+             [:body
+              [:main.wrap
+               [:div.not-found
+                [:p.not-found-eyebrow "404"]
+                [:h1 title]
+                [:p.tag-sub "We couldn't find that page. It may have been removed or never published."]]]]]]
+    (str "<!doctype html>" (render-hiccup doc))))
