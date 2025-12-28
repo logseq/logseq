@@ -612,6 +612,58 @@
                                        targets)))))))]
     (vec refs)))
 
+(defn page-tagged-nodes-from-payload [payload page-eid page-uuid page-title graph-uuid]
+  (let [entities (datoms->entities (:datoms payload))
+        normalize-tags (fn [tags]
+                         (let [tags (if (sequential? tags) tags (when tags [tags]))]
+                           (->> tags
+                                (map ref-eid)
+                                (keep #(get entities %))
+                                (keep (fn [entity]
+                                        (when-let [uuid (:block/uuid entity)]
+                                          {:tag_page_uuid (str uuid)
+                                           :tag_title (entity->title entity)})))
+                                distinct)))
+        page-entity (get entities page-eid)
+        page-tags (normalize-tags (:block/tags page-entity))
+        page-entries (when (seq page-tags)
+                       (map (fn [tag]
+                              {:graph_uuid graph-uuid
+                               :tag_page_uuid (:tag_page_uuid tag)
+                               :tag_title (:tag_title tag)
+                               :source_page_uuid (str page-uuid)
+                               :source_page_title page-title
+                               :source_block_uuid (str page-uuid)
+                               :source_block_content nil
+                               :source_block_format "page"
+                               :updated_at (.now js/Date)})
+                            page-tags))
+        block-entries (mapcat (fn [[_e entity]]
+                                (when (and (= (:block/page entity) page-eid)
+                                           (not= (:block/uuid entity) page-uuid)
+                                           (not (:logseq.property/created-from-property entity)))
+                                  (let [block-uuid (some-> (:block/uuid entity) str)
+                                        block-content (or (:block/content entity)
+                                                          (:block/title entity)
+                                                          (:block/name entity)
+                                                          "")
+                                        block-format (name (or (:block/format entity) :markdown))
+                                        tags (normalize-tags (:block/tags entity))]
+                                    (when (seq tags)
+                                      (map (fn [tag]
+                                             {:graph_uuid graph-uuid
+                                              :tag_page_uuid (:tag_page_uuid tag)
+                                              :tag_title (:tag_title tag)
+                                              :source_page_uuid (str page-uuid)
+                                              :source_page_title page-title
+                                              :source_block_uuid block-uuid
+                                              :source_block_content block-content
+                                              :source_block_format block-format
+                                              :updated_at (.now js/Date)})
+                                           tags)))))
+                              entities)]
+    (vec (distinct (concat page-entries block-entries)))))
+
 (defn render-hiccup [node]
   (cond
     (nil? node) ""
@@ -691,8 +743,44 @@
            (for [block blocks]
              [:li.ref-block [:div.block-content (block-content-from-ref block ctx)]])])]))])
 
+(defn tag-item-val [item k]
+  (cond
+    (map? item) (or (get item k)
+                    (get item (name k)))
+    (object? item) (or (aget item (name k))
+                       (aget item k))
+    :else nil))
+
+(defn format-timestamp
+  [ts]
+  (when (number? ts)
+    (.toLocaleString (js/Date. ts))))
+
+(defn render-tagged-item
+  [graph-uuid item]
+  (let [source-page-uuid (tag-item-val item :source_page_uuid)
+        source-page-title (tag-item-val item :source_page_title)
+        source-block-uuid (tag-item-val item :source_block_uuid)
+        source-block-content (tag-item-val item :source_block_content)
+        updated-at (tag-item-val item :updated_at)
+        page? (and source-page-uuid (= source-page-uuid source-block-uuid))
+        href (when (and graph-uuid source-page-uuid)
+               (str "/p/" graph-uuid "/" source-page-uuid))]
+    [:li.tagged-item
+     [:div.tagged-main
+      (if href
+        [:a.page-ref {:href href} (or source-page-title source-page-uuid)]
+        [:span (or source-page-title source-page-uuid)])
+      (when (and source-block-content (not page?))
+        [:div.tagged-block source-block-content])
+      [:div.tagged-sub
+       (if page?
+         (str "Page: " source-page-uuid)
+         (str "Block: " source-block-uuid))]]
+     [:span.tagged-meta (or (format-timestamp updated-at) "—")]]))
+
 (defn render-page-html
-  [transit page_uuid-str refs-data]
+  [transit page_uuid-str refs-data tagged-nodes]
   (let [payload (read-transit-safe transit)
         meta (get-publish-meta payload)
         graph-uuid (when meta
@@ -778,6 +866,12 @@
                                          (string/lower-case (or page_title ""))))))
         linked-refs (when (seq linked-by-page)
                       (linked-references ctx graph-uuid linked-by-page))
+        tagged-section (when (seq tagged-nodes)
+                         [:section.tagged-pages
+                          [:h2 "Tagged nodes"]
+                          [:ul.tagged-list
+                           (for [item tagged-nodes]
+                             (render-tagged-item graph-uuid item))]])
         doc [:html
              [:head
               [:meta {:charset "utf-8"}]
@@ -807,10 +901,18 @@
                ".block-children{margin-left:16px;}"
                ".block.is-collapsed > .block-children { display: none; }"
                ".linked-refs{margin-top:36px;}"
+               ".tagged-pages{margin-top:36px;}"
                ".linked-refs h2{font-size:18px;margin:0 0 16px;color:#4b3b24;}"
+               ".tagged-pages h2{font-size:18px;margin:0 0 16px;color:#4b3b24;}"
                ".ref-page{margin:0 0 16px;}"
                ".ref-blocks{margin:8px 0 0 18px;padding:0;list-style:disc;}"
                ".ref-block{margin:6px 0;}"
+               ".tagged-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;}"
+               ".tagged-item{padding:10px 12px;border:1px solid #e6dccb;border-radius:10px;background:#fffdf8;display:flex;justify-content:space-between;gap:12px;align-items:flex-start;}"
+               ".tagged-main{display:flex;flex-direction:column;gap:4px;min-width:0;}"
+               ".tagged-block{font-size:13px;color:#2e2a23;white-space:pre-wrap;}"
+               ".tagged-sub{font-size:12px;color:#6b4f2b;}"
+               ".tagged-meta{color:#6b4f2b;font-size:12px;white-space:nowrap;}"
                ".page-ref{color:#1a5fb4;text-decoration:none;}"
                ".page-ref:hover{text-decoration:underline;}"]]
              [:body
@@ -829,16 +931,12 @@
                  [:section.page-properties page-properties])
 
                (when blocks blocks)
+               (when tagged-section tagged-section)
                (when linked-refs linked-refs)]
               [:script
                "document.addEventListener('click',function(e){var btn=e.target.closest('.block-toggle');if(!btn)return;var li=btn.closest('li.block');if(!li)return;var collapsed=li.classList.toggle('is-collapsed');btn.setAttribute('aria-expanded',String(!collapsed));});"
                "window.toggleTopBlocks=function(btn){var list=document.querySelector('.blocks');if(!list){return;}var collapsed=list.classList.toggle('collapsed-all');list.querySelectorAll(':scope > .block').forEach(function(el){if(collapsed){el.classList.add('is-collapsed');}else{el.classList.remove('is-collapsed');}});if(btn){btn.textContent=collapsed?'Expand all':'Collapse all';}};"]]]]
     (str "<!doctype html>" (render-hiccup doc))))
-
-(defn format-timestamp
-  [ts]
-  (when (number? ts)
-    (.toLocaleString (js/Date. ts))))
 
 (defn render-graph-html
   [graph-uuid pages]
@@ -883,6 +981,60 @@
                  [:p "No pages have been published yet."])]]]]
     (str "<!doctype html>" (render-hiccup doc))))
 
+(defn render-tag-html
+  [graph-uuid tag-uuid tag-title tag-items]
+  (let [rows tag-items
+        title (or tag-title tag-uuid)
+        doc [:html
+             [:head
+              [:meta {:charset "utf-8"}]
+              [:meta {:name "viewport" :content "width=device-width,initial-scale=1"}]
+              [:title (str "Tag - " title)]
+              [:style
+               "body{margin:0;background:#fbf8f3;color:#1b1b1b;font-family:Georgia,serif;}"
+               ".wrap{max-width:880px;margin:0 auto;padding:40px 24px;}"
+               "h1{font-size:26px;margin:0 0 8px;font-weight:600;}"
+               ".graph-meta{color:#6b4f2b;font-size:13px;margin:0 0 24px;}"
+               ".tag-sub{color:#6b4f2b;font-size:13px;margin:0 0 18px;}"
+               ".page-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px;}"
+               ".page-item{padding:12px 14px;border:1px solid #e6dccb;border-radius:12px;background:#fffdf8;display:flex;justify-content:space-between;gap:12px;align-items:flex-start;}"
+               ".tagged-main{display:flex;flex-direction:column;gap:4px;min-width:0;}"
+               ".tagged-block{font-size:13px;color:#2e2a23;white-space:pre-wrap;}"
+               ".tagged-sub{font-size:12px;color:#6b4f2b;}"
+               ".page-link{color:#1a5fb4;text-decoration:none;overflow-wrap:anywhere;}"
+               ".page-link:hover{text-decoration:underline;}"
+               ".page-meta{color:#6b4f2b;font-size:12px;white-space:nowrap;}"]]
+             [:body
+              [:main.wrap
+               [:h1 title]
+               [:p.tag-sub (str "Tag: " tag-uuid)]
+               [:p.graph-meta (str "Graph: " graph-uuid)]
+               (if (seq rows)
+                 [:ul.page-list
+                  (for [item rows]
+                    (let [source-page-uuid (tag-item-val item :source_page_uuid)
+                          source-page-title (tag-item-val item :source_page_title)
+                          source-block-uuid (tag-item-val item :source_block_uuid)
+                          source-block-content (tag-item-val item :source_block_content)
+                          updated-at (tag-item-val item :updated_at)
+                          page? (and source-page-uuid (= source-page-uuid source-block-uuid))
+                          href (when (and graph-uuid source-page-uuid)
+                                 (str "/p/" graph-uuid "/" source-page-uuid))]
+                      [:li.page-item
+                       [:div.tagged-main
+                        (if href
+                          [:a.page-link {:href href} (or source-page-title source-page-uuid)]
+                          [:span (or source-page-title source-page-uuid)])
+                        (when (and source-block-content (not page?))
+                          [:div.tagged-block source-block-content])
+                        [:div.tagged-sub
+                         (if page?
+                           (str "Page: " source-page-uuid)
+                           (str "Block: " source-block-uuid))]]
+                       [:span.page-meta (or (format-timestamp updated-at) "—")]]))]
+                 [:p "No published nodes use this tag yet."])]]]]
+    (str "<!doctype html>" (render-hiccup doc))))
+
 (defn handle-post-pages [request env]
   (js-await [auth-header (.get (.-headers request) "authorization")
              token (when (and auth-header (string/starts-with? auth-header "Bearer "))
@@ -912,7 +1064,9 @@
                                 refs (or (:refs payload)
                                          (get payload "refs")
                                          (when (and page-eid page-title)
-                                           (page-refs-from-payload payload page-eid page_uuid page-title graph)))]
+                                           (page-refs-from-payload payload page-eid page_uuid page-title graph)))
+                                tagged-nodes (when (and page-eid page-title)
+                                               (page-tagged-nodes-from-payload payload page-eid page_uuid page-title graph))]
                             (cond
                               (not (valid-meta? meta))
                               (bad-request "missing publish metadata")
@@ -932,8 +1086,12 @@
                                                                  ":"
                                                                  page_uuid))
                                          do-stub (.get do-ns do-id)
+                                         page-tags (or (:page-tags payload)
+                                                       (get payload "page-tags"))
                                          payload (clj->js {:page_uuid page_uuid
                                                            :page_title page-title
+                                                           :page_tags (when page-tags
+                                                                        (js/JSON.stringify (clj->js page-tags)))
                                                            :graph graph-uuid
                                                            :schema_version schema_version
                                                            :block_count block_count
@@ -943,7 +1101,8 @@
                                                            :owner_sub (aget claims "sub")
                                                            :created_at created_at
                                                            :updated_at (.now js/Date)
-                                                           :refs refs})
+                                                           :refs refs
+                                                           :tagged_nodes tagged-nodes})
                                          meta-resp (.fetch do-stub "https://publish/pages"
                                                            #js {:method "POST"
                                                                 :headers #js {"content-type" "application/json"}
@@ -961,6 +1120,7 @@
                                                                     :r2_key r2-key
                                                                     :updated_at (.now js/Date)})))))))))))
 
+(declare handle-tag-page-html)
 (defn handle-get-page [request env]
   (let [url (js/URL. (.-url request))
         parts (string/split (.-pathname url) #"/")
@@ -973,7 +1133,7 @@
                  do-stub (.get do-ns do-id)
                  meta-resp (.fetch do-stub (str "https://publish/pages/" graph-uuid "/" page_uuid))]
                 (if-not (.-ok meta-resp)
-                  (not-found)
+                  (handle-tag-page-html graph-uuid page_uuid env)
                   (js-await [meta (.json meta-resp)
                              etag (aget meta "content_hash")
                              if-none-match (normalize-etag (.get (.-headers request) "if-none-match"))]
@@ -1031,6 +1191,22 @@
                   (js-await [refs (.json refs-resp)]
                             (json-response (js->clj refs :keywordize-keys true) 200)))))))
 
+(defn handle-get-page-tagged-nodes [request env]
+  (let [url (js/URL. (.-url request))
+        parts (string/split (.-pathname url) #"/")
+        graph-uuid (nth parts 2 nil)
+        page_uuid (nth parts 3 nil)]
+    (if (or (nil? graph-uuid) (nil? page_uuid))
+      (bad-request "missing graph uuid or page uuid")
+      (js-await [^js do-ns (aget env "PUBLISH_META_DO")
+                 do-id (.idFromName do-ns "index")
+                 do-stub (.get do-ns do-id)
+                 tags-resp (.fetch do-stub (str "https://publish/pages/" graph-uuid "/" page_uuid "/tagged_nodes"))]
+                (if-not (.-ok tags-resp)
+                  (not-found)
+                  (js-await [tags (.json tags-resp)]
+                            (json-response (js->clj tags :keywordize-keys true) 200)))))))
+
 (defn handle-list-pages [env]
   (js-await [^js do-ns (aget env "PUBLISH_META_DO")
              do-id (.idFromName do-ns "index")
@@ -1068,6 +1244,31 @@
                            pages (or (aget meta "pages") #js [])]
                           (js/Response.
                            (render-graph-html graph-uuid pages)
+                           #js {:headers (merge-headers
+                                          #js {"content-type" "text/html; charset=utf-8"}
+                                          (cors-headers))}))))))
+
+(defn handle-tag-page-html [graph-uuid tag-uuid env]
+  (if (or (nil? graph-uuid) (nil? tag-uuid))
+    (bad-request "missing graph uuid or tag uuid")
+    (js-await [^js do-ns (aget env "PUBLISH_META_DO")
+               do-id (.idFromName do-ns "index")
+               do-stub (.get do-ns do-id)
+               tags-resp (.fetch do-stub (str "https://publish/pages/" graph-uuid "/" tag-uuid "/tagged_nodes")
+                                 #js {:method "GET"})]
+              (if-not (.-ok tags-resp)
+                (not-found)
+                (js-await [raw (.json tags-resp)
+                           tag-items (js->clj (or (aget raw "tagged_nodes") #js [])
+                                              :keywordize-keys true)
+                           tag-title (or (some (fn [item]
+                                                 (let [title (tag-item-val item :tag_title)]
+                                                   (when (and title (not (string/blank? title)))
+                                                     title)))
+                                               tag-items)
+                                         tag-uuid)]
+                          (js/Response.
+                           (render-tag-html graph-uuid tag-uuid tag-title tag-items)
                            #js {:headers (merge-headers
                                           #js {"content-type" "text/html; charset=utf-8"}
                                           (cors-headers))}))))))
@@ -1139,23 +1340,49 @@
                  do-stub (.get do-ns do-id)
                  meta-resp (.fetch do-stub (str "https://publish/pages/" graph-uuid "/" page_uuid))]
                 (if-not (.-ok meta-resp)
-                  (not-found)
+                  (js-await [index-id (.idFromName do-ns "index")
+                             index-stub (.get do-ns index-id)
+                             tags-resp (.fetch index-stub (str "https://publish/pages/" graph-uuid "/" page_uuid "/tagged_nodes")
+                                               #js {:method "GET"})]
+                            (if (and tags-resp (.-ok tags-resp))
+                              (js-await [raw (.json tags-resp)
+                                         tag-items (js->clj (or (aget raw "tagged_nodes") #js [])
+                                                            :keywordize-keys true)
+                                         tag-title (or (some (fn [item]
+                                                               (let [title (tag-item-val item :tag_title)]
+                                                                 (when (and title (not (string/blank? title)))
+                                                                   title)))
+                                                             tag-items)
+                                                       page_uuid)]
+                                        (if (seq tag-items)
+                                          (js/Response.
+                                           (render-tag-html graph-uuid page_uuid tag-title tag-items)
+                                           #js {:headers (merge-headers
+                                                          #js {"content-type" "text/html; charset=utf-8"}
+                                                          (cors-headers))})
+                                          (not-found)))
+                              (not-found)))
                   (js-await [meta (.json meta-resp)
-                             refs-resp (let [index-id (.idFromName do-ns "index")
-                                             index-stub (.get do-ns index-id)]
-                                         (.fetch index-stub (str "https://publish/pages/" graph-uuid "/" page_uuid "/refs")))
+                             index-id (.idFromName do-ns "index")
+                             index-stub (.get do-ns index-id)
+                             refs-resp (.fetch index-stub (str "https://publish/pages/" graph-uuid "/" page_uuid "/refs"))
                              refs-json (when (and refs-resp (.-ok refs-resp))
                                          (js-await [raw (.json refs-resp)]
                                                    (js->clj raw :keywordize-keys false)))
+                             tags-resp (.fetch index-stub (str "https://publish/pages/" graph-uuid "/" page_uuid "/tagged_nodes")
+                                               #js {:method "GET"})
+                             tagged-nodes (when (and tags-resp (.-ok tags-resp))
+                                            (js-await [raw (.json tags-resp)]
+                                                      (js->clj (or (aget raw "tagged_nodes") #js [])
+                                                               :keywordize-keys true)))
                              r2 (aget env "PUBLISH_R2")
                              object (.get r2 (aget meta "r2_key"))]
                             (if-not object
                               (json-response {:error "missing transit blob"} 404)
                               (js-await [buffer (.arrayBuffer object)
-                                         transit (.decode text-decoder buffer)
-                                         html (render-page-html transit page_uuid refs-json)]
+                                         transit (.decode text-decoder buffer)]
                                         (js/Response.
-                                         html
+                                         (render-page-html transit page_uuid refs-json tagged-nodes)
                                          #js {:headers (merge-headers
                                                         #js {"content-type" "text/html; charset=utf-8"}
                                                         (cors-headers))})))))))))
@@ -1190,6 +1417,7 @@
           (= (count parts) 3) (handle-list-graph-pages request env)
           (= (nth parts 4 nil) "transit") (handle-get-page-transit request env)
           (= (nth parts 4 nil) "refs") (handle-get-page-refs request env)
+          (= (nth parts 4 nil) "tagged_nodes") (handle-get-page-tagged-nodes request env)
           :else (handle-get-page request env)))
 
       (and (string/starts-with? path "/pages/") (= method "DELETE"))
@@ -1207,7 +1435,6 @@
 
 (defn init-schema! [sql]
   (let [cols (get-sql-rows (sql-exec sql "PRAGMA table_info(pages);"))
-        col-names (set (map #(aget % "name") cols))
         drop? (some #(contains? #{"page_id" "graph"} (aget % "name")) cols)]
     (when drop?
       (sql-exec sql "DROP TABLE IF EXISTS pages;"))
@@ -1215,6 +1442,7 @@
               (str "CREATE TABLE IF NOT EXISTS pages ("
                    "page_uuid TEXT NOT NULL,"
                    "page_title TEXT,"
+                   "page_tags TEXT,"
                    "graph_uuid TEXT NOT NULL,"
                    "schema_version TEXT,"
                    "block_count INTEGER,"
@@ -1226,8 +1454,12 @@
                    "updated_at INTEGER,"
                    "PRIMARY KEY (graph_uuid, page_uuid)"
                    ");"))
-    (when (and (not drop?) (not (contains? col-names "page_title")))
-      (sql-exec sql "ALTER TABLE pages ADD COLUMN page_title TEXT;"))
+    (let [cols (get-sql-rows (sql-exec sql "PRAGMA table_info(pages);"))
+          col-names (set (map #(aget % "name") cols))]
+      (when-not (contains? col-names "page_title")
+        (sql-exec sql "ALTER TABLE pages ADD COLUMN page_title TEXT;"))
+      (when-not (contains? col-names "page_tags")
+        (sql-exec sql "ALTER TABLE pages ADD COLUMN page_tags TEXT;")))
     (sql-exec sql
               (str "CREATE TABLE IF NOT EXISTS page_refs ("
                    "graph_uuid TEXT NOT NULL,"
@@ -1239,12 +1471,37 @@
                    "source_block_format TEXT,"
                    "updated_at INTEGER,"
                    "PRIMARY KEY (graph_uuid, target_page_uuid, source_block_uuid)"
+                   ");"))
+    (sql-exec sql
+              (str "CREATE TABLE IF NOT EXISTS page_tags ("
+                   "graph_uuid TEXT NOT NULL,"
+                   "tag_page_uuid TEXT NOT NULL,"
+                   "tag_title TEXT,"
+                   "source_page_uuid TEXT NOT NULL,"
+                   "source_page_title TEXT,"
+                   "source_block_uuid TEXT NOT NULL,"
+                   "source_block_content TEXT,"
+                   "source_block_format TEXT,"
+                   "updated_at INTEGER,"
+                   "PRIMARY KEY (graph_uuid, tag_page_uuid, source_block_uuid)"
                    ");"))))
 
+(defn parse-page-tags [value]
+  (cond
+    (nil? value) #js []
+    (array? value) value
+    (string? value) (try
+                      (js/JSON.parse value)
+                      (catch :default _
+                        #js []))
+    :else #js []))
+
 (defn row->meta [row]
-  (let [data (js->clj row :keywordize-keys false)]
+  (let [data (js->clj row :keywordize-keys false)
+        page-tags (parse-page-tags (get data "page_tags"))]
     (assoc data
            "graph" (get data "graph_uuid")
+           "page_tags" page-tags
            "content_hash" (get data "content_hash")
            "content_length" (get data "content_length"))))
 
@@ -1258,6 +1515,7 @@
                           (str "INSERT INTO pages ("
                                "page_uuid,"
                                "page_title,"
+                               "page_tags,"
                                "graph_uuid,"
                                "schema_version,"
                                "block_count,"
@@ -1267,10 +1525,11 @@
                                "owner_sub,"
                                "created_at,"
                                "updated_at"
-                               ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                               ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                                " ON CONFLICT(graph_uuid, page_uuid) DO UPDATE SET"
                                " page_uuid=excluded.page_uuid,"
                                " page_title=excluded.page_title,"
+                               " page_tags=excluded.page_tags,"
                                " schema_version=excluded.schema_version,"
                                " block_count=excluded.block_count,"
                                " content_hash=excluded.content_hash,"
@@ -1280,6 +1539,7 @@
                                " updated_at=excluded.updated_at;")
                           (aget body "page_uuid")
                           (aget body "page_title")
+                          (aget body "page_tags")
                           (aget body "graph")
                           (aget body "schema_version")
                           (aget body "block_count")
@@ -1290,11 +1550,16 @@
                           (aget body "created_at")
                           (aget body "updated_at"))
                 (let [refs (aget body "refs")
+                      tagged-nodes (aget body "tagged_nodes")
                       graph-uuid (aget body "graph")
                       page-uuid (aget body "page_uuid")]
                   (when (and graph-uuid page-uuid)
                     (sql-exec sql
                               "DELETE FROM page_refs WHERE graph_uuid = ? AND source_page_uuid = ?;"
+                              graph-uuid
+                              page-uuid)
+                    (sql-exec sql
+                              "DELETE FROM page_tags WHERE graph_uuid = ? AND source_page_uuid = ?;"
                               graph-uuid
                               page-uuid)
                     (when (seq refs)
@@ -1312,7 +1577,24 @@
                                   (aget ref "source_block_uuid")
                                   (aget ref "source_block_content")
                                   (aget ref "source_block_format")
-                                  (aget ref "updated_at")))))
+                                  (aget ref "updated_at"))))
+                    (when (seq tagged-nodes)
+                      (doseq [tag tagged-nodes]
+                        (sql-exec sql
+                                  (str "INSERT OR REPLACE INTO page_tags ("
+                                       "graph_uuid, tag_page_uuid, tag_title, source_page_uuid, "
+                                       "source_page_title, source_block_uuid, source_block_content, "
+                                       "source_block_format, updated_at"
+                                       ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);")
+                                  (aget tag "graph_uuid")
+                                  (aget tag "tag_page_uuid")
+                                  (aget tag "tag_title")
+                                  (aget tag "source_page_uuid")
+                                  (aget tag "source_page_title")
+                                  (aget tag "source_block_uuid")
+                                  (aget tag "source_block_content")
+                                  (aget tag "source_block_format")
+                                  (aget tag "updated_at")))))
                   (json-response {:ok true})))
 
       (= "GET" (.-method request))
@@ -1335,10 +1617,24 @@
                                          (js->clj row :keywordize-keys false))
                                        rows)}))
 
+          (= (nth parts 4 nil) "tagged_nodes")
+          (let [rows (get-sql-rows
+                      (sql-exec sql
+                                (str "SELECT graph_uuid, tag_page_uuid, tag_title, source_page_uuid, "
+                                     "source_page_title, source_block_uuid, source_block_content, "
+                                     "source_block_format, updated_at "
+                                     "FROM page_tags WHERE graph_uuid = ? AND tag_page_uuid = ? "
+                                     "ORDER BY updated_at DESC;")
+                                graph-uuid
+                                page_uuid))]
+            (json-response {:tagged_nodes (map (fn [row]
+                                                 (js->clj row :keywordize-keys false))
+                                               rows)}))
+
           (and graph-uuid page_uuid)
           (let [rows (get-sql-rows
                       (sql-exec sql
-                                (str "SELECT page_uuid, page_title, graph_uuid, schema_version, block_count, "
+                                (str "SELECT page_uuid, page_title, page_tags, graph_uuid, schema_version, block_count, "
                                      "content_hash, content_length, r2_key, owner_sub, created_at, updated_at "
                                      "FROM pages WHERE graph_uuid = ? AND page_uuid = ? LIMIT 1;")
                                 graph-uuid
@@ -1351,7 +1647,7 @@
           graph-uuid
           (let [rows (get-sql-rows
                       (sql-exec sql
-                                (str "SELECT page_uuid, page_title, graph_uuid, schema_version, block_count, "
+                                (str "SELECT page_uuid, page_title, page_tags, graph_uuid, schema_version, block_count, "
                                      "content_hash, content_length, r2_key, owner_sub, created_at, updated_at "
                                      "FROM pages WHERE graph_uuid = ? ORDER BY updated_at DESC;")
                                 graph-uuid))]
@@ -1360,7 +1656,7 @@
           :else
           (let [rows (get-sql-rows
                       (sql-exec sql
-                                (str "SELECT page_uuid, page_title, graph_uuid, schema_version, block_count, "
+                                (str "SELECT page_uuid, page_title, page_tags, graph_uuid, schema_version, block_count, "
                                      "content_hash, content_length, r2_key, owner_sub, created_at, updated_at "
                                      "FROM pages ORDER BY updated_at DESC;")))]
             (json-response {:pages (map row->meta rows)}))))
@@ -1377,11 +1673,21 @@
                       "DELETE FROM pages WHERE graph_uuid = ? AND page_uuid = ?;"
                       graph-uuid
                       page_uuid)
+            (sql-exec sql
+                      "DELETE FROM page_refs WHERE graph_uuid = ? AND source_page_uuid = ?;"
+                      graph-uuid
+                      page_uuid)
+            (sql-exec sql
+                      "DELETE FROM page_tags WHERE graph_uuid = ? AND source_page_uuid = ?;"
+                      graph-uuid
+                      page_uuid)
             (json-response {:ok true}))
 
           graph-uuid
           (do
             (sql-exec sql "DELETE FROM pages WHERE graph_uuid = ?;" graph-uuid)
+            (sql-exec sql "DELETE FROM page_refs WHERE graph_uuid = ?;" graph-uuid)
+            (sql-exec sql "DELETE FROM page_tags WHERE graph_uuid = ?;" graph-uuid)
             (json-response {:ok true}))
 
           :else

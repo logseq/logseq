@@ -62,7 +62,11 @@
   (let [repo (state/get-current-repo)]
     (if-let [db* (and repo (db/get-db repo))]
       (if (and page (:db/id page))
-        (p/let [payload (state/<invoke-db-worker :thread-api/build-publish-page-payload repo (:db/id page))]
+        (p/let [graph-uuid (some-> (ldb/get-graph-rtc-uuid db*) str)
+                payload (state/<invoke-db-worker :thread-api/build-publish-page-payload
+                                                 repo
+                                                 (:db/id page)
+                                                 graph-uuid)]
           (if payload
             (-> (<post-publish! payload)
                 (p/then (fn [_resp]
