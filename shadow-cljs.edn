@@ -217,11 +217,4 @@
                 :entries [logseq.shui.storybook]
                 :output-dir "packages/ui/.storybook/cljs"
                 :devtools {:enabled true}
-                :compiler-options {:optimizations :simple}}
-
-  :publish-worker {:target :esm
-                   :output-dir "deps/publish/worker/dist/worker"
-                   :modules {:main {:exports {default logseq.publish.worker/worker
-                                              PublishMetaDO logseq.publish.worker/PublishMetaDO}}}
-                   :js-options {:js-provider :import}
-                   :devtools {:enabled false}}}}
+                :compiler-options {:optimizations :simple}}}}

@@ -1,5 +1,12 @@
 {
   "name": "@logseq/publish",
   "version": "1.0.0",
-  "private": true
+  "private": true,
+  "scripts": {
+    "watch": "clojure -M:cljs watch publish-worker",
+    "release": "clojure -M:cljs release publish-worker"
+  },
+  "dependencies": {
+    "shadow-cljs": "^3.3.4"
+  }
 }
