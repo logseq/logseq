@@ -8,8 +8,8 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [shadow.resource :as resource]
-            [shadow.cljs.modern :refer (defclass)])
+            [shadow.cljs.modern :refer (defclass)]
+            [shadow.resource :as resource])
   (:require-macros [logseq.publish.async :refer [js-await]]))
 
 (def text-decoder (js/TextDecoder.))
@@ -991,7 +991,7 @@
                (when blocks blocks)
                (when tagged-section tagged-section)
                (when linked-refs linked-refs)]
-              [:script {:type "module" :src "/static/publish.js"}]]]
+              [:script {:type "module" :src "/static/publish.js"}]]]]
     (str "<!doctype html>" (render-hiccup doc))))
 
 (defn render-graph-html
