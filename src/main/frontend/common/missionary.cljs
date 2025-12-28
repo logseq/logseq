@@ -4,6 +4,7 @@
   (:require [cljs.core.async.impl.channels]
             [clojure.core.async :as a]
             [lambdaisland.glogi :as log]
+            [logseq.db.common.entity-plus :as entity-plus]
             [missionary.core :as m]
             [promesa.protocols :as pt])
   (:import [missionary Cancelled]))
@@ -157,6 +158,8 @@
 (defn background-task-running?
   [key']
   (contains? @*background-task-cancelers key'))
+
+(reset! entity-plus/*reset-cache-background-task-running-f background-task-running?)
 
 (comment
   (defn >!

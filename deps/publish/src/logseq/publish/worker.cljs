@@ -291,15 +291,11 @@
 (def ref-regex
   (js/RegExp. "\\[\\[([0-9a-fA-F-]{36})\\]\\]|\\(\\(([0-9a-fA-F-]{36})\\)\\)" "g"))
 
-(defonce inline-configs
-  {:markdown (gp-mldoc/default-config :markdown)
-   :org (gp-mldoc/default-config :org)})
+(defonce inline-config
+  (gp-mldoc/default-config :markdown))
 
-(defn inline-config [format]
-  (get inline-configs format (:markdown inline-configs)))
-
-(defn inline-ast [text format]
-  (gp-mldoc/inline->edn text (inline-config format)))
+(defn inline-ast [text]
+  (gp-mldoc/inline->edn text inline-config))
 
 (defn content->nodes [content uuid->title graph-uuid]
   (let [s (or content "")
@@ -396,9 +392,9 @@
                 (:block/title block)
                 (:block/name block)
                 "")
-        format (keyword (or (:block/format block) :markdown))
+        format :markdown
         ctx (assoc ctx :format format)
-        ast (inline-ast raw format)
+        ast (inline-ast raw)
         content (if (seq ast)
                   (inline->nodes-seq ctx ast)
                   (content->nodes raw (:uuid->title ctx) (:graph-uuid ctx)))]
@@ -406,9 +402,7 @@
 
 (defn block-content-from-ref [ref ctx]
   (let [raw (or (get ref "source_block_content") "")
-        format (keyword (or (get ref "source_block_format") "markdown"))
-        ctx (assoc ctx :format format)
-        ast (inline-ast raw format)
+        ast (inline-ast raw)
         content (if (seq ast)
                   (inline->nodes-seq ctx ast)
                   (content->nodes raw (:uuid->title ctx) (:graph-uuid ctx)))]
