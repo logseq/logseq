@@ -1,11 +1,14 @@
 (ns frontend.handler.publish
   "Prepare publish payloads for pages."
   (:require [cljs-bean.core :as bean]
+            [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]
+            [frontend.fs :as fs]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [frontend.util :as util]
+            [logseq.common.path :as path]
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
@@ -23,6 +26,97 @@
 (defn- publish-endpoint
   []
   (str config/PUBLISH-API-BASE "/pages"))
+
+(defn- asset-upload-endpoint
+  []
+  (str config/PUBLISH-API-BASE "/assets"))
+
+(defn- asset-content-type
+  [ext]
+  (case (string/lower-case (or ext ""))
+    ("png") "image/png"
+    ("jpg" "jpeg") "image/jpeg"
+    ("gif") "image/gif"
+    ("webp") "image/webp"
+    ("svg") "image/svg+xml"
+    ("bmp") "image/bmp"
+    ("avif") "image/avif"
+    ("mp4") "video/mp4"
+    ("webm") "video/webm"
+    ("mov") "video/quicktime"
+    ("mp3") "audio/mpeg"
+    ("wav") "audio/wav"
+    ("ogg") "audio/ogg"
+    ("pdf") "application/pdf"
+    "application/octet-stream"))
+
+(defn- merge-attr
+  [entity attr value]
+  (let [existing (get entity attr ::none)]
+    (cond
+      (= existing ::none) (assoc entity attr value)
+      (vector? existing) (assoc entity attr (conj existing value))
+      (set? existing) (assoc entity attr (conj existing value))
+      :else (assoc entity attr [existing value]))))
+
+(defn- datoms->entities
+  [datoms]
+  (reduce
+   (fn [acc datom]
+     (let [[e a v _tx added?] datom]
+       (if added?
+         (update acc e (fn [entity]
+                         (merge-attr (or entity {:db/id e}) a v)))
+         acc)))
+   {}
+   datoms))
+
+(defn- asset-entities-from-payload
+  [payload]
+  (let [entities (datoms->entities (:datoms payload))]
+    (->> entities
+         vals
+         (filter (fn [entity]
+                   (and (:logseq.property.asset/type entity)
+                        (:block/uuid entity)))))))
+
+(defn- <upload-asset!
+  [repo graph-uuid asset]
+  (let [asset-type (:logseq.property.asset/type asset)
+        asset-uuid (some-> (:block/uuid asset) str)
+        external-url (:logseq.property.asset/external-url asset)
+        token (state/get-auth-id-token)]
+    (if (or (not (string? asset-type)) (string/blank? asset-type) external-url (nil? asset-uuid))
+      (p/resolved nil)
+      (p/let [repo-dir (config/get-repo-dir repo)
+              asset-path (path/path-join "assets" (str asset-uuid "." asset-type))
+              content (fs/read-file-raw repo-dir asset-path {})
+              meta {:graph graph-uuid
+                    :asset_uuid asset-uuid
+                    :asset_type asset-type
+                    :checksum (:logseq.property.asset/checksum asset)
+                    :size (:logseq.property.asset/size asset)
+                    :title (:block/title asset)}
+              headers (cond-> {"content-type" (asset-content-type asset-type)
+                               "x-asset-meta" (js/JSON.stringify (clj->js meta))}
+                        token (assoc "authorization" (str "Bearer " token)))
+              resp (js/fetch (asset-upload-endpoint)
+                             (clj->js {:method "POST"
+                                       :headers headers
+                                       :body content}))]
+        (when-not (.-ok resp)
+          (js/console.warn "Asset publish failed" {:asset asset-uuid :status (.-status resp)}))
+        resp))))
+
+(defn- <upload-assets!
+  [repo graph-uuid payload]
+  (let [assets (asset-entities-from-payload payload)]
+    (when (seq assets)
+      (p/all (map (fn [asset]
+                    (p/catch (<upload-asset! repo graph-uuid asset)
+                             (fn [error]
+                               (js/console.warn "Asset publish error" error))))
+                  assets)))))
 
 (defn- <post-publish!
   [payload]
@@ -69,11 +163,11 @@
                                                  (:db/id page)
                                                  graph-uuid)]
           (if payload
-            (-> (<post-publish! payload)
+            (-> (p/let [_ (<upload-assets! repo graph-uuid payload)]
+                  (<post-publish! payload))
                 (p/then (fn [resp]
                           (p/let [json (.json resp)
                                   data (bean/->clj json)]
-                            (js/console.dir data)
                             (let [short-url (:short_url data)
                                   graph-uuid (or (:graph-uuid payload)
                                                  (some-> (ldb/get-graph-rtc-uuid db*) str))
