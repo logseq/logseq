@@ -8,6 +8,7 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.graph-parser.mldoc :as gp-mldoc]
+            [shadow.resource :as resource]
             [shadow.cljs.modern :refer (defclass)])
   (:require-macros [logseq.publish.async :refer [js-await]]))
 
@@ -51,6 +52,9 @@
          :headers (merge-headers
                    #js {"content-type" "application/json"}
                    (cors-headers))})))
+
+(def publish-css (resource/inline "logseq/publish/publish.css"))
+(def publish-js (resource/inline "logseq/publish/publish.js"))
 
 (defn unauthorized []
   (json-response {:error "unauthorized"} 401))
@@ -968,59 +972,7 @@
               [:meta {:charset "utf-8"}]
               [:meta {:name "viewport" :content "width=device-width,initial-scale=1"}]
               [:title page-title]
-              [:link {:rel "stylesheet"
-                      :href "https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css"}]
-              [:script {:defer true
-                        :src "https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js"}]
-              [:style
-               "body{margin:0;background:#fbf8f3;color:#1b1b1b;font-family:Georgia,serif;}"
-               ".wrap{max-width:880px;margin:0 auto;padding:40px 24px;}"
-               "h1{font-size:30px;margin:24px 0 36px;font-weight:600;}"
-               ".page-toolbar{display:flex;gap:12px;align-items:center;margin:0 0 16px;flex-wrap:wrap;}"
-               ".toolbar-btn{border:1px solid #e1d7c7;background:#fff7ea;color:#5c4a2f;padding:6px 10px;border-radius:999px;font-size:12px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;}"
-               ".toolbar-btn:hover{background:#f6e8d4;}"
-               ".blocks{margin:0;padding-left:18px;}"
-               ".block{margin:6px 0;}"
-               ".block-content{white-space:pre-wrap;line-height:1.6;display:flex;gap:8px;align-items:flex-start;}"
-               ".block-text{flex:1;}"
-               ".code-block{flex:1;position:relative;border-radius:10px;overflow:hidden;border:1px solid #e6dccb;background:#1f2933;}"
-               ".code-block[data-lang]:before{content:attr(data-lang);position:absolute;top:8px;right:10px;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#c7b38f;z-index:2;}"
-               ".code-block .cm-editor{height:auto;background:#1f2933;color:#f8f4ec;font-size:13px;line-height:1.5;}"
-               ".code-block .cm-scroller{font-family:\"SFMono-Regular\",Consolas,\"Liberation Mono\",Menlo,monospace;padding:12px;}"
-               ".code-block .cm-gutters{background:#1f2933;color:#8a7a63;border-right:1px solid rgba(199,179,143,0.25);}"
-               ".math-block{flex:1;padding:10px 12px;border-radius:10px;background:#f1e8d9;font-family:\"Times New Roman\",serif;}"
-               ".quote-block{flex:1;margin:0;padding:8px 12px;border-left:4px solid #c7b38f;background:#fff8ec;border-radius:8px;}"
-               ".asset-image{max-width:100%;border-radius:10px;border:1px solid #e6dccb;}"
-               ".asset-video,.asset-audio{width:100%;}"
-               ".asset-link{color:#1a5fb4;text-decoration:none;}"
-               ".asset-link:hover{text-decoration:underline;}"
-               ".page-properties{margin:0 0 24px;padding:12px 16px;border:1px solid #e6dccb;border-radius:12px;background:#fffdf8;}"
-               ".properties{margin:0;display:grid;grid-template-columns:140px 1fr;gap:6px 16px;}"
-               ".property{display:contents;}"
-               ".property-name{margin:0;color:#6b4f2b;font-weight:600;font-size:13px;}"
-               ".property-value{margin:0;color:#2e2a23;}"
-               ".block-properties{margin:6px 0 0 22px;}"
-               ".block-properties .properties{grid-template-columns:120px 1fr;font-size:13px;}"
-               ".block-toggle{border:none;background:transparent;cursor:pointer;font-size:14px;line-height:1;margin-top:3px;margin-left:auto;color:#6b7280;}"
-               ".block.is-collapsed >.block-content >.block-toggle {transform: rotate(-90deg);}"
-               ".block-toggle:focus{outline:2px solid #c7b38f;outline-offset:2px;border-radius:4px;}"
-               ".block-children{margin-left:16px;}"
-               ".block.is-collapsed > .block-children { display: none; }"
-               ".linked-refs{margin-top:36px;}"
-               ".tagged-pages{margin-top:36px;}"
-               ".linked-refs h2{font-size:18px;margin:0 0 16px;color:#4b3b24;}"
-               ".tagged-pages h2{font-size:18px;margin:0 0 16px;color:#4b3b24;}"
-               ".ref-page{margin:0 0 16px;}"
-               ".ref-blocks{margin:8px 0 0 18px;padding:0;list-style:disc;}"
-               ".ref-block{margin:6px 0;}"
-               ".tagged-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;}"
-               ".tagged-item{padding:10px 12px;border:1px solid #e6dccb;border-radius:10px;background:#fffdf8;display:flex;justify-content:space-between;gap:12px;align-items:flex-start;}"
-               ".tagged-main{display:flex;flex-direction:column;gap:4px;min-width:0;}"
-               ".tagged-block{font-size:13px;color:#2e2a23;white-space:pre-wrap;}"
-               ".tagged-sub{font-size:12px;color:#6b4f2b;}"
-               ".tagged-meta{color:#6b4f2b;font-size:12px;white-space:nowrap;}"
-               ".page-ref{color:#1a5fb4;text-decoration:none;}"
-               ".page-ref:hover{text-decoration:underline;}"]]
+              [:link {:rel "stylesheet" :href "/static/publish.css"}]]
              [:body
               [:main.wrap
                [:div.page-toolbar
@@ -1039,35 +991,7 @@
                (when blocks blocks)
                (when tagged-section tagged-section)
                (when linked-refs linked-refs)]
-              [:script
-               "document.addEventListener('click',function(e){var btn=e.target.closest('.block-toggle');if(!btn)return;var li=btn.closest('li.block');if(!li)return;var collapsed=li.classList.toggle('is-collapsed');btn.setAttribute('aria-expanded',String(!collapsed));});"
-               "window.toggleTopBlocks=function(btn){var list=document.querySelector('.blocks');if(!list){return;}var collapsed=list.classList.toggle('collapsed-all');list.querySelectorAll(':scope > .block').forEach(function(el){if(collapsed){el.classList.add('is-collapsed');}else{el.classList.remove('is-collapsed');}});if(btn){btn.textContent=collapsed?'Expand all':'Collapse all';}};"
-               "document.addEventListener('DOMContentLoaded',function(){if(!window.katex){return;}document.querySelectorAll('.math-block').forEach(function(el){var tex=el.textContent;try{window.katex.render(tex,el,{displayMode:true,throwOnError:false});}catch(e){}});});"]]
-             [:script {:type "module"}
-              "import {EditorState, EditorView, basicSetup, defaultHighlightStyle, syntaxHighlighting, javascript, python, html, css, json, markdown, sql, clojure} from 'https://esm.sh/codemirror@6.0.1?bundle';\n"
-              "document.querySelectorAll('.code-block').forEach((block)=>{\n"
-              "  const codeEl = block.querySelector('code');\n"
-              "  const doc = codeEl ? codeEl.textContent : '';\n"
-              "  block.textContent='';\n"
-              "  const lang = (block.dataset.lang || '').toLowerCase();\n"
-              "  const langExt = (()=>{\n"
-              "    if (!lang) return null;\n"
-              "    if (['js','javascript','ts','typescript'].includes(lang)) return javascript({typescript: lang.startsWith('t')});\n"
-              "    if (['py','python'].includes(lang)) return python();\n"
-              "    if (['html','htm'].includes(lang)) return html();\n"
-              "    if (['css','scss'].includes(lang)) return css();\n"
-              "    if (['json'].includes(lang)) return json();\n"
-              "    if (['md','markdown'].includes(lang)) return markdown();\n"
-              "    if (['sql'].includes(lang)) return sql();\n"
-              "    if (['clj','cljc','cljs','clojure'].includes(lang)) return clojure();\n"
-              "    return null;\n"
-              "  })();\n"
-              "  const state = EditorState.create({\n"
-              "    doc,\n"
-              "    extensions: [basicSetup, syntaxHighlighting(defaultHighlightStyle), EditorView.editable.of(false), EditorView.lineWrapping].concat(langExt ? [langExt] : [])\n"
-              "  });\n"
-              "  new EditorView({state, parent: block});\n"
-              "});"]]]
+              [:script {:type "module" :src "/static/publish.js"}]]]
     (str "<!doctype html>" (render-hiccup doc))))
 
 (defn render-graph-html
@@ -1092,21 +1016,7 @@
               [:meta {:charset "utf-8"}]
               [:meta {:name "viewport" :content "width=device-width,initial-scale=1"}]
               [:title (str "Published pages - " graph-uuid)]
-              [:style
-               "body{margin:0;background:#fbf8f3;color:#1b1b1b;font-family:Georgia,serif;}"
-               ".wrap{max-width:880px;margin:0 auto;padding:40px 24px;}"
-               "h1{font-size:26px;margin:0 0 20px;font-weight:600;}"
-               ".graph-meta{color:#6b4f2b;font-size:13px;margin:0 0 24px;}"
-               ".page-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px;}"
-               ".page-item{padding:12px 14px;border:1px solid #e6dccb;border-radius:12px;background:#fffdf8;display:flex;justify-content:space-between;gap:12px;align-items:center;}"
-               ".page-links{display:flex;flex-direction:column;gap:4px;min-width:0;}"
-               ".short-link{color:#6b4f2b;font-size:12px;text-decoration:none;}"
-               ".short-link:hover{text-decoration:underline;}"
-               ".page-link{color:#1a5fb4;text-decoration:none;overflow-wrap:anywhere;}"
-               ".page-link:hover{text-decoration:underline;}"
-               ".page-ref{color:#1a5fb4;text-decoration:none;overflow-wrap:anywhere;}"
-               ".page-ref:hover{text-decoration:underline;}"
-               ".page-meta{color:#6b4f2b;font-size:12px;white-space:nowrap;}"]]
+              [:link {:rel "stylesheet" :href "/static/publish.css"}]]
              [:body
               [:main.wrap
                [:h1 "Published pages"]
@@ -1132,20 +1042,7 @@
               [:meta {:charset "utf-8"}]
               [:meta {:name "viewport" :content "width=device-width,initial-scale=1"}]
               [:title (str "Tag - " title)]
-              [:style
-               "body{margin:0;background:#fbf8f3;color:#1b1b1b;font-family:Georgia,serif;}"
-               ".wrap{max-width:880px;margin:0 auto;padding:40px 24px;}"
-               "h1{font-size:26px;margin:0 0 8px;font-weight:600;}"
-               ".graph-meta{color:#6b4f2b;font-size:13px;margin:0 0 24px;}"
-               ".tag-sub{color:#6b4f2b;font-size:13px;margin:0 0 18px;}"
-               ".page-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px;}"
-               ".page-item{padding:12px 14px;border:1px solid #e6dccb;border-radius:12px;background:#fffdf8;display:flex;justify-content:space-between;gap:12px;align-items:flex-start;}"
-               ".tagged-main{display:flex;flex-direction:column;gap:4px;min-width:0;}"
-               ".tagged-block{font-size:13px;color:#2e2a23;white-space:pre-wrap;}"
-               ".tagged-sub{font-size:12px;color:#6b4f2b;}"
-               ".page-link{color:#1a5fb4;text-decoration:none;overflow-wrap:anywhere;}"
-               ".page-link:hover{text-decoration:underline;}"
-               ".page-meta{color:#6b4f2b;font-size:12px;white-space:nowrap;}"]]
+              [:link {:rel "stylesheet" :href "/static/publish.css"}]]
              [:body
               [:main.wrap
                [:h1 title]
@@ -1167,19 +1064,7 @@
               [:meta {:charset "utf-8"}]
               [:meta {:name "viewport" :content "width=device-width,initial-scale=1"}]
               [:title (str "Tag - " title)]
-              [:style
-               "body{margin:0;background:#fbf8f3;color:#1b1b1b;font-family:Georgia,serif;}"
-               ".wrap{max-width:880px;margin:0 auto;padding:40px 24px;}"
-               "h1{font-size:26px;margin:0 0 8px;font-weight:600;}"
-               ".tag-sub{color:#6b4f2b;font-size:13px;margin:0 0 18px;}"
-               ".page-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px;}"
-               ".page-item{padding:12px 14px;border:1px solid #e6dccb;border-radius:12px;background:#fffdf8;display:flex;justify-content:space-between;gap:12px;align-items:center;}"
-               ".page-links{display:flex;flex-direction:column;gap:4px;min-width:0;}"
-               ".page-ref{color:#1a5fb4;text-decoration:none;overflow-wrap:anywhere;}"
-               ".page-ref:hover{text-decoration:underline;}"
-               ".short-link{color:#6b4f2b;font-size:12px;text-decoration:none;}"
-               ".short-link:hover{text-decoration:underline;}"
-               ".page-meta{color:#6b4f2b;font-size:12px;white-space:nowrap;}"]]
+              [:link {:rel "stylesheet" :href "/static/publish.css"}]]
              [:body
               [:main.wrap
                [:h1 title]
@@ -1214,19 +1099,7 @@
               [:meta {:charset "utf-8"}]
               [:meta {:name "viewport" :content "width=device-width,initial-scale=1"}]
               [:title (str "Ref - " title)]
-              [:style
-               "body{margin:0;background:#fbf8f3;color:#1b1b1b;font-family:Georgia,serif;}"
-               ".wrap{max-width:880px;margin:0 auto;padding:40px 24px;}"
-               "h1{font-size:26px;margin:0 0 8px;font-weight:600;}"
-               ".tag-sub{color:#6b4f2b;font-size:13px;margin:0 0 18px;}"
-               ".page-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px;}"
-               ".page-item{padding:12px 14px;border:1px solid #e6dccb;border-radius:12px;background:#fffdf8;display:flex;justify-content:space-between;gap:12px;align-items:center;}"
-               ".page-links{display:flex;flex-direction:column;gap:4px;min-width:0;}"
-               ".page-ref{color:#1a5fb4;text-decoration:none;overflow-wrap:anywhere;}"
-               ".page-ref:hover{text-decoration:underline;}"
-               ".short-link{color:#6b4f2b;font-size:12px;text-decoration:none;}"
-               ".short-link:hover{text-decoration:underline;}"
-               ".page-meta{color:#6b4f2b;font-size:12px;white-space:nowrap;}"]]
+              [:link {:rel "stylesheet" :href "/static/publish.css"}]]
              [:body
               [:main.wrap
                [:h1 title]
@@ -1740,6 +1613,22 @@
     (cond
       (= method "OPTIONS")
       (js/Response. nil #js {:status 204 :headers (cors-headers)})
+
+      (and (= path "/static/publish.css") (= method "GET"))
+      (js/Response.
+       publish-css
+       #js {:headers (merge-headers
+                      #js {"content-type" "text/css; charset=utf-8"
+                           "cache-control" "public, max-age=31536000, immutable"}
+                      (cors-headers))})
+
+      (and (= path "/static/publish.js") (= method "GET"))
+      (js/Response.
+       publish-js
+       #js {:headers (merge-headers
+                      #js {"content-type" "text/javascript; charset=utf-8"
+                           "cache-control" "public, max-age=31536000, immutable"}
+                      (cors-headers))})
 
       (and (string/starts-with? path "/page/") (= method "GET"))
       (handle-page-html request env)
