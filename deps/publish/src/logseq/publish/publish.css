@@ -76,6 +76,7 @@ body {
   max-width: 920px;
   margin: 32px auto 56px;
   padding: 32px 28px 40px;
+  overflow-x: hidden;
 }
 
 h1 {
@@ -625,12 +626,20 @@ a:hover {
 @media (max-width: 720px) {
   .wrap {
     margin: 16px;
-    padding: 24px 18px 32px;
+    padding: 4px;
   }
 
   .page-toolbar {
     gap: 10px;
     justify-content: flex-end;
+  }
+
+  .block-children {
+    margin-left: 12px;
+  }
+
+  .block-children .blocks {
+    padding-left: 12px;
   }
 
   .properties {
