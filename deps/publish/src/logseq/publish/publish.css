@@ -91,6 +91,33 @@ h2 {
   letter-spacing: 0.01em;
 }
 
+.block-heading {
+  margin: 0;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+h1.block-heading {
+  font-size: 1.6em;
+}
+
+h2.block-heading {
+  font-size: 1.4em;
+}
+
+h3.block-heading {
+  font-size: 1.25em;
+}
+
+h4.block-heading {
+  font-size: 1.1em;
+}
+
+h5.block-heading,
+h6.block-heading {
+  font-size: 1em;
+}
+
 a {
   color: var(--link);
   text-decoration: underline;
