@@ -793,12 +793,12 @@
 
 (defn- migrate-advanced-query-string [query-str]
   (try
-    (pretty-print-dissoc query-str [:title :group-by-page? :collapsed?])
+    (pretty-print-dissoc query-str [:title :group-by-page? :group-collapsed? :collapsed?])
     (catch :default _e
       ;; rewrite/parse-string can fail on some queries in Advanced Queries in docs graph
       (js/console.error "Failed to parse advanced query string. Falling back to full query string: " (pr-str query-str))
       (if-let [query-map (not-empty (common-util/safe-read-map-string query-str))]
-        (pr-str (dissoc query-map :title :group-by-page? :collapsed?))
+        (pr-str (dissoc query-map :title :group-by-page? :group-collapsed? :collapsed?))
         query-str))))
 
 (declare extract-block-list ast->text)

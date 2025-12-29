@@ -4574,7 +4574,8 @@
            (page-cp config page)
            (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
           items
-          {:debug-id page})
+          {:debug-id page
+           :default-collapsed? (:group-collapsed? config)})
          [:div.only-page-blocks items]))]))
 
 ;; headers to hiccup
@@ -4607,7 +4608,8 @@
                       (rum/with-key
                         (breadcrumb-with-container blocks (assoc config :top-level? top-level?))
                         (:db/id parent))))))
-              {:debug-id page})])))]
+              {:debug-id page
+               :default-collapsed? (:group-collapsed? config)})])))]
 
      (and (:ref? config) (:group-by-page? config) (vector? (first blocks)))
      [:div.flex.flex-col.references-blocks-wrap
@@ -4649,7 +4651,7 @@
                    (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
                   (fn []
                     (when-not whiteboard? (blocks-container config blocks)))
-                  {})])))))]
+                  {:default-collapsed? (:group-collapsed? config)})])))))]
 
      :else
      (blocks-container config blocks))])
