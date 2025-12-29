@@ -709,45 +709,66 @@
              (or (:block/order block) (:block/uuid block) ""))
            blocks))
 
-(defn render-block-tree [children-by-parent parent-id ctx]
-  (let [children (get children-by-parent parent-id)]
-    (when (seq children)
-      [:ul.blocks
-       (map (fn [block]
-              (let [child-id (:db/id block)
-                    nested (render-block-tree children-by-parent child-id ctx)
-                    has-children? (boolean nested)
-                    raw-props (entity-properties block ctx (:entities ctx))
-                    icon-prop (get raw-props :logseq.property/icon)
-                    tags-prop (get raw-props :block/tags)
-                    raw-props (dissoc raw-props :logseq.property/icon :block/tags)
-                    {:keys [properties block-left block-right block-below]}
-                    (split-properties-by-position raw-props ctx)
-                    block-left (cond-> block-left
-                                 (and icon-prop (not (property-value-empty? icon-prop)))
-                                 (assoc :logseq.property/icon icon-prop))
-                    block-right (cond-> block-right
-                                  (and tags-prop (not (property-value-empty? tags-prop)))
-                                  (assoc :block/tags tags-prop))
-                    positioned-left (render-positioned-properties block-left ctx (:entities ctx) :block-left)
-                    positioned-right (render-positioned-properties block-right ctx (:entities ctx) :block-right)
-                    positioned-below (render-positioned-properties block-below ctx (:entities ctx) :block-below)
-                    properties (render-properties properties ctx (:entities ctx))]
-                [:li.block
-                 [:div.block-content
-                  (when positioned-left positioned-left)
-                  (block-display-node block ctx)
-                  (when positioned-right positioned-right)
-                  (when has-children?
-                    [:button.block-toggle
-                     {:type "button" :aria-expanded "true"}
-                     "▾"])]
-                 (when positioned-below positioned-below)
-                 (when properties
-                   [:div.block-properties properties])
-                 (when nested
-                   [:div.block-children nested])]))
-            (sort-blocks children))])))
+(defn- linked-block-entity
+  [block ctx visited]
+  (let [link (:block/link block)
+        linked-id (cond
+                    (map? link) (:db/id link)
+                    (number? link) link
+                    :else nil)]
+    (when (and linked-id (not (contains? visited linked-id)))
+      (get (:entities ctx) linked-id))))
+
+(defn render-block-tree
+  ([page-children-by-parent linked-children-by-parent parent-id ctx]
+   (render-block-tree page-children-by-parent linked-children-by-parent parent-id ctx #{}))
+  ([page-children-by-parent linked-children-by-parent parent-id ctx visited]
+   (let [children (get page-children-by-parent parent-id)]
+     (when (seq children)
+       [:ul.blocks
+        (map (fn [block]
+               (let [linked-block (linked-block-entity block ctx visited)
+                     display-block (or linked-block block)
+                     display-id (:db/id display-block)
+                     visited (cond-> visited linked-block (conj display-id))
+                     nested (render-block-tree
+                             (if linked-block linked-children-by-parent page-children-by-parent)
+                             linked-children-by-parent
+                             display-id
+                             ctx
+                             visited)
+                     has-children? (boolean nested)
+                     raw-props (entity-properties display-block ctx (:entities ctx))
+                     icon-prop (get raw-props :logseq.property/icon)
+                     tags-prop (get raw-props :block/tags)
+                     raw-props (dissoc raw-props :logseq.property/icon :block/tags)
+                     {:keys [properties block-left block-right block-below]}
+                     (split-properties-by-position raw-props ctx)
+                     block-left (cond-> block-left
+                                  (and icon-prop (not (property-value-empty? icon-prop)))
+                                  (assoc :logseq.property/icon icon-prop))
+                     block-right (cond-> block-right
+                                   (and tags-prop (not (property-value-empty? tags-prop)))
+                                   (assoc :block/tags tags-prop))
+                     positioned-left (render-positioned-properties block-left ctx (:entities ctx) :block-left)
+                     positioned-right (render-positioned-properties block-right ctx (:entities ctx) :block-right)
+                     positioned-below (render-positioned-properties block-below ctx (:entities ctx) :block-below)
+                     properties (render-properties properties ctx (:entities ctx))]
+                 [:li.block
+                  [:div.block-content
+                   (when positioned-left positioned-left)
+                   (block-display-node display-block ctx)
+                   (when positioned-right positioned-right)
+                   (when has-children?
+                     [:button.block-toggle
+                      {:type "button" :aria-expanded "true"}
+                      "▾"])]
+                  (when positioned-below positioned-below)
+                  (when properties
+                    [:div.block-properties properties])
+                  (when nested
+                    [:div.block-children nested])]))
+             (sort-blocks children))]))))
 
 (defn linked-references
   [ctx graph-uuid linked-by-page]
@@ -876,6 +897,16 @@
                                 (reduce-kv (fn [acc k v]
                                              (assoc acc k (sort-blocks v)))
                                            {}))
+        linked-children-by-parent (->> entities
+                                       (reduce (fn [acc [_e entity]]
+                                                 (if (and (:block/parent entity)
+                                                          (not (:logseq.property/created-from-property entity)))
+                                                   (update acc (:block/parent entity) (fnil conj []) entity)
+                                                   acc))
+                                               {})
+                                       (reduce-kv (fn [acc k v]
+                                                    (assoc acc k (sort-blocks v)))
+                                                  {}))
         ctx {:uuid->title uuid->title
              :name->uuid name->uuid
              :graph-uuid graph-uuid
@@ -887,7 +918,7 @@
         page-properties (render-properties (entity-properties page-entity ctx entities)
                                            ctx
                                            entities)
-        blocks (render-block-tree children-by-parent page-eid ctx)
+        blocks (render-block-tree children-by-parent linked-children-by-parent page-eid ctx)
         linked-by-page (when refs-data
                          (->> (get refs-data "refs")
                               (group-by #(get % "source_page_uuid"))
