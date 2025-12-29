@@ -6,6 +6,7 @@
             [frontend.db :as db]
             [frontend.fs :as fs]
             [frontend.handler.notification :as notification]
+            [frontend.handler.property :as property-handler]
             [frontend.image :as image]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -27,6 +28,10 @@
 (defn- publish-endpoint
   []
   (str config/PUBLISH-API-BASE "/pages"))
+
+(defn- publish-page-endpoint
+  [graph-uuid page-uuid]
+  (str config/PUBLISH-API-BASE "/pages/" graph-uuid "/" page-uuid))
 
 (defn- asset-upload-endpoint
   []
@@ -336,6 +341,10 @@
                                   url (or (when short-url
                                             (str config/PUBLISH-API-BASE short-url))
                                           fallback-url)]
+                              (when (and url (:db/id page))
+                                (property-handler/set-block-property! (:db/id page)
+                                                                      :logseq.property.publish/published-url
+                                                                      url))
                               (when url
                                 (notification/show!
                                  [:div.inline
@@ -350,3 +359,28 @@
                            (notification/show! "Publish failed." :error))))
             (notification/show! "Publish failed." :error)))
         (notification/show! "Publish failed: invalid page." :error)))))
+
+(defn unpublish-page!
+  [page]
+  (let [token (state/get-auth-id-token)
+        headers (cond-> {}
+                  token (assoc "authorization" (str "Bearer " token)))]
+    (p/let [graph-uuid (some-> (ldb/get-graph-rtc-uuid (db/get-db)) str)
+            page-uuid (some-> (:block/uuid page) str)]
+      (if (and graph-uuid page-uuid)
+        (-> (p/let [resp (js/fetch (publish-page-endpoint graph-uuid page-uuid)
+                                   (clj->js {:method "DELETE"
+                                             :headers headers}))]
+              (if (.-ok resp)
+                (do
+                  (property-handler/remove-block-property! (:db/id page)
+                                                           :logseq.property.publish/published-url)
+                  (notification/show! "Unpublished." :success false))
+                (p/let [body (.text resp)]
+                  (throw (ex-info "Unpublish failed"
+                                  {:status (.-status resp)
+                                   :body body})))))
+            (p/catch (fn [error]
+                       (js/console.error error)
+                       (notification/show! "Unpublish failed." :error))))
+        (notification/show! "Unpublish failed: missing page id." :error)))))
