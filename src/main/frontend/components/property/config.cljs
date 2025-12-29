@@ -314,7 +314,7 @@
                           (re-init-commands! property)))
         update-icon! (fn [icon]
                        (property-handler/set-block-property!
-                        (state/get-current-repo) (:block/uuid block) :logseq.property/icon
+                        (:block/uuid block) :logseq.property/icon
                         (select-keys icon [:id :type :color])))
         icon (:logseq.property/icon block)
         value (db-property/closed-value-content block)]
@@ -528,10 +528,9 @@
 (defn- handle-delete-property!
   [block property & {:keys [class? class-schema?]}]
   (let [class? (or class? (ldb/class? block))
-        remove! #(let [repo (state/get-current-repo)]
-                   (if (and class? class-schema?)
-                     (db-property-handler/class-remove-property! (:db/id block) (:db/id property))
-                     (property-handler/remove-block-property! repo (:block/uuid block) (:db/ident property))))]
+        remove! #(if (and class? class-schema?)
+                   (db-property-handler/class-remove-property! (:db/id block) (:db/id property))
+                   (property-handler/remove-block-property! (:block/uuid block) (:db/ident property)))]
     (if (and class? class-schema?)
       (-> (shui/dialog-confirm!
            [:p (str "Are you sure you want to delete the property from this tag?")]

@@ -5,7 +5,6 @@
             [frontend.colors :as colors]
             [frontend.common.missionary :as c.m]
             [frontend.components.assets :as assets]
-            [frontend.components.file-sync :as fs]
             [frontend.components.shortcut :as shortcut]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
@@ -16,12 +15,10 @@
             [frontend.handler.config :as config-handler]
             [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.handler.db-based.vector-search-flows :as vector-search-flows]
-            [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.property :as property-handler]
-            [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
             [frontend.mobile.util :as mobile-util]
@@ -34,7 +31,6 @@
             [frontend.ui :as ui]
             [frontend.util :refer [classnames web-platform?] :as util]
             [frontend.version :as fv]
-            [goog.object :as gobj]
             [goog.string :as gstring]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
@@ -284,63 +280,6 @@
                      (js/logseq.api.relaunch))))
         true)]]]))
 
-(rum/defcs switch-git-auto-commit-row < rum/reactive
-  [state t]
-  (let [enabled? (state/get-git-auto-commit-enabled?)]
-    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
-     [:label.block.text-sm.font-medium.leading-5.opacity-70
-      (t :settings-page/git-switcher-label)]
-     [:div
-      [:div.rounded-md.sm:max-w-xs
-       (ui/toggle
-        enabled?
-        (fn []
-          (state/set-state! [:electron/user-cfgs :git/disable-auto-commit?] enabled?)
-          (p/do!
-           (ipc/ipc :userAppCfgs :git/disable-auto-commit? enabled?)
-           (ipc/ipc :setGitAutoCommit)))
-        true)]]]))
-
-(rum/defcs switch-git-commit-on-close-row < rum/reactive
-  [state t]
-  (let [enabled? (state/get-git-commit-on-close-enabled?)]
-    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
-     [:label.block.text-sm.font-medium.leading-5.opacity-70
-      (t :settings-page/git-commit-on-close)]
-     [:div
-      [:div.rounded-md.sm:max-w-xs
-       (ui/toggle
-        enabled?
-        (fn []
-          (state/set-state! [:electron/user-cfgs :git/commit-on-close?] (not enabled?))
-          (ipc/ipc :userAppCfgs :git/commit-on-close? (not enabled?)))
-        true)]]]))
-
-(rum/defcs git-auto-commit-seconds < rum/reactive
-  [state t]
-  (let [secs (or (state/sub [:electron/user-cfgs :git/auto-commit-seconds]) 60)]
-    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
-     [:label.block.text-sm.font-medium.leading-5.opacity-70
-      (t :settings-page/git-commit-delay)]
-     [:div.mt-1.sm:mt-0.sm:col-span-2
-      [:div.max-w-lg.rounded-md.sm:max-w-xs
-       [:input#home-default-page.form-input.is-small.transition.duration-150.ease-in-out
-        {:default-value secs
-         :on-blur       (fn [event]
-                          (let [value (-> (util/evalue event)
-                                          util/safe-parse-int)]
-                            (if (and (number? value)
-                                     (< 0 value (inc 86400)))
-                              (p/do!
-                               (state/set-state! [:electron/user-cfgs :git/auto-commit-seconds] value)
-                               (ipc/ipc :userAppCfgs :git/auto-commit-seconds value)
-                               (ipc/ipc :setGitAutoCommit))
-                              (when-let [elem (gobj/get event "target")]
-                                (notification/show!
-                                 [:div "Invalid value! Must be a number between 1 and 86400"]
-                                 :warning true)
-                                (gobj/set elem "value" secs)))))}]]]]))
-
 (rum/defc app-auto-update-row < rum/reactive [t]
   (let [enabled? (state/sub [:electron/user-cfgs :auto-update])
         enabled? (if (nil? enabled?) true enabled?)]
@@ -441,54 +380,22 @@
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "custom_date_format"}
-    (t :settings-page/custom-date-format)
-    (when-not (config/db-based-graph? (state/get-current-repo))
-      (ui/tooltip [:span.flex.px-2 (svg/info)]
-                  [:span (t :settings-page/custom-date-format-warning)]))]
+    (t :settings-page/custom-date-format)]
    [:div.mt-1.sm:mt-0.sm:col-span-2
     [:div.max-w-lg.rounded-md
      [:select.form-select.is-small
       {:value     preferred-date-format
        :on-change (fn [e]
-                    (let [repo (state/get-current-repo)
-                          format (util/evalue e)
-                          db-based? (config/db-based-graph? repo)]
+                    (let [format (util/evalue e)]
                       (when-not (string/blank? format)
-                        (if db-based?
-                          (p/do!
-                           (property-handler/set-block-property! repo
-                                                                 :logseq.class/Journal
-                                                                 :logseq.property.journal/title-format
-                                                                 format)
-                           (notification/show! "Please refresh the app for this change to take effect"))
-                          (do
-                            (config-handler/set-config! :journal/page-title-format format)
-                            (notification/show!
-                             [:div (t :settings-page/custom-date-format-notification)]
-                             :warning false)))
-                        (shui/dialog-close-all!)
-                        (when-not db-based? (route-handler/redirect! {:to :graphs})))))}
+                        (p/do!
+                         (property-handler/set-block-property! :logseq.class/Journal
+                                                               :logseq.property.journal/title-format
+                                                               format)
+                         (notification/show! "Please refresh the app for this change to take effect"))
+                        (shui/dialog-close-all!))))}
       (for [format (sort (date/journal-title-formatters))]
         [:option {:key format} format])]]]])
-
-(defn workflow-row [t preferred-workflow]
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
-   [:label.block.text-sm.font-medium.leading-5.opacity-70
-    {:for "preferred_workflow"}
-    (t :settings-page/preferred-workflow)]
-   [:div.mt-1.sm:mt-0.sm:col-span-2
-    [:div.max-w-lg.rounded-md
-     [:select.form-select.is-small
-      {:value     (name preferred-workflow)
-       :on-change (fn [e]
-                    (-> (util/evalue e)
-                        string/lower-case
-                        keyword
-                        (#(if (= % :now) :now :todo))
-                        user-handler/set-preferred-workflow!))}
-      (for [workflow [:now :todo]]
-        [:option {:key (name workflow) :value (name workflow)}
-         (if (= workflow :now) "NOW/LATER" "TODO/DOING")])]]]])
 
 (defn outdenting-row [t logical-outdenting?]
   (toggle "preferred_outdenting"
@@ -578,31 +485,6 @@
           (fn []
             (let [value (not enable-all-pages-public?)]
               (config-handler/set-config! :publishing/all-pages-public? value)))))
-
-(defn zotero-settings-row []
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
-   [:label.block.text-sm.font-medium.leading-5.opacity-70
-    {:for "zotero_settings"}
-    "Zotero"]
-   [:div.mt-1.sm:mt-0.sm:col-span-2
-    [:div
-     (ui/button
-      (t :settings)
-      :class "text-sm"
-      :style {:margin-top "0px"}
-      :on-click
-      (fn []
-        (state/close-settings!)
-        (route-handler/redirect! {:to :zotero-setting})))]]])
-
-(defn auto-push-row [_t current-repo enable-git-auto-push?]
-  (when (and current-repo (string/starts-with? current-repo "https://"))
-    (toggle "enable_git_auto_push"
-            "Enable Git auto push"
-            enable-git-auto-push?
-            (fn []
-              (let [value (not enable-git-auto-push?)]
-                (config-handler/set-config! :git-auto-push value))))))
 
 (defn usage-diagnostics-row [t instrument-disabled?]
   (toggle "usage-diagnostics"
@@ -746,28 +628,9 @@
      (when current-repo (edit-custom-css))
      (when current-repo (edit-export-css))]))
 
-(defn file-format-row [t preferred-format]
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
-   [:label.block.text-sm.font-medium.leading-5.opacity-70
-    {:for "preferred_format"}
-    (t :settings-page/preferred-file-format)]
-   [:div.mt-1.sm:mt-0.sm:col-span-2
-    [:div.max-w-lg.rounded-md
-     [:select.form-select.is-small
-      {:value     (name preferred-format)
-       :on-change (fn [e]
-                    (let [format (-> (util/evalue e)
-                                     (string/lower-case)
-                                     keyword)]
-                      (user-handler/set-preferred-format! format)))}
-      (for [format (map name [:org :markdown])]
-        [:option {:key format :value format} (string/capitalize format)])]]]])
-
 (rum/defcs settings-editor < rum/reactive
-  [_state current-repo]
-  (let [preferred-format (state/get-preferred-format)
-        preferred-date-format (state/get-date-formatter)
-        preferred-workflow (state/get-preferred-workflow)
+  [_state]
+  (let [preferred-date-format (state/get-date-formatter)
         enable-timetracking? (state/enable-timetracking?)
         enable-all-pages-public? (state/all-pages-public?)
         logical-outdenting? (state/logical-outdenting?)
@@ -777,16 +640,10 @@
         enable-tooltip? (state/enable-tooltip?)
         enable-shortcut-tooltip? (state/sub :ui/shortcut-tooltip?)
         show-brackets? (state/show-brackets?)
-        wide-mode? (state/sub :ui/wide-mode?)
-        enable-git-auto-push? (state/enable-git-auto-push? current-repo)
-        db-graph? (config/db-based-graph? (state/get-current-repo))]
+        wide-mode? (state/sub :ui/wide-mode?)]
 
     [:div.panel-wrap.is-editor
-     (when-not db-graph?
-       (file-format-row t preferred-format))
      (date-format-row t preferred-date-format)
-     (when-not db-graph?
-       (workflow-row t preferred-workflow))
      (show-brackets-row t show-brackets?)
      (toggle-wide-mode-row t wide-mode?)
 
@@ -800,30 +657,7 @@
      (when-not (or (util/mobile?) (mobile-util/native-platform?))
        (tooltip-row t enable-tooltip?))
      (timetracking-row t enable-timetracking?)
-     (enable-all-pages-public-row t enable-all-pages-public?)
-     (when-not db-graph?
-       (auto-push-row t current-repo enable-git-auto-push?))]))
-
-(rum/defc settings-git
-  []
-  [:div.panel-wrap
-   [:div.text-sm.my-4
-    (ui/admonition
-     :tip
-     [:p (t :settings-page/git-tip)])
-    [:span.text-sm.opacity-50.my-4
-     (t :settings-page/git-desc-1)]
-    [:br] [:br]
-    [:span.text-sm.opacity-50.my-4
-     (t :settings-page/git-desc-2)]
-    [:a {:href "https://git-scm.com/" :target "_blank"}
-     "Git"]
-    [:span.text-sm.opacity-50.my-4
-     (t :settings-page/git-desc-3)]]
-   [:br]
-   (switch-git-auto-commit-row t)
-   (switch-git-commit-on-close-row t)
-   (git-auto-commit-seconds t)])
+     (enable-all-pages-public-row t enable-all-pages-public?)]))
 
 (rum/defc settings-advanced < rum/reactive
   []
@@ -842,47 +676,6 @@
      ;;  :warning
      ;;  [:p (t :settings-page/clear-cache-warning)])
      ]))
-
-(rum/defc sync-enabled-switcher
-  [enabled?]
-  (ui/toggle enabled?
-             (fn []
-               (file-sync-handler/set-sync-enabled! (not enabled?)))
-             true))
-
-(rum/defc sync-diff-merge-enabled-switcher
-  [enabled?]
-  (ui/toggle enabled?
-             (fn []
-               (file-sync-handler/set-sync-diff-merge-enabled! (not enabled?)))
-             true))
-
-(defn sync-switcher-row [enabled?]
-  (row-with-button-action
-   {:left-label (t :settings-page/sync)
-    :action (sync-enabled-switcher enabled?)}))
-
-(defn sync-diff-merge-switcher-row [enabled?]
-  (row-with-button-action
-   {:left-label (str (t :settings-page/sync-diff-merge) " (Experimental!)") ;; Not included in i18n to avoid outdating translations
-    :action (sync-diff-merge-enabled-switcher enabled?)
-    :desc (ui/tooltip [:span.inline-flex.px-1 (svg/info)]
-                      [:div
-                       [:div (t :settings-page/sync-diff-merge-desc)]
-                       [:div (t :settings-page/sync-diff-merge-warn)]])}))
-
-(rum/defc whiteboards-enabled-switcher
-  [enabled?]
-  (ui/toggle enabled?
-             (fn []
-               (let [value (not enabled?)]
-                 (config-handler/set-config! :feature/enable-whiteboards? value)))
-             true))
-
-(defn whiteboards-switcher-row [enabled?]
-  (row-with-button-action
-   {:left-label (t :settings-page/enable-whiteboards)
-    :action (whiteboards-enabled-switcher enabled?)}))
 
 (rum/defc settings-account-usage-description [pro-account? graph-usage]
   (let [count-usage (count graph-usage)
@@ -928,9 +721,7 @@
 
 (rum/defc ^:large-vars/cleanup-todo settings-account < rum/reactive
   []
-  (let [current-graph-uuid (state/sub-current-file-sync-graph-uuid)
-        graph-usage (state/get-remote-graph-usage)
-        current-graph-is-remote? ((set (map :uuid graph-usage)) current-graph-uuid)
+  (let [graph-usage []
         logged-in? (user-handler/logged-in?)
         user-info (state/get-user-info)
         paid-user? (#{"active" "on_trial" "cancelled"} (:LemonStatus user-info))
@@ -963,16 +754,7 @@
                                          :on-click user-handler/upgrade})
               :else nil)]
            (settings-account-usage-graphs pro-account? graph-usage)
-           (settings-account-usage-description pro-account? graph-usage)
-           (if current-graph-is-remote?
-             (ui/button "Deactivate syncing" {:class "p-1 h-8 justify-center"
-                                              :disabled true
-                                              :background "gray"
-                                              :icon "cloud-off"})
-             (ui/button "Activate syncing" {:class "p-1 h-8 justify-center"
-                                            :background "blue"
-                                            :icon "cloud"
-                                            :on-click #(fs/maybe-onboarding-show :sync-initiate)}))]]
+           (settings-account-usage-description pro-account? graph-usage)]]
          (when has-subscribed?
            [:<>
             [:div "Billing"]
@@ -1078,10 +860,6 @@
   (let [current-repo (state/get-current-repo)
         enable-journals? (state/enable-journals? current-repo)
         enable-flashcards? (state/enable-flashcards? current-repo)
-        enable-sync? (state/enable-sync?)
-        enable-sync-diff-merge? (state/enable-sync-diff-merge?)
-        db-based? (config/db-based-graph? current-repo)
-        enable-whiteboards? (state/enable-whiteboards? current-repo)
         logged-in? (user-handler/logged-in?)]
     [:div.panel-wrap.is-features.mb-8
      (journal-row enable-journals?)
@@ -1098,13 +876,11 @@
             :on-key-press  (fn [e]
                              (when (= "Enter" (util/ekey e))
                                (update-home-page e)))}]]]])
-     (when-not db-based? (whiteboards-switcher-row enable-whiteboards?))
      (when (and web-platform? config/feature-plugin-system-on?)
        (plugin-system-switcher-row))
      (when (util/electron?)
        (http-server-switcher-row))
      (flashcards-switcher-row enable-flashcards?)
-     (when-not db-based? (zotero-settings-row))
      (when-not web-platform?
        [:div.mt-1.sm:mt-0.sm:col-span-2
         [:hr]
@@ -1120,34 +896,7 @@
                                   :on-click (fn []
                                               (state/close-settings!)
                                               (state/pub-event! [:user/login]))})
-           [:p.text-sm.opacity-50 (t :settings-page/login-prompt)]])])
-
-     (when-not web-platform?
-       [:<>
-        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
-         [:label.flex.font-medium.leading-5.self-start.mt-1
-          (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/beta-features)]]
-        [:div.flex.flex-col.gap-4
-         {:class (when-not user-handler/alpha-or-beta-user? "opacity-50 pointer-events-none cursor-not-allowed")}
-         (sync-switcher-row enable-sync?)
-         (when (and enable-sync? (not (config/db-based-graph? current-repo)))
-           (sync-diff-merge-switcher-row enable-sync-diff-merge?))
-         [:div.text-sm
-          (t :settings-page/sync-desc-1)
-          [:a.mx-1 {:href "https://blog.logseq.com/how-to-setup-and-use-logseq-sync/"
-                    :target "_blank"}
-           (t :settings-page/sync-desc-2)]
-          (t :settings-page/sync-desc-3)]]])]))
-
-     ;; (when-not web-platform?
-     ;;   [:<>
-     ;;    [:hr]
-;;    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
-     ;;     [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/alpha-features)]]
-     ;;    [:div.flex.flex-col.gap-4
-     ;;     {:class (when-not user-handler/alpha-user? "opacity-50 pointer-events-none cursor-not-allowed")}
-     ;;     ;; features
-     ;;     ]])
+           [:p.text-sm.opacity-50 (t :settings-page/login-prompt)]])])]))
 
 (def DEFAULT-ACTIVE-TAB-STATE (if config/ENABLE-SETTINGS-ACCOUNT-TAB [:account :account] [:general :general]))
 
@@ -1487,8 +1236,7 @@
         _installed-plugins (state/sub :plugin/installed-plugins)
         plugins-of-settings (and config/lsp-enabled? (seq (plugin-handler/get-enabled-plugins-if-setting-schema)))
         *active (::active state)
-        logged-in? (user-handler/logged-in?)
-        db-based? (config/db-based-graph?)]
+        logged-in? (user-handler/logged-in?)]
 
     [:div#settings.cp__settings-main
      (settings-effect @*active)
@@ -1504,13 +1252,7 @@
                [:editor "editor" (t :settings-page/tab-editor) (ui/icon "writing")]
                [:keymap "keymap" (t :settings-page/tab-keymap) (ui/icon "keyboard")]
 
-               (when db-based?
-                 [:ai (t :settings-page/tab-ai) (t :settings-page/ai) (ui/icon "wand")])
-               (when (and (util/electron?) (not db-based?))
-                 [:version-control "git" (t :settings-page/tab-version-control) (ui/icon "history")])
-
-               ;; (when (util/electron?)
-               ;;   [:assets "assets" (t :settings-page/tab-assets) (ui/icon "box")])
+               [:ai (t :settings-page/tab-ai) (t :settings-page/ai) (ui/icon "wand")]
 
                [:advanced "advanced" (t :settings-page/tab-advanced) (ui/icon "bulb")]
                [:features "features" (t :settings-page/tab-features) (ui/icon "app-feature")]
@@ -1554,13 +1296,10 @@
          (settings-general current-repo)
 
          :editor
-         (settings-editor current-repo)
+         (settings-editor)
 
          :keymap
          (shortcut/shortcut-keymap-x)
-
-         :version-control
-         (settings-git)
 
          :assets
          (assets/settings-content)

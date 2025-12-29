@@ -4,12 +4,6 @@
             [frontend.state :as state]
             [frontend.util :as util]))
 
-(defn get-current-page-name
-  "Fetch the current page's original name with same approach as get-current-page-id"
-  []
-  (or (:block/title (db/get-page (state/get-current-page)))
-      (get-in (first (state/get-editor-args)) [:block :block/page :block/title])))
-
 (defn get-current-page-uuid
   "Fetch the current page's uuid with same approach as get-current-page-id"
   []

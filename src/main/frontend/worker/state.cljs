@@ -76,17 +76,6 @@
   [repo]
   (get @*opfs-pools repo))
 
-(defn tx-idle?
-  [repo & {:keys [diff]
-           :or {diff 1000}}]
-  (when repo
-    (let [last-input-time (get-in @*state [:db/latest-transact-time repo])]
-      (or
-       (nil? last-input-time)
-
-       (let [now (common-util/time-ms)]
-         (>= (- now last-input-time) diff))))))
-
 (defn set-db-latest-tx-time!
   [repo]
   (swap! *state assoc-in [:db/latest-transact-time repo] (common-util/time-ms)))

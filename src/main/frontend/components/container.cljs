@@ -17,7 +17,6 @@
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
-            [frontend.db.model :as db-model]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
@@ -32,7 +31,6 @@
             [frontend.version :refer [version]]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [logseq.common.path :as path]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.popup.core :as shui-popup]
@@ -107,30 +105,9 @@
                                     margin-less-pages? 0
                                     onboarding-and-home? 0
                                     :else 120)}}
-          main-content])
-
-       (comment
-         (when onboarding-and-home?
-           (onboarding/intro onboarding-and-home?)))]]]))
+          main-content])]]]))
 
 (defonce sidebar-inited? (atom false))
-;; TODO: simplify logic
-
-(rum/defc parsing-progress < rum/static
-  [state]
-  (let [finished (or (:finished state) 0)
-        total (:total state)
-        width (js/Math.round (* (.toFixed (/ finished total) 2) 100))
-        display-filename (some-> (:current-parsing-file state)
-                                 not-empty
-                                 path/filename)
-        left-label [:div.flex.flex-row.font-bold
-                    (t :parsing-files)
-                    [:div.hidden.md:flex.flex-row
-                     [:span.mr-1 ": "]
-                     [:div.text-ellipsis-wrapper {:style {:max-width 300}}
-                      display-filename]]]]
-    (ui/progress-bar-with-label width left-label (str finished "/" total))))
 
 (rum/defc main-content < rum/reactive db-mixins/query
   {:init (fn [state]
@@ -151,38 +128,24 @@
            state)}
   []
   (let [default-home (app-left-sidebar/get-default-home-if-valid)
-        current-repo (state/sub :git/current-repo)
-        loading-files? (when current-repo (state/sub [:repo/loading-files? current-repo]))
-        graph-parsing-state (state/sub [:graph/parsing-state current-repo])]
-    (cond
-      (or
-       (:graph-loading? graph-parsing-state)
-       (not= (:total graph-parsing-state) (:finished graph-parsing-state)))
-      [:div.flex.items-center.justify-center.full-height-without-header
-       [:div.flex-1
-        (parsing-progress graph-parsing-state)]]
+        current-repo (state/sub :git/current-repo)]
+    [:div
+     (cond
+       (and default-home
+            (= :home (state/get-current-route))
+            (not (state/route-has-p?))
+            (:page default-home))
+       (route-handler/redirect-to-page! (:page default-home))
 
-      :else
-      [:div
-       (cond
-         (and default-home
-              (= :home (state/get-current-route))
-              (not (state/route-has-p?))
-              (:page default-home))
-         (route-handler/redirect-to-page! (:page default-home))
+       (or (not (state/enable-journals? current-repo))
+           (let [latest-journals (db/get-latest-journals (state/get-current-repo) 1)]
+             (and config/publishing?
+                  (not default-home)
+                  (empty? latest-journals))))
+       (route-handler/redirect! {:to :all-pages})
 
-         (or (not (state/enable-journals? current-repo))
-             (let [latest-journals (db/get-latest-journals (state/get-current-repo) 1)]
-               (and config/publishing?
-                    (not default-home)
-                    (empty? latest-journals))))
-         (route-handler/redirect! {:to :all-pages})
-
-         loading-files?
-         (ui/loading (t :loading-files))
-
-         :else
-         (journal/all-journals))])))
+       :else
+       (journal/all-journals))]))
 
 (defn- hide-context-menu-and-clear-selection
   [e & {:keys [esc?]}]
@@ -414,11 +377,9 @@
         left-sidebar-open? (state/sub :ui/left-sidebar-open?)
         wide-mode? (state/sub :ui/wide-mode?)
         ls-block-hl-colored? (state/sub :pdf/block-highlight-colored?)
-        onboarding-state (state/sub :file-sync/onboarding-state)
         right-sidebar-blocks (state/sub-right-sidebar-blocks)
         route-name (get-in route-match [:data :name])
-        margin-less-pages? (or (boolean (#{:graph} route-name))
-                               (db-model/whiteboard-page? (state/get-current-page)))
+        margin-less-pages? (boolean (#{:graph} route-name))
         db-restoring? (state/sub :db/restoring?)
         page? (= :page route-name)
         home? (= :home route-name)
@@ -444,7 +405,6 @@
       :settings-open? settings-open?
       :sidebar-blocks-len (count right-sidebar-blocks)
       :system-theme? system-theme?
-      :onboarding-state onboarding-state
       :preferred-language preferred-language
       :on-click (fn [e]
                   (editor-handler/unhighlight-blocks!)

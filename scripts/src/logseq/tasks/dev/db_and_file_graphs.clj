@@ -80,12 +80,7 @@
    "deps/graph-parser/src/logseq/graph_parser/extract.cljc"
    "deps/graph-parser/src/logseq/graph_parser/property.cljs"
    "deps/graph-parser/src/logseq/graph_parser.cljs"
-   "src/main/frontend/handler/file_based" "src/main/frontend/handler/file_sync.cljs" "src/main/frontend/db/file_based"
-   "src/main/frontend/util/file_based" "src/main/frontend/worker/handler/page/file_based" "src/main/frontend/worker/file.cljs"
-   "src/main/frontend/common/file_based"
    "src/main/frontend/fs"
-   "src/main/frontend/components/file_sync.cljs"
-   "src/main/frontend/components/file_based"
    "src/main/frontend/util/fs.cljs"])
 
 (defn- grep-many

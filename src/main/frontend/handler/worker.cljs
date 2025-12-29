@@ -2,28 +2,13 @@
   "Handle messages received from the webworkers"
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [frontend.undo-redo :as undo-redo]
             [lambdaisland.glogi :as log]
-            [logseq.db :as ldb]
-            [promesa.core :as p]))
+            [logseq.db :as ldb]))
 
 (defmulti handle identity)
-
-(defmethod handle :write-files [_ _worker data]
-  (let [{:keys [request-id page-id repo files]} data]
-    (->
-     (p/let [_ (file-handler/alter-files repo files {})]
-       (state/<invoke-db-worker :thread-api/page-file-saved request-id page-id))
-     (p/catch (fn [error]
-                (notification/show!
-                 [:div
-                  [:p "Write file failed, please copy the changes to other editors in case of losing data."]
-                  "Error: " (str (.-stack error))]
-                 :error)
-                (state/<invoke-db-worker :thread-api/page-file-saved request-id page-id))))))
 
 (defmethod handle :notification [_ _worker data]
   (apply notification/show! data))

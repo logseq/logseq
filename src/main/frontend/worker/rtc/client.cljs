@@ -24,7 +24,7 @@
             [tick.core :as tick]))
 
 (defn- task--apply-remote-updates-from-apply-ops
-  [apply-ops-resp graph-uuid repo conn date-formatter aes-key add-log-fn]
+  [apply-ops-resp graph-uuid repo conn aes-key add-log-fn]
   (m/sp
     (if-let [remote-ex (:ex-data apply-ops-resp)]
       (do (add-log-fn :rtc.log/pull-remote-data (assoc remote-ex :sub-type :pull-remote-data-exception))
@@ -39,7 +39,7 @@
       (do (assert (and (pos? (:t apply-ops-resp)) (pos? (:t-query-end apply-ops-resp))) apply-ops-resp)
           (m/?
            (r.remote-update/task--apply-remote-update
-            graph-uuid repo conn date-formatter {:type :remote-update :value apply-ops-resp} aes-key add-log-fn))))))
+            graph-uuid repo conn {:type :remote-update :value apply-ops-resp} aes-key add-log-fn))))))
 
 (defn- new-task--init-request
   [get-ws-create-task graph-uuid major-schema-version repo conn *last-calibrate-t *server-schema-version add-log-fn]
@@ -104,7 +104,7 @@
   "Return a task: get or create a mws(missionary wrapped websocket).
   see also `ws/get-mws-create`.
   But ensure `init-request` and `calibrate-graph-skeleton` has been sent"
-  [get-ws-create-task graph-uuid major-schema-version repo conn date-formatter
+  [get-ws-create-task graph-uuid major-schema-version repo conn
    *last-calibrate-t *online-users *server-schema-version *aes-key add-log-fn]
   (m/sp
     (let [ws (m/? get-ws-create-task)
@@ -152,7 +152,7 @@
                          :graph-uuid graph-uuid
                          :remote-schema-version max-remote-schema-version}))
           (m/? (task--apply-remote-updates-from-apply-ops
-                init-request-resp graph-uuid repo conn date-formatter @*aes-key add-log-fn))))
+                init-request-resp graph-uuid repo conn @*aes-key add-log-fn))))
       ws)))
 
 (defn- ->pos
@@ -475,7 +475,7 @@
 
 (defn new-task--push-local-ops
   "Return a task: push local updates"
-  [repo conn graph-uuid major-schema-version date-formatter get-ws-create-task *remote-profile? aes-key add-log-fn]
+  [repo conn graph-uuid major-schema-version get-ws-create-task *remote-profile? aes-key add-log-fn]
   (m/sp
     (let [block-ops-map-coll (client-op/get&remove-all-block-ops repo)
           update-kv-value-ops-map-coll (client-op/get&remove-all-update-kv-value-ops repo)
@@ -543,11 +543,11 @@
               (do (assert (and (pos? (:t r)) (pos? (:t-query-end r))) r)
                   (m/?
                    (r.remote-update/task--apply-remote-update
-                    graph-uuid repo conn date-formatter {:type :remote-update :value r} aes-key add-log-fn))
+                    graph-uuid repo conn {:type :remote-update :value r} aes-key add-log-fn))
                   (add-log-fn :rtc.log/push-local-update {:remote-t (:t r) :remote-t-query-end (:t-query-end r)})))))))))
 
 (defn new-task--pull-remote-data
-  [repo conn graph-uuid major-schema-version date-formatter get-ws-create-task aes-key add-log-fn]
+  [repo conn graph-uuid major-schema-version get-ws-create-task aes-key add-log-fn]
   (m/sp
     (let [local-tx (client-op/get-local-tx repo)
           message {:action "apply-ops"
@@ -558,4 +558,4 @@
                    :t-before local-tx}
           r (m/? (ws-util/send&recv get-ws-create-task message :timeout-ms 30000))]
       (r.throttle/add-rtc-api-call-record! message)
-      (m/? (task--apply-remote-updates-from-apply-ops r graph-uuid repo conn date-formatter aes-key add-log-fn)))))
+      (m/? (task--apply-remote-updates-from-apply-ops r graph-uuid repo conn aes-key add-log-fn)))))

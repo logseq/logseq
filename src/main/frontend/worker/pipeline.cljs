@@ -5,7 +5,6 @@
             [datascript.core :as d]
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.commands :as commands]
-            [frontend.worker.file :as file]
             [frontend.worker.react :as worker-react]
             [frontend.worker.state :as worker-state]
             [logseq.common.util :as common-util]
@@ -14,7 +13,6 @@
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.order :as db-order]
-            [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.export :as sqlite-export]
@@ -40,35 +38,28 @@
   (when (or (and (:outliner-op tx-meta) (refs-need-recalculated? tx-meta))
             (:rtc-tx? tx-meta)
             (:rtc-op? tx-meta))
-    (let [db-based? (entity-plus/db-based-graph? db-after)]
-      (mapcat (fn [block]
-                (when (d/entity db-after (:db/id block))
-                  (let [date-formatter (worker-state/get-date-formatter repo)
-                        refs (->> (outliner-core/rebuild-block-refs repo db-after date-formatter block) set)]
-                    (if db-based?
-                      (let [old-refs (->> (:block/refs (d/entity db-before (:db/id block)))
-                                          (map :db/id)
-                                          set)
-                            added-refs (when (and (seq refs) (not= refs old-refs))
-                                         (set/difference refs old-refs))
-                            retracted-refs (when (and (seq old-refs) (not= refs old-refs))
-                                             (set/difference old-refs refs))]
-                        (concat
-                         (map (fn [id]
-                                [:db/retract (:db/id block) :block/refs id])
-                              retracted-refs)
-                         (map (fn [id]
-                                [:db/add (:db/id block) :block/refs id])
-                              added-refs)))
-                      ;; retract all refs for file graphs because we can't ensure `refs` are all db ids
-                      (cond-> [[:db/retract (:db/id block) :block/refs]]
-                        (seq refs)
-                        (conj {:db/id (:db/id block)
-                               :block/refs refs}))))))
-              blocks))))
+    (mapcat (fn [block]
+              (when (d/entity db-after (:db/id block))
+                (let [date-formatter (worker-state/get-date-formatter repo)
+                      refs (->> (outliner-core/rebuild-block-refs repo db-after date-formatter block) set)
+                      old-refs (->> (:block/refs (d/entity db-before (:db/id block)))
+                                    (map :db/id)
+                                    set)
+                      added-refs (when (and (seq refs) (not= refs old-refs))
+                                   (set/difference refs old-refs))
+                      retracted-refs (when (and (seq old-refs) (not= refs old-refs))
+                                       (set/difference old-refs refs))]
+                  (concat
+                   (map (fn [id]
+                          [:db/retract (:db/id block) :block/refs id])
+                        retracted-refs)
+                   (map (fn [id]
+                          [:db/add (:db/id block) :block/refs id])
+                        added-refs)))))
+            blocks)))
 
 (defn- insert-tag-templates
-  [repo tx-report]
+  [tx-report]
   (let [db (:db-after tx-report)
         journal-id (:db/id (d/entity db :logseq.class/Journal))
         journal-page (some (fn [d] (when (and (= :block/journal-day (:a d)) (:added d))
@@ -105,9 +96,8 @@
                                                                                                                                               (:block/uuid e)))))))]
                                                                           blocks))))]
                                      (when (seq template-blocks)
-                                       ;; FIXME: outliner core apis shouldn't use `repo`
                                        (let [result (outliner-core/insert-blocks
-                                                     repo db template-blocks object
+                                                     db template-blocks object
                                                      {:sibling? false
                                                       :keep-uuid? journal-template?
                                                       :outliner-op :insert-template-blocks})]
@@ -403,7 +393,7 @@
       (distinct tx-data'))))
 
 (defn- compute-extra-tx-data
-  [repo tx-report]
+  [tx-report]
   (let [{:keys [db-before db-after tx-data tx-meta]} tx-report
         db db-after
         revert-tx-data (revert-disallowed-changes tx-report)
@@ -415,7 +405,7 @@
         commands-tx (when-not (or (:undo? tx-meta) (:redo? tx-meta) (rtc-tx-or-download-graph? tx-meta))
                       (commands/run-commands tx-report))
         insert-templates-tx (when-not (rtc-tx-or-download-graph? tx-meta)
-                              (insert-tag-templates repo tx-report))
+                              (insert-tag-templates tx-report))
         created-by-tx (add-created-by-ref-hook db-before db-after tx-data tx-meta)]
     (concat revert-tx-data
             toggle-page-and-block-tx-data
@@ -439,9 +429,7 @@
   "Compute extra tx-data and block/refs, should ensure it's a pure function and
   doesn't call `d/transact!` or `ldb/transact!`."
   [repo {:keys [db-after tx-meta] :as tx-report}]
-  (let [db-based? (entity-plus/db-based-graph? db-after)
-        extra-tx-data (when db-based?
-                        (compute-extra-tx-data repo tx-report))
+  (let [extra-tx-data (compute-extra-tx-data tx-report)
         tx-report* (if (seq extra-tx-data)
                      (let [result (d/with db-after extra-tx-data)]
                        (assoc tx-report
@@ -478,15 +466,10 @@
                          (:db-after tx-report)))))
 
 (defn- invoke-hooks-default
-  [repo conn {:keys [tx-meta] :as tx-report} context]
+  [{:keys [tx-meta] :as tx-report} context]
   (try
     (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
           deleted-blocks (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report))
-          _ (when (common-sqlite/local-file-based-graph? repo)
-              (let [page-ids (distinct (map :db/id pages))]
-                (doseq [page-id page-ids]
-                  (when (d/entity @conn page-id)
-                    (file/sync-to-file repo page-id tx-meta)))))
           deleted-block-uuids (set (map :block/uuid deleted-blocks))
           deleted-block-ids (set (map :db/id deleted-blocks))
           _ (when (seq deleted-block-uuids)
@@ -511,7 +494,7 @@
       (throw e))))
 
 (defn invoke-hooks
-  [repo conn {:keys [tx-meta] :as tx-report} context]
+  [conn {:keys [tx-meta] :as tx-report} context]
   (let [{:keys [from-disk? new-graph? transact-new-graph-refs?]} tx-meta]
     (when-not transact-new-graph-refs?
       (cond
@@ -528,4 +511,4 @@
         (invoke-hooks-for-imported-graph conn tx-report)
 
         :else
-        (invoke-hooks-default repo conn tx-report context)))))
+        (invoke-hooks-default tx-report context)))))

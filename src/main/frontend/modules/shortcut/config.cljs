@@ -1,7 +1,6 @@
 (ns frontend.modules.shortcut.config
   (:require [clojure.data :as data]
             [clojure.string :as string]
-            [electron.ipc :as ipc]
             [frontend.commands :as commands]
             [frontend.components.commit :as commit]
             [frontend.config :as config]
@@ -14,7 +13,6 @@
             [frontend.handler.history :as history]
             [frontend.handler.journal :as journal-handler]
             [frontend.handler.jump :as jump-handler]
-            [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.paste :as paste-handler]
             [frontend.handler.plugin :as plugin-handler]
@@ -23,13 +21,11 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.window :as window-handler]
             [frontend.modules.shortcut.before :as m]
             [frontend.state :as state]
             [frontend.util :refer [mac?] :as util]
-            [medley.core :as medley]
-            [promesa.core :as p]))
+            [medley.core :as medley]))
 
 (defn- search
   [mode]
@@ -51,8 +47,6 @@
 ;;  * :fn - Fn or a qualified keyword that represents a fn
 ;;  * :inactive - Optional boolean to disable a shortcut for certain conditions
 ;;    e.g. a given platform or feature condition
-;;  * :file-graph? - Optional boolean to identify a command to only be run in file graphs
-;;    and warned gracefully in db graphs
 (def ^:large-vars/data-var all-built-in-keyboard-shortcuts
   {:pdf/previous-page                       {:binding "alt+p"
                                              :fn      pdf-utils/prev-page}
@@ -65,90 +59,6 @@
 
    :pdf/find                                {:binding "alt+f"
                                              :fn      pdf-utils/open-finder}
-
-   :whiteboard/select                       {:binding ["1" "w s"]
-                                             :fn      #(.selectTool ^js (state/active-tldraw-app) "select")}
-
-   :whiteboard/pan                          {:binding ["2" "w p"]
-                                             :fn      #(.selectTool ^js (state/active-tldraw-app) "move")}
-
-   :whiteboard/portal                       {:binding ["3" "w b"]
-                                             :fn      #(.selectTool ^js (state/active-tldraw-app) "logseq-portal")}
-
-   :whiteboard/pencil                       {:binding ["4" "w d"]
-                                             :fn      #(.selectTool ^js (state/active-tldraw-app) "pencil")}
-
-   :whiteboard/highlighter                  {:binding ["5" "w h"]
-                                             :fn      #(.selectTool ^js (state/active-tldraw-app) "highlighter")}
-
-   :whiteboard/eraser                       {:binding ["6" "w e"]
-                                             :fn      #(.selectTool ^js (state/active-tldraw-app) "erase")}
-
-   :whiteboard/connector                    {:binding ["7" "w c"]
-                                             :fn      #(.selectTool ^js (state/active-tldraw-app) "line")}
-
-   :whiteboard/text                         {:binding ["8" "w t"]
-                                             :fn      #(.selectTool ^js (state/active-tldraw-app) "text")}
-
-   :whiteboard/rectangle                    {:binding ["9" "w r"]
-                                             :fn      #(.selectTool ^js (state/active-tldraw-app) "box")}
-
-   :whiteboard/ellipse                      {:binding ["o" "w o"]
-                                             :fn      #(.selectTool ^js (state/active-tldraw-app) "ellipse")}
-
-   :whiteboard/reset-zoom                   {:binding "shift+0"
-                                             :fn      #(.resetZoom (.-api ^js (state/active-tldraw-app)))}
-
-   :whiteboard/zoom-to-fit                  {:binding "shift+1"
-                                             :fn      #(.zoomToFit (.-api ^js (state/active-tldraw-app)))}
-
-   :whiteboard/zoom-to-selection            {:binding "shift+2"
-                                             :fn      #(.zoomToSelection (.-api ^js (state/active-tldraw-app)))}
-
-   :whiteboard/zoom-out                     {:binding "shift+dash"
-                                             :fn      #(.zoomOut (.-api ^js (state/active-tldraw-app)) false)}
-
-   :whiteboard/zoom-in                      {:binding "shift+equals"
-                                             :fn      #(.zoomIn (.-api ^js (state/active-tldraw-app)) false)}
-
-   :whiteboard/send-backward                {:binding "open-square-bracket"
-                                             :fn      #(.sendBackward ^js (state/active-tldraw-app))}
-
-   :whiteboard/send-to-back                 {:binding "shift+open-square-bracket"
-                                             :fn      #(.sendToBack ^js (state/active-tldraw-app))}
-
-   :whiteboard/bring-forward                {:binding "close-square-bracket"
-                                             :fn      #(.bringForward ^js (state/active-tldraw-app))}
-
-   :whiteboard/bring-to-front               {:binding "shift+close-square-bracket"
-                                             :fn      #(.bringToFront ^js (state/active-tldraw-app))}
-
-   :whiteboard/lock                         {:binding "mod+l"
-                                             :fn      #(.setLocked ^js (state/active-tldraw-app) true)}
-
-   :whiteboard/unlock                       {:binding "mod+shift+l"
-                                             :fn      #(.setLocked ^js (state/active-tldraw-app) false)}
-
-   :whiteboard/group                        {:binding "mod+g"
-                                             :fn      #(.doGroup (.-api ^js (state/active-tldraw-app)))}
-
-   :whiteboard/ungroup                      {:binding "mod+shift+g"
-                                             :fn      #(.unGroup (.-api ^js (state/active-tldraw-app)))}
-
-   :whiteboard/toggle-grid                  {:binding "t g"
-                                             :fn      #(.toggleGrid (.-api ^js (state/active-tldraw-app)))}
-
-   :whiteboard/clone-right                  {:binding (if mac? "ctrl+shift+right" "alt+right")
-                                             :fn      #(.clone (.-api ^js (state/active-tldraw-app)) "right")}
-
-   :whiteboard/clone-left                   {:binding (if mac? "ctrl+shift+left" "alt+left")
-                                             :fn      #(.clone (.-api ^js (state/active-tldraw-app)) "left")}
-
-   :whiteboard/clone-up                     {:binding (if mac? "ctrl+shift+up" "alt+up")
-                                             :fn      #(.clone (.-api ^js (state/active-tldraw-app)) "up")}
-
-   :whiteboard/clone-down                   {:binding (if mac? "ctrl+shift+down" "alt+down")
-                                             :fn      #(.clone (.-api ^js (state/active-tldraw-app)) "down")}
 
    :auto-complete/complete                  {:binding "enter"
                                              :fn      ui-handler/auto-complete-complete}
@@ -209,11 +119,6 @@
    :editor/new-line                         {:binding "shift+enter"
                                              :fn      editor-handler/keydown-new-line-handler}
 
-   :editor/new-whiteboard                   {:binding "n w"
-                                             :fn      (fn []
-                                                        (when-not (config/db-based-graph? (state/get-current-repo))
-                                                          (whiteboard-handler/<create-new-whiteboard-and-redirect!)))}
-
    :editor/follow-link                      {:binding "mod+o"
                                              :fn      editor-handler/follow-link-under-cursor!}
 
@@ -259,8 +164,6 @@
    :editor/backward-kill-word               {:binding (if mac? false "alt+w")
                                              :fn      editor-handler/backward-kill-word}
 
-   :editor/replace-block-reference-at-point {:binding "mod+shift+r"
-                                             :fn      editor-handler/replace-block-reference-with-content-at-point}
    :editor/copy-embed                       {:binding "mod+shift+e"
                                              :fn      editor-handler/copy-current-block-embed}
 
@@ -363,42 +266,35 @@
                                              :fn      #(state/pub-event! [:editor/toggle-own-number-list (state/get-selection-block-ids)])}
 
    :editor/add-property                     {:binding (if mac? "mod+p" "ctrl+alt+p")
-                                             :db-graph? true
                                              :fn      (fn [e]
                                                         (when e (util/stop e))
                                                         (state/pub-event! [:editor/new-property {}]))}
    :editor/set-tags                         {:binding "p t"
-                                             :db-graph? true
                                              :selection? true
                                              :fn      (fn []
                                                         (state/pub-event! [:editor/new-property {:property-key "Tags"}]))}
 
    :editor/add-property-deadline            {:binding "p d"
-                                             :db-graph? true
                                              :selection? true
                                              :fn      (fn []
                                                         (state/pub-event! [:editor/new-property {:property-key "Deadline"}]))}
 
    :editor/add-property-status              {:binding "p s"
-                                             :db-graph? true
                                              :selection? true
                                              :fn      (fn []
                                                         (state/pub-event! [:editor/new-property {:property-key "Status"}]))}
 
    :editor/add-property-priority            {:binding "p p"
-                                             :db-graph? true
                                              :selection? true
                                              :fn      (fn []
                                                         (state/pub-event! [:editor/new-property {:property-key "Priority"}]))}
 
    :editor/add-property-icon                {:binding "p i"
-                                             :db-graph? true
                                              :selection? true
                                              :fn      (fn []
                                                         (state/pub-event! [:editor/new-property {:property-key "Icon"}]))}
 
    :editor/toggle-display-hidden-properties {:binding "p a"
-                                             :db-graph? true
                                              :fn      ui-handler/toggle-show-empty-hidden-properties!}
 
    :ui/toggle-brackets                      {:binding "t b"
@@ -480,12 +376,6 @@
                                              :inactive (not (util/electron?))
                                              :binding "mod+s"}
 
-   :graph/re-index                          {:fn      (fn []
-                                                        (p/let [multiple-windows? (ipc/ipc "graphHasMultipleWindows" (state/get-current-repo))]
-                                                          (state/pub-event! [:graph/ask-for-re-index (atom multiple-windows?) nil])))
-                                             :file-graph? true
-                                             :binding []}
-
    :command/run                             {:binding  "mod+shift+1"
                                              :inactive (not (util/electron?))
                                              :fn       #(do
@@ -503,9 +393,6 @@
 
    :go/all-graphs                           {:binding "g shift+g"
                                              :fn      route-handler/redirect-to-all-graphs}
-
-   :go/whiteboards                          {:binding "g w"
-                                             :fn      route-handler/redirect-to-whiteboard-dashboard!}
 
    :go/keyboard-shortcuts                   {:binding "g s"
                                              :fn      #(state/pub-event! [:modal/keymap])}
@@ -550,25 +437,10 @@
                                              :fn      page-handler/toggle-favorite!}
 
    :editor/quick-add                        {:binding (if mac? "mod+e" "mod+alt+e")
-                                             :db-graph? true
                                              :inactive config/publishing?
                                              :fn      editor-handler/quick-add}
    :editor/jump                             {:binding "mod+j"
                                              :fn      jump-handler/jump-to}
-   :editor/open-file-in-default-app         {:binding  "mod+d mod+a"
-                                             :inactive (not (util/electron?))
-                                             :file-graph? true
-                                             :fn       page-handler/open-file-in-default-app}
-
-   :editor/open-file-in-directory           {:binding  "mod+d mod+i"
-                                             :inactive (not (util/electron?))
-                                             :file-graph? true
-                                             :fn       page-handler/open-file-in-directory}
-
-   :editor/copy-current-file                {:binding  false
-                                             :inactive (not (util/electron?))
-                                             :file-graph? true
-                                             :fn       page-handler/copy-current-file}
 
    :editor/copy-page-url                    {:binding  []
                                              :inactive (not (util/electron?))
@@ -629,36 +501,25 @@
                         :inactive (not (state/developer-mode?))
                         :fn :frontend.handler.common.developer/show-page-data}
 
-   :dev/show-page-ast {:binding []
-                       :inactive (not (state/developer-mode?))
-                       :fn :frontend.handler.common.developer/show-page-ast}
-
    :misc/export-block-data {:binding []
-                            :db-graph? true
                             :fn :frontend.handler.db-based.export/export-block-data}
 
    :misc/export-page-data {:binding []
-                           :db-graph? true
                            :fn :frontend.handler.db-based.export/export-page-data}
 
    :misc/export-graph-ontology-data {:binding []
-                                     :db-graph? true
                                      :fn :frontend.handler.db-based.export/export-graph-ontology-data}
 
    :misc/import-edn-data {:binding []
-                          :db-graph? true
                           :fn :frontend.handler.db-based.import/import-edn-data-dialog}
 
    :dev/validate-db   {:binding []
-                       :db-graph? true
                        :inactive (not (state/developer-mode?))
                        :fn :frontend.handler.common.developer/validate-db}
    :dev/rtc-stop {:binding []
-                  :db-graph? true
                   :inactive (not (state/developer-mode?))
                   :fn :frontend.handler.common.developer/rtc-stop}
    :dev/rtc-start {:binding []
-                   :db-graph? true
                    :inactive (not (state/developer-mode?))
                    :fn :frontend.handler.common.developer/rtc-start}})
 
@@ -667,7 +528,8 @@
        ::dicts/commands dicts/abbreviated-commands}]
   (assert (= (::commands keyboard-commands) (::dicts/commands keyboard-commands))
           (str "Keyboard commands must have an english label"
-               (data/diff (::commands keyboard-commands) (::commands keyboard-commands)))))
+               (data/diff (::commands keyboard-commands)
+                          (::dicts/commands keyboard-commands)))))
 
 (defn- resolve-fn
   "Converts a keyword fn to the actual fn. The fn to be resolved needs to be
@@ -682,24 +544,6 @@
                                  (aget (munge (name keyword-fn))))]
       (resolved-fn)
       (throw (ex-info (str "Unable to resolve " keyword-fn " to a fn") {})))))
-
-(defn- wrap-fn-with-db-graph-only-warning
-  "Wraps DB graph only commands so they are only run in DB graphs and warned
-   when in file graphs"
-  [f]
-  (fn []
-    (if (config/db-based-graph? (state/get-current-repo))
-      (f)
-      (notification/show! "This command is only for DB graphs." :warning true nil 3000))))
-
-(defn- wrap-fn-with-file-graph-only-warning
-  "Wraps file graph only commands so they are only run in file graphs and warned
-   when in DB graphs"
-  [f]
-  (fn []
-    (if (config/db-based-graph? (state/get-current-repo))
-      (notification/show! "This command is only for file graphs." :warning true nil 3000)
-      (f))))
 
 (defn build-category-map [ks]
   (->> (if (sequential? ks)
@@ -718,13 +562,6 @@
               [k (if (keyword? (:fn v))
                    (assoc v :fn (resolve-fn (:fn v)))
                    v)]))
-       (map (fn [[k v]]
-              [k (cond (:file-graph? v)
-                       (update v :fn wrap-fn-with-file-graph-only-warning)
-                       (:db-graph? v)
-                       (update v :fn wrap-fn-with-db-graph-only-warning)
-                       :else
-                       v)]))
        (into {})))
 
 ;; This is the only var that should be publicly expose :fn functionality
@@ -735,10 +572,6 @@
 
     :shortcut.handler/pdf
     (-> (build-category-map {:ns :pdf})
-        (with-meta {:before m/enable-when-not-editing-mode!}))
-
-    :shortcut.handler/whiteboard
-    (-> (build-category-map {:ns :whiteboard})
         (with-meta {:before m/enable-when-not-editing-mode!}))
 
     :shortcut.handler/auto-complete
@@ -772,7 +605,6 @@
           :editor/backward-word
           :editor/forward-kill-word
           :editor/backward-kill-word
-          :editor/replace-block-reference-at-point
           :editor/copy-embed
           :editor/paste-text-in-one-block-at-point
           :editor/insert-youtube-timestamp])
@@ -786,7 +618,6 @@
           :graph/add
           :graph/db-add
           :graph/db-save
-          :graph/re-index
           :editor/cycle-todo
           :editor/up
           :editor/down
@@ -849,7 +680,6 @@
           :go/flashcards
           :go/graph-view
           :go/all-graphs
-          :go/whiteboards
           :go/keyboard-shortcuts
           :go/tomorrow
           :go/next-journal
@@ -862,11 +692,7 @@
           :ui/toggle-help
           :ui/toggle-theme
           :ui/toggle-contents
-          :editor/open-file-in-default-app
-          :editor/open-file-in-directory
-          :editor/copy-current-file
           :editor/copy-page-url
-          :editor/new-whiteboard
           :editor/set-tags
           :editor/add-property-deadline
           :editor/add-property-status
@@ -889,7 +715,6 @@
           :dev/show-block-data
           :dev/show-block-ast
           :dev/show-page-data
-          :dev/show-page-ast
           :dev/replace-graph-with-db-file
           :dev/validate-db
           :dev/gc-graph
@@ -952,7 +777,6 @@
      :go/all-pages
      :go/graph-view
      :go/all-graphs
-     :go/whiteboards
      :go/flashcards
      :go/tomorrow
      :go/next-journal
@@ -987,7 +811,6 @@
      :editor/backward-word
      :editor/forward-kill-word
      :editor/backward-kill-word
-     :editor/replace-block-reference-at-point
      :editor/copy-embed
      :editor/paste-text-in-one-block-at-point
      :editor/select-up
@@ -1023,37 +846,6 @@
      :ui/toggle-contents
      :ui/customize-appearance]
 
-    :shortcut.category/whiteboard
-    [:editor/new-whiteboard
-     :whiteboard/select
-     :whiteboard/pan
-     :whiteboard/portal
-     :whiteboard/pencil
-     :whiteboard/highlighter
-     :whiteboard/eraser
-     :whiteboard/connector
-     :whiteboard/text
-     :whiteboard/rectangle
-     :whiteboard/ellipse
-     :whiteboard/reset-zoom
-     :whiteboard/zoom-to-fit
-     :whiteboard/zoom-to-selection
-     :whiteboard/zoom-out
-     :whiteboard/zoom-in
-     :whiteboard/send-backward
-     :whiteboard/send-to-back
-     :whiteboard/bring-forward
-     :whiteboard/bring-to-front
-     :whiteboard/lock
-     :whiteboard/unlock
-     :whiteboard/group
-     :whiteboard/ungroup
-     :whiteboard/toggle-grid
-     :whiteboard/clone-left
-     :whiteboard/clone-right
-     :whiteboard/clone-top
-     :whiteboard/clone-bottom]
-
     :shortcut.category/others
     [:pdf/previous-page
      :pdf/next-page
@@ -1065,14 +857,11 @@
      :graph/open
      :graph/remove
      :graph/add
-     :graph/re-index
      :sidebar/close-top
      :sidebar/clear
      :sidebar/open-today-page
      :search/re-index
      :editor/insert-youtube-timestamp
-     :editor/open-file-in-default-app
-     :editor/open-file-in-directory
      :editor/copy-page-url
      :window/close
      :auto-complete/prev
@@ -1088,7 +877,6 @@
      :dev/show-block-data
      :dev/show-block-ast
      :dev/show-page-data
-     :dev/show-page-ast
      :dev/replace-graph-with-db-file
      :dev/validate-db
      :dev/gc-graph

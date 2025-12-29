@@ -2,7 +2,6 @@
   "Handles DB graph exports and imports across graphs"
   (:require [cljs.pprint :as pprint]
             [clojure.string :as string]
-            [frontend.config :as config]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -71,7 +70,7 @@
 
 ;; Copied from handler.export
 (defn- file-name [repo extension]
-  (-> (string/replace repo config/local-db-prefix "")
+  (-> repo
       (string/replace #"^/+" "")
       (str "_" (quot (util/time-ms) 1000))
       (str "." (string/lower-case (name extension)))))

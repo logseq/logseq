@@ -3,10 +3,8 @@
   (:require [frontend.db :as db]
             [frontend.handler.block :as block-handler]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.property :as property-handler]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
-            [frontend.state :as state]
             [frontend.util.ref :as ref]
             [logseq.db :as ldb]))
 
@@ -26,27 +24,16 @@
         top? (= move-to :top)
         nested? (= move-to :nested)
         alt-key? (and event (.-altKey event))
-        current-format (get first-block :block/format :markdown)
-        target-format (get target-block :block/format :markdown)
         target-block (if nested? target-block
                          (or original-block target-block))]
     (cond
       ;; alt pressed, make a block-ref
       (and alt-key? (= (count blocks) 1))
-      (do
-        (property-handler/file-persist-block-id! (state/get-current-repo) (:block/uuid first-block))
-        (editor-handler/api-insert-new-block!
-         (ref/->block-ref (:block/uuid first-block))
-         {:block-uuid (:block/uuid target-block)
-          :sibling? (not nested?)
-          :before? top?}))
-
-;; format mismatch
-      (and current-format target-format (not= current-format target-format))
-      (state/pub-event! [:notification/show
-                         {:content [:div "Those two pages have different formats."]
-                          :status :warning
-                          :clear? true}])
+      (editor-handler/api-insert-new-block!
+       (ref/->block-ref (:block/uuid first-block))
+       {:block-uuid (:block/uuid target-block)
+        :sibling? (not nested?)
+        :before? top?})
 
       (every? map? (conj blocks' target-block))
       (let [blocks' (block-handler/get-top-level-blocks blocks')]

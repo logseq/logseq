@@ -18,7 +18,6 @@
             [logseq.api.db-based :as db-based-api]
             [logseq.sdk.core]
             [logseq.sdk.experiments]
-            [logseq.sdk.git]
             [logseq.sdk.utils :as sdk-utils]
             [reitit.frontend.easy :as rfe]))
 
@@ -84,12 +83,7 @@
 
 (def get_current_graph_favorites
   (fn []
-    (if (config/db-based-graph?)
-      (db-based-api/get-favorites)
-      (some->> (:favorites (state/get-config))
-               (remove string/blank?)
-               (filter string?)
-               (bean/->js)))))
+    (db-based-api/get-favorites)))
 
 (def get_current_graph_recent
   (fn []

@@ -11,7 +11,6 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.rum :refer [use-mounted]]
             [frontend.state :as state]
-            [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.shui.hooks :as hooks]
@@ -38,7 +37,7 @@
 
 (rum/defc ^:large-vars/cleanup-todo container < rum/static
   [{:keys [route theme accent-color editor-font on-click current-repo db-restoring?
-           settings-open? sidebar-open? system-theme? sidebar-blocks-len onboarding-state preferred-language]} child]
+           settings-open? sidebar-open? system-theme? sidebar-blocks-len preferred-language]} child]
   (let [mounted-fn (use-mounted)
         [restored-sidebar? set-restored-sidebar?] (rum/use-state false)]
 
@@ -63,12 +62,12 @@
      [accent-color])
 
     (hooks/use-effect!
-      (fn []
-        (when-let [{:keys [type global]} editor-font]
-          (doto js/document.documentElement
-            (.setAttribute "data-font" (or type "default"))
-            (.setAttribute "data-font-global" (boolean global)))))
-      [editor-font])
+     (fn []
+       (when-let [{:keys [type global]} editor-font]
+         (doto js/document.documentElement
+           (.setAttribute "data-font" (or type "default"))
+           (.setAttribute "data-font-global" (boolean global)))))
+     [editor-font])
 
     (hooks/use-effect!
      #(let [doc js/document.documentElement]
@@ -101,7 +100,6 @@
     (hooks/use-effect!
      (fn []
        (ui-handler/reset-custom-css!)
-       (ui-handler/set-file-graph-flag! (false? (config/db-based-graph? current-repo)))
        (pdf/reset-current-pdf!)
        (plugin-handler/hook-plugin-app :current-graph-changed {}))
      [current-repo])
@@ -145,10 +143,6 @@
            :id :app-settings})
          (shui/dialog-close! :app-settings)))
      [settings-open?])
-
-    (hooks/use-effect!
-     #(storage/set :file-sync/onboarding-state onboarding-state)
-     [onboarding-state])
 
     [:div#root-container.theme-container
      {:on-click on-click

@@ -18,9 +18,7 @@
             [logseq.clj-fractional-indexing :as index]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [logseq.db.common.property-util :as db-property-util]
             [logseq.db.frontend.property :as db-property]
-            [logseq.graph-parser.whiteboard :as gp-whiteboard]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.transaction :as outliner-tx]
             [missionary.core :as m]))
@@ -40,8 +38,7 @@
    {:persist-op? false
     :gen-undo-ops? false
     :outliner-op :delete-blocks
-    :transact-opts {:repo (first args)
-                    :conn (second args)}}
+    :transact-opts {:conn (first args)}}
    (apply outliner-core/delete-blocks! args)))
 
 (defmethod transact-db! :move-blocks [_ & args]
@@ -49,11 +46,10 @@
    {:persist-op? false
     :gen-undo-ops? false
     :outliner-op :move-blocks
-    :transact-opts {:repo (first args)
-                    :conn (second args)}}
+    :transact-opts {:conn (first args)}}
    (apply outliner-core/move-blocks! args)))
 
-(defmethod transact-db! :update-block-order-directly [_ _repo conn block-uuid block-parent-uuid block-order]
+(defmethod transact-db! :update-block-order-directly [_ conn block-uuid block-parent-uuid block-order]
   ;; transact :block/parent and :block/order directly,
   ;; check :block/order has any conflicts with other blocks
   (let [parent-ent (when block-parent-uuid (d/entity @conn [:block/uuid block-parent-uuid]))
@@ -98,20 +94,18 @@
    {:persist-op? true
     :gen-undo-ops? false
     :outliner-op :move-blocks
-    :transact-opts {:repo (first args)
-                    :conn (second args)}}
+    :transact-opts {:conn (first args)}}
    (apply outliner-core/move-blocks! args)))
 
-(defmethod transact-db! :insert-blocks [_ repo conn blocks target opts]
+(defmethod transact-db! :insert-blocks [_ conn blocks target opts]
   (outliner-tx/transact!
    {:persist-op? false
     :gen-undo-ops? false
     :outliner-op :insert-blocks
-    :transact-opts {:repo repo
-                    :conn conn}}
+    :transact-opts {:conn conn}}
    (let [opts' (assoc opts :keep-block-order? true)
          blocks' (map block-reuse-db-id blocks)]
-     (outliner-core/insert-blocks! repo conn blocks' target opts')))
+     (outliner-core/insert-blocks! conn blocks' target opts')))
   (doseq [block blocks]
     (assert (some? (d/entity @conn [:block/uuid (:block/uuid block)]))
             {:msg "insert-block failed"
@@ -128,15 +122,6 @@
                  {:persist-op? false
                   :gen-undo-ops? false
                   :rtc-op? true}))
-
-(defmethod transact-db! :save-block [_ & args]
-  (outliner-tx/transact!
-   {:persist-op? false
-    :gen-undo-ops? false
-    :outliner-op :save-block
-    :transact-opts {:repo (first args)
-                    :conn (second args)}}
-   (apply outliner-core/save-block! args)))
 
 (defmethod transact-db! :delete-whiteboard-blocks [_ conn block-uuids]
   (ldb/transact! conn
@@ -179,7 +164,7 @@
      :block-uuids-to-remove block-uuid-set}))
 
 (defn- apply-remote-remove-ops
-  [repo conn date-formatter remove-ops]
+  [conn remove-ops]
   (let [{whiteboard-block-ops true other-ops false} (group-remote-remove-ops-by-whiteboard-block @conn remove-ops)]
     (transact-db! :delete-whiteboard-blocks conn (map :block-uuid whiteboard-block-ops))
 
@@ -190,15 +175,15 @@
         (when-let [b (d/entity @conn [:block/uuid block-uuid])]
           (when-let [target-b
                      (d/entity @conn (:db/id (:block/page (d/entity @conn [:block/uuid block-uuid]))))]
-            (transact-db! :move-blocks&persist-op repo conn [b] target-b {:sibling? false}))))
+            (transact-db! :move-blocks&persist-op conn [b] target-b {:sibling? false}))))
       (let [deleting-blocks (keep (fn [block-uuid]
                                     (d/entity @conn [:block/uuid block-uuid]))
                                   block-uuids-to-remove)]
         (when (seq deleting-blocks)
-          (transact-db! :delete-blocks repo conn date-formatter deleting-blocks {}))))))
+          (transact-db! :delete-blocks conn deleting-blocks {}))))))
 
 (defn- insert-or-move-block
-  [repo conn block-uuid remote-parents remote-block-order move? op-value]
+  [conn block-uuid remote-parents remote-block-order move? op-value]
   (when (or (seq remote-parents) remote-block-order) ;at least one of parent|order exists
     (let [first-remote-parent (first remote-parents)
           local-parent (when first-remote-parent (d/entity @conn [:block/uuid first-remote-parent]))
@@ -208,21 +193,21 @@
         [false true true]
         (do
           (if move?
-            (transact-db! :move-blocks repo conn [(block-reuse-db-id b)] local-parent {:sibling? false})
-            (transact-db! :insert-blocks repo conn
+            (transact-db! :move-blocks conn [(block-reuse-db-id b)] local-parent {:sibling? false})
+            (transact-db! :insert-blocks conn
                           [{:block/uuid block-uuid}]
                           local-parent {:sibling? false :keep-uuid? true}))
-          (transact-db! :update-block-order-directly repo conn block-uuid first-remote-parent remote-block-order))
+          (transact-db! :update-block-order-directly conn block-uuid first-remote-parent remote-block-order))
 
         [false true false]
         (if move?
-          (transact-db! :move-blocks repo conn [b] local-parent
+          (transact-db! :move-blocks conn [b] local-parent
                         {:sibling? false})
           (transact-db! :insert-no-order-blocks conn [[block-uuid first-remote-parent]]))
 
         [false false true] ;no parent, only update order. e.g. update property's order
         (when (and (empty? remote-parents) move?)
-          (transact-db! :update-block-order-directly repo conn block-uuid nil remote-block-order))
+          (transact-db! :update-block-order-directly conn block-uuid nil remote-block-order))
 
         ([true false false] [true false true] [true true false] [true true true])
         (throw (ex-info "Not implemented yet for whiteboard" {:op-value op-value}))
@@ -253,9 +238,9 @@
     (mapv move-ops-map sorted-uuids)))
 
 (defn- apply-remote-remove-page-ops
-  [repo conn remove-page-ops]
+  [conn remove-page-ops]
   (doseq [op remove-page-ops]
-    (worker-page/delete! repo conn (:block-uuid op) {:persist-op? false})))
+    (worker-page/delete! conn (:block-uuid op) {:persist-op? false})))
 
 (defn- get-schema-ref+cardinality
   [db-schema attr]
@@ -374,20 +359,6 @@
       :wrong-pos
 
       :else nil)))
-
-(defn- upsert-whiteboard-block
-  [repo conn {:keys [parents properties] :as _op-value}]
-  (let [db @conn
-        first-remote-parent (first parents)]
-    (when-let [local-parent (d/entity db [:block/uuid first-remote-parent])]
-      (let [page-id (:db/id local-parent)
-            properties* (ldb/read-transit-str properties)
-            shape-property-id (db-property-util/get-pid repo :logseq.property.tldraw/shape)
-            shape (and (map? properties*)
-                       (get properties* shape-property-id))]
-        (assert (some? page-id) local-parent)
-        (assert (some? shape) properties*)
-        (transact-db! :upsert-whiteboard-block conn [(gp-whiteboard/shape->block repo shape page-id)])))))
 
 (def ^:private update-op-watched-attrs
   #{:block/title
@@ -515,45 +486,40 @@
     {:op-value op-value}))
 
 (defn- update-block-attrs
-  [repo conn block-uuid {:keys [parents] :as op-value}]
+  [conn block-uuid op-value]
   (when-let [ent (d/entity @conn [:block/uuid block-uuid])]
     (when (some (fn [k] (= "block" (namespace k))) (keys op-value)) ; there exists some :block/xxx attrs
       (let [{update-block-order-tx-data :tx-data op-value :op-value} (update-block-order (:db/id ent) op-value)
-            first-remote-parent (first parents)
-            local-parent (d/entity @conn [:block/uuid first-remote-parent])
-            whiteboard-page-block? (ldb/whiteboard? local-parent)
             tx-meta {:persist-op? false :gen-undo-ops? false :rtc-op? true}]
-        (if whiteboard-page-block?
-          (upsert-whiteboard-block repo conn op-value)
-          (do (when-let [schema-tx-data (remote-op-value->schema-tx-data block-uuid op-value)]
-                (ldb/transact! conn schema-tx-data tx-meta))
-              (when-let [tx-data (seq (remote-op-value->tx-data @conn ent (dissoc op-value :client/schema)
-                                                                rtc-const/ignore-attrs-when-syncing))]
-                (ldb/transact! conn (concat tx-data update-block-order-tx-data) tx-meta))))))))
+        (when-let [schema-tx-data (remote-op-value->schema-tx-data block-uuid op-value)]
+          (ldb/transact! conn schema-tx-data tx-meta))
+        (when-let [tx-data (seq (remote-op-value->tx-data @conn ent (dissoc op-value :client/schema)
+                                                          rtc-const/ignore-attrs-when-syncing))]
+          (ldb/transact! conn (concat tx-data update-block-order-tx-data) tx-meta))))))
 
 (defn- apply-remote-update-ops
-  [repo conn update-ops]
+  [conn update-ops]
   (doseq [{:keys [parents self] block-order :block/order :as op-value} update-ops]
     (when (and parents block-order)
       (let [r (check-block-pos @conn self parents block-order)]
         (case r
           :not-exist
-          (insert-or-move-block repo conn self parents block-order false op-value)
+          (insert-or-move-block conn self parents block-order false op-value)
           :wrong-pos
-          (insert-or-move-block repo conn self parents block-order true op-value)
+          (insert-or-move-block conn self parents block-order true op-value)
           nil)))
-    (update-block-attrs repo conn self op-value)))
+    (update-block-attrs conn self op-value)))
 
 (defn- apply-remote-move-ops
-  [repo conn sorted-move-ops]
+  [conn sorted-move-ops]
   (doseq [{:keys [parents self] block-order :block/order :as op-value} sorted-move-ops]
     (let [r (check-block-pos @conn self parents block-order)]
       (case r
         :not-exist
-        (do (insert-or-move-block repo conn self parents block-order false op-value)
-            (update-block-attrs repo conn self op-value))
+        (do (insert-or-move-block conn self parents block-order false op-value)
+            (update-block-attrs conn self op-value))
         :wrong-pos
-        (insert-or-move-block repo conn self parents block-order true op-value)
+        (insert-or-move-block conn self parents block-order true op-value)
         ;; else
         nil))))
 
@@ -563,27 +529,27 @@
 
 (defn- apply-remote-update-page-ops
   [repo conn update-page-ops]
-  (let [config (worker-state/get-config repo)]
-    (doseq [{:keys [self _page-name]
-             title :block/title
-             :as op-value} update-page-ops]
-      (let [db-ident (:db/ident op-value)]
-        (when-not (or
+  (doseq [{:keys [self _page-name]
+           title :block/title
+           :as op-value} update-page-ops]
+    (let [db-ident (:db/ident op-value)]
+      (when-not (or
                    ;; property or class exists
-                   (and db-ident (d/entity @conn db-ident))
+                 (and db-ident (d/entity @conn db-ident))
                    ;; journal with the same block/uuid exists
-                   (ldb/journal? (d/entity @conn [:block/uuid self])))
-          (let [create-opts {:uuid self
-                             :old-db-id (@worker-state/*deleted-block-uuid->db-id self)}
-                [_ page-name page-uuid] (worker-page/rtc-create-page! conn config
-                                                                      (ldb/read-transit-str title)
-                                                                      create-opts)]
+                 (ldb/journal? (d/entity @conn [:block/uuid self])))
+        (let [create-opts {:uuid self
+                           :old-db-id (@worker-state/*deleted-block-uuid->db-id self)}
+              [_ page-name page-uuid] (worker-page/rtc-create-page! conn
+                                                                    (ldb/read-transit-str title)
+                                                                    (worker-state/get-date-formatter repo)
+                                                                    create-opts)]
             ;; TODO: current page-create fn is buggy, even provide :uuid option, it will create-page with different uuid,
             ;; if there's already existing same name page
-            (assert (= page-uuid self) {:page-name page-name :page-uuid page-uuid :should-be self})
-            (assert (some? (d/entity @conn [:block/uuid page-uuid])) {:page-uuid page-uuid :page-name page-name})))
-        (when (need-update-block-attrs-when-apply-update-page-op? op-value)
-          (update-block-attrs repo conn self op-value))))))
+          (assert (= page-uuid self) {:page-name page-name :page-uuid page-uuid :should-be self})
+          (assert (some? (d/entity @conn [:block/uuid page-uuid])) {:page-uuid page-uuid :page-name page-name})))
+      (when (need-update-block-attrs-when-apply-update-page-op? op-value)
+        (update-block-attrs conn self op-value)))))
 
 (defn- ensure-refed-blocks-exist
   "Ensure refed-blocks from remote existing in client"
@@ -597,10 +563,10 @@
             (apply-remote-update-page-ops repo conn [(-> refed-block
                                                          (assoc :self (:block/uuid refed-block))
                                                          (dissoc :block/uuid))])
-            (apply-remote-move-ops repo conn [(-> refed-block
-                                                  (assoc :self (:block/uuid refed-block)
-                                                         :parents [(:block/parent refed-block)])
-                                                  (dissoc :block/uuid))])))))))
+            (apply-remote-move-ops conn [(-> refed-block
+                                             (assoc :self (:block/uuid refed-block)
+                                                    :parents [(:block/parent refed-block)])
+                                             (dissoc :block/uuid))])))))))
 
 (defn task--decrypt-blocks-in-remote-update-data
   [aes-key encrypt-attr-set remote-update-data]
@@ -667,7 +633,7 @@
 
 (defn task--apply-remote-update
   "Apply remote-update(`remote-update-event`)"
-  [graph-uuid repo conn date-formatter remote-update-event aes-key add-log-fn]
+  [graph-uuid repo conn remote-update-event aes-key add-log-fn]
   (m/sp
     (when (apply-remote-update-check repo remote-update-event add-log-fn)
       (let [remote-update-data (:value remote-update-event)
@@ -697,13 +663,13 @@
          (fn [temp-conn]
            (worker-util/profile :ensure-refed-blocks-exist (ensure-refed-blocks-exist repo temp-conn refed-blocks))
            (worker-util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo temp-conn update-page-ops))
-           (worker-util/profile :apply-remote-move-ops (apply-remote-move-ops repo temp-conn sorted-move-ops))
-           (worker-util/profile :apply-remote-update-ops (apply-remote-update-ops repo temp-conn update-ops))
-           (worker-util/profile :apply-remote-remove-page-ops (apply-remote-remove-page-ops repo temp-conn remove-page-ops))))
+           (worker-util/profile :apply-remote-move-ops (apply-remote-move-ops temp-conn sorted-move-ops))
+           (worker-util/profile :apply-remote-update-ops (apply-remote-update-ops temp-conn update-ops))
+           (worker-util/profile :apply-remote-remove-page-ops (apply-remote-remove-page-ops temp-conn remove-page-ops))))
 
         ;; NOTE: we cannot set :persist-op? = true when batch-tx/with-batch-tx-mode (already set to false)
         ;; and there're some transactions in `apply-remote-remove-ops` need to :persist-op?=true
-        (worker-util/profile :apply-remote-remove-ops (apply-remote-remove-ops repo conn date-formatter remove-ops))
+        (worker-util/profile :apply-remote-remove-ops (apply-remote-remove-ops conn remove-ops))
 
         ;; wait all remote-ops transacted into db,
         ;; then start to check any asset-updates in remote

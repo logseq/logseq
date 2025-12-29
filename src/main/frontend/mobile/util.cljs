@@ -19,9 +19,6 @@
   (and (native-platform?)
        (= (platform) "android")))
 
-(defn convert-file-src [path-str]
-  (.convertFileSrc Capacitor path-str))
-
 (defn plugin-available?
   "Check if a native plugin is available from Capacitor.Plugins."
   [name]
@@ -151,11 +148,6 @@
     (when (:isZoomed is-zoomed?)
       (let [^js cl (.-classList js/document.documentElement)]
         (.add cl "is-zoomed-native-ios")))))
-
-(defn in-iCloud-container-path?
-  "Check whether `path' is logseq's iCloud container path on iOS"
-  [path]
-  (string/includes? path "/iCloud~com~logseq~logseq/"))
 
 (defn alert
   "Show a native drop alert on iOS.

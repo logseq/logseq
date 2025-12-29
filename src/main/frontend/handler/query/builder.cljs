@@ -1,28 +1,15 @@
 (ns frontend.handler.query.builder
   "DSL query builder handler"
   (:require [clojure.walk :as walk]
-            [logseq.common.util.page-ref :as page-ref]
+            [frontend.db.query-dsl :as query-dsl]
             [lambdaisland.glogi :as log]
-            [frontend.db.query-dsl :as query-dsl]))
+            [logseq.common.util.page-ref :as page-ref]))
 
 ;; TODO: make it extensible for Datalog/SPARQL etc.
 
 (def operators [:and :or :not])
 (def operators-set (set operators))
 
-(def page-filters ["all page tags"
-                   "namespace"
-                   "tags"
-                   "property"
-                   "sample"])
-(def block-filters ["page reference"
-                    "property"
-                    "task"
-                    "priority"
-                    "page"
-                    "full text search"
-                    "between"
-                    "sample"])
 (def db-based-block-filters
   ["tags"
    "page reference"

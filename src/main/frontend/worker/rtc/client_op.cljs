@@ -6,7 +6,6 @@
             [frontend.worker.state :as worker-state]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
-            [logseq.db.sqlite.util :as sqlite-util]
             [malli.core :as ma]
             [malli.transform :as mt]
             [missionary.core :as m]))
@@ -423,11 +422,10 @@
      (count (get-all-update-kv-value-ops* @conn)))))
 
 (defn rtc-db-graph?
-  "Is db-graph & RTC enabled"
+  "Is RTC enabled"
   [repo]
-  (and (sqlite-util/db-based-graph? repo)
-       (or (exists? js/process)
-           (some? (get-graph-uuid repo)))))
+  (or (exists? js/process)
+      (some? (get-graph-uuid repo))))
 
 (defn create-pending-block-ops-count-flow
   [repo]
