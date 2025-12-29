@@ -574,9 +574,8 @@
                [:div.page-toolbar
                 (when graph-uuid
                   [:a.toolbar-btn {:href (str "/graph/" graph-uuid)} "Home"])
-                [:button.toolbar-btn
-                 {:type "button"
-                  :onclick "window.toggleTopBlocks(this)"}
+                [:a.toolbar-btn
+                 {:onclick "window.toggleTopBlocks(this)"}
                  "Collapse all"]]
 
                [:h1 page-title]
