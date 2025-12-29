@@ -10,6 +10,8 @@
 
 (def publish-css (resource/inline "logseq/publish/publish.css"))
 (def publish-js (resource/inline "logseq/publish/publish.js"))
+(def tabler-ext-js (resource/inline "js/tabler.ext.js"))
+(def tabler-extension-css (resource/inline "css/tabler-extension.css"))
 
 (defn- request-password
   [request]
@@ -535,6 +537,14 @@
       (and (= path "/static/publish.js") (= method "GET"))
       (js/Response.
        publish-js
+       #js {:headers (publish-common/merge-headers
+                      #js {"content-type" "text/javascript; charset=utf-8"
+                           "cache-control" "public, max-age=31536000, immutable"}
+                      (publish-common/cors-headers))})
+
+      (and (= path "/static/tabler.ext.js") (= method "GET"))
+      (js/Response.
+       tabler-ext-js
        #js {:headers (publish-common/merge-headers
                       #js {"content-type" "text/javascript; charset=utf-8"
                            "cache-control" "public, max-age=31536000, immutable"}
