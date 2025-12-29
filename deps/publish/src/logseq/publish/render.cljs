@@ -287,15 +287,58 @@
       (str "/asset/" graph-uuid "/" asset-uuid "." asset-type)
       :else nil)))
 
+(def ^:private publish-image-variant-sizes
+  [1024 1600])
+
+(def ^:private publish-image-variant-types
+  #{"png" "jpg" "jpeg" "webp"})
+
+(def ^:private publish-image-sizes-attr
+  "(max-width: 640px) 92vw, (max-width: 1024px) 88vw, 920px")
+
+(defn- asset-variant-url
+  [graph-uuid asset-uuid asset-type variant]
+  (str "/asset/" graph-uuid "/" asset-uuid "@" variant "." asset-type))
+
+(defn- variant-width
+  [block size]
+  (let [asset-width (:logseq.property.asset/width block)
+        asset-height (:logseq.property.asset/height block)]
+    (if (and (number? asset-width)
+             (number? asset-height)
+             (pos? asset-width)
+             (pos? asset-height))
+      (let [max-dim (max asset-width asset-height)
+            scale (min 1 (/ size max-dim))]
+        (js/Math.round (* asset-width scale)))
+      size)))
+
 (defn- asset-node [block ctx]
   (let [asset-type (:logseq.property.asset/type block)
         asset-url (asset-url block ctx)
+        external-url (:logseq.property.asset/external-url block)
         title (or (:block/title block) (str asset-type))
-        ext (string/lower-case (or asset-type ""))]
+        ext (string/lower-case (or asset-type ""))
+        graph-uuid (:graph-uuid ctx)
+        asset-uuid (:block/uuid block)
+        variant? (and (not (string? external-url))
+                      graph-uuid
+                      asset-uuid
+                      (contains? publish-image-variant-types ext))
+        srcset (when variant?
+                 (->> publish-image-variant-sizes
+                      (map (fn [size]
+                             (let [width (variant-width block size)]
+                               (str (asset-variant-url graph-uuid asset-uuid asset-type size)
+                                    " "
+                                    width
+                                    "w"))))
+                      (string/join ", ")))]
     (when asset-url
       (cond
         (contains? #{"png" "jpg" "jpeg" "gif" "webp" "svg" "bmp" "avif"} ext)
-        [:img.asset-image {:src asset-url :alt title}]
+        [:img.asset-image (cond-> {:src asset-url :alt title}
+                            srcset (assoc :srcset srcset :sizes publish-image-sizes-attr))]
 
         (contains? #{"mp4" "webm" "mov"} ext)
         [:video.asset-video {:src asset-url :controls true}]
