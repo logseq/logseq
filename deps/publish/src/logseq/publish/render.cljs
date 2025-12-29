@@ -218,6 +218,154 @@
         [:dd.property-value
          (into [:span] (property-value->nodes v k ctx entities))]])]))
 
+(def ^:private youtube-regex #"^((?:https?:)?//)?((?:www|m).)?((?:youtube.com|youtu.be|y2u.be|youtube-nocookie.com))(/(?:[\w-]+\?v=|embed/|v/)?)([\w-]+)([\S^\?]+)?$")
+(def ^:private vimeo-regex #"^((?:https?:)?//)?((?:www).)?((?:player.vimeo.com|vimeo.com))(/(?:video/)?)([\w-]+)(\S+)?$")
+(def ^:private bilibili-regex #"^((?:https?:)?//)?((?:www).)?((?:bilibili.com))(/(?:video/)?)([\w-]+)(\?p=(\d+))?(\S+)?$")
+(def ^:private loom-regex #"^((?:https?:)?//)?((?:www).)?((?:loom.com))(/(?:share/|embed/))([\w-]+)(\S+)?$")
+
+(defn- safe-match
+  [re value]
+  (when (and (string? value) (not (string/blank? value)))
+    (re-find re value)))
+
+(defn- macro-iframe
+  [src {:keys [class title]}]
+  (when (and (string? src) (not (string/blank? src)))
+    (let [class-name (string/join " " (remove nil? ["macro-embed" class]))]
+      [:div {:class class-name}
+       [:iframe {:src src
+                 :title (or title "Embedded content")
+                 :loading "lazy"
+                 :allow "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                 :allowfullscreen true}]])))
+
+(defn- youtube-embed
+  [url]
+  (let [id (cond
+             (and (string? url) (= 11 (count url))) url
+             :else (nth (safe-match youtube-regex url) 5 nil))]
+    (when (and id (string? id))
+      (macro-iframe (str "https://www.youtube.com/embed/" id) {:class "macro-embed--video" :title "YouTube"}))))
+
+(defn- vimeo-embed
+  [url]
+  (let [id (nth (safe-match vimeo-regex url) 5 nil)]
+    (when (and id (string? id))
+      (macro-iframe (str "https://player.vimeo.com/video/" id) {:class "macro-embed--video" :title "Vimeo"}))))
+
+(defn- bilibili-embed
+  [url]
+  (let [id (if (<= (count (or url "")) 15)
+             url
+             (nth (safe-match bilibili-regex url) 5 nil))]
+    (when (and id (string? id) (not (string/blank? id)))
+      (macro-iframe (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1&autoplay=0")
+                    {:class "macro-embed--video" :title "Bilibili"}))))
+
+(defn- video-embed
+  [url]
+  (when (common-util/url? url)
+    (let [matches (or (safe-match youtube-regex url)
+                      (safe-match loom-regex url)
+                      (safe-match vimeo-regex url)
+                      (safe-match bilibili-regex url))
+          src (cond
+                (and matches (contains? #{"youtube.com" "youtu.be" "y2u.be" "youtube-nocookie.com"} (nth matches 3)))
+                (let [id (nth matches 5)]
+                  (when (= 11 (count (or id "")))
+                    (str "https://www.youtube.com/embed/" id)))
+
+                (and matches (string/ends-with? (nth matches 3) "loom.com"))
+                (str "https://www.loom.com/embed/" (nth matches 5))
+
+                (and matches (string/ends-with? (nth matches 3) "vimeo.com"))
+                (str "https://player.vimeo.com/video/" (nth matches 5))
+
+                (and matches (= (nth matches 3) "bilibili.com"))
+                (str "https://player.bilibili.com/player.html?bvid=" (nth matches 5) "&high_quality=1&autoplay=0")
+
+                :else
+                url)]
+      (macro-iframe src {:class "macro-embed--video" :title "Video"}))))
+
+(defn- tweet-embed
+  [url]
+  (let [url (cond
+              (and (string? url) (<= (count url) 15)) (str "https://x.com/i/status/" url)
+              :else url)]
+    (when url
+      [:div.twitter-tweet
+       [:a {:href url} url]])))
+
+(defn- tweet-embed-from-html
+  [html]
+  (let [id (last (safe-match #"/status/(\d+)" html))]
+    (when (and id (string? id))
+      (tweet-embed id))))
+
+(defn- macro->nodes
+  [ctx {:keys [name arguments]}]
+  (let [name (string/lower-case (or name ""))
+        arguments (if (sequential? arguments) arguments [])
+        first-arg (first arguments)]
+    (cond
+      (= name "cloze")
+      [[:span.cloze (string/join ", " arguments)]]
+
+      (= name "youtube")
+      (when-let [node (youtube-embed first-arg)] [node])
+
+      (= name "vimeo")
+      (when-let [node (vimeo-embed first-arg)] [node])
+
+      (= name "bilibili")
+      (when-let [node (bilibili-embed first-arg)] [node])
+
+      (= name "video")
+      (when-let [node (video-embed first-arg)] [node])
+
+      (contains? #{"tweet" "twitter"} name)
+      (when-let [node (tweet-embed first-arg)] [node])
+
+      :else
+      (content->nodes (str "{{" name (when (seq arguments)
+                                       (str " " (string/join ", " arguments))) "}}")
+                      (:uuid->title ctx)
+                      (:graph-uuid ctx)))))
+
+(defn- parse-macro-text
+  [value]
+  (when-let [[_ name args] (and (string? value)
+                                (re-find #"\{\{\s*([^\s\}]+)\s*([^}]*)\}\}" value))]
+    (let [args (->> (string/split (or args "") #",")
+                    (map string/trim)
+                    (remove string/blank?)
+                    vec)]
+      {:name name
+       :arguments args})))
+
+(defn- normalize-macro-data
+  [data]
+  (cond
+    (map? data) data
+    (string? data) (parse-macro-text data)
+    (and (sequential? data) (seq data))
+    (let [name (first data)
+          args (second data)]
+      {:name (when (string? name) name)
+       :arguments (if (sequential? args) args [])})
+    :else nil))
+
+(defn- macro-embed-node?
+  [node]
+  (when (vector? node)
+    (let [tag (first node)
+          attrs (second node)]
+      (and (= tag :div)
+           (map? attrs)
+           (string? (:class attrs))
+           (string/includes? (:class attrs) "macro-embed")))))
+
 (defn inline->nodes [ctx item]
   (let [[type data] item
         {:keys [uuid->title name->uuid graph-uuid]} ctx]
@@ -277,6 +425,16 @@
           [[:a.page-ref {:href (str "/page/" graph-uuid "/" page-uuid)} (str "#" s)]]
           [(str "#" s)]))
 
+      (= "Macro" type)
+      (if-let [macro-data (normalize-macro-data data)]
+        (or (macro->nodes ctx macro-data) [])
+        (content->nodes (str data) uuid->title graph-uuid))
+
+      (or (= "Inline_Html" type) (= "Export_Snippet" type))
+      (if-let [node (tweet-embed-from-html data)]
+        [node]
+        [])
+
       :else
       (content->nodes (str data) uuid->title graph-uuid))))
 
@@ -291,7 +449,8 @@
         content (if (seq ast)
                   (mapcat #(inline->nodes ctx %) ast)
                   (content->nodes raw (:uuid->title ctx) (:graph-uuid ctx)))]
-    (into [:span.block-text] content)))
+    (let [container (if (some macro-embed-node? content) :div :span)]
+      (into [(keyword (str (name container) ".block-text"))] content))))
 
 (defn block-raw-content [block]
   (or (:block/content block)

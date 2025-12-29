@@ -224,6 +224,33 @@ a:hover {
   font-size: 16px;
 }
 
+.macro-embed {
+  width: min(100%, 560px);
+  aspect-ratio: 16 / 9;
+  margin: 10px 0;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--surface-strong);
+  box-shadow: var(--image-shadow);
+}
+
+.macro-embed iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.macro-embed--tweet {
+  aspect-ratio: 4 / 5;
+}
+
+.cloze {
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--surface-strong);
+  box-shadow: inset 0 0 0 1px rgba(40, 39, 38, 0.12);
+}
+
 .code-block {
   flex: 1;
   position: relative;
