@@ -198,11 +198,7 @@ a:hover {
   background-color: currentColor;
   opacity: 0.6;
   transition: opacity 0.2s ease;
-  mask
-
-
-
-  -repeat: no-repeat;
+  mask-repeat: no-repeat;
   mask-position: center;
   mask-size: contain;
   -webkit-mask-repeat: no-repeat;
