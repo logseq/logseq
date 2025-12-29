@@ -2,7 +2,6 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.components.svg :as svg]
-            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db.async :as db-async]
             [frontend.db.conn :as conn]
@@ -404,8 +403,7 @@
       [hls-state *highlights-ctx*]
       (let [hls (sort-by :page (or (seq (:initial-hls hls-state))
                                    (:latest-hls hls-state)))
-            repo (state/get-current-repo)
-            db-graph? (config/db-based-graph? repo)]
+            repo (state/get-current-repo)]
 
         (for [{:keys [id content properties page] :as hl} hls
               :let [goto-ref! #(pdf-assets/goto-block-ref! hl)]]
@@ -426,14 +424,8 @@
               :on-click goto-ref!}
              (ui/icon "external-link")]]
 
-           (if-let [img-stamp (:image content)]
-             (if db-graph?
-               (area-image-for-db repo id)
-               (let [fpath (pdf-assets/resolve-area-image-file
-                            img-stamp (state/get-current-pdf) hl)
-                     fpath (assets-handler/<make-asset-url fpath)]
-                 [:p.area-wrap
-                  [:img {:src fpath}]]))
+           (if-let [_img-stamp (:image content)]
+             (area-image-for-db repo id)
              [:p.text-wrap (:text content)])])))))
 
 (rum/defc pdf-outline-&-highlights
@@ -491,7 +483,7 @@
         in-system-window? (.-$inSystemWindow viewer)
         doc               (pdf-windows/resolve-own-document viewer)
         ;; asset block container for db mode
-        asset-block (and (config/db-based-graph?) (:block pdf-current))
+        asset-block (:block pdf-current)
         dispatch-extra-state!
         (fn []
           (js/setTimeout
@@ -599,7 +591,7 @@
         [:a.button
          {:title "Annotations page"
           :on-click (fn []
-                      (if (or asset-block (not (config/db-based-graph?)))
+                      (if asset-block
                         (pdf-assets/goto-annotations-page! (:pdf/current @state/state))
                         (state/pub-event! [:asset/dialog-edit-external-url nil pdf-current])))}
          (svg/annotations 16)]

@@ -44,13 +44,11 @@
            :or   {redirect? true}
            :as options}]
    (when (string? title)
-     (p/let [repo (state/get-current-repo)
-             db-based? (config/db-based-graph? repo)
-             title (if (and db-based? (string/includes? title " #")) ; tagged page
+     (p/let [title (if (string/includes? title " #") ; tagged page
                      (wrap-tags title)
                      title)
-             parsed-result (when db-based? (db-editor-handler/wrap-parse-block {:block/title title}))
-             has-tags? (and db-based? (seq (:block/tags parsed-result)))
+             parsed-result (db-editor-handler/wrap-parse-block {:block/title title})
+             has-tags? (seq (:block/tags parsed-result))
              title' (if has-tags?
                       (some-> (first
                                (common-util/split-first (str "#" page-ref/left-brackets) (:block/title parsed-result)))
@@ -68,11 +66,9 @@
                              :error)
          :else
          (when-not (string/blank? title')
-           (p/let [options' (if db-based?
-                              (cond-> (update options :tags concat (:block/tags parsed-result))
-                                (nil? (:split-namespace? options))
-                                (assoc :split-namespace? true))
-                              options)
+           (p/let [options' (cond-> (update options :tags concat (:block/tags parsed-result))
+                              (nil? (:split-namespace? options))
+                              (assoc :split-namespace? true))
                    [_page-name page-uuid] (ui-outliner-tx/transact!
                                            {:outliner-op :create-page}
                                            (outliner-op/create-page! title' options'))
@@ -91,35 +87,6 @@
 
 ;; favorite fns
 ;; ============
-(defn file-favorited?
-  [page-name]
-  (let [favorites (->> (:favorites (state/get-config))
-                       (filter string?)
-                       (map string/lower-case)
-                       (set))]
-    (contains? favorites (string/lower-case page-name))))
-
-(defn file-favorite-page!
-  [page-name]
-  (when-not (string/blank? page-name)
-    (let [favorites (->
-                     (cons
-                      page-name
-                      (or (:favorites (state/get-config)) []))
-                     (distinct)
-                     (vec))]
-      (config-handler/set-config! :favorites favorites))))
-
-(defn file-unfavorite-page!
-  [page-name]
-  (when-not (string/blank? page-name)
-    (let [old-favorites (:favorites (state/get-config))
-          new-favorites (->> old-favorites
-                             (remove #(= (string/lower-case %) (string/lower-case page-name)))
-                             (vec))]
-      (when-not (= old-favorites new-favorites)
-        (config-handler/set-config! :favorites new-favorites)))))
-
 (defn- find-block-in-favorites-page
   [page-block-uuid]
   (let [db (conn/get-db)]
@@ -191,11 +158,9 @@
 (defn after-page-deleted!
   [repo page-name file-path tx-meta]
   (let [repo-dir (config/get-repo-dir repo)]
-      ;; TODO: move favorite && unfavorite to worker too
-    (if (config/db-based-graph? repo)
-      (when-let [page-block-uuid (:block/uuid (db/get-page page-name))]
-        (<db-unfavorite-page! page-block-uuid))
-      (file-unfavorite-page! page-name))
+    ;; TODO: move favorite && unfavorite to worker too
+    (when-let [page-block-uuid (:block/uuid (db/get-page page-name))]
+      (<db-unfavorite-page! page-block-uuid))
 
     (when (and (not= :rename-page (:real-outliner-op tx-meta))
                (= (some-> (state/get-current-page) common-util/page-name-sanity-lc)
@@ -210,24 +175,9 @@
             (when exists? (fs/unlink! repo (config/get-repo-fpath repo file-path) nil)))
           (p/catch (fn [error] (js/console.error error)))))))
 
-(defn rename-file!
-  "emit file-rename events to :file/rename-event-chan
-   force-fs? - when true, rename file event the db transact is failed."
-  [old-path new-path]
-  (let [repo (state/get-current-repo)]
-    (->
-     (p/let [_ (state/offer-file-rename-event-chan! {:repo repo
-                                                     :old-path old-path
-                                                     :new-path new-path})]
-       (fs/rename! repo old-path new-path))
-     (p/catch (fn [error]
-                (println "file rename failed: " error))))))
-
 (defn after-page-renamed!
-  [repo {:keys [page-id old-name new-name old-path new-path]}]
-  (let [db-based?           (config/db-based-graph? repo)
-        old-page-name       (common-util/page-name-sanity-lc old-name)
-        new-page-name       (common-util/page-name-sanity-lc new-name)
+  [repo {:keys [page-id old-name new-name]}]
+  (let [old-page-name       (common-util/page-name-sanity-lc old-name)
         redirect? (= (some-> (state/get-current-page) common-util/page-name-sanity-lc)
                      (common-util/page-name-sanity-lc old-page-name))
         page (db/entity repo page-id)]
@@ -238,16 +188,8 @@
                                 :push        false
                                 :path-params {:name (str (:block/uuid page))}}))
 
-    ;; FIXME: favorites should store db id/uuid instead of page names
-    (when (and (config/db-based-graph? repo) (file-favorited? old-page-name))
-      (file-unfavorite-page! old-page-name)
-      (file-favorite-page! new-page-name))
     (let [home (get (state/get-config) :default-home {})]
       (when (= old-page-name (common-util/page-name-sanity-lc (get home :page "")))
         (config-handler/set-config! :default-home (assoc home :page new-name))))
-
-    (when-not db-based?
-      (when (and old-path new-path)
-        (rename-file! old-path new-path)))
 
     (ui-handler/re-render-root!)))
