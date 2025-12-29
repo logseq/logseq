@@ -91,7 +91,7 @@
            "graph" (get data "graph_uuid")
            "page_tags" page-tags
            "short_id" short-id
-           "short_url" (when short-id (str "/s/" short-id))
+           "short_url" (when short-id (str "/p/" short-id))
            "content_hash" (get data "content_hash")
            "content_length" (get data "content_length"))))
 
