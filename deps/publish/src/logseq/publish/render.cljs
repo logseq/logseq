@@ -9,13 +9,19 @@
             [logseq.publish.common :as publish-common]
             [logseq.publish.model :as publish-model]))
 
-(defonce version 1767014800432)
+(defonce version 1767016302995)
 
 (def ref-regex
   (js/RegExp. "\\[\\[([0-9a-fA-F-]{36})\\]\\]|\\(\\(([0-9a-fA-F-]{36})\\)\\)" "g"))
 
 (defonce inline-config
   (gp-mldoc/default-config :markdown))
+
+(defn- block-ast
+  [text]
+  (when-not (string/blank? text)
+    (->> (gp-mldoc/->edn text inline-config)
+         (map first))))
 
 (defn inline-ast [text]
   (gp-mldoc/inline->edn text inline-config))
@@ -510,7 +516,12 @@
         {:keys [uuid->title name->uuid graph-uuid]} ctx]
     (cond
       (or (= "Plain" type) (= "Spaces" type))
-      (content->nodes data uuid->title graph-uuid)
+      (let [sub-ast (inline-ast data)
+            simple-plain? (and (= 1 (count sub-ast))
+                               (= "Plain" (ffirst sub-ast)))]
+        (if (and (seq sub-ast) (not simple-plain?))
+          (mapcat #(inline->nodes ctx %) sub-ast)
+          (content->nodes data uuid->title graph-uuid)))
 
       (= "Break_Line" type)
       [[:br]]
@@ -551,6 +562,10 @@
                           :else [""])
             href (cond
                    page-uuid (str "/page/" graph-uuid "/" page-uuid)
+                   (= "Complex" link-type) (when (and (map? link-value)
+                                                      (string? (:protocol link-value))
+                                                      (string? (:link link-value)))
+                                             (str (:protocol link-value) "://" (:link link-value)))
                    (string? link-value) link-value
                    :else nil)]
         (if href
@@ -569,6 +584,10 @@
         (or (macro->nodes ctx macro-data) [])
         (content->nodes (str data) uuid->title graph-uuid))
 
+      (= "Email" type)
+      (let [email (str (:local_part data) "@" (:domain data))]
+        [[:a {:href (str "mailto:" email)} email]])
+
       (or (= "Inline_Html" type) (= "Export_Snippet" type))
       (if-let [node (tweet-embed-from-html data)]
         [node]
@@ -576,6 +595,81 @@
 
       :else
       (content->nodes (str data) uuid->title graph-uuid))))
+
+(defn- inline-coll->nodes
+  [ctx inline-coll]
+  (mapcat #(inline->nodes ctx %) (or inline-coll [])))
+
+(declare block-ast->nodes)
+(defn- block-ast-coll->nodes
+  [ctx content]
+  (mapcat #(block-ast->nodes ctx %) (or content [])))
+
+(defn- list-items->node
+  [ctx items]
+  (into
+   [:ul]
+   (map (fn [item]
+          (let [content (let [content (:content item)]
+                          (if (and (sequential? content)
+                                   (every? #(and (vector? %) (string? (first %))) content))
+                            (block-ast-coll->nodes ctx content)
+                            (inline-coll->nodes ctx content)))
+                nested (when (seq (:items item))
+                         [(list-items->node ctx (:items item))])
+                children (concat content nested)]
+            (into [:li] children)))
+        items)))
+
+(defn- block-ast->nodes
+  [ctx block-ast]
+  (let [[type data] block-ast]
+    (case type
+      "Paragraph"
+      (let [children (inline-coll->nodes ctx data)]
+        (when (seq children)
+          [(into [:p] children)]))
+
+      "Heading"
+      (let [children (inline-coll->nodes ctx (:title data))]
+        (when (seq children)
+          [(into [:p] children)]))
+
+      "List"
+      (when (seq data)
+        [(list-items->node ctx data)])
+
+      "Quote"
+      (when (seq data)
+        [(into [:blockquote] (mapcat #(block-ast->nodes ctx %) data))])
+
+      "Example"
+      (when (seq data)
+        [[:pre (string/join "\n" data)]])
+
+      "Src"
+      (let [lines (:lines data)
+            code (if (sequential? lines) (string/join "\n" lines) (str lines))]
+        [[:pre [:code code]]])
+
+      "Paragraph_Sep"
+      [[:br]]
+
+      "Horizontal_Rule"
+      [[:hr]]
+
+      (let [fallback (content->nodes (str data) (:uuid->title ctx) (:graph-uuid ctx))]
+        (when (seq fallback)
+          [(into [:p] fallback)])))))
+
+(defn- block-ast-complex?
+  [block-asts]
+  (let [block-asts (seq block-asts)]
+    (and block-asts
+         (or (> (count block-asts) 1)
+             (some (fn [[type _]]
+                     (not (contains? #{"Paragraph" "Heading"} type)))
+                   block-asts)))))
 
 (defn- heading-level
   [block depth]
@@ -601,14 +695,17 @@
         raw (if heading
               (strip-heading-prefix raw)
               raw)
-        format :markdown
-        ctx (assoc ctx :format format)
-        ast (inline-ast raw)
-        content (if (seq ast)
-                  (mapcat #(inline->nodes ctx %) ast)
-                  (content->nodes raw (:uuid->title ctx) (:graph-uuid ctx)))]
+        block-asts (when-not heading (block-ast raw))
+        block-level? (and (not heading) (block-ast-complex? block-asts))
+        content (if block-level?
+                  (mapcat #(block-ast->nodes ctx %) block-asts)
+                  (let [ast (inline-ast raw)]
+                    (if (seq ast)
+                      (mapcat #(inline->nodes ctx %) ast)
+                      (content->nodes raw (:uuid->title ctx) (:graph-uuid ctx)))))]
     (let [container (cond
                       heading (keyword (str "h" heading ".block-text.block-heading"))
+                      block-level? :div.block-text
                       (some macro-embed-node? content) :div.block-text
                       :else :span.block-text)]
       (into [container] content))))
@@ -715,11 +812,15 @@
 
 (defn block-content-from-ref [ref ctx]
   (let [raw (or (get ref "source_block_content") "")
-        ast (inline-ast raw)
-        content (if (seq ast)
-                  (mapcat #(inline->nodes ctx %) ast)
-                  (content->nodes raw (:uuid->title ctx) (:graph-uuid ctx)))]
-    (into [:span.block-text] content)))
+        block-asts (block-ast raw)
+        block-level? (block-ast-complex? block-asts)
+        content (if block-level?
+                  (mapcat #(block-ast->nodes ctx %) block-asts)
+                  (let [ast (inline-ast raw)]
+                    (if (seq ast)
+                      (mapcat #(inline->nodes ctx %) ast)
+                      (content->nodes raw (:uuid->title ctx) (:graph-uuid ctx)))))]
+    (into [(if block-level? :div.block-text :span.block-text)] content)))
 
 (comment
   (def ^:private void-tags
