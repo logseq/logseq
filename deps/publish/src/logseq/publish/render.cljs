@@ -9,7 +9,7 @@
             [logseq.publish.common :as publish-common]
             [logseq.publish.model :as publish-model]))
 
-(defonce version 1767012660213)
+(defonce version 1767014800432)
 
 (def ref-regex
   (js/RegExp. "\\[\\[([0-9a-fA-F-]{36})\\]\\]|\\(\\(([0-9a-fA-F-]{36})\\)\\)" "g"))
@@ -577,19 +577,41 @@
       :else
       (content->nodes (str data) uuid->title graph-uuid))))
 
-(defn block-content-nodes [block ctx]
+(defn- heading-level
+  [block depth]
+  (let [legacy (:block/heading-level block)
+        prop (:logseq.property/heading block)
+        legacy (when (and (number? legacy) (<= 1 legacy 6)) legacy)
+        prop (cond
+               (and (number? prop) (<= 1 prop 6)) prop
+               (true? prop) (min (inc depth) 6)
+               :else nil)]
+    (or legacy prop)))
+
+(defn- strip-heading-prefix
+  [s]
+  (string/replace s #"^\s*#+\s+" ""))
+
+(defn block-content-nodes [block ctx depth]
   (let [raw (or (:block/content block)
                 (:block/title block)
                 (:block/name block)
                 "")
+        heading (heading-level block depth)
+        raw (if heading
+              (strip-heading-prefix raw)
+              raw)
         format :markdown
         ctx (assoc ctx :format format)
         ast (inline-ast raw)
         content (if (seq ast)
                   (mapcat #(inline->nodes ctx %) ast)
                   (content->nodes raw (:uuid->title ctx) (:graph-uuid ctx)))]
-    (let [container (if (some macro-embed-node? content) :div :span)]
-      (into [(keyword (str (name container) ".block-text"))] content))))
+    (let [container (cond
+                      heading (keyword (str "h" heading ".block-text.block-heading"))
+                      (some macro-embed-node? content) :div.block-text
+                      :else :span.block-text)]
+      (into [container] content))))
 
 (defn block-raw-content [block]
   (or (:block/content block)
@@ -670,7 +692,7 @@
         :else
         [:a.asset-link {:href asset-url :target "_blank"} title]))))
 
-(defn block-display-node [block ctx]
+(defn block-display-node [block ctx depth]
   (let [display-type (:logseq.property.node/display-type block)
         asset-node (when (:logseq.property.asset/type block)
                      (asset-node block ctx))]
@@ -686,10 +708,10 @@
       [:div.math-block (block-raw-content block)]
 
       :quote
-      [:blockquote.quote-block (block-content-nodes block ctx)]
+      [:blockquote.quote-block (block-content-nodes block ctx depth)]
 
       (or asset-node
-          (block-content-nodes block ctx)))))
+          (block-content-nodes block ctx depth)))))
 
 (defn block-content-from-ref [ref ctx]
   (let [raw (or (get ref "source_block_content") "")
@@ -723,8 +745,8 @@
 
 (defn render-block-tree
   ([page-children-by-parent linked-children-by-parent parent-id ctx]
-   (render-block-tree page-children-by-parent linked-children-by-parent parent-id ctx #{}))
-  ([page-children-by-parent linked-children-by-parent parent-id ctx visited]
+   (render-block-tree page-children-by-parent linked-children-by-parent parent-id ctx #{} 1))
+  ([page-children-by-parent linked-children-by-parent parent-id ctx visited depth]
    (let [children (get page-children-by-parent parent-id)]
      (when (seq children)
        [:ul.blocks
@@ -738,7 +760,8 @@
                              linked-children-by-parent
                              display-id
                              ctx
-                             visited)
+                             visited
+                             (inc depth))
                      has-children? (boolean nested)
                      raw-props (entity-properties display-block ctx (:entities ctx))
                      icon-prop (get raw-props :logseq.property/icon)
@@ -759,7 +782,7 @@
                  [:li.block
                   [:div.block-content
                    (when positioned-left positioned-left)
-                   (block-display-node display-block ctx)
+                   (block-display-node display-block ctx depth)
                    (when positioned-right positioned-right)
                    (when has-children?
                      [:button.block-toggle
