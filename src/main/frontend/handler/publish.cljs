@@ -6,6 +6,7 @@
             [frontend.db :as db]
             [frontend.fs :as fs]
             [frontend.handler.notification :as notification]
+            [frontend.image :as image]
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.common.path :as path]
@@ -50,6 +51,141 @@
     ("pdf") "application/pdf"
     "application/octet-stream"))
 
+(def ^:private publish-image-variant-sizes
+  [1024 1600])
+
+(def ^:private publish-image-quality
+  0.9)
+
+(def ^:private publish-image-types
+  #{"png" "jpg" "jpeg" "webp"})
+
+(defn- image-asset?
+  [asset-type]
+  (contains? publish-image-types (string/lower-case (or asset-type ""))))
+
+(defn- asset-uuid-with-variant
+  [asset-uuid variant]
+  (if variant
+    (str asset-uuid "@" variant)
+    asset-uuid))
+
+(defn- <sha256-hex-buffer
+  [array-buffer]
+  (p/let [digest (.digest (.-subtle js/crypto) "SHA-256" array-buffer)
+          bytes (js/Uint8Array. digest)]
+    (->> bytes
+         (map (fn [b]
+                (.padStart (.toString b 16) 2 "0")))
+         (apply str))))
+
+(defn- <blob-checksum
+  [blob]
+  (p/let [buffer (.arrayBuffer blob)]
+    (<sha256-hex-buffer buffer)))
+
+(defn- <canvas->blob
+  [canvas content-type quality]
+  (p/create
+   (fn [resolve _reject]
+     (.toBlob canvas
+              (fn [blob]
+                (resolve blob))
+              content-type
+              quality))))
+
+(defn- <canvas-from-blob
+  [blob max-dim]
+  (if (exists? js/createImageBitmap)
+    (p/let [bitmap (js/createImageBitmap blob #js {:imageOrientation "from-image"})
+            width (.-width bitmap)
+            height (.-height bitmap)
+            scale (min 1 (/ max-dim (max width height)))
+            target-width (js/Math.round (* width scale))
+            target-height (js/Math.round (* height scale))
+            canvas (js/document.createElement "canvas")
+            ctx ^js (.getContext canvas "2d")]
+      (set! (.-width canvas) target-width)
+      (set! (.-height canvas) target-height)
+      (set! (.-imageSmoothingEnabled ctx) true)
+      (set! (.-imageSmoothingQuality ctx) "high")
+      (.drawImage ctx bitmap 0 0 target-width target-height)
+      (when (.-close bitmap)
+        (.close bitmap))
+      canvas)
+    (p/create
+     (fn [resolve reject]
+       (let [img (js/Image.)
+             url (js/URL.createObjectURL blob)]
+         (set! (.-onload img)
+               (fn []
+                 (image/get-orientation img
+                                        (fn [canvas]
+                                          (js/URL.revokeObjectURL url)
+                                          (resolve canvas))
+                                        max-dim
+                                        max-dim)))
+         (set! (.-onerror img)
+               (fn [error]
+                 (js/URL.revokeObjectURL url)
+                 (reject error)))
+         (set! (.-src img) url))))))
+
+(defn- <build-image-uploads
+  [asset-uuid asset-type title blob content-type]
+  (p/let [variant-promises (map (fn [size]
+                                  (p/let [canvas (<canvas-from-blob blob size)
+                                          blob' (<canvas->blob canvas content-type publish-image-quality)]
+                                    (when blob'
+                                      {:variant size
+                                       :blob blob'})))
+                                publish-image-variant-sizes)
+          variants (p/then (p/all variant-promises)
+                           (fn [entries]
+                             (->> entries (remove nil?) vec)))]
+    (when (seq variants)
+      (let [sorted (sort-by :variant variants)
+            largest (last sorted)
+            uploads (vec (concat [(assoc largest :variant nil)] sorted))]
+        (p/all
+         (map (fn [{:keys [variant blob]}]
+                (p/let [checksum (<blob-checksum blob)]
+                  {:asset_uuid (asset-uuid-with-variant asset-uuid variant)
+                   :asset_type asset-type
+                   :content_type content-type
+                   :checksum checksum
+                   :size (.-size blob)
+                   :title title
+                   :blob blob}))
+              uploads))))))
+
+(defn- <upload-blob-asset!
+  [graph-uuid asset-token {:keys [asset_uuid asset_type checksum size title content_type blob]}]
+  (let [meta {:graph graph-uuid
+              :asset_uuid asset_uuid
+              :asset_type asset_type
+              :checksum checksum
+              :size size
+              :title title
+              :content_type content_type}
+        headers (cond-> {"content-type" content_type
+                         "x-asset-meta" (js/JSON.stringify (clj->js meta))}
+                  asset-token (assoc "authorization" (str "Bearer " asset-token)))]
+    (js/fetch (asset-upload-endpoint)
+              (clj->js {:method "POST"
+                        :headers headers
+                        :body blob}))))
+
+(defn- <upload-raw-asset!
+  [graph-uuid asset-token asset-meta content-type content]
+  (let [headers (cond-> {"content-type" content-type
+                         "x-asset-meta" (js/JSON.stringify (clj->js asset-meta))}
+                  asset-token (assoc "authorization" (str "Bearer " asset-token)))]
+    (js/fetch (asset-upload-endpoint)
+              (clj->js {:method "POST"
+                        :headers headers
+                        :body content}))))
+
 (defn- merge-attr
   [entity attr value]
   (let [existing (get entity attr ::none)]
@@ -91,22 +227,38 @@
       (p/let [repo-dir (config/get-repo-dir repo)
               asset-path (path/path-join "assets" (str asset-uuid "." asset-type))
               content (fs/read-file-raw repo-dir asset-path {})
-              meta {:graph graph-uuid
-                    :asset_uuid asset-uuid
-                    :asset_type asset-type
-                    :checksum (:logseq.property.asset/checksum asset)
-                    :size (:logseq.property.asset/size asset)
-                    :title (:block/title asset)}
-              headers (cond-> {"content-type" (asset-content-type asset-type)
-                               "x-asset-meta" (js/JSON.stringify (clj->js meta))}
-                        token (assoc "authorization" (str "Bearer " token)))
-              resp (js/fetch (asset-upload-endpoint)
-                             (clj->js {:method "POST"
-                                       :headers headers
-                                       :body content}))]
-        (when-not (.-ok resp)
-          (js/console.warn "Asset publish failed" {:asset asset-uuid :status (.-status resp)}))
-        resp))))
+              content-type (asset-content-type asset-type)]
+        (if (image-asset? asset-type)
+          (p/let [blob (js/Blob. (array content) (clj->js {:type content-type}))
+                  uploads (<build-image-uploads asset-uuid asset-type (:block/title asset) blob content-type)]
+            (if (seq uploads)
+              (p/let [responses (p/all (map (fn [upload]
+                                              (<upload-blob-asset! graph-uuid token upload))
+                                            uploads))]
+                (doseq [resp responses]
+                  (when-not (.-ok resp)
+                    (js/console.warn "Asset publish failed" {:asset asset-uuid :status (.-status resp)})))
+                (last responses))
+              (p/let [meta {:graph graph-uuid
+                            :asset_uuid asset-uuid
+                            :asset_type asset-type
+                            :checksum (:logseq.property.asset/checksum asset)
+                            :size (:logseq.property.asset/size asset)
+                            :title (:block/title asset)}
+                      resp (<upload-raw-asset! graph-uuid token meta content-type content)]
+                (when-not (.-ok resp)
+                  (js/console.warn "Asset publish failed" {:asset asset-uuid :status (.-status resp)}))
+                resp)))
+          (p/let [meta {:graph graph-uuid
+                        :asset_uuid asset-uuid
+                        :asset_type asset-type
+                        :checksum (:logseq.property.asset/checksum asset)
+                        :size (:logseq.property.asset/size asset)
+                        :title (:block/title asset)}
+                  resp (<upload-raw-asset! graph-uuid token meta content-type content)]
+            (when-not (.-ok resp)
+              (js/console.warn "Asset publish failed" {:asset asset-uuid :status (.-status resp)}))
+            resp))))))
 
 (defn- <upload-assets!
   [repo graph-uuid payload]
