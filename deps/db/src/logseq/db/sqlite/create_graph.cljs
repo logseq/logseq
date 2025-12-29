@@ -207,6 +207,16 @@
     :file/path (str "logseq/" "custom.js")
     :file/content ""
     :file/created-at (js/Date.)
+    :file/last-modified-at (js/Date.)}
+   {:block/uuid (common-uuid/gen-uuid :builtin-block-uuid "logseq/publish.css")
+    :file/path (str "logseq/" "publish.css")
+    :file/content ""
+    :file/created-at (js/Date.)
+    :file/last-modified-at (js/Date.)}
+   {:block/uuid (common-uuid/gen-uuid :builtin-block-uuid "logseq/publish.js")
+    :file/path (str "logseq/" "publish.js")
+    :file/content ""
+    :file/created-at (js/Date.)
     :file/last-modified-at (js/Date.)}])
 
 (defn build-db-initial-data

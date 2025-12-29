@@ -9,7 +9,7 @@
             [logseq.publish.common :as publish-common]
             [logseq.publish.model :as publish-model]))
 
-(defonce version 1767021063531)
+(defonce version 1767022880706)
 
 (def ref-regex
   (js/RegExp. "\\[\\[([0-9a-fA-F-]{36})\\]\\]|\\(\\(([0-9a-fA-F-]{36})\\)\\)" "g"))
@@ -149,7 +149,7 @@
    "(function(){if(window.React&&window.React.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED){return;}var s='http://www.w3.org/2000/svg';var k=function(n){return n.replace(/[A-Z]/g,function(m){return'-'+m.toLowerCase();});};var a=function(el,key,val){if(key==='className'){el.setAttribute('class',val);return;}if(key==='style'&&val&&typeof val==='object'){for(var sk in val){el.style[sk]=val[sk];}return;}if(key==='ref'||key==='key'||key==='children'){return;}if(val===true){el.setAttribute(key,'');return;}if(val===false||val==null){return;}var attr=key;if(key==='strokeWidth'){attr='stroke-width';}else if(key==='strokeLinecap'){attr='stroke-linecap';}else if(key==='strokeLinejoin'){attr='stroke-linejoin';}else if(key!=='viewBox'&&/[A-Z]/.test(key)){attr=k(key);}el.setAttribute(attr,val);};var c=function(el,child){if(child==null||child===false){return;}if(Array.isArray(child)){child.forEach(function(n){c(el,n);});return;}if(typeof child==='string'||typeof child==='number'){el.appendChild(document.createTextNode(child));return;}if(child.nodeType){el.appendChild(child);} };var e=function(type,props){var children=Array.prototype.slice.call(arguments,2);if(type===Symbol.for('react.fragment')){var frag=document.createDocumentFragment();children.forEach(function(n){c(frag,n);});return frag;}if(typeof type==='function'){return type(Object.assign({},props,{children:children}));}var isSvg=type==='svg'||(props&&props.xmlns===s);var el=isSvg?document.createElementNS(s,type):document.createElement(type);if(props){for(var p in props){a(el,p,props[p]);}}children.forEach(function(n){c(el,n);});return el;};window.React={createElement:e,forwardRef:function(fn){return fn;},Fragment:Symbol.for('react.fragment'),__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED:{ReactCurrentOwner:{current:null}}};window.PropTypes=new Proxy({}, {get:function(){return function(){return null;};}});})();"])
 
 (defn- head-node
-  [title {:keys [description keywords topics tags url]}]
+  [title {:keys [description keywords topics tags url custom-css-hash graph-uuid]}]
   (let [description (when (string? description)
                       (string/trim description))
         keywords (->> [keywords topics tags]
@@ -181,7 +181,10 @@
                                    :property "og:image"}]
                            (when description
                              [:meta {:content description :property "og:description"}])
-                           [:meta {:content "logseq" :property "og:site_name"}]])]
+                           [:meta {:content "logseq" :property "og:site_name"}]])
+        custom-css (when (and (string? custom-css-hash) (string? graph-uuid))
+                     [:link {:rel "stylesheet"
+                             :href (str "/asset/" graph-uuid "/publish.css?v=" custom-css-hash)}])]
     [:head
      [:meta {:charset "UTF-8"}]
      [:meta {:name "viewport"
@@ -208,7 +211,18 @@
              :href "https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.0/dist/tabler-icons.min.css"}]
      [:link {:rel "stylesheet" :href (str "/static/tabler-extension.css?v=" version)}]
      [:link {:rel "stylesheet" :href (str "/static/publish.css?v=" version)}]
+     custom-css
      meta-tags]))
+
+(defn- render-head
+  ([title] (render-head title nil))
+  ([title opts]
+   (head-node title (or opts {}))))
+
+(defn- meta-value
+  [meta k]
+  (or (get meta k)
+      (get meta (name k))))
 
 (defn property-type
   [prop-key property-type-by-ident]
@@ -617,7 +631,8 @@
                    (string? link-value) link-value
                    :else nil)]
         (if href
-          [(into [:a.page-ref {:href href}] label-nodes)]
+          [(into [:a {:class (when page-uuid "page-ref")
+                      :href href}] label-nodes)]
           label-nodes))
 
       (= "Tag" type)
@@ -774,13 +789,13 @@
                   (let [ast (inline-ast raw)]
                     (if (seq ast)
                       (mapcat #(inline->nodes ctx %) ast)
-                      (content->nodes raw (:uuid->title ctx) (:graph-uuid ctx)))))]
-    (let [container (cond
-                      heading (keyword (str "h" heading ".block-text.block-heading"))
-                      block-level? :div.block-text
-                      (some macro-embed-node? content) :div.block-text
-                      :else :span.block-text)]
-      (into [container] content))))
+                      (content->nodes raw (:uuid->title ctx) (:graph-uuid ctx)))))
+        container (cond
+                    heading (keyword (str "h" heading ".block-text.block-heading"))
+                    block-level? :div.block-text
+                    (some macro-embed-node? content) :div.block-text
+                    :else :span.block-text)]
+    (into [container] content)))
 
 (defn block-raw-content [block]
   (or (:block/content block)
@@ -1142,12 +1157,16 @@
         topics (property-value->text (get page-props :logseq.property/topics) ctx entities)
         page-url (when (and graph-uuid page-uuid-str)
                    (str "/page/" graph-uuid "/" page-uuid-str))
+        custom-css-hash (meta-value meta :custom_publish_css_hash)
+        custom-js-hash (meta-value meta :custom_publish_js_hash)
         doc [:html
-             (head-node page-title {:description description
-                                    :keywords keywords
-                                    :topics topics
-                                    :tags tags
-                                    :url page-url})
+             (render-head page-title {:description description
+                                      :keywords keywords
+                                      :topics topics
+                                      :tags tags
+                                      :url page-url
+                                      :custom-css-hash custom-css-hash
+                                      :graph-uuid graph-uuid})
              [:body
               [:main.wrap
                (toolbar-node
@@ -1163,7 +1182,10 @@
                (when blocks blocks)
                (when tagged-section tagged-section)
                (when linked-refs linked-refs)]
-              (publish-script)]]]
+              (publish-script)
+              (when (and (string? custom-js-hash) (string? graph-uuid))
+                [:script {:defer true
+                          :src (str "/asset/" graph-uuid "/publish.js?v=" custom-js-hash)}])]]]
     (str "<!doctype html>" (render-hiccup doc))))
 
 (defn render-graph-html
@@ -1184,7 +1206,7 @@
                              (or (:updated-at row) 0)))
                   reverse)
         doc [:html
-             (head-node (str "Published pages - " graph-uuid) nil)
+             (render-head "Published pages")
              [:body
               [:main.wrap
                (toolbar-node
@@ -1223,7 +1245,7 @@
                   reverse)
         title (str "Published by " username)
         doc [:html
-             (head-node title nil)
+             (render-head title)
              [:body
               [:main.wrap
                (toolbar-node
@@ -1246,7 +1268,7 @@
   (let [rows tag-items
         title (or tag-title tag-uuid)
         doc [:html
-             (head-node (str "Tag - " title) nil)
+             (render-head (str "Tag - " title))
              [:body
               [:main.wrap
                (toolbar-node
@@ -1269,7 +1291,7 @@
   (let [rows tag-items
         title (or tag-title tag-name)
         doc [:html
-             (head-node (str "Tag - " title) nil)
+             (render-head (str "Tag - " title))
              [:body
               [:main.wrap
                (toolbar-node
@@ -1299,7 +1321,7 @@
   (let [rows ref-items
         title (or ref-title ref-name)
         doc [:html
-             (head-node (str "Ref - " title) nil)
+             (render-head (str "Ref - " title))
              [:body
               [:main.wrap
                (toolbar-node
@@ -1330,7 +1352,7 @@
   [graph-uuid]
   (let [title "Page not published"
         doc [:html
-             (head-node title nil)
+             (render-head title)
              [:body
               [:main.wrap
                (toolbar-node
@@ -1346,7 +1368,7 @@
   [graph-uuid page-uuid wrong?]
   (let [title "Protected page"
         doc [:html
-             (head-node title nil)
+             (render-head title)
              [:body
               [:main.wrap
                (toolbar-node
@@ -1375,7 +1397,7 @@
   []
   (let [title "Page not found"
         doc [:html
-             (head-node title nil)
+             (render-head title)
              [:body
               [:main.wrap
                (toolbar-node
