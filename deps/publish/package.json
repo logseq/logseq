@@ -3,9 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "npx wrangler dev",
+    "dev": "cd ./worker && npx wrangler dev",
     "watch": "clojure -M:cljs watch publish-worker",
-    "release": "clojure -M:cljs release publish-worker"
+    "release": "clojure -M:cljs release publish-worker",
+    "clean": "rm -rf ./worker/dist/",
+    "deploy": "yarn clean && yarn release && cd ./worker && wrangler deploy --env prod"
   },
   "dependencies": {
     "shadow-cljs": "^3.3.4"
