@@ -105,6 +105,13 @@
       (into [:span {:class "property-value-with-icon"} icon-node] nodes)
       nodes)))
 
+(defn- page-title-node
+  [title icon]
+  (let [icon-node (icon-span icon)]
+    (if icon-node
+      [:h1 [:span {:class "property-value-with-icon"} icon-node title]]
+      [:h1 title])))
+
 (defn- theme-toggle-node
   []
   [:button.theme-toggle
@@ -907,7 +914,7 @@
                   [:a.toolbar-btn {:href (str "/graph/" graph-uuid)} "Home"])
                 (theme-toggle-node))
 
-               [:h1 page-title]
+               (page-title-node page-title (:logseq.property/icon page-entity))
 
                (when page-properties
                  [:section.page-properties page-properties])
