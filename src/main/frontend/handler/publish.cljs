@@ -4,7 +4,9 @@
             [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]
+            [frontend.db.model :as db-model]
             [frontend.fs :as fs]
+            [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
             [frontend.handler.user :as user-handler]
@@ -65,6 +67,18 @@
 
 (def ^:private publish-image-types
   #{"png" "jpg" "jpeg" "webp"})
+
+(def ^:private custom-publish-assets
+  [{:path (path/path-join "logseq" "publish.css")
+    :type "css"
+    :content-type "text/css; charset=utf-8"
+    :meta-key :custom_publish_css_hash
+    :asset-name "publish.css"}
+   {:path (path/path-join "logseq" "publish.js")
+    :type "js"
+    :content-type "text/javascript; charset=utf-8"
+    :meta-key :custom_publish_js_hash
+    :asset-name "publish.js"}])
 
 (defn- image-asset?
   [asset-type]
@@ -276,8 +290,31 @@
                                (js/console.warn "Asset publish error" error))))
                   assets)))))
 
+(defn- <upload-custom-publish-assets!
+  [repo graph-uuid]
+  (let [token (state/get-auth-id-token)
+        asset-uuid "publish"]
+    (p/let [results (p/all
+                     (map (fn [{:keys [path type content-type meta-key asset-name]}]
+                            (p/let [content (db-model/get-file repo path)]
+                              (when (and (string? content) (not (string/blank? content)))
+                                (p/let [checksum (<sha256-hex content)
+                                        meta {:graph graph-uuid
+                                              :asset_uuid asset-uuid
+                                              :asset_type type
+                                              :content_type content-type
+                                              :checksum checksum
+                                              :title asset-name}
+                                        resp (<upload-raw-asset! token meta content-type content)]
+                                  (when-not (.-ok resp)
+                                    (js/console.warn "Custom publish asset upload failed"
+                                                     {:path path :status (.-status resp)}))
+                                  {meta-key checksum}))))
+                          custom-publish-assets))]
+      (apply merge (remove nil? results)))))
+
 (defn- <post-publish!
-  [payload {:keys [password]}]
+  [payload {:keys [password custom-assets]}]
   (let [token (state/get-auth-id-token)
         headers (cond-> {"content-type" "application/transit+json"}
                   token (assoc "authorization" (str "Bearer " token)))]
@@ -305,6 +342,11 @@
                           :owner_sub (user-handler/user-uuid)
                           :owner_username (user-handler/username)
                           :created_at (util/time-ms)}
+            publish-meta (cond-> publish-meta
+                           (get custom-assets :custom_publish_css_hash)
+                           (assoc :custom_publish_css_hash (:custom_publish_css_hash custom-assets))
+                           (get custom-assets :custom_publish_js_hash)
+                           (assoc :custom_publish_js_hash (:custom_publish_js_hash custom-assets)))
             publish-body (assoc payload :meta publish-meta)
             headers (assoc headers "x-publish-meta" (js/JSON.stringify (clj->js publish-meta)))
             resp (js/fetch (publish-endpoint)
@@ -330,8 +372,10 @@
                                                  (:db/id page)
                                                  graph-uuid)]
           (if payload
-            (-> (p/let [_ (<upload-assets! repo graph-uuid payload)]
-                  (<post-publish! payload {:password password}))
+            (-> (p/let [_ (<upload-assets! repo graph-uuid payload)
+                        custom-assets (<upload-custom-publish-assets! repo graph-uuid)]
+                  (<post-publish! payload {:password password
+                                           :custom-assets custom-assets}))
                 (p/then (fn [resp]
                           (p/let [json (.json resp)
                                   data (bean/->clj json)]
