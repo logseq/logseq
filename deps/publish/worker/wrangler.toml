@@ -68,3 +68,7 @@ new_sqlite_classes = ["PublishMetaDO"]
 [[env.prod.r2_buckets]]
 binding = "PUBLISH_R2"
 bucket_name = "logseq-publish-prod"
+
+[[env.prod.routes]]
+pattern = "logseq.io"
+custom_domain = true
