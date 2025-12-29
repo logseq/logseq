@@ -22,11 +22,49 @@ binding = "PUBLISH_R2"
 bucket_name = "logseq-publish-dev"
 
 [vars]
-COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/POOL_ID/.well-known/jwks.json"
-COGNITO_ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/POOL_ID"
-COGNITO_CLIENT_ID = "CLIENT_ID"
-R2_ACCOUNT_ID = "YOUR_ACCOUNT_ID"
-R2_BUCKET = "logseq-publish-dev"
-R2_ACCESS_KEY_ID = "R2_ACCESS_KEY_ID"
-R2_SECRET_ACCESS_KEY = "R2_SECRET_ACCESS_KEY"
+COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
+COGNITO_ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
+COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"
 DEV_SKIP_AUTH = "true"
+
+[env.staging]
+name = "logseq-publish-staging"
+
+[env.staging.vars]
+COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
+COGNITO_ISSUER   = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
+COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"
+DEV_SKIP_AUTH = "true"
+
+[[env.staging.durable_objects.bindings]]
+name = "PUBLISH_META_DO"
+class_name = "PublishMetaDO"
+
+[[env.staging.migrations]]
+tag = "v2"
+new_sqlite_classes = ["PublishMetaDO"]
+
+[[env.staging.r2_buckets]]
+binding = "PUBLISH_R2"
+bucket_name = "logseq-publish-dev"
+
+[env.prod]
+name = "logseq-publish-prod"
+
+[env.prod.vars]
+COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
+COGNITO_ISSUER   = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
+COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"
+DEV_SKIP_AUTH = "true"
+
+[[env.prod.durable_objects.bindings]]
+name = "PUBLISH_META_DO"
+class_name = "PublishMetaDO"
+
+[[env.prod.migrations]]
+tag = "v2"
+new_sqlite_classes = ["PublishMetaDO"]
+
+[[env.prod.r2_buckets]]
+binding = "PUBLISH_R2"
+bucket_name = "logseq-publish-prod"
