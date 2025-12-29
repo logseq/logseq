@@ -9,9 +9,8 @@
             [logseq.publish.common :as publish-common]
             [logseq.publish.model :as publish-model]))
 
-(defonce version
-  "Timestamp in milliseconds used for cache busting static assets."
-  1767022880706)
+;; Timestamp in milliseconds used for cache busting static assets.
+(defonce version 1767025653274)
 
 (def ref-regex
   (js/RegExp. "\\[\\[([0-9a-fA-F-]{36})\\]\\]|\\(\\(([0-9a-fA-F-]{36})\\)\\)" "g"))
@@ -1131,7 +1130,7 @@
              :property-entity-by-ident property-entity-by-ident
              :entities entities}
         page-props (entity-properties page-entity ctx entities)
-        page-properties (render-properties page-props ctx entities)
+        page-properties (render-properties (dissoc page-props :logseq.property/icon) ctx entities)
         blocks (render-block-tree children-by-parent linked-children-by-parent page-eid ctx)
         linked-by-page (when refs-data
                          (->> (get refs-data "refs")
