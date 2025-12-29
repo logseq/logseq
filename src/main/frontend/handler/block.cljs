@@ -1,57 +1,24 @@
 (ns ^:no-doc frontend.handler.block
   (:require [clojure.string :as string]
-            [clojure.walk :as walk]
             [datascript.impl.entity :as de]
             [dommy.core :as dom]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
-            [frontend.handler.file-based.property.util :as property-util]
             [frontend.handler.property.util :as pu]
             [frontend.mobile.haptics :as haptics]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.util.file-based.drawer :as drawer]
             [goog.object :as gobj]
             [logseq.db :as ldb]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.graph-parser.block :as gp-block]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op]
             [promesa.core :as p]))
 
 ;;  Fns
-
-;; TODO: reduced version
-(defn- walk-block
-  [block check? transform]
-  (let [result (atom nil)]
-    (walk/postwalk
-     (fn [x]
-       (if (check? x)
-         (reset! result (transform x))
-         x))
-     (:block.temp/ast-body block))
-    @result))
-
-(defn get-timestamp
-  [block typ]
-  (walk-block block
-              (fn [x]
-                (and (gp-block/timestamp-block? x)
-                     (= typ (first (second x)))))
-              #(second (second %))))
-
-(defn get-scheduled-ast
-  [block]
-  (get-timestamp block "Scheduled"))
-
-(defn get-deadline-ast
-  [block]
-  (get-timestamp block "Deadline"))
 
 (defn select-block!
   [block-uuid]
@@ -123,13 +90,6 @@
                           {:db (db/get-db)
                            :container-id container-id :direction direction :event event :pos pos}))
     (mark-last-input-time! repo)))
-
-(defn sanity-block-content
-  [repo format content]
-  (if (sqlite-util/db-based-graph? repo)
-    content
-    (-> (property-util/remove-built-in-properties format content)
-        (drawer/remove-logbook))))
 
 (defn block-unique-title
   "Multiple pages/objects may have the same `:block/title`.
@@ -205,8 +165,7 @@
                             content
 
                             :else
-                            (subs content 0 pos))
-               content (sanity-block-content repo (get block :block/format :markdown) content)]
+                            (subs content 0 pos))]
            (state/clear-selection!)
            (edit-block-aux repo block content text-range (assoc opts :pos pos))))))))
 

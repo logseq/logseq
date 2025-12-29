@@ -31,9 +31,10 @@
     (cli-export-common/get-page-content page-uuid)))
 
 ;; Utils
-(defn <get-all-pages
-  [repo]
-  (state/<invoke-db-worker :thread-api/export-get-all-pages repo))
+(comment
+  (defn <get-all-pages
+    [repo]
+    (state/<invoke-db-worker :thread-api/export-get-all-pages repo)))
 
 (defn <get-debug-datoms
   [repo]

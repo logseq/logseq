@@ -19,7 +19,6 @@
             [lambdaisland.glogi :as log]
             [logseq.sdk.core]
             [logseq.sdk.experiments]
-            [logseq.sdk.git]
             [promesa.core :as p]))
 
 (defn get-caller-plugin-id

@@ -2,7 +2,6 @@
   "Common fns for developer related functionality"
   (:require [cljs.pprint :as pprint]
             [datascript.impl.entity :as de]
-            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.format.mldoc :as mldoc]
             [frontend.handler.db-based.rtc :as rtc-handler]
@@ -20,7 +19,7 @@
   (let [result* (db/pull eid)
         entity (db/entity eid)
         result (cond-> result*
-                 (and (seq (:block/properties entity)) (config/db-based-graph? (state/get-current-repo)))
+                 (seq (:block/properties entity))
                  (assoc :block.debug/properties
                         (->> (:block/properties entity)
                              (map (fn [[k v]]
@@ -80,16 +79,6 @@
   (if-let [page-id (page-util/get-current-page-id)]
     (show-entity-data page-id)
     (notification/show! "No page found" :warning)))
-
-(defn ^:export show-page-ast []
-  (if (config/db-based-graph? (state/get-current-repo))
-    (notification/show! "Command not available yet for DB graphs" :warning)
-    (let [page-data (db/pull '[:block/format {:block/file [:file/content]}]
-                             (page-util/get-current-page-id))]
-      (if (get-in page-data [:block/file :file/content])
-        (show-content-ast (get-in page-data [:block/file :file/content])
-                          (get page-data :block/format :markdown))
-        (notification/show! "No page found" :warning)))))
 
 (defn ^:export validate-db []
   (state/<invoke-db-worker :thread-api/validate-db (state/get-current-repo)))

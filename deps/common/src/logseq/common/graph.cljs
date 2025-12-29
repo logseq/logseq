@@ -82,7 +82,7 @@ Rules:
            (re-find #"^\.[^.]+" rpath))))))
 
 (def ^:private allowed-formats
-  #{:org :markdown :md :edn :json :js :css :excalidraw :tldr})
+  #{:org :markdown :md :edn :json :js :css})
 
 (defn- get-ext
   [p]

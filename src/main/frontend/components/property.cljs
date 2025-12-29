@@ -231,11 +231,10 @@
   (fn [{:keys [value label convert-page-to-property?]}]
     (let [property (when (uuid? value) (db/entity [:block/uuid value]))
           _ (reset! *property-key (if (uuid? value) (if convert-page-to-property? (:block/title property) label) value))
-          batch? (pv/batch-operation?)
-          repo (state/get-current-repo)]
+          batch? (pv/batch-operation?)]
       (if (and property remove-property?)
         (let [block-ids (map :block/uuid (pv/get-operating-blocks block))]
-          (property-handler/batch-remove-block-property! repo block-ids (:db/ident property))
+          (property-handler/batch-remove-block-property! block-ids (:db/ident property))
           (shui/popup-hide!))
         (do
           (when (and *show-new-property-config? (not (ldb/property? property)))

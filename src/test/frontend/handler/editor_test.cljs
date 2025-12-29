@@ -1,11 +1,10 @@
 (ns frontend.handler.editor-test
-  (:require [clojure.test :refer [deftest is testing are use-fixtures]]
-            [datascript.core :as d]
+  (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.handler.editor :as editor]
             [frontend.state :as state]
-            [frontend.test.helper :as test-helper :refer [load-test-files]]
+            [frontend.test.helper :as test-helper]
             [frontend.util.cursor :as cursor]))
 
 (use-fixtures :each test-helper/start-and-destroy-db)
@@ -49,28 +48,6 @@
          (editor/extract-nearest-link-from-text
           "[[https://github.com/logseq/logseq][logseq]] is #awesome :)" 0 editor/url-regex))
       "Finds url in org link correctly"))
-
-(defn- set-marker
-  "Spied version of editor/set-marker"
-  [marker content format]
-  (let [actual-content (atom nil)]
-    (with-redefs [editor/save-block-if-changed! (fn [_ content]
-                                                  (reset! actual-content content))]
-      (editor/set-marker {:block/marker marker :block/title content :block/format format})
-      @actual-content)))
-
-(deftest set-marker-org
-  (are [marker content expect] (= expect (set-marker marker content :org))
-    "TODO" "TODO content" "DOING content"
-    "TODO" "** TODO content" "** DOING content"
-    "TODO" "## TODO content" "DOING ## TODO content"
-    "DONE" "DONE content" "content"))
-
-(deftest set-marker-markdown
-  (are [marker content expect] (= expect (set-marker marker content :markdown))
-    "TODO" "TODO content" "DOING content"
-    "TODO" "## TODO content" "## DOING content"
-    "DONE" "DONE content" "content"))
 
 (defn- keyup-handler
   "Spied version of editor/keyup-handler"
@@ -155,24 +132,6 @@
       (editor/handle-last-input))))
 
 (deftest handle-last-input-handler-test
-  (testing "Property autocompletion"
-    (handle-last-input-handler {:value "::"})
-    (is (= :property-search (state/get-editor-action))
-        "Autocomplete properties if only colons have been typed")
-
-    (handle-last-input-handler {:value "foo::bar\n::"})
-    (is (= :property-search (state/get-editor-action))
-        "Autocomplete properties if typing colons on a second line")
-
-    (handle-last-input-handler {:value "middle of line::"})
-    (is (= nil (state/get-editor-action))
-        "Don't autocomplete properties if typing colons in the middle of a line")
-
-    (handle-last-input-handler {:value "first \nfoo::bar"
-                                :cursor-pos (dec (count "first "))})
-    (is (= nil (state/get-editor-action))
-        "Don't autocomplete properties if typing in a block where properties already exist"))
-
   (testing "Command autocompletion"
     (handle-last-input-handler {:value "/"})
     (is (= :commands (state/get-editor-action))
@@ -235,21 +194,6 @@
   ;; Reset state
   (state/set-editor-action! nil))
 
-(deftest save-block-aux!
-  (load-test-files [{:file/path "pages/page1.md"
-                     :file/content "\n
-- b1 #foo"}])
-  (testing "updating block's content changes content"
-    (let [conn (db/get-db test-helper/test-db false)
-          block (->> (d/q '[:find (pull ?b [*])
-                            :where [?b :block/title "b1 #foo"]]
-                          @conn)
-                     ffirst)
-         ;; Use same options as edit-box-on-change!
-          _ (editor/save-block-aux! block "b12 #foo" {:skip-properties? true})
-          updated-block (d/pull @conn '[*] [:block/uuid (:block/uuid block)])]
-      (is (= "b12 #foo" (:block/title updated-block)) "Content updated correctly"))))
-
 (deftest save-block!
   (testing "Saving blocks with and without properties"
     (test-helper/load-test-files [{:file/path "foo.md"
@@ -258,10 +202,7 @@
           page-uuid (:block/uuid (db/get-page "foo"))
           block-uuid (:block/uuid (model/get-block-by-page-name-and-block-route-name repo (str page-uuid) "foo"))]
       (editor/save-block! repo block-uuid "# bar")
-      (is (= "# bar" (:block/title (model/query-block-by-uuid block-uuid))))
-
-      (editor/save-block! repo block-uuid "# foo" {:properties {:foo "bar"}})
-      (is (= "# foo\nfoo:: bar" (:block/title (model/query-block-by-uuid block-uuid))))
+      (is (= "bar" (:block/title (model/query-block-by-uuid block-uuid))))
 
       (editor/save-block! repo block-uuid "# bar")
-      (is (= "# bar" (:block/title (model/query-block-by-uuid block-uuid)))))))
+      (is (= "bar" (:block/title (model/query-block-by-uuid block-uuid)))))))

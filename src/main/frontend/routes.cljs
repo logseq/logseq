@@ -1,22 +1,18 @@
 (ns frontend.routes
   "Defines routes for use with reitit router"
-  (:require [frontend.components.file :as file]
+  (:require [frontend.components.all-pages :as all-pages]
+            [frontend.components.bug-report :as bug-report]
+            [frontend.components.file :as file]
             [frontend.components.home :as home]
+            [frontend.components.imports :as imports]
             [frontend.components.journal :as journal]
             [frontend.components.page :as page]
-            [frontend.components.all-pages :as all-pages]
             [frontend.components.plugins :as plugins]
             [frontend.components.repo :as repo]
             [frontend.components.settings :as settings]
-            [frontend.components.whiteboard :as whiteboard]
-            [frontend.extensions.zotero :as zotero]
-            [frontend.components.bug-report :as bug-report]
             [frontend.components.user.login :as login]
-            [logseq.shui.demo :as shui]
-            [frontend.components.imports :as imports]
             [frontend.config :as config]
-            [logseq.db :as ldb]
-            [frontend.db :as db]))
+            [logseq.shui.demo :as shui]))
 
 ;; http://localhost:3000/#?anchor=fn.1
 (def routes
@@ -28,18 +24,10 @@
     {:name :graphs
      :view repo/repos-cp}]
 
-   ["/whiteboards"
-    {:name :whiteboards
-     :view whiteboard/whiteboard-dashboard}]
-
    ["/page/:name"
     {:name :page
      :view (fn [route-match]
-             (let [page-name (get-in route-match [:parameters :path :name])
-                   whiteboard? (ldb/whiteboard? (db/get-page page-name))]
-               (if whiteboard?
-                 (whiteboard/whiteboard-route route-match)
-                 (page/page-cp (assoc route-match :current-page? true)))))}]
+             (page/page-cp (assoc route-match :current-page? true)))}]
 
    ["/page/:name/block/:block-route-name"
     {:name :page-block
@@ -56,10 +44,6 @@
    ["/settings"
     {:name :settings
      :view settings/settings}]
-
-   ["/settings/zotero"
-    {:name :zotero-setting
-     :view zotero/settings}]
 
    ["/import"
     {:name :import

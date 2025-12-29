@@ -22,7 +22,7 @@
   (when repo (worker-state/set-db-latest-tx-time! repo))
   (when-not (:rtc-download-graph? tx-meta)
     (let [{:keys [from-disk?]} tx-meta
-          result (worker-pipeline/invoke-hooks repo conn tx-report (worker-state/get-context))
+          result (worker-pipeline/invoke-hooks conn tx-report (worker-state/get-context))
           tx-report' (:tx-report result)]
       (when result
         (let [data (merge
@@ -52,20 +52,19 @@
 
 (defn- remove-old-embeddings-and-reset-new-updates!
   [conn tx-data tx-meta]
-  (when (ldb/db-based-graph? @conn)
-    (let [;; Remove old :logseq.property.embedding/hnsw-label-updated-at when importing a graph
-          remove-old-hnsw-tx-data (when (:import-db? tx-meta)
-                                    (->> (d/datoms @conn :avet :logseq.property.embedding/hnsw-label-updated-at)
-                                         (map (fn [d]
-                                                [:db/retract (:e d) :logseq.property.embedding/hnsw-label-updated-at]))))
+  (let [;; Remove old :logseq.property.embedding/hnsw-label-updated-at when importing a graph
+        remove-old-hnsw-tx-data (when (:import-db? tx-meta)
+                                  (->> (d/datoms @conn :avet :logseq.property.embedding/hnsw-label-updated-at)
+                                       (map (fn [d]
+                                              [:db/retract (:e d) :logseq.property.embedding/hnsw-label-updated-at]))))
           ;; Mark vector embedding
-          mark-embedding-tx-data (->> (keep (fn [datom] (when (and (= :block/title (:a datom)) (:added datom) (not (string/blank? (:v datom))))
-                                                          (:e datom))) tx-data)
+        mark-embedding-tx-data (->> (keep (fn [datom] (when (and (= :block/title (:a datom)) (:added datom) (not (string/blank? (:v datom))))
+                                                        (:e datom))) tx-data)
                                       ;; Mark block embedding to be computed
-                                      (map (fn [id] [:db/add id :logseq.property.embedding/hnsw-label-updated-at 0])))
-          tx-data (concat remove-old-hnsw-tx-data mark-embedding-tx-data)]
-      (when (seq tx-data)
-        (ldb/transact! conn tx-data {:skip-validate-db? true})))))
+                                    (map (fn [id] [:db/add id :logseq.property.embedding/hnsw-label-updated-at 0])))
+        tx-data (concat remove-old-hnsw-tx-data mark-embedding-tx-data)]
+    (when (seq tx-data)
+      (ldb/transact! conn tx-data {:skip-validate-db? true}))))
 
 (defn listen-db-changes!
   [repo conn & {:keys [handler-keys]}]
