@@ -6,6 +6,8 @@
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.graph-parser.db :as gp-db]))
 
@@ -75,8 +77,25 @@
     {:nodes nodes'
      :links links}))
 
+(defn- get-file-graph-property-pages
+  "Get all property pages for file graphs using database query"
+  [db]
+  (let [;; Query all properties from the database synchronously
+        properties (d/q '[:find ?p
+                          :where
+                          [_ :block/properties ?p]]
+                        db)]
+    (->> properties
+         (map first)
+         (remove empty?)
+         (map keys)
+         (apply concat)
+         distinct
+         (map name)  ;; Convert keywords to strings
+         set)))
+
 (defn- build-global-graph
-  [db {:keys [theme journal? orphan-pages? builtin-pages? excluded-pages? created-at-filter]}]
+  [db {:keys [theme journal? tags? properties? orphan-pages? builtin-pages? excluded-pages? created-at-filter]}]
   (let [dark? (= "dark" theme)
         relation (ldb/get-pages-relation db journal?)
         tagged-pages (ldb/get-all-tagged-pages db)
@@ -85,6 +104,8 @@
         full-pages (ldb/get-all-pages db)
         db-based? (entity-plus/db-based-graph? db)
         created-ats (map :block/created-at full-pages)
+        file-property-pages (when (not db-based?)
+                              (get-file-graph-property-pages db))
 
         ;; build up nodes
         full-pages'
@@ -93,6 +114,22 @@
           (filter #(<= (:block/created-at %) (+ (apply min created-ats) created-at-filter)))
           (not journal?)
           (remove ldb/journal?)
+          (not tags?)
+          (remove (fn [p]
+                    (if db-based?
+                      ;; For DB graphs, use the class? function
+                      (ldb/class? p)
+                      ;; For file graphs, check if the page is in the tags set
+                      (contains? tags (:db/id p)))))
+          (not properties?)
+          (remove (fn [p]
+                    (if db-based?
+                      ;; For DB graphs, use the property? function
+                      (ldb/property? p)
+                      ;; For file graphs, check if the page name matches any property
+                      (let [page-name (:block/name p)]
+                        (and page-name
+                             (contains? file-property-pages page-name))))))
           (not excluded-pages?)
           (remove (fn [p] (true?
                            (if db-based?
@@ -100,7 +137,14 @@
                              (get-in p [:block/properties :exclude-from-graph-view]))))))
         links (concat relation tagged-pages namespaces)
         linked (set (mapcat identity links))
-        build-in-pages (->> (if db-based? sqlite-create-graph/built-in-pages-names gp-db/built-in-pages-names)
+        build-in-pages (->> (if db-based?
+                               ;; For DB graphs, collect built-ins from static definitions
+                              (concat
+                               sqlite-create-graph/built-in-pages-names
+                               (map :title (vals db-class/built-in-classes))
+                               (keep :title (vals db-property/built-in-properties)))
+                               ;; For file graphs, simply use predefined names
+                              gp-db/built-in-pages-names)
                             (map string/lower-case)
                             set)
         nodes (cond->> full-pages'
