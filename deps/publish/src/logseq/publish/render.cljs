@@ -311,9 +311,18 @@
 
 (defn- positioned-value-nodes
   [value prop-key ctx entities]
-  (->> (property-value->nodes value prop-key ctx entities)
-       normalize-nodes
-       (map strip-positioned-value)))
+  (cond
+    (= prop-key :logseq.property/icon)
+    (let [icon-node (icon-span value)]
+      (if icon-node [icon-node] []))
+
+    (= prop-key :block/tags)
+    (normalize-nodes (property-value->nodes value prop-key ctx entities))
+
+    :else
+    (->> (property-value->nodes value prop-key ctx entities)
+         normalize-nodes
+         (map strip-positioned-value))))
 
 (defn- render-positioned-properties
   [props ctx entities position]
@@ -695,8 +704,17 @@
                     nested (render-block-tree children-by-parent child-id ctx)
                     has-children? (boolean nested)
                     raw-props (entity-properties block ctx (:entities ctx))
+                    icon-prop (get raw-props :logseq.property/icon)
+                    tags-prop (get raw-props :block/tags)
+                    raw-props (dissoc raw-props :logseq.property/icon :block/tags)
                     {:keys [properties block-left block-right block-below]}
                     (split-properties-by-position raw-props ctx)
+                    block-left (cond-> block-left
+                                 (and icon-prop (not (property-value-empty? icon-prop)))
+                                 (assoc :logseq.property/icon icon-prop))
+                    block-right (cond-> block-right
+                                  (and tags-prop (not (property-value-empty? tags-prop)))
+                                  (assoc :block/tags tags-prop))
                     positioned-left (render-positioned-properties block-left ctx (:entities ctx) :block-left)
                     positioned-right (render-positioned-properties block-right ctx (:entities ctx) :block-right)
                     positioned-below (render-positioned-properties block-below ctx (:entities ctx) :block-below)

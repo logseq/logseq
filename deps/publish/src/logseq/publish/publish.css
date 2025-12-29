@@ -432,12 +432,6 @@ a:hover {
   transform: rotate(-90deg);
 }
 
-.block-toggle:focus {
-  outline: 2px solid var(--action);
-  outline-offset: 2px;
-  border-radius: 4px;
-}
-
 .block-children {
   margin-left: 16px;
 }
