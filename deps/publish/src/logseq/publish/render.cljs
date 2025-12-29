@@ -9,7 +9,7 @@
             [logseq.publish.common :as publish-common]
             [logseq.publish.model :as publish-model]))
 
-(defonce version 1767016302995)
+(defonce version 1767019463259)
 
 (def ref-regex
   (js/RegExp. "\\[\\[([0-9a-fA-F-]{36})\\]\\]|\\(\\(([0-9a-fA-F-]{36})\\)\\)" "g"))
@@ -149,18 +149,66 @@
    "(function(){if(window.React&&window.React.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED){return;}var s='http://www.w3.org/2000/svg';var k=function(n){return n.replace(/[A-Z]/g,function(m){return'-'+m.toLowerCase();});};var a=function(el,key,val){if(key==='className'){el.setAttribute('class',val);return;}if(key==='style'&&val&&typeof val==='object'){for(var sk in val){el.style[sk]=val[sk];}return;}if(key==='ref'||key==='key'||key==='children'){return;}if(val===true){el.setAttribute(key,'');return;}if(val===false||val==null){return;}var attr=key;if(key==='strokeWidth'){attr='stroke-width';}else if(key==='strokeLinecap'){attr='stroke-linecap';}else if(key==='strokeLinejoin'){attr='stroke-linejoin';}else if(key!=='viewBox'&&/[A-Z]/.test(key)){attr=k(key);}el.setAttribute(attr,val);};var c=function(el,child){if(child==null||child===false){return;}if(Array.isArray(child)){child.forEach(function(n){c(el,n);});return;}if(typeof child==='string'||typeof child==='number'){el.appendChild(document.createTextNode(child));return;}if(child.nodeType){el.appendChild(child);} };var e=function(type,props){var children=Array.prototype.slice.call(arguments,2);if(type===Symbol.for('react.fragment')){var frag=document.createDocumentFragment();children.forEach(function(n){c(frag,n);});return frag;}if(typeof type==='function'){return type(Object.assign({},props,{children:children}));}var isSvg=type==='svg'||(props&&props.xmlns===s);var el=isSvg?document.createElementNS(s,type):document.createElement(type);if(props){for(var p in props){a(el,p,props[p]);}}children.forEach(function(n){c(el,n);});return el;};window.React={createElement:e,forwardRef:function(fn){return fn;},Fragment:Symbol.for('react.fragment'),__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED:{ReactCurrentOwner:{current:null}}};window.PropTypes=new Proxy({}, {get:function(){return function(){return null;};}});})();"])
 
 (defn- head-node
-  [title]
-  [:head
-   [:meta {:charset "utf-8"}]
-   [:meta {:name "viewport" :content "width=device-width,initial-scale=1"}]
-   [:title title]
-   (theme-init-script)
-   (icon-runtime-script)
-   [:script {:defer true :src "/static/tabler.ext.js"}]
-   [:link {:rel "stylesheet"
-           :href "https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.0/dist/tabler-icons.min.css"}]
-   [:link {:rel "stylesheet" :href (str "/static/tabler-extension.css?v=" version)}]
-   [:link {:rel "stylesheet" :href (str "/static/publish.css?v=" version)}]])
+  [title {:keys [description keywords topics tags url]}]
+  (let [description (when (string? description)
+                      (string/trim description))
+        keywords (->> [keywords topics tags]
+                      (map #(when (string? %) (string/trim %)))
+                      (remove string/blank?)
+                      (string/join ", "))
+        meta-tags (remove nil?
+                          [[:meta {:name "description" :content description}]
+                           (when (seq keywords)
+                             [:meta {:name "keywords" :content keywords}])
+                           (when (string? tags)
+                             [:meta {:name "tags" :content tags}])
+                           (when (string? topics)
+                             [:meta {:name "topics" :content topics}])
+                           [:meta {:content "summary_large_image" :name "twitter:card"}]
+                           (when description
+                             [:meta {:content description :name "twitter:description"}])
+                           [:meta {:content "@logseq" :name "twitter:site"}]
+                           [:meta {:content title :name "twitter:title"}]
+                           [:meta {:content "https://asset.logseq.com/static/img/social-banner-230118.png"
+                                   :name "twitter:image:src"}]
+                           (when description
+                             [:meta {:content description :name "twitter:image:alt"}])
+                           [:meta {:content title :property "og:title"}]
+                           [:meta {:content "article" :property "og:type"}]
+                           (when url
+                             [:meta {:content url :property "og:url"}])
+                           [:meta {:content "https://asset.logseq.com/static/img/social-banner-230118.png"
+                                   :property "og:image"}]
+                           (when description
+                             [:meta {:content description :property "og:description"}])
+                           [:meta {:content "logseq" :property "og:site_name"}]])]
+    [:head
+     [:meta {:charset "UTF-8"}]
+     [:meta {:name "viewport"
+             :content "width=device-width, initial-scale=1.0, maximum-scale=5.0, minimum-scale=1.0"}]
+     [:meta {:http-equiv "X-UA-Compatible" :content "ie=edge"}]
+     [:title title]
+     [:link {:href "https://asset.logseq.com/static/img/logo.png"
+             :rel "shortcut icon"
+             :type "image/png"}]
+     [:link {:href "https://asset.logseq.com/static/img/logo.png"
+             :rel "shortcut icon"
+             :sizes "192x192"}]
+     [:link {:href "https://asset.logseq.com/static/img/logo.png"
+             :rel "apple-touch-icon"}]
+     [:meta {:content "Logseq" :name "apple-mobile-web-app-title"}]
+     [:meta {:content "yes" :name "apple-mobile-web-app-capable"}]
+     [:meta {:content "yes" :name "apple-touch-fullscreen"}]
+     [:meta {:content "black-translucent" :name "apple-mobile-web-app-status-bar-style"}]
+     [:meta {:content "yes" :name "mobile-web-app-capable"}]
+     (theme-init-script)
+     (icon-runtime-script)
+     [:script {:defer true :src "/static/tabler.ext.js"}]
+     [:link {:rel "stylesheet"
+             :href "https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.0/dist/tabler-icons.min.css"}]
+     [:link {:rel "stylesheet" :href (str "/static/tabler-extension.css?v=" version)}]
+     [:link {:rel "stylesheet" :href (str "/static/publish.css?v=" version)}]
+     meta-tags]))
 
 (defn property-type
   [prop-key property-type-by-ident]
@@ -686,6 +734,30 @@
   [s]
   (string/replace s #"^\s*#+\s+" ""))
 
+(defn- property-value->text
+  [value ctx entities]
+  (cond
+    (nil? value) nil
+    (string? value) value
+    (keyword? value) (name value)
+    (number? value)
+    (if-let [entity (get entities value)]
+      (publish-model/entity->title entity)
+      (str value))
+    (map? value)
+    (if (:db/id value)
+      (publish-model/entity->title value)
+      (if-let [content (db-property/property-value-content value)]
+        (str content)
+        (str value)))
+    (sequential? value)
+    (->> value
+         (map #(property-value->text % ctx entities))
+         (remove string/blank?)
+         distinct
+         (string/join ", "))
+    :else (str value)))
+
 (defn block-content-nodes [block ctx depth]
   (let [raw (or (:block/content block)
                 (:block/title block)
@@ -1041,9 +1113,8 @@
              :property-hidden-by-ident property-hidden-by-ident
              :property-entity-by-ident property-entity-by-ident
              :entities entities}
-        page-properties (render-properties (entity-properties page-entity ctx entities)
-                                           ctx
-                                           entities)
+        page-props (entity-properties page-entity ctx entities)
+        page-properties (render-properties page-props ctx entities)
         blocks (render-block-tree children-by-parent linked-children-by-parent page-eid ctx)
         linked-by-page (when refs-data
                          (->> (get refs-data "refs")
@@ -1062,8 +1133,21 @@
                           [:ul.tagged-list
                            (for [item tagged-nodes]
                              (render-tagged-item graph-uuid item))]])
+        description (property-value->text (get page-props :logseq.property/description) ctx entities)
+        tags (property-value->text (or (get page-props :block/tags)
+                                       (get page-props :logseq.property/page-tags))
+                                   ctx
+                                   entities)
+        keywords (property-value->text (get page-props :logseq.property/keywords) ctx entities)
+        topics (property-value->text (get page-props :logseq.property/topics) ctx entities)
+        page-url (when (and graph-uuid page-uuid-str)
+                   (str "/page/" graph-uuid "/" page-uuid-str))
         doc [:html
-             (head-node page-title)
+             (head-node page-title {:description description
+                                    :keywords keywords
+                                    :topics topics
+                                    :tags tags
+                                    :url page-url})
              [:body
               [:main.wrap
                (toolbar-node
@@ -1100,7 +1184,7 @@
                              (or (:updated-at row) 0)))
                   reverse)
         doc [:html
-             (head-node (str "Published pages - " graph-uuid))
+             (head-node (str "Published pages - " graph-uuid) nil)
              [:body
               [:main.wrap
                (toolbar-node
@@ -1125,7 +1209,7 @@
   (let [rows tag-items
         title (or tag-title tag-uuid)
         doc [:html
-             (head-node (str "Tag - " title))
+             (head-node (str "Tag - " title) nil)
              [:body
               [:main.wrap
                (toolbar-node
@@ -1148,7 +1232,7 @@
   (let [rows tag-items
         title (or tag-title tag-name)
         doc [:html
-             (head-node (str "Tag - " title))
+             (head-node (str "Tag - " title) nil)
              [:body
               [:main.wrap
                (toolbar-node
@@ -1182,7 +1266,7 @@
   (let [rows ref-items
         title (or ref-title ref-name)
         doc [:html
-             (head-node (str "Ref - " title))
+             (head-node (str "Ref - " title) nil)
              [:body
               [:main.wrap
                (toolbar-node
@@ -1217,7 +1301,7 @@
   [graph-uuid]
   (let [title "Page not published"
         doc [:html
-             (head-node title)
+             (head-node title nil)
              [:body
               [:main.wrap
                (toolbar-node
@@ -1233,7 +1317,7 @@
   [graph-uuid page-uuid wrong?]
   (let [title "Protected page"
         doc [:html
-             (head-node title)
+             (head-node title nil)
              [:body
               [:main.wrap
                (toolbar-node
@@ -1262,7 +1346,7 @@
   []
   (let [title "Page not found"
         doc [:html
-             (head-node title)
+             (head-node title nil)
              [:body
               [:main.wrap
                (toolbar-node
