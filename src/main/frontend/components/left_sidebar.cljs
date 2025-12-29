@@ -16,7 +16,6 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.recent :as recent-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.state :as state]
@@ -47,8 +46,6 @@
   [page recent?]
   (when-let [id (:db/id page)]
     (let [page (db/sub-block id)
-          repo (state/get-current-repo)
-          db-based? (config/db-based-graph? repo)
           icon (icon/get-node-icon-cp page {:size 16})
           title (:block/title page)
           untitled? (db-model/untitled-page? title)
@@ -66,7 +63,7 @@
                               (when-not recent?
                                 (x-menu-item
                                  {:key "unfavorite"
-                                  :on-click #(page-handler/<unfavorite-page! (if db-based? (str (:block/uuid page)) title))}
+                                  :on-click #(page-handler/<unfavorite-page! (str (:block/uuid page)))}
                                  (ctx-icon "star-off")
                                  (t :page/unfavorite)
                                  (x-menu-shortcut (when-let [binding (shortcut-dh/shortcut-binding :command/toggle-favorite)]
@@ -201,14 +198,10 @@
       (when child [:div.bd child])]]))
 
 (rum/defc ^:large-vars/cleanup-todo sidebar-navigations
-  [{:keys [default-home route-match route-name srs-open? db-based? enable-whiteboards?]}]
-  (let [navs (cond-> [:flashcards :all-pages :graph-view]
-               db-based?
-               (concat [:tag/tasks :tag/assets])
-               (not db-based?)
-               (#(cons :whiteboards %)))
+  [{:keys [default-home route-match route-name srs-open?]}]
+  (let [navs [:flashcards :all-pages :graph-view :tag/tasks :tag/assets]
         [checked-navs set-checked-navs!] (rum/use-state (or (storage/get :ls-sidebar-navigations)
-                                                            [:whiteboards :flashcards :all-pages :graph-view]))]
+                                                            [:flashcards :all-pages :graph-view]))]
 
     (hooks/use-effect!
      (fn []
@@ -259,18 +252,6 @@
 
       (for [nav checked-navs]
         (cond
-          (= nav :whiteboards)
-          (when enable-whiteboards?
-            (when (not db-based?)
-              (sidebar-item
-               {:class "whiteboard"
-                :title (t :right-side-bar/whiteboards)
-                :href (rfe/href :whiteboards)
-                :on-click-handler (fn [_e] (whiteboard-handler/onboarding-show))
-                :active (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
-                :icon "writing"
-                :shortcut :go/whiteboards})))
-
           (= nav :flashcards)
           (when (state/enable-flashcards? (state/get-current-repo))
             (let [num (state/sub :srs/cards-due-count)]
@@ -303,17 +284,16 @@
             :icon "files"})
 
           (= (namespace nav) "tag")
-          (when db-based?
-            (let [name'' (name nav)
-                  class-ident (get {"assets" :logseq.class/Asset  "tasks" :logseq.class/Task} name'')]
-              (when-let [tag-uuid (and class-ident (:block/uuid (db/entity class-ident)))]
-                (sidebar-item
-                 {:class (str "tag-view-nav " name'')
-                  :title (tt (keyword "left-side-bar" name'')
-                             (keyword "right-side-bar" name''))
-                  :href (rfe/href :page {:name tag-uuid})
-                  :active (= (str tag-uuid) (get-in route-match [:path-params :name]))
-                  :icon "hash"}))))))])))
+          (let [name'' (name nav)
+                class-ident (get {"assets" :logseq.class/Asset  "tasks" :logseq.class/Task} name'')]
+            (when-let [tag-uuid (and class-ident (:block/uuid (db/entity class-ident)))]
+              (sidebar-item
+               {:class (str "tag-view-nav " name'')
+                :title (tt (keyword "left-side-bar" name'')
+                           (keyword "right-side-bar" name''))
+                :href (rfe/href :page {:name tag-uuid})
+                :active (= (str tag-uuid) (get-in route-match [:path-params :name]))
+                :icon "hash"})))))])))
 
 (rum/defc sidebar-favorites < rum/reactive
   []
@@ -358,13 +338,12 @@
          (page-name page true)])])))
 
 (rum/defc ^:large-vars/cleanup-todo sidebar-container
-  [route-match close-modal-fn left-sidebar-open? enable-whiteboards? srs-open?
+  [route-match close-modal-fn left-sidebar-open? srs-open?
    *closing? close-signal touching-x-offset]
   (let [[local-closing? set-local-closing?] (rum/use-state false)
         [el-rect set-el-rect!] (rum/use-state nil)
         ref-el (rum/use-ref nil)
         ref-open? (rum/use-ref left-sidebar-open?)
-        db-based? (config/db-based-graph? (state/get-current-repo))
         default-home (get-default-home-if-valid)
         route-name (get-in route-match [:data :name])
         on-contents-scroll #(when-let [^js el (.-target %)]
@@ -441,8 +420,6 @@
         (sidebar-navigations
          {:default-home default-home
           :route-match route-match
-          :db-based? db-based?
-          :enable-whiteboards? enable-whiteboards?
           :route-name route-name
           :srs-open? srs-open?})]
 
@@ -507,7 +484,6 @@
         *closing? (::closing? s)
         *touch-state (::touch-state s)
         *close-signal (::close-signal s)
-        enable-whiteboards? (state/enable-whiteboards?)
         touch-point-fn (fn [^js e] (some-> (gobj/get e "touches") (aget 0) (#(hash-map :x (.-clientX %) :y (.-clientY %)))))
         srs-open? (= :srs (state/sub :modal/id))
         touching-x-offset (and (some-> @*touch-state :after)
@@ -539,7 +515,7 @@
         (reset! *touch-state nil))}
 
      ;; sidebar contents
-     (sidebar-container route-match close-fn left-sidebar-open? enable-whiteboards? srs-open? *closing?
+     (sidebar-container route-match close-fn left-sidebar-open? srs-open? *closing?
                         @*close-signal (and touch-pending? touching-x-offset))
 
      ;; resizer

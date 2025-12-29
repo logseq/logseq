@@ -2,13 +2,11 @@
   "References filters"
   (:require [clojure.string :as string]
             [datascript.impl.entity :as de]
-            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.handler.page :as page-handler]
             [frontend.search :as search]
-            [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.db.common.reference :as db-reference]
@@ -28,22 +26,14 @@
       ref-name
       (when ref-count [:sup " " ref-count])]
      :on-click (fn [e]
-                 (let [db-based? (config/db-based-graph? (state/get-current-repo))
-                       includes (set (map :block/name (:included filters)))
+                 (let [includes (set (map :block/name (:included filters)))
                        excludes (set (map :block/name (:excluded filters)))
                        included? (includes lc-reference)
                        not-in-filters? (and (not included?) (not (excludes lc-reference)))
                        shift? (.-shiftKey e)]
-                   (if db-based?
-                     (page-handler/db-based-save-filter! page (:db/id (db/get-page lc-reference))
-                                                         {:add? not-in-filters?
-                                                          :include? (if not-in-filters? (not shift?) included?)})
-                     (let [filters-m (->> (concat (map #(vector % true) includes) (map #(vector % false) excludes))
-                                          (into {}))
-                           filters' (if not-in-filters?
-                                      (assoc filters-m lc-reference (not shift?))
-                                      (dissoc filters-m lc-reference))]
-                       (page-handler/file-based-save-filter! page filters')))))
+                   (page-handler/db-based-save-filter! page (:db/id (db/get-page lc-reference))
+                                                       {:add? not-in-filters?
+                                                        :include? (if not-in-filters? (not shift?) included?)})))
      :small? true
      :variant :outline)))
 

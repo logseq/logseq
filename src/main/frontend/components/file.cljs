@@ -9,7 +9,7 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.db.file-based.model :as file-model]
+            [frontend.db.model :as db-model]
             [frontend.fs :as fs]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -86,9 +86,7 @@
                                     :else
                                     [repo-dir path])]
                    (when (and format (contains? (common-config/text-formats) format))
-                     (p/let [content (if (and (config/db-based-graph? repo)
-                                              ;; not global
-                                              (not (string/starts-with? path "/")))
+                     (p/let [content (if-not (string/starts-with? path "/")
                                        (db/get-file path)
                                        (fs/read-file dir path))]
                        (reset! *content (or content ""))))
@@ -103,18 +101,8 @@
   (let [repo-dir (config/get-repo-dir (state/get-current-repo))
         rel-path (when (string/starts-with? path repo-dir)
                    (path/trim-dir-prefix repo-dir path))
-        title (file-model/get-file-page (or path rel-path))
-        in-db? (when-not (path/absolute? path)
-                 (boolean (db/get-file (or path rel-path))))
-        file-path (cond
-                    (config/db-based-graph? (state/get-current-repo))
-                    path
-
-                    in-db?
-                    (path/path-join repo-dir path)
-
-                    :else
-                    path)
+        title (db-model/get-file-page (or path rel-path))
+        file-path path
         random-id (str (common-uuid/gen-uuid))
         content (rum/react (::file-content state))]
     [:div.file {:id (str "file-edit-wrapper-" random-id)

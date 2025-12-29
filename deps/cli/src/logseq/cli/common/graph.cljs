@@ -26,7 +26,6 @@
     (->> (common-graph/read-directories dir)
          (remove (fn [s] (= s common-config/unlinked-graphs-dir)))
          (map graph-name->path)
-         (map (fn [s]
-                (if (string/starts-with? s common-config/file-version-prefix)
-                  s
-                  (str common-config/db-version-prefix s)))))))
+         (keep (fn [s]
+                 (when-not (string/starts-with? s common-config/file-version-prefix)
+                   (str common-config/db-version-prefix s)))))))

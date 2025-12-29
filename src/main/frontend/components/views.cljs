@@ -136,7 +136,6 @@
 (defn header-cp
   [{:keys [view-entity column-set-sorting! state]} column]
   (let [sorting (:sorting state)
-        db-based? (config/db-based-graph?)
         [asc?] (some (fn [item] (when (= (:id item) (:id column))
                                   (when-some [asc? (:asc? item)]
                                     [asc?]))) sorting)
@@ -157,15 +156,14 @@
                                             [:div.flex.flex-row.items-center.gap-1
                                              (ui/icon "arrow-down" {:size 15})
                                              [:div "Sort descending"]])
-                                           (when (and db-based? property)
+                                           (when property
                                              (shui/dropdown-menu-item
                                               {:on-click (fn [_e]
                                                            (if pinned?
                                                              (db-property-handler/delete-property-value! (:db/id view-entity)
                                                                                                          :logseq.property.table/pinned-columns
                                                                                                          (:db/id property))
-                                                             (property-handler/set-block-property! (state/get-current-repo)
-                                                                                                   (:db/id view-entity)
+                                                             (property-handler/set-block-property! (:db/id view-entity)
                                                                                                    :logseq.property.table/pinned-columns
                                                                                                    (:db/id property)))
                                                            (shui/popup-hide! id))}
@@ -1546,39 +1544,37 @@
 (defn- db-set-table-state!
   [entity {:keys [set-sorting! set-filters! set-visible-columns!
                   set-ordered-columns! set-sized-columns!]}]
-  (let [repo (state/get-current-repo)
-        db-based? (config/db-based-graph?)]
-    {:set-sorting!
-     (fn [sorting]
+  {:set-sorting!
+   (fn [sorting]
+     (p/do!
+      (property-handler/set-block-property! (:db/id entity) :logseq.property.table/sorting sorting)
+      (set-sorting! sorting)))
+   :set-filters!
+   (fn [filters]
+     (let [filters (-> (update filters :filters table-filters->persist-state)
+                       (update :or? boolean))]
        (p/do!
-        (when db-based? (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/sorting sorting))
-        (set-sorting! sorting)))
-     :set-filters!
-     (fn [filters]
-       (let [filters (-> (update filters :filters table-filters->persist-state)
-                         (update :or? boolean))]
-         (p/do!
-          (when db-based? (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/filters filters))
-          (set-filters! filters))))
-     :set-visible-columns!
-     (fn [columns]
-       (let [hidden-columns (vec (keep (fn [[column visible?]]
-                                         (when (false? visible?)
-                                           column)) columns))]
-         (p/do!
-          (when db-based?  (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/hidden-columns hidden-columns))
-          (set-visible-columns! columns))))
-     :set-ordered-columns!
-     (fn [ordered-columns]
-       (let [ids (vec (remove #{:select} ordered-columns))]
-         (p/do!
-          (when db-based? (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/ordered-columns ids))
-          (set-ordered-columns! ordered-columns))))
-     :set-sized-columns!
-     (fn [sized-columns]
+        (property-handler/set-block-property! (:db/id entity) :logseq.property.table/filters filters)
+        (set-filters! filters))))
+   :set-visible-columns!
+   (fn [columns]
+     (let [hidden-columns (vec (keep (fn [[column visible?]]
+                                       (when (false? visible?)
+                                         column)) columns))]
        (p/do!
-        (when db-based? (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/sized-columns sized-columns))
-        (set-sized-columns! sized-columns)))}))
+        (property-handler/set-block-property! (:db/id entity) :logseq.property.table/hidden-columns hidden-columns)
+        (set-visible-columns! columns))))
+   :set-ordered-columns!
+   (fn [ordered-columns]
+     (let [ids (vec (remove #{:select} ordered-columns))]
+       (p/do!
+        (property-handler/set-block-property! (:db/id entity) :logseq.property.table/ordered-columns ids)
+        (set-ordered-columns! ordered-columns))))
+   :set-sized-columns!
+   (fn [sized-columns]
+     (p/do!
+      (property-handler/set-block-property! (:db/id entity) :logseq.property.table/sized-columns sized-columns)
+      (set-sized-columns! sized-columns)))})
 
 (rum/defc lazy-item
   [data idx {:keys [properties list-view? scrolling?]} item-render]
@@ -1949,7 +1945,6 @@
    {:keys [view-feature-type title-key additional-actions]
     :as option}]
   (let [[hover? set-hover?] (hooks/use-state nil)
-        db-based? (config/db-based-graph? (state/get-current-repo))
         references? (contains? #{:linked-references :unlinked-references} view-feature-type)
         opacity (cond
                   (and references? (not hover?)) "opacity-0"
@@ -1961,23 +1956,14 @@
                                    (ui/dropdown-exists?))
                        (set-hover? false))}
      [:div.flex.flex-row.items-center.gap-2
-      (if db-based?
-        (if (= view-feature-type :query-result)
-          [:div.font-medium.opacity-50.text-sm
-           (t (or title-key :views.table/default-title)
-              (count (:rows table)))]
-          (views-tab view-parent view-entity (assoc option
-                                                    :hover? hover?
-                                                    :opacity opacity
-                                                    :references? references?)))
-        [:div.font-medium.text-sm
-         [:span
-          (case view-feature-type
-            :all-pages "All pages"
-            :linked-references "Linked references"
-            :unlinked-references "Unlinked references"
-            "Nodes")]
-         [:span.ml-1 (count (:rows table))]])]
+      (if (= view-feature-type :query-result)
+        [:div.font-medium.opacity-50.text-sm
+         (t (or title-key :views.table/default-title)
+            (count (:rows table)))]
+        (views-tab view-parent view-entity (assoc option
+                                                  :hover? hover?
+                                                  :opacity opacity
+                                                  :references? references?)))]
      [:div.view-actions.flex.items-center.gap-1.transition-opacity.ease-in.duration-300
       {:class opacity}
 
@@ -1987,22 +1973,21 @@
                  (action option)
                  action))])
 
-      (when (and db-based? (seq sorting))
+      (when (seq sorting)
         (view-sorting table columns sorting))
 
-      (when db-based? (filter-properties view-entity columns table option))
+      (filter-properties view-entity columns table option)
 
       [:div.view-action-search
        (search input {:on-change set-input!
                       :set-input! set-input!})]
 
-      (when db-based?
-        [:div.view-action-type.text-muted-foreground.text-sm
-         (pv/property-value view-entity (db/entity :logseq.property.view/type) {:icon? true})])
+      [:div.view-action-type.text-muted-foreground.text-sm
+       (pv/property-value view-entity (db/entity :logseq.property.view/type) {:icon? true})]
 
-      (when db-based? (more-actions view-entity columns table option))
+      (more-actions view-entity columns table option)
 
-      (when (and db-based? add-new-object!) (new-record-button table view-entity))]]))
+      (when add-new-object! (new-record-button table view-entity))]]))
 
 (rum/defc group-item
   [view-entity table' group group-by-property value option view-opts {:keys [list-view? group-by-page? readable-property-value]}]
@@ -2040,8 +2025,7 @@
 (rum/defc ^:large-vars/cleanup-todo view-inner < rum/static
   [view-entity {:keys [view-parent data full-data set-data! columns add-new-object! foldable-options input set-input! sorting set-sorting! filters set-filters! display-type group-by-property-ident config] :as option*}
    *scroller-ref]
-  (let [db-based? (config/db-based-graph?)
-        journals? (:journals? config)
+  (let [journals? (:journals? config)
         option (assoc option* :properties
                       (-> (remove #{:id :select} (map :id columns))
                           (conj :block/uuid :block/name)
@@ -2155,8 +2139,7 @@
                                                                        "Empty"
                                                                        :else
                                                                        (str %))
-                                        group-by-page? (or (= :block/page group-by-property-ident)
-                                                           (and (not db-based?) (contains? #{:linked-references :unlinked-references} display-type)))
+                                        group-by-page? (= :block/page group-by-property-ident)
                                         key (str (:db/id view-entity) "-group-idx-" idx)]
                                     (rum/with-key
                                       (group-item view-entity table' group group-by-property value option view-opts
@@ -2249,21 +2232,14 @@
   [view-entity {:keys [config view-parent view-feature-type data query-entity-ids query set-view-entity!] :as option}]
   (let [[input set-input!] (hooks/use-state "")
         [properties set-properties!] (hooks/use-state nil)
-        db-based? (config/db-based-graph?)
         group-by-property (:logseq.property.view/group-by-property view-entity)
-        display-type (if (config/db-based-graph?)
-                       (or (:db/ident (get view-entity :logseq.property.view/type))
-                           (when (= (:view-type option) :linked-references)
-                             :logseq.property.view/type.list)
-                           :logseq.property.view/type.table)
-                       (if (= view-feature-type :all-pages)
-                         :logseq.property.view/type.table
-                         :logseq.property.view/type.list))
+        display-type (or (:db/ident (get view-entity :logseq.property.view/type))
+                         (when (= (:view-type option) :linked-references)
+                           :logseq.property.view/type.list)
+                         :logseq.property.view/type.table)
         list-view? (= display-type :logseq.property.view/type.list)
         group-by-property-ident (or (:db/ident group-by-property)
                                     (when (and list-view? (nil? group-by-property))
-                                      :block/page)
-                                    (when (and (not db-based?) (contains? #{:linked-references :unlinked-references} view-feature-type))
                                       :block/page))
         sorting* (:logseq.property.table/sorting view-entity)
         sorting (if (or (= sorting* :logseq.property/empty-placeholder) (empty? sorting*))
@@ -2362,14 +2338,13 @@
   [{:keys [view-parent view-feature-type view-entity] :as option}]
   (let [[views set-views!] (hooks/use-state nil)
         [view-entity set-view-entity!] (hooks/use-state view-entity)
-        query? (= view-feature-type :query-result)
-        db-based? (config/db-based-graph?)]
+        query? (= view-feature-type :query-result)]
     (hooks/use-effect!
      #(c.m/run-task*
        (m/sp
          (when-not query?
            (let [repo (state/get-current-repo)]
-             (when (and db-based? (not view-entity))
+             (when-not view-entity
                (c.m/<? (db-async/<get-views repo (:db/id view-parent) view-feature-type))
                (let [views (get-views view-parent view-feature-type)]
                  (if-let [v (first views)]
@@ -2381,8 +2356,7 @@
                        (set-views! (concat views [new-view]))
                        (set-view-entity! new-view))))))))))
      [])
-    (when (if db-based? view-entity (or view-entity view-parent
-                                        (= view-feature-type :all-pages)))
+    (when view-entity
       (let [option' (assoc option
                            :view-feature-type (or view-feature-type
                                                   (:logseq.property.view/feature-type view-entity))

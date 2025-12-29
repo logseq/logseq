@@ -7,8 +7,8 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [frontend.db :as db]
-            [frontend.db.conn :as db-conn]
             [frontend.db.async :as db-async]
+            [frontend.db.conn :as db-conn]
             [frontend.db.model :as db-model]
             [frontend.handler.common.page :as page-common-handler]
             [frontend.handler.db-based.page :as db-page-handler]
@@ -18,16 +18,15 @@
             [frontend.modules.layout.core]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.db.frontend.entity-util :as entity-util]
             [goog.object :as gobj]
             [logseq.api.block :as api-block]
             [logseq.db :as ldb]
             [logseq.db.common.entity-util :as common-entity-util]
+            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.graph-parser.text :as text]
             [logseq.outliner.core :as outliner-core]
             [logseq.sdk.core]
             [logseq.sdk.experiments]
-            [logseq.sdk.git]
             [logseq.sdk.utils :as sdk-utils]
             [promesa.core :as p]))
 
@@ -226,8 +225,8 @@
          class-ident-namespace (or (some-> custom-ident-namespace (api-block/sanitize-user-property-name))
                                    (api-block/resolve-class-prefix-for-db this))
          opts' (assoc opts
-                 :redirect? false
-                 :class-ident-namespace class-ident-namespace)]
+                      :redirect? false
+                      :class-ident-namespace class-ident-namespace)]
      (p/let [tag (db-page-handler/<create-class! title opts')]
        (sdk-utils/result->js tag)))))
 
@@ -261,21 +260,21 @@
 
 (defn get-tag [class-uuid-or-ident-or-title]
   (this-as this
-    (let [eid (if (number? class-uuid-or-ident-or-title)
-                class-uuid-or-ident-or-title
-                (let [title-or-ident (-> (if-not (string? class-uuid-or-ident-or-title)
-                                           (str class-uuid-or-ident-or-title)
-                                           class-uuid-or-ident-or-title)
-                                         (string/replace #"^:+" ""))]
-                  (if (text/namespace-page? title-or-ident)
-                    (keyword title-or-ident)
-                    (if (util/uuid-string? title-or-ident)
-                      (when-let [id (sdk-utils/uuid-or-throw-error title-or-ident)]
-                        [:block/uuid id])
-                      (keyword (api-block/resolve-class-prefix-for-db this) title-or-ident)))))
-          tag (db/entity eid)]
-      (when (ldb/class? tag)
-        (sdk-utils/result->js tag)))))
+           (let [eid (if (number? class-uuid-or-ident-or-title)
+                       class-uuid-or-ident-or-title
+                       (let [title-or-ident (-> (if-not (string? class-uuid-or-ident-or-title)
+                                                  (str class-uuid-or-ident-or-title)
+                                                  class-uuid-or-ident-or-title)
+                                                (string/replace #"^:+" ""))]
+                         (if (text/namespace-page? title-or-ident)
+                           (keyword title-or-ident)
+                           (if (util/uuid-string? title-or-ident)
+                             (when-let [id (sdk-utils/uuid-or-throw-error title-or-ident)]
+                               [:block/uuid id])
+                             (keyword (api-block/resolve-class-prefix-for-db this) title-or-ident)))))
+                 tag (db/entity eid)]
+             (when (ldb/class? tag)
+               (sdk-utils/result->js tag)))))
 
 (defn get-tags-by-name [name]
   (when-let [tags (some->> (entity-util/get-pages-by-name (db-conn/get-db) name)

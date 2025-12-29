@@ -290,16 +290,12 @@
    (map :e)
    set))
 
-(defn- get-entities-for-all-pages [db sorting property-ident {:keys [db-based?]}]
+(defn- get-entities-for-all-pages [db sorting property-ident]
   (let [refs-count? (and (coll? sorting) (some (fn [m] (= (:id m) :block.temp/refs-count)) sorting))
-        exclude-ids (when db-based? (get-exclude-page-ids db))]
+        exclude-ids (get-exclude-page-ids db)]
     (keep (fn [d]
             (let [e (entity-plus/unsafe->Entity db (:e d))]
-              (when-not (if db-based?
-                          (exclude-ids (:db/id e))
-                          (or (ldb/hidden-or-internal-tag? e)
-                              (entity-util/property? e)
-                              (entity-util/built-in? e)))
+              (when-not (exclude-ids (:db/id e))
                 (cond-> e
                   refs-count?
                   (assoc :block.temp/refs-count (common-initial-data/get-block-refs-count db (:e d)))))))
@@ -311,11 +307,10 @@
         view-for-id (or (:db/id view-for) view-for-id*)
         non-hidden-e (fn [id] (let [e (d/entity db id)]
                                 (when-not (entity-util/hidden? e)
-                                  e)))
-        db-based? (entity-plus/db-based-graph? db)]
+                                  e)))]
     (case feat-type
       :all-pages
-      (get-entities-for-all-pages db sorting property-ident {:db-based? db-based?})
+      (get-entities-for-all-pages db sorting property-ident)
 
       :class-objects
       (db-class/get-class-objects db view-for-id)
@@ -443,10 +438,7 @@
     :else
     (let [view (d/entity db view-id)
           group-by-property (:logseq.property.view/group-by-property view)
-          db-based? (entity-plus/db-based-graph? db)
-          list-view? (or (= :logseq.property.view/type.list (:db/ident (:logseq.property.view/type view)))
-                         (and (not db-based?)
-                              (contains? #{:linked-references :unlinked-references} view-feature-type)))
+          list-view? (= :logseq.property.view/type.list (:db/ident (:logseq.property.view/type view)))
           group-by-property-ident (or (:db/ident group-by-property) group-by-property-ident)
           group-by-closed-values? (some? (:property/closed-values group-by-property))
           ref-property? (= (:db/valueType group-by-property) :db.type/ref)
