@@ -35,6 +35,52 @@ document.addEventListener("click", (event) => {
   btn.setAttribute("aria-expanded", String(!collapsed));
 });
 
+let sequenceKey = null;
+let sequenceTimer = null;
+const SEQUENCE_TIMEOUT_MS = 900;
+
+const resetSequence = () => {
+  sequenceKey = null;
+  if (sequenceTimer) {
+    clearTimeout(sequenceTimer);
+    sequenceTimer = null;
+  }
+};
+
+const isTypingTarget = (target) => {
+  if (!target) return false;
+  const tag = target.tagName;
+  return (
+    tag === "INPUT" ||
+    tag === "TEXTAREA" ||
+    target.isContentEditable
+  );
+};
+
+document.addEventListener("keydown", (event) => {
+  if (event.metaKey || event.ctrlKey || event.altKey) return;
+  if (isTypingTarget(event.target)) return;
+
+  const key = (event.key || "").toLowerCase();
+  if (!key) return;
+
+  if (sequenceKey === "t" && key === "o") {
+    resetSequence();
+    window.toggleTopBlocks();
+    event.preventDefault();
+    return;
+  }
+
+  if (key === "t") {
+    sequenceKey = "t";
+    if (sequenceTimer) clearTimeout(sequenceTimer);
+    sequenceTimer = setTimeout(resetSequence, SEQUENCE_TIMEOUT_MS);
+    return;
+  }
+
+  resetSequence();
+});
+
 document.addEventListener("click", (event) => {
   const toggle = event.target.closest(".theme-toggle");
   if (!toggle) return;
