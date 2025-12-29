@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "dev": "npx wrangler dev",
     "watch": "clojure -M:cljs watch publish-worker",
     "release": "clojure -M:cljs release publish-worker"
   },
