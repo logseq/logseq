@@ -9,7 +9,7 @@
             [logseq.publish.common :as publish-common]
             [logseq.publish.model :as publish-model]))
 
-(defonce version 1767019463259)
+(defonce version 1767021063531)
 
 (def ref-regex
   (js/RegExp. "\\[\\[([0-9a-fA-F-]{36})\\]\\]|\\(\\(([0-9a-fA-F-]{36})\\)\\)" "g"))
@@ -1192,14 +1192,51 @@
                [:h1 "Published pages"]
                (if (seq rows)
                  [:ul.page-list
-                  (for [{:keys [page-uuid page-title href updated-at short-id]} rows]
+                  (for [{:keys [page-uuid page-title href updated-at]} rows]
                     [:li.page-item
                      [:div.page-links
-                      [:a.page-link {:href href} (or page-title page-uuid)]
-                      (when short-id
-                        [:a.short-link {:href (str "/s/" short-id)}
-                         (str "/s/" short-id)])]
+                      [:a.page-link {:href href} (or page-title page-uuid)]]
                      [:span.page-meta (or (format-timestamp updated-at) "—")]])]
+                 [:p "No pages have been published yet."])
+               (publish-script)]]]]
+    (str "<!doctype html>" (render-hiccup doc))))
+
+(defn render-user-html
+  [username user pages]
+  (let [username (or (aget user "username") username)
+        rows (->> pages
+                  (map (fn [page]
+                         (let [page-uuid (aget page "page_uuid")
+                               page-title (aget page "page_title")
+                               updated-at (aget page "updated_at")
+                               graph-uuid (aget page "graph_uuid")
+                               href (str "/page/" graph-uuid "/" page-uuid)
+                               short-id (aget page "short_id")]
+                           {:page-uuid page-uuid
+                            :page-title page-title
+                            :href href
+                            :short-id short-id
+                            :updated-at updated-at
+                            :graph-uuid graph-uuid})))
+                  (sort-by (fn [row]
+                             (or (:updated-at row) 0)))
+                  reverse)
+        title (str "Published by " username)
+        doc [:html
+             (head-node title nil)
+             [:body
+              [:main.wrap
+               (toolbar-node
+                (theme-toggle-node))
+               [:h1 title]
+               (if (seq rows)
+                 [:ul.page-list
+                  (for [{:keys [page-uuid page-title href updated-at]} rows]
+                    [:li.page-item
+                     [:div.page-links
+                      [:a.page-link {:href href} (or page-title page-uuid)]]
+                     [:span.page-meta
+                      (or (format-timestamp updated-at) "—")]])]
                  [:p "No pages have been published yet."])
                (publish-script)]]]]
     (str "<!doctype html>" (render-hiccup doc))))
@@ -1245,17 +1282,13 @@
                         :let [graph-id (tag-item-val row :graph_uuid)
                               page-uuid (tag-item-val row :source_page_uuid)
                               page-title (tag-item-val row :source_page_title)
-                              short-id (tag-item-val row :short_id)
                               href (when (and graph-id page-uuid)
                                      (str "/page/" graph-id "/" page-uuid))]]
                     [:li.page-item
                      [:div.page-links
                       (if href
                         [:a.page-ref {:href href} (or page-title page-uuid)]
-                        [:span (or page-title page-uuid)])
-                      (when short-id
-                        [:a.short-link {:href (str "/s/" short-id)}
-                         (str "/s/" short-id)])]
+                        [:span (or page-title page-uuid)])]
                      [:span.page-meta (or (format-timestamp (tag-item-val row :updated_at)) "—")]])]
                  [:p "No published pages use this tag yet."])
                (publish-script)]]]]
@@ -1281,17 +1314,13 @@
                         :let [graph-id (or (tag-item-val row :graph_uuid) graph-uuid)
                               page-uuid (tag-item-val row :source_page_uuid)
                               page-title (tag-item-val row :source_page_title)
-                              short-id (tag-item-val row :short_id)
                               href (when (and graph-id page-uuid)
                                      (str "/page/" graph-id "/" page-uuid))]]
                     [:li.page-item
                      [:div.page-links
                       (if href
                         [:a.page-ref {:href href} (or page-title page-uuid)]
-                        [:span (or page-title page-uuid)])
-                      (when short-id
-                        [:a.short-link {:href (str "/s/" short-id)}
-                         (str "/s/" short-id)])]
+                        [:span (or page-title page-uuid)])]
                      [:span.page-meta (or (format-timestamp (tag-item-val row :updated_at)) "—")]])]
                  [:p "No published pages reference this yet."])
                (publish-script)]]]]
