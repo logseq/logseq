@@ -136,7 +136,7 @@
                                                                                    :graph_uuid graph-uuid
                                                                                    :r2_key r2-key
                                                                                    :short_id short-id
-                                                                                   :short_url (str "/s/" short-id)
+                                                                                   :short_url (str "/p/" short-id)
                                                                                    :updated_at (.now js/Date)})))))))))))
 
 (defn handle-tag-page-html [graph-uuid tag-uuid env]
@@ -632,7 +632,7 @@
                             (js/Response. (.-body object)
                                           #js {:headers headers}))))))))
 
-      (and (string/starts-with? path "/s/") (= method "GET"))
+      (and (string/starts-with? path "/p/") (= method "GET"))
       (let [parts (string/split path #"/")
             short-id (nth parts 2 nil)]
         (if (string/blank? short-id)
