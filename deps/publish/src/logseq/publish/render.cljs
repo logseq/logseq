@@ -161,8 +161,12 @@
   (let [title (publish-model/entity->title entity)
         uuid (:block/uuid entity)
         graph-uuid (:graph-uuid ctx)]
-    (if (and uuid graph-uuid (publish-model/page-entity? entity))
+    (cond
+      (and uuid graph-uuid (publish-model/page-entity? entity))
       [[:a.page-ref {:href (str "/page/" graph-uuid "/" uuid)} title]]
+      (common-util/url? title)
+      [:a {:href title} title]
+      :else
       [title])))
 
 (defn property-value->nodes
@@ -174,10 +178,13 @@
       []
 
       (string? value)
-      (if (= prop-type :datetime)
+      (cond
+        (= prop-type :datetime)
         (if-let [formatted (format-datetime value)]
           [formatted]
           (content->nodes value (:uuid->title ctx) (:graph-uuid ctx)))
+
+        :else
         (content->nodes value (:uuid->title ctx) (:graph-uuid ctx)))
 
       (keyword? value)
