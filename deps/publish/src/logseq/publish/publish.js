@@ -127,8 +127,60 @@ window.toggleTheme = () => {
   window.localStorage.setItem(THEME_KEY, next);
 };
 
+const initTwitterEmbeds = () => {
+  const tweetTargets = document.querySelectorAll(".twitter-tweet");
+  if (!tweetTargets.length) return;
+
+  const ensureTwitterScript = () =>
+    new Promise((resolve) => {
+      if (window.twttr?.widgets?.createTweet) {
+        return resolve(window.twttr);
+      }
+
+      let script = document.querySelector("script[data-twitter-widget]");
+      if (!script) {
+        script = document.createElement("script");
+        script.src = "https://platform.twitter.com/widgets.js";
+        script.async = true;
+        script.defer = true;
+        script.setAttribute("data-twitter-widget", "true");
+        document.body.appendChild(script);
+      }
+
+      script.addEventListener("load", () => {
+        resolve(window.twttr);
+      });
+    });
+
+  ensureTwitterScript().then((twttr) => {
+    if (!twttr?.widgets?.createTweet) return;
+
+    tweetTargets.forEach((el) => {
+      const a = el.querySelector("a[href*='/status/']");
+      if (!a) return;
+      const m = a.href.match(/status\/(\d+)/);
+      if (!m) return;
+      const tweetId = m[1];
+
+      // Clear fallback text
+      el.innerHTML = "";
+
+      // Optional: theme based on your current theme
+      const theme =
+        (document.documentElement.getAttribute("data-theme") || "light") ===
+        "dark"
+          ? "dark"
+          : "light";
+
+      twttr.widgets.createTweet(tweetId, el, { theme });
+    });
+  });
+};
+
 const initPublish = () => {
   applyTheme(preferredTheme());
+
+  initTwitterEmbeds();
 
   document.querySelectorAll(".math-block").forEach((el) => {
     const tex = el.textContent;
