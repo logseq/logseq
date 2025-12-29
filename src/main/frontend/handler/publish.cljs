@@ -73,8 +73,8 @@
 (defn- <sha256-hex-buffer
   [array-buffer]
   (p/let [digest (.digest (.-subtle js/crypto) "SHA-256" array-buffer)
-          bytes (js/Uint8Array. digest)]
-    (->> bytes
+          data (js/Uint8Array. digest)]
+    (->> data
          (map (fn [b]
                 (.padStart (.toString b 16) 2 "0")))
          (apply str))))
@@ -177,7 +177,7 @@
                         :body blob}))))
 
 (defn- <upload-raw-asset!
-  [graph-uuid asset-token asset-meta content-type content]
+  [asset-token asset-meta content-type content]
   (let [headers (cond-> {"content-type" content-type
                          "x-asset-meta" (js/JSON.stringify (clj->js asset-meta))}
                   asset-token (assoc "authorization" (str "Bearer " asset-token)))]
@@ -245,7 +245,7 @@
                             :checksum (:logseq.property.asset/checksum asset)
                             :size (:logseq.property.asset/size asset)
                             :title (:block/title asset)}
-                      resp (<upload-raw-asset! graph-uuid token meta content-type content)]
+                      resp (<upload-raw-asset! token meta content-type content)]
                 (when-not (.-ok resp)
                   (js/console.warn "Asset publish failed" {:asset asset-uuid :status (.-status resp)}))
                 resp)))
@@ -255,7 +255,7 @@
                         :checksum (:logseq.property.asset/checksum asset)
                         :size (:logseq.property.asset/size asset)
                         :title (:block/title asset)}
-                  resp (<upload-raw-asset! graph-uuid token meta content-type content)]
+                  resp (<upload-raw-asset! token meta content-type content)]
             (when-not (.-ok resp)
               (js/console.warn "Asset publish failed" {:asset asset-uuid :status (.-status resp)}))
             resp))))))
