@@ -7,7 +7,8 @@
     "watch": "clojure -M:cljs watch publish-worker",
     "release": "clojure -M:cljs release publish-worker",
     "clean": "rm -rf ./worker/dist/",
-    "deploy": "yarn clean && yarn release && cd ./worker && wrangler deploy --env prod"
+    "bump-publish-version": "node ./scripts/bump-publish-version.js",
+    "deploy": "yarn bump-publish-version && yarn clean && yarn release && cd ./worker && wrangler deploy --env prod"
   },
   "dependencies": {
     "shadow-cljs": "^3.3.4"
