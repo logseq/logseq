@@ -7,6 +7,7 @@
             [frontend.fs :as fs]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
+            [frontend.handler.user :as user-handler]
             [frontend.image :as image]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -301,6 +302,8 @@
                           :compression :none
                           :content_hash content-hash
                           :content_length (count body)
+                          :owner_sub (user-handler/user-uuid)
+                          :owner_username (user-handler/username)
                           :created_at (util/time-ms)}
             publish-body (assoc payload :meta publish-meta)
             headers (assoc headers "x-publish-meta" (js/JSON.stringify (clj->js publish-meta)))

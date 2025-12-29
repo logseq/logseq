@@ -20,6 +20,7 @@
                                   "content_length INTEGER,"
                                   "r2_key TEXT NOT NULL,"
                                   "owner_sub TEXT,"
+                                  "owner_username TEXT,"
                                   "created_at INTEGER,"
                                   "updated_at INTEGER,"
                                   "password_hash TEXT,"
@@ -33,6 +34,8 @@
         (publish-common/sql-exec sql "ALTER TABLE pages ADD COLUMN page_tags TEXT;"))
       (when-not (contains? col-names "short_id")
         (publish-common/sql-exec sql "ALTER TABLE pages ADD COLUMN short_id TEXT;"))
+      (when-not (contains? col-names "owner_username")
+        (publish-common/sql-exec sql "ALTER TABLE pages ADD COLUMN owner_username TEXT;"))
       (when-not (contains? col-names "password_hash")
         (publish-common/sql-exec sql "ALTER TABLE pages ADD COLUMN password_hash TEXT;")))
     (let [cols (publish-common/get-sql-rows (publish-common/sql-exec sql "PRAGMA table_info(page_refs);"))
@@ -110,11 +113,12 @@
                                               "content_length,"
                                               "r2_key,"
                                               "owner_sub,"
+                                              "owner_username,"
                                               "created_at,"
                                               "updated_at,"
                                               "short_id,"
                                               "password_hash"
-                                              ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                                              ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                                               " ON CONFLICT(graph_uuid, page_uuid) DO UPDATE SET"
                                               " page_uuid=excluded.page_uuid,"
                                               " page_title=excluded.page_title,"
@@ -125,6 +129,7 @@
                                               " content_length=excluded.content_length,"
                                               " r2_key=excluded.r2_key,"
                                               " owner_sub=excluded.owner_sub,"
+                                              " owner_username=excluded.owner_username,"
                                               " updated_at=excluded.updated_at,"
                                               " short_id=excluded.short_id,"
                                               " password_hash=excluded.password_hash;")
@@ -138,6 +143,7 @@
                                          (aget body "content_length")
                                          (aget body "r2_key")
                                          (aget body "owner_sub")
+                                         (aget body "owner_username")
                                          (aget body "created_at")
                                          (aget body "updated_at")
                                          (aget body "short_id")
@@ -250,6 +256,19 @@
                 row (first rows)]
             (publish-common/json-response {:page (when row (js->clj row :keywordize-keys false))}))
 
+          (= (nth parts 1 nil) "user")
+          (let [raw-username (nth parts 2 nil)
+                username (when raw-username (js/decodeURIComponent raw-username))
+                rows (publish-common/get-sql-rows
+                      (publish-common/sql-exec sql
+                                               (str "SELECT page_uuid, page_title, short_id, graph_uuid, updated_at, owner_username "
+                                                    "FROM pages WHERE owner_username = ? ORDER BY updated_at DESC;")
+                                               username))]
+            (publish-common/json-response {:user {:username username}
+                                           :pages (map (fn [row]
+                                                         (js->clj row :keywordize-keys false))
+                                                       rows)}))
+
           (= (nth parts 4 nil) "password")
           (let [rows (publish-common/get-sql-rows
                       (publish-common/sql-exec sql
@@ -294,7 +313,7 @@
           (let [rows (publish-common/get-sql-rows
                       (publish-common/sql-exec sql
                                                (str "SELECT page_uuid, page_title, page_tags, short_id, graph_uuid, schema_version, block_count, "
-                                                    "content_hash, content_length, r2_key, owner_sub, created_at, updated_at "
+                                                    "content_hash, content_length, r2_key, owner_sub, owner_username, created_at, updated_at "
                                                     "FROM pages WHERE graph_uuid = ? AND page_uuid = ? LIMIT 1;")
                                                graph-uuid
                                                page-uuid))
@@ -307,7 +326,7 @@
           (let [rows (publish-common/get-sql-rows
                       (publish-common/sql-exec sql
                                                (str "SELECT page_uuid, page_title, page_tags, short_id, graph_uuid, schema_version, block_count, "
-                                                    "content_hash, content_length, r2_key, owner_sub, created_at, updated_at "
+                                                    "content_hash, content_length, r2_key, owner_sub, owner_username, created_at, updated_at "
                                                     "FROM pages WHERE graph_uuid = ? ORDER BY updated_at DESC;")
                                                graph-uuid))]
             (publish-common/json-response {:pages (map row->meta rows)}))
@@ -316,7 +335,7 @@
           (let [rows (publish-common/get-sql-rows
                       (publish-common/sql-exec sql
                                                (str "SELECT page_uuid, page_title, page_tags, short_id, graph_uuid, schema_version, block_count, "
-                                                    "content_hash, content_length, r2_key, owner_sub, created_at, updated_at "
+                                                    "content_hash, content_length, r2_key, owner_sub, owner_username, created_at, updated_at "
                                                     "FROM pages ORDER BY updated_at DESC;")))]
             (publish-common/json-response {:pages (map row->meta rows)}))))
 

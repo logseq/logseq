@@ -96,6 +96,12 @@
                                          page-tags (or (:page-tags payload)
                                                        (get payload "page-tags"))
                                          short-id (publish-common/short-id-for-page graph-uuid page_uuid)
+                                         owner-sub (:owner_sub meta)
+                                         owner-username (:owner_username meta)
+                                         _ (when-not (and owner-sub owner-username)
+                                             (throw (ex-info "owner sub or username is missing"
+                                                             {:owner-sub owner-sub
+                                                              :owner-username owner-username})))
                                          payload (clj->js {:page_uuid page_uuid
                                                            :page_title page-title
                                                            :page_tags (when page-tags
@@ -107,7 +113,8 @@
                                                            :content_hash content_hash
                                                            :content_length content_length
                                                            :r2_key r2-key
-                                                           :owner_sub (aget claims "sub")
+                                                           :owner_sub owner-sub
+                                                           :owner_username owner-username
                                                            :created_at created_at
                                                            :updated_at (.now js/Date)
                                                            :short_id short-id
@@ -648,6 +655,27 @@
                                                            :headers (publish-common/merge-headers
                                                                      #js {"location" location}
                                                                      (publish-common/cors-headers))}))))))))
+
+      (and (string/starts-with? path "/u/") (= method "GET"))
+      (let [parts (string/split path #"/")
+            username (nth parts 2 nil)]
+        (if (string/blank? username)
+          (publish-common/bad-request "missing username")
+          (js-await [^js do-ns (aget env "PUBLISH_META_DO")
+                     index-id (.idFromName do-ns "index")
+                     index-stub (.get do-ns index-id)
+                     resp (.fetch index-stub (str "https://publish/user/" username)
+                                  #js {:method "GET"})]
+                    (if-not (.-ok resp)
+                      (publish-common/not-found)
+                      (js-await [data (.json resp)
+                                 user (aget data "user")
+                                 rows (or (aget data "pages") #js [])]
+                                (js/Response.
+                                 (publish-render/render-user-html username user rows)
+                                 #js {:headers (publish-common/merge-headers
+                                                #js {"content-type" "text/html; charset=utf-8"}
+                                                (publish-common/cors-headers))}))))))
 
       (and (string/starts-with? path "/pages/") (= method "GET"))
       (let [parts (string/split path #"/")]
