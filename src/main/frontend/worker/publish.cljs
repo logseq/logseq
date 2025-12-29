@@ -76,10 +76,44 @@
     (ldb/get-page-blocks db (:db/id entity))
     (ldb/get-block-and-children db (:block/uuid entity))))
 
+(defn- collect-embedded-blocks
+  [db blocks]
+  (let [linked-eids (->> blocks
+                         (map :block/link)
+                         (map publish-ref-eid)
+                         (remove nil?)
+                         distinct)]
+    (loop [queue (vec linked-eids)
+           visited #{}
+           acc []]
+      (if (empty? queue)
+        acc
+        (let [eid (first queue)
+              queue (subvec queue 1)]
+          (if (contains? visited eid)
+            (recur queue visited acc)
+            (let [entity (d/entity db eid)
+                  uuid (:block/uuid entity)
+                  children (when uuid
+                             (ldb/get-block-and-children db uuid))
+                  child-links (->> children
+                                   (map :block/link)
+                                   (map publish-ref-eid)
+                                   (remove nil?))]
+              (recur (into queue child-links)
+                     (conj visited eid)
+                     (into acc children)))))))))
+
 (defn- publish-collect-page-eids
   [db entity]
   (let [page-id (:db/id entity)
         blocks (collect-publish-blocks db entity)
+        embedded-blocks (collect-embedded-blocks db blocks)
+        blocks (->> (concat blocks embedded-blocks)
+                    (remove (comp nil? :db/id))
+                    (map (juxt :db/id identity))
+                    (into {})
+                    vals)
         block-eids (map :db/id blocks)
         ref-eids (->> blocks
                       (mapcat :block/refs)
