@@ -9,7 +9,7 @@
             [logseq.publish.common :as publish-common]
             [logseq.publish.model :as publish-model]))
 
-(defonce version 1767012226301)
+(defonce version 1767012660213)
 
 (def ref-regex
   (js/RegExp. "\\[\\[([0-9a-fA-F-]{36})\\]\\]|\\(\\(([0-9a-fA-F-]{36})\\)\\)" "g"))

@@ -494,6 +494,8 @@
                                               #js {"content-type" "text/html; charset=utf-8"}
                                               (publish-common/cors-headers))})
                               (js-await [meta (.json meta-resp)
+                                         etag (aget meta "content_hash")
+                                         if-none-match (publish-common/normalize-etag (.get (.-headers request) "if-none-match"))
                                          index-id (.idFromName do-ns "index")
                                          index-stub (.get do-ns index-id)
                                          refs-resp (.fetch index-stub (str "https://publish/pages/" graph-uuid "/" page-uuid "/refs"))
@@ -508,15 +510,25 @@
                                                                            :keywordize-keys true)))
                                          r2 (aget env "PUBLISH_R2")
                                          object (.get r2 (aget meta "r2_key"))]
-                                        (if-not object
-                                          (publish-common/json-response {:error "missing transit blob"} 404)
-                                          (js-await [buffer (.arrayBuffer object)
-                                                     transit (.decode publish-common/text-decoder buffer)]
-                                                    (js/Response.
-                                                     (publish-render/render-page-html transit page-uuid refs-json tagged-nodes)
-                                                     #js {:headers (publish-common/merge-headers
-                                                                    #js {"content-type" "text/html; charset=utf-8"}
-                                                                    (publish-common/cors-headers))})))))))))))
+                                        (if (and etag if-none-match (= etag if-none-match))
+                                          (js/Response. nil #js {:status 304
+                                                                 :headers (publish-common/merge-headers
+                                                                           #js {:etag etag
+                                                                                "cache-control" "public, max-age=300, must-revalidate"}
+                                                                           (publish-common/cors-headers))})
+                                          (if-not object
+                                            (publish-common/json-response {:error "missing transit blob"} 404)
+                                            (js-await [buffer (.arrayBuffer object)
+                                                       transit (.decode publish-common/text-decoder buffer)]
+                                                      (let [headers (publish-common/merge-headers
+                                                                     #js {"content-type" "text/html; charset=utf-8"
+                                                                          "cache-control" "public, max-age=300, must-revalidate"}
+                                                                     (publish-common/cors-headers))]
+                                                        (when etag
+                                                          (.set headers "etag" etag))
+                                                        (js/Response.
+                                                         (publish-render/render-page-html transit page-uuid refs-json tagged-nodes)
+                                                         #js {:headers headers})))))))))))))
 
 (defn handle-fetch [request env]
   (let [url (js/URL. (.-url request))
