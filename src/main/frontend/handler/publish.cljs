@@ -6,7 +6,6 @@
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.fs :as fs]
-            [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
             [frontend.handler.user :as user-handler]
