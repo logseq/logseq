@@ -9,6 +9,8 @@
             [logseq.publish.common :as publish-common]
             [logseq.publish.model :as publish-model]))
 
+(defonce version 1767012226301)
+
 (def ref-regex
   (js/RegExp. "\\[\\[([0-9a-fA-F-]{36})\\]\\]|\\(\\(([0-9a-fA-F-]{36})\\)\\)" "g"))
 
@@ -133,7 +135,7 @@
 
 (defn- publish-script
   []
-  [:script {:type "module" :src "/static/publish.js"}])
+  [:script {:type "module" :src (str "/static/publish.js?v=" version)}])
 
 (defn- icon-runtime-script
   []
@@ -151,8 +153,8 @@
    [:script {:defer true :src "/static/tabler.ext.js"}]
    [:link {:rel "stylesheet"
            :href "https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.0/dist/tabler-icons.min.css"}]
-   [:link {:rel "stylesheet" :href "/static/tabler-extension.css"}]
-   [:link {:rel "stylesheet" :href "/static/publish.css"}]])
+   [:link {:rel "stylesheet" :href (str "/static/tabler-extension.css?v=" version)}]
+   [:link {:rel "stylesheet" :href (str "/static/publish.css?v=" version)}]])
 
 (defn property-type
   [prop-key property-type-by-ident]
