@@ -383,7 +383,7 @@ a:hover {
   padding: 12px 14px;
 }
 
-.quote-block {
+.quote-block, blockquote {
   padding-left: 1.5em;
   margin: 1.5em 0;
   border-left: 2px solid var(--quote-border);
