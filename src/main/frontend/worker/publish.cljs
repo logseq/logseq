@@ -36,12 +36,14 @@
   [db blocks page-entity graph-uuid]
   (let [page-uuid (:block/uuid page-entity)
         page-title (publish-entity-title page-entity)
+        page? (common-entity-util/page? page-entity)
         graph-uuid (str graph-uuid)]
     (mapcat (fn [block]
               (let [block-uuid (:block/uuid block)
                     block-uuid-str (some-> block-uuid str)]
                 (when (and block-uuid-str
-                           (not= block-uuid page-uuid))
+                           (or (not page?)
+                               (not= block-uuid page-uuid)))
                   (let [block-content (or (:block/content block)
                                           (:block/title block)
                                           (:block/name block)
@@ -68,10 +70,16 @@
                            targets))))))
             blocks)))
 
+(defn- collect-publish-blocks
+  [db entity]
+  (if (common-entity-util/page? entity)
+    (ldb/get-page-blocks db (:db/id entity))
+    (ldb/get-block-and-children db (:block/uuid entity))))
+
 (defn- publish-collect-page-eids
-  [db page-entity]
-  (let [page-id (:db/id page-entity)
-        blocks (ldb/get-page-blocks db page-id)
+  [db entity]
+  (let [page-id (:db/id entity)
+        blocks (collect-publish-blocks db entity)
         block-eids (map :db/id blocks)
         ref-eids (->> blocks
                       (mapcat :block/refs)
@@ -81,13 +89,13 @@
                       (mapcat :block/tags)
                       (map publish-ref-eid)
                       (remove nil?))
-        page-tag-eids (->> (if-let [tags (:block/tags page-entity)]
+        page-tag-eids (->> (if-let [tags (:block/tags entity)]
                              (if (sequential? tags) tags [tags])
                              [])
                            (map publish-ref-eid)
                            (remove nil?))
         page-eids (->> blocks (map :block/page) (keep :db/id))
-        property-eids (->> (cons page-entity blocks)
+        property-eids (->> (cons entity blocks)
                            (map db-property/properties)
                            (mapcat (fn [props]
                                      (mapcat (fn [[k v]]
@@ -107,23 +115,34 @@
                 (remove nil?)
                 distinct)}))
 
+(defn- normalize-block-publish-datoms
+  [datoms block-eids root-eid]
+  (map (fn [[e a v tx added]]
+         (if (and (contains? block-eids e) (= a :block/page))
+           [e a root-eid tx added]
+           [e a v tx added]))
+       datoms))
+
 (defn- build-publish-page-payload
-  [db page-entity graph-uuid]
-  (let [{:keys [blocks eids]} (publish-collect-page-eids db page-entity)
+  [db entity graph-uuid]
+  (let [{:keys [blocks eids]} (publish-collect-page-eids db entity)
         graph-uuid (or graph-uuid (ldb/get-graph-rtc-uuid db))
         refs (when graph-uuid
-               (publish-refs-from-blocks db blocks page-entity graph-uuid))
-        tags (page-tags page-entity)
-        datoms (->>
-                (mapcat (fn [eid]
-                          (map (fn [d] [(:e d) (:a d) (:v d) (:tx d) (:added d)])
-                               (d/datoms db :eavt eid)))
-                        eids)
-                (remove (fn [[_e a _v _tx _added]]
-                          (contains? #{:block/tx-id :logseq.property.user/email :logseq.property.embedding/hnsw-label-updated-at} a))))]
-    {:page (common-entity-util/entity->map page-entity)
-     :page-uuid (:block/uuid page-entity)
-     :page-title (publish-entity-title page-entity)
+               (publish-refs-from-blocks db blocks entity graph-uuid))
+        tags (page-tags entity)
+        raw-datoms (->>
+                    (mapcat (fn [eid]
+                              (map (fn [d] [(:e d) (:a d) (:v d) (:tx d) (:added d)])
+                                   (d/datoms db :eavt eid)))
+                            eids)
+                    (remove (fn [[_e a _v _tx _added]]
+                              (contains? #{:block/tx-id :logseq.property.user/email :logseq.property.embedding/hnsw-label-updated-at} a))))
+        datoms (if (common-entity-util/page? entity)
+                 raw-datoms
+                 (normalize-block-publish-datoms raw-datoms (set (map :db/id blocks)) (:db/id entity)))]
+    {:page (common-entity-util/entity->map entity)
+     :page-uuid (:block/uuid entity)
+     :page-title (publish-entity-title entity)
      :graph-uuid (some-> graph-uuid str)
      :block-count (count blocks)
      :schema-version (db-schema/schema-version->string db-schema/version)
