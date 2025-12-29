@@ -215,8 +215,70 @@ a:hover {
 .block-content {
   white-space: pre-wrap;
   display: flex;
-  gap: 10px;
+  gap: 4px;
   align-items: flex-start;
+}
+
+.positioned-properties {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+
+.positioned-properties.block-left, .positioned-properties.block-right {
+  display: flex;
+  align-items: center;
+  margin-top: 2px;
+}
+
+.positioned-properties.block-right {
+  margin-left: auto;
+}
+
+.positioned-properties.block-below {
+  margin: 6px 0 0 22px;
+  gap: 8px 12px;
+}
+
+.positioned-property {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.positioned-property .property-name {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.positioned-property .property-value {
+  color: var(--ink);
+}
+
+.property-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  line-height: 1;
+  font-size: 1rem;
+  color: currentColor;
+}
+
+.property-icon svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.property-value-with-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .block-text {
