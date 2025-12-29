@@ -232,7 +232,7 @@
     :on-boarding/tour-whiteboard-new "{1} Créer un nouveau tableau blanc"
     :on-boarding/tour-whiteboard-new-description "Il existe plusieurs façons de créer un nouveau tableau blanc. L'un d'eux est toujours ici dans le tableau de bord."
     :on-boarding/welcome-whiteboard-modal-description "Les tableaux blancs sont un excellent outil de remue-méninges et d'organisation. Vous pouvez maintenant placer n'importe laquelle de vos pensées de la base de connaissances ou de nouvelles à côté l'une de l'autre sur une toile spatiale pour vous connecter, vous associer et comprendre de nouvelles façons."
-    :on-boarding/welcome-whiteboard-modal-skip "Sauter"
+    :on-boarding/welcome-whiteboard-modal-skip "Passer"
     :on-boarding/welcome-whiteboard-modal-start "Démarrer le tableau blanc"
     :on-boarding/welcome-whiteboard-modal-title "Un nouveau cadre pour vos pensées."
     :settings-page/clear-cache-warning "Vider le cache supprimera les graphiques ouverts. Vous perdrez les modifications non enregistrées."
