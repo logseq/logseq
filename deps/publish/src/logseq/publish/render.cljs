@@ -80,6 +80,29 @@
           []
           nodes-list))
 
+(defn- theme-toggle-node
+  []
+  [:button.theme-toggle
+   {:type "button"
+    :role "switch"
+    :aria-checked "false"}
+   [:span.theme-toggle__icon.theme-toggle__icon--day {:aria-hidden "true"}]
+   [:span.theme-toggle__thumb {:aria-hidden "true"}]
+   [:span.theme-toggle__icon.theme-toggle__icon--night {:aria-hidden "true"}]])
+
+(defn- toolbar-node
+  [& nodes]
+  (into [:div.page-toolbar] nodes))
+
+(defn- theme-init-script
+  []
+  [:script
+   "(function(){try{var k='publish-theme';var t=localStorage.getItem(k);if(!t){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();"])
+
+(defn- publish-script
+  []
+  [:script {:type "module" :src "/static/publish.js"}])
+
 (defn property-type
   [prop-key property-type-by-ident]
   (or (get property-type-by-ident prop-key)
@@ -568,15 +591,14 @@
               [:meta {:charset "utf-8"}]
               [:meta {:name "viewport" :content "width=device-width,initial-scale=1"}]
               [:title page-title]
+              (theme-init-script)
               [:link {:rel "stylesheet" :href "/static/publish.css"}]]
              [:body
               [:main.wrap
-               [:div.page-toolbar
+               (toolbar-node
                 (when graph-uuid
                   [:a.toolbar-btn {:href (str "/graph/" graph-uuid)} "Home"])
-                [:a.toolbar-btn
-                 {:onclick "window.toggleTopBlocks(this)"}
-                 "Collapse all"]]
+                (theme-toggle-node))
 
                [:h1 page-title]
 
@@ -586,7 +608,7 @@
                (when blocks blocks)
                (when tagged-section tagged-section)
                (when linked-refs linked-refs)]
-              [:script {:type "module" :src "/static/publish.js"}]]]]
+              (publish-script)]]]
     (str "<!doctype html>" (render-hiccup doc))))
 
 (defn render-graph-html
@@ -611,9 +633,12 @@
               [:meta {:charset "utf-8"}]
               [:meta {:name "viewport" :content "width=device-width,initial-scale=1"}]
               [:title (str "Published pages - " graph-uuid)]
+              (theme-init-script)
               [:link {:rel "stylesheet" :href "/static/publish.css"}]]
              [:body
               [:main.wrap
+               (toolbar-node
+                (theme-toggle-node))
                [:h1 "Published pages"]
                (if (seq rows)
                  [:ul.page-list
@@ -625,7 +650,8 @@
                         [:a.short-link {:href (str "/s/" short-id)}
                          (str "/s/" short-id)])]
                      [:span.page-meta (or (format-timestamp updated-at) "—")]])]
-                 [:p "No pages have been published yet."])]]]]
+                 [:p "No pages have been published yet."])
+               (publish-script)]]]]
     (str "<!doctype html>" (render-hiccup doc))))
 
 (defn render-tag-html
@@ -637,9 +663,14 @@
               [:meta {:charset "utf-8"}]
               [:meta {:name "viewport" :content "width=device-width,initial-scale=1"}]
               [:title (str "Tag - " title)]
+              (theme-init-script)
               [:link {:rel "stylesheet" :href "/static/publish.css"}]]
              [:body
               [:main.wrap
+               (toolbar-node
+                (when graph-uuid
+                  [:a.toolbar-btn {:href (str "/graph/" graph-uuid)} "Home"])
+                (theme-toggle-node))
                [:h1 title]
                [:p.tag-sub (str "Tag: " tag-uuid)]
                [:p.graph-meta (str "Graph: " graph-uuid)]
@@ -647,7 +678,8 @@
                  [:ul.page-list
                   (for [item rows]
                     (render-tagged-item graph-uuid item))]
-                 [:p "No published nodes use this tag yet."])]]]]
+                 [:p "No published nodes use this tag yet."])
+               (publish-script)]]]]
     (str "<!doctype html>" (render-hiccup doc))))
 
 (defn render-tag-name-html
@@ -659,9 +691,12 @@
               [:meta {:charset "utf-8"}]
               [:meta {:name "viewport" :content "width=device-width,initial-scale=1"}]
               [:title (str "Tag - " title)]
+              (theme-init-script)
               [:link {:rel "stylesheet" :href "/static/publish.css"}]]
              [:body
               [:main.wrap
+               (toolbar-node
+                (theme-toggle-node))
                [:h1 title]
                [:p.tag-sub (str "Tag: " tag-name)]
                (if (seq rows)
@@ -682,7 +717,8 @@
                         [:a.short-link {:href (str "/s/" short-id)}
                          (str "/s/" short-id)])]
                      [:span.page-meta (or (format-timestamp (tag-item-val row :updated_at)) "—")]])]
-                 [:p "No published pages use this tag yet."])]]]]
+                 [:p "No published pages use this tag yet."])
+               (publish-script)]]]]
     (str "<!doctype html>" (render-hiccup doc))))
 
 (defn render-ref-html
@@ -694,9 +730,14 @@
               [:meta {:charset "utf-8"}]
               [:meta {:name "viewport" :content "width=device-width,initial-scale=1"}]
               [:title (str "Ref - " title)]
+              (theme-init-script)
               [:link {:rel "stylesheet" :href "/static/publish.css"}]]
              [:body
               [:main.wrap
+               (toolbar-node
+                (when graph-uuid
+                  [:a.toolbar-btn {:href (str "/graph/" graph-uuid)} "Home"])
+                (theme-toggle-node))
                [:h1 title]
                [:p.tag-sub (str "Reference: " ref-name)]
                (if (seq rows)
@@ -717,7 +758,8 @@
                         [:a.short-link {:href (str "/s/" short-id)}
                          (str "/s/" short-id)])]
                      [:span.page-meta (or (format-timestamp (tag-item-val row :updated_at)) "—")]])]
-                 [:p "No published pages reference this yet."])]]]]
+                 [:p "No published pages reference this yet."])
+               (publish-script)]]]]
     (str "<!doctype html>" (render-hiccup doc))))
 
 (defn render-not-published-html
@@ -728,14 +770,17 @@
               [:meta {:charset "utf-8"}]
               [:meta {:name "viewport" :content "width=device-width,initial-scale=1"}]
               [:title title]
+              (theme-init-script)
               [:link {:rel "stylesheet" :href "/static/publish.css"}]]
              [:body
               [:main.wrap
-               [:div.page-toolbar
+               (toolbar-node
                 (when graph-uuid
-                  [:a.toolbar-btn {:href (str "/graph/" graph-uuid)} "Home"])]
+                  [:a.toolbar-btn {:href (str "/graph/" graph-uuid)} "Home"])
+                (theme-toggle-node))
                [:h1 title]
-               [:p.tag-sub "This page hasn't been published yet."]]]]]
+               [:p.tag-sub "This page hasn't been published yet."]
+               (publish-script)]]]]
     (str "<!doctype html>" (render-hiccup doc))))
 
 (defn render-password-html
@@ -746,12 +791,14 @@
               [:meta {:charset "utf-8"}]
               [:meta {:name "viewport" :content "width=device-width,initial-scale=1"}]
               [:title title]
+              (theme-init-script)
               [:link {:rel "stylesheet" :href "/static/publish.css"}]]
              [:body
               [:main.wrap
-               [:div.page-toolbar
+               (toolbar-node
                 (when graph-uuid
-                  [:a.toolbar-btn {:href (str "/graph/" graph-uuid)} "Home"])]
+                  [:a.toolbar-btn {:href (str "/graph/" graph-uuid)} "Home"])
+                (theme-toggle-node))
                [:div.password-card
                 [:h1 title]
                 [:p.tag-sub "This page is password protected."]
@@ -766,7 +813,8 @@
                                          :type "password"
                                          :placeholder "Password"
                                          :required true}]
-                 [:button.toolbar-btn {:type "submit"} "Unlock"]]]]]]]
+                 [:button.toolbar-btn {:type "submit"} "Unlock"]]]
+               (publish-script)]]]]
     (str "<!doctype html>" (render-hiccup doc))))
 
 (defn render-404-html
@@ -777,11 +825,15 @@
               [:meta {:charset "utf-8"}]
               [:meta {:name "viewport" :content "width=device-width,initial-scale=1"}]
               [:title title]
+              (theme-init-script)
               [:link {:rel "stylesheet" :href "/static/publish.css"}]]
              [:body
               [:main.wrap
+               (toolbar-node
+                (theme-toggle-node))
                [:div.not-found
                 [:p.not-found-eyebrow "404"]
                 [:h1 title]
-                [:p.tag-sub "We couldn't find that page. It may have been removed or never published."]]]]]]
+                [:p.tag-sub "We couldn't find that page. It may have been removed or never published."]]
+               (publish-script)]]]]
     (str "<!doctype html>" (render-hiccup doc))))

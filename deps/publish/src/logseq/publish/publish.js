@@ -24,6 +24,7 @@ import { css } from "https://esm.sh/@codemirror/lang-css@6";
 import { clojure } from "https://esm.sh/@nextjournal/lang-clojure";
 
 const katex = katexPkg.default || katexPkg;
+const THEME_KEY = "publish-theme";
 
 document.addEventListener("click", (event) => {
   const btn = event.target.closest(".block-toggle");
@@ -32,6 +33,13 @@ document.addEventListener("click", (event) => {
   if (!li) return;
   const collapsed = li.classList.toggle("is-collapsed");
   btn.setAttribute("aria-expanded", String(!collapsed));
+});
+
+document.addEventListener("click", (event) => {
+  const toggle = event.target.closest(".theme-toggle");
+  if (!toggle) return;
+  event.preventDefault();
+  window.toggleTheme();
 });
 
 window.toggleTopBlocks = (btn) => {
@@ -50,7 +58,32 @@ window.toggleTopBlocks = (btn) => {
   }
 };
 
+const applyTheme = (theme) => {
+  document.documentElement.setAttribute("data-theme", theme);
+  document.querySelectorAll(".theme-toggle").forEach((toggle) => {
+    toggle.classList.toggle("is-dark", theme === "dark");
+    toggle.setAttribute("aria-checked", String(theme === "dark"));
+  });
+};
+
+const preferredTheme = () => {
+  const stored = window.localStorage.getItem(THEME_KEY);
+  if (stored) return stored;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+};
+
+window.toggleTheme = () => {
+  const current = document.documentElement.getAttribute("data-theme") || "light";
+  const next = current === "dark" ? "light" : "dark";
+  applyTheme(next);
+  window.localStorage.setItem(THEME_KEY, next);
+};
+
 const initPublish = () => {
+  applyTheme(preferredTheme());
+
   document.querySelectorAll(".math-block").forEach((el) => {
     const tex = el.textContent;
     try {
