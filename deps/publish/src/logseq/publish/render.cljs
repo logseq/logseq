@@ -80,6 +80,31 @@
           []
           nodes-list))
 
+(defn- normalize-nodes
+  [nodes]
+  (cond
+    (nil? nodes) []
+    (and (vector? nodes) (keyword? (first nodes))) [nodes]
+    :else nodes))
+
+(defn- icon-span
+  [icon]
+  (when (and (map? icon) (string? (:id icon)) (not (string/blank? (:id icon))))
+    [:span
+     (cond->
+      {:class "property-icon"
+       :data-icon-id (:id icon)
+       :data-icon-type (name (:type icon))}
+       (:color icon)
+       (assoc :style (str "color: " (:color icon) ";")))]))
+
+(defn- with-icon
+  [icon nodes]
+  (let [icon-node (icon-span icon)]
+    (if icon-node
+      (into [:span {:class "property-value-with-icon"} icon-node] nodes)
+      nodes)))
+
 (defn- theme-toggle-node
   []
   [:button.theme-toggle
@@ -102,6 +127,25 @@
 (defn- publish-script
   []
   [:script {:type "module" :src "/static/publish.js"}])
+
+(defn- icon-runtime-script
+  []
+  [:script
+   "(function(){if(window.React&&window.React.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED){return;}var s='http://www.w3.org/2000/svg';var k=function(n){return n.replace(/[A-Z]/g,function(m){return'-'+m.toLowerCase();});};var a=function(el,key,val){if(key==='className'){el.setAttribute('class',val);return;}if(key==='style'&&val&&typeof val==='object'){for(var sk in val){el.style[sk]=val[sk];}return;}if(key==='ref'||key==='key'||key==='children'){return;}if(val===true){el.setAttribute(key,'');return;}if(val===false||val==null){return;}var attr=key;if(key==='strokeWidth'){attr='stroke-width';}else if(key==='strokeLinecap'){attr='stroke-linecap';}else if(key==='strokeLinejoin'){attr='stroke-linejoin';}else if(key!=='viewBox'&&/[A-Z]/.test(key)){attr=k(key);}el.setAttribute(attr,val);};var c=function(el,child){if(child==null||child===false){return;}if(Array.isArray(child)){child.forEach(function(n){c(el,n);});return;}if(typeof child==='string'||typeof child==='number'){el.appendChild(document.createTextNode(child));return;}if(child.nodeType){el.appendChild(child);} };var e=function(type,props){var children=Array.prototype.slice.call(arguments,2);if(type===Symbol.for('react.fragment')){var frag=document.createDocumentFragment();children.forEach(function(n){c(frag,n);});return frag;}if(typeof type==='function'){return type(Object.assign({},props,{children:children}));}var isSvg=type==='svg'||(props&&props.xmlns===s);var el=isSvg?document.createElementNS(s,type):document.createElement(type);if(props){for(var p in props){a(el,p,props[p]);}}children.forEach(function(n){c(el,n);});return el;};window.React={createElement:e,forwardRef:function(fn){return fn;},Fragment:Symbol.for('react.fragment'),__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED:{ReactCurrentOwner:{current:null}}};window.PropTypes=new Proxy({}, {get:function(){return function(){return null;};}});})();"])
+
+(defn- head-node
+  [title]
+  [:head
+   [:meta {:charset "utf-8"}]
+   [:meta {:name "viewport" :content "width=device-width,initial-scale=1"}]
+   [:title title]
+   (theme-init-script)
+   (icon-runtime-script)
+   [:script {:defer true :src "/static/tabler.ext.js"}]
+   [:link {:rel "stylesheet"
+           :href "https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.0/dist/tabler-icons.min.css"}]
+   [:link {:rel "stylesheet" :href "/static/tabler-extension.css"}]
+   [:link {:rel "stylesheet" :href "/static/publish.css"}]])
 
 (defn property-type
   [prop-key property-type-by-ident]
@@ -157,7 +201,9 @@
           [(str value)])
 
         (and ref-type? (get entities value))
-        (entity->link-node (get entities value) ctx)
+        (let [entity (get entities value)]
+          (with-icon (:logseq.property/icon entity)
+            (entity->link-node entity ctx)))
 
         :else
         [(str value)])
@@ -216,7 +262,75 @@
        [:div.property
         [:dt.property-name (property-title k (:property-title-by-ident ctx))]
         [:dd.property-value
-         (into [:span] (property-value->nodes v k ctx entities))]])]))
+         (into [:span] (normalize-nodes (property-value->nodes v k ctx entities)))]])]))
+
+(defn- property-ui-position
+  [prop-key ctx]
+  (when-let [property (get (:property-entity-by-ident ctx) prop-key)]
+    (:logseq.property/ui-position property)))
+
+(defn- split-properties-by-position
+  [props ctx]
+  (reduce (fn [acc [k v]]
+            (let [position (property-ui-position k ctx)
+                  bucket (case position
+                           (:block-left :block-right :block-below) position
+                           :properties)]
+              (update acc bucket assoc k v)))
+          {:properties {}
+           :block-left {}
+           :block-right {}
+           :block-below {}}
+          props))
+
+(defn- sorted-properties
+  [props ctx]
+  (sort-by (fn [[prop-key _]]
+             (get-in ctx [:property-entity-by-ident prop-key :block/order]))
+           props))
+
+(defn- class-has?
+  [class-name target]
+  (some #{target} (string/split (or class-name "") #"\s+")))
+
+(defn- node-has-class?
+  [node target]
+  (when (and (vector? node) (keyword? (first node)))
+    (let [attrs (second node)]
+      (and (map? attrs) (class-has? (:class attrs) target)))))
+
+(defn- strip-positioned-value
+  [node]
+  (if (node-has-class? node "property-value-with-icon")
+    (let [[tag attrs & children] node
+          icon-children (filter #(node-has-class? % "property-icon") children)]
+      (if (seq icon-children)
+        (into [tag attrs] icon-children)
+        node))
+    node))
+
+(defn- positioned-value-nodes
+  [value prop-key ctx entities]
+  (->> (property-value->nodes value prop-key ctx entities)
+       normalize-nodes
+       (map strip-positioned-value)))
+
+(defn- render-positioned-properties
+  [props ctx entities position]
+  (when (seq props)
+    (case position
+      :block-below
+      [:div.positioned-properties.block-below
+       (for [[k v] (sorted-properties props ctx)]
+         [:div.positioned-property
+          [:span.property-name (property-title k (:property-title-by-ident ctx))]
+          [:span.property-value
+           (into [:span] (positioned-value-nodes v k ctx entities))]])]
+
+      [:div {:class (str "positioned-properties " (name position))}
+       (for [[k v] (sorted-properties props ctx)]
+         [:span.positioned-property
+          (into [:span] (positioned-value-nodes v k ctx entities))])])))
 
 (def ^:private youtube-regex #"^((?:https?:)?//)?((?:www|m).)?((?:youtube.com|youtu.be|y2u.be|youtube-nocookie.com))(/(?:[\w-]+\?v=|embed/|v/)?)([\w-]+)([\S^\?]+)?$")
 (def ^:private vimeo-regex #"^((?:https?:)?//)?((?:www).)?((?:player.vimeo.com|vimeo.com))(/(?:video/)?)([\w-]+)(\S+)?$")
@@ -580,16 +694,23 @@
               (let [child-id (:db/id block)
                     nested (render-block-tree children-by-parent child-id ctx)
                     has-children? (boolean nested)
-                    properties (render-properties (entity-properties block ctx (:entities ctx))
-                                                  ctx
-                                                  (:entities ctx))]
+                    raw-props (entity-properties block ctx (:entities ctx))
+                    {:keys [properties block-left block-right block-below]}
+                    (split-properties-by-position raw-props ctx)
+                    positioned-left (render-positioned-properties block-left ctx (:entities ctx) :block-left)
+                    positioned-right (render-positioned-properties block-right ctx (:entities ctx) :block-right)
+                    positioned-below (render-positioned-properties block-below ctx (:entities ctx) :block-below)
+                    properties (render-properties properties ctx (:entities ctx))]
                 [:li.block
                  [:div.block-content
+                  (when positioned-left positioned-left)
                   (block-display-node block ctx)
+                  (when positioned-right positioned-right)
                   (when has-children?
                     [:button.block-toggle
                      {:type "button" :aria-expanded "true"}
                      "▾"])]
+                 (when positioned-below positioned-below)
                  (when properties
                    [:div.block-properties properties])
                  (when nested
@@ -705,6 +826,12 @@
                                              acc))
                                          {}
                                          entities)
+        property-entity-by-ident (reduce (fn [acc [_e entity]]
+                                           (if-let [ident (:db/ident entity)]
+                                             (assoc acc ident entity)
+                                             acc))
+                                         {}
+                                         entities)
         children-by-parent (->> entities
                                 (reduce (fn [acc [e entity]]
                                           (if (and (= (:block/page entity) page-eid)
@@ -723,6 +850,7 @@
              :property-title-by-ident property-title-by-ident
              :property-type-by-ident property-type-by-ident
              :property-hidden-by-ident property-hidden-by-ident
+             :property-entity-by-ident property-entity-by-ident
              :entities entities}
         page-properties (render-properties (entity-properties page-entity ctx entities)
                                            ctx
@@ -746,12 +874,7 @@
                            (for [item tagged-nodes]
                              (render-tagged-item graph-uuid item))]])
         doc [:html
-             [:head
-              [:meta {:charset "utf-8"}]
-              [:meta {:name "viewport" :content "width=device-width,initial-scale=1"}]
-              [:title page-title]
-              (theme-init-script)
-              [:link {:rel "stylesheet" :href "/static/publish.css"}]]
+             (head-node page-title)
              [:body
               [:main.wrap
                (toolbar-node
@@ -788,12 +911,7 @@
                              (or (:updated-at row) 0)))
                   reverse)
         doc [:html
-             [:head
-              [:meta {:charset "utf-8"}]
-              [:meta {:name "viewport" :content "width=device-width,initial-scale=1"}]
-              [:title (str "Published pages - " graph-uuid)]
-              (theme-init-script)
-              [:link {:rel "stylesheet" :href "/static/publish.css"}]]
+             (head-node (str "Published pages - " graph-uuid))
              [:body
               [:main.wrap
                (toolbar-node
@@ -818,12 +936,7 @@
   (let [rows tag-items
         title (or tag-title tag-uuid)
         doc [:html
-             [:head
-              [:meta {:charset "utf-8"}]
-              [:meta {:name "viewport" :content "width=device-width,initial-scale=1"}]
-              [:title (str "Tag - " title)]
-              (theme-init-script)
-              [:link {:rel "stylesheet" :href "/static/publish.css"}]]
+             (head-node (str "Tag - " title))
              [:body
               [:main.wrap
                (toolbar-node
@@ -846,12 +959,7 @@
   (let [rows tag-items
         title (or tag-title tag-name)
         doc [:html
-             [:head
-              [:meta {:charset "utf-8"}]
-              [:meta {:name "viewport" :content "width=device-width,initial-scale=1"}]
-              [:title (str "Tag - " title)]
-              (theme-init-script)
-              [:link {:rel "stylesheet" :href "/static/publish.css"}]]
+             (head-node (str "Tag - " title))
              [:body
               [:main.wrap
                (toolbar-node
@@ -885,12 +993,7 @@
   (let [rows ref-items
         title (or ref-title ref-name)
         doc [:html
-             [:head
-              [:meta {:charset "utf-8"}]
-              [:meta {:name "viewport" :content "width=device-width,initial-scale=1"}]
-              [:title (str "Ref - " title)]
-              (theme-init-script)
-              [:link {:rel "stylesheet" :href "/static/publish.css"}]]
+             (head-node (str "Ref - " title))
              [:body
               [:main.wrap
                (toolbar-node
@@ -925,12 +1028,7 @@
   [graph-uuid]
   (let [title "Page not published"
         doc [:html
-             [:head
-              [:meta {:charset "utf-8"}]
-              [:meta {:name "viewport" :content "width=device-width,initial-scale=1"}]
-              [:title title]
-              (theme-init-script)
-              [:link {:rel "stylesheet" :href "/static/publish.css"}]]
+             (head-node title)
              [:body
               [:main.wrap
                (toolbar-node
@@ -946,12 +1044,7 @@
   [graph-uuid page-uuid wrong?]
   (let [title "Protected page"
         doc [:html
-             [:head
-              [:meta {:charset "utf-8"}]
-              [:meta {:name "viewport" :content "width=device-width,initial-scale=1"}]
-              [:title title]
-              (theme-init-script)
-              [:link {:rel "stylesheet" :href "/static/publish.css"}]]
+             (head-node title)
              [:body
               [:main.wrap
                (toolbar-node
@@ -980,12 +1073,7 @@
   []
   (let [title "Page not found"
         doc [:html
-             [:head
-              [:meta {:charset "utf-8"}]
-              [:meta {:name "viewport" :content "width=device-width,initial-scale=1"}]
-              [:title title]
-              (theme-init-script)
-              [:link {:rel "stylesheet" :href "/static/publish.css"}]]
+             (head-node title)
              [:body
               [:main.wrap
                (toolbar-node
