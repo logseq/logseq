@@ -1040,6 +1040,22 @@
          (str "Block: " source-block-uuid))]]
      [:span.tagged-meta (or (format-timestamp updated-at) "—")]]))
 
+(defn- author-usernames
+  [entities page-eid page-entity]
+  (let [author-ids (->> entities
+                        (keep (fn [[_e entity]]
+                                (when (= (:block/page entity) page-eid)
+                                  (publish-model/ref-eid (:logseq.property/created-by-ref entity)))))
+                        (concat [(publish-model/ref-eid (:logseq.property/created-by-ref page-entity))])
+                        (remove nil?)
+                        distinct)]
+    (->> author-ids
+         (map #(get entities %))
+         (keep publish-model/entity->title)
+         (remove string/blank?)
+         distinct
+         sort)))
+
 (defn render-page-html
   [transit page-uuid-str refs-data tagged-nodes]
   (let [payload (publish-common/read-transit-safe transit)
@@ -1062,6 +1078,7 @@
                          (when (= (:block/uuid entity) page-uuid)
                            e))
                        entities)
+        authors (author-usernames entities page-eid page-entity)
         uuid->title (reduce (fn [acc [_e entity]]
                               (if-let [uuid-value (:block/uuid entity)]
                                 (assoc acc (str uuid-value) (publish-model/entity->title entity))
@@ -1177,8 +1194,12 @@
                 (theme-toggle-node))
 
                (page-title-node page-title (:logseq.property/icon page-entity))
-               (let [updated-at (format-timestamp page-updated-at)]
-                 [:div.page-updated-at updated-at])
+               [:div.page-meta
+                (when true
+                  [:div.page-authors (str "By: " (string/join ", " authors))])
+
+                (let [updated-at (format-timestamp page-updated-at)]
+                  [:div.page-updated-at updated-at])]
 
                (when page-properties
                  [:section.page-properties
