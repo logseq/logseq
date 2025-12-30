@@ -389,6 +389,11 @@
                                            :hide? true
                                            :view-context :page
                                            :public? true}}
+     :logseq.property.publish/published-url {:title "Published URL"
+                                             :schema
+                                             {:type :url
+                                              :view-context :page
+                                              :public? true}}
      :logseq.property/exclude-from-graph-view {:title "Excluded from Graph view?"
                                                :schema
                                                {:type :checkbox
@@ -651,7 +656,8 @@
     "logseq.property.linked-references" "logseq.property.asset" "logseq.property.table" "logseq.property.node"
     "logseq.property.code" "logseq.property.repeat"
     "logseq.property.journal" "logseq.property.class" "logseq.property.view"
-    "logseq.property.user" "logseq.property.history" "logseq.property.embedding"})
+    "logseq.property.user" "logseq.property.history" "logseq.property.embedding"
+    "logseq.property.publish"})
 
 (defn logseq-property?
   "Determines if keyword is a logseq property"

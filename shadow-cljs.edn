@@ -1,6 +1,7 @@
 ;; shadow-cljs configuration
 {:deps true
  :nrepl {:port 8701}
+ :source-paths ["src/main" "src/electron" "src/resources"]
 
  ;; :ssl   {:password "logseq"}
 

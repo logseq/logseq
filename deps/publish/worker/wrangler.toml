@@ -1,0 +1,71 @@
+name = "logseq-publish"
+main = "dist/worker/main.js"
+compatibility_date = "2025-02-04"
+compatibility_flags = ["nodejs_compat"]
+
+# Workers Logs
+# Docs: https://developers.cloudflare.com/workers/observability/logs/workers-logs/
+# Configuration: https://developers.cloudflare.com/workers/observability/logs/workers-logs/#enable-workers-logs
+[observability]
+enabled = true
+
+[[durable_objects.bindings]]
+name = "PUBLISH_META_DO"
+class_name = "PublishMetaDO"
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["PublishMetaDO"]
+
+[[r2_buckets]]
+binding = "PUBLISH_R2"
+bucket_name = "logseq-publish-dev"
+
+[vars]
+COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
+COGNITO_ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
+COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"
+
+[env.staging]
+name = "logseq-publish-staging"
+
+[env.staging.vars]
+COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
+COGNITO_ISSUER   = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
+COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"
+
+[[env.staging.durable_objects.bindings]]
+name = "PUBLISH_META_DO"
+class_name = "PublishMetaDO"
+
+[[env.staging.migrations]]
+tag = "v2"
+new_sqlite_classes = ["PublishMetaDO"]
+
+[[env.staging.r2_buckets]]
+binding = "PUBLISH_R2"
+bucket_name = "logseq-publish-dev"
+
+[env.prod]
+name = "logseq-publish-prod"
+
+[env.prod.vars]
+COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
+COGNITO_ISSUER   = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
+COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"
+
+[[env.prod.durable_objects.bindings]]
+name = "PUBLISH_META_DO"
+class_name = "PublishMetaDO"
+
+[[env.prod.migrations]]
+tag = "v2"
+new_sqlite_classes = ["PublishMetaDO"]
+
+[[env.prod.r2_buckets]]
+binding = "PUBLISH_R2"
+bucket_name = "logseq-publish-prod"
+
+[[env.prod.routes]]
+pattern = "logseq.io"
+custom_domain = true

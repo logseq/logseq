@@ -67,6 +67,10 @@ packages/ui/.storybook/cljs
 deps/shui/.lsp
 deps/shui/.lsp-cache
 deps/shui/.clj-kondo
+deps/publish/worker/.wrangler
+deps/publish/worker/dist
+deps/publish/worker/.env*
+
 tx-log*
 clj-e2e/.wally
 clj-e2e/resources
