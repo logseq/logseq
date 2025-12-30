@@ -1,5 +1,6 @@
 (ns logseq.publish.routes
-  (:require [clojure.string :as string]
+  (:require [cljs-bean.core :as bean]
+            [clojure.string :as string]
             [logseq.publish.assets :as publish-assets]
             [logseq.publish.common :as publish-common]
             [logseq.publish.index :as publish-index]
@@ -68,6 +69,8 @@
                                                (get payload "page-title")
                                                (when page-eid
                                                  (publish-model/entity->title (get payload-entities page-eid))))
+                                blocks (or (:blocks payload)
+                                           (get payload "blocks"))
                                 page-password-hash (or (:page-password-hash payload)
                                                        (get payload "page-password-hash"))
                                 refs (when (and page-eid page-title)
@@ -98,28 +101,34 @@
                                          short-id (publish-common/short-id-for-page graph-uuid page_uuid)
                                          owner-sub (:owner_sub meta)
                                          owner-username (:owner_username meta)
+                                         updated-at (.now js/Date)
                                          _ (when-not (and owner-sub owner-username)
                                              (throw (ex-info "owner sub or username is missing"
                                                              {:owner-sub owner-sub
                                                               :owner-username owner-username})))
-                                         payload (clj->js {:page_uuid page_uuid
-                                                           :page_title page-title
-                                                           :page_tags (when page-tags
-                                                                        (js/JSON.stringify (clj->js page-tags)))
-                                                           :password_hash page-password-hash
-                                                           :graph graph-uuid
-                                                           :schema_version schema_version
-                                                           :block_count block_count
-                                                           :content_hash content_hash
-                                                           :content_length content_length
-                                                           :r2_key r2-key
-                                                           :owner_sub owner-sub
-                                                           :owner_username owner-username
-                                                           :created_at created_at
-                                                           :updated_at (.now js/Date)
-                                                           :short_id short-id
-                                                           :refs refs
-                                                           :tagged_nodes tagged-nodes})
+                                         payload (bean/->js
+                                                  {:page_uuid page_uuid
+                                                   :page_title page-title
+                                                   :page_tags (when page-tags
+                                                                (js/JSON.stringify (clj->js page-tags)))
+                                                   :password_hash page-password-hash
+                                                   :graph graph-uuid
+                                                   :schema_version schema_version
+                                                   :block_count block_count
+                                                   :content_hash content_hash
+                                                   :content_length content_length
+                                                   :r2_key r2-key
+                                                   :owner_sub owner-sub
+                                                   :owner_username owner-username
+                                                   :created_at created_at
+                                                   :updated_at updated-at
+                                                   :short_id short-id
+                                                   :refs refs
+                                                   :tagged_nodes tagged-nodes
+                                                   :blocks (when (seq blocks)
+                                                             (map (fn [block]
+                                                                    (assoc block :updated_at updated-at))
+                                                                  blocks))})
                                          meta-resp (.fetch do-stub "https://publish/pages"
                                                            #js {:method "POST"
                                                                 :headers #js {"content-type" "application/json"}
@@ -300,6 +309,25 @@
                                 (publish-common/cors-headers))})
                 (js-await [meta (.json meta-resp)]
                           (publish-common/json-response (js->clj meta :keywordize-keys true) 200))))))
+
+(defn handle-graph-search [request env]
+  (let [url (js/URL. (.-url request))
+        parts (string/split (.-pathname url) #"/")
+        graph-uuid (nth parts 2 nil)
+        query (.get (.-searchParams url) "q")]
+    (if (or (string/blank? graph-uuid) (string/blank? query))
+      (publish-common/bad-request "missing graph uuid or query")
+      (js-await [^js do-ns (aget env "PUBLISH_META_DO")
+                 do-id (.idFromName do-ns "index")
+                 do-stub (.get do-ns do-id)
+                 resp (.fetch do-stub
+                              (str "https://publish/search/" graph-uuid
+                                   "?q=" (js/encodeURIComponent query))
+                              #js {:method "GET"})]
+                (if-not (.-ok resp)
+                  (publish-common/not-found)
+                  (js-await [data (.json resp)]
+                            (publish-common/json-response (js->clj data :keywordize-keys true) 200)))))))
 
 (defn handle-graph-html [graph-uuid env]
   (if-not graph-uuid
@@ -580,6 +608,9 @@
 
       (and (= path "/pages") (= method "GET"))
       (handle-list-pages env)
+
+      (and (string/starts-with? path "/search/") (= method "GET"))
+      (handle-graph-search request env)
 
       (and (string/starts-with? path "/graph/") (= method "GET"))
       (let [parts (string/split path #"/")
