@@ -8,10 +8,10 @@ on:
       - release/*
 
 env:
-  NODE_VERSION: "22"
+  NODE_VERSION: "22.20.0"
   JAVA_VERSION: "21"
   CLOJURE_VERSION: "1.11.1.1413"
-  ANDROID_BUILD_TOOLS: "34.0.0"
+  ANDROID_BUILD_TOOLS: "35.0.0"
   ANDROID_PLATFORM_VERSION: "android-35"
 
 jobs:
@@ -31,10 +31,10 @@ jobs:
       - name: Enable Corepack and Yarn
         run: |
           corepack enable
-          corepack prepare yarn@1.22.22 --activate
+          corepack prepare yarn@4.5.1 --activate
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: yarn install --immutable
 
       - name: Set up Java
         uses: actions/setup-java@v4
