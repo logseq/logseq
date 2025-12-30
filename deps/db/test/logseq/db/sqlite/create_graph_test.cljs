@@ -155,8 +155,10 @@
 (deftest build-db-initial-data-test
   (testing "idempotent initial-data"
     (letfn [(remove-ignored-attrs&entities [init-data]
-              (let [[before after] (split-with #(not= :logseq.kv/graph-created-at (:db/ident %)) init-data)
-                    init-data* (concat before (rest after))]
+              (let [ignored-idents #{:logseq.kv/graph-created-at :logseq.kv/graph-uuid}
+                    init-data* (remove (fn [ent]
+                                         (contains? ignored-idents (:db/ident ent)))
+                                       init-data)]
                 (map (fn [ent] (dissoc ent
                                        :block/created-at :block/updated-at
                                        :file/last-modified-at :file/created-at
