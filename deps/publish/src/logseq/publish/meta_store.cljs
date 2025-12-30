@@ -1,6 +1,5 @@
 (ns logseq.publish.meta-store
-  (:require [cljs-bean.core :as bean]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [logseq.publish.common :as publish-common])
   (:require-macros [logseq.publish.async :refer [js-await]]))
 
@@ -274,22 +273,38 @@
           (= (nth parts 1 nil) "tag")
           (let [tag-name (when-let [raw (nth parts 2 nil)]
                            (js/decodeURIComponent raw))
-                rows (publish-common/get-sql-rows
-                      (publish-common/sql-exec sql
-                                               (str "SELECT page_tags.graph_uuid, page_tags.source_page_uuid, page_tags.source_page_title, "
-                                                    "pages.short_id, "
-                                                    "MAX(page_tags.updated_at) AS updated_at "
-                                                    "FROM page_tags "
-                                                    "LEFT JOIN pages "
-                                                    "ON pages.graph_uuid = page_tags.graph_uuid "
-                                                    "AND pages.page_uuid = page_tags.source_page_uuid "
-                                                    "WHERE page_tags.tag_title = ? "
-                                                    "GROUP BY page_tags.graph_uuid, page_tags.source_page_uuid, page_tags.source_page_title, pages.short_id "
-                                                    "ORDER BY updated_at DESC;")
-                                               tag-name))]
+                tagged-rows (publish-common/get-sql-rows
+                             (publish-common/sql-exec sql
+                                                      (str "SELECT page_tags.graph_uuid, page_tags.tag_page_uuid, page_tags.tag_title, "
+                                                           "page_tags.source_page_uuid, page_tags.source_page_title, page_tags.source_block_uuid, "
+                                                           "page_tags.source_block_content, page_tags.source_block_format, page_tags.updated_at, "
+                                                           "pages.short_id "
+                                                           "FROM page_tags "
+                                                           "LEFT JOIN pages "
+                                                           "ON pages.graph_uuid = page_tags.graph_uuid "
+                                                           "AND pages.page_uuid = page_tags.source_page_uuid "
+                                                           "WHERE page_tags.tag_title = ? "
+                                                           "ORDER BY page_tags.updated_at DESC;")
+                                                      tag-name))
+                page-rows (publish-common/get-sql-rows
+                           (publish-common/sql-exec sql
+                                                    (str "SELECT page_tags.graph_uuid, page_tags.source_page_uuid, page_tags.source_page_title, "
+                                                         "pages.short_id, "
+                                                         "MAX(page_tags.updated_at) AS updated_at "
+                                                         "FROM page_tags "
+                                                         "LEFT JOIN pages "
+                                                         "ON pages.graph_uuid = page_tags.graph_uuid "
+                                                         "AND pages.page_uuid = page_tags.source_page_uuid "
+                                                         "WHERE page_tags.tag_title = ? "
+                                                         "GROUP BY page_tags.graph_uuid, page_tags.source_page_uuid, page_tags.source_page_title, pages.short_id "
+                                                         "ORDER BY updated_at DESC;")
+                                                    tag-name))]
             (publish-common/json-response {:pages (map (fn [row]
                                                          (js->clj row :keywordize-keys false))
-                                                       rows)}))
+                                                       page-rows)
+                                           :tagged_nodes (map (fn [row]
+                                                                (js->clj row :keywordize-keys false))
+                                                              tagged-rows)}))
 
           (= (nth parts 1 nil) "ref")
           (let [ref-name (when-let [raw (nth parts 2 nil)]
