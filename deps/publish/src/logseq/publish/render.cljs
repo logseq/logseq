@@ -10,7 +10,7 @@
             [logseq.publish.model :as publish-model]))
 
 ;; Timestamp in milliseconds used for cache busting static assets.
-(defonce version 1767097626211)
+(defonce version 1767097749942)
 
 (def ref-regex
   (js/RegExp. "\\[\\[([0-9a-fA-F-]{36})\\]\\]|\\(\\(([0-9a-fA-F-]{36})\\)\\)" "g"))
@@ -1382,8 +1382,8 @@
                 "Publish your Logseq notes to the web. Each note links through "
                 [:code "#tag"]
                 " or "
-                [:code "[[page]] reference"]
-                ", connect your dots with others."]]
+                [:code "[[page]] references"]
+                ", connecting your dots with others."]]
               [:script
                "(function(){\n"
                "  const svg = document.getElementById('publish-home-bg');\n"
