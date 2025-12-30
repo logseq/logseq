@@ -1057,6 +1057,7 @@
                               entity))
                           entities)
         page-title (publish-model/entity->title page-entity)
+        page-updated-at (:block/updated-at page-entity)
         page-eid (some (fn [[e entity]]
                          (when (= (:block/uuid entity) page-uuid)
                            e))
@@ -1176,9 +1177,12 @@
                 (theme-toggle-node))
 
                (page-title-node page-title (:logseq.property/icon page-entity))
+               (let [updated-at (format-timestamp page-updated-at)]
+                 [:div.page-updated-at updated-at])
 
                (when page-properties
-                 [:section.page-properties page-properties])
+                 [:section.page-properties
+                  page-properties])
 
                (when blocks blocks)
                (when tagged-section tagged-section)
