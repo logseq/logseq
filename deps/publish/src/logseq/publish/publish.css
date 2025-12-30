@@ -81,7 +81,8 @@ body {
 
 h1 {
   font-size: clamp(30px, 3.4vw, 44px);
-  margin: 16px 0 28px;
+  margin-top: 1.5em;
+  margin-bottom: 0.25em;
   font-weight: 600;
   letter-spacing: 0.01em;
 }
@@ -642,10 +643,21 @@ a:hover {
 
 .page-updated-at {
   color: var(--muted);
-  font-size: 12px;
   white-space: nowrap;
-  margin-bottom: 1rem;
   margin-left: 2px;
+}
+
+.page-authors {
+  color: var(--muted);
+  white-space: nowrap;
+  margin-left: 2px;
+}
+
+.page-meta {
+  display: flex;
+  margin-bottom: 2rem;
+  gap: 8px;
+  font-size: 13px;
 }
 
 @media (max-width: 720px) {
@@ -682,6 +694,7 @@ a:hover {
   }
 
   .page-updated-at,
+  .page-authors,
   .tagged-meta {
     white-space: normal;
   }
