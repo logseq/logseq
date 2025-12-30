@@ -6,7 +6,8 @@
 
   datascript/datascript                 {:git/url "https://github.com/logseq/datascript" ;; fork
                                          :sha     "ff5a7d5326e2546f40146e4a489343f557519bc3"}
-  datascript-transit/datascript-transit {:mvn/version "0.3.0"}
+  datascript-transit/datascript-transit {:mvn/version "0.3.0"
+                                         :exclusions [datascript/datascript]}
   funcool/promesa                       {:mvn/version "11.0.678"}
   thheller/shadow-cljs                  {:mvn/version "3.3.4"}
   logseq/common                         {:local/root "../common"}
