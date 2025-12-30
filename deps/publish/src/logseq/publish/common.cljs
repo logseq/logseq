@@ -49,6 +49,9 @@
 (defn unauthorized []
   (json-response {:error "unauthorized"} 401))
 
+(defn forbidden []
+  (json-response {:error "forbidden"} 403))
+
 (defn bad-request [message]
   (json-response {:error message} 400))
 

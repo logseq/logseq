@@ -43,110 +43,117 @@
                             {:allowed? (= hashed stored-hash) :provided? true})
                   {:allowed? false :provided? false})))))
 
+(defn- auth-claims
+  [request env]
+  (js-await [auth-header (.get (.-headers request) "authorization")
+             token (when (and auth-header (string/starts-with? auth-header "Bearer "))
+                     (subs auth-header 7))
+             claims (cond
+                      (nil? token) nil
+                      :else (publish-common/verify-jwt token env))]
+            {:claims claims}))
+
 (defn handle-post-pages [request env]
   (js-await [auth-header (.get (.-headers request) "authorization")
              token (when (and auth-header (string/starts-with? auth-header "Bearer "))
                      (subs auth-header 7))
-             dev-skip? (= "true" (aget env "DEV_SKIP_AUTH"))
              claims (cond
-                      dev-skip? #js {:sub "dev"}
                       (nil? token) nil
                       :else (publish-common/verify-jwt token env))]
-            (let [claims (if dev-skip? #js {:sub "dev"} claims)]
-              (if (and (not dev-skip?) (nil? claims))
-                (publish-common/unauthorized)
-                (js-await [body (.arrayBuffer request)]
-                          (let [{:keys [content_hash content_length graph page_uuid schema_version block_count created_at] :as meta}
-                                (or (publish-common/parse-meta-header request)
-                                    (publish-common/meta-from-body body))
-                                payload (publish-common/read-transit-safe (.decode publish-common/text-decoder body))
-                                payload-entities (publish-model/datoms->entities (:datoms payload))
-                                page-eid (some (fn [[e entity]]
-                                                 (when (= (:block/uuid entity) (uuid page_uuid))
-                                                   e))
-                                               payload-entities)
-                                page-title (or (:page-title payload)
-                                               (get payload "page-title")
-                                               (when page-eid
-                                                 (publish-model/entity->title (get payload-entities page-eid))))
-                                blocks (or (:blocks payload)
-                                           (get payload "blocks"))
-                                page-password-hash (or (:page-password-hash payload)
-                                                       (get payload "page-password-hash"))
-                                refs (when (and page-eid page-title)
-                                       (publish-index/page-refs-from-payload payload page-eid page_uuid page-title graph))
-                                tagged-nodes (when (and page-eid page-title)
-                                               (publish-index/page-tagged-nodes-from-payload payload page-eid page_uuid page-title graph))]
-                            (cond
-                              (not (publish-common/valid-meta? meta))
-                              (publish-common/bad-request "missing publish metadata")
+            (if (nil? claims)
+              (publish-common/unauthorized)
+              (js-await [body (.arrayBuffer request)]
+                        (let [{:keys [content_hash content_length graph page_uuid schema_version block_count created_at] :as meta}
+                              (or (publish-common/parse-meta-header request)
+                                  (publish-common/meta-from-body body))
+                              payload (publish-common/read-transit-safe (.decode publish-common/text-decoder body))
+                              payload-entities (publish-model/datoms->entities (:datoms payload))
+                              page-eid (some (fn [[e entity]]
+                                               (when (= (:block/uuid entity) (uuid page_uuid))
+                                                 e))
+                                             payload-entities)
+                              page-title (or (:page-title payload)
+                                             (get payload "page-title")
+                                             (when page-eid
+                                               (publish-model/entity->title (get payload-entities page-eid))))
+                              blocks (or (:blocks payload)
+                                         (get payload "blocks"))
+                              page-password-hash (or (:page-password-hash payload)
+                                                     (get payload "page-password-hash"))
+                              refs (when (and page-eid page-title)
+                                     (publish-index/page-refs-from-payload payload page-eid page_uuid page-title graph))
+                              tagged-nodes (when (and page-eid page-title)
+                                             (publish-index/page-tagged-nodes-from-payload payload page-eid page_uuid page-title graph))]
+                          (cond
+                            (not (publish-common/valid-meta? meta))
+                            (publish-common/bad-request "missing publish metadata")
 
-                              :else
-                              (js-await [graph-uuid graph
-                                         r2-key (str "publish/" graph-uuid "/"
-                                                     content_hash ".transit")
-                                         r2 (aget env "PUBLISH_R2")
-                                         existing (.head r2 r2-key)
-                                         _ (when-not existing
-                                             (.put r2 r2-key body
-                                                   #js {:httpMetadata #js {:contentType "application/transit+json"}}))
-                                         ^js do-ns (aget env "PUBLISH_META_DO")
-                                         do-id (.idFromName do-ns
-                                                            (str graph-uuid
-                                                                 ":"
-                                                                 page_uuid))
-                                         do-stub (.get do-ns do-id)
-                                         page-tags (or (:page-tags payload)
-                                                       (get payload "page-tags"))
-                                         short-id (publish-common/short-id-for-page graph-uuid page_uuid)
-                                         owner-sub (:owner_sub meta)
-                                         owner-username (:owner_username meta)
-                                         updated-at (.now js/Date)
-                                         _ (when-not (and owner-sub owner-username)
-                                             (throw (ex-info "owner sub or username is missing"
-                                                             {:owner-sub owner-sub
-                                                              :owner-username owner-username})))
-                                         payload (bean/->js
-                                                  {:page_uuid page_uuid
-                                                   :page_title page-title
-                                                   :page_tags (when page-tags
-                                                                (js/JSON.stringify (clj->js page-tags)))
-                                                   :password_hash page-password-hash
-                                                   :graph graph-uuid
-                                                   :schema_version schema_version
-                                                   :block_count block_count
-                                                   :content_hash content_hash
-                                                   :content_length content_length
-                                                   :r2_key r2-key
-                                                   :owner_sub owner-sub
-                                                   :owner_username owner-username
-                                                   :created_at created_at
-                                                   :updated_at updated-at
-                                                   :short_id short-id
-                                                   :refs refs
-                                                   :tagged_nodes tagged-nodes
-                                                   :blocks (when (seq blocks)
-                                                             (map (fn [block]
-                                                                    (assoc block :updated_at updated-at))
-                                                                  blocks))})
-                                         meta-resp (.fetch do-stub "https://publish/pages"
-                                                           #js {:method "POST"
-                                                                :headers #js {"content-type" "application/json"}
-                                                                :body (js/JSON.stringify payload)})]
-                                        (if-not (.-ok meta-resp)
-                                          (publish-common/json-response {:error "metadata store failed"} 500)
-                                          (js-await [index-id (.idFromName do-ns "index")
-                                                     index-stub (.get do-ns index-id)
-                                                     _ (.fetch index-stub "https://publish/pages"
-                                                               #js {:method "POST"
-                                                                    :headers #js {"content-type" "application/json"}
-                                                                    :body (js/JSON.stringify payload)})]
-                                                    (publish-common/json-response {:page_uuid page_uuid
-                                                                                   :graph_uuid graph-uuid
-                                                                                   :r2_key r2-key
-                                                                                   :short_id short-id
-                                                                                   :short_url (str "/p/" short-id)
-                                                                                   :updated_at (.now js/Date)})))))))))))
+                            :else
+                            (js-await [graph-uuid graph
+                                       r2-key (str "publish/" graph-uuid "/"
+                                                   content_hash ".transit")
+                                       r2 (aget env "PUBLISH_R2")
+                                       existing (.head r2 r2-key)
+                                       _ (when-not existing
+                                           (.put r2 r2-key body
+                                                 #js {:httpMetadata #js {:contentType "application/transit+json"}}))
+                                       ^js do-ns (aget env "PUBLISH_META_DO")
+                                       do-id (.idFromName do-ns
+                                                          (str graph-uuid
+                                                               ":"
+                                                               page_uuid))
+                                       do-stub (.get do-ns do-id)
+                                       page-tags (or (:page-tags payload)
+                                                     (get payload "page-tags"))
+                                       short-id (publish-common/short-id-for-page graph-uuid page_uuid)
+                                       owner-sub (:owner_sub meta)
+                                       owner-username (:owner_username meta)
+                                       updated-at (.now js/Date)
+                                       _ (when-not (and owner-sub owner-username)
+                                           (throw (ex-info "owner sub or username is missing"
+                                                           {:owner-sub owner-sub
+                                                            :owner-username owner-username})))
+                                       payload (bean/->js
+                                                {:page_uuid page_uuid
+                                                 :page_title page-title
+                                                 :page_tags (when page-tags
+                                                              (js/JSON.stringify (clj->js page-tags)))
+                                                 :password_hash page-password-hash
+                                                 :graph graph-uuid
+                                                 :schema_version schema_version
+                                                 :block_count block_count
+                                                 :content_hash content_hash
+                                                 :content_length content_length
+                                                 :r2_key r2-key
+                                                 :owner_sub owner-sub
+                                                 :owner_username owner-username
+                                                 :created_at created_at
+                                                 :updated_at updated-at
+                                                 :short_id short-id
+                                                 :refs refs
+                                                 :tagged_nodes tagged-nodes
+                                                 :blocks (when (seq blocks)
+                                                           (map (fn [block]
+                                                                  (assoc block :updated_at updated-at))
+                                                                blocks))})
+                                       meta-resp (.fetch do-stub "https://publish/pages"
+                                                         #js {:method "POST"
+                                                              :headers #js {"content-type" "application/json"}
+                                                              :body (js/JSON.stringify payload)})]
+                                      (if-not (.-ok meta-resp)
+                                        (publish-common/json-response {:error "metadata store failed"} 500)
+                                        (js-await [index-id (.idFromName do-ns "index")
+                                                   index-stub (.get do-ns index-id)
+                                                   _ (.fetch index-stub "https://publish/pages"
+                                                             #js {:method "POST"
+                                                                  :headers #js {"content-type" "application/json"}
+                                                                  :body (js/JSON.stringify payload)})]
+                                                  (publish-common/json-response {:page_uuid page_uuid
+                                                                                 :graph_uuid graph-uuid
+                                                                                 :r2_key r2-key
+                                                                                 :short_id short-id
+                                                                                 :short_url (str "/p/" short-id)
+                                                                                 :updated_at (.now js/Date)}))))))))))
 
 (defn handle-tag-page-html [graph-uuid tag-uuid env]
   (if (or (nil? graph-uuid) (nil? tag-uuid))
@@ -436,18 +443,31 @@
         page-uuid (nth parts 3 nil)]
     (if (or (nil? graph-uuid) (nil? page-uuid))
       (publish-common/bad-request "missing graph uuid or page uuid")
-      (js-await [^js do-ns (aget env "PUBLISH_META_DO")
-                 page-id (.idFromName do-ns (str graph-uuid ":" page-uuid))
-                 page-stub (.get do-ns page-id)
-                 index-id (.idFromName do-ns "index")
-                 index-stub (.get do-ns index-id)
-                 page-resp (.fetch page-stub (str "https://publish/pages/" graph-uuid "/" page-uuid)
-                                   #js {:method "DELETE"})
-                 index-resp (.fetch index-stub (str "https://publish/pages/" graph-uuid "/" page-uuid)
-                                    #js {:method "DELETE"})]
-                (if (or (not (.-ok page-resp)) (not (.-ok index-resp)))
-                  (publish-common/not-found)
-                  (publish-common/json-response {:ok true} 200))))))
+      (js-await [{:keys [claims]} (auth-claims request env)]
+                (if (nil? claims)
+                  (publish-common/unauthorized)
+                  (js-await [^js do-ns (aget env "PUBLISH_META_DO")
+                             page-id (.idFromName do-ns (str graph-uuid ":" page-uuid))
+                             page-stub (.get do-ns page-id)
+                             index-id (.idFromName do-ns "index")
+                             index-stub (.get do-ns index-id)
+                             meta-resp (.fetch index-stub (str "https://publish/pages/" graph-uuid "/" page-uuid)
+                                               #js {:method "GET"})]
+                            (if-not (.-ok meta-resp)
+                              (publish-common/not-found)
+                              (js-await [meta (.json meta-resp)
+                                         owner-sub (aget meta "owner_sub")
+                                         subject (aget claims "sub")]
+                                        (if (and (or (string/blank? owner-sub)
+                                                     (not= owner-sub subject)))
+                                          (publish-common/forbidden)
+                                          (js-await [page-resp (.fetch page-stub (str "https://publish/pages/" graph-uuid "/" page-uuid)
+                                                                       #js {:method "DELETE"})
+                                                     index-resp (.fetch index-stub (str "https://publish/pages/" graph-uuid "/" page-uuid)
+                                                                        #js {:method "DELETE"})]
+                                                    (if (or (not (.-ok page-resp)) (not (.-ok index-resp)))
+                                                      (publish-common/not-found)
+                                                      (publish-common/json-response {:ok true} 200))))))))))))
 
 (defn handle-delete-graph [request env]
   (let [url (js/URL. (.-url request))
@@ -455,28 +475,39 @@
         graph-uuid (nth parts 2 nil)]
     (if-not graph-uuid
       (publish-common/bad-request "missing graph uuid")
-      (js-await [^js do-ns (aget env "PUBLISH_META_DO")
-                 index-id (.idFromName do-ns "index")
-                 index-stub (.get do-ns index-id)
-                 list-resp (.fetch index-stub (str "https://publish/pages/" graph-uuid)
-                                   #js {:method "GET"})]
-                (if-not (.-ok list-resp)
-                  (publish-common/not-found)
-                  (js-await [data (.json list-resp)
-                             pages (or (aget data "pages") #js [])
-                             _ (js/Promise.all
-                                (map (fn [page]
-                                       (let [page-uuid (aget page "page_uuid")
-                                             page-id (.idFromName do-ns (str graph-uuid ":" page-uuid))
-                                             page-stub (.get do-ns page-id)]
-                                         (.fetch page-stub (str "https://publish/pages/" graph-uuid "/" page-uuid)
-                                                 #js {:method "DELETE"})))
-                                     pages))
-                             del-resp (.fetch index-stub (str "https://publish/pages/" graph-uuid)
-                                              #js {:method "DELETE"})]
-                            (if-not (.-ok del-resp)
+      (js-await [{:keys [claims]} (auth-claims request env)]
+                (if (nil? claims)
+                  (publish-common/unauthorized)
+                  (js-await [^js do-ns (aget env "PUBLISH_META_DO")
+                             index-id (.idFromName do-ns "index")
+                             index-stub (.get do-ns index-id)
+                             list-resp (.fetch index-stub (str "https://publish/pages/" graph-uuid)
+                                               #js {:method "GET"})]
+                            (if-not (.-ok list-resp)
                               (publish-common/not-found)
-                              (publish-common/json-response {:ok true} 200))))))))
+                              (js-await [data (.json list-resp)
+                                         pages (or (aget data "pages") #js [])
+                                         subject (aget claims "sub")
+                                         owner-mismatch? (some (fn [page]
+                                                                 (let [owner-sub (aget page "owner_sub")]
+                                                                   (or (string/blank? owner-sub)
+                                                                       (not= owner-sub subject))))
+                                                               (array-seq pages))]
+                                        (if owner-mismatch?
+                                          (publish-common/forbidden)
+                                          (js-await [_ (js/Promise.all
+                                                        (map (fn [page]
+                                                               (let [page-uuid (aget page "page_uuid")
+                                                                     page-id (.idFromName do-ns (str graph-uuid ":" page-uuid))
+                                                                     page-stub (.get do-ns page-id)]
+                                                                 (.fetch page-stub (str "https://publish/pages/" graph-uuid "/" page-uuid)
+                                                                         #js {:method "DELETE"})))
+                                                             pages))
+                                                     del-resp (.fetch index-stub (str "https://publish/pages/" graph-uuid)
+                                                                      #js {:method "DELETE"})]
+                                                    (if-not (.-ok del-resp)
+                                                      (publish-common/not-found)
+                                                      (publish-common/json-response {:ok true} 200))))))))))))
 
 (defn handle-page-html [request env]
   (let [url (js/URL. (.-url request))
