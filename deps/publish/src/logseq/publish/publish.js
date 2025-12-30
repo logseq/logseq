@@ -413,6 +413,7 @@ const initSearch = () => {
     const graphUuid = container.dataset.graphUuid;
     const input = container.querySelector(".publish-search-input");
     const toggleBtn = container.querySelector(".publish-search-toggle");
+    const toggleIcon = container.querySelector(".publish-search-toggle .ti");
     const resultsEl = container.querySelector(".publish-search-results");
     if (!input || !resultsEl || !toggleBtn) return;
 
@@ -560,6 +561,10 @@ const initSearch = () => {
     const setExpanded = (expanded) => {
       container.classList.toggle("is-expanded", expanded);
       toggleBtn.setAttribute("aria-expanded", String(expanded));
+      if (toggleIcon) {
+        toggleIcon.classList.toggle("ti-search", !expanded);
+        toggleIcon.classList.toggle("ti-x", expanded);
+      }
       if (expanded) {
         input.focus();
       } else {

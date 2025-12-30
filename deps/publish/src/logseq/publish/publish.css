@@ -175,6 +175,7 @@ a:hover {
 
 .publish-search-toggle .ti {
   font-size: 16px;
+  transition: transform 0.2s ease, opacity 0.2s ease;
 }
 
 .publish-search-input {
