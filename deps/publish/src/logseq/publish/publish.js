@@ -429,13 +429,6 @@ const initSearch = () => {
       activeItems = [];
     };
 
-    const renderSection = (title) => {
-      const header = document.createElement("div");
-      header.className = "publish-search-section";
-      header.textContent = title;
-      return header;
-    };
-
     const renderResults = (query, data) => {
       const pages = data?.pages || [];
       const blocks = data?.blocks || [];
