@@ -321,9 +321,8 @@
             page-password (when (and (string? page-password)
                                      (not (string/blank? page-password)))
                             page-password)
-            page-password-hash (when page-password (<sha256-hex page-password))
             payload (cond-> payload
-                      page-password-hash (assoc :page-password-hash page-password-hash))
+                      page-password (assoc :page-password page-password))
             body (ldb/write-transit-str payload)
             content-hash (<sha256-hex body)
             graph-uuid (or (:graph-uuid payload)
