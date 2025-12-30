@@ -38,7 +38,7 @@ on:
       ANDROID_KEYSTORE_PASSWORD:
         required: true
       SENTRY_AUTH_TOKEN:
-        required: true
+        required: false
 
 env:
   CLOJURE_VERSION: '1.11.1.1413'
@@ -114,7 +114,7 @@ jobs:
           LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
 
       - name: Upload Sentry Sourcemaps (beta only)
-        # if: ${{ github.repository == 'logseq/logseq' && (inputs.build-target == 'beta' || github.event.inputs.build-target == 'beta') }}
+        if: ${{ secrets.SENTRY_AUTH_TOKEN != '' && (github.repository == 'logseq/logseq' && (inputs.build-target == 'beta' || github.event.inputs.build-target == 'beta')) }}
         run: |
           curl -sL https://sentry.io/get-cli/ | SENTRY_CLI_VERSION=2.58.4 bash
           release_name="logseq-android@${{ steps.ref.outputs.version }}"

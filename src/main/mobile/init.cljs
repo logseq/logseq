@@ -51,6 +51,8 @@
             :worker-client-id @state/*db-worker-client-id)
   (when (state/get-current-repo)
     (let [is-active? (.-isActive state)]
+      (when (and is-active? (:ui/system-theme? @state/state))
+        (state/sync-system-theme!))
       (if (not is-active?)
         (editor-handler/save-current-block!)
         ;; check whether db-worker is available
@@ -90,6 +92,10 @@
 
   (.addListener Keyboard "keyboardWillHide"
                 (fn []
+                  (when-let [input (state/get-input)]
+                    (.blur input))
+                  (editor-handler/save-current-block!)
+                  (state/clear-edit!)
                   (state/pub-event! [:mobile/keyboard-will-hide])))
 
   (.addEventListener js/window "statusTap"
