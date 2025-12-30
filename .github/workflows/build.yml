@@ -174,7 +174,7 @@ jobs:
 
       # Can run from deps/db since all JS deps for this command are available in deps/db
       - name: Validate created DB graphs
-        run: cd deps/db && yarn nbb-logseq -cp src:../cli/src -m logseq.cli validate -g ../../scripts/schema-graph
+        run: cd deps/db && yarn nbb-logseq -cp src:../cli/src -m logseq.cli validate -g ../../scripts/properties-graph ../../scripts/schema-graph
 
       - name: Export a created DB graph
         run: cd deps/db && yarn nbb-logseq -cp src:../cli/src -m logseq.cli export-edn -g ../../scripts/properties-graph -f properties.edn -T
