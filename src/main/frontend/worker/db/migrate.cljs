@@ -8,6 +8,7 @@
             [frontend.worker.db.rename-db-ident :as rename-db-ident]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
+            [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.property :as db-property]
@@ -163,6 +164,12 @@
                  (when (:logseq.property/ui-position e)
                    [:db/retract (:e d) :logseq.property/ui-position]))))))
 
+(defn- ensure-graph-uuid
+  [db]
+  (let [graph-uuid (:kv/value (d/entity db :logseq.kv/graph-uuid))]
+    (when-not graph-uuid
+      [(sqlite-util/kv :logseq.kv/graph-uuid (common-uuid/gen-uuid))])))
+
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
@@ -179,7 +186,9 @@
    ["65.15" (rename-properties {:logseq.property.asset/external-src
                                 :logseq.property.asset/external-url}
                                {})]
-   ["65.16" {:properties [:logseq.property.asset/external-file-name]}]])
+   ["65.16" {:properties [:logseq.property.asset/external-file-name]}]
+   ["65.17" {:properties [:logseq.property.publish/published-url]}]
+   ["65.18" {:fix ensure-graph-uuid}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]
