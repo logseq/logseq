@@ -10,7 +10,7 @@
             [logseq.publish.model :as publish-model]))
 
 ;; Timestamp in milliseconds used for cache busting static assets.
-(defonce version 1767025653274)
+(defonce version 1767097626211)
 
 (def ref-regex
   (js/RegExp. "\\[\\[([0-9a-fA-F-]{36})\\]\\]|\\(\\(([0-9a-fA-F-]{36})\\)\\)" "g"))
@@ -1362,6 +1362,143 @@
                     (render-tagged-item (tag-item-val row :graph_uuid) row))]
                  [:p "No published pages use this tag yet."])
                (publish-script)]]]]
+    (str "<!doctype html>" (render-hiccup doc))))
+
+(defn render-home-html
+  []
+  (let [doc [:html
+             (render-head "Logseq Publish")
+             [:body.publish-home
+              [:svg#publish-home-bg.publish-home-bg
+               {:aria-hidden "true"}]
+              [:main.publish-home-card
+               [:div.publish-home-logo "Logseq Publish"]
+               [:h1.publish-home-title
+                "Small notes,"
+                [:br]
+                [:strong "big "]
+                "connections!"]
+               [:p.publish-home-subtitle
+                "Publish your Logseq notes to the web. Each note links through "
+                [:code "#tag"]
+                " or "
+                [:code "[[page]] reference"]
+                ", connect your dots with others."]]
+              [:script
+               "(function(){\n"
+               "  const svg = document.getElementById('publish-home-bg');\n"
+               "  if (!svg) return;\n"
+               "  let width = window.innerWidth;\n"
+               "  let height = window.innerHeight;\n"
+               "  const POINTS_COUNT = 40;\n"
+               "  const MAX_DIST = 160;\n"
+               "  const pts = [];\n"
+               "  let circlesGroup;\n"
+               "  let linesGroup;\n"
+               "\n"
+               "  const cssVar = (name) =>\n"
+               "    getComputedStyle(document.documentElement)\n"
+               "      .getPropertyValue(name)\n"
+               "      .trim();\n"
+               "\n"
+               "  function resize() {\n"
+               "    width = window.innerWidth;\n"
+               "    height = window.innerHeight;\n"
+               "    svg.setAttribute('width', width);\n"
+               "    svg.setAttribute('height', height);\n"
+               "    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);\n"
+               "  }\n"
+               "\n"
+               "  function createSvgElement(tag, attrs) {\n"
+               "    const el = document.createElementNS('http://www.w3.org/2000/svg', tag);\n"
+               "    for (const k in attrs) el.setAttribute(k, attrs[k]);\n"
+               "    return el;\n"
+               "  }\n"
+               "\n"
+               "  function init() {\n"
+               "    resize();\n"
+               "    svg.innerHTML = '';\n"
+               "\n"
+               "    const lineColor = cssVar('--muted') || '#6f6e69';\n"
+               "    const dotColor = cssVar('--ink') || '#282726';\n"
+               "\n"
+               "    linesGroup = createSvgElement('g', {\n"
+               "      stroke: lineColor,\n"
+               "      'stroke-width': 0.6,\n"
+               "      'stroke-linecap': 'round',\n"
+               "      opacity: 0.35\n"
+               "    });\n"
+               "    circlesGroup = createSvgElement('g', { fill: dotColor, opacity: 0.65 });\n"
+               "\n"
+               "    svg.appendChild(linesGroup);\n"
+               "    svg.appendChild(circlesGroup);\n"
+               "    pts.length = 0;\n"
+               "\n"
+               "    for (let i = 0; i < POINTS_COUNT; i++) {\n"
+               "      const x = Math.random() * width;\n"
+               "      const y = Math.random() * height;\n"
+               "      const speed = 0.15 + Math.random() * 0.25;\n"
+               "      const angle = Math.random() * Math.PI * 2;\n"
+               "      const vx = Math.cos(angle) * speed;\n"
+               "      const vy = Math.sin(angle) * speed;\n"
+               "\n"
+               "      const circle = createSvgElement('circle', {\n"
+               "        cx: x,\n"
+               "        cy: y,\n"
+               "        r: 2 + Math.random() * 1.2\n"
+               "      });\n"
+               "\n"
+               "      circlesGroup.appendChild(circle);\n"
+               "      pts.push({ x, y, vx, vy, circle });\n"
+               "    }\n"
+               "  }\n"
+               "\n"
+               "  function step() {\n"
+               "    linesGroup.innerHTML = '';\n"
+               "\n"
+               "    for (let i = 0; i < pts.length; i++) {\n"
+               "      const p = pts[i];\n"
+               "      p.x += p.vx;\n"
+               "      p.y += p.vy;\n"
+               "\n"
+               "      if (p.x < 0 || p.x > width) p.vx *= -1;\n"
+               "      if (p.y < 0 || p.y > height) p.vy *= -1;\n"
+               "\n"
+               "      p.circle.setAttribute('cx', p.x);\n"
+               "      p.circle.setAttribute('cy', p.y);\n"
+               "    }\n"
+               "\n"
+               "    for (let i = 0; i < pts.length; i++) {\n"
+               "      for (let j = i + 1; j < pts.length; j++) {\n"
+               "        const p1 = pts[i];\n"
+               "        const p2 = pts[j];\n"
+               "        const dx = p1.x - p2.x;\n"
+               "        const dy = p1.y - p2.y;\n"
+               "        const dist = Math.sqrt(dx * dx + dy * dy);\n"
+               "        if (dist < MAX_DIST) {\n"
+               "          const opacity = 0.35 * (1 - dist / MAX_DIST);\n"
+               "          const line = createSvgElement('line', {\n"
+               "            x1: p1.x,\n"
+               "            y1: p1.y,\n"
+               "            x2: p2.x,\n"
+               "            y2: p2.y,\n"
+               "            opacity: opacity.toString()\n"
+               "          });\n"
+               "          linesGroup.appendChild(line);\n"
+               "        }\n"
+               "      }\n"
+               "    }\n"
+               "\n"
+               "    requestAnimationFrame(step);\n"
+               "  }\n"
+               "\n"
+               "  window.addEventListener('resize', () => {\n"
+               "    init();\n"
+               "  });\n"
+               "\n"
+               "  init();\n"
+               "  requestAnimationFrame(step);\n"
+               "})();\n"]]]]
     (str "<!doctype html>" (render-hiccup doc))))
 
 (defn render-ref-html
