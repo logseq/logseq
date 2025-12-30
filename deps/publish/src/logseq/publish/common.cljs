@@ -120,10 +120,11 @@
              digest (.digest js/crypto.subtle "SHA-256" data)]
             (to-hex digest)))
 
-(def password-kdf-iterations 210000)
+(def password-kdf-max-iterations 90000)
+(def password-kdf-iterations 90000)
 
-(defn bytes->base64url [bytes]
-  (let [binary (apply str (map #(js/String.fromCharCode %) (array-seq bytes)))
+(defn bytes->base64url [data]
+  (let [binary (apply str (map #(js/String.fromCharCode %) (array-seq data)))
         b64 (js/btoa binary)]
     (-> b64
         (string/replace #"\+" "-")
@@ -139,18 +140,19 @@
                                     #js {:name "PBKDF2"}
                                     false
                                     #js ["deriveBits"])
+             iterations (min password-kdf-iterations password-kdf-max-iterations)
              derived (.deriveBits js/crypto.subtle
                                   #js {:name "PBKDF2"
                                        :hash "SHA-256"
                                        :salt salt
-                                       :iterations password-kdf-iterations}
+                                       :iterations iterations}
                                   crypto-key
                                   256)
              derived-bytes (js/Uint8Array. derived)
              salt-encoded (bytes->base64url salt)
              hash-encoded (bytes->base64url derived-bytes)]
             (str "pbkdf2$sha256$"
-                 password-kdf-iterations
+                 iterations
                  "$"
                  salt-encoded
                  "$"
@@ -176,32 +178,34 @@
                  (= "pbkdf2" (nth parts 0))
                  (= "sha256" (nth parts 1)))
       false
-      (js-await [iterations (js/parseInt (nth parts 2))
-                 salt (base64url->uint8array (nth parts 3))
-                 expected (base64url->uint8array (nth parts 4))
-                 crypto-key (.importKey js/crypto.subtle
-                                        "raw"
-                                        (.encode text-encoder password)
-                                        #js {:name "PBKDF2"}
-                                        false
-                                        #js ["deriveBits"])
-                 derived (.deriveBits js/crypto.subtle
-                                      #js {:name "PBKDF2"
-                                           :hash "SHA-256"
-                                           :salt salt
-                                           :iterations iterations}
-                                      crypto-key
-                                      (* 8 (.-length expected)))
-                 derived-bytes (js/Uint8Array. derived)]
-                (if (not= (.-length derived-bytes) (.-length expected))
+      (js-await [iterations (js/parseInt (nth parts 2))]
+                (if (> iterations password-kdf-max-iterations)
                   false
-                  (let [mismatch (reduce (fn [acc idx]
-                                           (bit-or acc
-                                                   (bit-xor (aget derived-bytes idx)
-                                                            (aget expected idx))))
-                                         0
-                                         (range (.-length expected)))]
-                    (zero? mismatch)))))))
+                  (js-await [salt (base64url->uint8array (nth parts 3))
+                             expected (base64url->uint8array (nth parts 4))
+                             crypto-key (.importKey js/crypto.subtle
+                                                    "raw"
+                                                    (.encode text-encoder password)
+                                                    #js {:name "PBKDF2"}
+                                                    false
+                                                    #js ["deriveBits"])
+                             derived (.deriveBits js/crypto.subtle
+                                                  #js {:name "PBKDF2"
+                                                       :hash "SHA-256"
+                                                       :salt salt
+                                                       :iterations iterations}
+                                                  crypto-key
+                                                  (* 8 (.-length expected)))
+                             derived-bytes (js/Uint8Array. derived)]
+                            (if (not= (.-length derived-bytes) (.-length expected))
+                              false
+                              (let [mismatch (reduce (fn [acc idx]
+                                                       (bit-or acc
+                                                               (bit-xor (aget derived-bytes idx)
+                                                                        (aget expected idx))))
+                                                     0
+                                                     (range (.-length expected)))]
+                                (zero? mismatch)))))))))
 
 (defn hmac-sha256 [key message]
   (js-await [crypto-key (.importKey js/crypto.subtle
