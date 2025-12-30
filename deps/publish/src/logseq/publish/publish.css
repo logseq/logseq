@@ -72,6 +72,73 @@ body {
   letter-spacing: 0.01em;
 }
 
+.publish-home {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  overflow: hidden;
+}
+
+.publish-home-bg {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.publish-home-card {
+  position: relative;
+  z-index: 1;
+  max-width: 520px;
+  padding: 32px 28px 28px;
+  border-radius: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+
+.publish-home-logo {
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 18px;
+}
+
+.publish-home-title {
+  margin: 0 0 12px;
+  font-size: clamp(26px, 3.6vw, 36px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.publish-home-subtitle {
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.publish-home-subtitle code {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  background: var(--bg-accent);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
+@media (max-width: 600px) {
+  .publish-home-card {
+    margin: 0 16px;
+    padding: 24px 20px 22px;
+  }
+}
+
 .wrap {
   max-width: 920px;
   margin: 32px auto 56px;
