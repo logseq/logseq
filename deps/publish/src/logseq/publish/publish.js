@@ -244,6 +244,13 @@ document.addEventListener("keydown", (event) => {
     return;
   }
 
+  if (sequenceKey === "t" && key === "t") {
+    resetSequence();
+    window.toggleTheme();
+    event.preventDefault();
+    return;
+  }
+
   if (key === "t") {
     sequenceKey = "t";
     if (sequenceTimer) clearTimeout(sequenceTimer);
@@ -259,6 +266,42 @@ document.addEventListener("click", (event) => {
   if (!toggle) return;
   event.preventDefault();
   window.toggleTheme();
+});
+
+const searchStateMap = new WeakMap();
+
+const getSearchContainerState = () => {
+  const container =
+    document.querySelector(".publish-search.is-expanded") ||
+    document.querySelector(".publish-search");
+  if (!container) return null;
+  return searchStateMap.get(container) || null;
+};
+
+document.addEventListener("keydown", (event) => {
+  const isMod = event.metaKey || event.ctrlKey;
+  if (!isMod) return;
+
+  const key = (event.key || "").toLowerCase();
+  if (!key) return;
+
+  const typingTarget = isTypingTarget(event.target);
+  if (
+    typingTarget &&
+    !event.target.classList?.contains("publish-search-input")
+  ) {
+    return;
+  }
+
+  const state = getSearchContainerState();
+  if (!state) return;
+
+  if (key === "k") {
+    event.preventDefault();
+    state.setExpanded(true);
+    state.focusInput();
+    return;
+  }
 });
 
 window.toggleTopBlocks = (btn) => {
@@ -350,6 +393,264 @@ const initTwitterEmbeds = () => {
   });
 };
 
+const buildSnippet = (text, query) => {
+  const haystack = text.toLowerCase();
+  const needle = query.toLowerCase();
+  const idx = haystack.indexOf(needle);
+  if (idx < 0) return text.slice(0, 160);
+  const start = Math.max(0, idx - 48);
+  const end = Math.min(text.length, idx + needle.length + 48);
+  return text.slice(start, end).replace(/\s+/g, " ").trim();
+};
+
+const initSearch = () => {
+  const containers = Array.from(
+    document.querySelectorAll(".publish-search")
+  );
+  if (!containers.length) return;
+
+  containers.forEach((container) => {
+    const graphUuid = container.dataset.graphUuid;
+    const input = container.querySelector(".publish-search-input");
+    const toggleBtn = container.querySelector(".publish-search-toggle");
+    const resultsEl = container.querySelector(".publish-search-results");
+    if (!input || !resultsEl || !toggleBtn) return;
+
+    let debounceTimer = null;
+    let activeController = null;
+    let activeIndex = -1;
+    let activeItems = [];
+
+    const hideResults = () => {
+      resultsEl.hidden = true;
+      resultsEl.innerHTML = "";
+      activeIndex = -1;
+      activeItems = [];
+    };
+
+    const renderSection = (title) => {
+      const header = document.createElement("div");
+      header.className = "publish-search-section";
+      header.textContent = title;
+      return header;
+    };
+
+    const renderResults = (query, data) => {
+      const pages = data?.pages || [];
+      const blocks = data?.blocks || [];
+
+      if (!pages.length && !blocks.length) {
+        resultsEl.innerHTML = "";
+        const empty = document.createElement("div");
+        empty.className = "publish-search-empty";
+        empty.textContent = `No results for "${query}".`;
+        resultsEl.appendChild(empty);
+        resultsEl.hidden = false;
+        activeIndex = -1;
+        activeItems = [];
+        return;
+      }
+
+      const list = document.createElement("div");
+      list.className = "publish-search-list";
+
+      if (pages.length) {
+        pages.forEach((page) => {
+          const title = page.page_title || page.page_uuid;
+          const href = `/page/${graphUuid}/${page.page_uuid}`;
+          const item = document.createElement("a");
+          item.className = "publish-search-result";
+          item.href = href;
+
+          const kind = document.createElement("span");
+          kind.className = "publish-search-kind";
+          kind.textContent = "Page";
+
+          const titleEl = document.createElement("span");
+          titleEl.className = "publish-search-title";
+          titleEl.textContent = title;
+
+          item.appendChild(kind);
+          item.appendChild(titleEl);
+          list.appendChild(item);
+        });
+      }
+
+      if (blocks.length) {
+        blocks.forEach((block) => {
+          const title = block.page_title || block.page_uuid;
+          const href = `/page/${graphUuid}/${block.page_uuid}#block-${block.block_uuid}`;
+          const snippet = buildSnippet(block.block_content || "", query);
+          const item = document.createElement("a");
+          item.className = "publish-search-result";
+          item.href = href;
+
+          const titleEl = document.createElement("span");
+          titleEl.className = "publish-search-title";
+          titleEl.textContent = title;
+
+          const snippetEl = document.createElement("span");
+          snippetEl.className = "publish-search-snippet";
+          snippetEl.textContent = snippet;
+
+          item.appendChild(titleEl);
+          item.appendChild(snippetEl);
+          list.appendChild(item);
+        });
+      }
+
+      resultsEl.innerHTML = "";
+      resultsEl.appendChild(list);
+      resultsEl.hidden = false;
+      activeIndex = -1;
+      activeItems = Array.from(
+        resultsEl.querySelectorAll(".publish-search-result")
+      );
+      activeItems.forEach((item, index) => {
+        item.addEventListener("mouseenter", () => {
+          activeIndex = index;
+          updateActive();
+        });
+      });
+    };
+
+    const updateActive = () => {
+      if (!activeItems.length) return;
+      activeItems.forEach((item, index) => {
+        item.classList.toggle("is-active", index === activeIndex);
+      });
+      const activeEl = activeItems[activeIndex];
+      if (activeEl) {
+        activeEl.scrollIntoView({ block: "nearest" });
+      }
+    };
+
+    const moveActive = (direction) => {
+      if (!activeItems.length) {
+        activeItems = Array.from(
+          resultsEl.querySelectorAll(".publish-search-result")
+        );
+      }
+      if (!activeItems.length) return;
+
+      if (activeIndex === -1) {
+        activeIndex = direction > 0 ? 0 : activeItems.length - 1;
+      } else {
+        activeIndex =
+          (activeIndex + direction + activeItems.length) %
+          activeItems.length;
+      }
+      updateActive();
+    };
+
+    const activateSelection = () => {
+      if (!activeItems.length) {
+        activeItems = Array.from(
+          resultsEl.querySelectorAll(".publish-search-result")
+        );
+      }
+      if (!activeItems.length) return;
+      const item =
+        activeIndex >= 0 ? activeItems[activeIndex] : activeItems[0];
+      if (item?.href) {
+        window.location.href = item.href;
+      }
+    };
+
+    const setExpanded = (expanded) => {
+      container.classList.toggle("is-expanded", expanded);
+      toggleBtn.setAttribute("aria-expanded", String(expanded));
+      if (expanded) {
+        input.focus();
+      } else {
+        input.value = "";
+        hideResults();
+      }
+    };
+
+    const runSearch = async (query) => {
+      if (!query) {
+        hideResults();
+        return;
+      }
+
+      if (activeController) activeController.abort();
+      activeController = new AbortController();
+
+      try {
+        const resp = await fetch(
+          `/search/${encodeURIComponent(graphUuid)}?q=${encodeURIComponent(query)}`,
+          { signal: activeController.signal }
+        );
+        if (!resp.ok) throw new Error("search request failed");
+        const data = await resp.json();
+        renderResults(query, data);
+      } catch (error) {
+        if (error?.name === "AbortError") return;
+        hideResults();
+      }
+    };
+
+    if (graphUuid) {
+      input.addEventListener("input", () => {
+        const query = input.value.trim();
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => runSearch(query), 250);
+      });
+    }
+
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        setExpanded(false);
+      }
+      if (event.key === "Enter") {
+        if (!resultsEl.hidden && input.value.trim()) {
+          activateSelection();
+          event.preventDefault();
+        }
+      }
+      if (
+        !resultsEl.hidden &&
+        input.value.trim() &&
+        resultsEl.querySelector(".publish-search-result")
+      ) {
+        const key = event.key;
+        if (key === "ArrowDown" || key === "Down") {
+          moveActive(1);
+          event.preventDefault();
+        } else if (key === "ArrowUp" || key === "Up") {
+          moveActive(-1);
+          event.preventDefault();
+        } else if ((event.metaKey || event.ctrlKey) && key === "n") {
+          moveActive(1);
+          event.preventDefault();
+        } else if ((event.metaKey || event.ctrlKey) && key === "p") {
+          moveActive(-1);
+          event.preventDefault();
+        }
+      }
+    });
+
+    document.addEventListener("click", (event) => {
+      if (!container.contains(event.target)) setExpanded(false);
+    });
+
+    toggleBtn.addEventListener("click", () => {
+      const expanded = container.classList.contains("is-expanded");
+      setExpanded(!expanded);
+    });
+
+    searchStateMap.set(container, {
+      setExpanded,
+      focusInput: () => input.focus(),
+      moveActive,
+      activateSelection,
+      hasResults: () => !!resultsEl.querySelector(".publish-search-result"),
+      isExpanded: () => container.classList.contains("is-expanded"),
+    });
+  });
+};
+
 const initPublish = () => {
   applyTheme(preferredTheme());
   renderPropertyIcons();
@@ -358,6 +659,7 @@ const initPublish = () => {
   }
 
   initTwitterEmbeds();
+  initSearch();
 
   document.querySelectorAll(".math-block").forEach((el) => {
     const tex = el.textContent;

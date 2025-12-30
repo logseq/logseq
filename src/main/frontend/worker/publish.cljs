@@ -1,11 +1,13 @@
 (ns frontend.worker.publish
   "Publish"
-  (:require [datascript.core :as d]
+  (:require [clojure.string :as string]
+            [datascript.core :as d]
             [frontend.common.thread-api :refer [def-thread-api]]
             [frontend.worker.state :as worker-state]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.common.entity-util :as common-entity-util]
+            [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.schema :as db-schema]))
 
@@ -73,8 +75,46 @@
 (defn- collect-publish-blocks
   [db entity]
   (if (common-entity-util/page? entity)
-    (ldb/get-page-blocks db (:db/id entity))
+    (:block/_page entity)
     (ldb/get-block-and-children db (:block/uuid entity))))
+
+(def ^:private publish-search-max-length 4096)
+
+(defn- block-page-eid
+  [block]
+  (let [page (:block/page block)]
+    (cond
+      (map? page) (:db/id page)
+      (number? page) page
+      :else nil)))
+
+(defn- block-search-content
+  [block]
+  (let [raw-content (or (:block/content block)
+                        (:block/title block)
+                        (:block/name block)
+                        "")
+        raw-content (string/trim raw-content)]
+    (when-not (string/blank? raw-content)
+      (let [content (db-content/recur-replace-uuid-in-block-title
+                     (assoc block :block/title raw-content))
+            content (if (> (count content) publish-search-max-length)
+                      (subs content 0 publish-search-max-length)
+                      content)]
+        (string/trim content)))))
+
+(defn- collect-search-blocks
+  [blocks page-eid page-uuid]
+  (->> blocks
+       (keep (fn [block]
+               (when (and (= (block-page-eid block) page-eid)
+                          (not= (:db/id block) page-eid)
+                          (not (:logseq.property/created-from-property block)))
+                 (when-let [block-uuid (some-> (:block/uuid block) str)]
+                   (when-let [content (block-search-content block)]
+                     {:page_uuid (str page-uuid)
+                      :block_uuid block-uuid
+                      :block_content content})))))))
 
 (defn- collect-embedded-blocks
   [db blocks]
@@ -109,11 +149,7 @@
   (let [page-id (:db/id entity)
         blocks (collect-publish-blocks db entity)
         embedded-blocks (collect-embedded-blocks db blocks)
-        blocks (->> (concat blocks embedded-blocks)
-                    (remove (comp nil? :db/id))
-                    (map (juxt :db/id identity))
-                    (into {})
-                    vals)
+        blocks (concat blocks embedded-blocks)
         block-eids (map :db/id blocks)
         ref-eids (->> blocks
                       (mapcat :block/refs)
@@ -164,6 +200,7 @@
         refs (when graph-uuid
                (publish-refs-from-blocks db blocks entity graph-uuid))
         tags (page-tags entity)
+        search-blocks (collect-search-blocks blocks (:db/id entity) (:block/uuid entity))
         raw-datoms (->>
                     (mapcat (fn [eid]
                               (map (fn [d] [(:e d) (:a d) (:v d) (:tx d) (:added d)])
@@ -182,6 +219,7 @@
      :schema-version (db-schema/schema-version->string db-schema/version)
      :refs refs
      :page-tags tags
+     :blocks search-blocks
      :datoms datoms}))
 
 (def-thread-api :thread-api/build-publish-page-payload
