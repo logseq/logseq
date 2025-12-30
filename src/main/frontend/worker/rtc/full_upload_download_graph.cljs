@@ -189,10 +189,9 @@
                                                           :s3-key key
                                                           :schema-version (str major-schema-version)
                                                           :graph-name remote-graph-name
-                                                          ;; FIXME: use local graph uuid instead of creating new one
-                                                          :graph-uuid (:kv/value (:logseq.kv/graph-uuid @conn))
                                                           :encrypted-aes-key
                                                           (ldb/write-transit-str encrypted-aes-key)}))]
+          ;; FIXME: use local graph uuid instead of creating new one
           (if-let [graph-uuid (:graph-uuid upload-resp)]
             (let [schema-version (ldb/get-graph-schema-version @conn)]
               (ldb/transact! conn
