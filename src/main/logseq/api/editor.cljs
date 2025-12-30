@@ -16,6 +16,7 @@
             [frontend.handler.export :as export-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.property :as property-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.modules.layout.core]
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.state :as state]
@@ -130,13 +131,15 @@
                            :journal? journal
                            :class? class
                            :format format}
-                           (string? customUUID)
-                           (assoc :uuid (uuid customUUID)))))
+                          (string? customUUID)
+                          (assoc :uuid (uuid customUUID)))))
+             page' (or page new-page)
              _ (when (seq properties)
                  (api-block/db-based-save-block-properties! new-page properties {:plugin this
-                                                                                 :schema schema}))]
-       (some-> (or page new-page)
-               sdk-utils/result->js)))))
+                                                                                 :schema schema}))
+             _ (when (true? redirect)
+                 (route-handler/redirect-to-page! (:block/uuid page')))]
+       (some-> page' sdk-utils/result->js)))))
 
 (defn create_journal_page
   [^js date]
@@ -319,13 +322,15 @@
 
 (def get_current_page_blocks_tree
   (fn []
-    (when-let [page (state/get-current-page)]
-      (let [page-id (:db/id (ldb/get-page (db/get-db) page))
-            blocks (db-model/get-page-blocks-no-cache page-id)
-            blocks (outliner-tree/blocks->vec-tree blocks page-id)
-            ;; clean key
-            blocks (sdk-utils/normalize-keyword-for-json blocks)]
-        (bean/->js blocks)))))
+    (when-let [page-uuid (state/get-current-page)]
+      (p/let [_ (<ensure-page-loaded page-uuid)
+              page-id (:db/id (db-model/get-page page-uuid))
+              blocks (db-model/get-page-blocks-no-cache page-id)
+              blocks (outliner-tree/blocks->vec-tree blocks page-id)]
+        (some->
+         (seq blocks)
+         (sdk-utils/normalize-keyword-for-json)
+         (bean/->js))))))
 
 (def get_page_blocks_tree
   (fn [id-or-page-name]
