@@ -120,6 +120,14 @@
    :event? true
    :handler #(insert-text "/" {})})
 
+(defn- command-palette-action
+  []
+  {:id "command-palette"
+   :title "Commands"
+   :system-icon "sparkles"
+   :event? true
+   :handler #(state/pub-event! [:go/search])})
+
 (defn- camera-action
   []
   {:id "camera"
@@ -155,6 +163,7 @@
                       (indent-outdent-action true)
                       (tag-action)
                       (camera-action)
+                      (command-palette-action)
                       (page-ref-action)
                       (audio-action)
                       (slash-action)

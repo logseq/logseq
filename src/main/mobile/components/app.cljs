@@ -24,6 +24,7 @@
             [mobile.components.selection-toolbar :as selection-toolbar]
             [mobile.components.ui :as ui-component]
             [mobile.state :as mobile-state]
+            [mobile.navigation :as mobile-nav]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -54,8 +55,8 @@
                      (when (:ui/system-theme? @state/state)
                        (let [is-dark? (boolean (some-> e .-detail .-isDark))]
                          (state/set-theme-mode! (if is-dark? "dark" "light") true))))]
-       (.addEventListener js/window "logseq:native-system-theme-changed" handler)
-       #(.removeEventListener js/window "logseq:native-system-theme-changed" handler)))
+      (.addEventListener js/window "logseq:native-system-theme-changed" handler)
+      #(.removeEventListener js/window "logseq:native-system-theme-changed" handler)))
    [])
   (hooks/use-effect!
    #(let [^js doc js/document.documentElement
@@ -73,6 +74,62 @@
    (fn []
      (some-> js/window.externalsjs (.settleStatusBar)))
    [current-repo]))
+
+(defn use-gesture-navigation!
+  []
+  (let [gesture-ref (hooks/use-ref nil)
+        edge-threshold 28
+        swipe-threshold 64
+        max-duration 650]
+    (hooks/use-effect!
+     (fn []
+       (let [on-start (fn [^js e]
+                        (let [touches (.-touches e)
+                              count (.-length touches)]
+                          (when (pos? count)
+                            (let [t1 (.item touches 0)
+                                  t2 (when (> count 1) (.item touches 1))
+                                  now (.now js/Date)]
+                              (set! (.-current gesture-ref)
+                                    {:count count
+                                     :x1 (.-clientX t1)
+                                     :y1 (.-clientY t1)
+                                     :x2 (some-> t2 .-clientX)
+                                     :started-at now
+                                     :edge-left (< (.-clientX t1) edge-threshold)
+                                     :edge-right (> (.-clientX t1) (- js/window.innerWidth edge-threshold))})))))
+             on-end (fn [^js e]
+                      (when-let [st (.-current gesture-ref)]
+                        (let [touches (.-changedTouches e)
+                              idx (dec (max 1 (.-length touches)))
+                              touch (.item touches idx)
+                              end-x (.-clientX touch)
+                              dx (- end-x (:x1 st))
+                              elapsed (- (.now js/Date) (:started-at st))]
+                          (when (<= elapsed max-duration)
+                            (cond
+                              (and (= (:count st) 2)
+                                   (> (js/Math.abs dx) swipe-threshold))
+                              (if (> dx 0)
+                                (when (false? (mobile-nav/pop-modal!))
+                                  (mobile-nav/pop-stack!))
+                                (.forward js/history))
+
+                              (and (= (:count st) 1)
+                                   (> (js/Math.abs dx) swipe-threshold))
+                              (cond
+                                (and (:edge-left st) (> dx 0))
+                                (state/toggle-left-sidebar!)
+
+                                (and (:edge-right st) (< dx 0))
+                                (state/open-right-sidebar!)))))
+                        (set! (.-current gesture-ref) nil)))]
+         (.addEventListener js/window "touchstart" on-start #js {:passive true})
+         (.addEventListener js/window "touchend" on-end #js {:passive true})
+         (fn []
+           (.removeEventListener js/window "touchstart" on-start)
+           (.removeEventListener js/window "touchend" on-end)))))
+     [])))
 
 (defn use-screen-size-effects!
   []
@@ -144,6 +201,7 @@
   (let [[tab] (mobile-state/use-tab)
         [theme] (frum/use-atom-in state/state :ui/theme)]
     (use-screen-size-effects!)
+    (use-gesture-navigation!)
     (use-theme-effects! current-repo theme)
     (hooks/use-effect!
      (fn []
