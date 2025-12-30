@@ -391,7 +391,7 @@
                                            :public? true}}
      :logseq.property.publish/published-url {:title "Published URL"
                                              :schema
-                                             {:type :string
+                                             {:type :url
                                               :view-context :page
                                               :public? true}}
      :logseq.property/exclude-from-graph-view {:title "Excluded from Graph view?"
