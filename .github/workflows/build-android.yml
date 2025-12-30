@@ -127,6 +127,10 @@ jobs:
       - name: Upload Sentry Sourcemaps (beta only)
         if: ${{ secrets.SENTRY_AUTH_TOKEN != '' && (github.repository == 'Procyontta/logseq' && (inputs.build-target == 'beta' || github.event.inputs.build-target == 'beta')) }}
         run: |
+          if [ "${{ steps.sentry_token.outputs.enabled }}" != "true" ]; then
+            echo "Skipping Sentry upload: token not provided"
+            exit 0
+          fi
           curl -sL https://sentry.io/get-cli/ | SENTRY_CLI_VERSION=2.58.4 bash
           release_name="logseq-android@${{ steps.ref.outputs.version }}"
           sentry-cli releases new "${release_name}"
