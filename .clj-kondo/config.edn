@@ -199,7 +199,6 @@
              logseq.db.test.helper db-test
              logseq.graph-parser graph-parser
              logseq.graph-parser.block gp-block
-             logseq.graph-parser.db gp-db
              logseq.graph-parser.mldoc gp-mldoc
              logseq.graph-parser.property gp-property
              logseq.graph-parser.text text
