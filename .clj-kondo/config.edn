@@ -70,7 +70,6 @@
              electron.ipc ipc
              electron.utils utils
              frontend.commands commands
-             frontend.common.file-based.db common-file-db
              frontend.common.date common-date
              frontend.common.file.util wfu
              frontend.common.missionary-util c.m
@@ -85,7 +84,6 @@
              frontend.config config
              frontend.date date
              frontend.db db
-             frontend.db.file-based.model file-model
              frontend.db-mixins db-mixins
              frontend.db.query-custom query-custom
              frontend.db.query-dsl query-dsl
@@ -112,15 +110,6 @@
              frontend.handler.editor.property editor-property
              frontend.handler.events events
              frontend.handler.extract extract
-             frontend.handler.file-based.file file-handler
-             frontend.handler.file-based.native-fs nfs-handler
-             frontend.handler.file-based.page file-page-handler
-             frontend.handler.file-based.page-property file-page-property
-             frontend.handler.file-based.property file-property-handler
-             frontend.handler.file-based.property.util property-util
-             frontend.handler.file-based.recent file-recent-handler
-             frontend.handler.file-based.reset-file reset-file-handler
-             frontend.handler.file-based.repo file-repo-handler
              frontend.handler.global-config global-config-handler
              frontend.handler.notification notification
              frontend.handler.page page-handler
@@ -149,8 +138,6 @@
              frontend.test.helper test-helper
              frontend.ui ui
              frontend.util util
-             frontend.util.file-based.clock clock
-             frontend.util.file-based.drawer drawer
              frontend.util.page page-util
              frontend.util.persist-var persist-var
              frontend.util.property property
