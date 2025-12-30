@@ -597,6 +597,14 @@
                            "cache-control" "public, max-age=31536000, immutable"}
                       (publish-common/cors-headers))})
 
+      (and (= path "/") (= method "GET"))
+      (js/Response.
+       (publish-render/render-home-html)
+       #js {:headers (publish-common/merge-headers
+                      #js {"content-type" "text/html; charset=utf-8"
+                           "cache-control" "public, max-age=31536000, immutable"}
+                      (publish-common/cors-headers))})
+
       (and (string/starts-with? path "/page/") (= method "GET"))
       (handle-page-html request env)
 
