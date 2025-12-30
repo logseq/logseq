@@ -39,8 +39,8 @@
               {:allowed? true :provided? false}
               (let [provided (request-password request)]
                 (if (string? provided)
-                  (js-await [hashed (publish-common/sha256-hex provided)]
-                            {:allowed? (= hashed stored-hash) :provided? true})
+                  (js-await [valid? (publish-common/verify-password provided stored-hash)]
+                            {:allowed? valid? :provided? true})
                   {:allowed? false :provided? false})))))
 
 (defn- auth-claims
@@ -78,8 +78,8 @@
                                                (publish-model/entity->title (get payload-entities page-eid))))
                               blocks (or (:blocks payload)
                                          (get payload "blocks"))
-                              page-password-hash (or (:page-password-hash payload)
-                                                     (get payload "page-password-hash"))
+                              page-password (or (:page-password payload)
+                                                (get payload "page-password"))
                               refs (when (and page-eid page-title)
                                      (publish-index/page-refs-from-payload payload page-eid page_uuid page-title graph))
                               tagged-nodes (when (and page-eid page-title)
@@ -113,12 +113,15 @@
                                            (throw (ex-info "owner sub or username is missing"
                                                            {:owner-sub owner-sub
                                                             :owner-username owner-username})))
+                                       password-hash (when (and (string? page-password)
+                                                                (not (string/blank? page-password)))
+                                                       (publish-common/hash-password page-password))
                                        payload (bean/->js
                                                 {:page_uuid page_uuid
                                                  :page_title page-title
                                                  :page_tags (when page-tags
                                                               (js/JSON.stringify (clj->js page-tags)))
-                                                 :password_hash page-password-hash
+                                                 :password_hash password-hash
                                                  :graph graph-uuid
                                                  :schema_version schema_version
                                                  :block_count block_count
