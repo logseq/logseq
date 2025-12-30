@@ -1176,7 +1176,11 @@
              :property-entity-by-ident property-entity-by-ident
              :entities entities}
         page-props (entity-properties page-entity ctx entities)
-        page-properties (render-properties (dissoc page-props :logseq.property/icon) ctx entities)
+        page-properties (render-properties (dissoc page-props
+                                                   :logseq.property/icon
+                                                   :logseq.property.publish/published-url)
+                                           ctx
+                                           entities)
         blocks (render-block-tree children-by-parent linked-children-by-parent page-eid ctx)
         linked-by-page (when refs-data
                          (->> (get refs-data "refs")
