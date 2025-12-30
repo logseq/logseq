@@ -33,37 +33,34 @@
   (js-await [auth-header (.get (.-headers request) "authorization")
              token (when (and auth-header (string/starts-with? auth-header "Bearer "))
                      (subs auth-header 7))
-             dev-skip? (= "true" (aget env "DEV_SKIP_AUTH"))
              claims (cond
-                      dev-skip? #js {:sub "dev"}
                       (nil? token) nil
                       :else (publish-common/verify-jwt token env))]
-            (let [claims (if dev-skip? #js {:sub "dev"} claims)]
-              (if (and (not dev-skip?) (nil? claims))
-                (publish-common/unauthorized)
-                (let [meta (parse-asset-meta-header request)
-                      graph-uuid (get meta :graph)
-                      asset-uuid (get meta :asset_uuid)
-                      asset-type (get meta :asset_type)
-                      checksum (get meta :checksum)]
-                  (if (or (nil? meta) (string/blank? graph-uuid) (string/blank? asset-uuid) (string/blank? asset-type))
-                    (publish-common/bad-request "missing asset metadata")
-                    (js-await [body (.arrayBuffer request)
-                               r2 (aget env "PUBLISH_R2")
-                               r2-key (str "publish/assets/" graph-uuid "/" asset-uuid "." asset-type)
-                               ^js existing (.head r2 r2-key)
-                               existing-checksum (when existing
-                                                   (when-let [meta (.-customMetadata existing)]
-                                                     (aget meta "checksum")))
-                               content-type (or (get meta :content_type)
-                                                (asset-content-type asset-type))
-                               put? (not (and existing-checksum checksum (= existing-checksum checksum)))
-                               _ (when put?
-                                   (.put r2 r2-key body
-                                         #js {:httpMetadata #js {:contentType content-type}
-                                              :customMetadata #js {:checksum (or checksum "")
-                                                                   :owner_sub (aget claims "sub")}}))]
-                              (publish-common/json-response {:asset_uuid asset-uuid
-                                                             :graph_uuid graph-uuid
-                                                             :asset_type asset-type
-                                                             :asset_url (str "/asset/" graph-uuid "/" asset-uuid "." asset-type)}))))))))
+            (if (nil? claims)
+              (publish-common/unauthorized)
+              (let [meta (parse-asset-meta-header request)
+                    graph-uuid (get meta :graph)
+                    asset-uuid (get meta :asset_uuid)
+                    asset-type (get meta :asset_type)
+                    checksum (get meta :checksum)]
+                (if (or (nil? meta) (string/blank? graph-uuid) (string/blank? asset-uuid) (string/blank? asset-type))
+                  (publish-common/bad-request "missing asset metadata")
+                  (js-await [body (.arrayBuffer request)
+                             r2 (aget env "PUBLISH_R2")
+                             r2-key (str "publish/assets/" graph-uuid "/" asset-uuid "." asset-type)
+                             ^js existing (.head r2 r2-key)
+                             existing-checksum (when existing
+                                                 (when-let [meta (.-customMetadata existing)]
+                                                   (aget meta "checksum")))
+                             content-type (or (get meta :content_type)
+                                              (asset-content-type asset-type))
+                             put? (not (and existing-checksum checksum (= existing-checksum checksum)))
+                             _ (when put?
+                                 (.put r2 r2-key body
+                                       #js {:httpMetadata #js {:contentType content-type}
+                                            :customMetadata #js {:checksum (or checksum "")
+                                                                 :owner_sub (aget claims "sub")}}))]
+                            (publish-common/json-response {:asset_uuid asset-uuid
+                                                           :graph_uuid graph-uuid
+                                                           :asset_type asset-type
+                                                           :asset_url (str "/asset/" graph-uuid "/" asset-uuid "." asset-type)})))))))
