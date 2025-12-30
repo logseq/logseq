@@ -53,25 +53,21 @@
   []
   (vreset! *seen-immutable-entities {}))
 
-(def ^:private *reset-cache-background-task-running?
-  ;; missionary is not compatible with nbb, so entity-memoized is disabled in nbb
-  (delay
-    ;; FIXME: Correct dependency ordering instead of resolve workaround
-    #?(:org.babashka/nbb false
-       :cljs (when-let [f (resolve 'frontend.common.missionary/background-task-running?)]
-               (f :logseq.db.common.entity-plus/reset-immutable-entities-cache!)))))
+(defonce *reset-cache-background-task-running-f (atom nil))
 
 (defn entity-memoized
   [db eid]
   (if (and (qualified-keyword? eid) (not (exists? js/process))) ; don't memoize on node
     (when-not (contains? nil-db-ident-entities eid) ;fast return nil
-      (if (and @*reset-cache-background-task-running?
-               (contains? immutable-db-ident-entities eid)) ;return cache entity if possible which isn't nil
-        (or (get @*seen-immutable-entities eid)
-            (let [r (d/entity db eid)]
-              (when r (vswap! *seen-immutable-entities assoc eid r))
-              r))
-        (d/entity db eid)))
+      (let [f @*reset-cache-background-task-running-f]
+        (if (and (fn? f)
+                 (f :logseq.db.common.entity-plus/reset-immutable-entities-cache!)
+                 (contains? immutable-db-ident-entities eid)) ;return cache entity if possible which isn't nil
+          (or (get @*seen-immutable-entities eid)
+              (let [r (d/entity db eid)]
+                (when r (vswap! *seen-immutable-entities assoc eid r))
+                r))
+          (d/entity db eid))))
     (d/entity db eid)))
 
 (defn unsafe->Entity
