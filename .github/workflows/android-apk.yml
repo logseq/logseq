@@ -1,0 +1,121 @@
+name: Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+      - main
+      - release/*
+
+env:
+  NODE_VERSION: "22"
+  JAVA_VERSION: "21"
+  CLOJURE_VERSION: "1.11.1.1413"
+  ANDROID_BUILD_TOOLS: "34.0.0"
+  ANDROID_PLATFORM_VERSION: "android-35"
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: yarn
+          cache-dependency-path: yarn.lock
+
+      - name: Enable Corepack and Yarn
+        run: |
+          corepack enable
+          corepack prepare yarn@1.22.22 --activate
+
+      - name: Install native build prerequisites (canvas)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+
+      - name: Set up Clojure
+        uses: DeLaGuardo/setup-clojure@10.1
+        with:
+          cli: ${{ env.CLOJURE_VERSION }}
+
+      - name: Cache Clojure deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+          key: ${{ runner.os }}-clojure-lib-${{ hashFiles('**/deps.edn') }}
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK components
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager "platform-tools" "platforms;${ANDROID_PLATFORM_VERSION}" "build-tools;${ANDROID_BUILD_TOOLS}"
+
+      - name: Build mobile assets
+        run: yarn release-mobile
+
+      - name: Sync web assets to Android
+        run: npx cap sync android
+
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew :app:assembleDebug --no-daemon
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: logseq-android-apk-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Check release signing inputs
+        id: signing
+        run: |
+          if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ] && [ -n "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" ] && [ -n "${{ secrets.ANDROID_KEY_ALIAS }}" ] && [ -n "${{ secrets.ANDROID_KEY_PASSWORD }}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Write release keystore
+        if: steps.signing.outputs.enabled == 'true'
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/release-keystore.jks
+          cat > android/keystore.properties <<EOF
+          storeFile=release-keystore.jks
+          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          EOF
+
+      - name: Build release APK
+        if: steps.signing.outputs.enabled == 'true'
+        working-directory: android
+        run: ./gradlew :app:assembleRelease --no-daemon
+
+      - name: Upload release APK
+        if: steps.signing.outputs.enabled == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: logseq-android-apk-release
+          path: android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: warn
