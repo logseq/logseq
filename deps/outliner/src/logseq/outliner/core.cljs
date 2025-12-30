@@ -10,14 +10,12 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
-            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.block :as gp-block]
-            [logseq.graph-parser.db :as gp-db]
             [logseq.outliner.batch-tx :include-macros true :as batch-tx]
             [logseq.outliner.datascript :as ds]
             [logseq.outliner.pipeline :as outliner-pipeline]
@@ -63,7 +61,7 @@
                 (if (de/entity? block) block (d/entity db (:db/id block))))))))
 
 (defn- remove-orphaned-page-refs!
-  [db {db-id :db/id} txs-state old-refs new-refs {:keys [db-graph?]}]
+  [db {db-id :db/id} txs-state old-refs new-refs]
   (when (not= old-refs new-refs)
     (let [new-refs (set (map (fn [ref]
                                (or (:block/name ref)
@@ -76,10 +74,7 @@
                          (remove nil?))
           orphaned-pages (when (seq old-pages)
                            (ldb/get-orphaned-pages db {:pages old-pages
-                                                       :built-in-pages-names
-                                                       (if db-graph?
-                                                         sqlite-create-graph/built-in-pages-names
-                                                         gp-db/built-in-pages-names)
+                                                       :built-in-pages-names sqlite-create-graph/built-in-pages-names
                                                        :empty-ref-f (fn [page]
                                                                       (let [refs (:block/_refs page)]
                                                                         (and (or (zero? (count refs))
@@ -116,17 +111,15 @@
       (swap! txs-state into txs))))
 
 (defn- remove-orphaned-refs-when-save
-  [db txs-state block-entity m {:keys [db-graph?] :as opts}]
+  [db txs-state block-entity m]
   (let [remove-self-page #(remove (fn [b]
                                     (= (:db/id b) (:db/id (:block/page block-entity)))) %)
         ;; only provide content based refs for db graphs instead of removing
         ;; as calculating all non-content refs is more complex
-        old-refs (if db-graph?
-                   (let [content-refs (set (outliner-pipeline/block-content-refs db block-entity))]
-                     (filter #(contains? content-refs (:db/id %)) (:block/refs block-entity)))
-                   (remove-self-page (:block/refs block-entity)))
+        old-refs (let [content-refs (set (outliner-pipeline/block-content-refs db block-entity))]
+                   (filter #(contains? content-refs (:db/id %)) (:block/refs block-entity)))
         new-refs (remove-self-page (:block/refs m))]
-    (remove-orphaned-page-refs! db block-entity txs-state old-refs new-refs opts)))
+    (remove-orphaned-page-refs! db block-entity txs-state old-refs new-refs)))
 
 (defn- get-last-child-or-self
   [db block]
@@ -177,7 +170,7 @@
 
 (defn- fix-tag-ids
   "Fix or remove tags related when entered via `Escape`"
-  [m db {:keys [db-graph?]}]
+  [m db]
   (let [refs (set (keep :block/name (seq (:block/refs m))))
         tags (seq (:block/tags m))]
     (if (and (seq refs) tags)
@@ -200,7 +193,7 @@
                             tag))
                         tags)
 
-                    db-graph?
+                    true
                     ;; Remove tags changing case with `Escape`
                     ((fn [tags']
                        (let [ref-titles (->> (map :block/title (:block/refs m))
@@ -299,8 +292,7 @@
                               :or {retract-attributes? true}}]
     (assert (ds/outliner-txs-state? *txs-state)
             "db should be satisfied outliner-tx-state?")
-    (let [db-graph? (entity-plus/db-based-graph? db)
-          data (if (de/entity? this)
+    (let [data (if (de/entity? this)
                  (assoc (.-kv ^js this) :db/id (:db/id this))
                  this)
           data' (->> (dissoc data :block/properties)
@@ -311,7 +303,7 @@
                   (dissoc :block/children :block/meta :block/unordered
                           :block.temp/ast-title :block.temp/ast-body :block/level :block.temp/load-status
                           :block.temp/has-children?)
-                  (fix-tag-ids db {:db-graph? db-graph?}))
+                  (fix-tag-ids db))
                (not collapse-or-expand?)
                block-with-updated-at)
           db-id (:db/id this)
@@ -368,7 +360,7 @@
           (update-page-when-save-block *txs-state block-entity m))
         ;; Remove orphaned refs from block
         (when (and (:block/title m) (not= (:block/title m) (:block/title block-entity)))
-          (remove-orphaned-refs-when-save db *txs-state block-entity m {:db-graph? db-graph?})))
+          (remove-orphaned-refs-when-save db *txs-state block-entity m)))
 
       ;; handle others txs
       (let [other-tx (:db/other-tx m)]
