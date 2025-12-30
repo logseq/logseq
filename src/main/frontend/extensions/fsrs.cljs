@@ -215,16 +215,15 @@
            (component-block/blocks-container option [block-entity]))
          [:div.mt-8.pb-2
           (if (contains? #{:show-cloze :show-answer} next-phase)
-            (btn-with-shortcut {:btn-text (t
-                                           (case next-phase
-                                             :show-answer
-                                             :flashcards/modal-btn-show-answers
-                                             :show-cloze
-                                             :flashcards/modal-btn-show-clozes
-                                             :init
-                                             :flashcards/modal-btn-hide-answers))
+            (btn-with-shortcut {:btn-text (case next-phase
+                                            :show-answer
+                                            (t :flashcards/modal-btn-show-answers)
+                                            :show-cloze
+                                            (t :flashcards/modal-btn-show-clozes)
+                                            :init
+                                            (t :flashcards/modal-btn-hide-answers))
                                 :shortcut "s"
-                                :id (str "card-answers")
+                                :id "card-answers"
                                 :on-click #(swap! *phase
                                                   (fn [phase]
                                                     (phase->next-phase block-entity phase)))})

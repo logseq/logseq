@@ -247,6 +247,10 @@
  :flashcards/modal-welcome-title "Time to create a card!"
  :flashcards/modal-welcome-desc-1 "You can add \"{1}\" to any block to turn it into a card or trigger \"/cloze\" to add some clozes."
  :flashcards/modal-finished "Congrats, you've reviewed all the cards for this query, see you next time! 💯"
+ :flashcards/modal-btn-show-answers "Show answers"
+ :flashcards/modal-btn-hide-answers "Hide answers"
+ :flashcards/modal-btn-show-clozes "Show clozes"
+
  :home "Home"
  :new-page "New page:"
  :new-tag "New tag:"
