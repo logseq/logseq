@@ -120,6 +120,89 @@
              digest (.digest js/crypto.subtle "SHA-256" data)]
             (to-hex digest)))
 
+(def password-kdf-iterations 210000)
+
+(defn bytes->base64url [bytes]
+  (let [binary (apply str (map #(js/String.fromCharCode %) (array-seq bytes)))
+        b64 (js/btoa binary)]
+    (-> b64
+        (string/replace #"\+" "-")
+        (string/replace #"/" "_")
+        (string/replace #"=+$" ""))))
+
+(defn hash-password [password]
+  (js-await [salt (doto (js/Uint8Array. 16)
+                    (js/crypto.getRandomValues))
+             crypto-key (.importKey js/crypto.subtle
+                                    "raw"
+                                    (.encode text-encoder password)
+                                    #js {:name "PBKDF2"}
+                                    false
+                                    #js ["deriveBits"])
+             derived (.deriveBits js/crypto.subtle
+                                  #js {:name "PBKDF2"
+                                       :hash "SHA-256"
+                                       :salt salt
+                                       :iterations password-kdf-iterations}
+                                  crypto-key
+                                  256)
+             derived-bytes (js/Uint8Array. derived)
+             salt-encoded (bytes->base64url salt)
+             hash-encoded (bytes->base64url derived-bytes)]
+            (str "pbkdf2$sha256$"
+                 password-kdf-iterations
+                 "$"
+                 salt-encoded
+                 "$"
+                 hash-encoded)))
+
+(defn base64url->uint8array [input]
+  (let [pad (if (pos? (mod (count input) 4))
+              (apply str (repeat (- 4 (mod (count input) 4)) "="))
+              "")
+        base64 (-> (str input pad)
+                   (string/replace "-" "+")
+                   (string/replace "_" "/"))
+        raw (js/atob base64)
+        data (js/Uint8Array. (.-length raw))]
+    (dotimes [i (.-length raw)]
+      (aset data i (.charCodeAt raw i)))
+    data))
+
+(defn verify-password [password stored-hash]
+  (let [parts (when (string? stored-hash)
+                (string/split stored-hash #"\$"))]
+    (if-not (and (= 5 (count parts))
+                 (= "pbkdf2" (nth parts 0))
+                 (= "sha256" (nth parts 1)))
+      false
+      (js-await [iterations (js/parseInt (nth parts 2))
+                 salt (base64url->uint8array (nth parts 3))
+                 expected (base64url->uint8array (nth parts 4))
+                 crypto-key (.importKey js/crypto.subtle
+                                        "raw"
+                                        (.encode text-encoder password)
+                                        #js {:name "PBKDF2"}
+                                        false
+                                        #js ["deriveBits"])
+                 derived (.deriveBits js/crypto.subtle
+                                      #js {:name "PBKDF2"
+                                           :hash "SHA-256"
+                                           :salt salt
+                                           :iterations iterations}
+                                      crypto-key
+                                      (* 8 (.-length expected)))
+                 derived-bytes (js/Uint8Array. derived)]
+                (if (not= (.-length derived-bytes) (.-length expected))
+                  false
+                  (let [mismatch (reduce (fn [acc idx]
+                                           (bit-or acc
+                                                   (bit-xor (aget derived-bytes idx)
+                                                            (aget expected idx))))
+                                         0
+                                         (range (.-length expected)))]
+                    (zero? mismatch)))))))
+
 (defn hmac-sha256 [key message]
   (js-await [crypto-key (.importKey js/crypto.subtle
                                     "raw"
@@ -194,22 +277,9 @@
              signed-query (str canonical-query "&X-Amz-Signature=" signature)]
             (str "https://" host canonical-uri "?" signed-query)))
 
-(defn base64url->uint8array [input]
-  (let [pad (if (pos? (mod (count input) 4))
-              (apply str (repeat (- 4 (mod (count input) 4)) "="))
-              "")
-        base64 (-> (str input pad)
-                   (string/replace "-" "+")
-                   (string/replace "_" "/"))
-        raw (js/atob base64)
-        bytes (js/Uint8Array. (.-length raw))]
-    (dotimes [i (.-length raw)]
-      (aset bytes i (.charCodeAt raw i)))
-    bytes))
-
 (defn decode-jwt-part [part]
-  (let [bytes (base64url->uint8array part)]
-    (js/JSON.parse (.decode text-decoder bytes))))
+  (let [data (base64url->uint8array part)]
+    (js/JSON.parse (.decode text-decoder data))))
 
 (defn import-rsa-key [jwk]
   (.importKey js/crypto.subtle
@@ -254,17 +324,9 @@
   (when etag
     (string/replace etag #"\"" "")))
 
-(defn bytes->base64url [bytes]
-  (let [binary (apply str (map #(js/String.fromCharCode %) (array-seq bytes)))
-        b64 (js/btoa binary)]
-    (-> b64
-        (string/replace #"\+" "-")
-        (string/replace #"/" "_")
-        (string/replace #"=+$" ""))))
-
 (defn short-id-for-page [graph-uuid page-uuid]
   (js-await [payload (.encode text-encoder (str graph-uuid ":" page-uuid))
              digest (.digest js/crypto.subtle "SHA-256" payload)]
-            (let [bytes (js/Uint8Array. digest)
-                  encoded (bytes->base64url bytes)]
+            (let [data (js/Uint8Array. digest)
+                  encoded (bytes->base64url data)]
               (subs encoded 0 10))))
