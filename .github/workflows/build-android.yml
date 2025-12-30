@@ -125,8 +125,7 @@ jobs:
           LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
 
       - name: Upload Sentry Sourcemaps (beta only)
-        if: ${{ steps.sentry_token.outputs.enabled == 'true' && github.repository == 'logseq/logseq' && (inputs.build-target == 'beta' || github.event.inputs.build-target == 'beta') }}
-        continue-on-error: true
+        if: ${{ secrets.SENTRY_AUTH_TOKEN != '' && (github.repository == 'Procyontta/logseq' && (inputs.build-target == 'beta' || github.event.inputs.build-target == 'beta')) }}
         run: |
           if [ "${{ steps.sentry_token.outputs.enabled }}" != "true" ]; then
             echo "Skipping Sentry upload: token not provided"
