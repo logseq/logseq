@@ -7,14 +7,18 @@
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [logseq.graph-parser :as graph-parser]
-            [logseq.graph-parser.db :as gp-db]))
+            [logseq.graph-parser :as graph-parser]))
+
+(defn get-page-file
+  [db page-name]
+  (some-> (ldb/get-page db page-name)
+          :block/file))
 
 (defn- page-exists-in-another-file
   "Conflict of files towards same page"
   [db page file]
   (when-let [page-name (:block/name page)]
-    (let [current-file (:file/path (gp-db/get-page-file db page-name))]
+    (let [current-file (:file/path (get-page-file db page-name))]
       (when (not= file current-file)
         current-file))))
 
