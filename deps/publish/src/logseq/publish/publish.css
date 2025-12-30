@@ -640,10 +640,12 @@ a:hover {
   overflow-wrap: anywhere;
 }
 
-.page-meta {
+.page-updated-at {
   color: var(--muted);
   font-size: 12px;
   white-space: nowrap;
+  margin-bottom: 1rem;
+  margin-left: 2px;
 }
 
 @media (max-width: 720px) {
@@ -679,7 +681,7 @@ a:hover {
     align-items: flex-start;
   }
 
-  .page-meta,
+  .page-updated-at,
   .tagged-meta {
     white-space: normal;
   }
