@@ -749,7 +749,11 @@
           {:file/path "logseq/custom.css"
            :file/content ".foo {background-color: blue}"}
           {:file/path "logseq/custom.js"
-           :file/content "// comment"}]
+           :file/content "// comment"}
+          {:file/path "logseq/publish.css"
+           :file/content ""}
+          {:file/path "logseq/publish.js"
+           :file/content ""}]
          :build-existing-tx? true}]
     original-data))
 

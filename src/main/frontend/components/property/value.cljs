@@ -20,6 +20,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
+            [frontend.handler.publish :as publish-handler]
             [frontend.handler.route :as route-handler]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.search :as search]
@@ -1237,17 +1238,36 @@
         {:on-click #(<create-new-block! block property "")}
         "Set default value"]
 
+       (= (:db/ident property) :logseq.property.publish/published-url)
+       [:div.flex.items-center.gap-2.w-full
+        [:a {:href (:block/title value)
+             :target "_blank"}
+         (:block/title value)]
+
+        (when-not config/publishing?
+          (shui/button
+           {:variant :text
+            :size :sm
+            :class "text-xs"
+            :on-click (fn [e]
+                        (util/stop e)
+                        (publish-handler/unpublish-page! block))}
+           "Unpublish"))]
+
        text-ref-type?
        (property-block-value value block property page-cp opts)
 
        :else
        (let [content (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros)))]
-         (if (contains? (set (keys string-value-on-click))
-                        (:db/ident property))
+         (cond
+           (contains? (set (keys string-value-on-click))
+                      (:db/ident property))
            [:div.w-full {:on-click (fn []
                                      (let [f (get string-value-on-click (:db/ident property))]
                                        (f block property)))}
             content]
+
+           :else
            content)))]))
 
 (rum/defc single-number-input
