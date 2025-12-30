@@ -11,14 +11,12 @@ frontend and commandline functionality.
 ## API
 
 This library is under the parent namespace `logseq.graph-parser`. This library
-provides two main namespaces for parsing, `logseq.graph-parser` and
-`logseq.graph-parser.cli`. `logseq.graph-parser/parse-file` is the main fn for
-the frontend. `logseq.graph-parser.cli/parse-graph` is the main fn for node.js
-CLIs.
+provides two main namespaces for parsing, `logseq.graph-parser`.
+`logseq.graph-parser/parse-file` is the main fn for the frontend.
 
 ## Usage
 
-See `logseq.graph-parser.cli-test` and [nbb-logseq example
+See [nbb-logseq example
 scripts](https://github.com/logseq/nbb-logseq/tree/main/examples) for example
 usage.
 
