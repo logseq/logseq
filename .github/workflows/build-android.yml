@@ -38,7 +38,7 @@ on:
       ANDROID_KEYSTORE_PASSWORD:
         required: true
       SENTRY_AUTH_TOKEN:
-        required: true
+        required: false
 
 env:
   CLOJURE_VERSION: '1.11.1.1413'
@@ -97,6 +97,17 @@ jobs:
           pkgver=$(node ./scripts/get-pkg-version.js "${{ inputs.build-target || github.event.inputs.build-target }}")
           echo "version=$pkgver" >> $GITHUB_OUTPUT
 
+      - name: Check Sentry token
+        id: sentry_token
+        env:
+          TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: |
+          if [ -n "$TOKEN" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Update Nightly APP Version
         if: ${{ inputs.build-target == '' || inputs.build-target == 'nightly' || github.event.inputs.build-target == 'nightly' }}
         run: |
@@ -114,7 +125,7 @@ jobs:
           LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
 
       - name: Upload Sentry Sourcemaps (beta only)
-        # if: ${{ github.repository == 'logseq/logseq' && (inputs.build-target == 'beta' || github.event.inputs.build-target == 'beta') }}
+        if: ${{ steps.sentry_token.outputs.enabled == 'true' && github.repository == 'logseq/logseq' && (inputs.build-target == 'beta' || github.event.inputs.build-target == 'beta') }}
         run: |
           curl -sL https://sentry.io/get-cli/ | SENTRY_CLI_VERSION=2.58.4 bash
           release_name="logseq-android@${{ steps.ref.outputs.version }}"

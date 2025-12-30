@@ -61,6 +61,13 @@ html.has-mobile-keyboard {
   }
 }
 
+html.is-native-android,
+html.is-native-ios {
+  .cp__sidebar-main-content {
+    padding-bottom: max(96px, env(safe-area-inset-bottom, 0px));
+  }
+}
+
 html, body {
   overscroll-behavior: none;
 }
