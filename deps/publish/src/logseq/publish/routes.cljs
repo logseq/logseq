@@ -383,7 +383,7 @@
                                 #js {"content-type" "text/html; charset=utf-8"}
                                 (publish-common/cors-headers))})
                 (js-await [data (.json resp)
-                           rows (or (aget data "pages") #js [])
+                           rows (or (aget data "tagged_nodes") #js [])
                            title (or tag-name "Tag")]
                           (js/Response.
                            (publish-render/render-tag-name-html tag-name title rows)
@@ -514,12 +514,12 @@
                                            (publish-render/render-not-published-html graph-uuid)
                                            #js {:headers (publish-common/merge-headers
                                                           #js {"content-type" "text/html; charset=utf-8"}
-                                                          (publish-common/cors-headers))}))))
-                            (js/Response.
-                             (publish-render/render-not-published-html graph-uuid)
-                             #js {:headers (publish-common/merge-headers
-                                            #js {"content-type" "text/html; charset=utf-8"}
-                                            (publish-common/cors-headers))}))
+                                                          (publish-common/cors-headers))})))
+                              (js/Response.
+                               (publish-render/render-not-published-html graph-uuid)
+                               #js {:headers (publish-common/merge-headers
+                                              #js {"content-type" "text/html; charset=utf-8"}
+                                              (publish-common/cors-headers))})))
                   (js-await [{:keys [allowed? provided?]} (check-page-password request graph-uuid page-uuid env)]
                             (if-not allowed?
                               (js/Response.

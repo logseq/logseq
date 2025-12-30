@@ -665,7 +665,9 @@
             page-uuid (page-ref->uuid s name->uuid)]
         (if page-uuid
           [[:a.page-ref {:href (str "/page/" graph-uuid "/" page-uuid)} (str "#" s)]]
-          [(str "#" s)]))
+          (if (and graph-uuid (not (string/blank? s)))
+            [[:a.page-ref {:href (str "/tag/" (js/encodeURIComponent s))} (str "#" s)]]
+            [(str "#" s)])))
 
       (= "Macro" type)
       (if-let [macro-data (normalize-macro-data data)]
@@ -1061,11 +1063,7 @@
         [:a.page-ref {:href href} (or source-page-title source-page-uuid)]
         [:span (or source-page-title source-page-uuid)])
       (when (and source-block-content (not page?))
-        [:div.tagged-block source-block-content])
-      [:div.tagged-sub
-       (if page?
-         (str "Page: " source-page-uuid)
-         (str "Block: " source-block-uuid))]]
+        [:div.tagged-block source-block-content])]
      [:span.tagged-meta (or (format-timestamp updated-at) "—")]]))
 
 (defn- author-usernames
@@ -1329,7 +1327,7 @@
   (let [rows tag-items
         title (or tag-title tag-uuid)
         doc [:html
-             (render-head (str "Tag - " title))
+             (render-head (str "#" title))
              [:body
               [:main.wrap
                (toolbar-node
@@ -1337,9 +1335,7 @@
                   [:a.toolbar-btn {:href (str "/graph/" graph-uuid)} "Home"])
                 (search-node graph-uuid)
                 (theme-toggle-node))
-               [:h1 title]
-               [:p.tag-sub (str "Tag: " tag-uuid)]
-               [:p.graph-meta (str "Graph: " graph-uuid)]
+               [:h1 (str "#" title)]
                (if (seq rows)
                  [:ul.page-list
                   (for [item rows]
@@ -1357,24 +1353,13 @@
              [:body
               [:main.wrap
                (toolbar-node
-                (search-node nil)
+                [:a.toolbar-btn {:href "/"} "Home"]
                 (theme-toggle-node))
-               [:h1 title]
-               [:p.tag-sub (str "Tag: " tag-name)]
+               [:h1 (str "#" title)]
                (if (seq rows)
                  [:ul.page-list
-                  (for [row rows
-                        :let [graph-id (tag-item-val row :graph_uuid)
-                              page-uuid (tag-item-val row :source_page_uuid)
-                              page-title (tag-item-val row :source_page_title)
-                              href (when (and graph-id page-uuid)
-                                     (str "/page/" graph-id "/" page-uuid))]]
-                    [:li.page-item
-                     [:div.page-links
-                      (if href
-                        [:a.page-ref {:href href} (or page-title page-uuid)]
-                        [:span (or page-title page-uuid)])]
-                     [:span.page-meta (or (format-timestamp (tag-item-val row :updated_at)) "—")]])]
+                  (for [row rows]
+                    (render-tagged-item (tag-item-val row :graph_uuid) row))]
                  [:p "No published pages use this tag yet."])
                (publish-script)]]]]
     (str "<!doctype html>" (render-hiccup doc))))
@@ -1388,9 +1373,7 @@
              [:body
               [:main.wrap
                (toolbar-node
-                (when graph-uuid
-                  [:a.toolbar-btn {:href (str "/graph/" graph-uuid)} "Home"])
-                (search-node graph-uuid)
+                [:a.toolbar-btn {:href "/"} "Home"]
                 (theme-toggle-node))
                [:h1 title]
                [:p.tag-sub (str "Reference: " ref-name)]
@@ -1467,7 +1450,7 @@
              [:body
               [:main.wrap
                (toolbar-node
-                (search-node nil)
+                [:a.toolbar-btn {:href "/"} "Home"]
                 (theme-toggle-node))
                [:div.not-found
                 [:p.not-found-eyebrow "404"]
