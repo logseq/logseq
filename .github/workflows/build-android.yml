@@ -125,7 +125,7 @@ jobs:
           LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
 
       - name: Upload Sentry Sourcemaps (beta only)
-        if: ${{ steps.sentry_token.outputs.enabled == 'true' && github.repository == 'logseq/logseq' && (inputs.build-target == 'beta' || github.event.inputs.build-target == 'beta') }}
+        if: ${{ secrets.SENTRY_AUTH_TOKEN != '' && (github.repository == 'Procyontta/logseq' && (inputs.build-target == 'beta' || github.event.inputs.build-target == 'beta')) }}
         run: |
           curl -sL https://sentry.io/get-cli/ | SENTRY_CLI_VERSION=2.58.4 bash
           release_name="logseq-android@${{ steps.ref.outputs.version }}"
