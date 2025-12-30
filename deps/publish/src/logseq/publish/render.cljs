@@ -135,6 +135,30 @@
   [& nodes]
   (into [:div.page-toolbar] nodes))
 
+(defn- search-node
+  [graph-uuid]
+  (let [graph-id (some-> graph-uuid str)]
+    [:div.publish-search {:data-graph-uuid graph-id}
+     [:button.publish-search-toggle
+      {:type "button"
+       :aria-label "Search"
+       :aria-expanded "false"}
+      [:span.ti.ti-search {:aria-hidden "true"}]]
+     [:input.publish-search-input
+      (cond->
+       {:id "publish-search-input"
+        :type "search"
+        :placeholder "Search graph (Cmd+K)"
+        :autocomplete "off"
+        :spellcheck "false"
+        :aria-label "Search graph"}
+        (string/blank? (or graph-id ""))
+        (assoc :disabled true :placeholder "Search unavailable"))]
+     [:div.publish-search-hint "Up/Down to navigate"]
+     [:div.publish-search-results
+      {:id "publish-search-results"
+       :hidden true}]]))
+
 (defn- theme-init-script
   []
   [:script
@@ -967,8 +991,12 @@
                      positioned-left (render-positioned-properties block-left ctx (:entities ctx) :block-left)
                      positioned-right (render-positioned-properties block-right ctx (:entities ctx) :block-right)
                      positioned-below (render-positioned-properties block-below ctx (:entities ctx) :block-below)
-                     properties (render-properties properties ctx (:entities ctx))]
+                     properties (render-properties properties ctx (:entities ctx))
+                     block-uuid (:block/uuid display-block)
+                     block-uuid-str (some-> block-uuid str)]
                  [:li.block
+                  (cond-> {:data-block-uuid block-uuid-str}
+                    block-uuid-str (assoc :id (str "block-" block-uuid-str)))
                   [:div.block-content
                    (when positioned-left positioned-left)
                    (block-display-node display-block ctx depth)
@@ -1191,6 +1219,7 @@
                (toolbar-node
                 (when graph-uuid
                   [:a.toolbar-btn {:href (str "/graph/" graph-uuid)} "Home"])
+                (search-node graph-uuid)
                 (theme-toggle-node))
 
                (page-title-node page-title (:logseq.property/icon page-entity))
@@ -1236,6 +1265,7 @@
              [:body
               [:main.wrap
                (toolbar-node
+                (search-node graph-uuid)
                 (theme-toggle-node))
                [:h1 "Published pages"]
                (if (seq rows)
@@ -1275,6 +1305,7 @@
              [:body
               [:main.wrap
                (toolbar-node
+                (search-node nil)
                 (theme-toggle-node))
                [:h1 title]
                (if (seq rows)
@@ -1300,6 +1331,7 @@
                (toolbar-node
                 (when graph-uuid
                   [:a.toolbar-btn {:href (str "/graph/" graph-uuid)} "Home"])
+                (search-node graph-uuid)
                 (theme-toggle-node))
                [:h1 title]
                [:p.tag-sub (str "Tag: " tag-uuid)]
@@ -1321,6 +1353,7 @@
              [:body
               [:main.wrap
                (toolbar-node
+                (search-node nil)
                 (theme-toggle-node))
                [:h1 title]
                [:p.tag-sub (str "Tag: " tag-name)]
@@ -1353,6 +1386,7 @@
                (toolbar-node
                 (when graph-uuid
                   [:a.toolbar-btn {:href (str "/graph/" graph-uuid)} "Home"])
+                (search-node graph-uuid)
                 (theme-toggle-node))
                [:h1 title]
                [:p.tag-sub (str "Reference: " ref-name)]
@@ -1384,6 +1418,7 @@
                (toolbar-node
                 (when graph-uuid
                   [:a.toolbar-btn {:href (str "/graph/" graph-uuid)} "Home"])
+                (search-node graph-uuid)
                 (theme-toggle-node))
                [:h1 title]
                [:p.tag-sub "This page hasn't been published yet."]
@@ -1400,6 +1435,7 @@
                (toolbar-node
                 (when graph-uuid
                   [:a.toolbar-btn {:href (str "/graph/" graph-uuid)} "Home"])
+                (search-node graph-uuid)
                 (theme-toggle-node))
                [:div.password-card
                 [:h1 title]
@@ -1427,6 +1463,7 @@
              [:body
               [:main.wrap
                (toolbar-node
+                (search-node nil)
                 (theme-toggle-node))
                [:div.not-found
                 [:p.not-found-eyebrow "404"]
