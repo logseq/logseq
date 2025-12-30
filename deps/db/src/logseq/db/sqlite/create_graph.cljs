@@ -235,7 +235,9 @@
                        import-type
                        (into (sqlite-util/import-tx import-type))
                        graph-git-sha
-                       (conj (sqlite-util/kv :logseq.kv/graph-git-sha graph-git-sha)))
+                       (conj (sqlite-util/kv :logseq.kv/graph-git-sha graph-git-sha))
+                       true
+                       (conj (sqlite-util/kv :logseq.kv/graph-uuid (common-uuid/gen-uuid))))
         initial-files (build-initial-files config-content)
         {properties-tx :tx :keys [properties]} (build-initial-properties)
         db-ident->properties (zipmap (map :db/ident properties) properties)
