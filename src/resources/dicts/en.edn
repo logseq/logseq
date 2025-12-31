@@ -515,6 +515,7 @@
   :sidebar/close-top              "Closes the top item in the right sidebar"
   :sidebar/clear                  "Clear all in the right sidebar"
   :misc/copy                      "Copy"
+  :publish/open-dialog            "Open publish dialog for current page"
   :graph/export-as-html           "Export public graph pages as html"
   :graph/open                     "Select graph to open"
   :graph/remove                   "Remove a graph"
