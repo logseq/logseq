@@ -5,6 +5,7 @@
             [frontend.components.assets :as assets]
             [frontend.components.cmdk.core :as cmdk]
             [frontend.components.page :as component-page]
+            [frontend.components.page-menu :as page-menu]
             [frontend.components.plugins :as plugin]
             [frontend.components.property.dialog :as property-dialog]
             [frontend.components.quick-add :as quick-add]
@@ -99,6 +100,15 @@
   (if classic?
     (plugin/open-select-theme!)
     (route-handler/go-to-search! :themes)))
+
+(defmethod events/handle :publish/open-dialog [_]
+  (when-not config/publishing?
+    (when-let [page-name (state/get-current-page)]
+      (when-let [page (db/get-page page-name)]
+        (when (db/page? page)
+          (shui/dialog-open!
+           (fn [] (page-menu/publish-page-dialog page))
+           {:class "w-auto max-w-md"}))))))
 
 (defmethod events/handle :ui/toggle-appearance [_]
   (let [popup-id "appearance_settings"]
