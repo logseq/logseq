@@ -978,6 +978,7 @@
                              visited
                              (inc depth))
                      has-children? (boolean nested)
+                     collapsed? (:block/collapsed? display-block)
                      raw-props (entity-properties display-block ctx (:entities ctx))
                      icon-prop (get raw-props :logseq.property/icon)
                      tags-prop (get raw-props :block/tags)
@@ -996,8 +997,9 @@
                      properties (render-properties properties ctx (:entities ctx))
                      block-uuid (:block/uuid display-block)
                      block-uuid-str (some-> block-uuid str)]
-                 [:li.block
-                  (cond-> {:data-block-uuid block-uuid-str}
+                 [:li
+                  (cond-> {:data-block-uuid block-uuid-str
+                           :class (if collapsed? "block is-collapsed" "block")}
                     block-uuid-str (assoc :id (str "block-" block-uuid-str)))
                   [:div.block-content
                    (when positioned-left positioned-left)
@@ -1005,7 +1007,8 @@
                    (when positioned-right positioned-right)
                    (when has-children?
                      [:button.block-toggle
-                      {:type "button" :aria-expanded "true"}
+                      {:type "button"
+                       :aria-expanded (str (not collapsed?))}
                       "▾"])]
                   (when positioned-below positioned-below)
                   (when properties

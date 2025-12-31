@@ -68,3 +68,24 @@
           second-eid (:db/id (d/entity db [:block/uuid second-uuid]))]
       (is (contains? datom-eids first-eid))
       (is (contains? datom-eids second-eid)))))
+
+(deftest publish-payload-includes-collapsed-state
+  (testing "collapsed blocks include :block/collapsed? in publish payload"
+    (let [block-uuid (random-uuid)
+          conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "Page"}
+                  :blocks [{:block/title "Collapsed"
+                            :block/uuid block-uuid
+                            :build/keep-uuid? true
+                            :block/collapsed? true}]}])
+          db @conn
+          page (db-test/find-page-by-title db "Page")
+          payload (#'worker-publish/build-publish-page-payload db page nil)
+          datoms (:datoms payload)
+          block-eid (:db/id (d/entity db [:block/uuid block-uuid]))
+          has-collapsed? (some (fn [[e a v]]
+                                 (and (= e block-eid)
+                                      (= a :block/collapsed?)
+                                      (= v true)))
+                               datoms)]
+      (is has-collapsed?))))
