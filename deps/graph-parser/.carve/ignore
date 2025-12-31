@@ -21,3 +21,7 @@ logseq.graph-parser.text/get-page-name
 logseq.graph-parser.text/get-namespace-last-part
 ;; API
 logseq.graph-parser.whiteboard/shape->block
+;; API
+logseq.graph-parser/parse-file
+;; API
+logseq.graph-parser/filter-files
