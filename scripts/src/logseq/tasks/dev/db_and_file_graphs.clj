@@ -76,7 +76,6 @@
 (def file-graph-paths
   "Paths _only_ for file graphs"
   ["deps/db/src/logseq/db/file_based"
-   "deps/graph-parser/src/logseq/graph_parser/db.cljs"
    "deps/graph-parser/src/logseq/graph_parser/extract.cljc"
    "deps/graph-parser/src/logseq/graph_parser/property.cljs"
    "deps/graph-parser/src/logseq/graph_parser.cljs"
