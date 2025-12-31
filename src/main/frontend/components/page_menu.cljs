@@ -32,7 +32,10 @@
                         (p/finally (fn []
                                      (set-publishing! false)
                                      (shui/dialog-close!))))))]
-    [:div.flex.flex-col.gap-4.p-2
+    [:form.flex.flex-col.gap-4.p-2
+     {:on-submit (fn [e]
+                   (.preventDefault e)
+                   (submit!))}
      [:div.text-lg.font-medium "Publish page"]
      [:div.text-sm.opacity-70
       "Optionally protect this page with a password. Leave empty for public access."]
@@ -44,10 +47,12 @@
      [:div.flex.justify-end.gap-2
       (shui/button
        {:variant "ghost"
+        :type "button"
         :on-click #(shui/dialog-close!)}
        "Cancel")
       (shui/button
-       {:on-click submit!
+       {:type "submit"
+        :auto-focus true
         :disabled publishing?}
        (if publishing?
          "Publishing..."

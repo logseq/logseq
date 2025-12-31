@@ -376,6 +376,10 @@
                                              :inactive (not (util/electron?))
                                              :binding "mod+s"}
 
+   :publish/open-dialog                     {:binding "mod+m"
+                                             :inactive config/publishing?
+                                             :fn      #(state/pub-event! [:publish/open-dialog])}
+
    :command/run                             {:binding  "mod+shift+1"
                                              :inactive (not (util/electron?))
                                              :fn       #(do
@@ -667,6 +671,7 @@
           :sidebar/open-today-page
           :sidebar/clear
           :command/run
+          :publish/open-dialog
           :command-palette/toggle
           :editor/add-property
           :window/close])
@@ -847,7 +852,8 @@
      :ui/customize-appearance]
 
     :shortcut.category/others
-    [:pdf/previous-page
+    [:publish/open-dialog
+     :pdf/previous-page
      :pdf/next-page
      :pdf/close
      :pdf/find
