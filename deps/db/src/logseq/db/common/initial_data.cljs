@@ -255,16 +255,19 @@
           (assoc :children children))))))
 
 (defn get-latest-journals
-  [db]
-  (let [today (date-time-util/date->int (js/Date.))]
-    (->> (d/datoms db :avet :block/journal-day)
-         vec
-         rseq
-         (keep (fn [d]
-                 (when (<= (:v d) today)
-                   (let [e (d/entity db (:e d))]
-                     (when (and (common-entity-util/journal? e) (:db/id e))
-                       e))))))))
+  ([db] (get-latest-journals db nil))
+  ([db {:keys [limit offset] :or {limit nil offset 0}}]
+   (let [today (date-time-util/date->int (js/Date.))]
+     (->> (d/datoms db :avet :block/journal-day)
+          vec
+          rseq
+          (keep (fn [d]
+                  (when (<= (:v d) today)
+                    (let [e (d/entity db (:e d))]
+                      (when (and (common-entity-util/journal? e) (:db/id e))
+                        e)))))
+          (drop offset)
+          (#(if limit (take limit %) %))))))
 
 (defn- get-structured-datoms
   [db]

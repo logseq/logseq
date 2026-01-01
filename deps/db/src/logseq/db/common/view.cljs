@@ -426,15 +426,24 @@
       (distinct (mapcat keys entities)))))
 
 (defn ^:api ^:large-vars/cleanup-todo get-view-data
-  [db view-id {:keys [journals? _view-for-id view-feature-type group-by-property-ident input query-entity-ids query filters sorting]
+  [db view-id {:keys [journals? _view-for-id view-feature-type group-by-property-ident input query-entity-ids query filters sorting
+                      journal-limit journal-offset]
                :as opts}]
   ;; TODO: create a view for journals maybe?
   (cond
     journals?
-    (let [ids (->> (ldb/get-latest-journals db)
-                   (mapv :db/id))]
-      {:count (count ids)
-       :data ids})
+    (let [pagination-opts (when (or journal-limit journal-offset)
+                            {:limit journal-limit
+                             :offset (or journal-offset 0)})
+          ids (->> (ldb/get-latest-journals db pagination-opts)
+                   (mapv :db/id))
+          ;; Get total count for pagination by calling without limit
+          total-count (if pagination-opts
+                        (count (ldb/get-latest-journals db nil))
+                        (count ids))]
+      {:count total-count
+       :data ids
+       :has-more? (and journal-limit (> total-count (+ (or journal-offset 0) (count ids))))})
     :else
     (let [view (d/entity db view-id)
           group-by-property (:logseq.property.view/group-by-property view)
