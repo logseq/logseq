@@ -73,7 +73,6 @@ deps/publish/worker/.env*
 
 tx-log*
 clj-e2e/.wally
-clj-e2e/resources
 clj-e2e/e2e-dump
 .dir-locals.el
 .projectile
