@@ -3,6 +3,14 @@
 name: Build-Desktop-Release
 
 on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'src/**'
+      - 'resources/**'
+      - 'yarn.lock'
+      - 'package.json'
+      - 'deps/**'
   workflow_dispatch:
     inputs:
       build-target:
@@ -43,8 +51,6 @@ on:
         type: boolean
         required: true
         default: true
-  schedule: # Every workday at the 2 P.M. (UTC) we run a scheduled nightly build
-    - cron: '0 14 * * MON-FRI'
 
 env:
   CLOJURE_VERSION: '1.10.1.763'
@@ -148,7 +154,7 @@ jobs:
         working-directory: ./static
 
       - name: Upload Sentry Sourcemaps (beta only)
-        if: ${{ github.repository == 'logseq/logseq' && github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
+        if: ${{ secrets.SENTRY_AUTH_TOKEN != '' && github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
         run: |
           curl -sL https://sentry.io/get-cli/ | bash
           release_name="logseq@${{ steps.ref.outputs.version }}"
@@ -212,69 +218,6 @@ jobs:
           name: logseq-linux-builds
           path: builds
 
-  build-windows:
-    runs-on: windows-latest
-    needs: [ compile-cljs ]
-    steps:
-      - name: Download The Static Asset
-        uses: actions/download-artifact@v2
-        with:
-          name: static
-          path: static
-
-      - name: Retrieve tag version
-        id: ref
-        run: |
-          $env:PkgVer=$(cat ./static/VERSION)
-          echo "::set-output name=version::$env:PkgVer"
-
-      - name: Install Node.js, NPM and Yarn
-        uses: actions/setup-node@v2
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      # - name: Cache Node Modules
-      #   uses: actions/cache@v2
-      #   with:
-      #    path: |
-      #      **/node_modules
-      #    key: ${{ runner.os }}-node-modules
-
-      - name: Deps Electron app
-        run: yarn install
-        working-directory: ./static
-
-      - name: Fix Deps Electron app
-        run: yarn run postinstall
-        working-directory: ./static/node_modules/dugite/
-
-      - name: Prepare Code Sign
-        if: ${{ github.repository == 'logseq/logseq' }}
-        run: |
-          [IO.File]::WriteAllBytes($(Get-Location).Path + "\codesign.pfx", [Convert]::FromBase64String($env:CERTIFICATE))
-        env:
-          CERTIFICATE: ${{ secrets.CODE_SIGN_CERTIFICATE }}
-
-      - name: Build/Release Electron app
-        run: yarn electron:make
-        working-directory: ./static
-        env:
-          CODE_SIGN_CERTIFICATE_FILE: ../codesign.pfx
-          CODE_SIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODE_SIGN_CERTIFICATE_PASSWORD }}
-
-      - name: Save Artifact
-        run: |
-          mkdir builds
-          mv static\out\make\squirrel.windows\x64\*.exe    builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.exe
-          mv static\out\make\squirrel.windows\x64\*.nupkg  builds\Logseq-win-x64-${{ steps.ref.outputs.version }}-full.nupkg
-          mv static\out\make\squirrel.windows\x64\RELEASES builds\RELEASES
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v2
-        with:
-          name: logseq-win64-builds
-          path: builds
-
   build-macos-x64:
     needs: [ compile-cljs ]
     runs-on: macos-11
@@ -313,7 +256,7 @@ jobs:
             ${{ runner.os }}-yarn-
 
       - name: Signing By Apple Developer ID
-        if: ${{ github.repository == 'logseq/logseq' }}
+        if: ${{ secrets.APPLE_CERTIFICATES_P12 != '' && secrets.APPLE_CERTIFICATES_P12_PASSWORD != '' }}
         uses: apple-actions/import-codesign-certs@v1
         with:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATES_P12 }}
@@ -381,7 +324,7 @@ jobs:
             ${{ runner.os }}-arm64-yarn-
 
       - name: Signing By Apple Developer ID
-        if: ${{ github.repository == 'logseq/logseq' }}
+        if: ${{ secrets.APPLE_CERTIFICATES_P12 != '' && secrets.APPLE_CERTIFICATES_P12_PASSWORD != '' }}
         uses: apple-actions/import-codesign-certs@v1
         with:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATES_P12 }}
@@ -433,7 +376,7 @@ jobs:
 
   nightly-release:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.build-target == 'nightly' }}
-    needs: [ build-macos-x64, build-macos-arm64, build-linux, build-windows, build-android ]
+    needs: [ build-macos-x64, build-macos-arm64, build-linux, build-android ]
     runs-on: ubuntu-18.04
     steps:
       - name: Download MacOS x64 Artifacts
@@ -500,7 +443,7 @@ jobs:
   release:
     # NOTE: For now, we only have beta channel to be released on Github
     if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
-    needs: [ build-macos-x64, build-macos-arm64, build-linux, build-windows ]
+    needs: [ build-macos-x64, build-macos-arm64, build-linux ]
     runs-on: ubuntu-latest
     steps:
       - name: Download MacOS x64 Artifacts
