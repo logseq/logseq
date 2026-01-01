@@ -674,7 +674,7 @@
      :id->new-uuid id->new-uuid}))
 
 (defn- get-target-block
-  [db blocks target-block {:keys [outliner-op bottom? top? indent? sibling? up?]}]
+  [db blocks target-block {:keys [outliner-op bottom? top? indent? sibling? up? replace-empty-target?]}]
   (when-let [block (if (:db/id target-block)
                      (d/entity db (:db/id target-block))
                      (when (:block/uuid target-block)
@@ -707,7 +707,7 @@
                                top?
                                [block false]
 
-                               bottom?
+                               (and bottom? (not replace-empty-target?))
                                (if-let [last-child (last (ldb/sort-by-order (:block/_parent block)))]
                                  [last-child true]
                                  [block false])
