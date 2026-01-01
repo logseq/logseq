@@ -33,7 +33,6 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
             [frontend.mixins :as mixins]
-            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -312,36 +311,6 @@
                             nil))}
        page)]]))
 
-(defn- page-mouse-over
-  [e *control-show? *all-collapsed?]
-  (util/stop e)
-  (reset! *control-show? true)
-  (p/let [blocks (editor-handler/<all-blocks-with-level {:collapse? true})
-          all-collapsed?
-          (->> blocks
-               (filter (fn [b] (editor-handler/collapsable? (:block/uuid b))))
-               (empty?))]
-    (reset! *all-collapsed? all-collapsed?)))
-
-(defn- page-mouse-leave
-  [e *control-show?]
-  (util/stop e)
-  (reset! *control-show? false))
-
-(rum/defcs page-blocks-collapse-control <
-  [state title *control-show? *all-collapsed?]
-  [:a.page-blocks-collapse-control
-   {:id (str "control-" title)
-    :on-click (fn [event]
-                (util/stop event)
-                (if @*all-collapsed?
-                  (editor-handler/expand-all!)
-                  (editor-handler/collapse-all!))
-                (swap! *all-collapsed? not))}
-   [:span.mt-6 {:class (if @*control-show?
-                         "control-show cursor-pointer" "control-hide")}
-    (ui/rotating-arrow @*all-collapsed?)]])
-
 (defn- get-path-page-name
   [state page-name]
   (or page-name
@@ -475,14 +444,6 @@
          [:div.relative.grid.gap-4.sm:gap-8.page-inner.mb-16
           (when-not (or block? sidebar?)
             [:div.flex.flex-row.space-between
-             (when (or (mobile-util/native-platform?) (util/mobile?))
-               [:div.flex.flex-row.pr-2
-                {:style {:margin-left -15}
-                 :on-mouse-over (fn [e]
-                                  (page-mouse-over e *control-show? *all-collapsed?))
-                 :on-mouse-leave (fn [e]
-                                   (page-mouse-leave e *control-show?))}
-                (page-blocks-collapse-control title *control-show? *all-collapsed?)])
              (when (ldb/page? page)
                (db-page-title page
                               {:sidebar? sidebar?
