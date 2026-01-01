@@ -1,11 +1,14 @@
 (ns electron.utils
-  (:require [clojure.string :as string]
+  (:require ["electron" :refer [app BrowserWindow]]
             ["fs-extra" :as fs]
-            ["path" :as path]
+            ["path" :as node-path]
+            [cljs-bean.core :as bean]
+            [clojure.string :as string]
             [electron.configs :as cfgs]
             [electron.logger :as logger]
-            [cljs-bean.core :as bean]
-            ["electron" :refer [app BrowserWindow]]))
+            [logseq.cli.common.graph :as cli-common-graph]
+            [logseq.db.sqlite.util :as sqlite-util]
+            [promesa.core :as p]))
 
 (defonce *win (atom nil)) ;; The main window
 
@@ -15,16 +18,12 @@
 
 (defonce prod? (= js/process.env.NODE_ENV "production"))
 
-;; Under e2e testing?
-(defonce ci? (let [v js/process.env.CI]
-               (or (true? v)
-                   (= v "true"))))
-
 (defonce dev? (not prod?))
 (defonce *fetchAgent (atom nil))
 
 (defonce open (js/require "open"))
-(defonce HttpsProxyAgent (js/require "https-proxy-agent"))
+(defonce HttpsProxyAgent (.-HttpsProxyAgent (js/require "https-proxy-agent")))
+(defonce SocksProxyAgent (.-SocksProxyAgent (js/require "socks-proxy-agent")))
 (defonce _fetch (js/require "node-fetch"))
 (defonce extract-zip (js/require "extract-zip"))
 
@@ -33,65 +32,173 @@
   ([url options]
    (_fetch url (bean/->js (merge options {:agent @*fetchAgent})))))
 
+(defn fix-win-path!
+  [path]
+  (when (not-empty path)
+    (if win32?
+      (string/replace path "\\" "/")
+      path)))
+
+(defn to-native-win-path!
+  "Convert path to native win path"
+  [path]
+  (when (not-empty path)
+    (if win32?
+      (string/replace path "/" "\\")
+      path)))
+
 (defn get-ls-dotdir-root
   []
-  (let [lg-dir (path/join (.getPath app "home") ".logseq")]
-    (if-not (fs/existsSync lg-dir)
-      (do (fs/mkdirSync lg-dir) lg-dir)
-      lg-dir)))
+  (let [lg-dir (node-path/join (.getPath app "home") ".logseq")]
+    (when-not (fs/existsSync lg-dir)
+      (fs/mkdirSync lg-dir))
+    (fix-win-path! lg-dir)))
 
 (defn get-ls-default-plugins
   []
-  (let [plugins-root (path/join (get-ls-dotdir-root) "plugins")
+  (let [plugins-root (node-path/join (get-ls-dotdir-root) "plugins")
         _ (when-not (fs/existsSync plugins-root)
             (fs/mkdirSync plugins-root))
         dirs (js->clj (fs/readdirSync plugins-root #js{"withFileTypes" true}))
         dirs (->> dirs
                   (filter #(.isDirectory %))
                   (filter (fn [f] (not (some #(string/starts-with? (.-name f) %) ["_" "."]))))
-                  (map #(path/join plugins-root (.-name %))))]
+                  (map #(node-path/join plugins-root (.-name %))))]
     dirs))
 
-(defn set-fetch-agent
-  [{:keys [protocol host port] :as opts}]
-  (reset! *fetchAgent
-          (when (and protocol host port)
-            (new HttpsProxyAgent (str protocol "://" host ":" port))))
-  (cfgs/set-item! :settings/agent opts))
+(defn- set-fetch-agent-proxy
+  "Set proxy for fetch agent(plugin system)
+  protocol: http | socks5"
+  [{:keys [protocol host port]}]
+  (if (and protocol host port (or (= protocol "http") (= protocol "socks5")))
+    (let [proxy-url (str protocol "://" host ":" port)]
+      (condp = protocol
+        "http"
+        (reset! *fetchAgent (new HttpsProxyAgent proxy-url))
+        "socks5"
+        (reset! *fetchAgent (new SocksProxyAgent proxy-url))
+        (logger/error "Unknown proxy protocol:" protocol)))
+    (reset! *fetchAgent nil)))
 
-(defn restore-user-fetch-agent
+(defn <set-electron-proxy
+  "Set proxy for electron
+  type: system | direct | socks5 | http"
+  ([{:keys [type host port] :or {type "system"}}]
+   (let [->proxy-rules (fn [type host port]
+                         (cond
+                           (= type "http")
+                           (str "http=" host ":" port ";https=" host ":" port)
+                           (= type "socks5")
+                           (str "http=socks5://" host ":" port ";https=socks5://" host ":" port)
+                           (or (= type "socks") (= type "socks4"))
+                           (str "http=socks://" host ":" port ";https=socks://" host ":" port)
+                           (= type "direct")
+                           "direct://"
+                           :else
+                           nil))
+         config (cond
+                  (= type "system")
+                  #js {:mode "system"}
+
+                  (= type "direct")
+                  #js {:mode "direct"}
+
+                  (or (= type "socks5") (= type "http"))
+                  #js {:mode "fixed_servers"
+                       :proxyRules (->proxy-rules type host port)
+                       :proxyBypassRules "<local>"}
+
+                  :else
+                  #js {:mode "system"})
+         sess (.. ^js @*win -webContents -session)]
+     (if sess
+       (p/do!
+        (.setProxy sess config)
+        (.forceReloadProxyConfig sess))
+       (p/resolved nil)))))
+
+(defn- parse-pac-rule
+  "Parse Proxy Auto Config(PAC) line"
+  [line]
+  (let [parts (string/split line #"[ :]")
+        type (first parts)]
+    (cond
+      (= type "DIRECT")
+      nil
+
+      (and (contains? #{"PROXY" "HTTP" "SOCKS"} type)
+           (>= (count parts) 3))
+      {:protocol (if (= type "SOCKS") "socks5" "http")
+       :host (nth parts 1)
+       :port (nth parts 2)}
+
+      :else
+      (do
+        (logger/warn "Unknown PAC rule:" line)
+        nil))))
+
+(defn <get-system-proxy
+  "Get system proxy for url, requires proxy to be set to system"
+  ([] (<get-system-proxy "https://www.google.com"))
+  ([for-url]
+   (when-let [sess (.. ^js @*win -webContents -session)]
+     (p/let [proxy (.resolveProxy sess for-url)
+             pac-opts (->> (string/split proxy #";")
+                        (map parse-pac-rule)
+                        (remove nil?))]
+       (when (seq pac-opts)
+         (first pac-opts))))))
+
+(defn <set-proxy
+  "Set proxy for electron, fetch"
+  ([{:keys [type host port] :or {type "system"} :as opts}]
+   (logger/info "set proxy to" opts)
+   (cond
+     (= type "system")
+     (p/let [_ (<set-electron-proxy {:type "system"})
+             proxy (<get-system-proxy)]
+       (set-fetch-agent-proxy proxy))
+
+     (= type "direct")
+     (do
+       (<set-electron-proxy {:type "direct"})
+       (set-fetch-agent-proxy nil))
+
+     (or (= type "socks5") (= type "http"))
+     (do
+       (<set-electron-proxy {:type type :host host :port port})
+       (set-fetch-agent-proxy {:protocol type :host host :port port}))
+
+     :else
+     (logger/error "Unknown proxy type:" type))))
+
+(defn <restore-proxy-settings
+  "Restore proxy settings from configs.edn"
   []
-  (when-let [agent (cfgs/get-item :settings/agent)]
-    (set-fetch-agent agent)))
+  (let [settings (cfgs/get-item :settings/agent)
+        settings (cond
+                   (:type settings)
+                   settings
 
-(defn ignored-path?
-  "Ignore given path from file-watcher notification"
-  [dir path]
-  (when (string? path)
-    (or
-     (some #(string/starts-with? path (str dir "/" %))
-           ["." ".recycle" "node_modules" "logseq/bak" "version-files"])
-     (some #(string/includes? path (str "/" % "/"))
-           ["." ".recycle" "node_modules" "logseq/bak" "version-files"])
-     (some #(string/ends-with? path %)
-           [".DS_Store" "logseq/graphs-txid.edn" "logseq/broken-config.edn"])
-     ;; hidden directory or file
-     (let [relpath (path/relative dir path)]
-       (or (re-find #"/\.[^.]+" relpath)
-           (re-find #"^\.[^.]+" relpath))))))
+                   ;; migration from old config
+                   (not-empty (:protocol settings))
+                   (assoc settings :type (:protocol settings))
 
-(defn should-read-content?
-  "Skip reading content of file while using file-watcher"
+                   :else
+                   {:type "system"})]
+    (logger/info "restore proxy settings" settings)
+    (<set-proxy settings)))
+
+(defn save-proxy-settings
+  "Save proxy settings to configs.edn"
+  [{test' :test :keys [type host port] :or {type "system"}}]
+  (if (or (= type "system") (= type "direct"))
+    (cfgs/set-item! :settings/agent {:type type :test test'})
+    (cfgs/set-item! :settings/agent {:type type :protocol type :host host :port port :test test'})))
+
+(defn read-file-raw
   [path]
-  (let [ext (string/lower-case (path/extname path))]
-    (contains? #{".md" ".markdown" ".org" ".js" ".edn" ".css"} ext)))
-
-(defn fix-win-path!
-  [path]
-  (when path
-    (if win32?
-      (string/replace path "\\" "/")
-      path)))
+  (fs/readFileSync path))
 
 (defn read-file
   [path]
@@ -133,12 +240,14 @@
 (defn get-graph-dir
   "required by all internal state in the electron section"
   [graph-name]
-  (string/replace graph-name "logseq_local_" ""))
+  (when (string/starts-with? graph-name sqlite-util/db-version-prefix)
+    (node-path/join (cli-common-graph/get-db-graphs-dir) (string/replace-first graph-name sqlite-util/db-version-prefix ""))))
 
-(defn get-graph-name
-  "reversing `get-graph-dir`"
-  [graph-dir]
-  (str "logseq_local_" graph-dir))
+(comment
+  (defn get-graph-name
+    "Reverse `get-graph-dir`"
+    [graph-dir]
+    (str sqlite-util/db-version-prefix (node-path/basename graph-dir))))
 
 (defn decode-protected-assets-schema-path
   [schema-path]
@@ -154,3 +263,18 @@
 (defn normalize-lc
   [s]
   (normalize (string/lower-case s)))
+
+(defn safe-decode-uri-component
+  [uri]
+  (try
+    (js/decodeURIComponent uri)
+    (catch :default _
+      (println "decodeURIComponent failed: " uri)
+      uri)))
+
+(defn fs-stat->clj
+  [path]
+  (let [stat (fs/statSync path)]
+    {:size (.-size stat)
+     :mtime (.-mtime stat)
+     :ctime (.-ctime stat)}))

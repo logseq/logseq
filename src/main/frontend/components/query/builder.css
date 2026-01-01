@@ -1,0 +1,66 @@
+.cp__query-builder {
+    @apply grid auto-rows-max gap-2;
+
+    &-filter {
+        @apply flex flex-row flex-wrap items-center gap-1;
+        svg {
+          width: 14px;
+          height: 14px;
+        }
+    }
+
+    .between-date {
+        min-width: 36em;
+        padding: 1em;
+    }
+
+    .cp__select .input-wrap {
+        height: auto;
+        min-width: 14em;
+    }
+
+    .cp__select .input-wrap input {
+        @apply border-0 outline-0 text-popover-foreground/90;
+
+        box-shadow: none;
+    }
+
+    .item-results-wrap {
+        @apply py-1;
+    }
+
+    .cp__select-input {
+        padding: 0.5em 1em;
+    }
+
+    .clauses-group {
+        @apply flex flex-row gap-1 flex-wrap items-center text-sm;
+    }
+
+    a.query-clause, a.add-filter {
+        color: var(--ls-primary-text-color);
+    }
+
+    a.query-clause:hover, a.add-filter {
+        color: var(--ls-secondary-text-color);
+    }
+
+    .filter-item select {
+        border: none;
+    }
+
+    .clause-bracket {
+        @apply font-bold opacity-50;
+        font-family: "Inter";
+    }
+
+    .query-clause-btn {
+        border-color: var(--ls-border-color);
+    }
+
+    .query-builder-picker {
+       .form-input {
+           @apply focus:border-0;
+       }
+    }
+}

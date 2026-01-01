@@ -1,0 +1,23 @@
+# E2E test Guide
+
+- Source Layout (`src/logseq/e2e/`)
+  - `assert.clj`: Custom assertion functions
+  - `block.clj`: Block manipulation helpers
+  - `config.clj`: Configuration settings
+  - `const.clj`: Shared constants
+  - `graph.clj`: Graph management helpers
+  - `keyboard.clj`: Keyboard shortcut helpers
+  - `locator.clj`: Playwright locator utilities
+  - `page.clj`: Page operations helpers
+  - `playwright_page.clj`: Playwright page initialization
+  - `rtc.clj`: RTC testing helpers
+  - `settings.clj`: Logseq settings manipulation
+  - `util.clj`: General utilities
+- Tests (`test/logseq/e2e/`)
+  - `fixtures.clj`: Test fixtures
+  - Basic Tests: `*_basic_test.clj`
+  - RTC Tests: `rtc_*_test.clj`
+- Run tests commands (in `clj-e2e` directory)
+  - `clojure -X:dev-run-rtc-extra-test`
+  - `clojure -X:dev-run-rtc-extra-part2-test`
+  - `clojure -X:dev-run-all-basic-test`

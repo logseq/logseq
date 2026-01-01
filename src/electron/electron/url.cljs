@@ -39,9 +39,7 @@
         graph-name (when graph-identifier (handler/get-graph-name graph-identifier))]
     (if graph-name
       (p/let [window-on-graph (first (win/get-graph-all-windows (utils/get-graph-dir graph-name)))
-              open-new-window? (or force-new-window? (not window-on-graph))
-              _ (when (and force-new-window? window-on-graph)
-                  (handler/broadcast-persist-graph! graph-name))]
+              open-new-window? (or force-new-window? (not window-on-graph))]
           ;; TODO: call open new window on new graph without renderer (remove the reliance on local storage)
           ;; TODO: allow open new window on specific page, without waiting for `graph ready` ipc then redirect to that page
         (when (or page-name block-id file)
@@ -59,15 +57,25 @@
       (graph-identifier-error-handler graph-identifier))))
 
 (defn- x-callback-url-handler
-  "win - a window used for fallback (main window is prefered)"
+  "win - a window used for fallback (main window is preferred)"
   [^js win ^js/URL parsed-url]
   (let [action (.-pathname parsed-url)]
     (cond
+      ;; url:     (string) Page url
+      ;; title:   (string) Page title
+      ;; content: (string) Highlighted text
+      ;; page:    (string) Page name to insert to, use "TODAY" to insert to today page
+      ;; append:  (bool)   Append to the end of the page, default to false(current editing position)
       (= action "/quickCapture")
-      (let [[url title content] (get-URL-decoded-params parsed-url ["url" "title" "content"])]
+      (let [[url title content page append] (get-URL-decoded-params parsed-url ["url" "title" "content" "page" "append"])]
         (send-to-focused-renderer "quickCapture" {:url url
                                                   :title title
-                                                  :content content} win))
+                                                  :content content
+                                                  :page page
+                                                  :append (if (nil? append)
+                                                            append
+                                                            (= append "true"))}
+                                  win))
 
       :else
       (send-to-focused-renderer "notification" {:type "error"
@@ -80,9 +88,6 @@
   [^js win parsed-url]
   (let [url-host (.-host parsed-url)] ;; return "" when no pathname provided
     (cond
-      (= "auth-callback" url-host)
-      (send-to-renderer win "loginCallback" (.get (.-searchParams parsed-url) "code"))
-
       (= "x-callback-url" url-host)
       (x-callback-url-handler win parsed-url)
 
@@ -93,7 +98,13 @@
       (= "new-window" url-host)
       (local-url-handler win parsed-url true)
 
+      (= "handbook" url-host)
+      (send-to-renderer :handbook
+                        {:key  (some-> (.-pathname parsed-url) (string/replace-first #"^[\/]+" ""))
+                         :args (some-> (.-searchParams parsed-url) (js/Object.fromEntries))})
+
       :else
-      (send-to-renderer "notification" {:type "error"
-                                        :payload (str "Failed to open link. Cannot match `" url-host
-                                                      "` to any target.")}))))
+      (send-to-renderer :notification
+                        {:type    "error"
+                         :payload (str "Failed to open link. Cannot match `" url-host
+                                       "` to any target.")}))))

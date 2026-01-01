@@ -1,0 +1,22 @@
+.views {
+    @apply flex flex-row items-center flex-nowrap gap-2 overflow-hidden;
+}
+
+.ls-view-order-setting {
+    button.order-button {
+        width: 107px;
+    }
+}
+
+.group-list-view div[data-testid='virtuoso-item-list'] {
+    @apply flex flex-col gap-2;
+}
+
+.group-list-view div[data-testid='virtuoso-item-list'] div[data-testid='virtuoso-item-list'] {
+    @apply gap-0;
+}
+
+.ls-table-block {
+    @apply flex flex-row items-start text-sm;
+    margin-right: 6px;
+}

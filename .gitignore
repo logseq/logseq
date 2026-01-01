@@ -10,10 +10,12 @@ pom.xml.asc
 /.nrepl-port
 .hgignore
 .hg/
+.nbb/
 
 node_modules/
-static/
+static/**
 tmp
+cljs-test-runner-out
 
 .cpcache/
 /src/gen
@@ -30,9 +32,15 @@ strings.csv
 
 .calva
 resources/electron.js
+.lsp/.cache
 .clj-kondo/.cache
-.clj-kondo/babashka/sci
-.lsp/
+.clj-kondo/babashka
+.clj-kondo/http-kit
+.clj-kondo/metosin/malli
+.clj-kondo/rewrite-clj
+.clj-kondo/taoensso
+.clj-kondo/funcool
+.clj-kondo/com.lambdaisland
 /libs/dist/
 charlie/
 .vscode
@@ -40,12 +48,31 @@ charlie/
 docker
 android/app/src/main/assets/capacitor.plugin.json
 ios/App/App/capacitor.config.json
+ios/App/App/public
 
 startup.png
 
 /src/main/frontend/tldraw-logseq.js
-/src/test/docs
+/src/test/docs*
 ~*~
 
-ios/App/App/capacitor.config.json
 android/app/src/main/assets/capacitor.config.json
+
+*.sublime-*
+/public
+.yarn/
+.yarnrc.yml
+
+packages/ui/.storybook/cljs
+deps/shui/.lsp
+deps/shui/.lsp-cache
+deps/shui/.clj-kondo
+deps/publish/worker/.wrangler
+deps/publish/worker/dist
+deps/publish/worker/.env*
+
+tx-log*
+clj-e2e/.wally
+clj-e2e/e2e-dump
+.dir-locals.el
+.projectile

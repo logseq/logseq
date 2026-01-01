@@ -4,7 +4,6 @@
             [logseq.graph-parser.mldoc :as gp-mldoc]))
 
 (deftest test-get-page-name
-  []
   (are [x y] (= (text/get-page-name x) y)
          "[[page]]" "page"
          "[[another page]]" "another page"
@@ -28,7 +27,6 @@
          "[logseq/page](file:./pages/logseq.page.md)" "logseq/page"))
 
 (deftest page-ref-un-brackets!
-  []
   (are [x y] (= (text/page-ref-un-brackets! x) y)
     "[[page]]" "page"
     "[[another page]]" "another page"
@@ -41,7 +39,6 @@
    :org "*"})
 
 (deftest remove-level-spaces
-  []
   (testing "markdown"
     (are [x y] (= (text/remove-level-spaces x :markdown (block-patterns :markdown) true) y)
       "- foobar" "foobar"

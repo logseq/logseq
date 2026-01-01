@@ -1,94 +1,231 @@
-{:ns-groups [{:pattern "frontend.components.*" :name all-components}]
+{:ns-groups [{:pattern "frontend.components.*" :name all-components}
+             {:pattern "frontend.*" :name all-frontend}]
 
  :config-in-ns
  ;; :used-underscored-binding is turned off for components because of false positive
  ;; for rum/defcs and _state.
- {all-components {:linters {:used-underscored-binding {:level :off}}}
+ {all-components
+  {:linters {:used-underscored-binding {:level :off}}}
+
+  all-frontend
+  {:linters {:discouraged-namespace
+             {logseq.db.common.sqlite-cli {:message "frontend should not depend on CLI namespace with sqlite3 dependency"}
+              logseq.outliner.cli {:message "frontend should not depend on CLI namespace with sqlite3 dependency"}}}}
+
   ;; false positive with match/match and _
   frontend.handler.paste {:linters {:used-underscored-binding {:level :off}}}
   frontend.db {:linters {:aliased-namespace-symbol
-                         {:exclude [frontend.db.conn frontend.db.react logseq.db.default]}}}}
+                         {:exclude [frontend.db.conn frontend.db.react]}}}}
 
  :linters
- {:aliased-namespace-symbol {:level :warning}
+ {:path-invalid-construct/string-join {:level :info}
+  :defkeywords/invalid-arg {:level :warning}
+  :regex-checks/double-escaped-regex {:level :warning}
+  :aliased-namespace-symbol {:level :warning}
+  :shadowed-var {:level :warning
+                 :exclude [key val name binding type uuid
+                           ;; FIXME: Remove the shadowed below as shadowing core fns isn't a good practice
+                           ;; FIXME: At least remove the first two lines as they have few uses
+                           re-pattern sequence dispatch-fn comp vec delay chunk
+                           fn t ex-data list int? hash range
+                           time sort-by namespace count parents exists? min
+                           new var ns resolve identity next meta vals keys exists?]}
+  ;; Disable until it doesn't trigger false positives on rum/defcontext
+  :earmuffed-var-not-dynamic {:level :off}
+  ;; Disable until we decide to use conj! as recommended in docs
+  :unused-value {:level :off}
   :unresolved-symbol {:exclude [goog.DEBUG
                                 goog.string.unescapeEntities
                                 ;; TODO:lint: Fix when fixing all type hints
                                 object]}
+
+  :discouraged-var
+  {rum.core/use-effect! {:message "Use frontend.hooks/use-effect! instead" :level :info}
+   rum.core/use-memo {:message "Use frontend.hooks/use-memo instead" :level :info}
+   rum.core/use-layout-effect! {:message "Use frontend.hooks/use-layout-effect! instead" :level :info}
+   rum.core/use-callback {:message "Use frontend.hooks/use-callback instead" :level :info}}
+  :unused-namespace {:level :warning
+                     :exclude [logseq.db.common.entity-plus]}
+
   ;; TODO:lint: Remove node-path excludes once we have a cleaner api
   :unresolved-var {:exclude [frontend.util/node-path.basename
                              frontend.util/node-path.dirname
                              frontend.util/node-path.join
                              frontend.util/node-path.extname
-                             frontend.util/node-path.name]}
+                             frontend.util/node-path.name
+                             ;; frontend.pubsub/def-mult-or-pub generate vars clj-kondo cannot resolve
+                             frontend.pubsub]}
 
   :consistent-alias
-  {:aliases {cljs.reader reader
-             cljs-time.core t
+  {:aliases {"/electron/utils" js-utils
+             "path" node-path
+             borkdude.rewrite-edn rewrite
              cljs-time.coerce tc
+             cljs-time.core t
+             cljs.reader reader
+             clojure.string string
              datascript.core d
-             datascript.transit dt
              datascript.db ddb
+             datascript.transit dt
              electron.ipc ipc
+             electron.utils utils
              frontend.commands commands
+             frontend.common.file-based.db common-file-db
+             frontend.common.date common-date
+             frontend.common.file.util wfu
+             frontend.common.missionary-util c.m
+             frontend.common.schema-register sr
+             frontend.common.search-fuzzy fuzzy
+             frontend.components.block.macros block-macros
+             frontend.components.class class-component
+             frontend.components.property property-component
+             frontend.components.query query
+             frontend.components.query.result query-result
+             frontend.components.title title
              frontend.config config
              frontend.date date
              frontend.db db
+             frontend.db.file-based.model file-model
              frontend.db-mixins db-mixins
+             frontend.db.query-custom query-custom
              frontend.db.query-dsl query-dsl
-             frontend.db.react react
              frontend.db.query-react query-react
+             frontend.db.react react
+             frontend.db.util db-utils
              frontend.diff diff
              frontend.encrypt encrypt
-             frontend.format.mldoc mldoc
+             frontend.extensions.sci sci
              frontend.format.block block
+             frontend.format.mldoc mldoc
              frontend.fs fs
-             frontend.fs.bfs bfs
-             frontend.fs.capacitor-fs capacitor-fs
-             frontend.fs.nfs nfs
-             frontend.handler.extract extract
+             frontend.fs.memory-fs memory-fs
              frontend.handler.common common-handler
-             frontend.handler.common.file file-common-handler
+             frontend.handler.common.developer dev-common-handler
+             frontend.handler.common.page page-common-handler
              frontend.handler.common.plugin plugin-common-handler
              frontend.handler.config config-handler
+             frontend.handler.db-based.editor db-editor-handler
+             frontend.handler.db-based.export db-export-handler
+             frontend.handler.db-based.page db-page-handler
+             frontend.handler.db-based.property db-property-handler
+             frontend.handler.db-based.property.util db-pu
+             frontend.handler.editor.property editor-property
              frontend.handler.events events
+             frontend.handler.extract extract
+             frontend.handler.file-based.file file-handler
+             frontend.handler.file-based.native-fs nfs-handler
+             frontend.handler.file-based.page file-page-handler
+             frontend.handler.file-based.page-property file-page-property
+             frontend.handler.file-based.property file-property-handler
+             frontend.handler.file-based.property.util property-util
+             frontend.handler.file-based.recent file-recent-handler
+             frontend.handler.file-based.reset-file reset-file-handler
+             frontend.handler.file-based.repo file-repo-handler
              frontend.handler.global-config global-config-handler
-             frontend.handler.ui ui-handler
              frontend.handler.notification notification
              frontend.handler.page page-handler
              frontend.handler.plugin plugin-handler
              frontend.handler.plugin-config plugin-config-handler
+             frontend.handler.property.file property-file
+             frontend.handler.property.util pu
+             frontend.handler.query.builder query-builder
              frontend.handler.repo repo-handler
              frontend.handler.repo-config repo-config-handler
+             frontend.handler.route route-handler
              frontend.handler.search search-handler
+             frontend.handler.ui ui-handler
+             frontend.hooks hooks
              frontend.idb idb
              frontend.loader loader
              frontend.mixins mixins
              frontend.mobile.util mobile-util
+             frontend.modules.outliner.ui ui-outliner-tx
              frontend.page page
+             frontend.persist-db persist-db
+             frontend.schema.handler.common-config common-config-schema
              frontend.search search
              frontend.state state
              frontend.template template
              frontend.test.helper test-helper
              frontend.ui ui
              frontend.util util
-             frontend.util.clock clock
-             frontend.util.property property
+             frontend.util.file-based.clock clock
+             frontend.util.file-based.drawer drawer
+             frontend.util.page page-util
              frontend.util.persist-var persist-var
+             frontend.util.property property
              frontend.util.text text-util
-             frontend.util.url url-util
              frontend.util.thingatpt thingatpt
+             frontend.util.url url-util
+             frontend.util.ref ref
+             frontend.worker.shared-service shared-service
+             frontend.worker.handler.page worker-page
+             frontend.worker.pipeline worker-pipeline
+             frontend.worker.state worker-state
+             frontend.worker.util worker-util
              lambdaisland.glogi log
+             logseq.api.db-based db-based-api
+             logseq.cli.common.graph cli-common-graph
+             logseq.cli.common.export.common cli-export-common
+             logseq.cli.common.export.text cli-export-text
+             logseq.cli.common.file common-file
+             logseq.cli.common.mcp.server cli-common-mcp-server
+             logseq.cli.common.mcp.tools cli-common-mcp-tools
+             logseq.cli.text-util cli-text-util
+             logseq.common.config common-config
+             logseq.common.date-time-util date-time-util
+             logseq.common.graph common-graph
+             logseq.common.path path
+             logseq.common.util common-util
+             logseq.common.util.block-ref block-ref
+             logseq.common.util.macro macro-util
+             logseq.common.util.namespace ns-util
+             logseq.common.util.page-ref page-ref
+             logseq.db ldb
+             logseq.db.common.entity-plus entity-plus
+             logseq.db.common.entity-util common-entity-util
+             logseq.db.common.initial-data common-initial-data
+             logseq.db.common.order db-order
+             logseq.db.common.property-util db-property-util
+             logseq.db.common.sqlite common-sqlite
+             logseq.db.common.view db-view
+             logseq.db.file-based.rules file-rules
+             logseq.db.file-based.schema file-schema
+             logseq.db.file-based.entity-util file-entity-util
+             logseq.db.frontend.class db-class
+             logseq.db.frontend.content db-content
+             logseq.db.frontend.db db-db
+             logseq.db.frontend.db-ident db-ident
+             logseq.db.frontend.entity-util entity-util
+             logseq.db.frontend.inputs db-inputs
+             logseq.db.frontend.property db-property
+             logseq.db.frontend.property.build db-property-build
+             logseq.db.frontend.property.type db-property-type
+             logseq.db.frontend.rules rules
+             logseq.db.frontend.schema db-schema
+             logseq.db.frontend.validate db-validate
+             logseq.db.sqlite.build sqlite-build
+             logseq.db.common.sqlite-cli sqlite-cli
+             logseq.db.sqlite.create-graph sqlite-create-graph
+             logseq.db.sqlite.export sqlite-export
+             logseq.db.sqlite.util sqlite-util
+             logseq.db.test.helper db-test
              logseq.graph-parser graph-parser
-             logseq.graph-parser.text text
              logseq.graph-parser.block gp-block
+             logseq.graph-parser.db gp-db
              logseq.graph-parser.mldoc gp-mldoc
-             logseq.graph-parser.util gp-util
              logseq.graph-parser.property gp-property
-             logseq.graph-parser.config gp-config
-             logseq.graph-parser.util.page-ref page-ref
-             logseq.graph-parser.util.block-ref block-ref
-             logseq.graph-parser.date-time-util date-time-util
+             logseq.graph-parser.text text
+             logseq.outliner.batch-tx batch-tx
+             logseq.outliner.core outliner-core
+             logseq.outliner.datascript-report ds-report
+             logseq.outliner.op outliner-op
+             logseq.outliner.page outliner-page
+             logseq.outliner.pipeline outliner-pipeline
+             logseq.outliner.tree otree
+             logseq.outliner.validate outliner-validate
+             logseq.shui.popup.core shui-popup
+             logseq.shui.ui shui
              medley.core medley
              promesa.core p}}
 
@@ -96,21 +233,28 @@
   :used-underscored-binding {:level :warning}}
 
  :hooks {:analyze-call {rum.core/defc hooks.rum/defc
-                         rum.core/defcs hooks.rum/defcs}}
+                        rum.core/defcs hooks.rum/defcs
+                        clojure.string/join hooks.path-invalid-construct/string-join
+                        clojure.string/replace hooks.regex-checks/double-escaped-regex
+                        logseq.common.defkeywords/defkeywords hooks.defkeywords/defkeywords
+                        frontend.common.thread-api/def-thread-api hooks.def-thread-api/def-thread-api}}
  :lint-as {promesa.core/let clojure.core/let
            promesa.core/loop clojure.core/loop
            promesa.core/recur clojure.core/recur
+           promesa.core/doseq clojure.core/doseq
            rum.core/defcc rum.core/defc
            rum.core/with-context clojure.core/let
            rum.core/defcontext clojure.core/def
            clojure.test.check.clojure-test/defspec clojure.core/def
            clojure.test.check.properties/for-all clojure.core/for
            ;; src/main
-           frontend.modules.outliner.datascript/auto-transact! clojure.core/let
            frontend.namespaces/import-vars potemkin/import-vars
            ;; src/test
            frontend.test.helper/deftest-async clojure.test/deftest
-           frontend.test.helper/with-reset cljs.test/async
-           frontend.react/defc clojure.core/defn}
+           frontend.worker.rtc.idb-keyval-mock/with-reset-idb-keyval-mock cljs.test/async
+           frontend.react/defc clojure.core/defn
+           logseq.common.defkeywords/defkeyword cljs.spec.alpha/def
+           frontend.common.thread-api/defkeyword cljs.spec.alpha/def}
  :skip-comments true
- :output {:progress true}}
+ :output {:progress true
+          :exclude-files ["src/test/docs-0.10.12/"]}}

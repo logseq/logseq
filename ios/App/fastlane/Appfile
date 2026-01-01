@@ -1,0 +1,8 @@
+app_identifier("com.logseq.logseq") # The bundle identifier of your app
+apple_id("dev@logseq.com") # Your Apple Developer Portal username
+
+itc_team_id("123783177") # App Store Connect Team ID
+team_id("K378MFWK59") # Developer Portal Team ID
+
+# For more information about the Appfile, see:
+#     https://docs.fastlane.tools/advanced/#appfile

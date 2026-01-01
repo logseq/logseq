@@ -1,5 +1,6 @@
 const fs = require('fs')
 const path = require('path')
+const os = require('os')
 const { ipcRenderer, contextBridge, shell, clipboard, webFrame } = require('electron')
 
 const IS_MAC = process.platform === 'darwin'
@@ -15,6 +16,20 @@ function getFilePathFromClipboard () {
     return clipboard.read('public.file-url').replace('file://', '')
   } else {
     return clipboard.readText()
+  }
+}
+
+/**
+ * Read the contents of the clipboard for a custom format.
+ * @param  {string} format The custom format to read.
+ * @returns Buffer containing the contents of the clipboard for the specified format, or null if not available.
+ */
+function getClipboardData (format) {
+  if (clipboard.has(format, "clipboard")) {
+    return clipboard.readBuffer(format)
+  }
+  else {
+    return null;
   }
 }
 
@@ -72,16 +87,11 @@ contextBridge.exposeInMainWorld('apis', {
     await shell.openExternal(url, options)
   },
 
-  async openPath (path) {
-    await shell.openPath(path)
-  },
-
-  showItemInFolder (fullpath) {
-    if (IS_WIN32) {
-      shell.openPath(path.dirname(fullpath).replaceAll("/", "\\"))
-    } else {
-      shell.showItemInFolder(fullpath)
-    }
+  async openPath (relativePath) {
+    const absolutePath = path.resolve(
+      relativePath.startsWith('~') ? path.join(os.homedir(), relativePath.slice(1)) : relativePath
+    );
+    await shell.openPath(absolutePath)
   },
 
   /**
@@ -99,45 +109,6 @@ contextBridge.exposeInMainWorld('apis', {
       assetFilenames,
       outputDir
     )
-  },
-
-  /**
-   * When from is empty. The resource maybe from
-   * client paste or screenshoot.
-   * @param repoPathRoot
-   * @param to
-   * @param from?
-   * @returns {Promise<void>}
-   */
-  async copyFileToAssets (repoPathRoot, to, from) {
-    if (from && fs.statSync(from).isDirectory()) {
-      throw new Error('not support copy directory')
-    }
-
-    const dest = path.join(repoPathRoot, to)
-    const assetsRoot = path.dirname(dest)
-    
-    await fs.promises.mkdir(assetsRoot, { recursive: true })
-
-    from = from && decodeURIComponent(from || getFilePathFromClipboard())
-
-    if (from) {
-      // console.debug('copy file: ', from, dest)
-      await fs.promises.copyFile(from, dest)
-      return path.basename(from)
-    }
-
-    // support image
-    // console.debug('read image: ', from, dest)
-    const nImg = clipboard.readImage()
-
-    if (nImg && !nImg.isEmpty()) {
-      const rawExt = path.extname(dest)
-      return await fs.promises.writeFile(
-        dest.replace(rawExt, '.png'),
-        nImg.toPNG()
-      )
-    }
   },
 
   toggleMaxOrMinActiveWindow (isToggleMin = false) {
@@ -165,6 +136,8 @@ contextBridge.exposeInMainWorld('apis', {
   },
 
   getFilePathFromClipboard,
+
+  getClipboardData,
 
   setZoomFactor (factor) {
     webFrame.setZoomFactor(factor)

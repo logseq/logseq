@@ -8,5 +8,5 @@
 #import <Capacitor/Capacitor.h>
 
 CAP_PLUGIN(FileContainer, "FileContainer",
-           CAP_PLUGIN_METHOD(ensureDocuments, CAPPluginReturnPromise);
-           )
+    CAP_PLUGIN_METHOD(ensureDocuments, CAPPluginReturnPromise);
+)

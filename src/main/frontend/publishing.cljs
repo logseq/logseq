@@ -1,20 +1,27 @@
 (ns frontend.publishing
-  "Entry ns for publishing build. Handles primary publishing app behaviors"
-  (:require [frontend.state :as state]
-            [datascript.core :as d]
-            [frontend.db :as db]
-            [logseq.db.schema :as db-schema]
-            [rum.core :as rum]
-            [frontend.handler.route :as route]
+  "Entry ns for publishing build. Provides frontend for publishing single page
+  application"
+  (:require [cljs.reader :as reader]
+            [clojure.string :as string]
+            [frontend.components.block :as block]
+            [frontend.components.editor :as editor]
+            [frontend.components.page :as page-component]
+            [frontend.components.reference :as reference]
+            [frontend.context.i18n :as i18n]
+            [frontend.handler.command-palette :as command-palette]
+            [frontend.handler.events :as events]
+            [frontend.handler.repo :as repo-handler]
+            [frontend.handler.route :as route-handler]
+            [frontend.handler.ui :as ui-handler]
+            [frontend.modules.shortcut.core :as shortcut]
             [frontend.page :as page]
-            [frontend.util :as util]
+            [frontend.persist-db.browser :as db-browser]
             [frontend.routes :as routes]
+            [frontend.state :as state]
+            [promesa.core :as p]
             [reitit.frontend :as rf]
             [reitit.frontend.easy :as rfe]
-            [cljs.reader :as reader]
-            [frontend.components.page :as component-page]
-            [frontend.modules.shortcut.core :as shortcut]
-            [frontend.handler.events :as events]))
+            [rum.core :as rum]))
 
 ;; The publishing site should be as thin as possible.
 ;; Both files and git libraries can be removed.
@@ -31,15 +38,27 @@
 ;;    data should include all the public pages and blocks.
 ;; 2. Built-in sync with GitHub Pages, you should specify a GitHub repo for publishing.
 
+(defn- unescape-html
+  [text]
+  (-> text
+      (string/replace "logseq____&amp;" "&")
+      (string/replace "logseq____&lt;" "<")
+      (string/replace "logseq____&gt;" ">")
+      (string/replace "logseq____&quot;" "\"")
+      (string/replace "logseq____&apos;" "'")))
+
 (defn restore-from-transit-str!
   []
-  (state/set-current-repo! "local")
+  ;; Client sets repo name (and graph type) based on what was written in app state
   (when-let [data js/window.logseq_db]
-    (let [data (util/unescape-html data)
-          db-conn (d/create-conn db-schema/schema)
-          _ (swap! db/conns assoc "logseq-db/local" db-conn)
-          db (db/string->db data)]
-      (reset! db-conn db))))
+    (let [repo (-> @state/state :config keys first)]
+      (state/set-current-repo! repo)
+      (p/let [_ (repo-handler/restore-and-setup-repo! repo)
+              _ (let [db-transit-str (unescape-html data)]
+                  (state/<invoke-db-worker :thread-api/reset-db repo db-transit-str))
+              _ (repo-handler/restore-and-setup-repo! repo)]
+        (state/set-db-restoring! false)
+        (ui-handler/re-render-root!)))))
 
 (defn restore-state!
   []
@@ -51,7 +70,7 @@
   []
   (rfe/start!
    (rf/router routes/routes {})
-   route/set-route-match!
+   route-handler/set-route-match!
    ;; set to false to enable HistoryAPI
    {:use-fragment true}))
 
@@ -62,20 +81,36 @@
 
 (defn- register-components-fns!
   []
-  (state/set-page-blocks-cp! component-page/page-blocks-cp))
+  (state/set-page-blocks-cp! page-component/page-cp)
+  (state/set-component! :block/->hiccup block/->hiccup)
+  (state/set-component! :block/linked-references reference/references)
+  (state/set-component! :block/container block/block-container)
+  (state/set-component! :block/inline-title block/inline-title)
+  (state/set-component! :block/breadcrumb block/breadcrumb)
+  (state/set-component! :block/blocks-container block/blocks-container)
+  (state/set-component! :block/reference block/block-reference)
+  (state/set-component! :block/properties-cp block/db-properties-cp)
+  (state/set-component! :block/page-cp block/page-cp)
+  (state/set-component! :block/inline-text block/inline-text)
+  (state/set-component! :block/asset-cp block/asset-cp)
+  (state/set-component! :editor/box editor/box)
+  (command-palette/register-global-shortcut-commands))
 
 (defn ^:export init []
   ;; init is called ONCE when the page loads
   ;; this is called in the index.html and must be exported
   ;; so it is available even in :advanced release builds
   (register-components-fns!)
-  (restore-from-transit-str!)
+  ;; Set :preferred-lang as some components depend on it
+  (i18n/start)
   (restore-state!)
   (shortcut/refresh!)
   (events/run!)
-  ;; actually, there's no persist for publishing
-  (db/listen-and-persist! (state/get-current-repo))
-  (start))
+  (p/do!
+   (db-browser/start-db-worker!)
+   (state/set-db-restoring! true)
+   (start)
+   (restore-from-transit-str!)))
 
 (defn stop []
   ;; stop is called before any code is reloaded

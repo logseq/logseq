@@ -11,23 +11,20 @@ html[data-theme=light] {
   }
 }
 
+.cp__right-sidebar-settings-btn {
+  background-color: var(--ls-secondary-background-color);
+}
+
 .sidebar-item-list {
-  padding-bottom: 150px;
+  @apply ml-1 mt-[-8px] pb-[150px];
+
   height: calc(100vh - 48px);
 }
 
+.cp__right-sidebar-topbar {
+  @apply px-1 h-12;
 
-html[data-theme=light] a.toggle:hover {
-  color: var(--ls-primary-text-color);
-}
-
-.cp__header a, .cp__header button, .cp__right-sidebar-topbar button {
-    opacity: 1;
-    color: var(--ls-header-button-background);
-}
-
-html[data-theme=dark] {
-    .cp__header a, .cp__header button, .cp__right-sidebar-topbar button {
-        opacity: 0.7;
-    }
+  button {
+    @apply opacity-100;
+  }
 }

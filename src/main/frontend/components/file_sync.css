@@ -1,60 +1,42 @@
 :root {
-  --ls-color-file-sync-error: var(--ls-error-color);
-  --ls-color-file-sync-pending: var(--color-yellow-500);
-  --ls-color-file-sync-idle: var(--ls-success-color);
+  --ls-color-file-sync-error: var(--color-red-600);
+  --ls-color-file-sync-pending: var(--color-yellow-600);
+  --ls-color-file-sync-idle: var(--color-green-600);
 }
 
-.cp__file-sync {
+.cp__file-sync, .cp__rtc-sync {
   &-indicator {
-    a.cloud {
-      position: relative;
-      opacity: 1 !important;
-      cursor: pointer;
+      .ui__button.cloud {
+          @apply relative;
 
-      &:active {
-        opacity: .5 !important;
-      }
+          &.on {
+              @apply after:content-['*'];
 
-      .ti {
-        opacity: .5;
-      }
+              &:after {
+                  @apply absolute bottom-2.5 right-1 w-[7px] h-[7px] rounded-full opacity-100 text-transparent;
 
-      &:hover .ti {
-        opacity: .9;
-      }
+                  background-color: var(--ls-color-file-sync-pending);
+              }
 
-      &.on {
-        &:after {
-          content: " ";
-          position: absolute;
-          bottom: 10px;
-          right: 8px;
-          width: 7px;
-          height: 7px;
-          background-color: var(--ls-color-file-sync-pending);
-          border-radius: 100%;
-          opacity: 1;
-        }
+              &.syncing {
+                  &:after {
+                      background-color: var(--ls-color-file-sync-pending);
+                  }
+              }
 
-        &.syncing {
-          &:after {
-            background-color: var(--ls-color-file-sync-pending);
+              &.queuing {
+                  &:after {
+                      background-color: var(--ls-color-file-sync-pending);
+                  }
+              }
+
+              &.idle {
+                  &:after {
+                      background-color: var(--ls-color-file-sync-idle);
+                  }
+              }
           }
-        }
-
-        &.queuing {
-          &:after {
-            background-color: var(--ls-color-file-sync-pending);
-          }
-        }
-
-        &.idle {
-          &:after {
-            background-color: var(--ls-color-file-sync-idle);
-          }
-        }
       }
-    }
 
     .debug-status {
       position: absolute;
@@ -95,11 +77,6 @@
         word-break: break-all;
         font-size: 13px;
         padding: 6px 20px;
-
-        > div.flex > div {
-          margin: 0 !important;
-          flex: 1;
-        }
 
         &.is-first-placeholder {
           padding: 0 !important;
@@ -196,6 +173,10 @@
 
     .ti {
       @apply translate-y-0;
+
+      &.ls-icon-thumb-up {
+        @apply translate-x-[0.5px];
+      }
     }
 
     > .a {
@@ -461,8 +442,12 @@
       @apply flex-nowrap md:flex-wrap;
       background-color: var(--ls-primary-background-color);
 
+      &.strength-wrap {
+        @apply flex-wrap;
+      }
+
       .strength-item {
-        @apply flex items-center leading-none opacity-60 mr-2;
+        @apply whitespace-nowrap flex items-center leading-none opacity-60;
 
         .ti {
           @apply scale-75;
@@ -548,12 +533,6 @@
         }
       }
     }
-  }
-}
-
-div[label=modal-page-histories] {
-  .panel-content {
-    overflow: hidden;
   }
 }
 

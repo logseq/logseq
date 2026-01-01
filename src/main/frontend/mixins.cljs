@@ -1,15 +1,16 @@
 (ns frontend.mixins
   "Rum mixins for use in components"
-  (:require [rum.core :as rum]
-            [goog.dom :as dom]
+  (:require [frontend.state :as state]
             [frontend.util :refer [profile] :as util]
-            [frontend.state :as state])
+            [goog.dom :as dom]
+            [rum.core :as rum])
   (:import [goog.events EventHandler]))
 
 (defn detach
   "Detach all event listeners."
   [state]
-  (some-> state ::event-handler .removeAll))
+  (when-let [^EventHandler handler (some-> state ::event-handler)]
+    (.removeAll handler)))
 
 (defn listen
   "Register an event `handler` for events of `type` on `target`."
@@ -29,43 +30,46 @@
 
 (defn hide-when-esc-or-outside
   [state & {:keys [on-hide node visibilitychange? outside?]}]
-  (try
-    (let [dom-node (rum/dom-node state)]
-      (when-let [dom-node (or node dom-node)]
-        (let [click-fn (fn [e]
-                         (let [target (.. e -target)]
-                           ;; If the click target is outside of current node
-                           (when (and
-                                  (not (dom/contains dom-node target))
-                                  (not (.contains (.-classList target) "ignore-outside-event")))
-                             (on-hide state e :click))))]
-          (when-not (false? outside?)
-            (listen state js/window "mousedown" click-fn)))
-        (listen state js/window "keydown"
-                (fn [e]
-                  (case (.-keyCode e)
-                    ;; Esc
-                    27 (on-hide state e :esc)
-                    nil)))
-        (when visibilitychange?
-          (listen state js/window "visibilitychange"
+  (let [opts (last (:rum/args state))
+        outside? (cond-> opts (nil? outside?) (:outside?))]
+    (try
+      (let [dom-node (rum/dom-node state)]
+        (when-let [dom-node (or node dom-node)]
+          (let [click-fn (fn [e]
+                           (let [target (.. e -target)]
+                             ;; If the click target is outside of current node
+                             (when (and
+                                    (not (dom/contains dom-node target))
+                                    (not (.contains (.-classList target) "ignore-outside-event")))
+                               (on-hide state e :click))))]
+            (when-not (false? outside?)
+              (listen state js/window "mousedown" click-fn)))
+          (listen state js/window "keydown"
                   (fn [e]
-                    (on-hide state e :visibilitychange))))))
-    (catch :default _e
-      ;; TODO: Unable to find node on an unmounted component.
-      nil)))
+                    (case (.-keyCode e)
+                      ;; Esc
+                      27 (on-hide state e :esc)
+                      nil)))
+          (when visibilitychange?
+            (listen state js/window "visibilitychange"
+                    (fn [e]
+                      (on-hide state e :visibilitychange))))))
+      (catch :default _e
+        ;; TODO: Unable to find node on an unmounted component.
+        nil))))
 
 (defn on-enter
-  [state & {:keys [on-enter node]}]
+  [state & {on-enter-fn :on-enter :keys [node]}]
   (let [node (or node (rum/dom-node state))]
     (listen state node "keyup"
             (fn [e]
               (case (.-keyCode e)
                 ;; Enter
-                13 (on-enter e)
+                13 (on-enter-fn e)
                 nil)))))
 
 (defn on-key-up
+  "Caution: This mixin uses a different args than on-key-down"
   [state keycode-map all-handler]
   (listen state js/window "keyup"
           (fn [e]
@@ -77,16 +81,17 @@
 (defn on-key-down
   ([state keycode-map]
    (on-key-down state keycode-map {}))
-  ([state keycode-map {:keys [not-matched-handler all-handler target]}]
+  ([state keycode-map {:keys [not-matched-handler all-handler target keycode?]
+                       :or {keycode? true}}]
    (listen state (or target js/window) "keydown"
            (fn [e]
-             (let [key-code (.-keyCode e)]
-               (if-let [f (get keycode-map key-code)]
+             (let [key (if keycode? (.-keyCode e) (.-key e))]
+               (if-let [f (get keycode-map key)]
                  (f state e)
                  (when (and not-matched-handler (fn? not-matched-handler))
-                   (not-matched-handler e key-code)))
+                   (not-matched-handler e key)))
                (when (and all-handler (fn? all-handler))
-                 (all-handler e key-code)))))))
+                 (all-handler e key)))))))
 
 (defn event-mixin
   ([attach-listeners]
@@ -98,11 +103,7 @@
              (init-callback state))
      :did-mount (fn [state]
                   (attach-listeners state)
-                  state)
-     :did-remount (fn [old-state new-state]
-                    (detach old-state)
-                    (attach-listeners new-state)
-                    new-state)})))
+                  state)})))
 
 (defn modal
   [k]
@@ -129,15 +130,13 @@
               :toggle-fn (fn []
                            (swap! open? not)))))))
 
-(def component-editing-mode
-  {:will-mount
-   (fn [state]
-     (state/set-block-component-editing-mode! true)
-     state)
-   :will-unmount
-   (fn [state]
-     (state/set-block-component-editing-mode! false)
-     state)})
+(def container-id
+  "Notice: the first parameter needs to be a `config` with `id`, optional `sidebar?`, `whiteboard?`"
+  {:init (fn [state]
+           (let [config (first (:rum/args state))
+                 key (select-keys config [:id :sidebar? :whiteboard? :embed? :custom-query? :query :current-block :table? :block? :db/id :page-name])
+                 container-id (or (:container-id config) (state/get-container-id key))]
+             (assoc state :container-id container-id)))})
 
 (defn perf-measure-mixin
   "Does performance measurements in development."

@@ -1,24 +1,30 @@
-{:paths ["scripts/src" "src/main"]
+{:paths ["scripts/src" "src/main" "src/resources"]
  :deps
- {org.babashka/spec.alpha
-  {:git/url "https://github.com/babashka/spec.alpha"
-   :sha "1a841c4cc1d4f6dab7505a98ed2d532dd9d56b78"}
-  metosin/malli
-  {:mvn/version "0.9.1"}
+ {metosin/malli
+  {:mvn/version "0.16.1"}
+  borkdude/rewrite-edn {:mvn/version "0.4.9"}
   logseq/bb-tasks
   #_{:local/root "../bb-tasks"}
   {:git/url "https://github.com/logseq/bb-tasks"
-   :git/sha "95e4fbdb7bbf1c720c6f8b58e3b3b96b3b487526"}
+   :git/sha "70d3edeb287f5cec7192e642549a401f7d6d4263"}
   logseq/graph-parser
   {:local/root "deps/graph-parser"}
   org.clj-commons/digest
-  {:mvn/version "1.4.100"}}
+  {:mvn/version "1.4.100"}
+  cheshire/cheshire
+  {:mvn/version "5.12.0"}}
  :pods
- {clj-kondo/clj-kondo {:version "2022.02.09"}
-  org.babashka/fswatcher {:version "0.0.3"}}
+ {clj-kondo/clj-kondo {:version "2024.09.27"}
+  org.babashka/fswatcher {:version "0.0.3"}
+  org.babashka/go-sqlite3 {:version "0.1.0"}}
  :tasks
  {dev:desktop-watch
   logseq.tasks.dev.desktop/watch
+
+  libs:generate-cljs-sdk
+  {:doc "Generate CLJS wrappers based on the JS SDK declarations"
+   :requires ([logseq.libs.sdk-generator :as sdk-gen])
+   :task (sdk-gen/run! (sdk-gen/parse-args *command-line-args*))}
 
   dev:open-dev-electron-app
   logseq.tasks.dev.desktop/open-dev-electron-app
@@ -33,6 +39,81 @@
 
   dev:app-watch
   logseq.tasks.dev.mobile/app-watch
+
+  -dev:build-publishing-frontend
+  logseq.tasks.dev/build-publishing-frontend
+
+  dev:publishing-backend
+  logseq.tasks.dev/publishing-backend
+
+  -dev:publishing-release
+  {:depends [-dev:build-publishing-frontend]
+   :doc "Build release publishing spa app given graph and output dirs"
+   :task (run 'dev:publishing-backend)}
+
+  -dev:watch-publishing-frontend
+  logseq.tasks.dev/watch-publishing-frontend
+
+  -dev:watch-publishing-backend
+  logseq.tasks.dev/watch-publishing-backend
+
+  -dev:publishing-dev
+  {:depends [-dev:watch-publishing-frontend -dev:watch-publishing-backend]
+   :doc "Watch dev publishing spa app given graph and output dirs"}
+
+  dev:publishing
+  {:doc "Builds full publishing app given graph and output dirs. Append --dev to watch frontend"
+   :task (if ((set *command-line-args*) "--dev")
+           (run '-dev:publishing-dev {:parallel true})
+           (run '-dev:publishing-release))}
+
+  dev:cli
+  {:doc "Run CLI with current deps/db code. Commands with JS deps are not usable e.g. mcp-server"
+   :task (apply shell {:dir "deps/db"}
+                "yarn nbb-logseq -cp src:../cli/src:../graph-parser/src:../outliner/src -m logseq.cli" *command-line-args*)}
+  dev:db-query
+  {:doc "Query a DB graph's datascript db"
+   :requires ([babashka.fs :as fs])
+   :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
+                "yarn -s nbb-logseq script/query.cljs" *command-line-args*)}
+
+  dev:db-transact
+  {:doc "Transact against a DB graph's datascript db"
+   :requires ([babashka.fs :as fs])
+   :task (apply shell {:dir "deps/outliner" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
+                "yarn -s nbb-logseq script/transact.cljs" *command-line-args*)}
+
+  dev:db-create
+  {:doc "Create a DB graph given a sqlite.build EDN file"
+   :requires ([babashka.fs :as fs])
+   :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
+                "yarn -s nbb-logseq -cp src:../outliner/src:script script/create_graph.cljs" *command-line-args*)}
+
+  dev:db-diff
+  {:doc "Diffs two DB graphs"
+   :requires ([babashka.fs :as fs])
+   :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
+                "yarn -s nbb-logseq script/diff_graphs.cljs" *command-line-args*)}
+
+  dev:db-import
+  {:doc "Import a file graph to db graph"
+   :requires ([babashka.fs :as fs])
+   :task (apply shell {:dir "deps/graph-parser" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
+                "yarn -s nbb-logseq -cp src:../outliner/src script/db_import.cljs" *command-line-args*)}
+
+  dev:db-import-many
+  {:doc "Import multiple file graphs to db graphs"
+   :task logseq.tasks.dev/db-import-many}
+
+  dev:db-datoms
+  {:doc "Write db's datoms to a file"
+   :requires ([babashka.fs :as fs])
+   :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
+                "yarn -s nbb-logseq script/dump_datoms.cljs"
+                *command-line-args*)}
+
+  dev:diff-datoms
+  logseq.tasks.dev/diff-datoms
 
   dev:npx-cap-run-ios
   logseq.tasks.dev.mobile/npx-cap-run-ios
@@ -66,8 +147,40 @@
   dev:validate-plugins-edn
   logseq.tasks.malli/validate-plugins-edn
 
-  dev:lint
-  logseq.tasks.dev/lint
+  dev:validate-repo-config-edn
+  logseq.tasks.malli/validate-repo-config-edn
+
+  dev:validate-global-config-edn
+  logseq.tasks.malli/validate-global-config-edn
+
+  dev:validate-ast
+  logseq.tasks.malli/validate-ast
+
+  dev:test
+  logseq.tasks.dev/test
+
+  dev:lint-and-test
+  logseq.tasks.dev/lint-and-test
+
+  dev:e2e-basic-test
+  logseq.tasks.dev/e2e-basic-test
+
+  dev:e2e-rtc-extra-test
+  {:doc "Run e2e rtc extra tests. HTTP server should be available at localhost:3001"
+   :task (clojure {:dir "clj-e2e"} "-X:dev-run-rtc-extra-test")}
+
+  dev:e2e-rtc-extra-part2-test
+  {:doc "Run e2e rtc extra part2 tests. HTTP server should be available at localhost:3001"
+   :task (clojure {:dir "clj-e2e"} "-X:dev-run-rtc-extra-part2-test")}
+
+  dev:gen-malli-kondo-config
+  logseq.tasks.dev/gen-malli-kondo-config
+
+  lint:dev
+  logseq.tasks.dev.lint/dev
+
+  lint:kondo-git-changes
+  logseq.tasks.dev.lint/kondo-git-changes
 
   lint:large-vars
   logseq.bb-tasks.lint.large-vars/-main
@@ -77,6 +190,12 @@
 
   lint:ns-docstrings
   logseq.bb-tasks.lint.ns-docstrings/-main
+
+  lint:db-and-file-graphs-separate
+  logseq.tasks.dev.db-and-file-graphs/-main
+
+  lint:worker-and-frontend-separate
+  logseq.tasks.dev.lint/worker-and-frontend-separate
 
   nbb:watch
   logseq.bb-tasks.nbb.watch/watch
@@ -90,14 +209,14 @@
   lang:missing
   logseq.tasks.lang/list-missing
 
-  lang:duplicates
-  logseq.tasks.lang/list-duplicates
-
-  lang:invalid-translations
-  logseq.tasks.lang/invalid-translations
+  lang:validate-translations
+  logseq.tasks.lang/validate-translations
 
   file-sync:integration-tests
-  logseq.tasks.file-sync/integration-tests}
+  logseq.tasks.file-sync/integration-tests
+
+  ai:check-common-errors
+  logseq.tasks.common-errors/check-common-errors}
 
  :tasks/config
  {:large-vars
@@ -112,4 +231,4 @@
   {:paths ["src/main"]
    ;; Ignore namespaces that won't be helpful to document initially
    ;; e.g. frontend.components.onboarding -> "Onboarding fns"
-   :ignore-regex "^(frontend.components|frontend.extensions|frontend.modules|frontend.mobile)"}}}
+   :ignore-regex "^(frontend.components|frontend.extensions|frontend.modules|frontend.mobile|logseq.sdk)"}}}

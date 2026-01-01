@@ -1,39 +1,23 @@
 .cp__header {
-  @apply z-10;
+  @apply shadow z-10 flex items-center justify-between sticky top-0 left-0 right-0 leading-none whitespace-nowrap;
 
   -webkit-app-region: drag;
 
-  padding-top: var(--ls-headbar-inner-top-padding);
+  padding-top: calc(var(--ls-headbar-inner-top-padding));
+  margin-top: var(--ls-win32-title-bar-height);
   height: calc(var(--ls-headbar-height) + var(--ls-headbar-inner-top-padding));
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex: 0 0 auto;
-  position: sticky;
-  top: 0;
-  left: 0;
-  right: 0;
-  user-select: none;
-  line-height: 1;
-  white-space: nowrap;
 
   > .l {
-    @apply pl-2;
+    @apply pl-2 h-full min-w-[var(--ls-left-sidebar-width)];
 
-    width: var(--ls-left-sidebar-width);
-    height: 100%;
-    align-items: center;
-    transition: padding-left .2s;
+    > div {
+      @apply items-center;
+    }
   }
 
   > .r {
-    align-items: center;
-    flex: 1;
-    justify-content: flex-end;
-    padding-right: 6px;
+    @apply flex flex-1 items-center justify-end pr-1.5;
   }
-
-  /* To prevent header glitch on Safari */
 
   > .l, > .r {
     -webkit-transform: translate3d(0, 0, 0);
@@ -41,18 +25,15 @@
   }
 
   .button {
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    @apply flex items-center justify-center;
 
     .ti, .tie {
-      font-size: 20px;
+      @apply text-[20px];
     }
   }
 
   .ui-items-container .button {
-    width: auto;
-    padding: 0 8px;
+    @apply w-auto py-0 px-1.5;
   }
 
   svg.warning {
@@ -131,7 +112,14 @@
   padding-left: 1rem;
 }
 
-.cp__header a, .cp__header svg {
+/* Workaround for Linux Intel GPU text rendering issue GH#7233 */
+.is-electron.is-linux .cp__header .dropdown-wrapper .title-wrap {
+  position: relative;
+}
+
+.cp__header a,
+.cp__header svg,
+.cp__header button {
   -webkit-app-region: no-drag;
 }
 
@@ -166,37 +154,13 @@
   transform: scale(0.9);
 }
 
-#repo-name {
-  display: table-cell;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 20ch;
-  height: 14px;
-
-  .ui__icon {
-    position: relative;
-    top: 5px;
-    right: -1px;
-  }
-}
-
 .button {
-  @apply h-8 px-2.5 py-1 rounded-md opacity-60;
-  display: block;
-  user-select: none;
+  @apply h-8 px-2.5 py-1 rounded-md opacity-90 block select-none hover:opacity-100 active:opacity-80;
 
-  &:hover, &.active {
-    opacity: 1;
-    background: none;
-
+  &:hover {
     @screen md {
-      background: var(--ls-tertiary-background-color);
+      background: var(--lx-gray-03, var(--ls-tertiary-background-color, var(--rx-gray-03)));
     }
-  }
-
-  &:active {
-    opacity: .7;
   }
 }
 
@@ -229,7 +193,7 @@ html.is-native-iphone-without-notch,
 html.is-native-ipad {
 
   #main-container {
-    padding-top: 0px;
+    padding-top: 0;
     display: flex;
     flex-direction: column;
   }
@@ -237,7 +201,7 @@ html.is-native-ipad {
   #main-content-container {
     padding-left: 22px;
     padding-right: 14px;
-    padding-top: 0px;
+    padding-top: 0;
     height: calc(100vh - var(--ls-headbar-inner-top-padding) - var(--ls-headbar-height));
 
     @screen sm {
@@ -245,7 +209,7 @@ html.is-native-ipad {
     }
 
     .page {
-      margin-top: 24px;
+      margin-top: 15px;
     }
   }
 
@@ -283,12 +247,6 @@ html.is-native-ipad {
     }
   }
 
-  .left-sidebar-inner  {
-    > .wrap {
-      padding-top: 20px;
-    }
-  }
-
   .cp__right-sidebar {
     &-settings {
       margin-top: -4px;
@@ -297,23 +255,11 @@ html.is-native-ipad {
     &-topbar {
       padding-top: 37px;
     }
-
-    &-inner {
-      .resizer {
-        top: 30vh;
-        width: 12px;
-        height: 40vh;
-      }
-
-      .resizer:hover {
-        background-color: var(--ls-guideline-color, #ddd);
-      }
-    }
   }
 }
 
 html.is-native-iphone {
-  --ls-headbar-inner-top-padding: 36px;
+  --ls-headbar-inner-top-padding: 38px;
 
   .left-sidebar-inner {
     .create {
@@ -350,4 +296,49 @@ html.is-zoomed-native-ios {
     --ls-headbar-inner-top-padding: 8px;
     --ls-headbar-height: 2.5rem;
   }
+}
+
+.drag-region {
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+.recent-slider {
+  user-select: initial;
+  -webkit-app-region: no-drag
+}
+
+/* TODO: remote for prod */
+.theme-container-inner:not(.ls-left-sidebar-open) {
+  .cp__header > .l {
+    min-width: auto;
+  }
+}
+
+
+.cp__header {
+    > .r > div:not(.ui__dropdown-trigger) a, button {
+        @apply opacity-70 text-[inherit];
+
+        &:hover {
+            @apply opacity-100;
+        }
+    }
+}
+
+.cp__header {
+    .ls-block-breadcrumb {
+        @apply text-sm pl-4;
+    }
+    .breadcrumb {
+        @apply flex items-center;
+    }
+
+    .breadcrumb a {
+        @apply !opacity-75 hover:!opacity-100;
+        span {
+            @apply whitespace-nowrap text-ellipsis inline-block overflow-x-hidden align-middle;
+            max-width: 34ch;
+        }
+    }
 }

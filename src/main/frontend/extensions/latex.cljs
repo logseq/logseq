@@ -1,12 +1,12 @@
 (ns frontend.extensions.latex
-  (:require [rum.core :as rum]
+  (:require [frontend.config :as config]
+            [frontend.handler.plugin :refer [hook-extensions-enhancers-by-key] :as plugin-handler]
             [frontend.loader :as loader]
             [frontend.ui :as ui]
-            [frontend.config :as config]
             [frontend.util :as util]
-            [frontend.handler.plugin :refer [hook-extensions-enhancer-by-type] :as plugin-handler]
+            [goog.dom :as gdom]
             [promesa.core :as p]
-            [goog.dom :as gdom]))
+            [rum.core :as rum]))
 
 ;; TODO: extracted to a rum mixin
 (defn loaded? []
@@ -16,7 +16,8 @@
 
 (defn render!
   [state]
-  (let [[id s display?] (:rum/args state)]
+  (let [[s _ display?] (:rum/args state)
+        id (:id state)]
     (try
       (when-let [elem (gdom/getElement id)]
         (js/katex.render s elem
@@ -35,33 +36,35 @@
       (render! state))
     (when-not @*loading?
       (reset! *loading? true)
-      (loader/load
-       (config/asset-uri "/static/js/katex.min.js")
-       (fn []
-         (loader/load
-          (config/asset-uri "/static/js/mhchem.min.js")
-          (fn []
-            (p/finally
-              (p/all (when-let [enhancers (and config/lsp-enabled? (seq (hook-extensions-enhancer-by-type :katex)))]
-                       (for [{f :enhancer} enhancers]
-                         (when (fn? f) (f js/window.katex)))))
-              (fn []
-                (reset! *loading? false)
-                (render! state))))))
-       state))))
+      (loader/load "./js/katex.min.js"
+                   (fn []
+                     (loader/load "./js/mhchem.min.js"
+                                  (fn []
+                                    (-> (when-let [enhancers (and config/lsp-enabled?
+                                                                  (seq (hook-extensions-enhancers-by-key :katex)))]
+                                          (for [{f :enhancer} enhancers]
+                                            (when (fn? f) (f js/window.katex))))
+                                        (p/all)
+                                        (p/finally (fn []
+                                                     (reset! *loading? false)
+                                                     (render! state)))))))
+                   state))))
 
 (defn- state-&-load-and-render!
   [state]
-  (js/setTimeout #(load-and-render! state) 10)
+  (load-and-render! state)
   state)
 
-(rum/defc latex < rum/reactive
-  {:did-mount  state-&-load-and-render!
+(rum/defcs latex < rum/reactive
+  {:init (fn [state]
+           (assoc state :id (str (random-uuid))))
+   :did-mount  state-&-load-and-render!
    :did-update state-&-load-and-render!}
-  [id s block? _display?]
-  (let [loading? (rum/react *loading?)]
+  [state s block? _display?]
+  (let [id (:id state)
+        loading? (rum/react *loading?)]
     (if loading?
-      (ui/loading "Loading")
+      (ui/loading)
       (let [element (if block?
                       :div.latex
                       :span.latex-inline)]

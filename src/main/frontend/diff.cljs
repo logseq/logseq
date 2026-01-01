@@ -1,17 +1,9 @@
 (ns ^:no-doc frontend.diff
   (:require [clojure.string :as string]
-            ["diff" :as jsdiff]
-            [goog.object :as gobj]
-            [lambdaisland.glogi :as log]
-            [cljs-bean.core :as bean]
             [frontend.util :as util]
-            [logseq.graph-parser.util :as gp-util]
-            [frontend.util.text :as text-util]))
-
-(defn diff
-  [s1 s2]
-  (-> ((gobj/get jsdiff "diffLines") s1 s2 (clj->js {"newlineIsToken" true}))
-      bean/->clj))
+            [frontend.util.text :as text-util]
+            [lambdaisland.glogi :as log]
+            [logseq.common.util :as common-util]))
 
 (def inline-special-chars
   #{\* \_ \/ \` \+ \^ \~ \$})
@@ -55,7 +47,7 @@
           (+ pos 2)
 
           (contains? inline-special-chars (util/nth-safe markup pos))
-          (let [matched (->> (take-while inline-special-chars (gp-util/safe-subs markup pos))
+          (let [matched (->> (take-while inline-special-chars (common-util/safe-subs markup pos))
                              (apply str))
                 matched? (and current-line (string/includes? current-line (string/reverse matched)))]
             (if matched?

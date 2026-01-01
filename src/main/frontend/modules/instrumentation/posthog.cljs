@@ -1,12 +1,12 @@
 (ns frontend.modules.instrumentation.posthog
-  (:require [frontend.config :as config]
-            [frontend.util :as util]
+  (:require ["posthog-js" :as posthog]
+            [cljs-bean.core :as bean]
+            [frontend.config :as config]
             [frontend.mobile.util :as mobile-util]
-            [frontend.version :refer [version]]
-            ["posthog-js" :as posthog]
-            [cljs-bean.core :as bean]))
+            [frontend.util :as util]
+            [frontend.version :refer [version]]))
 
-(def ^:const token "qUumrWobEk2dKiKt1b32CMEZy8fgNS94rb_Bq4WutPA")
+(goog-define POSTHOG-TOKEN "")
 (def ^:const masked "masked")
 
 (defn register []
@@ -39,7 +39,8 @@
    :loaded (fn [_] (register))})
 
 (defn init []
-  (posthog/init token (clj->js config)))
+  (when (and (not config/dev?) (not-empty POSTHOG-TOKEN))
+    (posthog/init POSTHOG-TOKEN (clj->js config))))
 
 (defn opt-out [opt-out?]
   (if opt-out?

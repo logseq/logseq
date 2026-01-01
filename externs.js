@@ -8,6 +8,8 @@ fs.unlink = function() {};
 fs.readdir = function() {};
 fs.rmdir = function() {};
 fs.rimraf = function() {};
+fs.lstat = function () {};
+
 var dummy = {};
 dummy.populateStat = function() {};
 dummy.populateHash = function() {};
@@ -114,6 +116,8 @@ dummy.bounding = function() {};
 dummy.getPageView = function() {};
 dummy.convertToPdfPoint = function() {};
 dummy.scrollPageIntoView = function() {};
+dummy.textLayer = function() {};
+dummy.viewport = function() {};
 dummy.convertToViewportRectangle = function() {};
 dummy.init = function() {};
 dummy.commit = function() {};
@@ -132,6 +136,28 @@ dummy.contentRect = function() {};
 dummy.height = function() {};
 dummy.createShapes = function() {};
 dummy.updateShapes = function() {};
+// hickory related, ATTRIBUTE will be $ATTRIBUTE$
+dummy.ATTRIBUTE = function() {};
+dummy.COMMENT = function() {};
+dummy.DOCUMENT = function() {};
+dummy.DOCUMENT_TYPE = function() {};
+dummy.ELEMENT = function() {};
+dummy.TEXT = function() {};
+dummy.isAbsolute = function() {};
+dummy._address = function() {};
+dummy.setInterfaceStyle = function() {};
+dummy.Consumer = {}
+
+var utils = {}
+utils.withFileTypes = true;
+utils.accessTime = 0;
+utils.modifiedTime = 0;
+utils.changeTime = 0;
+utils.birthTime = 0;
+utils.atimeMs = 0;
+utils.mtimeMs = 0;
+utils.ctimeMs = 0;
+utils.birthtimeMs = 0;
 
 /**
  * @typedef {{
@@ -144,3 +170,7 @@ var openDirectoryOptions;
  * @param {function} cb
  */
 var openDirectory = function(options, cb) {};
+var StatusBar;
+StatusBar.setStyle = {}
+StatusBar.setBackgroundColor = {}
+StatusBar.setOverlaysWebView = {}

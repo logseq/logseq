@@ -478,7 +478,7 @@ export class PDFFindController {
       // kind of whitespaces are replaced by a single " ".
 
       if (p1) {
-        // Escape characters like *+?... to not interfer with regexp syntax.
+        // Escape characters like *+?... to not interfere with regexp syntax.
         return `[ ]*\\${p1}[ ]*`
       }
       if (p2) {

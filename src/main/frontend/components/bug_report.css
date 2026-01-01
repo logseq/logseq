@@ -1,0 +1,7 @@
+.cp__bug-report-reporter {
+  background-color: var(--ls-tertiary-background-color);
+}
+
+.cp__bug-report-item-button {
+  background-color: var(--ls-quaternary-background-color);
+}

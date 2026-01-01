@@ -1,0 +1,20 @@
+{:paths ["src" "test"]
+ :deps {org.clojure/clojurescript {:mvn/version "1.12.42"}
+        cljs-bean/cljs-bean       {:mvn/version "1.5.0"}}
+
+ :npm-deps {"@logseq/libs" "0.2.3"}
+
+ :aliases
+ {:dev
+  {:extra-paths ["example"]}
+
+  :test
+  {:extra-paths ["test"]
+   :extra-deps {org.clojure/test.check {:mvn/version "1.1.1"}}
+   :ns-default build}
+
+  :build
+  {:deps {io.github.clojure/tools.build {:mvn/version "0.9.6"}
+          slipset/deps-deploy {:mvn/version "0.2.1"}
+          org.clojure/data.json {:mvn/version "2.4.0"}}
+   :ns-default build}}}

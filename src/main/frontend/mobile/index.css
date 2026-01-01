@@ -1,201 +1,135 @@
-.cp__footer {
-    position: absolute;
-    bottom: 0px;
-    left: 0px;
-    padding: 10px 20px;
-    background-color: var(--ls-primary-background-color);
-    z-index: 10;
-    display: flex;
-    flex: 0 0 auto;
-    white-space: nowrap;
-    height: 80px;
-    align-items: start;
-    box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.05);
-
-    .bottom-action {
-        width: 23px;
-        height: 23px;
-    }
-                                                             
-    .ti, .timer {
-        color: var(--ls-primary-text-color);
-    }
-
-    .timer {
-        position: absolute;
-        left: 40px;
-    }
-}
-
 .action-bar {
-    position: absolute;
-    bottom: 100px;
-    height: 70px;
-    padding: 6px;
-    border-radius: 10px;
-    background-color: var(--ls-secondary-background-color);
-    overflow-x: overlay;
-    box-shadow: rgba(0, 0, 0, 0.02) 0px 1px 1px 0px, rgba(27, 31, 35, 0.10) 0px 0px 0px 1px;
-    z-index: 100;
-        
-    .action-bar-commands {
-        position: relative;
-        display: flex;
-        justify-content: space-around;
-        width: 120%;
-        
-        
-        .ti, .tie {
-            color: var(--ls-primary-text-color);
-            font-size: 23px;
-            opacity: 50%;
-        }
-        
-        .description {
-            color: var(--ls-primary-text-color);
-            font-size: 13px;
-            opacity: 60%;
-        }
-        
-        button {
-            padding: 5px 10px
-        }
+  @apply fixed bottom-[100px] h-[70px] p-1.5 rounded-md overflow-y-hidden overflow-x-auto
+  bg-[var(--ls-secondary-background-color)] z-[99999];
+
+  box-shadow: /* bottom = shadow-lg */ 0 10px 15px -3px rgba(0, 0, 0, 0.1),
+  0 4px 6px -4px rgba(0, 0, 0, 0.1),
+    /* top = lighter (closer to shadow-md) */ 0 -6px 10px -4px rgba(0, 0, 0, 0.08),
+  0 -2px 4px -4px rgba(0, 0, 0, 0.08);
+
+  .action-bar-commands {
+    @apply relative flex w-full;
+
+
+    .ti, .tie {
+      @apply text-[var(--ls-primary-text-color)] text-[23px] opacity-90;
     }
-}
 
-#mobile-editor-toolbar {
-  position: fixed;
-  bottom: 0;
-  transition: bottom 260ms;
-  /* transition-timing-function: cubic-bezier(.29, 1.01, 1, -0.68); */
-  /* transition-timing-function: steps(10, jump-end); */
-  /* transition-timing-function: steps(5, end); */
-  transition-timing-function: ease-out;
-  left: 0;
-  width: 100%;
-  z-index: 9999;
-  display: flex;
-  justify-content: space-between;
+    .description {
+      @apply text-[var(--ls-primary-text-color)] text-[10px] opacity-100;
+    }
 
-  button {
-      padding: 7px 10px;
-
-      .submenu {
-          background-color: red;
-          z-index: 100;
-          background-color: var(--ls-secondary-background-color);
-          border-radius: 5px;
-          box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.02);
-          overflow-x: overlay;
-          overflow-y: hidden;
-          left: 0px;
-          height: 40px;
-      }
-
-      .show-submenu {
-          display: block;
-      }
-  }
-
-  .toolbar-commands {
-    justify-content: space-between;
-    display: flex;
-    align-items: center;
-    overflow-x: overlay;
-    overflow-y: hidden;
-    width: 95%;
-  }
-
-  .toolbar-hide-keyboard {
-    border-left: 1px solid;
-    border-color: var(--ls-quaternary-background-color);
+    button {
+      @apply flex-1 flex flex-col items-center justify-center py-3 px-1
+      opacity-80 active:opacity-100;
+    }
   }
 }
-
 
 html.is-native-ipad {
-    .cp__footer {
-        height: 55px;
-        right: 0;
-        box-shadow: none;
-        flex: 1;
-        index: 0;
-    }
-    
-    .action-bar {
-        width: 70%;
-        min-width:550px;
-        
-        .action-bar-commands {
-            width: 100%;
-        }
+  .action-bar {
+    @apply w-[70%] min-w-[550px];
 
-        @media (orientation: landscape) {
-            width: 50%;
-        }
+    @media (orientation: landscape) {
+      @apply w-1/2;
     }
+  }
 }
 
 html.is-native-iphone {
+  .action-bar {
+    left: 3%;
+    right: 3%;
+  }
+
+  @media (orientation: landscape) {
+    .cp__footer {
+      height: 45px;
+    }
 
     .action-bar {
-        left: 3%;
-        right: 3%;
+      bottom: 50px;
+      left: 15%;
+      right: 15%;
+      width: 70%;
+      min-width: 450px;
     }
-    
-    @media (orientation: landscape) {
-        .cp__footer {
-            height: 45px;
-        }
-
-        .action-bar {
-            bottom: 50px;
-            left: 15%;
-            right: 15%;
-            width: 70%;
-            min-width: 450px;
-
-            .action-bar-commands {
-                width: 100%;
-            }
-        }
-    }
+  }
 }
 
 html.is-native-iphone-without-notch,
 html.is-native-android {
-    .cp__footer {
-        height: 45px;
-    }
-    
+  .cp__footer {
+    height: 45px;
+  }
+
+  .action-bar {
+    left: 5%;
+    right: 5%;
+  }
+
+  @media (orientation: landscape) {
+
     .action-bar {
-        left: 5%;
-        right: 5%;
+      bottom: 50px;
+      left: 15%;
+      right: 15%;
+      width: 70%;
     }
+  }
 
-    @media (orientation: landscape) {
-        
-        .action-bar {
-            bottom: 50px;
-            left: 15%;
-            right: 15%;
-            width: 70%;
-
-            .action-bar-commands {
-                width: 100%;
-            }
-        }
-    }
+  .cp__sidebar-left-layout {
+    bottom: 0;
+  }
 }
 
 html.is-zoomed-native-ios {
+  .cp__footer {
+    height: 70px;
+  }
+
+  @media (orientation: landscape) {
     .cp__footer {
-        height: 70px;
+      height: 50px;
+    }
+  }
+}
+
+.cp__graph-picker {
+  button.toggle-item {
+    opacity: .5;
+    background: transparent !important;
+    -webkit-tap-highlight-color: transparent;
+
+    &:hover {
+      color: inherit;
+      opacity: .5;
     }
 
-    @media (orientation: landscape) {
-        .cp__footer {
-            height: 50px;
-        }
+    &.is-on {
+      @apply opacity-100;
     }
+  }
+}
+
+.ui__dialog-content {
+    margin-top: 45px;
+}
+
+html.has-mobile-keyboard {
+  .ui__dialog-overlay {
+    &:has(.app-login-modal) {
+      @apply overflow-y-auto;
+    }
+  }
+
+  .ui__dialog-content {
+    &.app-login-modal {
+      margin-bottom: 460px;
+    }
+  }
+}
+
+.ui__dialog-content[label=user-login] {
+  @apply rounded-lg pb-3;
 }

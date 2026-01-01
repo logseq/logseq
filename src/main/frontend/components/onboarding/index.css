@@ -1,3 +1,4 @@
+/* TODO: Remove this file */
 body[data-page=repo-add],
 body[data-page=import] {
   .cp__header .add-graph-btn {
@@ -7,8 +8,9 @@ body[data-page=import] {
 
 .cp__onboarding {
   &-setups {
-    background-color: var(--ls-primary-background-color);
     z-index: 1;
+    overflow: hidden;
+    border-radius: 20px;
 
     .as-flex-center {
       display: flex;
@@ -17,7 +19,6 @@ body[data-page=import] {
     }
 
     .inner-card {
-      background-color: var(--ls-secondary-background-color);
       padding-top: 55px;
 
       > h1 {
@@ -32,7 +33,6 @@ body[data-page=import] {
           &:first-child {
             display: block;
             text-align: center;
-            padding-bottom: 15px;
           }
         }
       }
@@ -46,7 +46,6 @@ body[data-page=import] {
       }
 
       > article {
-        background-color: var(--ls-secondary-background-color);
         border-radius: 20px;
         flex: 1;
 
@@ -54,7 +53,7 @@ body[data-page=import] {
           flex: 1;
 
           &.a {
-            background-color: var(--ls-tertiary-background-color);
+            background-color: var(--ls-tertiary-background-color, var(--rx-gray-03));
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -173,8 +172,7 @@ body[data-page=import] {
         }
 
         &.importer {
-          background-color: var(--ls-tertiary-background-color);
-          position: relative;
+          @apply relative bg-gray-03;
 
           > section {
             flex: unset;
@@ -253,8 +251,6 @@ body[data-page=import] {
 
           > section {
             &.a {
-              border-radius: 20px 0 0 20px;
-
               > small {
                 padding: 0 95px;
               }
@@ -301,16 +297,8 @@ body[data-page=import] {
     }
 
     label.action-input {
-      transition: none;
-      color: var(--ls-active-primary-color);
-      background-color: var(--ls-quaternary-background-color);
-      height: 68px;
-      width: 100%;
-      opacity: .8;
-      user-select: none;
-      border-radius: 12px;
-      overflow: hidden;
-      cursor: pointer;
+      @apply transition-none bg-gray-06 h-[68px] w-full opacity-80 select-none;
+      @apply rounded-xl overflow-hidden cursor-pointer;
 
       small {
         font-size: 11px;
@@ -416,8 +404,7 @@ body[data-page=import] {
 
     .shepherd-footer {
       button {
-        @apply bg-indigo-600 hover:bg-indigo-700;
-
+        background-color: var(--lx-accent-09, var(--ls-button-background));
         padding: 4px 8px;
         border-radius: 6px;
         overflow: hidden;
@@ -432,6 +419,10 @@ body[data-page=import] {
         &.bg-gray {
           @apply bg-gray-400;
         }
+      }
+
+      button:hover {
+          background-color: var(--lx-accent-10, var(--ls-button-background));
       }
     }
   }
@@ -506,6 +497,7 @@ body[data-page=import] {
 
   &.cp__sidebar-help-btn {
     background-color: rgba(0, 0, 0, .4);
+    z-index: 9;
 
     > .inner {
       opacity: 1;
@@ -568,16 +560,9 @@ html.is-native-iphone,
 html.is-native-iphone-without-notch {
   .cp__onboarding {
     &-setups {
-      position: absolute;
-      width: 100%;
-      top: 0;
-      left: 0;
-      height: 100vh;
-      overflow-y: auto;
-
       .inner-card {
         padding-top: 30px;
-        min-height: 100vh;
+        min-height: 100%;
         width: 100%;
 
         > h2 {

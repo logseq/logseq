@@ -1,38 +1,34 @@
 (ns frontend.commands
   "Provides functionality for commands and advanced commands"
   (:require [clojure.string :as string]
-            [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db.utils :as db-util]
-            [frontend.handler.draw :as draw]
+            [frontend.extensions.video.youtube :as youtube]
+            [frontend.handler.db-based.property :as db-property-handler]
+            [frontend.handler.db-based.property.util :as db-pu]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
-            [frontend.extensions.video.youtube :as youtube]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
-            [frontend.util.marker :as marker]
-            [frontend.util.priority :as priority]
-            [frontend.util.property :as property]
-            [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.config :as gp-config]
-            [logseq.graph-parser.property :as gp-property]
-            [logseq.graph-parser.util.page-ref :as page-ref]
-            [logseq.graph-parser.util.block-ref :as block-ref]
             [goog.dom :as gdom]
             [goog.object :as gobj]
+            [logseq.common.util :as common-util]
+            [logseq.common.util.block-ref :as block-ref]
+            [logseq.common.util.page-ref :as page-ref]
+            [logseq.graph-parser.property :as gp-property]
             [promesa.core :as p]))
 
 ;; TODO: move to frontend.handler.editor.commands
 
-(defonce angle-bracket "<")
-(defonce colon ":")
+(defonce hashtag "#")
+(defonce command-trigger "/")
+(defonce command-ask "\\")
 (defonce *current-command (atom nil))
 
 (def query-doc
-  [:div {:on-mouse-down (fn [e] (.stopPropagation e))}
+  [:div {:on-pointer-down (fn [e] (.stopPropagation e))}
    [:div.font-medium.text-lg.mb-2 "Query examples:"]
    [:ul.mb-1
     [:li.mb-1 [:code "{{query #tag}}"]]
@@ -51,7 +47,7 @@
     "."]])
 
 (defn link-steps []
-  [[:editor/input (str (state/get-editor-command-trigger) "link")]
+  [[:editor/input (str command-trigger "link")]
    [:editor/show-input [{:command :link
                          :id :link
                          :placeholder "Link"
@@ -61,7 +57,7 @@
                          :placeholder "Label"}]]])
 
 (defn image-link-steps []
-  [[:editor/input (str (state/get-editor-command-trigger) "link")]
+  [[:editor/input (str command-trigger "link")]
    [:editor/show-input [{:command :image-link
                          :id :link
                          :placeholder "Link"
@@ -69,10 +65,6 @@
                         {:command :image-link
                          :id :label
                          :placeholder "Label"}]]])
-
-(defn zotero-steps []
-  [[:editor/input (str (state/get-editor-command-trigger) "zotero")]
-   [:editor/show-zotero]])
 
 (def *extend-slash-commands (atom []))
 
@@ -82,7 +74,7 @@
 (defn ->marker
   [marker]
   [[:editor/clear-current-slash]
-   [:editor/set-marker marker]
+   [:editor/set-status marker]
    [:editor/move-cursor-to-end]])
 
 (defn ->priority
@@ -95,34 +87,93 @@
   [type]
   (let [template (util/format "@@%s: @@"
                               type)]
-    [[:editor/input template {:last-pattern (state/get-editor-command-trigger)
+    [[:editor/input template {:last-pattern command-trigger
                               :backward-pos 2}]]))
 
-(defn embed-page
+(defn db-based-statuses
   []
-  (conj
-   [[:editor/input "{{embed [[]]}}" {:last-pattern (state/get-editor-command-trigger)
-                                     :backward-pos 4}]]
-   [:editor/search-page :embed]))
+  (map (fn [e] (:block/title e))
+       (db-pu/get-closed-property-values :logseq.property/status)))
 
-(defn embed-block
+(defn db-based-embed-block
   []
-  [[:editor/input "{{embed (())}}" {:last-pattern (state/get-editor-command-trigger)
-                                    :backward-pos 4}]
+  [[:editor/input "" {:last-pattern command-trigger}]
    [:editor/search-block :embed]])
 
-(defn get-preferred-workflow
+(defn db-based-query
   []
-  (let [workflow (state/get-preferred-workflow)]
-    (if (= :now workflow)
-      [["LATER" (->marker "LATER")]
-       ["NOW" (->marker "NOW")]
-       ["TODO" (->marker "TODO")]
-       ["DOING" (->marker "DOING")]]
-      [["TODO" (->marker "TODO")]
-       ["DOING" (->marker "DOING")]
-       ["LATER" (->marker "LATER")]
-       ["NOW" (->marker "NOW")]])))
+  [[:editor/input "" {:last-pattern command-trigger}]
+   [:editor/run-query-command]])
+
+(defn query-steps
+  []
+  (db-based-query))
+
+(defn- calc-steps
+  []
+  [[:editor/input "" {:last-pattern command-trigger}]
+   [:editor/upsert-type-block :code "calc"]
+   [:codemirror/focus]])
+
+(defn- advanced-query-steps
+  []
+  [[:editor/input "" {:last-pattern command-trigger}]
+   [:editor/set-property :block/tags :logseq.class/Query]
+   [:editor/set-property :logseq.property/query ""]
+   [:editor/set-property-on-block-property :logseq.property/query :logseq.property.node/display-type :code]
+   [:editor/set-property-on-block-property :logseq.property/query :logseq.property.code/lang "clojure"]
+   [:editor/exit]])
+
+(defn code-block-steps
+  []
+  [[:editor/input "" {:last-pattern command-trigger}]
+   [:editor/upsert-type-block :code]
+   [:editor/exit]])
+
+(defn quote-block-steps
+  []
+  [[:editor/input "" {:last-pattern command-trigger}]
+   [:editor/set-property :logseq.property.node/display-type :quote]])
+
+(defn math-block-steps
+  []
+  [[:editor/input "" {:last-pattern command-trigger}]
+   [:editor/set-property :logseq.property.node/display-type :math]])
+
+(defn get-statuses
+  []
+  (let [result (->>
+                (db-based-statuses)
+                (mapv (fn [command]
+                        (let [icon (case command
+                                     "Canceled" "Cancelled"
+                                     "Doing" "InProgress50"
+                                     command)]
+                          [command (->marker command) (str "Set status to " command) icon]))))]
+    (when (seq result)
+      (map (fn [v] (conj v "TASK STATUS")) result))))
+
+(defn db-based-priorities
+  []
+  (map (fn [e] (str "Priority " (:block/title e)))
+       (db-pu/get-closed-property-values :logseq.property/priority)))
+
+(defn get-priorities
+  []
+  (let [with-no-priority #(cons ["No priority" (->priority nil) "" :icon/priorityLvlNone] %)
+        result (->>
+                (db-based-priorities)
+                (mapv (fn [item]
+                        (let [command item
+                              item (string/replace item #"^Priority " "")]
+                          [command
+                           (->priority item)
+                           (str "Set priority to " item)
+                           (str "priorityLvl" item)])))
+                (with-no-priority)
+                (vec))]
+    (when (seq result)
+      (map (fn [v] (into v ["PRIORITY"])) result))))
 
 ;; Credits to roamresearch.com
 
@@ -135,210 +186,192 @@
 (defn- headings
   []
   (mapv (fn [level]
-          (let [heading (str "h" level)]
-            [heading (->heading level)])) (range 1 7)))
+          (let [heading (str "Heading " level)]
+            [heading (->heading level) heading (str "h-" level) "Heading"])) (range 1 7)))
 
+(defonce *latest-matched-command (atom ""))
 (defonce *matched-commands (atom nil))
 (defonce *initial-commands (atom nil))
 
-(defonce *first-command-group
-  {"Page reference" "BASIC"
-   "Tomorrow" "TIME & DATE"
-   "LATER" "TASK"
-   "A" "PRIORITY"
-   "Query" "ADVANCED"
-   "Quote" "ORG-MODE"})
-
-(defn ->block
-  ([type]
-   (->block type nil))
-  ([type optional]
-   (let [format (get (state/get-edit-block) :block/format)
-         markdown-src? (and (= format :markdown)
-                            (= (string/lower-case type) "src"))
-         [left right] (cond
-                        markdown-src?
-                        ["```" "\n```"]
-
-                        :else
-                        (->> ["#+BEGIN_%s" "\n#+END_%s"]
-                             (map #(util/format %
-                                                (string/upper-case type)))))
-         template (str
-                   left
-                   (if optional (str " " optional) "")
-                   "\n"
-                   right)
-         backward-pos (if (= type "src")
-                        (+ 1 (count right))
-                        (count right))]
-     [[:editor/input template {:type "block"
-                               :last-pattern angle-bracket
-                               :backward-pos backward-pos}]])))
-
-(defn ->properties
-  []
-  [[:editor/clear-current-bracket]
-   [:editor/insert-properties]
-   [:editor/move-cursor-to-properties]])
-
-;; https://orgmode.org/manual/Structure-Templates.html
-(defn block-commands-map
-  []
-  (->>
-   (concat
-    [["Quote" (->block "quote")]
-     ["Src" (->block "src" "")]
-     ["Query" (->block "query")]
-     ["Latex export" (->block "export" "latex")]
-     ;; FIXME: current page's format
-     (when (= :org (state/get-preferred-format))
-       ["Properties" (->properties)])
-     ["Note" (->block "note")]
-     ["Tip" (->block "tip")]
-     ["Important" (->block "important")]
-     ["Caution" (->block "caution")]
-     ["Pinned" (->block "pinned")]
-     ["Warning" (->block "warning")]
-     ["Example" (->block "example")]
-     ["Export" (->block "export")]
-     ["Verse" (->block "verse")]
-     ["Ascii" (->block "export" "ascii")]
-     ["Center" (->block "center")]
-     ["Comment" (->block "comment")]]
-
-    ;; Allow user to modify or extend, should specify how to extend.
-    (state/get-commands))
-   (remove nil?)
-   (util/distinct-by-last-wins first)))
-
-(defn commands-map
+(defn ^:large-vars/cleanup-todo commands-map
   [get-page-ref-text]
-  (->>
-   (concat
-    ;; basic
-    [["Page reference" [[:editor/input page-ref/left-and-right-brackets {:backward-pos 2}]
-                        [:editor/search-page]] "Create a backlink to a page"]
-     ["Page embed" (embed-page) "Embed a page here"]
-     ["Block reference" [[:editor/input block-ref/left-and-right-parens {:backward-pos 2}]
-                         [:editor/search-block :reference]] "Create a backlink to a block"]
-     ["Block embed" (embed-block) "Embed a block here" "Embed a block here"]
-     ["Link" (link-steps) "Create a HTTP link"]
-     ["Image link" (image-link-steps) "Create a HTTP link to a image"]
-     (when (state/markdown?)
-       ["Underline" [[:editor/input "<ins></ins>"
-                      {:last-pattern (state/get-editor-command-trigger)
-                       :backward-pos 6}]] "Create a underline text decoration"])
-     ["Template" [[:editor/input (state/get-editor-command-trigger) nil]
-                  [:editor/search-template]] "Insert a created template here"]
-     (cond
-       (and (util/electron?) (config/local-db? (state/get-current-repo)))
+  (let [embed-block db-based-embed-block]
+    (->>
+     (concat
+        ;; basic
+      [["Node reference"
+        [[:editor/input page-ref/left-and-right-brackets {:backward-pos 2}]
+         [:editor/search-page]]
+        "Create a backlink to a node (a page or a block)"
+        :icon/pageRef
+        "BASIC"]
+       ["Node embed"
+        (embed-block)
+        "Embed a node here"
+        :icon/blockEmbed]]
 
-       ["Upload an asset" [[:editor/click-hidden-file-input :id]] "Upload file types like image, pdf, docx, etc.)"]
+        ;; format
+      [["Link" (link-steps) "Create a HTTP link" :icon/link "FORMAT"]
+       ["Image link" (image-link-steps) "Create a HTTP link to a image" :icon/photoLink]
+       (when (state/markdown?)
+         ["Underline" [[:editor/input "<ins></ins>"
+                        {:last-pattern command-trigger
+                         :backward-pos 6}]] "Create a underline text decoration"
+          :icon/underline])
+       ["Code block"
+        (code-block-steps)
+        "Insert code block"
+        :icon/code]
+       ["Quote"
+        (quote-block-steps)
+        "Create a quote block"
+        :icon/quote]
+       ["Math block"
+        (math-block-steps)
+        "Create a latex block"
+        :icon/math]]
 
-       ;; ["Upload an image" [[:editor/click-hidden-file-input :id]]]
-       )]
+      (headings)
 
-    (headings)
+      ;; task management
+      (get-statuses)
 
-    ;; time & date
+      ;; task date
+      [["Deadline"
+        [[:editor/clear-current-slash]
+         [:editor/set-deadline]]
+        ""
+        :icon/calendar-stats
+        "TASK DATE"]
+       ["Scheduled"
+        [[:editor/clear-current-slash]
+         [:editor/set-scheduled]]
+        ""
+        :icon/calendar-month
+        "TASK DATE"]]
 
-    [["Tomorrow" #(get-page-ref-text (date/tomorrow)) "Insert the date of tomorrow"]
-     ["Yesterday" #(get-page-ref-text (date/yesterday)) "Insert the date of yesterday"]
-     ["Today" #(get-page-ref-text (date/today)) "Insert the date of today"]
-     ["Current time" #(date/get-current-time) "Insert current time"]
-     ["Date picker" [[:editor/show-date-picker]] "Pick a date and insert here"]]
+      ;; priority
+      (get-priorities)
 
-    ;; task management
-    (get-preferred-workflow)
+      ;; time & date
+      [["Tomorrow"
+        #(get-page-ref-text (date/tomorrow))
+        "Insert the date of tomorrow"
+        :icon/tomorrow
+        "TIME & DATE"]
+       ["Yesterday" #(get-page-ref-text (date/yesterday)) "Insert the date of yesterday" :icon/yesterday]
+       ["Today" #(get-page-ref-text (date/today)) "Insert the date of today" :icon/calendar]
+       ["Current time" #(date/get-current-time) "Insert current time" :icon/clock]
+       ["Date picker" [[:editor/show-date-picker]] "Pick a date and insert here" :icon/calendar-dots]]
 
-    [["DONE" (->marker "DONE")]
-     ["WAITING" (->marker "WAITING")]
-     ["CANCELED" (->marker "CANCELED")]
-     ["Deadline" [[:editor/clear-current-slash]
-                  [:editor/show-date-picker :deadline]]]
-     ["Scheduled" [[:editor/clear-current-slash]
-                   [:editor/show-date-picker :scheduled]]]]
+      ;; order list
+      [["Number list"
+        [[:editor/clear-current-slash]
+         [:editor/toggle-own-number-list]]
+        "Number list"
+        :icon/numberedParents
+        "LIST TYPE"]
+       ["Number children" [[:editor/clear-current-slash]
+                           [:editor/toggle-children-number-list]]
+        "Number children"
+        :icon/numberedChildren]]
 
-    ;; priority
-    [["A" (->priority "A")]
-     ["B" (->priority "B")]
-     ["C" (->priority "C")]]
+      ;; advanced
+      [["Query" (query-steps) query-doc :icon/query "ADVANCED"]
+       ["Advanced Query" (advanced-query-steps) "Create an advanced query block" :icon/query]
+       ["Query function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query function" :icon/queryCode]
+       ["Calculator"
+        (calc-steps)
+        "Insert a calculator" :icon/calculator]
 
-    ;; advanced
+       ["Upload an asset"
+        [[:editor/click-hidden-file-input :id]]
+        "Upload file types like image, pdf, docx, etc.)"
+        :icon/upload]
 
-    [["Query" [[:editor/input "{{query }}" {:backward-pos 2}]] query-doc]
-     ["Zotero" (zotero-steps) "Import Zotero journal article"]
-     ["Query table function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query table function"]
-     ["Calculator" [[:editor/input "```calc\n\n```" {:backward-pos 4}]
-                    [:codemirror/focus]] "Insert a calculator"]
-     ["Draw" (fn []
-               (let [file (draw/file-name)
-                     path (str gp-config/default-draw-directory "/" file)
-                     text (page-ref/->page-ref path)]
-                 (p/let [_ (draw/create-draw-with-default-content path)]
-                   (println "draw file created, " path))
-                 text)) "Draw a graph with Excalidraw"]
-     ["Embed HTML " (->inline "html")]
+       ["Template" [[:editor/input command-trigger nil]
+                    [:editor/search-template]] "Insert a created template here"
+        :icon/template]
 
-     ["Embed Video URL" [[:editor/input "{{video }}" {:last-pattern (state/get-editor-command-trigger)
-                                                      :backward-pos 2}]]]
+       ["Embed HTML " (->inline "html") "" :icon/htmlEmbed]
 
-     ["Embed Youtube timestamp" [[:youtube/insert-timestamp]]]
+       ["Embed Video URL" [[:editor/input "{{video }}" {:last-pattern command-trigger
+                                                        :backward-pos 2}]] ""
+        :icon/videoEmbed]
 
-     ["Embed Twitter tweet" [[:editor/input "{{tweet }}" {:last-pattern (state/get-editor-command-trigger)
-                                                          :backward-pos 2}]]]]
+       ["Embed Youtube timestamp" [[:youtube/insert-timestamp]] "" :icon/videoEmbed]
 
-    @*extend-slash-commands
-    ;; Allow user to modify or extend, should specify how to extend.
+       ["Embed Twitter tweet" [[:editor/input "{{tweet }}" {:last-pattern command-trigger
+                                                            :backward-pos 2}]] ""
+        :icon/xEmbed]
 
-    (state/get-commands)
-    (state/get-plugins-commands))
-   (remove nil?)
-   (util/distinct-by-last-wins first)))
+       ["Add new property" [[:editor/clear-current-slash]
+                            [:editor/new-property]] ""
+        :icon/cube-plus]]
+
+      (let [commands (->> @*extend-slash-commands
+                          (remove (fn [command] (when (map? (last command))
+                                                  (false? (:db-graph? (last command)))))))]
+        commands)
+
+;; Allow user to modify or extend, should specify how to extend.
+
+      (state/get-commands)
+      (when-let [plugin-commands (seq (some->> (state/get-plugins-slash-commands)
+                                               (mapv #(vec (concat % [nil :icon/puzzle])))))]
+        (-> plugin-commands (vec) (update 0 (fn [v] (conj v "PLUGINS"))))))
+     (remove nil?)
+     (util/distinct-by-last-wins first))))
 
 (defn init-commands!
   [get-page-ref-text]
   (let [commands (commands-map get-page-ref-text)]
+    (reset! *latest-matched-command "")
     (reset! *initial-commands commands)
     (reset! *matched-commands commands)))
 
-(defonce *matched-block-commands (atom (block-commands-map)))
+(defn set-matched-commands!
+  [command matched-commands]
+  (reset! *latest-matched-command command)
+  (reset! *matched-commands matched-commands))
 
 (defn reinit-matched-commands!
   []
-  (reset! *matched-commands @*initial-commands))
-
-(defn reinit-matched-block-commands!
-  []
-  (reset! *matched-block-commands (block-commands-map)))
+  (set-matched-commands! "" @*initial-commands))
 
 (defn restore-state
   []
   (state/clear-editor-action!)
-  (reinit-matched-commands!)
-  (reinit-matched-block-commands!))
+  (reinit-matched-commands!))
 
 (defn insert!
   [id value
-   {:keys [last-pattern postfix-fn backward-pos forward-pos end-pattern backward-truncate-number]
+   {:keys [last-pattern postfix-fn backward-pos end-pattern backward-truncate-number
+           command only-breakline?]
     :as _option}]
   (when-let [input (gdom/getElement id)]
-    (let [last-pattern (when-not backward-truncate-number
-                         (or last-pattern (state/get-editor-command-trigger)))
+    (let [last-pattern (when-not (= last-pattern :skip-check)
+                         (when-not backward-truncate-number
+                           (or last-pattern command-trigger)))
           edit-content (gobj/get input "value")
           current-pos (cursor/pos input)
           current-pos (or
                        (when (and end-pattern (string? end-pattern))
-                         (when-let [i (string/index-of (gp-util/safe-subs edit-content current-pos) end-pattern)]
+                         (when-let [i (string/index-of (common-util/safe-subs edit-content current-pos) end-pattern)]
                            (+ current-pos i)))
                        current-pos)
           orig-prefix (subs edit-content 0 current-pos)
+          postfix (subs edit-content current-pos)
+          postfix (if postfix-fn (postfix-fn postfix) postfix)
           space? (let [space? (when (and last-pattern orig-prefix)
                                 (let [s (when-let [last-index (string/last-index-of orig-prefix last-pattern)]
-                                          (gp-util/safe-subs orig-prefix 0 last-index))]
+                                          (common-util/safe-subs orig-prefix 0 last-index))]
                                   (not
                                    (or
+                                    (and (= :page-ref command)
+                                         (util/cjk-string? value)
+                                         (or (util/cjk-string? (str (last orig-prefix)))
+                                             (util/cjk-string? (str (first postfix)))))
                                     (and s
                                          (string/ends-with? s "(")
                                          (or (string/starts-with? last-pattern block-ref/left-parens)
@@ -348,12 +381,13 @@
                                     (and last-pattern
                                          (or (string/ends-with? last-pattern gp-property/colons)
                                              (string/starts-with? last-pattern gp-property/colons)))))))]
-                   (if (and space? (string/starts-with? last-pattern "#[["))
+                   (if (and space? (or (string/starts-with? last-pattern "#[[")
+                                       (string/starts-with? last-pattern "```")))
                      false
                      space?))
           prefix (cond
                    (and backward-truncate-number (integer? backward-truncate-number))
-                   (str (gp-util/safe-subs orig-prefix 0 (- (count orig-prefix) backward-truncate-number))
+                   (str (common-util/safe-subs orig-prefix 0 (- (count orig-prefix) backward-truncate-number))
                         (when-not (zero? backward-truncate-number)
                           value))
 
@@ -364,8 +398,10 @@
 
                    :else
                    (util/replace-last last-pattern orig-prefix value space?))
-          postfix (subs edit-content current-pos)
-          postfix (if postfix-fn (postfix-fn postfix) postfix)
+          postfix (cond-> postfix
+                    (and only-breakline? postfix
+                         (= (get postfix 0) "\n"))
+                    (string/replace-first "\n" ""))
           new-value (cond
                       (string/blank? postfix)
                       prefix
@@ -377,13 +413,10 @@
                       (str prefix postfix))
           new-pos (- (count prefix)
                      (or backward-pos 0))]
-      (when-not (string/blank? new-value)
+      (when-not (and (not (string/blank? value))
+                     (string/blank? new-value))
         (state/set-block-content-and-last-pos! id new-value new-pos)
-        (cursor/move-cursor-to input
-                               (if (and (or backward-pos forward-pos)
-                                        (not= end-pattern page-ref/right-brackets))
-                                 new-pos
-                                 (inc new-pos)))))))
+        (cursor/move-cursor-to input new-pos)))))
 
 (defn simple-insert!
   [id value
@@ -393,9 +426,10 @@
         edit-content (gobj/get input "value")
         current-pos (cursor/pos input)
         prefix (subs edit-content 0 current-pos)
+        surfix (subs edit-content current-pos)
         new-value (str prefix
                        value
-                       (subs edit-content current-pos))
+                       surfix)
         new-pos (- (+ (count prefix)
                       (count value)
                       (or forward-pos 0))
@@ -510,123 +544,73 @@
       (let [edit-content (gobj/get current-input "value")
             current-pos (cursor/pos current-input)
             prefix (subs edit-content 0 current-pos)
-            prefix (util/replace-last (state/get-editor-command-trigger) prefix "" (boolean space?))
+            prefix (util/replace-last command-trigger prefix "" (boolean space?))
             new-value (str prefix
                            (subs edit-content current-pos))]
         (state/set-block-content-and-last-pos! input-id
                                                new-value
                                                (count prefix))))))
 
-(defmethod handle-step :editor/clear-current-bracket [[_ space?]]
-  (when-let [input-id (state/get-edit-input-id)]
-    (when-let [current-input (gdom/getElement input-id)]
-      (let [edit-content (gobj/get current-input "value")
-            current-pos (cursor/pos current-input)
-            prefix (subs edit-content 0 current-pos)
-            prefix (util/replace-last angle-bracket prefix "" (boolean space?))
-            new-value (str prefix
-                           (subs edit-content current-pos))]
-        (state/set-block-content-and-last-pos! input-id
-                                               new-value
-                                               (count prefix))))))
+(defn- db-based-set-status
+  [status]
+  (when-let [block (state/get-edit-block)]
+    (db-property-handler/batch-set-property-closed-value! [(:block/uuid block)] :logseq.property/status status)))
 
-(defn compute-pos-delta-when-change-marker
-  [edit-content marker pos]
-  (let [old-marker (some->> (first (util/safe-re-find marker/bare-marker-pattern edit-content))
-                            (string/trim))
-        pos-delta (- (count marker)
-                     (count old-marker))
-        pos-delta (cond (string/blank? old-marker)
-                        (inc pos-delta)
-                        (string/blank? marker)
-                        (dec pos-delta)
+(defmethod handle-step :editor/set-status [[_ status] _format]
+  (db-based-set-status status))
 
-                        :else
-                        pos-delta)]
-    (max (+ pos pos-delta) 0)))
+(defmethod handle-step :editor/set-property [[_ property-id value]]
+  (when-let [block (state/get-edit-block)]
+    (db-property-handler/set-block-property! (:db/id block) property-id value)))
 
-(defmethod handle-step :editor/set-marker [[_ marker] format]
-  (when-let [input-id (state/get-edit-input-id)]
-    (when-let [current-input (gdom/getElement input-id)]
-      (let [edit-content (gobj/get current-input "value")
-            slash-pos (:pos (:pos (state/get-editor-action-data)))
-            [re-pattern new-line-re-pattern] (if (= :org format)
-                                               [#"\*+\s" #"\n\*+\s"]
-                                               [#"#+\s" #"\n#+\s"])
-            pos (let [prefix (subs edit-content 0 (dec slash-pos))]
-                  (if-let [matches (seq (util/re-pos new-line-re-pattern prefix))]
-                    (let [[start-pos content] (last matches)]
-                      (+ start-pos (count content)))
-                    (count (util/safe-re-find re-pattern prefix))))
-            new-value (str (subs edit-content 0 pos)
-                           (string/replace-first (subs edit-content pos)
-                                                 (marker/marker-pattern format)
-                                                 (str marker " ")))]
-        (state/set-edit-content! input-id new-value)
-        (let [new-pos (compute-pos-delta-when-change-marker
-                       edit-content marker (dec slash-pos))]
-          ;; TODO: any performance issue?
-          (js/setTimeout #(cursor/move-cursor-to current-input new-pos) 10))))))
+(defmethod handle-step :editor/set-property-on-block-property [[_ block-property-id property-id value]]
+  (let [updated-block (when-let [block-uuid (:block/uuid (state/get-edit-block))]
+                        (db/entity [:block/uuid block-uuid]))
+        block-property-value (get updated-block block-property-id)]
+    (when block-property-value
+      (db-property-handler/set-block-property! (:db/id block-property-value) property-id value))))
+
+(defmethod handle-step :editor/upsert-type-block [[_ type lang]]
+  (when-let [block (state/get-edit-block)]
+    (state/pub-event! [:editor/upsert-type-block {:block block :type type :lang lang}])))
+
+(defn- db-based-set-priority
+  [priority]
+  (when-let [block (state/get-edit-block)]
+    (if (nil? priority)
+      (db-property-handler/set-block-property! (:block/uuid block) :logseq.property/priority :logseq.property/empty-placeholder)
+      (db-property-handler/batch-set-property-closed-value! [(:block/uuid block)] :logseq.property/priority priority))))
 
 (defmethod handle-step :editor/set-priority [[_ priority] _format]
-  (when-let [input-id (state/get-edit-input-id)]
-    (when-let [current-input (gdom/getElement input-id)]
-      (let [format (or (db/get-page-format (state/get-current-page)) (state/get-preferred-format))
-            edit-content (gobj/get current-input "value")
-            new-priority (util/format "[#%s]" priority)
-            new-value (string/trim (priority/add-or-update-priority edit-content format new-priority))]
-        (state/set-edit-content! input-id new-value)))))
+  (db-based-set-priority priority))
 
-(defmethod handle-step :editor/insert-properties [[_ _] _format]
-  (when-let [input-id (state/get-edit-input-id)]
-    (when-let [current-input (gdom/getElement input-id)]
-      (let [format (or (db/get-page-format (state/get-current-page)) (state/get-preferred-format))
-            edit-content (gobj/get current-input "value")
-            new-value (property/insert-property format edit-content "" "")]
-        (state/set-edit-content! input-id new-value)))))
+(defmethod handle-step :editor/set-scheduled [[_]]
+  (state/pub-event! [:editor/new-property {:property-key "Scheduled"}]))
 
-(defmethod handle-step :editor/move-cursor-to-properties [[_]]
-  (when-let [input-id (state/get-edit-input-id)]
-    (when-let [current-input (gdom/getElement input-id)]
-      (let [format (or (db/get-page-format (state/get-current-page)) (state/get-preferred-format))]
-        (property/goto-properties-end format current-input)
-        (cursor/move-cursor-backward current-input 3)))))
+(defmethod handle-step :editor/set-deadline [[_]]
+  (state/pub-event! [:editor/new-property {:property-key "Deadline"}]))
 
-(defonce markdown-heading-pattern #"^#+\s+")
-(defn set-markdown-heading
-  [content heading]
-  (let [heading-str (apply str (repeat heading "#"))]
-    (if (util/safe-re-find markdown-heading-pattern content)
-      (string/replace-first content
-                            markdown-heading-pattern
-                            (str heading-str " "))
-      (str heading-str " " (string/triml content)))))
+(defmethod handle-step :editor/run-query-command [[_]]
+  (state/pub-event! [:editor/run-query-command]))
 
-(defn clear-markdown-heading
-  [content]
-  [:pre (string? content)]
-  (string/replace-first content
-                        markdown-heading-pattern
-                        ""))
+(def clear-markdown-heading common-util/clear-markdown-heading)
 
 (defmethod handle-step :editor/set-heading [[_ heading]]
   (when-let [input-id (state/get-edit-input-id)]
-    (when-let [current-input (gdom/getElement input-id)]
-      (let [current-block (state/get-edit-block)
-            format (:block/format current-block)]
-        (if (= format :markdown)
-          (let [edit-content (gobj/get current-input "value")
-                new-content (set-markdown-heading edit-content heading)]
-            (state/set-edit-content! input-id new-content))
-          (state/pub-event! [:editor/set-org-mode-heading current-block heading]))))))
+    (when-let [_current-input (gdom/getElement input-id)]
+      (let [current-block (state/get-edit-block)]
+        (state/pub-event! [:editor/set-heading current-block heading])))))
 
-(defmethod handle-step :editor/search-page [[_]]
+(defmethod handle-step :editor/search-page [_]
   (state/set-editor-action! :page-search))
 
 (defmethod handle-step :editor/search-page-hashtag [[_]]
   (state/set-editor-action! :page-search-hashtag))
 
-(defmethod handle-step :editor/search-block [[_ _type]]
+(defmethod handle-step :editor/search-block [[_ type]]
+  (when (= type :embed)
+    (reset! *current-command "Block embed")
+    (state/set-editor-action-data! {:pos (cursor/get-caret-pos (state/get-input))}))
   (state/set-editor-action! :block-search))
 
 (defmethod handle-step :editor/search-template [[_]]
@@ -634,9 +618,6 @@
 
 (defmethod handle-step :editor/show-input [[_ option]]
   (state/set-editor-show-input! option))
-
-(defmethod handle-step :editor/show-zotero [[_]]
-  (state/set-editor-action! :zotero))
 
 (defn insert-youtube-timestamp
   []
@@ -651,30 +632,51 @@
         macro (youtube/gen-youtube-ts-macro)]
     (insert! input-id macro {})))
 
+(defmethod handle-step :editor/toggle-children-number-list [[_]]
+  (when-let [block (state/get-edit-block)]
+    (state/pub-event! [:editor/toggle-children-number-list block])))
+
+(defmethod handle-step :editor/toggle-own-number-list [[_]]
+  (when-let [block (state/get-edit-block)]
+    (state/pub-event! [:editor/toggle-own-number-list block])))
+
+(defmethod handle-step :editor/remove-own-number-list [[_]]
+  (when-let [block (state/get-edit-block)]
+    (state/pub-event! [:editor/remove-own-number-list block])))
+
 (defmethod handle-step :editor/show-date-picker [[_ type]]
   (if (and
        (contains? #{:scheduled :deadline} type)
-       (when-let [value (gobj/get (state/get-input) "value")]
-         (string/blank? value)))
+       (string/blank? (gobj/get (state/get-input) "value")))
     (do
       (notification/show! [:div "Please add some content first."] :warning)
       (restore-state))
-    (state/set-editor-action! :datepicker)))
+    (do
+      (state/set-timestamp-block! nil)
+      (state/set-editor-action! :datepicker))))
 
 (defmethod handle-step :editor/click-hidden-file-input [[_ _input-id]]
   (when-let [input-file (gdom/getElement "upload-file")]
     (.click input-file)))
 
+(defmethod handle-step :editor/exit [[_]]
+  (p/do!
+   (state/pub-event! [:editor/save-current-block])
+   (state/clear-edit!)))
+
+(defmethod handle-step :editor/new-property [[_]]
+  (state/pub-event! [:editor/new-property]))
+
 (defmethod handle-step :default [[type & _args]]
   (prn "No handler for step: " type))
 
 (defn handle-steps
-  [vector format]
-  (doseq [step vector]
+  [vector' format]
+  (p/doseq [step vector']
     (handle-step step format)))
 
 (defn exec-plugin-simple-command!
   [pid {:keys [block-id] :as cmd} action]
-  (let [format (and block-id (:block/format (db-util/pull [:block/uuid block-id])))
+  (let [format (and block-id (get (db/entity [:block/uuid block-id]) :block/format :markdown))
         inputs (vector (conj action (assoc cmd :pid pid)))]
     (handle-steps inputs format)))

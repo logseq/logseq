@@ -1,34 +1,35 @@
 (ns frontend.handler.plugin-config-test
   (:require [clojure.test :refer [is use-fixtures testing deftest]]
             [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async]]
-            [frontend.test.fixtures :as fixtures]
+            [frontend.test.node-helper :as test-node-helper]
+            [frontend.test.node-fixtures :as node-fixtures]
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.schema.handler.plugin-config :as plugin-config-schema]
             ["fs" :as fs-node]
-            ["path" :as path]
+            ["path" :as node-path]
             [clojure.edn :as edn]
             [malli.generator :as mg]
             [promesa.core :as p]
             [clojure.string :as string]
             [frontend.handler.notification :as notification]))
 
-(use-fixtures :once fixtures/redef-get-fs)
+(use-fixtures :once node-fixtures/redef-get-fs)
 
 (defn- create-global-config-dir
   []
-  (let [dir (test-helper/create-tmp-dir "config")
-        root-dir (path/dirname dir)]
+  (let [dir (test-node-helper/create-tmp-dir "config")
+        root-dir (node-path/dirname dir)]
     (reset! global-config-handler/root-dir root-dir)
     dir))
 
 (defn- delete-global-config-dir
   [config-dir]
   (doseq [relative-file (fs-node/readdirSync config-dir)]
-    (fs-node/unlinkSync (path/join config-dir relative-file)))
+    (fs-node/unlinkSync (node-path/join config-dir relative-file)))
   (reset! global-config-handler/root-dir nil)
   (fs-node/rmdirSync config-dir)
-  (fs-node/rmdirSync (path/dirname config-dir)))
+  (fs-node/rmdirSync (node-path/dirname config-dir)))
 
 (deftest-async add-or-update-plugin
   (let [dir (create-global-config-dir)
@@ -66,7 +67,7 @@
         error-message (atom nil)]
     (fs-node/writeFileSync (plugin-config-handler/plugin-config-path) "{:id {}")
 
-    (test-helper/with-reset reset
+    (p/with-redefs
       [notification/show! (fn [msg _] (reset! error-message msg))]
       (->
        (p/do!
@@ -82,7 +83,7 @@
     (fs-node/writeFileSync (plugin-config-handler/plugin-config-path)
                            (pr-str {:id {:theme true :repo "user/repo"}}))
 
-    (test-helper/with-reset reset
+    (p/with-redefs
       [notification/show! (fn [msg _] (reset! error-message msg))]
       (->
        (p/do!

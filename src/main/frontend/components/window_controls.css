@@ -1,0 +1,14 @@
+.window-controls {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 10;
+
+  .button {
+    -webkit-app-region: no-drag;
+    background: transparent;
+    border-radius: 0;
+    width: 48px;
+    height: 48px;
+  }
+}

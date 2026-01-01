@@ -1,27 +1,35 @@
 (ns frontend.core
   "Entry ns for the mobile, browser and electron frontend apps"
-  (:require [rum.core :as rum]
+  {:dev/always true}
+  (:require ["react-dom/client" :as rdc]
+            [frontend.background-tasks]
+            [frontend.common-keywords]
+            [frontend.components.plugins :as plugins]
+            [frontend.config :as config]
             [frontend.handler :as handler]
+            [frontend.handler.db-based.rtc-background-tasks]
+            [frontend.handler.db-based.vector-search-background-tasks]
             [frontend.handler.plugin :as plugin-handler]
-            [frontend.handler.route :as route]
+            [frontend.handler.route :as route-handler]
+            [frontend.log]
             [frontend.page :as page]
             [frontend.routes :as routes]
             [frontend.spec]
-            [frontend.log]
-            [frontend.util.persist-var :as persist-var]
-            [reitit.frontend :as rf]
-            [reitit.frontend.easy :as rfe]
+            [frontend.util :as util]
+            [lambdaisland.glogi :as log]
             [logseq.api]
-            [frontend.fs.sync :as sync]
-            [frontend.config :as config]
-            [frontend.util :as util]))
+            [logseq.db.frontend.kv-entity]
+            [malli.dev.cljs :as md]
+            [reitit.frontend :as rf]
+            [reitit.frontend.easy :as rfe]))
 
 (defn set-router!
   []
+  (.addEventListener js/window "popstate" route-handler/restore-scroll-pos)
   (rfe/start!
-   (rf/router routes/routes nil)
+   (rf/router (plugins/hook-custom-routes routes/routes) nil)
    (fn [route]
-     (route/set-route-match! route)
+     (route-handler/set-route-match! route)
      (plugin-handler/hook-plugin-app
       :route-changed (select-keys route [:template :path :parameters])))
 
@@ -43,33 +51,49 @@
             \\/    /_____/     \\/     \\/   |__|
      "))
 
-(defn start []
-  (when-let [node (.getElementById js/document "root")]
+(defonce root (rdc/createRoot (.getElementById js/document "root")))
+
+(defn ^:export start []
+  (when-not (util/capacitor?)
+    (when config/dev?
+      (md/start!))
     (set-router!)
-    (rum/mount (page/current-page) node)
-    (display-welcome-message)
-    (persist-var/load-vars)
-    (when (and config/dev? (util/electron?))
-      (js/setTimeout #(sync/sync-start) 1000))))
+
+    (.render ^js root (page/current-page))
+
+    (display-welcome-message)))
+
+(comment
+  (def d-entity-count (volatile! 0))
+  (def ident->count (volatile! {}))
+  (def time-sum (volatile! 0))
+  (defn- setup-entity-profile!
+    []
+    (let [origin-d-entity d/entity]
+      (set! d/entity (fn [& args]
+                       (let [{r :result time :time} (util/with-time (apply origin-d-entity args))
+                             k (last args)]
+                         (vswap! d-entity-count inc)
+                         (vswap! ident->count update k inc)
+                         (vswap! time-sum #(+ time %))
+                         (println @d-entity-count (:db/id r) k (get @ident->count k) @time-sum "ms")
+                         r))))))
 
 (defn ^:export init []
   ;; init is called ONCE when the page loads
   ;; this is called in the index.html and must be exported
   ;; so it is available even in :advanced release builds
 
-  (plugin-handler/setup!
-   #(handler/start! start))
+  ;; (setup-entity-profile!)
+  (log/info ::init "App started")
+  (handler/start! start))
 
-  ;; popup to notify user, could be toggled in settings
-  ;; (handler/request-notifications-if-not-asked)
-
-  ;; (handler/run-notify-worker!)
-)
-
-(defn stop []
+(defn ^:export stop []
   ;; stop is called before any code is reloaded
   ;; this is controlled by :before-load in the config
   (handler/stop!)
-  (when (and config/dev? (util/electron?))
-    (sync/<sync-stop))
   (js/console.log "stop"))
+
+(defn ^:export delay-remount
+  [delay]
+  (js/setTimeout #(start) delay))

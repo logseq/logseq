@@ -4,14 +4,7 @@
 
 .cp__plugins {
   &-page {
-    background-color: var(--ls-primary-background-color);
-    margin: -2rem;
-    padding: 1.5rem 2rem;
-    outline: none;
-
-    @screen xl {
-      width: 1260px;
-    }
+    @apply outline-none px-2 py-0;
 
     > h1 {
       margin: 0;
@@ -29,47 +22,48 @@
     }
 
     .tabs {
-      .ui__button {
-        background-color: transparent;
-        margin: 0 8px;
+      &-inner {
+        @apply flex gap-3 p-1 bg-gray-02 rounded-md;
 
-        > span {
-          display: flex;
-          align-items: center;
-          font-size: 16px;
-          font-weight: normal;
+        .ui__button {
+          @apply flex items-center opacity-70 px-3;
 
-          svg {
-            margin-right: 6px;
+          &.active {
+            @apply bg-gray-04 opacity-100;
           }
-        }
-
-        &.active {
-          background-color: var(--ls-tertiary-background-color);
         }
       }
     }
 
+    .panels {
+      @apply mx-[-20px] mt-2 -mb-2;
+    }
+
     .secondary-tabs {
-      button {
-        margin-right: 5px;
-        background: transparent;
+      .ui__button {
+        @apply mr-1.5 bg-transparent border border-b-2;
 
         .ti, .tie {
-          margin-right: 3px;
+          @apply mr-1;
         }
 
         &.active {
-          background: var(--ls-secondary-background-color);
-          color: var(--ls-link-text-color);
+          @apply !text-primary;
+        }
+
+        &:hover {
+          @apply text-accent-10;
         }
       }
     }
 
     .control-tabs {
-      .ti, .tie {
-        margin-right: 4px;
+      @apply px-6 transition-shadow;
+
+      &.scrolled {
+        box-shadow: 0 4px 6px -6px #ccc;
       }
+
       .ui__dropdown-trigger {
         .ti-circle {
           visibility: hidden;
@@ -77,7 +71,11 @@
       }
 
       .dropdown-wrapper {
-          min-width: 14rem;
+        min-width: 14rem;
+      }
+
+      .title-wrap {
+        @apply whitespace-nowrap;
       }
     }
 
@@ -90,26 +88,15 @@
       }
 
       &.contribute {
-        position: absolute;
-        top: -46px;
-        right: 0;
-        background: transparent;
-        font-size: 12px;
-        opacity: .8;
-        display: none;
-
-        @screen md {
-          display: block;
-        }
+        @apply absolute top-[-42px] right-5 bg-transparent text-xs opacity-60 hidden sm:block;
       }
 
       &.load-unpacked {
-        opacity: .9;
-        background: transparent;
+        @apply opacity-90 bg-transparent;
       }
 
       &.sort-or-filter-by, &.more-do {
-        padding: 0 4px;
+        @apply py-0 px-1.5;
       }
 
       &.picked {
@@ -133,7 +120,7 @@
       position: relative;
 
       small.s1 {
-        left: 6px;
+        left: 8px;
         top: 6px;
       }
 
@@ -145,10 +132,11 @@
         z-index: 1;
       }
 
-      .form-input {
+      .ui__input {
         background-color: var(--ls-primary-background-color);
-        padding: 5px 7px 5px 22px;
-        opacity: .5;
+        padding: 6px 7px 5px 29px;
+        opacity: .7;
+        height: 30px;
 
         &:focus {
           background-color: var(--ls-secondary-background-color);
@@ -156,15 +144,19 @@
         }
       }
     }
+
+    &.web-platform {
+      .cp__plugins-item-lists {
+        @apply max-h-[80vh] h-[calc(100vh-320px)];
+      }
+    }
   }
 
   &-installed {
-    min-height: 60vh;
     padding-top: 5px;
   }
 
   &-marketplace {
-    min-height: 60vh;
     padding-top: 5px;
 
     &.has-installing {
@@ -177,13 +169,18 @@
   }
 
   &-item-lists {
-    @apply w-full grid grid-flow-row gap-3 pt-1;
+    @apply w-full max-h-[80vh] h-[calc(100vh-480px)] overflow-y-auto;
+
+    &-inner {
+      @apply grid grid-flow-row gap-3 px-4
+      grid-cols-1 md:grid-cols-2 lg:grid-cols-3;
+    }
   }
 
   &-item-card {
     @apply flex py-3 px-1 rounded-md;
 
-    background-color: var(--ls-secondary-background-color);
+    background-color: var(--ls-tertiary-background-color, hsl(var(--muted)));
     height: 150px;
 
     li {
@@ -443,21 +440,16 @@
   }
 
   &-waiting-updates {
-    margin: -15px;
-
     > ul {
       li {
-        user-select: none;
-        justify-content: space-between;
-        opacity: .9;
+        @apply select-none justify-between opacity-90;
 
         sup {
-          padding-left: 8px;
-          font-weight: 400;
+          @apply pl-2 font-medium;
         }
 
         &:hover, &.checked {
-          opacity: 1;
+          @apply opacity-100;
         }
       }
     }
@@ -465,19 +457,30 @@
 
   &-settings {
     &-inner {
-      position: relative;
-      padding: 10px 0 20px;
+      @apply relative pt-2.5 pb-5 px-0;
 
       > .edit-file {
-        position: absolute;
-        top: 12px;
-        right: 8px;
+        @apply absolute top-3 right-2;
+      }
+
+      &[data-mode=code] {
+        @apply pt-2;
+
+        > .edit-file {
+          @apply -top-4;
+        }
       }
 
       .heading-item {
-        margin: 12px 12px 6px;
-        font-weight: bold;
-        border-bottom: 1px solid var(--ls-border-color, #738694);
+        @apply pt-3 px-3 pb-1.5 border-b;
+
+        h2 {
+          @apply font-bold;
+        }
+
+        small:empty {
+          @apply hidden;
+        }
       }
 
       .desc-item {
@@ -541,10 +544,13 @@
           display: flex;
           align-items: center;
           padding-top: 3px;
+          flex-wrap: wrap;
 
           label {
             padding-right: 15px;
             user-select: none;
+            white-space: nowrap;
+            margin-top: 2px;
           }
 
           input {
@@ -570,25 +576,27 @@
       }
     }
 
-    aside {
-      max-height: 70vh;
-      overflow: auto;
-      margin-bottom: -17px;
+    .cp__settings-inner {
+      aside {
+        @apply max-h-[70vh] overflow-auto;
 
-      ul {
-        img.icon {
-          height: 24px;
-          width: 24px;
-        }
+        ul {
+          @apply list-none pt-1.5 m-0;
 
-        li {
-          strong {
-            font-weight: 400;
-            overflow: hidden;
-            height: 22px;
+          img.icon {
+            @apply w-[20px] h-[20px];
+          }
 
-            text-overflow: ellipsis;
-            white-space: nowrap;
+          li {
+            @apply p-1.5 rounded;
+
+            a {
+              @apply mb-0 text-gray-12 opacity-90;
+            }
+
+            strong {
+              @apply overflow-hidden text-ellipsis whitespace-nowrap;
+            }
           }
         }
       }
@@ -600,39 +608,33 @@
       width: 100%;
       max-width: 760px;
     }
+
+    .html-content {
+      > p {
+        padding-bottom: 2px;
+        margin: 0;
+      }
+    }
   }
 }
 
 .cp__themes {
   &-installed {
-    margin: -2rem;
-    outline: none;
-    padding: 1rem;
+    @apply outline-none -m-4;
 
     .it {
-      user-select: none;
-      background-color: var(--ls-secondary-background-color);
-      border: 1px solid transparent;
-      margin-bottom: 4px;
-      cursor: pointer;
-      opacity: .8;
+      @apply select-none border-transparent mb-1 cursor-pointer opacity-80;
 
       .name {
-        font-weight: 600;
+        @apply font-semibold;
       }
 
-      &.is-active {
-        background-color: var(--ls-tertiary-background-color);
-        border: 1px solid var(--ls-quaternary-background-color);
-        opacity: 1;
+      &:hover, &.is-active {
+        @apply opacity-100 bg-gray-06;
       }
 
       &.is-selected {
-        opacity: 1;
-      }
-
-      &:hover {
-        opacity: 1;
+        @apply opacity-100;
       }
     }
   }
@@ -767,6 +769,10 @@
   }
 }
 
+.lsp-daemon-container {
+  @apply fixed top-0 left-0 z-10;
+}
+
 .lsp-ui-float-container {
   top: 40%;
   left: 30%;
@@ -786,6 +792,10 @@
   &[data-type=toolbar] {
     @apply flex items-center;
 
+    > .list-wrap {
+      @apply flex items-center flex-nowrap overflow-x-hidden transition-[max-width];
+    }
+
     > .injected-ui-item-toolbar {
       @apply hover:opacity-100 transition-opacity;
     }
@@ -797,48 +807,104 @@
     > .injected-ui-item-pagebar {
       @apply pr-3 opacity-30 hover:opacity-100 transition-opacity;
     }
+
+    > .list-wrap {
+      @apply flex items-center flex-nowrap overflow-x-hidden pt-[14px];
+    }
+
+    a.button {
+      @apply flex items-center;
+
+      color: var(--ls-primary-text-color);
+    }
+  }
+}
+
+.toolbar-plugins-manager {
+  &-content {
+    @apply max-h-[80vh];
+
+    > .ui__dropdown-menu-item {
+      @apply px-[5px] py-1 text-sm relative w-full;
+
+      &.extra-item {
+        @apply opacity-80 px-3 py-1.5 hover:opacity-100;
+
+        .ui__icon {
+          @apply pr-[2px];
+        }
+      }
+    }
+
+    .item-wrap {
+      @apply pr-[28px] text-sm relative w-full;
+
+      .ti {
+        @apply text-[18px];
+      }
+
+      div[data-injected-ui] > a.button {
+        @apply h-auto px-1.5;
+      }
+
+      div[data-injected-ui] :is(.ti, .tie) {
+        @apply relative bottom-[-2px];
+      }
+    }
+
+    .pin {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+      padding: 0 6px;
+
+      &.pinned {
+        color: var(--ls-link-ref-text-color);
+        opacity: 90;
+      }
+    }
+  }
+}
+
+.ui-fenced-code {
+  &-wrap {
+    &:not(.is-active) {
+      .ui-fenced-code-editor {
+        display: none !important;
+      }
+    }
+
+    &.is-active {
+      .ui-fenced-code-result {
+        @apply pt-2;
+      }
+    }
   }
 
-  .toolbar-plugins-manager {
-    &-trigger {
-      .dropdown-wrapper {
-        max-height: 80vh;
-        overflow-y: auto;
-      }
+  &-result {
+    @apply relative;
 
-      .menu-link {
-        padding: 3px 5px;
-      }
+    > .actions {
+      @apply absolute top-2 right-1 z-10 opacity-0 transition-opacity;
 
-      .item-wrap {
-        padding-right: 28px;
+      .ui__button {
         font-size: 13px;
-        position: relative;
-
-        div[data-injected-ui] :is(.ti, .tie) {
-          position: relative;
-          bottom: -1px;
-        }
+        padding: 4px;
+        margin-left: 6px;
       }
+    }
 
-      .pin {
-        position: absolute;
-        top: 0;
-        right: 0;
-        height: 100%;
-        padding: 0 6px;
-
-        &.pinned {
-          color: var(--ls-link-ref-text-color);
-          opacity: 90;
-        }
+    &:hover {
+      > .actions {
+        @apply opacity-100;
       }
     }
   }
 }
 
 .lsp-frame-readme {
-  margin: -2rem;
+  margin: -1.5rem;
   min-height: 75vh;
   min-width: 900px;
 }
@@ -846,6 +912,14 @@
 html[data-theme='dark'] {
   .lsp-frame-readme {
     background-color: #eeeeee;
+  }
+
+  .cp__plugins-page {
+    .control-tabs {
+      &.scrolled {
+        box-shadow: 0 4px 6px -6px #666;
+      }
+    }
   }
 }
 
@@ -857,6 +931,31 @@ html[data-theme='dark'] {
       display: inline-flex;
     }
   }
+
+  .block-slotted-body {
+    .lsp-hook-ui-slot {
+      display: block;
+
+      [data-injected-ui] {
+        display: flex;
+        flex-direction: column;
+      }
+    }
+  }
+}
+
+.ui__dialog-content[label=plugin-settings-modal] {
+  @apply w-auto lg:max-w-5xl p-0 gap-0;
+}
+
+.ui__dialog-content[label=plugins-dashboard] {
+  @apply overflow-y-hidden max-w-[90vw] lg:max-w-[1246px];
+
+  max-height: calc(100vh - 50px);
+}
+
+.ui__dialog-content[label=plugin-readme] {
+  @apply w-auto max-w-6xl;
 }
 
 body[data-page=plugins] {

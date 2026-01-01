@@ -1,31 +1,17 @@
 (ns frontend.extensions.pdf.utils
-  (:require [promesa.core :as p]
+  (:require ["/frontend/extensions/pdf/utils" :as js-utils]
             [cljs-bean.core :as bean]
-            [frontend.util :as util]
-            ["/frontend/extensions/pdf/utils" :as js-utils]
-            [datascript.core :as d]
-            [logseq.graph-parser.config :as gp-config]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [logseq.common.uuid :as common-uuid]
+            [promesa.core :as p]))
 
 (defonce MAX-SCALE 5.0)
 (defonce MIN-SCALE 0.25)
 (defonce DELTA_SCALE 1.05)
 
-(defn clean-asset-path-prefix
-  [path]
-  (when (string? path)
-    (string/replace-first path #"^[.\/\\]*(assets)[\/\\]+" "")))
-
-(defn get-area-block-asset-url
-  [block page]
-  (when-some [props (and block page (:block/properties block))]
-    (when-some [uuid (:block/uuid block)]
-      (when-some [stamp (:hl-stamp props)]
-        (let [group-key      (string/replace-first (:block/original-name page) #"^hls__" "")
-              hl-page        (:hl-page props)
-              encoded-chars? (boolean (re-find #"(?i)%[0-9a-f]{2}" group-key))
-              group-key      (if encoded-chars? (js/encodeURI group-key) group-key)]
-          (str "./" gp-config/local-assets-dir "/" group-key "/" (str hl-page "_" uuid "_" stamp ".png")))))))
+(defn hls-file?
+  [filename]
+  (and filename (string? filename) (string/starts-with? filename "hls__")))
 
 (defn get-bounding-rect
   [rects]
@@ -46,27 +32,22 @@
 
 (defn vw-to-scaled-pos
   [^js viewer {:keys [page bounding rects]}]
-  (when-let [^js viewport (.. viewer (getPageView (dec page)) -viewport)]
+  (when-let [^js viewport (some-> viewer ^js (.getPageView (dec page)) (.-viewport))]
     {:bounding (viewport-to-scaled bounding viewport)
      :rects    (for [rect rects] (viewport-to-scaled rect viewport))
      :page     page}))
 
 (defn scaled-to-vw-pos
   [^js viewer {:keys [page bounding rects]}]
-  (when-let [^js viewport (.. viewer (getPageView (dec page)) -viewport)]
+  (when-let [^js viewport (some-> viewer ^js (.getPageView (dec page)) (.-viewport))]
     {:bounding (scaled-to-viewport bounding viewport)
      :rects    (for [rect rects] (scaled-to-viewport rect viewport))
      :page     page}))
 
-(defn get-page-bounding
-  [^js viewer page-number]
-  (when-let [^js el (and page-number (.. viewer (getPageView (dec page-number)) -div))]
-    (bean/->clj (.toJSON (.getBoundingClientRect el)))))
-
 (defn resolve-hls-layer!
   [^js viewer page]
-  (when-let [^js text-layer (.. viewer (getPageView (dec page)) -textLayer)]
-    (let [cnt (.-textLayerDiv text-layer)
+  (when-let [^js text-layer (some-> viewer ^js (.getPageView (dec page)) (.-textLayer))]
+    (let [^js cnt (.-div text-layer)
           cls "extensions__pdf-hls-layer"
           doc js/document
           layer (.querySelector cnt (str "." cls))]
@@ -106,37 +87,38 @@
   [^js viewer]
   (when-let [^js doc (and viewer (.-pdfDocument viewer))]
     (p/create
-      (fn [resolve]
-        (p/catch
-          (p/then (.getMetadata doc)
-                  (fn [^js r]
-                    (js/console.debug "[metadata] " r)
-                    (when-let [^js info (and r (.-info r))]
-                      (resolve (bean/->clj info)))))
-          (fn [e]
-            (resolve nil)
-            (js/console.error e)))))))
+     (fn [resolve]
+       (p/catch
+        (p/then (.getMetadata doc)
+                (fn [^js r]
+                  (js/console.debug "[metadata] " r)
+                  (when-let [^js info (and r (.-info r))]
+                    (resolve (bean/->clj info)))))
+        (fn [e]
+          (resolve nil)
+          (js/console.error e)))))))
 
 (defn clear-all-selection
-  []
-  (.removeAllRanges (js/window.getSelection)))
+  ([] (clear-all-selection js/window))
+  ([^js win]
+   (some-> win (.getSelection) (.removeAllRanges))))
 
-(def adjust-viewer-size!
-  (util/debounce
-    200 (fn [^js viewer] (set! (. viewer -currentScaleValue) "auto"))))
+(defn adjust-viewer-size!
+  [^js viewer]
+  (let [bus (.-eventBus viewer)]
+    (.dispatch bus "resizing")))
+
+(defn reset-viewer-auto! [^js viewer]
+  (set! (. viewer -currentScaleValue) "auto"))
 
 (defn fix-nested-js
   [its]
   (when (sequential? its)
     (mapv #(if (map? %) % (bean/->clj %)) its)))
 
-(defn gen-uuid []
-  (d/squuid))
-
-(defn load-base-assets$
+(defn gen-uuid
   []
-  (p/let [_ (util/js-load$ (str util/JS_ROOT "/pdfjs/pdf.js"))
-          _ (util/js-load$ (str util/JS_ROOT "/pdfjs/pdf_viewer.js"))]))
+  (common-uuid/gen-uuid))
 
 (defn get-page-from-el
   [^js/HTMLElement el]
@@ -155,7 +137,8 @@
         ^js cnt-offset (.getBoundingClientRect page-cnt)]
 
     (when (seq rge-rects)
-      (let [rects (for [rect rge-rects]
+      (let [rects (for [rect rge-rects
+                        :when (and rect (not (zero? (.-width rect))) (not (zero? (.-height rect))))]
                     {:top    (- (+ (.-top rect) (.-scrollTop page-cnt)) (.-top cnt-offset))
                      :left   (- (+ (.-left rect) (.-scrollLeft page-cnt)) (.-left cnt-offset))
                      :width  (.-width rect)
@@ -173,17 +156,33 @@
           (string/replace #"\|#\|([a-zA-Z_])" " $1")
           (string/replace sp "")))))
 
+(defn fix-local-asset-pagename
+  [filename]
+  (if (and (string? filename) (not (string/blank? filename)))
+    (let [local-asset? (re-find #"[0-9]{13}_\d$" filename)
+          hls?         (hls-file? filename)
+          len          (count filename)]
+      (if (or local-asset? hls?)
+        (-> filename
+            (subs 0 (if local-asset? (- len 15) len))
+            (string/replace #"^hls__" "")
+            (string/replace #"__[-\d]+$" "")
+            (string/replace "_" " ")
+            (string/trimr))
+        filename))
+    filename))
+
 ;; TODO: which viewer instance?
 (defn next-page
   []
   (try
-    (js-invoke js/window.lsPdfViewer "nextPage")
+    (js-invoke js/window.lsActivePdfViewer "nextPage")
     (catch :default _e nil)))
 
 (defn prev-page
   []
   (try
-    (js-invoke js/window.lsPdfViewer "previousPage")
+    (js-invoke js/window.lsActivePdfViewer "previousPage")
     (catch :default _e nil)))
 
 (defn open-finder
@@ -194,8 +193,8 @@
     (catch js/Error _e nil)))
 
 (comment
- (fix-selection-text-breakline "this is a\ntest paragraph")
- (fix-selection-text-breakline "he is 1\n8 years old")
- (fix-selection-text-breakline "这是一个\n\n段落")
- (fix-selection-text-breakline "これ\n\nは、段落")
- (fix-selection-text-breakline "this is a te-\nst paragraph"))
+  (fix-selection-text-breakline "this is a\ntest paragraph")
+  (fix-selection-text-breakline "he is 1\n8 years old")
+  (fix-selection-text-breakline "这是一个\n\n段落")
+  (fix-selection-text-breakline "これ\n\nは、段落")
+  (fix-selection-text-breakline "this is a te-\nst paragraph"))

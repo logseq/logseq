@@ -1,8 +1,9 @@
 (ns frontend.extensions.graph
   (:require [cljs-bean.core :as bean]
-            [frontend.db.model :as model]
             [frontend.extensions.graph.pixi :as pixi]
             [frontend.handler.route :as route-handler]
+            [frontend.colors :as colors]
+            [frontend.db :as db]
             [goog.object :as gobj]
             [rum.core :as rum]))
 
@@ -13,10 +14,11 @@
    (fn [node attributes]
      (when-not (contains? focus-nodes node)
        (let [attributes (bean/->clj attributes)
+             accent-color (or (colors/get-accent-color) "#6366F1")
              attributes (assoc attributes
-                               :color "#6366F1"
+                               :color accent-color
                                :border {:width 2
-                                        :color "#6366F1"})]
+                                        :color accent-color})]
          (.resetNodeStyle graph node (bean/->js attributes)))))))
 
 (defn- highlight-edges!
@@ -40,18 +42,19 @@
       (highlight-neighbours! graph node (set @*focus-nodes) dark?)
       (highlight-edges! graph node dark?))
     (when-not drag?
-      (let [page-name (model/get-redirect-page-name node)]
-        (.unhoverNode ^js graph node)
-        (route-handler/redirect-to-page! page-name)))))
+      (.unhoverNode ^js graph node)
+      (when-let [page (and (string? node)
+                           (some-> (js/parseInt node) db/entity))]
+        (route-handler/redirect-to-page! (:block/uuid page))))))
 
 (rum/defcs graph-2d <
   (rum/local nil :ref)
   {:did-update pixi/render!
    :should-update (fn [old-state new-state]
                     (not= (select-keys (first (:rum/args old-state))
-                                       [:nodes :links :dark?])
+                                       [:nodes :links :dark? :link-dist :charge-strength :charge-range])
                           (select-keys (first (:rum/args new-state))
-                                       [:nodes :links :dark?])))
+                                       [:nodes :links :dark? :link-dist :charge-strength :charge-range])))
    :will-unmount (fn [state]
                    (reset! pixi/*graph-instance nil)
                    state)}

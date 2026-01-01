@@ -1,0 +1,10 @@
+{:paths ["src"]
+ :deps
+ {org.clojure/clojure                   {:mvn/version "1.11.1"}
+  org.clojure/clojurescript             {:mvn/version "1.11.132"}
+  funcool/promesa                       {:mvn/version "11.0.678"}
+  rum/rum                               {:git/url "https://github.com/logseq/rum" ;; fork
+                                         :sha     "5d672bf84ed944414b9f61eeb83808ead7be9127"}
+
+  medley/medley                         {:mvn/version "1.4.0"}
+  cljs-bean/cljs-bean                   {:mvn/version "1.5.0"}}}

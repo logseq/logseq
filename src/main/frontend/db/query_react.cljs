@@ -1,55 +1,36 @@
 (ns frontend.db.query-react
   "Custom queries."
-  (:require [cljs-time.core :as t]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [clojure.walk :as walk]
-            [frontend.config :as config]
+            [frontend.date :as date]
+            [frontend.db.conn :as conn]
             [frontend.db.model :as model]
             [frontend.db.react :as react]
-            [frontend.db.utils :as db-utils :refer [date->int]]
-            [frontend.debug :as debug]
+            [frontend.db.utils :as db-utils]
             [frontend.extensions.sci :as sci]
             [frontend.state :as state]
-            [logseq.graph-parser.util.page-ref :as page-ref]
             [frontend.util :as util]
-            [frontend.date :as date]
-            [lambdaisland.glogi :as log]))
+            [lambdaisland.glogi :as log]
+            [logseq.common.util.page-ref :as page-ref]
+            [logseq.db :as ldb]
+            [logseq.db.frontend.inputs :as db-inputs]))
 
 (defn resolve-input
-  [input]
-  (cond
-    (= :right-now-ms input) (util/time-ms)
-    (= :start-of-today-ms input) (util/today-at-local-ms 0 0 0 0)
-    (= :end-of-today-ms input) (util/today-at-local-ms 24 0 0 0)
-
-    (= :today input)
-    (date->int (t/today))
-    (= :yesterday input)
-    (date->int (t/minus (t/today) (t/days 1)))
-    (= :tomorrow input)
-    (date->int (t/plus (t/today) (t/days 1)))
-    (= :current-page input)
-    (some-> (or (state/get-current-page)
-                (:page (state/get-default-home))
-                (date/today)) string/lower-case)
-
-    (and (keyword? input)
-         (util/safe-re-find #"^\d+d(-before)?$" (name input)))
-    (let [input (name input)
-          days (parse-long (re-find #"^\d+" input))]
-      (date->int (t/minus (t/today) (t/days days))))
-    (and (keyword? input)
-         (util/safe-re-find #"^\d+d(-after)?$" (name input)))
-    (let [input (name input)
-          days (parse-long (re-find #"^\d+" input))]
-      (date->int (t/plus (t/today) (t/days days))))
-
-    (and (string? input) (page-ref/page-ref? input))
-    (-> (page-ref/get-page-name input)
-        (string/lower-case))
-
-    :else
-    input))
+  "Wrapper around db-inputs/resolve-input which provides editor-specific state"
+  ([db input]
+   (resolve-input db input {}))
+  ([db input opts]
+   (db-inputs/resolve-input db
+                            input
+                            (merge {:current-page-fn (fn []
+                                                       (or (when-let [name-or-uuid (state/get-current-page)]
+                                                             ;; `ldb/db-based-graph?` left here for testing
+                                                             (if (ldb/db-based-graph? db)
+                                                               (:block/title (model/get-block-by-uuid name-or-uuid))
+                                                               name-or-uuid))
+                                                           (:page (state/get-default-home))
+                                                           (date/today)))}
+                                   opts))))
 
 (defn custom-query-result-transform
   [query-result remove-blocks q]
@@ -113,19 +94,16 @@
 
 (defn react-query
   [repo {:keys [query inputs rules] :as query'} query-opts]
-  (let [pprint (if config/dev? debug/pprint (fn [_] nil))
-        start-time (.now js/performance)]
-    (pprint "================")
-    (pprint "Use the following to debug your datalog queries:")
-    (pprint query')
-    (let [query (resolve-query query)
-          resolved-inputs (mapv resolve-input inputs)
-          inputs (cond-> resolved-inputs
-                         rules
-                         (conj rules))
-          repo (or repo (state/get-current-repo))
-          k [:custom (or (:query-string query') query')]]
-      (pprint "inputs (post-resolution):" resolved-inputs)
-      (pprint "query-opts:" query-opts)
-      (pprint (str "time elapsed: " (.toFixed (- (.now js/performance) start-time) 2) "ms"))
-      (apply react/q repo k query-opts query inputs))))
+  (let [query (resolve-query query)
+        repo (or repo (state/get-current-repo))
+        db (conn/get-db repo)
+        resolve-with (select-keys query-opts [:current-page-fn :current-block-uuid])
+        resolved-inputs (mapv #(resolve-input db % resolve-with) inputs)
+        inputs (cond-> resolved-inputs
+                 rules
+                 (conj rules))
+        k [:custom
+           (or (:query-string query') (dissoc query' :title))
+           (:today-query? query-opts)
+           inputs]]
+    [k (apply react/q repo k query-opts query inputs)]))

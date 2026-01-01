@@ -1,0 +1,16 @@
+{
+  "name": "@logseq/publish",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "cd ./worker && npx wrangler dev",
+    "watch": "clojure -M:cljs watch publish-worker",
+    "release": "clojure -M:cljs release publish-worker",
+    "clean": "rm -rf ./worker/dist/",
+    "bump-publish-version": "node ./scripts/bump-publish-version.js",
+    "deploy": "yarn bump-publish-version && yarn clean && yarn release && cd ./worker && wrangler deploy --env prod"
+  },
+  "dependencies": {
+    "shadow-cljs": "^3.3.4"
+  }
+}

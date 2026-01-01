@@ -1,65 +1,53 @@
-# Build Logseq Desktop on Windows
+# Setup Logseq development dependencies on Windows
 
-## Intro
-This is a guide on creating Logseq development environment on Windows with `PowerShell`. Non-platform specific instructions like [Develop Logseq](develop-logseq.md) **should also be referenced**.
+This is a guide on setting up Logseq development dependencies on Windows.  Once these dependencies are installed, you can follow the  [develop-logseq](develop-logseq.md) docs for build instructions.
 
-## Pre-requisites
-* Ensure `Set-ExecutionPolicy Unrestricted` (or other equivalent)
-* Good network connection. Here's [An example of setting up proxy in PowerShell](#an-example-of-setting-up-proxy-in-powershell)
-* Node.js 16.x
-* Clojure (follow this [Guidance](https://clojure.org/guides/getting_started#_installation_on_windows))
-* JRE 8 (required for Clojure)
-* Visual Studio (required for desktop app)
+## [scoop](https://scoop.sh/)
 
-(updated 20220218. May confirm via JAVA_VERSION and NODE_VERSION in [THIS FILE](https://github.com/logseq/logseq/blob/master/.github/workflows/build.yml))
+Scoop provides a `clojure.exe` shim which works in Command Prompt and Powershell windows.
 
-### An example of installing pre-requisites on Windows
-* Install [Chocolatey](https://chocolatey.org/)
-* Install JRE
-* Install NVM for Windows, Node.js, and Yarn
+```
+scoop bucket add scoop-clojure https://github.com/littleli/scoop-clojure
+scoop bucket add extras
+scoop bucket add java
+scoop install java/openjdk clj-deps babashka leiningen nodejs-lts
+```
+
+## Winget
+
+Winget is a package manager installed by default on windows.
+
   ```
-  choco install nvm
-  nvm install 16.13 (or whatever version)
-  nvm use 16.13
+  winget install --id CoreyButler.NVMforWindows
+  nvm install 18
+  nvm use 18
   npm install -g yarn
-  nvm use 16.13
-  ```
-* Install [clj-on-windows](https://github.com/clojure/tools.deps.alpha/wiki/clj-on-Windows)
-
-Congrats! The pre-requisites are ready.
-
-## Set-up development environment (web app)
-
-The basic idea is replacing the `clojure` commands in [package.json](https://github.com/logseq/logseq/blob/master/package.json) to `clj`.  
-Go to your cloned Logseq repo. Then install dependencies, execute the `clj` equivalent of `yarn watch`. Refer [THIS](#an-example-of-setting-up-proxy-in-powershell) if you want to setup proxy in `PowerShell`.
-
-* Copy files in `resources` to `static`
-
-* Compile static assets(css, icons...)
-  ```
-  yarn add --dev gulp
-  yarn
-  yarn gulp:watch
+  winget install --id Microsoft.OpenJDK.17
+  winget install --id Microsoft.VisualStudio.2022.Community
   ```
 
-* Open another powershell window, and run `yarn cljs:watch`. Clojure CLI will pull dependencies from Maven and Clojars, build the app and start the development server. Refer [THIS](#set-up-clojure-cli-repository-mirror) if your network access to Maven and Clojars is unstable.
+An installer for clojure is available from [casselc/clj-msi](https://github.com/casselc/clj-msi/releases/)
 
-Now you can access the app via `http://localhost:3001` and all changes to the code will be watched.
+## [chocolatey](https://chocolatey.org/)
 
-## Set-up development environment (desktop)
-To run the desktop app in development mode, after setting up web app development environment, run following commands which are equivalent to `yarn dev-electron-app`:
+Chocolatey installs Clojure as a PowerShell module and alias, and does not provide `clojure` for `cmd.exe`.
+
+[@andelf has written a wrapper utility](https://github.com/andelf/clojure-cli) which you can install with `cargo install --git https://github.com/andelf/clojure-cli.git` instead.
 
 ```
-cd static
-yarn
-yarn electron:dev
+choco install nvm
+nvm install 18
+nvm use 18
+npm install -g yarn
+choco install visualstudio2022community
+choco install javaruntime
+choco install clojure
 ```
 
-The desktop app should pop-up on your screen.
+## Troubleshooting
 
-During the build process `node-gyp` may complain that it cannot find Visual Studio. Try building the app in Developer Powershell for VS(shipped with Visual Studio). If this does not work for you, [This issue](https://github.com/nodejs/node-gyp/issues/2203) may be helpful.
+### Configuring a proxy for internet access
 
-## An example of setting up proxy in PowerShell
 ```
 $env:GLOBAL_AGENT_HTTPS_PROXY='http://<proxy-host>:<proxy-port>'
 $env:ELECTRON_GET_USE_PROXY='true'
@@ -67,7 +55,12 @@ $env:HTTPS_PROXY='http://<proxy-host>:<proxy-port>'
 $env:HTTP_PROXY='http://<proxy-host>:<proxy-port>'
 ```
 
-## Set up Clojure CLI repository mirror
+### node-gyp cannot find visual studio
+
+During the build process `node-gyp` may complain that it cannot find Visual Studio. Try building the app in Developer Powershell for VS(shipped with Visual Studio). If this does not work for you, [This issue](https://github.com/nodejs/node-gyp/issues/2203) may be helpful.
+
+
+### Set up Clojure CLI repository mirror
 
 add the following pair to `deps.edn`:
 

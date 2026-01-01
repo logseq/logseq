@@ -4,7 +4,7 @@
             [clojure.walk :as walk]
             [frontend.config :as config]
             [frontend.util :as util]
-            [frontend.extensions.hickory :as hickory]))
+            [hickory.core :as hickory]))
 
 (defonce *inside-pre? (atom false))
 (defn- hiccup-without-style
@@ -33,7 +33,12 @@
         block-pattern (if (= format :markdown)
                         "#"
                         (config/get-block-pattern format))
-        map-join (fn [children] (apply str (map #(transform-fn % opts) children)))
+        map-join (fn [children & {list?' :list?}]
+                   (let [opts' (if list?'
+                                 (let [level (inc (or (:level opts) 0))]
+                                   (assoc opts :level level))
+                                 opts)]
+                     (apply str (map #(transform-fn % opts') children))))
         block-transform (fn [level children]
                           (str (apply str (repeat level block-pattern))
                                " "
@@ -132,7 +137,7 @@
                            :h5 (block-transform 5 children)
                            :h6 (block-transform 6 children)
                            :a (let [href (:href attrs)
-                                    label (or (map-join children) "")
+                                    label (or (string/trim (map-join children)) "")
                                     has-img-tag? (util/safe-re-find #"\[:img" (str x))]
                                 (when-not (string/blank? href)
                                   (if has-img-tag?
@@ -170,9 +175,7 @@
 
                                    (string? (first children))
                                    (let [pattern (config/get-code format)]
-                                     (str " "
-                                          (str pattern (first children) pattern)
-                                          " "))
+                                     (str pattern (map-join children) pattern))
 
                                    ;; skip monospace style, since it has more complex children
                                    :else
@@ -199,7 +202,11 @@
                              nil)
 
                            :li
-                           (str "- " (map-join children))
+                           (let [tabs (apply str (repeat (- (or (:level opts) 1) 1) "\t"))]
+                             (str tabs
+                                  (if (= format :markdown) "-" "*")
+                                  " "
+                                  (map-join children)))
 
                            :br
                            "\n"
@@ -238,8 +245,11 @@
                                 " |")
 
                            (_ :guard #(contains? #{:aside :center :figure :figcaption :fieldset :footer :header} %))
-                           (export-hiccup x)
+                           (throw (js/Error. (str "HTML->Hiccup: " tag " not supported yet")))
 
+                           :ul (map-join children :list? true)
+                           :ol (map-join children :list? true)
+                           :dl (map-join children :list? true)
                            :else (map-join children))]
               (wrapper tag result))
 
@@ -270,12 +280,19 @@
                      (goog.string.unescapeEntities f)
                      f)) hiccup))
 
+(defn- remove-ending-dash-lines
+  [s]
+  (if (string? s)
+    (string/replace s #"(\n*-\s*\n*)*$" "")
+    s))
+
 (defn convert
   [format html]
   (when-not (string/blank? html)
-    (let [hiccup (hickory/html->hiccup html)
-          decoded-hiccup (html-decode-hiccup hiccup)]
-      (hiccup->doc format decoded-hiccup))))
+    (let [hiccup (hickory/as-hiccup (hickory/parse html))
+          decoded-hiccup (html-decode-hiccup hiccup)
+          result (hiccup->doc format decoded-hiccup)]
+      (remove-ending-dash-lines result))))
 
 (comment
   ;; | Syntax      | Description | Test Text     |``

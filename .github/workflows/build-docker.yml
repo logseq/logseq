@@ -7,16 +7,16 @@ on:
     types: [released]
 
 env:
-  CLOJURE_VERSION: '1.10.1.727'
+  CLOJURE_VERSION: '1.11.1.1413'
 
 jobs:
 
   build-docker:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           fetch-depth: 1
           submodules: 'true'

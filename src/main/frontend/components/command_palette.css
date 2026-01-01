@@ -1,28 +1,50 @@
-.cp__palette, .cp__select {
+ .cp__select {
   --palettle-input-height: 64px;
   --palettle-container-height: 75vh;
 
   &-main {
     max-height: var(--palettle-container-height);
-    margin: -2rem;
-    overflow: hidden;
-    display: flex;
     flex-direction: column;
-
-    @screen lg {
-      width: var(--ls-main-content-max-width);
-    }
+    width: fit-content;
 
     .menu-link {
       transition: none;
       border: none;
-      border-radius: unset !important;
       background: none;
-    }
 
-    .chosen {
-      background-color: var(--ls-quaternary-background-color);
-      color: var(--ls-secondary-text-color);
+      .type-icon {
+        color: var(--ls-search-icon-color);
+
+        &.highlight {
+          color: var(--ls-selection-text-color);
+          border-color: var(--ls-selection-background-color);
+
+          &:before {
+            opacity: 0.5;
+            background: var(--ls-selection-background-color);
+          }
+        }
+      }
+
+      &.chosen .type-icon,
+      &:hover .type-icon {
+        color: var(--ls-search-icon-hover-color);
+      }
+
+      &.chosen,
+      &.chosen p {
+        background-color: var(--lx-gray-03, var(--ls-a-chosen-bg, var(--rx-gray-03)));
+        color: var(--ls-secondary-text-color);
+      }
+
+      .dark &.chosen,
+      .dark &.chosen p {
+        background-color: var(--lx-gray-02, var(--ls-a-chosen-bg, var(--rx-gray-02)));
+      }
+
+      &:hover p {
+        color: var(--ls-secondary-text-color);
+      }
     }
 
     .command-results-wrap,
@@ -31,19 +53,6 @@
       overflow-x: hidden;
       overflow-y: auto;
       max-height: calc(var(--palettle-container-height) - var(--palettle-input-height));
-    }
-
-    .input-wrap {
-      height: var(--palettle-input-height);
-    }
-
-    .recent-search {
-      > .wrap {
-        > div:last-child {
-          display: flex !important;
-          justify-items: center;
-        }
-      }
     }
 
     .cp__palette-input {
@@ -66,8 +75,9 @@
 
   &-input {
     padding: 16px;
-    font-size: 20px;
+    font-size: 16px;
     outline: none;
+    background-color: transparent;
   }
 
   &-results {
@@ -78,8 +88,23 @@
 }
 
 html.is-ios {
+  .ui__model {
+    &[label="ls-modal-search"] {
+      .panel-content {
+        padding-bottom: 0;
+        max-height: unset;
+      }
+    }
+
+    .ls-search {
+      @apply pb-0;
+    }
+  }
+
   .cp__palette-main {
     margin-bottom: 0;
+    min-height: var(--palettle-input-height);
+    --palettle-container-height: calc(98vh - 6rem - var(--ls-native-kb-height));
   }
 }
 

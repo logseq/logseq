@@ -1,0 +1,40 @@
+.cp__user-login {
+  @apply px-1;
+
+  span.opacity-50, a.opacity-60 {
+    @apply opacity-80;
+  }
+
+  p {
+    @apply text-[inherit];
+  }
+
+  .ui__alert {
+    @apply bg-red-300 dark:border-red-800 dark:bg-red-800/90 dark:text-red-200;
+
+    svg {
+      @apply dark:text-red-200;
+    }
+
+    &-description {
+      @apply -mb-3;
+    }
+  }
+
+}
+
+.ui__dialog-content[label=user-login] {
+  @apply flex items-center top-0 px-6 pt-0 w-auto;
+
+  .ui__card-header {
+    @apply pb-7;
+  }
+
+  .ui__dialog-main-content {
+    @apply p-0 w-[70vw] relative max-w-[500px] sm:w-[440px];
+  }
+
+  .ui__modal-close-wrap {
+    @apply z-10 top-[4px];
+  }
+}

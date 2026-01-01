@@ -79,9 +79,11 @@ export const sanitize = (message, allowedOrigin) => {
  *                            passed to functions in the child model
  * @return {Promise}
  */
-export const resolveValue = (model, property) => {
+export const resolveValue = (model, property, args) => {
   const unwrappedContext =
-    typeof model[property] === 'function' ? model[property]() : model[property]
+    typeof model[property] === 'function'
+      ? model[property].apply(null, args)
+      : model[property]
   return Promise.resolve(unwrappedContext)
 }
 
@@ -134,14 +136,18 @@ export class ParentAPI {
     }
   }
 
-  get(property) {
-    return new Promise((resolve) => {
+  get(property, ...args) {
+    return new Promise((resolve, reject) => {
       // Extract data from response and kill listeners
       const uid = generateNewMessageId()
       const transact = (e) => {
         if (e.data.uid === uid && e.data.postmate === 'reply') {
           this.parent.removeEventListener('message', transact, false)
-          resolve(e.data.value)
+          if (e.data.error) {
+            reject(e.data.error)
+          } else {
+            resolve(e.data.value)
+          }
         }
       }
 
@@ -154,6 +160,7 @@ export class ParentAPI {
           postmate: 'request',
           type: messageType,
           property,
+          args,
           uid,
         },
         this.childOrigin
@@ -218,7 +225,7 @@ export class ChildAPI {
         log('Child: Received request', e.data)
       }
 
-      const { property, uid, data } = e.data
+      const { property, uid, data, args } = e.data
 
       if (e.data.postmate === 'call') {
         if (
@@ -231,7 +238,7 @@ export class ChildAPI {
       }
 
       // Reply to Parent
-      resolveValue(this.model, property).then((value) => {
+      resolveValue(this.model, property, args).then((value) => {
         ;(e.source as WindowProxy).postMessage(
           {
             property,
@@ -239,6 +246,17 @@ export class ChildAPI {
             type: messageType,
             uid,
             value,
+          },
+          e.origin
+        )
+      }).catch((error) => {
+        ;(e.source as WindowProxy).postMessage(
+          {
+            property,
+            postmate: 'reply',
+            type: messageType,
+            uid,
+            error,
           },
           e.origin
         )
@@ -270,7 +288,8 @@ export type PostMateOptions = {
   id?: string
   classListArray?: Array<string>
   name?: string
-  model?: any
+  model?: any,
+  allow?: string
 }
 
 /**
@@ -297,6 +316,7 @@ export class Postmate {
     this.frame = document.createElement('iframe')
     if (opts.id) this.frame.id = opts.id
     if (opts.name) this.frame.name = opts.name
+    if (opts.allow) this.frame.allow = opts.allow
     this.frame.classList.add.apply(
       this.frame.classList,
       opts.classListArray || []
@@ -374,7 +394,6 @@ export class Postmate {
       this.frame.src = url
     })
   }
-
 
   destroy() {
     if (process.env.NODE_ENV !== 'production') {

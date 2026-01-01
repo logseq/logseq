@@ -1,0 +1,13 @@
+{
+  "name": "nbb-dev-scripts",
+  "version": "1.0.0",
+  "private": true,
+  "devDependencies": {
+    "@logseq/nbb-logseq": "github:logseq/nbb-logseq#feat-db-v31"
+  },
+  "dependencies": {
+    "better-sqlite3": "11.10.0",
+    "fs-extra": "9.1.0",
+    "mldoc": "^1.5.9"
+  }
+}

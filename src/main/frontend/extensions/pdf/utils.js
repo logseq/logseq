@@ -117,6 +117,17 @@ export const scrollToHighlight = (viewer, highlight) => {
     ],
     ignoreDestinationZoom: true
   })
+
+  setTimeout(blinkHighlight, 200)
+
+  // blink highlight
+  function blinkHighlight () {
+    const id = highlight?.id
+    const el = document.getElementById(`hl_${id}`)
+    if (!el) return
+    el.classList.add('hl-flash')
+    setTimeout(() => el?.classList.remove('hl-flash'), 1200)
+  }
 }
 
 export const optimizeClientRects = (clientRects) => {

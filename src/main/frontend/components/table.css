@@ -1,0 +1,150 @@
+.ls-table {
+  .asset-container {
+    @apply my-1;
+  }
+
+  img {
+    @apply max-h-[200px] !max-w-[80px] overflow-hidden;
+  }
+
+  a.tag {
+    @apply text-sm whitespace-nowrap;
+  }
+
+  .ls-block {
+    @apply w-full py-0;
+  }
+
+  .block-main-content, .block-head-wrap {
+    @apply min-h-[24px];
+  }
+
+  .property-value-inner {
+    @apply flex items-center cursor-pointer;
+  }
+
+  .ls-table-rows {
+    > .relative {
+      @apply pt-[34px] pb-[38px];
+    }
+  }
+
+  .ls-table-row, .ls-table-cell, .ls-table-cell .jtrigger {
+    @apply focus:ring-0 focus:ring-offset-0 focus-visible:outline-none;
+  }
+
+  .ls-table-row {
+    @apply h-[33px] min-h-[33px] max-h-[33px];
+    div, span, a {
+      @apply whitespace-nowrap;
+    }
+
+    .table-block-title, .block-head-wrap a {
+      @apply text-ellipsis overflow-hidden;
+    }
+
+    .multi-values {
+      @apply !flex-nowrap;
+    }
+  }
+
+  .ls-table-header {
+    @apply flex flex-row items-center w-fit absolute left-0 top-0;
+
+    min-width: 100%;
+
+    will-change: transform;
+    transform: translate3d(0, 0, 0);
+
+    &.translated, &.ls-fixed {
+      @apply shadow;
+    }
+
+    &.ls-fixed {
+      @apply fixed overflow-hidden;
+
+      min-width: unset;
+      /* default app head height */
+      top: 48px !important;
+    }
+
+    .ls-table-header-cell {
+      position: relative;
+
+      > .ui__button {
+        @apply overflow-hidden;
+      }
+    }
+  }
+
+  .ls-table-header-cell {
+    @apply cursor-pointer transition-colors hover:bg-muted/50 text-left align-middle font-medium text-muted-foreground border-r;
+  }
+
+  .ls-table-cell {
+    @apply overflow-hidden;
+  }
+  .ls-table-footer {
+    @apply absolute left-0 bottom-[8px] w-full;
+  }
+
+  .ls-table-resize-handle {
+    @apply absolute top-0 -right-0.5 w-1 h-full cursor-col-resize bg-accent-08 rounded
+    hover:opacity-70 active:opacity-100 opacity-0 delay-300 transition-opacity;
+  }
+
+  div[data-viewport-type="window"] {
+    min-width: 100%;
+    width: auto !important;
+  }
+}
+
+html.is-resizing-buf {
+  .ls-table-resize-handle:not(.is-active) {
+    @apply hidden;
+  }
+
+  .ls-table .ls-table-header-cell {
+    @apply pointer-events-none;
+  }
+}
+
+.query-table, .classic-table {
+  @apply my-2 rounded;
+
+  &.force-visible-scrollbar {
+    @apply !overflow-x-auto pb-1;
+  }
+
+  table {
+    @apply w-full border-none;
+  }
+
+  th {
+    @apply bg-gray-03 whitespace-nowrap;
+  }
+
+  tr {
+    @apply hover:bg-gray-03;
+
+    &:nth-child(even) {
+      @apply bg-gray-02;
+    }
+  }
+
+  th, td {
+    @apply p-1.5 border border-collapse;
+  }
+}
+
+.markdown-table {
+  width: 98%;
+}
+
+.sticky-columns {
+    @apply sticky left-0 z-[8] bg-gray-01;
+}
+
+.table-action-bar {
+    z-index: 100;
+}

@@ -1,0 +1,171 @@
+name: logseq/cli CI
+
+on:
+  # Path filters ensure jobs only kick off if a change is made to cli or
+  # its local dependencies
+  push:
+    branches: [master]
+    paths:
+      - 'deps/cli/**'
+      - '.github/workflows/cli.yml'
+      - '!deps/cli/**.md'
+      # Deps that logseq/cli depends on should trigger this workflow
+      - 'deps/outliner/**'
+      - 'deps/graph-parser/**'
+      - 'deps/db/**'
+      - 'deps/common/**'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'deps/cli/**'
+      - '.github/workflows/cli.yml'
+      - '!deps/cli/**.md'
+      # Deps that logseq/cli depends on should trigger this workflow
+      - 'deps/outliner/**'
+      - 'deps/graph-parser/**'
+      - 'deps/db/**'
+      - 'deps/common/**'
+  workflow_dispatch:
+    inputs:
+      git-ref:
+        description: "Release Git Ref (Which branch to build?)"
+        required: true
+        default: "master"
+      release-tag:
+        type: choice
+        description: "Npm Release Tag (Use 'latest' for a stable release)"
+        required: true
+        options:
+          - alpha
+          - latest
+        default: "latest"
+
+defaults:
+  run:
+    working-directory: deps/cli
+
+env:
+  CLOJURE_VERSION: '1.11.1.1413'
+  # This is the same as 1.8.
+  JAVA_VERSION: '11'
+  # This is the latest node version we can run.
+  NODE_VERSION: '22'
+  BABASHKA_VERSION: '1.0.168'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'yarn'
+          cache-dependency-path: deps/cli/yarn.lock
+
+      - name: Set up Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      # Clojure needed for bb step
+      - name: Set up Clojure
+        uses: DeLaGuardo/setup-clojure@10.1
+        with:
+          cli: ${{ env.CLOJURE_VERSION }}
+          bb: ${{ env.BABASHKA_VERSION }}
+
+      - name: Fetch yarn deps
+        run: yarn install --frozen-lockfile
+
+      - name: Run nbb-logseq tests
+        run: yarn test
+
+      # In this job because it depends on an npm package
+      - name: Load namespaces into nbb-logseq
+        run: bb test:load-all-namespaces-with-nbb .
+
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Clojure
+        uses: DeLaGuardo/setup-clojure@10.1
+        with:
+          cli: ${{ env.CLOJURE_VERSION }}
+          bb: ${{ env.BABASHKA_VERSION }}
+
+      - name: Run clj-kondo lint
+        run: clojure -M:clj-kondo --lint src test
+
+      - name: Carve lint for unused vars
+        run: bb lint:carve
+
+      - name: Lint for vars that are too large
+        run: bb lint:large-vars
+
+      - name: Lint for namespaces that aren't documented
+        run: bb lint:ns-docstrings
+
+      - name: Lint for public vars that are private based on usage
+        run: bb lint:minimize-public-vars
+
+  release:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.git-ref }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'yarn'
+          cache-dependency-path: deps/cli/yarn.lock
+
+      - name: Set up Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      # Clojure needed for bb step
+      - name: Set up Clojure
+        uses: DeLaGuardo/setup-clojure@10.1
+        with:
+          cli: ${{ env.CLOJURE_VERSION }}
+          bb: ${{ env.BABASHKA_VERSION }}
+
+      - name: Fetch yarn deps
+        run: yarn install --frozen-lockfile
+
+      - name: Bundle vendor deps
+        run: bb build:vendor-nbb-deps
+
+      # - name: Debug package
+      #   run: yarn pack && tar -tf logseq-cli-*.tgz
+
+      - name: Authenticate with registry
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_CLI_TOKEN }}
+        run: echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > .npmrc
+
+      - name: Publish package
+        run: npm publish --tag "${{ github.event.inputs.release-tag || 'alpha' }}" --access public

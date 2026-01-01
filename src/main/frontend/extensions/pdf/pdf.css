@@ -1,5 +1,3 @@
-@import "_viewer.css";
-
 :root {
   --ph-highlight-color-blue: var(--color-blue-300);
   --ph-highlight-color-green: var(--color-green-300);
@@ -56,15 +54,20 @@ input::-webkit-inner-spin-button {
     position: relative;
   }
 
-  &-toolbar {
+  &-header {
+    display: flex;
+    justify-content: flex-end;
     position: absolute;
     top: 0;
-    right: 20px;
-    width: 90%;
-    height: 42px;
-    z-index: 5;
+    right: 10px; /* Allows clicking on the scrollbar */
+    width: calc(100% - 10px);
     padding: 8px 20px;
-    padding-right: 0;
+    z-index: 5;
+    -webkit-app-region: drag;
+  }
+
+  &-toolbar {
+    -webkit-app-region: no-drag;
 
     > .inner {
       display: flex;
@@ -73,25 +76,17 @@ input::-webkit-inner-spin-button {
 
       > .r {
         a.button {
-          user-select: none;
-          display: flex;
-          align-items: center;
-          margin-left: 8px;
-          margin-right: 8px;
-          padding: 4px 2px;
-          color: var(--ls-icon-color);
-          background-color: transparent;
-          transition: none;
-          word-break: normal;
+          @apply select-none flex items-center mx-2 py-1 px-0.5 bg-transparent
+          transition-none break-normal hover:opacity-80;
 
           &.is-active {
-            opacity: 1;
+            @apply opacity-100 rounded-none;
+
             border-bottom: 2px solid #969494;
-            border-radius: 0;
           }
 
           &:active {
-            opacity: .6;
+            @apply opacity-60;
           }
         }
       }
@@ -107,9 +102,15 @@ input::-webkit-inner-spin-button {
             width: 35px;
             text-align: right;
             padding-right: 4px;
+            padding-left: 2px;
             height: 18px;
             border: none;
             background: transparent;
+            font-size: 15px;
+
+            &.is-long {
+              font-size: 12px;
+            }
           }
         }
 
@@ -265,8 +266,8 @@ input::-webkit-inner-spin-button {
   &-settings {
     &-inner.hls-popup-box {
       position: absolute;
-      right: 345px;
-      width: 178px;
+      right: 375px;
+      width: 235px;
       padding: 15px 10px;
     }
 
@@ -298,7 +299,7 @@ input::-webkit-inner-spin-button {
           }
 
           &.dark {
-            background-color: #0a4251;
+            background-color: var(--lx-pdf-container-dark-bg, #0a4251);
 
             svg {
               color: white;
@@ -366,8 +367,6 @@ input::-webkit-inner-spin-button {
 
         .ui__button {
           margin-top: unset;
-          border-radius: 4px;
-          color: black;
           padding: 4px;
 
           .ti {
@@ -418,15 +417,16 @@ input::-webkit-inner-spin-button {
   }
 
   &-resizer {
-    position: absolute;
-    width: 3px;
-    height: 88vh;
-    background-color: rgba(0, 0, 0, 0);
-    overflow: hidden;
-    z-index: 4;
-    top: 10vh;
-    cursor: col-resize;
-    right: 0;;
+    @apply absolute w-[3px] h-screen overflow-hidden;
+    @apply z-10 right-0 cursor-col-resize;
+
+    transition: background-color 300ms;
+    transition-delay: 300ms;
+
+    &.is-active, &:hover,
+    &:focus, &:active {
+      @apply bg-primary/90;
+    }
   }
 
   &-hls-text-region {
@@ -710,7 +710,9 @@ input::-webkit-inner-spin-button {
   }
 }
 
-#pdf-layout-container {
+.extensions__pdf-container {
+  --lx-pdf-container-dark-bg: var(--lx-gray-03);
+
   background-color: transparent;
 
   .extensions__pdf-toolbar .buttons {
@@ -718,20 +720,23 @@ input::-webkit-inner-spin-button {
   }
 
   &[data-theme=light] {
-    background-color: #FFFFFF;
+    @apply bg-white;
   }
 
   &[data-theme=dark] {
-    background-color: #042f3c;
+    background-color: var(--lx-pdf-container-dark-bg, var(--ls-primary-background-color, #042f3c));
 
     .pdfViewer {
-      -webkit-filter: invert(100%);
-      filter: invert(100%);
       background: transparent;
+
+      .page {
+        -webkit-filter: invert(100%);
+        filter: invert(100%);
+      }
     }
 
     .textLayer {
-      background-color: #023d4cf7;
+      background-color: var(--lx-pdf-container-dark-bg, var(--ls-primary-background-color, #042f3c));
       -webkit-filter: invert(100%);
       filter: invert(100%);
     }
@@ -755,32 +760,24 @@ input::-webkit-inner-spin-button {
 
     .extensions__pdf-toolbar {
       .buttons {
-        background-color: #f6efdf;
+        @apply bg-[#f6efdf];
       }
     }
   }
 }
 
-.asset-ref {
-  &.is-pdf {
-    &:before {
-      content: "[[📚";
-      opacity: .7;
-      margin-right: 4px;
-    }
-
-    &:after {
-      content: "]]";
-      opacity: .7;
+html[data-theme=dark] {
+  .extensions__pdf-container[data-theme=warm] {
+    .extensions__pdf-toolbar {
+      .buttons {
+        @apply bg-background;
+      }
     }
   }
 }
 
 .block-ref {
   &-wrap {
-    &[data-type=annotation] {
-    }
-
     &[data-hl-type=area] {
       display: block;
 
@@ -799,54 +796,41 @@ input::-webkit-inner-spin-button {
 .block-content {
   &[data-type=annotation] {
     .prefix-link {
-      display: inline-flex;
-      align-items: center;
-      padding-right: 4px;
-      cursor: alias;
+      @apply inline-flex items-center pr-1 cursor-alias;
+
       color: var(--ls-link-ref-text-color);
 
       &:before {
         content: "📌 ";
       }
+
+      &.as-block {
+        @apply inline-block;
+      }
     }
 
     [data-hl-type=area] {
-      display: flex;
-      margin-bottom: 10px;
-      flex-direction: column;
-
-      .prefix-link {
-        display: inline;
-      }
 
       .hl-page {
-        display: inline-flex;
-        justify-content: space-between;
-        width: 85%;
-
         > label {
-          flex: 1;
-          cursor: text;
+          @apply flex-1 cursor-text;
         }
       }
     }
 
     .hl-area {
-      @apply relative;
+      @apply relative block cursor-text mt-1;
 
-      display: inline-block;
-      cursor: text;
-      border: 1px solid #eee;
-      border-radius: 4px;
-      overflow: hidden;
-      margin-top: 4px;
+      > .asset-container {
+        @apply mt-0 border rounded-md overflow-hidden;
+
+        > .asset-action-bar {
+          @apply top-1 right-1;
+        }
+      }
 
       img {
-        margin: 0;
-        box-shadow: none;
-        max-width: 100%;
-        max-height: 420px;
-        cursor: alias;
+        @apply cursor-alias;
       }
     }
   }
@@ -917,7 +901,7 @@ body[data-page] {
     }
 
     &-viewer-cnt {
-      display: flex;
+      @apply flex overflow-x-hidden;
     }
 
     &-highlights {
@@ -962,6 +946,17 @@ body.is-pdf-active {
   }
 }
 
+html.is-system-window {
+  .extensions__pdf-container {
+    width: 100vw;
+    height: 100vh;
+  }
+
+  .extensions__pdf-loader {
+    @apply w-full;
+  }
+}
+
 /* overrides for pdf_viewer.css from PDF.JS web viewer */
 
 .textLayer {
@@ -971,11 +966,6 @@ body.is-pdf-active {
 }
 
 .annotationLayer {
-  position: absolute;
-  top: 0;
-
-  z-index: 3;
-
   .highlightAnnotation, .underlineAnnotation {
     display: none;
   }
@@ -996,5 +986,41 @@ body.is-pdf-active {
   &.selected {
     background-color: rgb(206 255 162);
     border: 2px dashed #ff3434;
+  }
+}
+
+.hl-flash {
+  animation-name: hl-flash;
+  animation-duration: 0.3s;
+  animation-timing-function: ease;
+  animation-iteration-count: 2;
+  animation-direction: alternate;
+  animation-play-state: running;
+}
+
+@keyframes hl-flash {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.pdfViewer .page.loadingIcon::after {
+  @apply bg-none;
+}
+
+.textLayer :is(span, br) {
+  &::selection {
+    @apply text-transparent;
+  }
+}
+
+.block-title-wrap[data-hl-type=area] {
+  @apply flex flex-col;
+
+  .prefix-link {
+    @apply inline-block;
   }
 }

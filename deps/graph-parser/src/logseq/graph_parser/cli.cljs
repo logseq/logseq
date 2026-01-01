@@ -1,55 +1,61 @@
-(ns logseq.graph-parser.cli
-  "Primary ns to parse graphs with node.js based CLIs"
+(ns ^:node-only logseq.graph-parser.cli
+  "For file graphs, primary ns to parse graphs with node.js based CLIs"
   (:require ["fs" :as fs]
-            ["child_process" :as child-process]
+            ["path" :as path]
             [clojure.edn :as edn]
-            [clojure.string :as string]
+            [logseq.common.config :as common-config]
+            [logseq.common.graph :as common-graph]
+            [logseq.common.util :as common-util]
             [logseq.graph-parser :as graph-parser]
-            [logseq.graph-parser.config :as gp-config]
-            [logseq.db :as ldb]))
+            [logseq.graph-parser.db :as gp-db]))
 
-(defn slurp
+(defn- slurp
   "Return file contents like clojure.core/slurp"
   [file]
   (str (fs/readFileSync file)))
 
-(defn sh
-  "Run shell cmd synchronously and print to inherited streams by default. Aims
-    to be similar to babashka.tasks/shell
-TODO: Fail fast when process exits 1"
-  [cmd opts]
-  (child-process/spawnSync (first cmd)
-                           (clj->js (rest cmd))
-                           (clj->js (merge {:stdio "inherit"} opts))))
+(defn- remove-hidden-files [dir config files]
+  (if (seq (:hidden config))
+    (->> files
+         (map #(assoc % ::rel-path (path/relative dir (:file/path %))))
+         ((fn [files] (common-config/remove-hidden-files files config ::rel-path)))
+         (map #(dissoc % ::rel-path)))
+    files))
 
-(defn build-graph-files
-  "Given a git graph directory, returns allowed file paths and their contents in
-  preparation for parsing"
-  [dir]
-  (let [files (->> (str (.-stdout (sh ["git" "ls-files"]
-                                      {:cwd dir :stdio nil})))
-                   string/split-lines
-                   (map #(hash-map :file/path (str dir "/" %)))
-                   graph-parser/filter-files)]
-    (mapv #(assoc % :file/content (slurp (:file/path %))) files)))
+(defn- build-graph-files
+  "Given a graph directory, return absolute, allowed file paths and their contents in preparation
+   for parsing"
+  [dir* config]
+  (let [dir (path/resolve dir*)]
+    (->> (common-graph/get-files dir)
+         (map #(hash-map :file/path %))
+         graph-parser/filter-files
+         (remove-hidden-files dir config)
+         (mapv #(assoc % :file/content (slurp (:file/path %)))))))
 
 (defn- read-config
   "Reads repo-specific config from logseq/config.edn"
   [dir]
-  (let [config-file (str dir "/" gp-config/app-name "/config.edn")]
+  (let [config-file (str dir "/" common-config/app-name "/config.edn")]
     (if (fs/existsSync config-file)
-     (-> config-file fs/readFileSync str edn/read-string)
-     {})))
+      (-> config-file fs/readFileSync str edn/read-string)
+      {})))
 
 (defn- parse-files
   [conn files {:keys [config] :as options}]
-  (let [extract-options (merge {:date-formatter (gp-config/get-date-formatter config)
-                                :user-config config}
+  (let [extract-options (merge {:date-formatter (common-config/get-date-formatter config)
+                                :user-config config
+                                :filename-format (or (:file/name-format config) :legacy)}
                                (select-keys options [:verbose]))]
     (mapv
      (fn [{:file/keys [path content]}]
        (let [{:keys [ast]}
-             (graph-parser/parse-file conn path content {:extract-options extract-options})]
+             (let [parse-file-options
+                   (merge {:extract-options
+                           (assoc extract-options
+                                  :block-pattern (common-config/get-block-pattern (common-util/get-format path)))}
+                          (:parse-file-options options))]
+               (graph-parser/parse-file conn path content parse-file-options))]
          {:file path :ast ast}))
      files)))
 
@@ -59,14 +65,16 @@ TODO: Fail fast when process exits 1"
   as it can't assume that the metadata in logseq/ is up to date. Directory is
   assumed to be using git. This fn takes the following options:
 * :verbose - When enabled prints more information during parsing. Defaults to true
-* :files - Specific files to parse instead of parsing the whole directory"
+* :files - Specific files to parse instead of parsing the whole directory
+* :conn - Database connection to use instead of creating new one
+* :parse-file-options - Options map to pass to graph-parser/parse-file"
   ([dir]
    (parse-graph dir {}))
   ([dir options]
-   (let [files (or (:files options) (build-graph-files dir))
-         conn (ldb/start-conn)
-         config (read-config dir)
-        _ (when-not (:files options) (println "Parsing" (count files) "files..."))
+   (let [config (read-config dir)
+         files (or (:files options) (build-graph-files dir config))
+         conn (or (:conn options) (gp-db/start-conn))
+         _ (when-not (:files options) (println "Parsing" (count files) "files..."))
          asts (parse-files conn files (merge options {:config config}))]
      {:conn conn
       :files (map :file/path files)

@@ -1,13 +1,7 @@
 (ns frontend.components.onboarding
   (:require [frontend.context.i18n :refer [t]]
-            [frontend.handler.route :as route-handler]
-            [rum.core :as rum]
-            [frontend.ui :as ui]
-            [frontend.components.onboarding.setups :as setups]))
-
-(rum/defc intro
-  []
-  (setups/picker))
+            [frontend.state :as state]
+            [frontend.ui :as ui]))
 
 (defn help
   []
@@ -16,9 +10,9 @@
                               [:span.mr-1 (t :help/forum-community)]
                               (ui/icon "message-circle" {:style {:font-size 20}})]
          list
-         [{:title "Usage"
+         [{:title (t :help/title-usage)
            :children [[[:a
-                        {:on-click (fn [] (route-handler/redirect! {:to :shortcut-setting}))}
+                        {:on-click (fn [] (state/sidebar-add-block! (state/get-current-repo) "shortcut-settings" :shortcut-settings))}
                         [:div.flex-row.inline-flex.items-center
                          [:span.mr-1 (t :help/shortcuts)]
                          (ui/icon "command" {:style {:font-size 20}})]]]
@@ -26,25 +20,23 @@
                       [(t :help/start) "https://docs.logseq.com/#/page/tutorial"]
                       ["FAQ" "https://docs.logseq.com/#/page/faq"]]}
 
-          {:title "Community"
+          {:title (t :help/title-community)
            :children [[(t :help/awesome-logseq) "https://github.com/logseq/awesome-logseq"]
                       [(t :help/blog) "https://blog.logseq.com"]
                       [discourse-with-icon "https://discuss.logseq.com"]]}
 
-          {:title "Development"
-           :children [[(t :help/roadmap) "https://trello.com/b/8txSM12G/roadmap"]
+          {:title (t :help/title-development)
+           :children [[(t :help/roadmap) "https://discuss.logseq.com/t/logseq-product-roadmap/34267"]
                       [(t :help/bug) "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"]
-                      [(t :help/feature) "https://discuss.logseq.com/c/feature-requests/"]
+                      [(t :help/feature) "https://discuss.logseq.com/c/feedback/feature-requests/"]
                       [(t :help/changelog) "https://docs.logseq.com/#/page/changelog"]]}
 
-          {:title "About"
-           :children [[(t :help/about) "https://logseq.com/blog/about"]]}
+          {:title (t :help/title-about)
+           :children [[(t :help/about) "https://blog.logseq.com/about/"]]}
 
-          {:title "Terms"
-           :children [[(t :help/privacy) "https://logseq.com/blog/privacy-policy"]
-                      [(t :help/terms) "https://logseq.com/blog/terms"]]}]]
-
-
+          {:title (t :help/title-terms)
+           :children [[(t :help/privacy) "https://blog.logseq.com/privacy-policy/"]
+                      [(t :help/terms) "https://blog.logseq.com/terms/"]]}]]
 
      (map (fn [sublist]
             [[:p.mt-4.mb-1 [:b (:title sublist)]]
@@ -54,5 +46,5 @@
                       (if href
                         [:a {:href href :target "_blank"} title]
                         title)])
-                (:children sublist))]])
-       list))])
+                   (:children sublist))]])
+          list))])

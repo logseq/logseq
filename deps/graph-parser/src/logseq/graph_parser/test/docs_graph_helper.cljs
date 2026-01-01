@@ -1,11 +1,11 @@
 (ns logseq.graph-parser.test.docs-graph-helper
   "Helper fns for setting up and running tests against docs graph"
-  (:require ["fs" :as fs]
-            ["child_process" :as child-process]
+  (:require ["child_process" :as child-process]
+            ["fs" :as fs]
             [cljs.test :refer [is testing]]
             [clojure.string :as string]
-            [logseq.graph-parser.config :as gp-config]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [logseq.common.config :as common-config]))
 
 ;; Helper fns for test setup
 ;; =========================
@@ -22,7 +22,6 @@
   (when-not (.existsSync fs dir)
     (sh ["git" "clone" "--depth" "1" "-b" branch "-c" "advice.detachedHead=false"
          "https://github.com/logseq/docs" dir] {})))
-
 
 ;; Fns for common test assertions
 ;; ==============================
@@ -59,12 +58,32 @@
        (map (fn [[k v]] [k (count v)]))
        (into {})))
 
+(defn- get-journal-page-count [db]
+  (->> (d/q '[:find (count ?b)
+              :where
+              [?b :block/journal-day]
+              [?b :block/name]
+              [?b :block/file]]
+            db)
+       ffirst))
+
+(defn- get-counts-for-common-attributes [db]
+  (->> [:block/scheduled :block/priority :block/deadline :block/collapsed?
+        :block/repeated?]
+       (map (fn [attr]
+              [attr
+               (ffirst (d/q [:find (list 'count '?b) :where ['?b attr]]
+                            db))]))
+       (into {})))
+
 (defn- query-assertions
-  [db files]
+  [db graph-dir files]
   (testing "Query based stats"
     (is (= (->> files
                 ;; logseq files aren't saved under :block/file
-                (remove #(string/includes? % (str "/" gp-config/app-name "/")))
+                (remove #(string/includes? % (str graph-dir "/" common-config/app-name "/")))
+                ;; edn files being listed in docs by parse-graph aren't graph files
+                (remove #(and (not (common-config/whiteboard? %)) (string/ends-with? % ".edn")))
                 set)
            (->> (d/q '[:find (pull ?b [* {:block/file [:file/path]}])
                        :where [?b :block/name] [?b :block/file]]
@@ -74,16 +93,10 @@
         "Files on disk should equal ones in db")
 
     (is (= (count (filter #(re-find #"journals/" %) files))
-           (->> (d/q '[:find (count ?b)
-                       :where
-                       [?b :block/journal? true]
-                       [?b :block/name]
-                       [?b :block/file]]
-                     db)
-                ffirst))
+           (get-journal-page-count db))
         "Journal page count on disk equals count in db")
 
-    (is (= {"CANCELED" 2 "DONE" 6 "LATER" 4 "NOW" 5}
+    (is (= {"CANCELED" 2 "DONE" 6 "LATER" 4 "NOW" 5 "WAIT" 1 "IN-PROGRESS" 1 "CANCELLED" 1 "TODO" 19}
            (->> (d/q '[:find (pull ?b [*]) :where [?b :block/marker]]
                      db)
                 (map first)
@@ -92,69 +105,66 @@
                 (into {})))
         "Task marker counts")
 
-    (is (= {:markdown 3143 :org 460} ;; 2 pages for namespaces are not parsed
-           (get-block-format-counts db))
+    (is (= {:markdown 7372 :org 500} (get-block-format-counts db))
         "Block format counts")
 
-    (is (= {:title 98 :id 98
-            :updated-at 47 :created-at 47
-            :card-last-score 6 :card-repeats 6 :card-next-schedule 6
-            :card-last-interval 6 :card-ease-factor 6 :card-last-reviewed 6
-            :alias 6 :logseq.macro-arguments 94 :logseq.macro-name 94 :heading 64}
+    (is (= {:rangeincludes 13, :description 137, :updated-at 46, :tags 5, :logseq.order-list-type 16, :query-table 8,
+            :logseq.macro-arguments 105, :parent 14, :logseq.tldraw.shape 79, :card-last-score 5, :card-repeats 5,
+            :name 16, :card-next-schedule 5, :ls-type 79, :card-last-interval 5, :type
+            166, :template 5, :domainincludes 7, :title 114, :alias 62, :supports 6, :id
+            146, :url 30, :card-ease-factor 5, :logseq.macro-name 105, :created-at 46,
+            :card-last-reviewed 5, :platforms 79, :initial-version 16, :heading 332}
            (get-top-block-properties db))
         "Counts for top block properties")
 
-    (is (= {:title 98
-            :alias 6
-            :tags 2 :permalink 2
-            :name 1 :type 1 :related 1 :sample 1 :click 1 :id 1 :example 1}
+    (is (= {:rangeincludes 13, :description 117, :tags 5, :unique 2, :meta 2, :parent 14,
+            :ls-type 1, :type 147, :source 1, :domainincludes 7, :sameas 4, :title 113, :author 1,
+            :alias 62, :logseq.tldraw.page 1, :supports 6, :url 30, :platforms 78,
+            :initial-version 15, :full-title 1}
            (get-all-page-properties db))
         "Counts for all page properties")
 
     (is (= {:block/scheduled 2
             :block/priority 4
             :block/deadline 1
-            :block/collapsed? 22
+            :block/collapsed? 90
             :block/repeated? 1}
-           (->> [:block/scheduled :block/priority :block/deadline :block/collapsed?
-                 :block/repeated?]
-                (map (fn [attr]
-                       [attr
-                        (ffirst (d/q [:find (list 'count '?b) :where ['?b attr]]
-                                     db))]))
-                (into {})))
+           (get-counts-for-common-attributes db))
         "Counts for blocks with common block attributes")
 
-    (is (= #{"term" "setting" "book" "templates" "Query" "Query/table" "page"}
-           (->> (d/q '[:find (pull ?n [*]) :where [?b :block/namespace ?n]] db)
-                (map (comp :block/original-name first))
-                set))
-        "Has correct namespaces")))
+    (let [no-name (->> (d/q '[:find (pull ?n [*]) :where [?b :block/namespace ?n]] db)
+                       (filter (fn [x]
+                                 (when-not (:block/title (first x))
+                                   x))))
+          all-namespaces (->> (d/q '[:find (pull ?n [*]) :where [?b :block/namespace ?n]] db)
+                              (map (comp :block/title first))
+                              set)]
+      (is (= #{"term" "setting" "book" "templates" "page" "Community" "Tweet"
+               "Whiteboard" "Whiteboard/Tool" "Whiteboard/Tool/Shape" "Whiteboard/Object" "Whiteboard/Action Bar"}
+             all-namespaces)
+          (str "Has correct namespaces: " no-name)))
 
-;; TODO update me to the number of the latest version of doc when namespace is updated
+    (is (empty? (->> (d/q '[:find ?n :where [?b :block/name ?n]] db)
+                     (map first)
+                     (filter #(string/includes? % "___"))))
+        "Block names don't have the slash/triple-lowbar delimiter")))
+
 (defn docs-graph-assertions
   "These are common assertions that should pass in both graph-parser and main
   logseq app. It is important to run these in both contexts to ensure that the
   functionality in frontend.handler.repo and logseq.graph-parser remain the
   same"
-  [db files]
+  [db graph-dir files]
   ;; Counts assertions help check for no major regressions. These counts should
   ;; only increase over time as the docs graph rarely has deletions
   (testing "Counts"
-    (is (= 211 (count files)) "Correct file count")
-    (is (= 42006 (count (d/datoms db :eavt))) "Correct datoms count")
-
-    (is (= 3600
+    (is (= 339 (count files)) "Correct file count")
+    (is (= 33
            (ffirst
             (d/q '[:find (count ?b)
-                   :where [?b :block/path-refs ?bp] [?bp :block/name]] db)))
-        "Correct referenced blocks count")
-    (is (= 21
-           (ffirst
-            (d/q '[:find (count ?b)
-                   :where [?b :block/content ?content]
+                   :where [?b :block/title ?content]
                    [(clojure.string/includes? ?content "+BEGIN_QUERY")]]
                  db)))
         "Advanced query count"))
 
-  (query-assertions db files))
+  (query-assertions db graph-dir files))

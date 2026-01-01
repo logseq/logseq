@@ -6,7 +6,8 @@ import { LSPluginExperiments } from './modules/LSPlugin.Experiments'
 import { IAsyncStorage, LSPluginFileStorage } from './modules/LSPlugin.Storage'
 import { LSPluginRequest } from './modules/LSPlugin.Request'
 
-export type WithOptional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
+export type WithOptional<T, K extends keyof T> = Omit<T, K> &
+  Partial<Pick<T, K>>
 
 export type PluginLocalIdentity = string
 
@@ -33,8 +34,6 @@ export type StyleOptions = {
 export type UIContainerAttrs = {
   draggable: boolean
   resizable: boolean
-
-  [key: string]: any
 }
 
 export type UIBaseOptions = {
@@ -75,20 +74,34 @@ export interface LSPluginPkgConfig {
   mode: 'shadow' | 'iframe'
   themes: Theme[]
   icon: string
-
-  [key: string]: any
+  /**
+   * Alternative entrypoint for development.
+   */
+  devEntry: string
+  /**
+   * For legacy themes, do not use.
+   */
+  theme: unknown
 }
 
 export interface LSPluginBaseInfo {
-  id: string // should be unique
+  /**
+   * Must be unique.
+   */
+  id: string
   mode: 'shadow' | 'iframe'
-
   settings: {
     disabled: boolean
-    [key: string]: any
-  }
-
-  [key: string]: any
+  } & Record<string, unknown>
+  effect: boolean
+  /**
+   * For internal use only. Indicates if plugin is installed in dot root.
+   */
+  iir: boolean
+  /**
+   * For internal use only.
+   */
+  lsr: string
 }
 
 export type IHookEvent = {
@@ -102,6 +115,10 @@ export type IUserHook<E = any, R = IUserOffHook> = (
 export type IUserSlotHook<E = any> = (
   callback: (e: IHookEvent & UISlotIdentity & E) => void
 ) => void
+export type IUserConditionSlotHook<C = any, E = any> = (
+  condition: C,
+  callback: (e: IHookEvent & UISlotIdentity & E) => void
+) => void
 
 export type EntityID = number
 export type BlockUUID = string
@@ -110,7 +127,12 @@ export type BlockUUIDTuple = ['uuid', BlockUUID]
 export type IEntityID = { id: EntityID; [key: string]: any }
 export type IBatchBlock = {
   content: string
+
+  /**
+   * @NOTE: not supported for DB graph
+   */
   properties?: Record<string, any>
+
   children?: Array<IBatchBlock>
 }
 export type IDatom = [e: number, a: string, v: any, t: number, added: boolean]
@@ -123,8 +145,9 @@ export interface AppUserInfo {
 
 export interface AppInfo {
   version: string
+  supportDb: boolean
 
-  [key: string]: any
+  [key: string]: unknown
 }
 
 /**
@@ -143,7 +166,7 @@ export interface AppUserConfigs {
   enabledFlashcards: boolean
   enabledJournals: boolean
 
-  [key: string]: any
+  [key: string]: unknown
 }
 
 /**
@@ -154,7 +177,7 @@ export interface AppGraphInfo {
   url: string
   path: string
 
-  [key: string]: any
+  [key: string]: unknown
 }
 
 /**
@@ -163,13 +186,18 @@ export interface AppGraphInfo {
 export interface BlockEntity {
   id: EntityID // db id
   uuid: BlockUUID
-  left: IEntityID
+  order: string
   format: 'markdown' | 'org'
   parent: IEntityID
-  unordered: boolean
-  content: string
-  page: IEntityID
+  title: string
+  fullTitle: string // replace block reference uuid with title text
+  content?: string // @deprecated. use :title instead!
+  page: IEntityID // owner page
+  createdAt: number
+  updatedAt: number
+  ident?: string // ident for property block
   properties?: Record<string, any>
+  'collapsed?': boolean
 
   // optional fields in dummy page
   anchor?: string
@@ -179,9 +207,9 @@ export interface BlockEntity {
   file?: IEntityID
   level?: number
   meta?: { timestamps: any; properties: any; startPos: number; endPos: number }
-  title?: Array<any>
+  marker?: string
 
-  [key: string]: any
+  [key: string]: unknown
 }
 
 /**
@@ -191,18 +219,22 @@ export interface PageEntity {
   id: EntityID
   uuid: BlockUUID
   name: string
-  originalName: string
+  format: 'markdown' | 'org'
+  type: 'page' | 'journal' | 'whiteboard' | 'class' | 'property' | 'hidden'
+  updatedAt: number
+  createdAt: number
   'journal?': boolean
 
+  title?: string
   file?: IEntityID
+  originalName?: string
   namespace?: IEntityID
   children?: Array<PageEntity>
   properties?: Record<string, any>
-  format?: 'markdown' | 'org'
   journalDay?: number
-  updatedAt?: number
+  ident?: string
 
-  [key: string]: any
+  [key: string]: unknown
 }
 
 export type BlockIdentity = BlockUUID | Pick<BlockEntity, 'uuid'>
@@ -226,9 +258,10 @@ export type BlockCursorPosition = {
   rect: DOMRect
 }
 
+export type Keybinding = string | Array<string>
 export type SimpleCommandKeybinding = {
   mode?: 'global' | 'non-editing' | 'editing'
-  binding: string
+  binding: Keybinding
   mac?: string // special for Mac OS
 }
 
@@ -250,8 +283,6 @@ export type ExternalCommandType =
   | 'logseq.editor/up'
   | 'logseq.editor/expand-block-children'
   | 'logseq.editor/collapse-block-children'
-  | 'logseq.editor/open-file-in-default-app'
-  | 'logseq.editor/open-file-in-directory'
   | 'logseq.editor/select-all-blocks'
   | 'logseq.editor/toggle-open-blocks'
   | 'logseq.editor/zoom-in'
@@ -266,7 +297,6 @@ export type ExternalCommandType =
   | 'logseq.go/next-journal'
   | 'logseq.go/prev-journal'
   | 'logseq.go/search'
-  | 'logseq.go/search-in-page'
   | 'logseq.go/tomorrow'
   | 'logseq.go/backward'
   | 'logseq.go/forward'
@@ -276,7 +306,6 @@ export type ExternalCommandType =
   | 'logseq.ui/goto-plugins'
   | 'logseq.ui/select-theme-color'
   | 'logseq.ui/toggle-brackets'
-  | 'logseq.ui/toggle-cards'
   | 'logseq.ui/toggle-contents'
   | 'logseq.ui/toggle-document-mode'
   | 'logseq.ui/toggle-help'
@@ -285,9 +314,46 @@ export type ExternalCommandType =
   | 'logseq.ui/toggle-settings'
   | 'logseq.ui/toggle-theme'
   | 'logseq.ui/toggle-wide-mode'
-  | 'logseq.command-palette/toggle'
 
-export type UserProxyTags = 'app' | 'editor' | 'db' | 'git' | 'ui' | 'assets'
+export type UserProxyNSTags = 'app' | 'editor' | 'db' | 'git' | 'ui' | 'assets' | 'utils'
+
+export type SearchIndiceInitStatus = boolean
+export type SearchBlockItem = {
+  id: EntityID
+  uuid: BlockIdentity
+  content: string
+  page: EntityID
+}
+export type SearchPageItem = string
+export type SearchFileItem = string
+
+export interface IPluginSearchServiceHooks {
+  name: string
+  options?: Record<string, any>
+
+  onQuery: (
+    graph: string,
+    key: string,
+    opts: Partial<{ limit: number }>
+  ) => Promise<{
+    graph: string
+    key: string
+    blocks?: Array<Partial<SearchBlockItem>>
+    pages?: Array<SearchPageItem>
+    files?: Array<SearchFileItem>
+  }>
+
+  onIndiceInit: (graph: string) => Promise<SearchIndiceInitStatus>
+  onIndiceReset: (graph: string) => Promise<void>
+  onBlocksChanged: (
+    graph: string,
+    changes: {
+      added: Array<SearchBlockItem>
+      removed: Array<EntityID>
+    }
+  ) => Promise<void>
+  onGraphRemoved: (graph: string, opts?: {}) => Promise<any>
+}
 
 /**
  * App level APIs
@@ -301,6 +367,9 @@ export interface IAppProxy {
 
   getUserInfo: () => Promise<AppUserInfo | null>
   getUserConfigs: () => Promise<AppUserConfigs>
+
+  // services
+  registerSearchService<T extends IPluginSearchServiceHooks>(s: T): void
 
   // commands
   registerCommand: (
@@ -331,14 +400,39 @@ export interface IAppProxy {
    * @param action
    */
   registerCommandShortcut: (
-    keybinding: SimpleCommandKeybinding,
-    action: SimpleCommandCallback
+    keybinding: SimpleCommandKeybinding | string,
+    action: SimpleCommandCallback,
+    opts?: Partial<{
+      key: string
+      label: string
+      desc: string
+      extras: Record<string, any>
+    }>
   ) => void
 
+  /**
+   * Supported all registered palette commands
+   * @param type
+   * @param args
+   */
   invokeExternalCommand: (
     type: ExternalCommandType,
     ...args: Array<any>
   ) => Promise<void>
+
+  /**
+   * Call external plugin command provided by models or registered commands
+   * @added 0.0.13
+   * @param type `xx-plugin-id.commands.xx-key`, `xx-plugin-id.models.xx-key`
+   * @param args
+   */
+  invokeExternalPlugin: (type: string, ...args: Array<any>) => Promise<unknown>
+
+  /**
+   * @added 0.0.13
+   * @param pid
+   */
+  getExternalPlugin: (pid: string) => Promise<{} | null>
 
   /**
    * Get state from app store
@@ -352,6 +446,7 @@ export interface IAppProxy {
    * @param path
    */
   getStateFromStore: <T = any>(path: string | Array<string>) => Promise<T>
+  setStateFromStore: (path: string | Array<string>, value: any) => Promise<void>
 
   // native
   relaunch: () => Promise<void>
@@ -367,6 +462,12 @@ export interface IAppProxy {
 
   // graph
   getCurrentGraph: () => Promise<AppGraphInfo | null>
+  checkCurrentIsDbGraph: () => Promise<Boolean>
+  getCurrentGraphConfigs: (...keys: string[]) => Promise<any>
+  setCurrentGraphConfigs: (configs: {}) => Promise<void>
+  getCurrentGraphFavorites: () => Promise<Array<string | PageEntity> | null>
+  getCurrentGraphRecent: () => Promise<Array<string | PageEntity> | null>
+  getCurrentGraphTemplates: () => Promise<Record<string, BlockEntity> | null>
 
   // router
   pushState: (
@@ -380,29 +481,22 @@ export interface IAppProxy {
     query?: Record<string, any>
   ) => void
 
-  // ui
-  queryElementById: (id: string) => Promise<string | boolean>
-
-  /**
-   * @added 0.0.5
-   * @param selector
-   */
-  queryElementRect: (selector: string) => Promise<DOMRectReadOnly | null>
-
-  /**
-   * @deprecated Use `logseq.UI.showMsg` instead
-   * @param content
-   * @param status
-   */
-  showMsg: (
-    content: string,
-    status?: 'success' | 'warning' | 'error' | string
-  ) => void
+  // templates
+  getTemplate: (name: string) => Promise<BlockEntity | null>
+  existTemplate: (name: string) => Promise<Boolean>
+  createTemplate: (
+    target: BlockUUID,
+    name: string,
+    opts?: { overwrite: boolean }
+  ) => Promise<any>
+  removeTemplate: (name: string) => Promise<any>
+  insertTemplate: (target: BlockUUID, name: string) => Promise<any>
 
   setZoomFactor: (factor: number) => void
   setFullScreen: (flag: boolean | 'toggle') => void
   setLeftSidebarVisible: (flag: boolean | 'toggle') => void
   setRightSidebarVisible: (flag: boolean | 'toggle') => void
+  clearRightSidebarBlocks: (opts?: { close: boolean }) => void
 
   registerUIItem: (
     type: 'toolbar' | 'pagebar',
@@ -418,8 +512,21 @@ export interface IAppProxy {
   onCurrentGraphChanged: IUserHook
   onGraphAfterIndexed: IUserHook<{ repo: string }>
   onThemeModeChanged: IUserHook<{ mode: 'dark' | 'light' }>
-  onThemeChanged: IUserHook<Partial<{ name: string, mode: string, pid: string, url: string }>>
-  onBlockRendererSlotted: IUserSlotHook<{ uuid: BlockUUID }>
+  onThemeChanged: IUserHook<
+    Partial<{ name: string; mode: string; pid: string; url: string }>>
+  onTodayJournalCreated: IUserHook<{ title: string }>
+  onBeforeCommandInvoked: (condition: ExternalCommandType | string, callback: (e: IHookEvent) => void) => IUserOffHook
+  onAfterCommandInvoked: (condition: ExternalCommandType | string, callback: (e: IHookEvent) => void) => IUserOffHook
+
+  /**
+   * provide ui slot to specific block with UUID
+   *
+   * @added 0.0.13
+   */
+  onBlockRendererSlotted: IUserConditionSlotHook<
+    BlockUUID,
+    Omit<BlockEntity, 'children' | 'page'>
+  >
 
   /**
    * provide ui slot to block `renderer` macro for `{{renderer arg1, arg2}}`
@@ -450,7 +557,7 @@ export interface IAppProxy {
   onSidebarVisibleChanged: IUserHook<{ visible: boolean }>
 
   // internal
-  _installPluginHook: (pid: string, hook: string) => void
+  _installPluginHook: (pid: string, hook: string, opts?: any) => void
   _uninstallPluginHook: (pid: string, hookOrAll: string | boolean) => void
 }
 
@@ -530,6 +637,8 @@ export interface IEditorProxy extends Record<string, any> {
 
   getSelectedBlocks: () => Promise<Array<BlockEntity> | null>
 
+  clearSelectedBlocks: () => Promise<void>
+
   /**
    * get all blocks of the current page as a tree structure
    *
@@ -546,7 +655,7 @@ export interface IEditorProxy extends Record<string, any> {
    *
    * @param srcPage - the page name or uuid
    */
-  getPageBlocksTree: (srcPage: PageIdentity) => Promise<Array<BlockEntity>>
+  getPageBlocksTree: (srcPage: PageIdentity) => Promise<Array<BlockEntity> | null>
 
   /**
    * get all page/block linked references
@@ -578,6 +687,8 @@ export interface IEditorProxy extends Record<string, any> {
    */
   newBlockUUID: () => Promise<string>
 
+  isPageBlock: (block: BlockEntity | PageEntity) => Boolean
+
   /**
    * @example https://github.com/logseq/logseq-plugin-samples/tree/master/logseq-reddit-hot-news
    *
@@ -586,48 +697,44 @@ export interface IEditorProxy extends Record<string, any> {
    * @param opts
    */
   insertBlock: (
-    srcBlock: BlockIdentity,
+    srcBlock: BlockIdentity | EntityID,
     content: string,
     opts?: Partial<{
       before: boolean
       sibling: boolean
-      isPageBlock: boolean
+      start: boolean
+      end: boolean
       customUUID: string
       properties: {}
     }>
   ) => Promise<BlockEntity | null>
 
+  /**
+   * @example https://github.com/logseq/logseq-plugin-samples/tree/master/logseq-reddit-hot-news
+   *
+   * `keepUUID` will allow you to set a custom UUID for blocks by setting their properties.id
+   */
   insertBatchBlock: (
     srcBlock: BlockIdentity,
     batch: IBatchBlock | Array<IBatchBlock>,
-    opts?: Partial<{ before: boolean; sibling: boolean }>
+    opts?: Partial<{ before: boolean; sibling: boolean; keepUUID: boolean }>
   ) => Promise<Array<BlockEntity> | null>
 
   updateBlock: (
-    srcBlock: BlockIdentity,
+    srcBlock: BlockIdentity | EntityID,
     content: string,
     opts?: Partial<{ properties: {} }>
   ) => Promise<void>
 
-  removeBlock: (srcBlock: BlockIdentity) => Promise<void>
+  removeBlock: (srcBlock: BlockIdentity | EntityID) => Promise<void>
 
   getBlock: (
     srcBlock: BlockIdentity | EntityID,
     opts?: Partial<{ includeChildren: boolean }>
   ) => Promise<BlockEntity | null>
 
-  /**
-   * @example
-   *
-   * ```ts
-   *  logseq.Editor.setBlockCollapsed('uuid', true)
-   *  logseq.Editor.setBlockCollapsed('uuid', 'toggle')
-   * ```
-   * @param uuid
-   * @param opts
-   */
   setBlockCollapsed: (
-    uuid: BlockUUID,
+    srcBlock: BlockIdentity | EntityID,
     opts: { flag: boolean | 'toggle' } | boolean | 'toggle'
   ) => Promise<void>
 
@@ -642,9 +749,14 @@ export interface IEditorProxy extends Record<string, any> {
     opts?: Partial<{
       redirect: boolean
       createFirstBlock: boolean
+      customUUID: string
       format: BlockEntity['format']
       journal: boolean
     }>
+  ) => Promise<PageEntity | null>
+
+  createJournalPage: (
+    date: string | Date
   ) => Promise<PageEntity | null>
 
   deletePage: (pageName: BlockPageName) => Promise<void>
@@ -652,6 +764,23 @@ export interface IEditorProxy extends Record<string, any> {
   renamePage: (oldName: string, newName: string) => Promise<void>
 
   getAllPages: (repo?: string) => Promise<PageEntity[] | null>
+  getAllTags: () => Promise<PageEntity[] | null>
+  getAllProperties: () => Promise<PageEntity[] | null>
+  getTagObjects: (nameOrIdent: string) => Promise<BlockEntity[] | null>
+  createTag: (tagName: string, opts?: Partial<{ uuid: string }>) => Promise<PageEntity | null>
+  getTag: (nameOrIdent: string | EntityID) => Promise<PageEntity | null>
+  getTagsByName: (tagName: string) => Promise<Array<PageEntity> | null>
+  addTagProperty: (tagId: BlockIdentity, propertyIdOrName: BlockIdentity) => Promise<void>
+  removeTagProperty: (tagId: BlockIdentity, propertyIdOrName: BlockIdentity) => Promise<void>
+  addTagExtends: (tagId: BlockIdentity, parentTagIdOrName: BlockIdentity) => Promise<void>
+  removeTagExtends: (tagId: BlockIdentity, parentTagIdOrName: BlockIdentity) => Promise<void>
+  addBlockTag: (blockId: BlockIdentity, tagId: BlockIdentity) => Promise<void>
+  removeBlockTag: (blockId: BlockIdentity, tagId: BlockIdentity) => Promise<void>
+  /**
+   * @note Emoji icon name from https://learn.missiveapp.com/open/emoji-mart
+   * */
+  setBlockIcon: (blockId: BlockIdentity, iconType: 'tabler-icon' | 'emoji', iconName: string) => Promise<void>
+  removeBlockIcon: (blockId: BlockIdentity) => Promise<void>
 
   prependBlockInPage: (
     page: PageIdentity,
@@ -666,10 +795,12 @@ export interface IEditorProxy extends Record<string, any> {
   ) => Promise<BlockEntity | null>
 
   getPreviousSiblingBlock: (
-    srcBlock: BlockIdentity
+    srcBlock: BlockIdentity | EntityID
   ) => Promise<BlockEntity | null>
 
-  getNextSiblingBlock: (srcBlock: BlockIdentity) => Promise<BlockEntity | null>
+  getNextSiblingBlock: (
+    srcBlock: BlockIdentity | EntityID
+  ) => Promise<BlockEntity | null>
 
   moveBlock: (
     srcBlock: BlockIdentity,
@@ -680,17 +811,39 @@ export interface IEditorProxy extends Record<string, any> {
   editBlock: (srcBlock: BlockIdentity, opts?: { pos: number }) => Promise<void>
   selectBlock: (srcBlock: BlockIdentity) => Promise<void>
 
-  upsertBlockProperty: (
-    block: BlockIdentity,
+  saveFocusedCodeEditorContent: () => Promise<void>
+
+  // property entity related APIs (DB only)
+  getProperty: (key: string) => Promise<BlockEntity | null>
+
+  // insert or update property entity
+  upsertProperty: (
     key: string,
-    value: any
+    schema?: Partial<{
+      type: 'default' | 'number' | 'node' | 'date' | 'checkbox' | 'url' | string,
+      cardinality: 'many' | 'one',
+      hide: boolean
+      public: boolean
+    }>,
+    opts?: { name?: string }) => Promise<IEntityID>
+
+  // remove property entity
+  removeProperty: (key: string) => Promise<void>
+
+  // block property related APIs
+  upsertBlockProperty: (
+    block: BlockIdentity | EntityID,
+    key: string,
+    value: any,
+    options?: Partial<{
+      reset: boolean
+    }>
   ) => Promise<void>
 
-  removeBlockProperty: (block: BlockIdentity, key: string) => Promise<void>
-
-  getBlockProperty: (block: BlockIdentity, key: string) => Promise<any>
-
-  getBlockProperties: (block: BlockIdentity) => Promise<any>
+  removeBlockProperty: (block: BlockIdentity | EntityID, key: string) => Promise<void>
+  getBlockProperty: (block: BlockIdentity | EntityID, key: string) => Promise<BlockEntity | null>
+  getBlockProperties: (block: BlockIdentity | EntityID) => Promise<Record<string, any> | null>
+  getPageProperties: (page: PageIdentity | EntityID) => Promise<Record<string, any> | null>
 
   scrollToBlockInPage: (
     pageName: BlockPageName,
@@ -698,7 +851,8 @@ export interface IEditorProxy extends Record<string, any> {
     opts?: { replaceState: boolean }
   ) => void
 
-  openInRightSidebar: (uuid: BlockUUID) => void
+  openInRightSidebar: (id: BlockUUID | EntityID) => void
+  openPDFViewer: (assetBlockIdOrFileUrl: string | EntityID) => Promise<void>
 
   /**
    * @example https://github.com/logseq/logseq-plugin-samples/tree/master/logseq-a-translator
@@ -780,20 +934,20 @@ export type UIMsgOptions = {
 export type UIMsgKey = UIMsgOptions['key']
 
 export interface IUIProxy {
-  /**
-   * @added 0.0.2
-   *
-   * @param content
-   * @param status
-   * @param opts
-   */
   showMsg: (
     content: string,
     status?: 'success' | 'warning' | 'error' | string,
     opts?: Partial<UIMsgOptions>
   ) => Promise<UIMsgKey>
-
   closeMsg: (key: UIMsgKey) => void
+  queryElementRect: (selector: string) => Promise<DOMRectReadOnly | null>
+  queryElementById: (id: string) => Promise<string | boolean>
+  checkSlotValid: (slot: UISlotIdentity['slot']) => Promise<boolean>
+  resolveThemeCssPropsVals: (props: string | Array<string>) => Promise<Record<string, string | undefined> | null>
+}
+
+export interface IUtilsProxy {
+  toJs: <R = unknown>(obj: {}) => Promise<R>
 }
 
 /**
@@ -804,20 +958,36 @@ export interface IAssetsProxy {
    * @added 0.0.2
    * @param exts
    */
-  listFilesOfCurrentGraph(exts?: string | string[]): Promise<{
-    path: string
-    size: number
-    accessTime: number
-    modifiedTime: number
-    changeTime: number
-    birthTime: number
-  }>
+  listFilesOfCurrentGraph(exts?: string | string[]): Promise<
+    Array<{
+      path: string
+      size: number
+      accessTime: number
+      modifiedTime: number
+      changeTime: number
+      birthTime: number
+    }>
+  >
 
   /**
    * @example https://github.com/logseq/logseq/pull/6488
    * @added 0.0.10
    */
   makeSandboxStorage(): IAsyncStorage
+
+  /**
+   * make assets scheme url based on current graph
+   * @added 0.0.15
+   * @param path
+   */
+  makeUrl(path: string): Promise<string>
+
+  /**
+   * try to open asset type file in Logseq app
+   * @added 0.0.16
+   * @param path
+   */
+  builtInOpen(path: string): Promise<boolean | undefined>
 }
 
 export interface ILSPluginThemeManager {
@@ -982,8 +1152,8 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
 
   resolveResourceFullUrl(filePath: string): string
 
-  App: IAppProxy & Record<string, any>
-  Editor: IEditorProxy & Record<string, any>
+  App: IAppProxy
+  Editor: IEditorProxy
   DB: IDBProxy
   Git: IGitProxy
   UI: IUIProxy

@@ -1,19 +1,26 @@
 ## Description
 
-This library provides a minimal API for using a
-[datascript](https://github.com/tonsky/datascript) database from the Logseq app
-and the CLI. This library is compatible with ClojureScript and with
+This library provides an API to the
+frontend([datascript](https://github.com/tonsky/datascript)) and
+backend([SQLite](https://www.sqlite.org/index.html)) databases from the Logseq
+app and the CLI. The majority of this library is focused on supporting DB graphs
+but there are a few namespaces that support file graphs. This library is
+compatible with ClojureScript and with
 [nbb-logseq](https://github.com/logseq/nbb-logseq) to respectively provide
 frontend and commandline functionality.
 
 ## API
 
-This library is under the parent namespace `logseq.db`. This library provides
-two main namespaces, `logseq.db` and `logseq.db.rules`.
+This library is under the parent namespace `logseq.db`. It provides the following namespaces:
+* `logseq.db` - main entry point serving both file and DB graphs
+* `logseq.db.frontend.*` - frontend namespaces for DB graphs
+* `logseq.db.sqlite.*` - backend/sqlite namespaces for DB graphs
+* `logseq.db.file-based.*` - namespaces for file graphs, mostly old namespaces
+* `logseq.db.common.*` - namespaces for both file and DB graphs
 
 ## Usage
 
-See usage in `deps/graph-parser` and in the Logseq app.
+See the frontend for example usage.
 
 ## Dev
 
@@ -24,29 +31,40 @@ file](/.github/workflows/db.yml) for linting examples.
 
 ### Setup
 
-To run linters, you'll want to install yarn dependencies once:
+To run linters and tests, you'll want to install yarn dependencies once:
 ```
 yarn install
 ```
 
 This step is not needed if you're just running the application.
 
-## Linting
+### Testing
 
+Testing is done with nbb-logseq and
+[nbb-test-runner](https://github.com/nextjournal/nbb-test-runner). Some basic
+usage:
+
+```
+# Run all tests
+$ yarn test
+# List available options
+$ yarn test -H
+# Run tests with :focus metadata flag
+$ yarn test -i focus
+```
 ### Datalog linting
 
-Our rules are linted through a script that also uses the datalog-parser. To run this linter:
+Datalog rules for the client are linted through a script that also uses the datalog-parser. To run this linter:
 ```
 bb lint:rules
 ```
-
 
 ### Managing dependencies
 
 The package.json dependencies are just for testing and should be updated if there is
 new behavior to test.
 
-The deps.edn dependecies are used by both ClojureScript and nbb-logseq. Their
+The deps.edn dependencies are used by both ClojureScript and nbb-logseq. Their
 versions should be backwards compatible with each other with priority given to
 the frontend. _No new dependency_ should be introduced to this library without
 an understanding of the tradeoffs of adding this to nbb-logseq.

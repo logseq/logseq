@@ -1,7 +1,6 @@
 :root {
   scrollbar-width: thin;
-  scrollbar-color: var(--ls-scrollbar-foreground-color)
-    var(--ls-scrollbar-background-color);
+  scrollbar-color: var(--lx-gray-05, var(--ls-scrollbar-foreground-color)) var(--lx-gray-02, var(--ls-scrollbar-background-color));
 
   --ls-z-index-level-0: 0;
   --ls-z-index-level-1: 9;
@@ -9,31 +8,6 @@
   --ls-z-index-level-3: 999;
   --ls-z-index-level-4: 9999;
   --ls-z-index-level-5: 99999;
-
-  --ls-right-sidebar-width: 40%;
-}
-
-html {
-  ::-webkit-scrollbar-thumb {
-    background-color: var(--ls-scrollbar-foreground-color);
-  }
-
-  ::-webkit-scrollbar {
-    background-color: var(--ls-scrollbar-background-color);
-  }
-
-  ::-webkit-scrollbar-thumb:active {
-    background-color: var(--ls-scrollbar-thumb-hover-color);
-  }
-
-  ::-webkit-scrollbar {
-    width: var(--ls-scrollbar-width);
-    height: 8px;
-  }
-
-  ::-webkit-scrollbar-corner {
-    background: transparent;
-  }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -42,37 +16,51 @@ html {
   }
 }
 
+.visible-scrollbar, html.custom-scrollbar {
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--lx-gray-05, var(--ls-scrollbar-foreground-color, var(--rx-gray-05)));
+  }
+
+  ::-webkit-scrollbar {
+    background-color: var(--lx-gray-02, var(--ls-scrollbar-background-color, var(--rx-gray-02)));
+    width: var(--ls-scrollbar-width, 6px);
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-thumb:active {
+    background-color: var(--lx-gray-06, var(--ls-scrollbar-thumb-hover-color, var(--rx-gray-06)));
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+
+.hide-scrollbar {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none !important; /* Firefox */
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 .form-checkbox, .form-radio {
-  color: var(--ls-page-checkbox-color, #6093a0);
-  background-color: var(--ls-page-checkbox-color, #6093a0);
-  border-color: var(--ls-page-checkbox-border-color, #6093a0);
+  color: var(--ls-page-checkbox-color, hsl(var(--primary)/.4));
+  background-color: var(--ls-page-checkbox-color, var(--rx-gray-06));
+  border-color: var(--ls-page-checkbox-border-color, hsl(var(--border)));
   border: none;
   position: relative;
-  top: -1px;
 }
 
 .form-checkbox:hover {
   transform: scale(1.1);
 }
 
-html[data-theme='dark'] {
-  background-color: var(--ls-primary-background-color);
-
-  input.form-input {
-    background: none;
-  }
-}
-
-html[data-theme='light'] {
+html[data-theme='light'] .theme-container {
   .form-checkbox {
     &:focus {
       border-color: var(--ls-page-checkbox-border-color);
-    }
-  }
-
-  .cp__header {
-    a {
-      color: var(--ls-primary-text-color);
     }
   }
 
@@ -85,13 +73,7 @@ html[data-theme='light'] {
   }
 }
 
-.hide-scrollbar {
-  -ms-overflow-style: none; /* IE and Edge */
-  scrollbar-width: none !important; /* Firefox */
-
-  &::-webkit-scrollbar {
-    display: none;
-  }
+html[data-theme='dark'] .theme-container {
 }
 
 html.locked-scroll {
@@ -113,4 +95,109 @@ html.is-resizing-buf {
       cursor: w-resize !important;
     }
   }
+}
+
+main.ls-fold-button-on-right {
+  #main-content-container {
+    padding-right: 18px;
+    padding-left: 18px;
+    padding-top: 4px;
+
+    .page-blocks-inner {
+      margin-left: 0 !important;
+    }
+
+    .block-control-wrap {
+      /* hack for toggling enable-opts */
+      height: 23px;
+      background: transparent;
+    }
+  }
+
+  .block-main-container {
+    padding-right: calc(1.2rem + env(safe-area-inset-right, 0px)); /* leave room for the right fold toggle */
+  }
+
+  .cp__sidebar-left-layout {
+    width: 15px;
+
+    &.is-open {
+      width: 100%;
+    }
+  }
+
+  .ls-block {
+    .block-control {
+      @apply absolute top-0 -right-1 z-[1];
+      opacity: 0.6;
+      margin-top: 3px;
+
+      /* Increase touch hit area */
+      padding: 6px 8px;          /* bigger hit box */
+      border-radius: 6px;         /* helps touch ergonomics */
+      cursor: pointer;
+      transition: opacity 0.15s ease, transform 0.15s ease;
+
+      &:hover {
+          opacity: 1;
+      }
+
+      &:active {
+          opacity: 1;
+          transform: scale(0.92);   /* subtle tactile feedback */
+      }
+
+      .rotating-arrow.collapsed svg {
+          transform: rotate(180deg);
+      }
+    }
+
+    &[haschild="true"] {
+      .control-hide {
+        display: block !important;
+      }
+    }
+
+    .block-content-wrapper {
+      width: 100%;
+    }
+  }
+
+  /* Keep the right fold toggle vertically aligned with the first line of text */
+  .ls-block .block-control {
+    top: 0.1em;
+    margin-top: 0;
+  }
+
+  .block-children-container {
+    margin-left: 7px;
+
+    .block-children {
+      padding-left: 10px;
+    }
+  }
+}
+
+#root-container.theme-container {
+  @apply outline-none;
+}
+
+main.theme-container-inner {
+  --left-sidebar-bg-color: var(--lx-gray-02, var(--ls-secondary-background-color, hsl(var(--secondary, var(--rx-gray-03-hsl)))));
+}
+
+html[data-font='serif'] .ls-block, .ls-font-serif {
+  font-family: Lyon-Text, Georgia, ui-serif, serif;
+}
+
+html[data-font='serif'][data-font-global='true'] {
+  --ls-font-family: Lyon-Text, Georgia, ui-serif, serif;
+}
+
+html[data-font='mono'] .ls-block, .ls-font-mono {
+  font-family: iawriter-mono, Nitti, Menlo, Courier, monospace;
+}
+
+html[data-font='mono'][data-font-global='true'] {
+  --ls-font-family: iawriter-mono, Nitti, Menlo, Courier, monospace;
 }

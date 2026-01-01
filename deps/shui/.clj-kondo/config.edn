@@ -1,0 +1,17 @@
+{ :config-in-ns
+ ;; :used-underscored-binding is turned off for components because of false positive
+ ;; for rum/defcs and _state.
+ {all-components {:linters {:used-underscored-binding {:level :off}}}}
+
+ :linters 
+ {;; Disable until it doesn't trigger false positives on rum/defcontext
+  :earmuffed-var-not-dynamic {:level :off}}
+ :hooks {:analyze-call {rum.core/defc hooks.rum/defc
+                        rum.core/defcs hooks.rum/defcs
+                        clojure.string/join hooks.path-invalid-construct/string-join}}
+ :lint-as {rum.core/defcc rum.core/defc
+           rum.core/with-context clojure.core/let
+           rum.core/defcontext clojure.core/def
+           rum.core/defc clojure.core/defn
+           rum.core/defcs clojure.core/defn
+           frontend.react/defc clojure.core/defn}}
