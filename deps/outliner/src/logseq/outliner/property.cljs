@@ -365,8 +365,7 @@
            (or (not number-property?)
                ;; Allows :number property to use number as a ref (for closed value) or value
                (and number-property?
-                    (or (= property-id (:db/ident (:logseq.property/created-from-property (d/entity @conn v))))
-                        (= :logseq.property/empty-placeholder (:db/ident (d/entity @conn v)))))))
+                    (= property-id (:db/ident (:logseq.property/created-from-property (d/entity @conn v)))))))
       v
 
       (= property-type :page)
