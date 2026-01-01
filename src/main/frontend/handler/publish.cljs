@@ -364,25 +364,25 @@
   (let [repo (state/get-current-repo)]
     (when-let [db* (and repo (db/get-db repo))]
       (if (and page (:db/id page))
-        (p/let [graph-uuid (some-> (ldb/get-graph-rtc-uuid db*) str)
+        (p/let [graph-id (some->
+                          (or (ldb/get-graph-rtc-uuid db*)
+                              (ldb/get-graph-local-uuid db*))
+                          str)
                 payload (state/<invoke-db-worker :thread-api/build-publish-page-payload
                                                  repo
-                                                 (:db/id page)
-                                                 graph-uuid)]
+                                                 (:db/id page))]
           (if payload
-            (-> (p/let [_ (<upload-assets! repo graph-uuid payload)
-                        custom-assets (<upload-custom-publish-assets! repo graph-uuid)]
+            (-> (p/let [_ (<upload-assets! repo graph-id payload)
+                        custom-assets (<upload-custom-publish-assets! repo graph-id)]
                   (<post-publish! payload {:password password
                                            :custom-assets custom-assets}))
                 (p/then (fn [resp]
                           (p/let [json (.json resp)
                                   data (bean/->clj json)]
                             (let [short-url (:short_url data)
-                                  graph-uuid (or (:graph-uuid payload)
-                                                 (some-> (ldb/get-graph-rtc-uuid db*) str))
-                                  page-uuid (str (:block/uuid page))
-                                  fallback-url (when (and graph-uuid page-uuid)
-                                                 (str config/PUBLISH-API-BASE "/page/" graph-uuid "/" page-uuid))
+                                  page-id (str (:block/uuid page))
+                                  fallback-url (when (and graph-id page-id)
+                                                 (str config/PUBLISH-API-BASE "/page/" graph-id "/" page-id))
                                   url (or (when short-url
                                             (str config/PUBLISH-API-BASE short-url))
                                           fallback-url)]
