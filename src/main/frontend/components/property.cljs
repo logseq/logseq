@@ -496,6 +496,7 @@
                         "property-pair items-center"
                         :else
                         "property-pair items-start")
+               :data-property-title (:block/title property)
                :data-property-type (name type)}
          (if (seq sortable-opts)
            (dnd/sortable-item (assoc sortable-opts :class "property-key") property-key-cp')
