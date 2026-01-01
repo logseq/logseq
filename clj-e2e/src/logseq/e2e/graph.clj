@@ -18,6 +18,7 @@
 
 (defn- input-e2ee-password
   []
+  (w/wait-for "input[type=\"password\"]" {:timeout 20000})
   (w/click "input[type=\"password\"]")
   (util/input "e2etest")
   (w/click "button:text(\"Submit\")"))
