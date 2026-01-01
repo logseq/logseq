@@ -194,9 +194,10 @@
        datoms))
 
 (defn- build-publish-page-payload
-  [db entity graph-uuid]
+  [db entity]
   (let [{:keys [blocks eids]} (publish-collect-page-eids db entity)
-        graph-uuid (or graph-uuid (ldb/get-graph-rtc-uuid db))
+        graph-uuid (or (ldb/get-graph-rtc-uuid db)
+                       (ldb/get-graph-local-uuid db))
         refs (when graph-uuid
                (publish-refs-from-blocks db blocks entity graph-uuid))
         tags (page-tags entity)
@@ -223,9 +224,9 @@
      :datoms datoms}))
 
 (def-thread-api :thread-api/build-publish-page-payload
-  [repo eid graph-uuid]
+  [repo eid]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (let [db @conn
           page-entity (d/entity db eid)]
       (when (and page-entity (:db/id page-entity))
-        (build-publish-page-payload db page-entity graph-uuid)))))
+        (build-publish-page-payload db page-entity)))))
