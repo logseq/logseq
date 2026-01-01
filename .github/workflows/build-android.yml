@@ -4,6 +4,13 @@
 name: Build-Android
 
 on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'android/**'
+      - 'src/**'
+      - 'yarn.lock'
+      - 'package.json'
   workflow_dispatch:
     inputs:
       build-target:
@@ -34,11 +41,11 @@ on:
         type: boolean
     secrets:
       ANDROID_KEYSTORE:
-        required: true
+        required: false
       ANDROID_KEYSTORE_PASSWORD:
-        required: true
+        required: false
       SENTRY_AUTH_TOKEN:
-        required: true
+        required: false
 
 env:
   CLOJURE_VERSION: '1.11.1.1413'
@@ -114,7 +121,7 @@ jobs:
           LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
 
       - name: Upload Sentry Sourcemaps (beta only)
-        # if: ${{ github.repository == 'logseq/logseq' && (inputs.build-target == 'beta' || github.event.inputs.build-target == 'beta') }}
+        if: ${{ secrets.SENTRY_AUTH_TOKEN != '' && (inputs.build-target == 'beta' || github.event.inputs.build-target == 'beta') }}
         run: |
           curl -sL https://sentry.io/get-cli/ | SENTRY_CLI_VERSION=2.58.4 bash
           release_name="logseq-android@${{ steps.ref.outputs.version }}"
@@ -141,6 +148,7 @@ jobs:
           LOGSEQ_SENTRY_DSN: ${{ secrets.LOGSEQ_SENTRY_DSN }}
 
       - name: Sign Android APK
+        if: ${{ secrets.ANDROID_KEYSTORE != '' && secrets.ANDROID_KEYSTORE_PASSWORD != '' }}
         run: |
           echo ${{ secrets.ANDROID_KEYSTORE }} | base64 -d > keystore.jks
           $ANDROID_SDK_ROOT/build-tools/34.0.0/apksigner sign \
@@ -149,10 +157,17 @@ jobs:
             --out app-signed.apk
         working-directory: android
 
-      - name: Rename Apk
+      - name: Rename Signed APK
+        if: ${{ secrets.ANDROID_KEYSTORE != '' && secrets.ANDROID_KEYSTORE_PASSWORD != '' }}
         run: |
           mkdir builds
           mv android/app-signed.apk ./builds/Logseq-android-${{ steps.ref.outputs.version }}.apk
+
+      - name: Rename Unsigned APK
+        if: ${{ secrets.ANDROID_KEYSTORE == '' || secrets.ANDROID_KEYSTORE_PASSWORD == '' }}
+        run: |
+          mkdir builds
+          mv android/app/build/outputs/apk/release/app-release-unsigned.apk ./builds/Logseq-android-${{ steps.ref.outputs.version }}-unsigned.apk
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
