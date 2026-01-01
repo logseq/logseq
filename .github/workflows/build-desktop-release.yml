@@ -242,14 +242,6 @@ jobs:
           npm_config_arch: arm64
         run: |
           yarn install --target_arch=arm64 --target_platform=linux
-          rsapi_version=`node -e 'console.log(require("@logseq/rsapi/package.json").optionalDependencies["@logseq/rsapi-linux-arm64-gnu"])'`
-          temp_dir=`mktemp -d`
-          cd "$temp_dir"
-          echo '{"dependencies": {"@logseq/rsapi-linux-arm64-gnu": "'"$rsapi_version"'"}}' > package.json
-          yarn install --ignore-platform
-          cd -
-          mv "$temp_dir/node_modules/@logseq/rsapi-linux-arm64-gnu" node_modules/@logseq/rsapi-linux-arm64-gnu
-          rm -rf "$temp_dir" "node_modules/@logseq/rsapi-linux-x64-gnu"
         working-directory: ./static
 
       - name: Build/Release Electron App
