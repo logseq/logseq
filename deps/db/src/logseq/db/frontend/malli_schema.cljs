@@ -286,7 +286,7 @@
    [:block/refs {:optional true} [:set :int]]
    [:block/tx-id {:optional true} :int]
    [:block/collapsed? {:optional true} :boolean]
-   [:block/warning {:optional true} [:string]]])
+   [:block/warning {:optional true} [:keyword]]])
 
 (def page-attrs
   "Common attributes for pages"
