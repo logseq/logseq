@@ -8,7 +8,7 @@ const config: CapacitorConfig = {
   appId: 'com.logseq.app',
   appName: 'Logseq',
   webDir: 'static/mobile',
-  loggingBehavior: 'debug',
+  loggingBehavior: process.env.NODE_ENV === 'development' ? 'debug' : 'production',
   server: {
     androidScheme: 'http',
   },
