@@ -8,6 +8,7 @@ import android.content.res.Configuration;
 import android.os.Bundle;
 import android.webkit.ValueCallback;
 import android.webkit.WebView;
+import android.webkit.WebViewClient;
 import androidx.activity.EdgeToEdge;
 import androidx.core.view.WindowInsetsControllerCompat;
 import com.getcapacitor.PluginCall;
@@ -17,14 +18,12 @@ import androidx.activity.OnBackPressedDispatcher;
 import android.util.Log;
 import android.view.View;
 
-import java.util.Timer;
-import java.util.TimerTask;
-
 import ee.forgr.capacitor_navigation_bar.NavigationBarPlugin;
 
 public class MainActivity extends BridgeActivity {
     private NavigationCoordinator navigationCoordinator = new NavigationCoordinator();
     private BroadcastReceiver routeChangeReceiver;
+    private boolean webViewLoaded = false;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -72,19 +71,28 @@ public class MainActivity extends BridgeActivity {
             registerReceiver(routeChangeReceiver, filter);
         }
 
-        // initNavigationBarBgColor();
-
-        new Timer().schedule(new TimerTask() {
+        // Listen for WebView load completion and dispatch intent event when ready
+        webView.setWebViewClient(new WebViewClient() {
             @Override
-            public void run() {
-                bridge.eval("window.dispatchEvent(new Event('sendIntentReceived'))", new ValueCallback<String>() {
-                    @Override
-                    public void onReceiveValue(String s) {
-                        //
-                    }
-                });
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                if (!webViewLoaded) {
+                    webViewLoaded = true;
+                    dispatchSendIntentEvent();
+                }
             }
-        }, 5000);
+        });
+
+        // initNavigationBarBgColor();
+    }
+
+    private void dispatchSendIntentEvent() {
+        bridge.eval("window.dispatchEvent(new Event('sendIntentReceived'))", new ValueCallback<String>() {
+            @Override
+            public void onReceiveValue(String s) {
+                //
+            }
+        });
     }
 
     @Override
@@ -175,12 +183,7 @@ public class MainActivity extends BridgeActivity {
         String type = intent.getType();
         if (Intent.ACTION_SEND.equals(action) && type != null) {
             bridge.getActivity().setIntent(intent);
-            bridge.eval("window.dispatchEvent(new Event('sendIntentReceived'))", new ValueCallback<String>() {
-                @Override
-                public void onReceiveValue(String s) {
-                    //
-                }
-            });
+            dispatchSendIntentEvent();
         }
     }
 
