@@ -18,4 +18,4 @@ fom = "fom"
 tne = "tne"
 Damon = "Damon"
 [files]
-extend-exclude = ["resources/*", "src/resources/*", "scripts/resources/*", "src/test/fixtures/*"]
+extend-exclude = ["resources/*", "src/resources/*", "scripts/resources/*", "src/test/fixtures/*", "clj-e2e/resources/*"]
