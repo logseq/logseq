@@ -127,7 +127,9 @@
           ;; Use same args as outliner.op
           _ (outliner-property/set-block-property! conn [:block/uuid block-uuid] :user.property/num (:db/id property-value))]
       (is (= (:db/id property-value)
-             (:db/id (:user.property/num (db-test/find-block-by-content @conn "b2")))))))
+             (:db/id (:user.property/num (db-test/find-block-by-content @conn "b2")))))
+      (outliner-property/set-block-property! conn [:block/uuid block-uuid] :user.property/num (:db/id (d/entity @conn :logseq.property/empty-placeholder)))
+      (is (= 9 (:logseq.property/value (:user.property/num (d/entity @conn [:block/uuid block-uuid])))))))
 
   (testing "Update a :number value with existing value"
     (let [conn (db-test/create-conn-with-blocks
