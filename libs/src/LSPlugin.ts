@@ -834,7 +834,10 @@ export interface IEditorProxy extends Record<string, any> {
   upsertBlockProperty: (
     block: BlockIdentity | EntityID,
     key: string,
-    value: any
+    value: any,
+    options?: Partial<{
+      reset: boolean
+    }>
   ) => Promise<void>
 
   removeBlockProperty: (block: BlockIdentity | EntityID, key: string) => Promise<void>
