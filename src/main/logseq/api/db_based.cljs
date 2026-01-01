@@ -258,23 +258,27 @@
                                                 :logseq.property.class/extends
                                                 (:db/id extend))))
 
+(defn- resolve-tag-eid [this class-uuid-or-ident-or-title]
+  (let [eid (if (number? class-uuid-or-ident-or-title)
+              class-uuid-or-ident-or-title
+              (let [title-or-ident (-> (if-not (string? class-uuid-or-ident-or-title)
+                                         (str class-uuid-or-ident-or-title)
+                                         class-uuid-or-ident-or-title)
+                                       (string/replace #"^:+" ""))]
+                (if (text/namespace-page? title-or-ident)
+                  (keyword title-or-ident)
+                  (if (util/uuid-string? title-or-ident)
+                    (when-let [id (sdk-utils/uuid-or-throw-error title-or-ident)]
+                      [:block/uuid id])
+                    (keyword (api-block/resolve-class-prefix-for-db this) title-or-ident)))))]
+    eid))
+
 (defn get-tag [class-uuid-or-ident-or-title]
   (this-as this
-           (let [eid (if (number? class-uuid-or-ident-or-title)
-                       class-uuid-or-ident-or-title
-                       (let [title-or-ident (-> (if-not (string? class-uuid-or-ident-or-title)
-                                                  (str class-uuid-or-ident-or-title)
-                                                  class-uuid-or-ident-or-title)
-                                                (string/replace #"^:+" ""))]
-                         (if (text/namespace-page? title-or-ident)
-                           (keyword title-or-ident)
-                           (if (util/uuid-string? title-or-ident)
-                             (when-let [id (sdk-utils/uuid-or-throw-error title-or-ident)]
-                               [:block/uuid id])
-                             (keyword (api-block/resolve-class-prefix-for-db this) title-or-ident)))))
-                 tag (db/entity eid)]
-             (when (ldb/class? tag)
-               (sdk-utils/result->js tag)))))
+    (let [eid (resolve-tag-eid this class-uuid-or-ident-or-title)
+          tag (db/entity eid)]
+      (when (ldb/class? tag)
+        (sdk-utils/result->js tag)))))
 
 (defn get-tags-by-name [name]
   (when-let [tags (some->> (entity-util/get-pages-by-name (db-conn/get-db) name)
@@ -304,25 +308,31 @@
      (sdk-utils/result->js (db/get-case-page tag-id)))))
 
 (defn add-block-tag [id-or-name tag-id]
-  (p/let [repo (state/get-current-repo)
-          tag (db-async/<get-block repo tag-id)
-          block (db-async/<get-block repo id-or-name)]
-    (when-not (ldb/class? tag)
-      (throw (ex-info (str "Not a tag: " tag-id)
-                      {:tag tag})))
-    (when (and tag block)
-      (db-page-handler/add-tag repo (:db/id block) tag))))
+  (this-as this
+    (p/let [repo (state/get-current-repo)
+            block (db-async/<get-block repo id-or-name)
+            tag-eid (resolve-tag-eid this tag-id)
+            tag (or (db/entity tag-eid)
+                    (db-async/<get-block repo tag-id))]
+      (when-not (ldb/class? tag)
+        (throw (ex-info (str "Not a tag: " tag-id)
+                        {:tag (pr-str tag)})))
+      (when (and tag block)
+        (db-page-handler/add-tag repo (:db/id block) tag)))))
 
 (defn remove-block-tag [id-or-name tag-id]
-  (p/let [repo (state/get-current-repo)
-          block (db-async/<get-block repo id-or-name)
-          tag (db-async/<get-block repo tag-id)]
-    (when-not (ldb/class? tag)
-      (throw (ex-info (str "Not a tag: " tag-id)
-                      {:tag tag})))
-    (when (and block tag)
-      (db-property-handler/delete-property-value!
-       (:db/id block) :block/tags (:db/id tag)))))
+  (this-as this
+    (p/let [repo (state/get-current-repo)
+            block (db-async/<get-block repo id-or-name)
+            tag-eid (resolve-tag-eid this tag-id)
+            tag (or (db/entity tag-eid)
+                    (db-async/<get-block repo tag-id))]
+      (when-not (ldb/class? tag)
+        (throw (ex-info (str "Not a tag: " tag-id)
+                        {:tag tag})))
+      (when (and block tag)
+        (db-property-handler/delete-property-value!
+         (:db/id block) :block/tags (:db/id tag))))))
 
 (defn set-block-icon
   [block-id icon-type icon-name]
@@ -342,6 +352,7 @@
                                               :id (if (= icon-type "emoji")
                                                     (:id (first (name->emoji icon-name)))
                                                     icon-name)})))
+
 (defn remove-block-icon
   [block-id]
   (p/let [repo (state/get-current-repo)
