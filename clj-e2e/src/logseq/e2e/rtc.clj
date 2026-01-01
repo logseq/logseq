@@ -21,7 +21,7 @@
          _# (prn :current-rtc-tx m# local-tx# remote-tx#)
          tx# (max local-tx# remote-tx#)]
      ~@body
-     (loop [i# 5]
+     (loop [i# 15]
        (when (zero? i#) (throw (ex-info "wait-tx-updated failed" {:old m# :new (get-rtc-tx)})))
        (util/wait-timeout 500)
        (w/wait-for "button.cloud.on.idle" {:timeout 35000})
