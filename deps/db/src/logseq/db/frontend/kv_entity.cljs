@@ -10,6 +10,9 @@
      :logseq.kv/graph-uuid                   {:doc "Store graph-uuid if it's a rtc enabled graph"
                                               :rtc {:rtc/ignore-entity-when-init-upload true
                                                     :rtc/ignore-entity-when-init-download true}}
+     :logseq.kv/local-graph-uuid             {:doc "Store graph-uuid if it's a local graph"
+                                              :rtc {:rtc/ignore-entity-when-init-upload true
+                                                    :rtc/ignore-entity-when-init-download true}}
      :logseq.kv/import-type                  {:doc "If graph is imported, identifies how a graph is imported including which UI or CLI import process. CLI scripts can set this to a custom value.
                                                  UI values include :file-graph and :sqlite-db and CLI values start with :cli e.g. :cli/default."}
      :logseq.kv/imported-at                  {:doc "Time if graph is imported"}
