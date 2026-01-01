@@ -237,7 +237,8 @@
                        graph-git-sha
                        (conj (sqlite-util/kv :logseq.kv/graph-git-sha graph-git-sha))
                        true
-                       (conj (sqlite-util/kv :logseq.kv/graph-uuid (common-uuid/gen-uuid))))
+                       (conj (sqlite-util/kv :logseq.kv/local-graph-uuid
+                                             (uuid (str "loc" (subs (str (common-uuid/gen-uuid)) 3))))))
         initial-files (build-initial-files config-content)
         {properties-tx :tx :keys [properties]} (build-initial-properties)
         db-ident->properties (zipmap (map :db/ident properties) properties)

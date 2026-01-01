@@ -587,11 +587,13 @@
 
 (def kv sqlite-util/kv)
 
-;; TODO: why not generate a UUID for all local graphs?
-;; And prefer this local graph UUID when picking an ID for new rtc graph?
 (defn get-graph-rtc-uuid
   [db]
   (when db (get-key-value db :logseq.kv/graph-uuid)))
+
+(defn get-graph-local-uuid
+  [db]
+  (when db (get-key-value db :logseq.kv/local-graph-uuid)))
 
 (defn get-graph-schema-version
   [db]
