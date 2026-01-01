@@ -406,8 +406,6 @@
 
 ;; A page is just a logical block
 (rum/defcs ^:large-vars/cleanup-todo page-inner < rum/reactive db-mixins/query mixins/container-id
-  (rum/local false ::all-collapsed?)
-  (rum/local false ::control-show?)
   (rum/local nil   ::current-page)
   [state {:keys [repo page preview? sidebar? tag-dialog? linked-refs? unlinked-refs? config journals?] :as option}]
   (let [current-repo (state/sub :git/current-repo)
@@ -424,8 +422,6 @@
         today? (and
                 journal?
                 (= title (date/journal-name)))
-        *control-show? (::control-show? state)
-        *all-collapsed? (::all-collapsed? state)
         home? (= :home (state/get-current-route))
         show-tabs? (and (or class-page? (ldb/property? page)) (not tag-dialog?))]
     (if page
