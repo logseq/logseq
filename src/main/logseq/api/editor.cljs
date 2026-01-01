@@ -419,7 +419,10 @@
            (p/let [key' (api-block/sanitize-user-property-name key)
                    opts (bean/->clj options)
                    block (<get-block id {:children? false})
-                   value (bean/->clj value)]
+                   value (bean/->clj value)
+                   opts (cond-> opts
+                                (boolean? (:reset opts))
+                                (assoc :reset-property-values (:reset opts)))]
              (when block
                (db-based-api/upsert-block-property this block key' value opts)))))
 
