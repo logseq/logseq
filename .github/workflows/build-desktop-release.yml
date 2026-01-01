@@ -292,10 +292,6 @@ jobs:
         run: yarn install
         working-directory: ./static
 
-      - name: Fix Deps Electron app
-        run: yarn run postinstall
-        working-directory: ./static/node_modules/dugite/
-
       - name: Build/Release Electron app
         run: yarn electron:make
         working-directory: ./static
@@ -360,10 +356,6 @@ jobs:
       - name: Deps Electron app
         run: yarn install
         working-directory: ./static
-
-      - name: Fix Deps Electron app
-        run: yarn run postinstall
-        working-directory: ./static/node_modules/dugite/
 
       - name: Build/Release Electron app
         run: yarn electron:make-win-arm64
@@ -529,8 +521,8 @@ jobs:
       #       **/node_modules
       #     key: ${{ runner.os }}-node-modules
 
-      - name: Fetch deps and fix dugit arch for arm64
-        run: yarn install --ignore-platform && yarn rebuild:all && cd node_modules/dugite && npm_config_arch=arm64 node script/download-git.js
+      - name: Fetch deps
+        run: yarn install --ignore-platform && yarn rebuild:all
         working-directory: ./static
 
       - name: Build/Release Electron App for arm64
