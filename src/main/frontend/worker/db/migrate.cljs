@@ -164,11 +164,8 @@
                  (when (:logseq.property/ui-position e)
                    [:db/retract (:e d) :logseq.property/ui-position]))))))
 
-(defn- ensure-graph-uuid
-  [db]
-  (let [graph-uuid (:kv/value (d/entity db :logseq.kv/graph-uuid))]
-    (when-not graph-uuid
-      [(sqlite-util/kv :logseq.kv/graph-uuid (common-uuid/gen-uuid))])))
+(defn- deprecated-ensure-graph-uuid
+  [_db])
 
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
@@ -188,7 +185,7 @@
                                {})]
    ["65.16" {:properties [:logseq.property.asset/external-file-name]}]
    ["65.17" {:properties [:logseq.property.publish/published-url]}]
-   ["65.18" {:fix ensure-graph-uuid}]])
+   ["65.18" {:fix deprecated-ensure-graph-uuid}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]
