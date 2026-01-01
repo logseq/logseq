@@ -1,5 +1,7 @@
 (ns logseq.e2e.rtc-extra-part2-test
-  (:require [clojure.test :refer [deftest testing is use-fixtures run-test]]
+  (:require [clojure.java.io :as io]
+            [clojure.test :refer [deftest testing is use-fixtures run-test]]
+            [jsonista.core :as json]
             [logseq.e2e.block :as b]
             [logseq.e2e.const :refer [*page1 *page2 *graph-name*]]
             [logseq.e2e.fixtures :as fixtures]
@@ -133,5 +135,20 @@ wait for 5-10 seconds, will found that \"aaa/bbb\" became \"aaa/<encrypted-strin
         (page/goto-page page-title)
         (w/wait-for ".ls-block img")
         (is (some? (.getAttribute (w/-query ".ls-block img") "src"))))
+
+      (rtc/validate-graphs-in-2-pw-pages))))
+
+(deftest issue-683-paste-large-block-test
+  (testing "Copying and pasting a large block of text into sync-ed graph causes sync to fail"
+    (let [large-text (slurp (io/resource "large_text.txt"))]
+      (w/with-page @*page1
+        (w/eval-js (str "navigator.clipboard.writeText(" (json/write-value-as-string large-text) ")")))
+      (let [{:keys [remote-tx]}
+            (w/with-page @*page1
+              (rtc/with-wait-tx-updated
+                (b/new-block "")
+                (b/paste)))]
+        (w/with-page @*page2
+          (rtc/wait-tx-update-to remote-tx)))
 
       (rtc/validate-graphs-in-2-pw-pages))))
