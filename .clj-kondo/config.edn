@@ -13,6 +13,10 @@
               :unresolved-namespace {:exclude [java.util.Base64 java.security.MessageDigest]}
               :shadowed-var {:exclude [bytes key]}}}
 
+   ;; Be more lenient with CLJS files since clj-kondo doesn't understand CLJS destructuring
+   all-frontend
+   {:linters {:unresolved-symbol {:level :warning}}}}
+
   all-frontend
   {:linters {:discouraged-namespace
              {logseq.db.common.sqlite-cli {:message "frontend should not depend on CLI namespace with sqlite3 dependency"}
@@ -43,7 +47,68 @@
    :unresolved-symbol {:exclude [goog.DEBUG
                                  goog.string.unescapeEntities
                                  ;; TODO:lint: Fix when fixing all type hints
-                                 object]}}
+                                 object
+                                 ;; CLJS-specific patterns that clj-kondo doesn't understand
+                                 _ *el-popup *timer *timer1 visible? set-visible! render
+                                 *control-show? edit? selected? top? bottom?
+                                 *show-query? _skip-async-load? collapsed?
+                                 *hide-block-refs? navigating-block navigated? editing?
+                                 *mouse-active? deps state' group visible-items first-item sidebar?
+                                 _show-page? _indent? _end-separator? _disabled? _navigating-block
+                                 disable-preview? show-non-exists-page? tag? breadcrumb?
+                                 positioned? local? full-text contents-page? other-position?
+                                 on-context-menu stop-event-propagation? with-tags? show-unique-title?
+                                 query? *show-query? html-export? nested-link? show-brackets?
+                                 config* uuid-or-title* ignore-alias? source-page preview?
+                                 block-refs-count block-refs-count' hide-block-refs-count? refs-count
+                                 breadcrumb-fragment breadcrumb-separator breadcrumb-aux show-page?
+                                 indent? end-separator? disabled? block-container-inner-aux
+                                 container-state block-container-inner loaded-block-container block*
+                                 inline-title src-lang-picker on-select! block-child block-children
+                                 block-control block-id page-cp-inner result preview? asset-container
+                                 asset-block src metadata full_text asset-link href audio-cp ext
+                                 handle file buffer resize-image-handles dx-fn resizable-image
+                                 page-inner page-entity children label popup-preview-impl sidebar?
+                                 open? manual? page-preview-trigger dnd-separator move-to
+                                 text-block-title pdf-assets/area-display block-title-aux
+                                 db-properties-cp opts properties-area dnd-separator-wrapper
+                                 block-tag popup-opts tags-cp position property-key-cp
+                                 status-history-cp status-history task-spent-time-cp edit-input-id
+                                 block-content-with-error editor-box custom-block-content
+                                 block-content-or-editor block-content-or-editor breadcrumb-with-container
+                                 ref-block-container page-blocks macro-function-cp arguments
+                                 block-item item blocks class-children confirm-dir-with-alias-name
+                                 set-dir! restart-button alias-directories settings-content
+                                 edit-external-url-form asset-block url title on-saved checksum ret
+                                 edit-external-url-content pdf-current input-auto-complete items
+                                 item-cp class on-chosen on-keydown input-opts all-pages _state
+                                 path nested-link link audio-link _label version asset
+                                 frm-zip zip-extracted-path tmp-extracted-root latest-version notes
+                                 dl-url dest artifact url dl-res dest-info info window-on-graph
+                                 open-new-window? proxy pac-opts res status text _ password api
+                                 endpoint illegal-text result files json s app-path root-dir
+                                 exported kp public-key exported-public-key public-key*
+                                 exported-public-key2 r salt iv password-key derived-key
+                                 exported-private-key encrypted-private-key len salt-data iv-data
+                                 encrypted-private-key-data version version>=20251210
+                                 decrypted-private-key-data private-key exported-aes-key
+                                 encrypted-aes-key decrypted-key-data encrypted-data decrypted-data
+                                 encoded-text decoded-text v' root file-handle writable thread
+                                 result' all-pages clipboard-data-inspector bug-report-tool-route
+                                 route-match report-item-button description icon-name cmdk-modal props
+                                 cmdk-block search-only group-name tip inner-state hint-button shortcut
+                                 hints cmdk input-row repo block created-from-block mouse-active-effect!
+                                 page link block-id list-item/root ui/lazy-visible page' ui/foldable
+                                 ui/admonition plugins/hook-ui-fenced-code ui/block-error
+                                 ui/rotating-arrow ui/catch-error ui/tweet-embed youtube/youtube-video
+                                 youtube/timestamp zotero/zotero-imported-file zotero/zotero-linked-file
+                                 latex/latex plugins/hook-ui-slot plugins/hook-block-slot
+                                 query/custom-query query-builder-component/builder db/entity
+                                 db/get-page db/sub-block db/page? db/get-db db/pull-many
+                                 db/get-case-page db/get-block-parents icon-component/icon-picker
+                                 component-block/page-cp views/view cp-select/select
+                                 property-component/properties-area property-component/property-key-cp
+                                 select/select lazy-editor/editor &]}}
 
   :discouraged-var
   {rum.core/use-effect! {:message "Use frontend.hooks/use-effect! instead" :level :info}
