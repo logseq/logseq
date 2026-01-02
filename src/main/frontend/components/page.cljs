@@ -10,7 +10,7 @@
              [frontend.components.lazy :as lazy]
              [frontend.components.library :as library]
              [frontend.components.objects :as objects]
-             [frontend.components.performance :as perf]
+             [frontend.performance :as perf]
              [frontend.components.plugins :as plugins]
              [frontend.components.property.config :as property-config]
              [frontend.components.query :as query]
