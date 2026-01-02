@@ -68,7 +68,7 @@ jobs:
 
       - name: Get yarn cache directory path
         id: yarn-cache-dir-path
-        run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
+        run: echo "dir=$(yarn cache dir)" >> "$GITHUB_OUTPUT"
 
       - name: Cache yarn cache directory
         uses: actions/cache@v4
@@ -102,7 +102,7 @@ jobs:
         id: ref
         run: |
           pkgver=$(node ./scripts/get-pkg-version.js "${{ inputs.build-target || github.event.inputs.build-target }}")
-          echo "version=$pkgver" >> $GITHUB_OUTPUT
+          echo "version=$pkgver" >> "$GITHUB_OUTPUT"
 
       - name: Update Nightly APP Version
         if: ${{ inputs.build-target == '' || inputs.build-target == 'nightly' || github.event.inputs.build-target == 'nightly' }}
@@ -112,7 +112,7 @@ jobs:
 
       - name: Set Build Environment Variables
         run: |
-          echo "ENABLE_FILE_SYNC_PRODUCTION=${{ inputs.enable-file-sync-production || github.event.inputs.enable-file-sync-production || inputs.build-target == '' }}" >> $GITHUB_ENV
+          echo "ENABLE_FILE_SYNC_PRODUCTION=${{ inputs.enable-file-sync-production || github.event.inputs.enable-file-sync-production || inputs.build-target == '' }}" >> "$GITHUB_ENV"
 
       - name: Compile CLJS - app variant, use es6 instead of es-next
         run: yarn install && yarn release-mobile
@@ -121,12 +121,16 @@ jobs:
           LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
 
       - name: Upload Sentry Sourcemaps (beta only)
-        if: ${{ secrets.SENTRY_AUTH_TOKEN != '' && (inputs.build-target == 'beta' || github.event.inputs.build-target == 'beta') }}
+        if: ${{ inputs.build-target == 'beta' || github.event.inputs.build-target == 'beta' }}
         run: |
+          if [ -z "$SENTRY_AUTH_TOKEN" ]; then
+            echo "SENTRY_AUTH_TOKEN not set, skipping Sentry upload"
+            exit 0
+          fi
           curl -sL https://sentry.io/get-cli/ | SENTRY_CLI_VERSION=2.58.4 bash
           release_name="logseq-android@${{ steps.ref.outputs.version }}"
           sentry-cli releases new "${release_name}"
-          sentry-cli releases files "${release_name}" upload-sourcemaps --ext map --ext js ./static/js --url-prefix '~/static/js'
+          sentry-cli releases files "${release_name}" upload-sourcemaps --ext map --ext js ./static/js --url-prefix "${HOME}/static/js"
           sentry-cli releases finalize "${release_name}"
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
@@ -148,26 +152,30 @@ jobs:
           LOGSEQ_SENTRY_DSN: ${{ secrets.LOGSEQ_SENTRY_DSN }}
 
       - name: Sign Android APK
-        if: ${{ secrets.ANDROID_KEYSTORE != '' && secrets.ANDROID_KEYSTORE_PASSWORD != '' }}
         run: |
-          echo ${{ secrets.ANDROID_KEYSTORE }} | base64 -d > keystore.jks
-          $ANDROID_SDK_ROOT/build-tools/34.0.0/apksigner sign \
-            --ks keystore.jks --ks-pass "pass:${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
+          if [ -z "$ANDROID_KEYSTORE" ] || [ -z "$ANDROID_KEYSTORE_PASSWORD" ]; then
+            echo "Android signing secrets not available, skipping APK signing"
+            exit 0
+          fi
+          echo "$ANDROID_KEYSTORE" | base64 -d > keystore.jks
+          "$ANDROID_SDK_ROOT"/build-tools/34.0.0/apksigner sign \
+            --ks keystore.jks --ks-pass "pass:$ANDROID_KEYSTORE_PASSWORD" \
             --in app/build/outputs/apk/release/app-release-unsigned.apk \
             --out app-signed.apk
         working-directory: android
+        env:
+          ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
 
       - name: Rename Signed APK
-        if: ${{ secrets.ANDROID_KEYSTORE != '' && secrets.ANDROID_KEYSTORE_PASSWORD != '' }}
         run: |
-          mkdir builds
-          mv android/app-signed.apk ./builds/Logseq-android-${{ steps.ref.outputs.version }}.apk
-
-      - name: Rename Unsigned APK
-        if: ${{ secrets.ANDROID_KEYSTORE == '' || secrets.ANDROID_KEYSTORE_PASSWORD == '' }}
-        run: |
-          mkdir builds
-          mv android/app/build/outputs/apk/release/app-release-unsigned.apk ./builds/Logseq-android-${{ steps.ref.outputs.version }}-unsigned.apk
+          if [ -f "android/app-signed.apk" ]; then
+            mkdir -p builds
+            mv android/app-signed.apk ./builds/Logseq-android-${{ steps.ref.outputs.version }}.apk
+          else
+            mkdir -p builds
+            mv android/app/build/outputs/apk/release/app-release-unsigned.apk ./builds/Logseq-android-${{ steps.ref.outputs.version }}-unsigned.apk
+          fi
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4

@@ -78,7 +78,7 @@ jobs:
 
       - name: Get yarn cache directory path
         id: yarn-cache-dir-path
-        run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
+        run: echo "dir=$(yarn cache dir)" >> "$GITHUB_OUTPUT"
 
       - name: Cache yarn cache directory
         uses: actions/cache@v4
@@ -112,7 +112,7 @@ jobs:
         id: ref
         run: |
           pkgver=$(node ./scripts/get-pkg-version.js "${{ github.event.inputs.build-target }}")
-          echo "version=$pkgver" >> $GITHUB_OUTPUT
+          echo "version=$pkgver" >> "$GITHUB_OUTPUT"
 
       - name: Do Not Overwrite Existing Release
         if: ${{ github.event.inputs.build-target == 'beta' }}
@@ -131,8 +131,8 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' }}
         # if scheduled, use default settings
         run: |
-          echo "ENABLE_PLUGINS=${{ github.event_name == 'schedule' || github.event.inputs.enable-plugins == 'true' }}" >> $GITHUB_ENV
-          echo "ENABLE_FILE_SYNC_PRODUCTION=${{ github.event_name == 'schedule' || github.event.inputs.enable-file-sync-production == 'true' }}" >> $GITHUB_ENV
+          echo "ENABLE_PLUGINS=${{ github.event_name == 'schedule' || github.event.inputs.enable-plugins == 'true' }}" >> "$GITHUB_ENV"
+          echo "ENABLE_FILE_SYNC_PRODUCTION=${{ github.event_name == 'schedule' || github.event.inputs.enable-file-sync-production == 'true' }}" >> "$GITHUB_ENV"
 
       - name: Compile CLJS
         run: yarn install && gulp build && yarn cljs:release-electron && yarn webpack-app-build
@@ -158,12 +158,16 @@ jobs:
         working-directory: ./static
 
       - name: Upload Sentry Sourcemaps (beta only)
-        if: ${{ secrets.SENTRY_AUTH_TOKEN != '' && github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
         run: |
+          if [ -z "$SENTRY_AUTH_TOKEN" ]; then
+            echo "SENTRY_AUTH_TOKEN not set, skipping Sentry upload"
+            exit 0
+          fi
           curl -sL https://sentry.io/get-cli/ | SENTRY_CLI_VERSION=2.58.4 bash
           release_name="logseq@${{ steps.ref.outputs.version }}"
           sentry-cli releases new "${release_name}"
-          sentry-cli releases files "${release_name}" upload-sourcemaps --ext map --ext js ./static/js --url-prefix '~/static/js'
+          sentry-cli releases files "${release_name}" upload-sourcemaps --ext map --ext js ./static/js --url-prefix "${HOME}/static/js"
           sentry-cli releases finalize "${release_name}"
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
@@ -189,7 +193,7 @@ jobs:
         id: ref
         run: |
           pkgver=$(cat ./static/VERSION)
-          echo "version=$pkgver" >> $GITHUB_OUTPUT
+          echo "version=$pkgver" >> "$GITHUB_OUTPUT"
 
       - name: Install Node.js, NPM and Yarn
         uses: actions/setup-node@v4
@@ -236,7 +240,7 @@ jobs:
         id: ref
         run: |
           pkgver=$(cat ./static/VERSION)
-          echo "version=$pkgver" >> $GITHUB_OUTPUT
+          echo "version=$pkgver" >> "$GITHUB_OUTPUT"
 
       - name: List Static Files
         run: ls -al ./static
@@ -247,13 +251,14 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Install Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Get yarn cache directory path
         id: yarn-cache-dir-path
-        run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
+        run: echo "dir=$(yarn cache dir)" >> "$GITHUB_OUTPUT"
+
       - name: Cache yarn cache directory
         uses: actions/cache@v4
         id: yarn-cache
@@ -261,10 +266,10 @@ jobs:
           path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
           key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
           restore-keys: |
-            ${{ runner.os }}-yarn-
+             ${{ runner.os }}-yarn-
 
       - name: Signing By Apple Developer ID
-        if: ${{ secrets.APPLE_CERTIFICATES_P12 != '' && secrets.APPLE_CERTIFICATES_P12_PASSWORD != '' }}
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         uses: apple-actions/import-codesign-certs@v1
         with:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATES_P12 }}
@@ -312,7 +317,7 @@ jobs:
         id: ref
         run: |
           pkgver=$(cat ./static/VERSION)
-          echo "version=$pkgver" >> $GITHUB_OUTPUT
+          echo "version=$pkgver" >> "$GITHUB_OUTPUT"
 
       - name: Install Node.js, NPM and Yarn
         uses: actions/setup-node@v4
@@ -321,7 +326,8 @@ jobs:
 
       - name: Get yarn cache directory path
         id: yarn-cache-dir-path
-        run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
+        run: echo "dir=$(yarn cache dir)" >> "$GITHUB_OUTPUT"
+
       - name: Cache yarn cache directory
         uses: actions/cache@v4
         id: yarn-cache
@@ -332,12 +338,12 @@ jobs:
             ${{ runner.os }}-arm64-yarn-
 
       - name: Install Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Signing By Apple Developer ID
-        if: ${{ secrets.APPLE_CERTIFICATES_P12 != '' && secrets.APPLE_CERTIFICATES_P12_PASSWORD != '' }}
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         uses: apple-actions/import-codesign-certs@v1
         with:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATES_P12 }}
@@ -389,8 +395,8 @@ jobs:
 
   nightly-release:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.build-target == 'nightly' }}
-    needs: [ build-macos-x64, build-macos-arm64, build-linux, build-android ]
-    runs-on: ubuntu-18.04
+    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-android ]
+    runs-on: ubuntu-22.04
     steps:
       - name: Download MacOS x64 Artifacts
         uses: actions/download-artifact@v4
@@ -436,10 +442,7 @@ jobs:
 
       - name: Generate SHA256 checksums
         run: |
-          sha256sum *-darwin-* > SHA256SUMS.txt
-          sha256sum *-win-* >> SHA256SUMS.txt
-          sha256sum *-linux-* >> SHA256SUMS.txt
-          sha256sum *.apk >> SHA256SUMS.txt
+          { sha256sum ./*-darwin-*; sha256sum ./*-win-*; sha256sum ./*-linux-*; sha256sum ./*.apk; } > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
       - name: List files
@@ -469,7 +472,7 @@ jobs:
   release:
     # NOTE: For now, we only have beta channel to be released on Github
     if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
-    needs: [ build-macos-x64, build-macos-arm64, build-linux ]
+    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64]
     runs-on: ubuntu-latest
     steps:
       - name: Download MacOS x64 Artifacts
@@ -521,8 +524,8 @@ jobs:
       - name: Retrieve tag version
         id: ref
         run: |
-          pkgver=$(cat VERSION)
-          echo "version=$pkgver" >> $GITHUB_OUTPUT
+           pkgver=$(cat ./static/VERSION)
+           echo "version=$pkgver" >> "$GITHUB_OUTPUT"
 
       - name: Fix .nupkg name in RELEASES file
         run: |
@@ -530,15 +533,11 @@ jobs:
 
       - name: Generate SHA256 checksums
         run: |
-          sha256sum *-darwin-* > SHA256SUMS.txt
-          sha256sum *-win-* >> SHA256SUMS.txt
-          sha256sum *-linux-* >> SHA256SUMS.txt
-          sha256sum *.apk >> SHA256SUMS.txt
-          sha256sum RELEASES >> SHA256SUMS.txt
+          { sha256sum ./*-darwin-*; sha256sum ./*-win-*; sha256sum ./*-linux-*; sha256sum ./*.apk; sha256sum RELEASES; } > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
       - name: Create Release Draft
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
