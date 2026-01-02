@@ -92,7 +92,7 @@
         "cljs:release-electron": "clojure -M:cljs release app db-worker inference-worker electron --debug && clojure -M:cljs release publishing",
         "cljs:release-app": "clojure -M:cljs release app db-worker inference-worker",
         "cljs:release-publishing": "clojure -M:cljs release app publishing",
-        "cljs:test": "clojure -M:test compile test",
+        "cljs:test": "cross-env GITLIBS_COMMAND='git clone https' clojure -M:test compile test",
         "cljs:run-test": "node static/tests.js",
         "cljs:dev-release-app": "clojure -M:cljs release app db-worker inference-worker --config-merge \"{:closure-defines {frontend.config/DEV-RELEASE true}}\"",
         "cljs:dev-release-electron": "clojure -M:cljs release app db-worker inference-worker electron --debug --config-merge \"{:closure-defines {frontend.config/DEV-RELEASE true}}\" && clojure -M:cljs release publishing",

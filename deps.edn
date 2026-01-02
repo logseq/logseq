@@ -28,8 +28,6 @@
   org.clojure/core.async                {:mvn/version "1.6.673"}
   thheller/shadow-cljs                  {:mvn/version "2.28.23"}
   expound/expound                       {:mvn/version "0.8.6"}
-  com.lambdaisland/glogi                {:git/url "https://github.com/lambdaisland/glogi"
-                                         :git/sha "30328a045141717aadbbb693465aed55f0904976"}
   camel-snake-kebab/camel-snake-kebab   {:mvn/version "0.4.3"}
   instaparse/instaparse                 {:mvn/version "1.4.10"}
   org.clojars.mmb90/cljs-cache          {:mvn/version "0.1.4"}
@@ -45,11 +43,11 @@
   missionary/missionary                 {:mvn/version "b.46"}
   meander/epsilon                       {:mvn/version "0.0.650"}
 
-  io.github.open-spaced-repetition/cljc-fsrs {:git/sha "eeef3520df664e51c3d0ba2031ec2ba071635442"
+  io.github.open-spaced-repetition/cljc-fsrs {:sha "eeef3520df664e51c3d0ba2031ec2ba071635442"
                                               :git/url "https://github.com/open-spaced-repetition/cljc-fsrs"}
   tick/tick                              {:mvn/version "0.7.5"}
   io.github.rcmerci/cljs-http-missionary {:git/url "https://github.com/RCmerci/cljs-http-missionary"
-                                          :git/sha "d61ce7e29186de021a2a453a8cee68efb5a88440"}}
+                                           :sha "d61ce7e29186de021a2a453a8cee68efb5a88440"}}
 
  :aliases {:cljs {:extra-paths ["src/dev-cljs/" "src/test/" "src/electron/"]
                   :extra-deps  {org.clojure/tools.namespace      {:mvn/version "0.2.11"}
