@@ -123,10 +123,6 @@ jobs:
       - name: Upload Sentry Sourcemaps (beta only)
         if: ${{ inputs.build-target == 'beta' || github.event.inputs.build-target == 'beta' }}
         run: |
-          if [ -z "$SENTRY_AUTH_TOKEN" ]; then
-            echo "SENTRY_AUTH_TOKEN not set, skipping Sentry upload"
-            exit 0
-          fi
           curl -sL https://sentry.io/get-cli/ | SENTRY_CLI_VERSION=2.58.4 bash
           release_name="logseq-android@${{ steps.ref.outputs.version }}"
           sentry-cli releases new "${release_name}"
@@ -153,19 +149,12 @@ jobs:
 
       - name: Sign Android APK
         run: |
-          if [ -z "$ANDROID_KEYSTORE" ] || [ -z "$ANDROID_KEYSTORE_PASSWORD" ]; then
-            echo "Android signing secrets not available, skipping APK signing"
-            exit 0
-          fi
-          echo "$ANDROID_KEYSTORE" | base64 -d > keystore.jks
+          echo "${{ secrets.ANDROID_KEYSTORE }}" | base64 -d > keystore.jks
           "$ANDROID_SDK_ROOT"/build-tools/34.0.0/apksigner sign \
-            --ks keystore.jks --ks-pass "pass:$ANDROID_KEYSTORE_PASSWORD" \
+            --ks keystore.jks --ks-pass "pass:${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
             --in app/build/outputs/apk/release/app-release-unsigned.apk \
             --out app-signed.apk
         working-directory: android
-        env:
-          ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
 
       - name: Rename Signed APK
         run: |

@@ -160,10 +160,6 @@ jobs:
       - name: Upload Sentry Sourcemaps (beta only)
         if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
         run: |
-          if [ -z "$SENTRY_AUTH_TOKEN" ]; then
-            echo "SENTRY_AUTH_TOKEN not set, skipping Sentry upload"
-            exit 0
-          fi
           curl -sL https://sentry.io/get-cli/ | SENTRY_CLI_VERSION=2.58.4 bash
           release_name="logseq@${{ steps.ref.outputs.version }}"
           sentry-cli releases new "${release_name}"
