@@ -6,7 +6,6 @@
   (:require ["@sentry/react" :as Sentry]
             [cljs-bean.core :as bean]
             [clojure.core.async :as async]
-            [clojure.core.async.interop :refer [p->c]]
             [clojure.string :as string]
             [frontend.commands :as commands]
             [frontend.components.rtc.indicator :as indicator]
@@ -16,11 +15,7 @@
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
             [frontend.db.react :as react]
-            [frontend.db.transact :as db-transact]
             [frontend.extensions.fsrs :as fsrs]
-            [frontend.fs :as fs]
-            [frontend.fs.sync :as sync]
-            [frontend.fs.watcher-handler :as fs-watcher]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.code :as code-handler]
             [frontend.handler.common.page :as page-common-handler]
@@ -48,7 +43,6 @@
             [frontend.quick-capture :as quick-capture]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.util.persist-var :as persist-var]
             [goog.dom :as gdom]
             [lambdaisland.glogi :as log]
             [logseq.db.frontend.schema :as db-schema]
@@ -59,47 +53,24 @@
 
 (defmulti handle first)
 
-(defn file-sync-restart! []
-  (async/go (async/<! (p->c (persist-var/load-vars)))
-            (async/<! (sync/<sync-stop))
-            (some-> (sync/<sync-start) async/<!)))
-
-(defn file-sync-stop! []
-  (async/go (async/<! (p->c (persist-var/load-vars)))
-            (async/<! (sync/<sync-stop))))
-
 (defmethod handle :graph/added [[_ repo {:keys [empty-graph?]}]]
   (search-handler/rebuild-indices!)
   (plugin-handler/hook-plugin-app :graph-after-indexed {:repo repo :empty-graph? empty-graph?})
-  (route-handler/redirect-to-home!)
-  (when-let [dir-name (and (not (config/db-based-graph? repo)) (config/get-repo-dir repo))]
-    (fs/watch-dir! dir-name))
-  (file-sync-restart!))
+  (route-handler/redirect-to-home!))
 
 (defmethod handle :init/commands [_]
   (page-handler/init-commands!))
 
-(defmethod handle :graph/unlinked [repo current-repo]
-  (when (= (:url repo) current-repo)
-    (file-sync-restart!)))
-
 (defn- graph-switch
   [graph]
   (react/clear-query-state!)
-  (let [db-based? (config/db-based-graph? graph)]
-    (state/set-current-repo! graph)
-    (page-handler/init-commands!)
-         ;; load config
-    (repo-config-handler/restore-repo-config! graph)
-    (when-not (= :draw (state/get-current-route))
-      (route-handler/redirect-to-home!))
-    (when-not db-based?
-           ;; graph-switch will trigger a rtc-start automatically
-           ;; (rtc-handler/<rtc-start! graph)
-      (file-sync-restart!))
-    (when-let [dir-name (and (not db-based?) (config/get-repo-dir graph))]
-      (fs/watch-dir! dir-name))
-    (graph-handler/settle-metadata-to-local! {:last-seen-at (js/Date.now)})))
+  (state/set-current-repo! graph)
+  (page-handler/init-commands!)
+  ;; load config
+  (repo-config-handler/restore-repo-config! graph)
+  (when-not (= :draw (state/get-current-route))
+    (route-handler/redirect-to-home!))
+  (graph-handler/settle-metadata-to-local! {:last-seen-at (js/Date.now)}))
 
 ;; Parameters for the `persist-db` function, to show the notification messages
 (defn- graph-switch-on-persisted
@@ -114,24 +85,16 @@
      (repo-handler/refresh-repos!))))
 
 (defmethod handle :graph/switch [[_ graph opts]]
-  (export/cancel-db-backup!)
-  (persist-db/export-current-graph!)
-  (state/set-state! :db/async-queries {})
-  (st/refresh!)
-
-  (p/let [writes-finished? (state/<invoke-db-worker :thread-api/file-writes-finished? (state/get-current-repo))
-          request-finished? (db-transact/request-finished?)]
-    (if (not writes-finished?) ; TODO: test (:sync-graph/init? @state/state)
-      (do
-        (log/info :graph/switch (cond->
-                                 {:request-finished? request-finished?
-                                  :file-writes-finished? writes-finished?}
-                                  (false? request-finished?)
-                                  (assoc :unfinished-requests? @db-transact/*unfinished-request-ids)))
-        (notification/show!
-         "Please wait seconds until all changes are saved for the current graph."
-         :warning))
-      (graph-switch-on-persisted graph opts))))
+  (let [switch-promise
+        (p/do!
+         (export/cancel-db-backup!)
+         (persist-db/export-current-graph!)
+         (state/set-state! :db/async-queries {})
+         (st/refresh!)
+         (graph-switch-on-persisted graph opts))]
+    (p/then switch-promise
+            (fn [_]
+              (export/backup-db-graph (state/get-current-repo))))))
 
 (defmethod handle :graph/open-new-window [[_ev target-repo]]
   (ui-handler/open-new-window-or-tab! target-repo))
@@ -145,10 +108,12 @@
     (page-handler/<create! page-name opts)))
 
 (defmethod handle :page/deleted [[_ repo page-name file-path tx-meta]]
-  (page-common-handler/after-page-deleted! repo page-name file-path tx-meta))
+  (when-not (util/mobile?)
+    (page-common-handler/after-page-deleted! repo page-name file-path tx-meta)))
 
 (defmethod handle :page/renamed [[_ repo data]]
-  (page-common-handler/after-page-renamed! repo data))
+  (when-not (util/mobile?)
+    (page-common-handler/after-page-renamed! repo data)))
 
 (defmethod handle :page/create-today-journal [[_ _repo]]
   (p/let [_ (page-handler/create-today-journal!)]
@@ -157,6 +122,7 @@
 (defmethod handle :graph/sync-context []
   (let [context {:dev? config/dev?
                  :node-test? util/node-test?
+                 :mobile? (util/mobile?)
                  :validate-db-options (:dev/validate-db-options (state/get-config))
                  :importing? (:graph/importing @state/state)
                  :date-formatter (state/get-date-formatter)
@@ -165,7 +131,6 @@
                  :export-bullet-indentation (state/get-export-bullet-indentation)
                  :preferred-format (state/get-preferred-format)
                  :journals-directory (config/get-journals-directory)
-                 :whiteboards-directory (config/get-whiteboards-directory)
                  :pages-directory (config/get-pages-directory)}]
     (state/<invoke-db-worker :thread-api/set-context context)))
 
@@ -174,43 +139,24 @@
 ;; FIXME: config may not be loaded when the graph is ready.
 (defmethod handle :graph/ready
   [[_ repo]]
-  (when (config/local-file-based-graph? repo)
-    (p/let [dir               (config/get-repo-dir repo)
-            dir-exists?       (fs/dir-exists? dir)]
-      (when (and (not dir-exists?)
-                 (not util/nfs?))
-        (state/pub-event! [:graph/dir-gone dir]))))
-  (let [db-based? (config/db-based-graph? repo)]
-    (p/do!
-     (state/pub-event! [:graph/sync-context])
-    ;; re-render-root is async and delegated to rum, so we need to wait for main ui to refresh
-     (when (util/mobile?)
-       (state/pub-event! [:mobile/post-init]))
-     ;; FIXME: an ugly implementation for redirecting to page on new window is restored
-     (repo-handler/graph-ready! repo)
-     (when-not config/publishing?
-       (if db-based?
-         (export/auto-db-backup! repo {:backup-now? true})
-         (fs-watcher/load-graph-files! repo))))))
+  ;; FIXME: an ugly implementation for redirecting to page on new window is restored
+  (repo-handler/graph-ready! repo))
 
 (defmethod handle :instrument [[_ {:keys [type payload] :as opts}]]
   (when-not (empty? (dissoc opts :type :payload))
     (js/console.error "instrument data-map should only contains [:type :payload]"))
   (posthog/capture type payload))
 
-(defmethod handle :capture-error [[_ {:keys [error payload]}]]
-  (let [[user-uuid graph-uuid tx-id] @sync/graphs-txid
-        payload (merge
+(defmethod handle :capture-error [[_ {:keys [error payload extra]}]]
+  (let [payload (merge
                  {:schema-version (str db-schema/version)
-                  :db-schema-version (when-let [db (frontend.db/get-db)]
-                                       (str (:kv/value (frontend.db/entity db :logseq.kv/schema-version))))
-                  :user-id user-uuid
-                  :graph-id graph-uuid
-                  :tx-id tx-id
-                  :db-based (config/db-based-graph? (state/get-current-repo))}
+                  :db-schema-version (when-let [db (db/get-db)]
+                                       (str (:kv/value (db/entity db :logseq.kv/schema-version))))
+                  :db-based true}
                  payload)]
     (Sentry/captureException error
-                             (bean/->js {:tags payload}))))
+                             (bean/->js {:tags payload
+                                         :extra extra}))))
 
 (defmethod handle :exec-plugin-cmd [[_ {:keys [pid cmd action]}]]
   (commands/exec-plugin-simple-command! pid cmd action))
@@ -222,9 +168,6 @@
 
 (defmethod handle :mobile/keyboard-will-show [[_ keyboard-height]]
   (let [_main-node (util/app-scroll-container-node)]
-    (state/set-state! :mobile/show-action-bar? false)
-    (when (= (state/sub :editor/record-status) "RECORDING")
-      (state/set-state! :mobile/show-recording-bar? true))
     (when-let [^js html (js/document.querySelector ":root")]
       (.setProperty (.-style html) "--ls-native-kb-height" (str keyboard-height "px"))
       (.add (.-classList html) "has-mobile-keyboard")
@@ -237,8 +180,6 @@
 
 (defmethod handle :mobile/keyboard-will-hide [[_]]
   (let [main-node (util/app-scroll-container-node)]
-    (when (= (state/sub :editor/record-status) "RECORDING")
-      (state/set-state! :mobile/show-recording-bar? false))
     (when-let [^js html (js/document.querySelector ":root")]
       (.removeProperty (.-style html) "--ls-native-kb-height")
       (.setProperty (.-style html) "--ls-native-toolbar-opacity" 0)
@@ -270,9 +211,11 @@
 
 (defmethod handle :graph/restored [[_ graph]]
   (when graph (assets-handler/ensure-assets-dir! graph))
+  (state/pub-event! [:graph/sync-context])
+  (export/auto-db-backup! graph)
   (rtc-flows/trigger-rtc-start graph)
   (fsrs/update-due-cards-count)
-  (when-not (mobile-util/native-ios?)
+  (when-not (mobile-util/native-platform?)
     (state/pub-event! [:graph/ready graph])))
 
 (defmethod handle :whiteboard-link [[_ shapes]]
@@ -408,11 +351,10 @@
       (shui/popup-hide! :download-rtc-graph)))
    (p/catch (fn [e]
               (println "RTC download graph failed, error:")
-              (js/console.error e)
-              (when (util/mobile?)
-                (shui/popup-hide! :download-rtc-graph)
-                ;; TODO: notify error
-                )))))
+              (log/error :rtc-download-graph-failed e)
+              (shui/popup-hide! :download-rtc-graph)
+              ;; TODO: notify error
+              ))))
 
 ;; db-worker -> UI
 (defmethod handle :db/sync-changes [[_ data]]

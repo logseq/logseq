@@ -1,16 +1,12 @@
 (ns frontend.components.query
   (:require [clojure.string :as string]
-            [frontend.components.file-based.query :as file-query]
-            [frontend.components.file-based.query-table :as query-table]
             [frontend.components.query.result :as query-result]
             [frontend.components.query.view :as query-view]
-            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.react :as react]
             [frontend.extensions.sci :as sci]
-            [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -24,17 +20,14 @@
     (when (seq queries)
       (boolean (some #(= % title) (map :title queries))))))
 
-;; TODO: Split this into file and DB graph versions. DB graph needlessly coupled to file graph args
 (rum/defcs custom-query-inner < rum/static
-  [state {:keys [db-graph? dsl-query?] :as config} {:keys [query breadcrumb-show?]}
+  [state {:keys [dsl-query?] :as config} {:keys [query breadcrumb-show?]}
    {:keys [query-error-atom
            current-block
-           table?
-           page-list?
            view-f
            result
            group-by-page?]}]
-  (let [{:keys [->hiccup ->elem inline-text page-cp map-inline]} config
+  (let [{:keys [->hiccup]} config
         *query-error query-error-atom
         only-blocks? (:block/uuid (first result))
         blocks-grouped-by-page? (and group-by-page?
@@ -60,15 +53,13 @@
                            (str error)]))]
            (util/hiccup-keywordize result))
 
-         (and db-graph? (not (:built-in-query? config)))
-         (when-let [query (:logseq.property/query current-block)]
-           (when-not (string/blank? (:block/title query))
-             (query-view/query-result (assoc config :id (str (:block/uuid current-block)))
+         (not (:built-in-query? config))
+         (when-let [query-block (:logseq.property/query current-block)]
+           (when-not (string/blank? (:block/title query-block))
+             (query-view/query-result (assoc config
+                                             :id (str (:block/uuid current-block))
+                                             :query query)
                                       current-block result)))
-
-         (and (not db-graph?)
-              (or page-list? table?))
-         (query-table/result-table config current-block result {:page? page-list?} map-inline page-cp ->elem inline-text)
 
          ;; Normally displays built-in-query results
          (and (seq result) (or only-blocks? blocks-grouped-by-page?))
@@ -134,7 +125,7 @@
              (assoc state
                     ::result (atom nil)
                     ::collapsed? (atom (or (:collapsed? q) (:collapsed? config))))))}
-  [state {:keys [*query-error db-graph? dsl-query? built-in-query? table? current-block] :as config}
+  [state {:keys [*query-error dsl-query? built-in-query? table? current-block] :as config}
    {:keys [builder query view _collapsed?] :as q}]
   (let [*result (::result state)
         *collapsed? (::collapsed? state)
@@ -167,18 +158,6 @@
       [:code (if dsl-query? (str "Results for " (pr-str query)) "Advanced query results")]
       (when-not (and built-in-query? (empty? result))
         [:div.custom-query (get config :attr {})
-         (when (and (not db-graph?) (not built-in-query?))
-           (file-query/custom-query-header config
-                                           q
-                                           {:query-error-atom *query-error
-                                            :current-block current-block
-                                            :table? table?
-                                            :view-f view-f
-                                            :page-list? page-list?
-                                            :*result *result
-                                            :result result
-                                            :collapsed? collapsed?}))
-
          (when (and dsl-query? builder) builder)
 
          (if built-in-query?
@@ -196,38 +175,23 @@
 
 (rum/defcs custom-query < rum/static
   {:init (fn [state]
-           (let [db-graph? (config/db-based-graph? (state/get-current-repo))
-                 [{:keys [dsl-query? built-in-query?] :as config}
-                  {:keys [collapsed?]}] (:rum/args state)]
-             ;; collapsed? not needed for db graphs
-             (when (not db-graph?)
-               (when-not (or built-in-query? dsl-query?)
-                 (when collapsed?
-                   (editor-handler/collapse-block! (or (:block/uuid (:block config))
-                                                       (:block/uuid config)))))))
            (assoc state :query-error (atom nil)))}
   [state {:keys [built-in-query?] :as config}
-   {:keys [query collapsed?] :as q}]
+   {:keys [collapsed?] :as q}]
   (ui/catch-error
    (ui/block-error "Query Error:" {:content (:query q)})
    (let [*query-error (:query-error state)
-         db-graph? (config/db-based-graph? (state/get-current-repo))
          current-block-uuid (or (:block/uuid (:block config))
                                 (:block/uuid config))
          current-block (db/entity [:block/uuid current-block-uuid])
         ;; Get query result
-         collapsed?' (calculate-collapsed? current-block current-block-uuid {:collapsed? (if-not db-graph? collapsed? false)})
+         collapsed?' (calculate-collapsed? current-block current-block-uuid {:collapsed? false})
          built-in-collapsed? (and collapsed? built-in-query?)
-         table? (when-not db-graph?
-                  (or (get-in current-block [:block/properties :query-table])
-                      (and (string? query) (string/ends-with? (string/trim query) "table"))))
          config' (assoc config
-                        :db-graph? db-graph?
                         :current-block current-block
                         :current-block-uuid current-block-uuid
                         :collapsed? collapsed?'
-                        :table? table?
                         :built-in-query? (built-in-custom-query? (:title q))
                         :*query-error *query-error)]
-     (when (or built-in-collapsed? (not db-graph?) (not collapsed?'))
+     (when (or built-in-collapsed? (not collapsed?'))
        (custom-query* config' q)))))

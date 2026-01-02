@@ -2,7 +2,6 @@
   (:require ["/frontend/utils" :as utils]
             [clojure.string :as string]
             [frontend.commands :as commands]
-            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.extensions.html-parser :as html-parser]
             [frontend.format.block :as block]
@@ -30,9 +29,8 @@
                   (mldoc/->edn text format)
                   text format
                   {:page-name (:block/name (db/entity page-id))})
-          db-based? (config/db-based-graph? (state/get-current-repo))
           blocks' (cond->> (gp-block/with-parent-and-order page-id blocks)
-                    db-based?
+                    true
                     (map (fn [block]
                            (let [refs (:block/refs block)]
                              (-> block
@@ -40,7 +38,8 @@
                                  (update :block/title (fn [title]
                                                         (let [title' (db-content/replace-tags-with-id-refs title refs)]
                                                           (db-content/title-ref->id-ref title' refs)))))))))]
-      (editor-handler/paste-blocks blocks' {:keep-uuid? true}))))
+      (editor-handler/paste-blocks blocks' {:keep-uuid? true
+                                            :outliner-real-op :paste-text}))))
 
 (defn- paste-segmented-text
   [format text]
@@ -198,9 +197,7 @@
        ;; Handle internal paste
          (let [revert-cut-txs (get-revert-cut-txs blocks)
                keep-uuid? (= (state/get-block-op-type) :cut)
-               blocks (if (config/db-based-graph? (state/get-current-repo))
-                        (map (fn [b] (dissoc b :block/properties)) blocks)
-                        blocks)]
+               blocks (map (fn [b] (dissoc b :block/properties)) blocks)]
            (if embed-block?
              (when-let [block-id (:block/uuid (first blocks))]
                (when-let [current-block (state/get-edit-block)]
@@ -213,6 +210,7 @@
                     (editor-handler/api-insert-new-block! ""
                                                           {:block-uuid (:block/uuid current-block)
                                                            :sibling? true
+                                                           :outliner-op :paste
                                                            :replace-empty-target? true
                                                            :other-attrs {:block/link (:db/id (db/entity [:block/uuid block-id]))}})
                     (state/clear-edit!)))))
@@ -246,8 +244,7 @@
 (defn- paste-text-or-blocks-aux
   [input e text html]
   (if (or (editing-display-type-block?)
-          (thingatpt/markdown-src-at-point input)
-          (thingatpt/org-admonition&src-at-point input))
+          (thingatpt/markdown-src-at-point input))
     (when-not (mobile-util/native-ios?)
       (util/stop e)
       (paste-text-in-one-block-at-point))
@@ -257,13 +254,9 @@
   (when id
     (let [clipboard-data (gobj/get e "clipboardData")
           files (.-files clipboard-data)]
-      (loop [files files]
-        (when-let [file (first files)]
-          (when-let [block (state/get-edit-block)]
-            (editor-handler/upload-asset! id #js[file]
-                                          (get block :block/format :markdown)
-                                          editor-handler/*asset-uploading? true))
-          (recur (rest files))))
+      (editor-handler/upload-asset! id files
+                                    (get (state/get-edit-block) :block/format :markdown)
+                                    editor-handler/*asset-uploading? true)
       (util/stop e))))
 
 (defn editor-on-paste!
@@ -283,19 +276,8 @@
           html (.getData clipboard-data "text/html")
           text (.getData clipboard-data "text")
           has-files? (seq (.-files clipboard-data))]
-      (cond
-        (and (string/blank? text) (string/blank? html))
-        ;; When both text and html are blank, paste file if exists.
-        ;; NOTE: util/stop is not called here if no file is provided,
-        ;; so the default paste behavior of the native platform will be used.
-        (when has-files?
-          (paste-file-if-exists id e))
-
-        ;; both file attachment and text/html exist
-        (and has-files? (state/preferred-pasting-file?))
+      (if has-files?
         (paste-file-if-exists id e)
-
-        :else
         (paste-text-or-blocks-aux (state/get-input) e text html)))))
 
 (defn editor-on-paste-raw!

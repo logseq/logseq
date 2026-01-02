@@ -5,6 +5,7 @@
 
 (defonce *main-thread (atom nil))
 (defonce *infer-worker (atom nil))
+(defonce *deleted-block-uuid->db-id (atom {}))
 
 (defn- <invoke-main-thread*
   [qkw direct-pass? args-list]
@@ -56,6 +57,7 @@
 ;; repo -> pool
 (defonce *opfs-pools (atom nil))
 
+;;; ================================================================
 (defn get-sqlite-conn
   ([repo] (get-sqlite-conn repo :db))
   ([repo which-db]
@@ -73,17 +75,6 @@
 (defn get-opfs-pool
   [repo]
   (get @*opfs-pools repo))
-
-(defn tx-idle?
-  [repo & {:keys [diff]
-           :or {diff 1000}}]
-  (when repo
-    (let [last-input-time (get-in @*state [:db/latest-transact-time repo])]
-      (or
-       (nil? last-input-time)
-
-       (let [now (common-util/time-ms)]
-         (>= (- now last-input-time) diff))))))
 
 (defn set-db-latest-tx-time!
   [repo]
@@ -127,3 +118,16 @@
 (defn get-id-token
   []
   (:auth/id-token @*state))
+
+(comment
+  (defn mobile?
+    []
+    (:mobile? (get-context))))
+
+;;; ========================== mobile log ======================================
+(defonce *log (atom []))
+(defn log-append!
+  [record]
+  (swap! *log conj record)
+  (when (> (count @*log) 1000)
+    (reset! *log (subvec @*log 800))))

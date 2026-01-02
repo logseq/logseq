@@ -31,8 +31,9 @@
     (b/select-blocks 3)
     (b/toggle-property "Tags" "Page")
     (assert/assert-is-visible ".ls-page-blocks .ls-block .ls-icon-file")
-    (w/wait-for (format "#ac-0.menu-link:has-text('%s')" "Page"))
-    (k/enter)
+    (w/wait-for (format ".menu-link:has-text('%s')" "Page"))
+    (k/esc)
+    (b/toggle-property "Tags" "Page")
     (w/wait-for-not-visible ".ls-page-blocks .ls-block .ls-icon-file")))
 
 (deftest disallow-adding-page-tag-to-normal-pages
@@ -66,6 +67,7 @@
     (w/fill "input[placeholder=\"Move blocks to\"]" "Target page 2")
     (w/wait-for (w/get-by-test-id "Target page 2"))
     (.focus (w/-query ".cp__cmdk-search-input"))
+    (k/arrow-down)
     (k/enter)
     (assert/assert-have-count ".ls-page-blocks .page-blocks-inner .ls-block" 0)))
 
@@ -75,6 +77,8 @@
     (p/new-page "test page")
     (b/new-blocks ["block1" "block2" "block3"])
     (b/select-blocks 3)
+    (b/toggle-property "Tags" "Page")
+    (assert/assert-is-visible ".ls-page-blocks .ls-block .ls-icon-file")
     (k/press "ControlOrMeta+Shift+m")
     (w/fill "input[placeholder=\"Move blocks to\"]" "Library")
     (w/wait-for (w/get-by-test-id "Library"))
@@ -86,6 +90,8 @@
     (p/goto-page "test page")
     (b/new-blocks ["block4" "block5"])
     (b/select-blocks 2)
+    (b/toggle-property "Tags" "Page")
+    (assert/assert-is-visible ".ls-page-blocks .ls-block .ls-icon-file")
     (k/press "ControlOrMeta+Shift+m")
     (w/fill "input[placeholder=\"Move blocks to\"]" "Library")
     (w/wait-for (w/get-by-test-id "Library"))
@@ -94,3 +100,11 @@
     (p/goto-page "Library")
     (let [contents (set (util/get-page-blocks-contents))]
       (is (set/subset? (set ["block1" "block2" "block3" "block4" "block5"]) contents)))))
+
+(deftest create-nested-pages-in-library
+  (testing "create nested pages in Library"
+    (p/goto-page "Library")
+    (b/new-blocks ["page parent" "page child"])
+    (b/indent)
+    (b/new-block "another nested child")
+    (b/indent)))

@@ -89,20 +89,26 @@
   expected to be a coll if the property has a :many cardinality. validate-fn is
   a fn that is called directly on each value to return a truthy value.
   validate-fn varies by property type"
-  [db validate-fn [property property-val] & {:keys [new-closed-value?]}]
+  [db validate-fn [property property-val] & {:keys [new-closed-value? :closed-values-validate? _skip-strict-url-validate?]
+                                             :as validate-options}]
   ;; For debugging
   ;; (when (not (internal-ident? (:db/ident property))) (prn :validate-val (dissoc property :property/closed-values) property-val))
   (let [validate-fn' (if (db-property-type/property-types-with-db (:logseq.property/type property))
                        (fn [value]
-                         (validate-fn db value {:new-closed-value? new-closed-value?}))
+                         (validate-fn db value validate-options))
                        validate-fn)
-        validate-fn'' (if (and (db-property-type/closed-value-property-types (:logseq.property/type property))
+        validate-fn'' (if (and closed-values-validate?
+                               (db-property-type/closed-value-property-types (:logseq.property/type property))
                                ;; new closed values aren't associated with the property yet
                                (not new-closed-value?)
                                (seq (:property/closed-values property)))
                         (fn closed-value-valid? [val]
                           (and (validate-fn' val)
-                               (contains? (set (map :db/id (:property/closed-values property))) val)))
+                               (let [ids (set (map :db/id (:property/closed-values property)))
+                                     result (contains? ids val)]
+                                 (when-not result
+                                   (js/console.error (str "Error: not a closed value, id: " val ", existing choices: " ids ", property: " (:db/ident property))))
+                                 result)))
                         validate-fn')]
     (if (db-property/many? property)
       (or (every? validate-fn'' property-val)
@@ -217,6 +223,16 @@
   "Used by validate-fns which need db as input"
   nil)
 
+(def ^:dynamic *skip-strict-url-validate?*
+  "`true` allows updating a block's other property when it has invalid URL value"
+  false)
+
+(def ^:dynamic *closed-values-validate?*
+  "By default this is false because we can't ensure this when merging updates from server.
+   `true` allows for non RTC graphs to have higher data quality and avoid
+   possible UX bugs related to closed values."
+  false)
+
 (def property-tuple
   "A tuple of a property map and a property value"
   (into
@@ -231,7 +247,9 @@
               (when error-message
                 {:error/message error-message})
               (fn [tuple]
-                (validate-property-value *db-for-validate-fns* schema-fn tuple))])])
+                (validate-property-value *db-for-validate-fns* schema-fn tuple
+                                         {:skip-strict-url-validate? *skip-strict-url-validate?*
+                                          :closed-values-validate? *closed-values-validate?*}))])])
         db-property-type/built-in-validation-schemas)))
 
 (def block-properties
@@ -242,7 +260,6 @@
 
 (def block-tags
   [:and
-   ;; FIXME: Display error message instead of 'unknown error'
    property-tuple
    ;; Important to keep data integrity of built-in entities. Ensure UI doesn't accidentally modify them
    [:fn {:error/message "should only have one tag for a built-in entity"}
@@ -268,13 +285,13 @@
    [:block/tags {:optional true} block-tags]
    [:block/refs {:optional true} [:set :int]]
    [:block/tx-id {:optional true} :int]
-   [:block/collapsed? {:optional true} :boolean]])
+   [:block/collapsed? {:optional true} :boolean]
+   [:block/warning {:optional true} [:keyword]]])
 
 (def page-attrs
   "Common attributes for pages"
   [[:block/name :string]
-   [:block/title :string]
-   [:block/path-refs {:optional true} [:set :int]]])
+   [:block/title :string]])
 
 (def property-attrs
   "Common attributes for properties"
@@ -287,7 +304,7 @@
 (def normal-page
   (vec
    (concat
-    [:map
+    [:map {:error/path ["normal-page"]}
      ;; journal-day is only set for journal pages
      [:block/journal-day {:optional true} :int]
      [:block/parent {:optional true} :int]
@@ -299,14 +316,14 @@
   [:or
    (vec
     (concat
-     [:map
+     [:map {:error/path ["class-page"]}
       [:db/ident class-ident]
       [:logseq.property.class/extends [:set :int]]]
      page-attrs
      page-or-block-attrs))
    (vec
     (concat
-     [:map
+     [:map {:error/path ["class-page"]}
       [:db/ident [:= :logseq.class/Root]]]
      page-attrs
      page-or-block-attrs))])
@@ -320,7 +337,7 @@
 (def internal-property
   (vec
    (concat
-    [:map
+    [:map {:error/path ["internal-property"]}
      [:db/ident internal-property-ident]
      [:logseq.property/type (apply vector :enum (into db-property-type/internal-built-in-property-types
                                                       db-property-type/user-built-in-property-types))]
@@ -333,9 +350,10 @@
 (def user-property
   (vec
    (concat
-    [:map
+    [:map {:error/path ["user-property"]}
      [:db/ident user-property-ident]
-     [:logseq.property/type (apply vector :enum db-property-type/user-built-in-property-types)]]
+     [:logseq.property/type (apply vector :enum (into db-property-type/user-allowed-internal-property-types
+                                                      db-property-type/user-built-in-property-types))]]
     property-common-schema-attrs
     property-attrs
     page-attrs
@@ -344,9 +362,9 @@
 (def plugin-property
   (vec
    (concat
-    [:map
+    [:map {:error/path ["plugin-property"]}
      [:db/ident plugin-property-ident]
-     [:logseq.property/type (apply vector :enum (conj db-property-type/user-built-in-property-types :string))]]
+     [:logseq.property/type (apply vector :enum (concat db-property-type/user-built-in-property-types [:json :string :page]))]]
     property-common-schema-attrs
     property-attrs
     page-attrs
@@ -373,7 +391,7 @@
 (def hidden-page
   (vec
    (concat
-    [:map
+    [:map {:error/path ["hidden-page"]}
      ;; pages from :default property uses this but closed-value pages don't
      [:block/order {:optional true} block-order]
      [:logseq.property/hide? [:enum true]]]
@@ -387,7 +405,6 @@
    [:block/order block-order]
    ;; refs
    [:block/page :int]
-   [:block/path-refs {:optional true} [:set :int]]
    [:block/link {:optional true} :int]
    [:logseq.property/created-from-property {:optional true} :int]])
 
@@ -395,19 +412,18 @@
   "A (shape) block for whiteboard"
   (vec
    (concat
-    [:map]
+    [:map {:error/path ["whiteboard-block"]}]
     [[:block/title :string]
      [:block/parent :int]
      ;; These blocks only associate with pages of type "whiteboard"
-     [:block/page :int]
-     [:block/path-refs {:optional true} [:set :int]]]
+     [:block/page :int]]
     page-or-block-attrs)))
 
 (def property-value-block
   "A common property value for user properties"
   (vec
    (concat
-    [:map]
+    [:map {:error/path "property-value-block"}]
     [[:logseq.property/value [:or :string :double :boolean]]
      [:logseq.property/created-from-property :int]]
     (remove #(#{:block/title :logseq.property/created-from-property} (first %)) block-attrs)
@@ -458,7 +474,7 @@
   "A block with content and no special type or tag behavior"
   (vec
    (concat
-    [:map]
+    [:map {:error/path ["normal-block"]}]
     block-attrs
     page-or-block-attrs)))
 
@@ -472,16 +488,18 @@
   "A block tagged with #Asset"
   (vec
    (concat
-    [:map]
+    [:map {:error/path ["asset-block"]}]
     ;; TODO: Derive required property types from existing schema in frontend.property
     [[:logseq.property.asset/type :string]
      [:logseq.property.asset/checksum :string]
-     [:logseq.property.asset/size :int]]
+     [:logseq.property.asset/size :int]
+     [:logseq.property.asset/width {:optional true} :int]
+     [:logseq.property.asset/height {:optional true} :int]]
     block-attrs
     page-or-block-attrs)))
 
 (def file-block
-  [:map
+  [:map {:error/path ["file-block"]}
    [:block/uuid :uuid]
    [:block/tx-id {:optional true} :int]
    ;; App doesn't use timestamps but migrations may
@@ -495,13 +513,13 @@
 
 (def db-ident-key-val
   "A key value map with :db/ident and :kv/value"
-  [:map
+  [:map {:error/path ["db-ident-key-val"]}
    [:db/ident logseq-ident]
    [:kv/value :any]
    [:block/tx-id {:optional true} :int]])
 
 (def property-value-placeholder
-  [:map
+  [:map {:error/path ["property-value-placeholder"]}
    [:db/ident [:= :logseq.property/empty-placeholder]]
    [:block/uuid :uuid]
    [:block/tx-id {:optional true} :int]

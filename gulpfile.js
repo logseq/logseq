@@ -66,10 +66,6 @@ const common = {
   syncAssetFiles (...params) {
     return gulp.series(
       () => gulp.src([
-        './node_modules/@excalidraw/excalidraw/dist/excalidraw-assets/**',
-        '!**/*/i18n-*.js',
-      ]).pipe(gulp.dest(path.join(outputPath, 'js', 'excalidraw-assets'))),
-      () => gulp.src([
         'node_modules/katex/dist/katex.min.js',
         'node_modules/katex/dist/contrib/mhchem.min.js',
         'node_modules/html2canvas/dist/html2canvas.min.js',
@@ -79,8 +75,7 @@ const common = {
         'node_modules/marked/marked.min.js',
         'node_modules/@highlightjs/cdn-assets/highlight.min.js',
         'node_modules/@isomorphic-git/lightning-fs/dist/lightning-fs.min.js',
-        'packages/amplify/dist/amplify.js',
-        'packages/ui/dist/ui/ui.js',
+        'packages/ui/dist/ui.js',
         'node_modules/@sqlite.org/sqlite-wasm/sqlite-wasm/jswasm/sqlite3.wasm',
         'node_modules/react/umd/react.production.min.js',
         'node_modules/react/umd/react.development.js',
@@ -130,15 +125,8 @@ const common = {
         'node_modules/prop-types/prop-types.min.js',
         'node_modules/interactjs/dist/interact.min.js',
         'node_modules/photoswipe/dist/umd/*.js',
-        'packages/amplify/dist/amplify.js',
-        'packages/ui/dist/ui/ui.js',
+        'packages/ui/dist/ui.js',
         'node_modules/@sqlite.org/sqlite-wasm/sqlite-wasm/jswasm/sqlite3.wasm',
-      ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'js'))),
-      () => gulp.src([
-        'packages/ui/dist/silkhq/*.css*',
-      ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'css'))),
-      () => gulp.src([
-        'packages/ui/dist/silkhq/*.js*',
       ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'js'))),
       () => gulp.src([
         'node_modules/inter-ui/inter.css',
@@ -184,14 +172,12 @@ const common = {
   syncWorkersToMobile () {
     return gulp.src([
       path.join(outputPath, 'js/db-worker.js'),
-      path.join(outputPath, 'js/inference-worker.js'),
     ], { base: outputJsPath }).pipe(gulp.dest(mobileJsPath))
   },
 
   keepSyncWorkersToMobile () {
     return gulp.watch([
       path.join(outputPath, 'js/db-worker.js'),
-      path.join(outputPath, 'js/inference-worker.js'),
     ], { ignoreInitial: false }, common.syncWorkersToMobile)
   },
 

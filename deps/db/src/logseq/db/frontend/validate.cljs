@@ -21,42 +21,48 @@
   [closed-schema?]
   (if closed-schema? closed-db-schema-explainer db-schema-explainer))
 
-(defn validate-tx-report!
+(defn validate-tx-report
   "Validates the datascript tx-report for entities that have changed. Returns
   boolean indicating if db is valid"
-  [{:keys [db-after tx-data tx-meta]} validate-options]
-  (let [changed-ids (->> tx-data (keep :e) distinct)
-        tx-datoms (mapcat #(d/datoms db-after :eavt %) changed-ids)
-        ent-maps* (map (fn [[db-id m]]
+  [{:keys [db-after tx-data tx-meta]} {:keys [closed-schema?]}]
+  (binding [db-malli-schema/*skip-strict-url-validate?* true]
+    (let [changed-ids (->> tx-data (keep :e) distinct)
+          tx-datoms (mapcat #(d/datoms db-after :eavt %) changed-ids)
+          ent-maps* (map (fn [[db-id m]]
                          ;; Add :db/id for debugging
-                         (assoc m :db/id db-id))
-                       (db-malli-schema/datoms->entity-maps tx-datoms {:entity-fn #(d/entity db-after %)}))
-        ent-maps (db-malli-schema/update-properties-in-ents db-after ent-maps*)
-        validator (get-schema-validator (:closed-schema? validate-options))]
-    (binding [db-malli-schema/*db-for-validate-fns* db-after]
-      (let [invalid-ent-maps (remove
+                           (assoc m :db/id db-id))
+                         (db-malli-schema/datoms->entity-maps tx-datoms {:entity-fn #(d/entity db-after %)}))
+          ent-maps (db-malli-schema/update-properties-in-ents db-after ent-maps*)
+          validator (get-schema-validator closed-schema?)]
+      (binding [db-malli-schema/*db-for-validate-fns* db-after]
+        (let [invalid-ent-maps (remove
                               ;; remove :db/id as it adds needless declarations to schema
-                              #(validator [(dissoc % :db/id)])
-                              ent-maps)]
-        (prn "changed eids:" changed-ids :tx-meta tx-meta)
-        (if (seq invalid-ent-maps)
-          (let [explainer (get-schema-explainer (:closed-schema? validate-options))]
-            (prn "Invalid datascript entities detected amongst changed entity ids:" changed-ids)
-            (doseq [m invalid-ent-maps]
-              (let [m' (update m :block/properties (fn [properties]
-                                                     (map (fn [[p v]]
-                                                            [(:db/ident p) v])
-                                                          properties)))
-                    data {:entity-map m'
-                          :errors (me/humanize (explainer [(dissoc m :db/id)]))}]
-                (try
-                  (pprint/pprint data)
-                  (catch :default _e
-                    (prn data)))))
-            false)
-          true)))))
+                                #(validator [(dissoc % :db/id)])
+                                ent-maps)]
+          (if (seq invalid-ent-maps)
+            (do
+              (prn "Invalid datascript entities detected amongst changed entity ids:" changed-ids :tx-meta tx-meta)
+              (let [explainer (get-schema-explainer closed-schema?)
+                    errors (doall
+                            (map
+                             (fn [m]
+                               (let [m' (update m :block/properties (fn [properties]
+                                                                      (map (fn [[p v]]
+                                                                             [(:db/ident p) v])
+                                                                           properties)))
+                                     data {:entity-map m'
+                                           :errors (me/humanize (explainer [(dissoc m :db/id)]))}]
+                                 (try
+                                   (pprint/pprint data)
+                                   (catch :default _e
+                                     (prn data)))
+                                 data))
+                             invalid-ent-maps))]
 
-(defn group-errors-by-entity
+                [false errors]))
+            [true nil]))))))
+
+(defn- group-errors-by-entity
   "Groups malli errors by entities. db is used for providing more debugging info"
   [db ent-maps errors]
   (assert (vector? ent-maps) "Must be a vec for grouping to work")
@@ -68,25 +74,13 @@
                            ;; Provide additional page info for debugging
                            (:block/page ent)
                            (update :block/page
-                                   (fn [id] (select-keys (d/entity db id)
-                                                         [:block/name :block/tags :db/id :block/created-at]))))
+                                   (fn [id]
+                                     (let [page-ent (d/entity db id)]
+                                       (cond-> (select-keys page-ent [:block/name :db/id :block/created-at])
+                                         (:block/tags page-ent)
+                                         (assoc :block/tags (mapv :db/ident (:block/tags page-ent))))))))
                  :dispatch-key (->> (dissoc ent :db/id) (db-malli-schema/entity-dispatch-key db))
-                 :errors errors'
-               ;; Group by type to reduce verbosity
-               ;; TODO: Move/remove this to another fn if unused
-                 :errors-by-type
-                 (->> (group-by :type errors')
-                      (map (fn [[type' type-errors]]
-                             [type'
-                              {:in-value-distinct (->> type-errors
-                                                       (map #(select-keys % [:in :value]))
-                                                       distinct
-                                                       vec)
-                               :schema-distinct (->> (map :schema type-errors)
-                                                     (map m/form)
-                                                     distinct
-                                                     vec)}]))
-                      (into {}))})))))
+                 :errors errors'})))))
 
 (defn validate-db!
   "Validates all the entities of the given db using :eavt datoms. Returns a map
@@ -106,8 +100,7 @@
     (cond-> {:datom-count (count datoms)
              :entities ent-maps*}
       (some? errors)
-      (assoc :errors (map #(-> (dissoc % :errors-by-type)
-                               (update :errors (fn [errs] (me/humanize {:errors errs}))))
+      (assoc :errors (map #(update % :errors (fn [errs] (me/humanize {:errors errs})))
                           (group-errors-by-entity db ent-maps errors))))))
 
 (defn graph-counts
@@ -124,3 +117,32 @@
      ;; Objects that aren't classes or properties
      :objects (- (count (d/datoms db :avet :block/tags)) classes-count properties-count)
      :property-pairs (count (mapcat #(-> % db-property/properties (dissoc :block/tags)) entities))}))
+
+(defn validate-local-db!
+  "Validates a local (non-RTC) DB like validate-db! but with default behavior,
+  options and logging specific to a local DB. Used by CLI, importer and tests"
+  [db & {:keys [db-name open-schema verbose]}]
+  (let [datoms (d/datoms db :eavt)
+        ent-maps* (db-malli-schema/datoms->entities datoms)
+        _ (when verbose
+            (println "Read graph" (str db-name " with counts: "
+                                       (pr-str (assoc (graph-counts db ent-maps*)
+                                                      :datoms (count datoms))))))
+        ent-maps (mapv
+                  ;; Remove some UI interactions adding this e.g. import
+                  #(dissoc % :block.temp/load-status :block.temp/has-children?)
+                  (db-malli-schema/update-properties-in-ents db ent-maps*))
+        explainer (get-schema-explainer (not open-schema))]
+    (when-let [explanation (binding [db-malli-schema/*db-for-validate-fns* db
+                                     db-malli-schema/*closed-values-validate?* true]
+                             (->> (map (fn [e] (dissoc e :db/id)) ent-maps) explainer not-empty))]
+      (let [ent-errors
+            (->> (group-errors-by-entity db ent-maps (:errors explanation))
+                 (map #(update % :errors
+                               (fn [errs]
+                                 ;; errs looks like: {178 {:logseq.property/hide? ["disallowed key"]}}
+                                 ;; map is indexed by :in which is unused since all errors are for the same map
+                                 (->> (me/humanize {:errors errs})
+                                      vals
+                                      (apply merge-with into))))))]
+        {:errors ent-errors}))))

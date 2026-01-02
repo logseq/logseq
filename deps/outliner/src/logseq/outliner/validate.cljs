@@ -37,17 +37,6 @@
                             :payload {:message "Page name can't be blank."
                                       :type :warning}})))))
 
-(def ^:api uneditable-page? ldb/built-in?)
-
-(defn ^:api validate-built-in-pages
-  "Validates built-in pages shouldn't be modified"
-  [entity & {:keys [message]}]
-  (when (uneditable-page? entity)
-    (throw (ex-info "Rename built-in pages"
-                    {:type :notification
-                     :payload {:message (or message "Built-in pages can't be edited")
-                               :type :warning}}))))
-
 (defn- find-other-ids-with-title-and-tags
   "Query that finds other ids given the id to ignore, title to look up and tags to consider"
   [entity]
@@ -138,18 +127,19 @@
 (defn validate-block-title
   "Validates a block title when it has changed for a entity-util/page? or tagged node"
   [db new-title existing-block-entity]
-  (validate-built-in-pages existing-block-entity)
   (validate-unique-by-name-and-tags db new-title existing-block-entity)
   (validate-disallow-page-with-journal-name new-title existing-block-entity))
 
 (defn validate-property-title
   "Validates a property's title when it has changed"
-  [new-title]
-  (when-not (db-property/valid-property-name? new-title)
-    (throw (ex-info "Property name is invalid"
-                    {:type :notification
-                     :payload {:message "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['."
-                               :type :error}}))))
+  ([new-title] (validate-property-title new-title {}))
+  ([new-title meta-m]
+   (when-not (db-property/valid-property-name? new-title)
+     (throw (ex-info "Property name is invalid"
+                     (merge meta-m
+                            {:type :notification
+                             :payload {:message "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['."
+                                       :type :error}}))))))
 
 (defn- validate-extends-property-have-correct-type
   "Validates whether given parent and children are classes"
@@ -165,9 +155,9 @@
 (defn- disallow-built-in-class-extends-change
   [_parent-ent child-ents]
   (when (some #(get db-class/built-in-classes (:db/ident %)) child-ents)
-    (throw (ex-info "Can't change the parent of a built-in tag"
+    (throw (ex-info "Can't change the extends of a built-in tag"
                     {:type :notification
-                     :payload {:message "Can't change the parent of a built-in tag"
+                     :payload {:message "Can't change the extends of a built-in tag"
                                :type :error}}))))
 
 (defn- disallow-extends-cycle
@@ -187,8 +177,8 @@
   (let [parent-ent (if (integer? parent-ent*)
                      (d/entity db parent-ent*)
                      parent-ent*)]
-    (disallow-extends-cycle db parent-ent child-ents)
     (when built-in? (disallow-built-in-class-extends-change parent-ent child-ents))
+    (disallow-extends-cycle db parent-ent child-ents)
     (validate-extends-property-have-correct-type parent-ent child-ents)))
 
 (defn- disallow-node-cant-tag-with-built-in-non-tags
@@ -289,14 +279,7 @@
                               {:type :notification
                                :payload {:message message
                                          :type :error
-                                         :block (into {} block)}}))))
-          ;; Guard against classes and properties becoming namespace parents
-          (when (or (entity-util/class? (:block/page block)) (entity-util/property? (:block/page block)))
-            (throw (ex-info "Can't convert this block to page when block is in a property or tag."
-                            {:type :notification
-                             :payload {:message "Can't convert this block to page when block is in a property or tag."
-                                       :type :error
-                                       :block (into {} block)}}))))))))
+                                         :block (into {} block)}})))))))))
 
 (defn validate-tags-property
   "Validates adding a property value to :block/tags for given blocks"

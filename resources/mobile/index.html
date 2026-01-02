@@ -2,8 +2,7 @@
 <html lang="en" data-color="logseq">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <link href="./css/silkhq.css" rel="stylesheet" type="text/css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, viewport-fit=cover, user-scalable=no">
     <link href="./css/style.css" rel="stylesheet" type="text/css">
     <title>Logseq: A privacy-first platform for knowledge management and collaboration</title>
 </head>
@@ -11,17 +10,6 @@
 <div id="root"></div>
 <script>var isCapacitorNew=true</script>
 <script src="./js/magic_portal.js"></script>
-<script>let worker = new Worker('./js/worker.js')
-const portal = new MagicPortal(worker);
-(async () => {
-  const fs = await portal.get('fs')
-  window.fs = fs
-  const pfs = await portal.get('pfs')
-  window.pfs = pfs
-  const workerThread = await portal.get('workerThread')
-  window.workerThread = workerThread
-})()
-</script>
 <script defer src="./js/highlight.min.js"></script>
 <script defer src="./js/interact.min.js"></script>
 <script defer src="./js/marked.min.js"></script>
@@ -34,9 +22,6 @@ const portal = new MagicPortal(worker);
 <script defer src="./js/tabler-icons-react.min.js"></script>
 <script defer src="./js/tabler.ext.js"></script>
 <script defer src="./js/ui.js"></script>
-<script defer src="./js/amplify.js"></script>
-<script defer src="./js/silkhq.js"></script>
-<script defer src="./js/main-bundle.js"></script>
 <script defer src="./js/main.js"></script>
 <script defer src="./js/code-editor.js"></script>
 <script>

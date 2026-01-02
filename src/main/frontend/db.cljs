@@ -55,14 +55,6 @@
      (ui-outliner-tx/transact! tx-meta
                                (outliner-op/transact! tx-data tx-meta)))))
 
-(defn set-file-last-modified-at!
-  "Refresh file timestamps to DB"
-  [repo path last-modified-at]
-  (when (and repo (not (config/db-based-graph? repo)) path last-modified-at)
-    (transact! repo
-               [{:file/path path
-                 :file/last-modified-at last-modified-at}] {})))
-
 (defn set-file-content!
   ([repo path content]
    (set-file-content! repo path content {}))

@@ -113,12 +113,12 @@
                  :or {replace-tag? true}}]
   (assert (string? title))
   (let [refs' (->> refs
-                   (remove (fn [ref]
-                             ;; remove uuid references since they're introduced to detect multiple pages
-                             ;; that have the same name
-                             (and (map? ref)
-                                  (:block.temp/original-page-name ref)
-                                  (common-util/uuid-string? (:block.temp/original-page-name ref)))))
+                   (map (fn [ref]
+                          ;; remove uuid references since they're introduced to detect multiple pages
+                          ;; that have the same name
+                          (if (and (map? ref) (some-> (:block.temp/original-page-name ref) common-util/uuid-string?))
+                            (dissoc ref :block.temp/original-page-name)
+                            ref)))
                    (map
                     (fn [ref]
                       (if (and (vector? ref) (= :block/uuid (first ref)))
@@ -127,9 +127,8 @@
                         ref)))
                    sort-refs)]
     (reduce
-     (fn [content {uuid' :block/uuid :block/keys [title] :as block}]
-       (let [title' (or (:block.temp/original-page-name block) title)]
-         (replace-page-ref-with-id content title' uuid' replace-tag?)))
+     (fn [content {uuid' :block/uuid :block/keys [title]}]
+       (replace-page-ref-with-id content title uuid' replace-tag?))
      title
      (filter :block/title refs'))))
 

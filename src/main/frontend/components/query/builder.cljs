@@ -2,12 +2,10 @@
   "DSL query builder."
   (:require [clojure.string :as string]
             [frontend.components.select :as component-select]
-            [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
-            [frontend.db.file-based.model :as file-model]
             [frontend.db.model :as db-model]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.handler.editor :as editor-handler]
@@ -21,26 +19,10 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.graph-parser.db :as gp-db]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]))
-
-(rum/defc page-block-selector
-  [*find]
-  [:div.filter-item {:on-pointer-down (fn [e] (util/stop-propagation e))}
-   (ui/select [{:label "Blocks"
-                :value "block"
-                :selected (not= @*find :page)}
-               {:label "Pages"
-                :value "page"
-                :selected (= @*find :page)}]
-              (fn [e v]
-                ;; Prevent opening the current block's editor
-                (util/stop e)
-                (reset! *find (keyword v))))])
 
 (defn- select
   ([items on-chosen]
@@ -160,28 +142,22 @@
      (select (map #(hash-map :db/ident (:db/ident %)
                              :value (:block/title %))
                   properties)
-             (fn [{value :value db-ident :db/ident}]
+             (fn [{db-ident :db/ident}]
                (reset! *mode "property-value")
-               (reset! *property (if (config/db-based-graph? (state/get-current-repo))
-                                   db-ident
-                                   (keyword value)))))]))
+               (reset! *property db-ident)))]))
 
 (rum/defc property-value-select-inner
   < rum/reactive db-mixins/query
-  [*property *private-property? *find *tree opts loc values {:keys [db-graph?]}]
+  [*property *private-property? *tree opts loc values]
   (let [values' (cons {:label "Select all"
                        :value "Select all"}
                       (map #(hash-map :value (str (:value %))
                                       ;; Preserve original-value as non-string values like boolean do not display in select
                                       :original-value (:value %))
-                           values))
-        find' (rum/react *find)]
+                           values))]
     (select values'
             (fn [{:keys [value original-value]}]
-              (let [k (cond
-                        db-graph? (if @*private-property? :private-property :property)
-                        (= find' :page) :page-property
-                        :else :property)
+              (let [k (if @*private-property? :private-property :property)
                     x (if (= value "Select all")
                         [k @*property]
                         [k @*property original-value])]
@@ -189,41 +165,35 @@
                 (append-tree! *tree opts loc x))))))
 
 (rum/defc property-value-select
-  [repo *property *private-property? *find *tree opts loc]
-  (let [db-graph? (sqlite-util/db-based-graph? repo)
-        [values set-values!] (rum/use-state nil)]
+  [*property *private-property? *tree opts loc]
+  (let [[values set-values!] (rum/use-state nil)]
     (hooks/use-effect!
      (fn [_property]
-       (p/let [result (if db-graph?
-                        (p/let [result (db-async/<get-property-values @*property)]
-                          (map (fn [{:keys [label]}]
-                                 {:label label
-                                  :value label})
-                               result))
-                        (p/let [result (db-async/<file-get-property-values repo @*property)]
-                          (map (fn [value]
-                                 {:label (str value)
-                                  :value value}) result)))]
+       (p/let [result (p/let [result (db-async/<get-property-values @*property)]
+                        (map (fn [{:keys [label]}]
+                               {:label label
+                                :value label})
+                             result))]
          (set-values! result)))
      [@*property])
-    (property-value-select-inner *property *private-property? *find *tree opts loc values
-                                 {:db-graph? db-graph?})))
+    (property-value-select-inner *property *private-property? *tree opts loc values)))
 
 (rum/defc tags
   [repo *tree opts loc]
-  (let [[values set-values!] (rum/use-state nil)
-        db-based? (config/db-based-graph? repo)]
+  (let [[values set-values!] (rum/use-state nil)]
     (hooks/use-effect!
      (fn []
        (let [result (db-model/get-all-readable-classes repo {:except-root-class? true})]
          (set-values! result)))
      [])
-    (let [items (->> values
-                     (map :block/title)
-                     sort)]
+    (let [items (->> (sort-by :block/title values)
+                     (map (fn [block]
+                            {:label (:block/title block)
+                             :value (:block/uuid block)})))]
       (select items
-              (fn [{:keys [value]}]
-                (append-tree! *tree opts loc [(if db-based? :tags :page-tags) value]))))))
+              (fn [{:keys [value _label]}]
+                (append-tree! *tree opts loc [:tags (str value)]))
+              {:extract-fn :label}))))
 
 (rum/defc page-search
   [on-chosen]
@@ -239,7 +209,7 @@
     (select result on-chosen {:loading? loading?})))
 
 (defn- db-based-query-filter-picker
-  [state *find *tree loc clause opts]
+  [state *tree loc clause opts]
   (let [*mode (::mode state)
         *property (::property state)
         *private-property? (::private-property? state)
@@ -250,7 +220,7 @@
        (property-select *mode *property *private-property?)
 
        "property-value"
-       (property-value-select repo *property *private-property? *find *tree opts loc)
+       (property-value-select *property *private-property? *tree opts loc)
 
        "sample"
        (select (range 1 101)
@@ -276,19 +246,18 @@
                                 (append-tree! *tree opts loc (vec (cons :task choices)))))}))
 
        "priority"
-       (select (if (config/db-based-graph? repo)
-                 (let [values (:property/closed-values (db/entity :logseq.property/priority))]
-                   (mapv db-property/property-value-content values))
-                 gp-db/built-in-priorities)
-               (constantly nil)
-               {:multiple-choices? true
-                :selected-choices #{}
-                :extract-chosen-fn :value
-                :prompt-key :select/default-select-multiple
-                :close-modal? false
-                :on-apply (fn [choices]
-                            (when (seq choices)
-                              (append-tree! *tree opts loc (vec (cons :priority choices)))))})
+       (select
+        (let [values (:property/closed-values (db/entity :logseq.property/priority))]
+          (mapv db-property/property-value-content values))
+        (constantly nil)
+        {:multiple-choices? true
+         :selected-choices #{}
+         :extract-chosen-fn :value
+         :prompt-key :select/default-select-multiple
+         :close-modal? false
+         :on-apply (fn [choices]
+                     (when (seq choices)
+                       (append-tree! *tree opts loc (vec (cons :priority choices)))))})
 
        "page"
        (page-search (fn [{:keys [value]}]
@@ -312,85 +281,6 @@
 
        nil)]))
 
-(defn- file-based-query-filter-picker
-  [state *find *tree loc clause opts]
-  (let [*mode (::mode state)
-        *property (::property state)
-        *private-property? (::private-property? state)
-        repo (state/get-current-repo)]
-    [:div
-     (case @*mode
-       "namespace"
-       (let [items (sort (map :block/title (file-model/get-all-namespace-parents repo)))]
-         (select items
-                 (fn [{:keys [value]}]
-                   (append-tree! *tree opts loc [:namespace value]))))
-
-       "tags"
-       (tags repo *tree opts loc)
-
-       "property"
-       (property-select *mode *property *private-property?)
-
-       "property-value"
-       (property-value-select repo *property *private-property? *find *tree opts loc)
-
-       "sample"
-       (select (range 1 101)
-               (fn [{:keys [value]}]
-                 (append-tree! *tree opts loc [:sample (util/safe-parse-int value)])))
-
-       "task"
-       (select (if (config/db-based-graph? repo)
-                 (let [values (:property/closed-values (db/entity :logseq.property/status))]
-                   (mapv db-property/property-value-content values))
-                 gp-db/built-in-markers)
-               (constantly nil)
-               {:multiple-choices? true
-                ;; Need the existing choices later to improve the UX
-                :selected-choices #{}
-                :extract-chosen-fn :value
-                :prompt-key :select/default-select-multiple
-                :close-modal? false
-                :on-apply (fn [choices]
-                            (when (seq choices)
-                              (append-tree! *tree opts loc (vec (cons :task choices)))))})
-
-       "priority"
-       (select (if (config/db-based-graph? repo)
-                 (let [values (:property/closed-values (db/entity :logseq.property/priority))]
-                   (mapv db-property/property-value-content values))
-                 gp-db/built-in-priorities)
-               (constantly nil)
-               {:multiple-choices? true
-                :selected-choices #{}
-                :extract-chosen-fn :value
-                :prompt-key :select/default-select-multiple
-                :close-modal? false
-                :on-apply (fn [choices]
-                            (when (seq choices)
-                              (append-tree! *tree opts loc (vec (cons :priority choices)))))})
-
-       "page"
-       (page-search (fn [{:keys [value]}]
-                      (append-tree! *tree opts loc [:page value])))
-
-       "page reference"
-       (page-search (fn [{:keys [value]}]
-                      (append-tree! *tree opts loc [:page-ref value])))
-
-       "full text search"
-       (search (fn [v] (append-tree! *tree opts loc v))
-               (:toggle-fn opts))
-
-       "between"
-       (between (merge opts
-                       {:tree *tree
-                        :loc loc
-                        :clause clause}))
-
-       nil)]))
-
 (rum/defcs picker < rum/reactive
   {:will-mount (fn [state]
                  (state/clear-selection!)
@@ -398,31 +288,16 @@
   (rum/local nil ::mode)                ; pick mode
   (rum/local nil ::property)
   (rum/local false ::private-property?)
-  [state *find *tree loc clause opts]
+  [state *tree loc clause opts]
   (let [*mode (::mode state)
-        db-based? (config/db-based-graph? (state/get-current-repo))
-        filters (if db-based?
-                  query-builder/db-based-block-filters
-                  (if (= :page (rum/react *find))
-                    query-builder/page-filters
-                    query-builder/block-filters))
+        filters query-builder/db-based-block-filters
         filters-and-ops (concat filters query-builder/operators)
         operator? #(contains? query-builder/operators-set (keyword %))]
     [:div.query-builder-picker
      (if @*mode
        (when-not (operator? @*mode)
-         (if db-based?
-           (db-based-query-filter-picker state *find *tree loc clause opts)
-           (file-based-query-filter-picker state *find *tree loc clause opts)))
+         (db-based-query-filter-picker state *tree loc clause opts))
        [:div
-        (when-not db-based?
-          [:<>
-           (when-not @*find
-             [:div.flex.flex-row.items-center.p-2.justify-between
-              [:div.ml-2 "Find: "]
-              (page-block-selector *find)])
-           (when-not @*find
-             [:hr.m-0])])
         (select
          (map name filters-and-ops)
          (fn [{:keys [value]}]
@@ -438,7 +313,7 @@
          {:input-default-placeholder "Add filter/operator"})])]))
 
 (rum/defc add-filter
-  [*find *tree loc clause]
+  [*tree loc clause]
   (shui/button
    {:class "jtrigger !px-1 h-6 add-filter text-muted-foreground"
     :size :sm
@@ -447,12 +322,18 @@
     :on-click (fn [^js e]
                 (shui/popup-show! (.-target e)
                                   (fn [{:keys [id]}]
-                                    (picker *find *tree loc clause {:toggle-fn #(shui/popup-hide! id)}))
+                                    (picker *tree loc clause {:toggle-fn #(shui/popup-hide! id)}))
                                   {:align :start}))}
    (ui/icon "plus" {:size 14})
    (when (= [0] loc) "Filter")))
 
 (declare clauses-group)
+
+(defn- uuid->page-title
+  [s]
+  (if (and (string? s) (common-util/uuid-string? s))
+    (:block/title (db/entity [:block/uuid (uuid s)]))
+    s))
 
 (defn- dsl-human-output
   [clause]
@@ -465,32 +346,32 @@
       (str "Search: " clause)
 
       (= (keyword f) :page-ref)
-      (ref/->page-ref (second clause))
+      (ref/->page-ref (uuid->page-title (second clause)))
 
       (contains? #{:tags :page-tags} (keyword f))
       (cond
         (string? (second clause))
-        (str "#" (second clause))
+        (str "#" (uuid->page-title (second clause)))
         (symbol? (second clause))
-        (str "#" (str (second clause)))
+        (str "#" (uuid->page-title  (str (second clause))))
         :else
-        (str "#" (second (second clause))))
+        (str "#" (uuid->page-title (second (second clause)))))
 
       (contains? #{:property :private-property :page-property} (keyword f))
-      (str (if (and (config/db-based-graph? (state/get-current-repo))
-                    (qualified-keyword? (second clause)))
+      (str (if (qualified-keyword? (second clause))
              (:block/title (db/entity (second clause)))
              (some-> (second clause) name))
            ": "
-           (cond
-             (and (vector? (last clause)) (= :page-ref (first (last clause))))
-             (second (last clause))
+           (uuid->page-title
+            (cond
+              (and (vector? (last clause)) (= :page-ref (first (last clause))))
+              (second (last clause))
 
-             (= 2 (count clause))
-             "ALL"
+              (= 2 (count clause))
+              "ALL"
 
-             :else
-             (last clause)))
+              :else
+              (last clause))))
 
       ;; between timestamp start (optional end)
       (and (= (keyword f) :between) (query-dsl/get-timestamp-property clause))
@@ -525,7 +406,7 @@
                         (symbol? (last clause)))
                   (name (last  clause))
                   (second (last clause)))]
-        (str "between: " start " ~ " end))
+        (str "between: " (uuid->page-title start) " ~ " (uuid->page-title end)))
 
       (contains? #{:task :priority} (keyword f))
       (str (name f) ": "
@@ -626,7 +507,7 @@
      (when parens? [:div.clause-bracket ")"])
 
      (when (not= loc [0])
-       (add-filter *find *tree loc []))]))
+       (add-filter *tree loc []))]))
 
 (rum/defc clause-tree < rum/reactive
   [*tree *find]
@@ -683,12 +564,7 @@
                                                          (str result))))
                                                  repo (state/get-current-repo)
                                                  block (db/entity [:block/uuid (:block/uuid block)])]
-                                             (if (config/db-based-graph? (state/get-current-repo))
-                                               (editor-handler/save-block! repo (:block/uuid block) q)
-                                               (let [content (string/replace (:block/title block)
-                                                                             #"\{\{query[^}]+\}\}"
-                                                                             (util/format "{{query %s}}" q))]
-                                                 (editor-handler/save-block! repo (:block/uuid block) content)))))))
+                                             (editor-handler/save-block! repo (:block/uuid block) q)))))
              (assoc state ::tree *tree)))
    :will-mount (fn [state]
                  (let [q-str (get-q (first (:rum/args state)))
@@ -710,4 +586,4 @@
       (when (and (seq @*tree)
                  (not= @*tree [:and]))
         (clause-tree *tree *find))
-      (add-filter *find *tree [0] [])]]))
+      (add-filter *tree [0] [])]]))

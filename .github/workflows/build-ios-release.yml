@@ -17,7 +17,7 @@ env:
 
 jobs:
   build-app:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - name: Check out Git repository
         uses: actions/checkout@v4
@@ -25,7 +25,13 @@ jobs:
           ref: ${{ github.event.inputs.git-ref }}
       - uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: latest-stable
+          xcode-version: '26.0.1'
+      - name: Show runtimes
+        run: |
+          xcrun simctl list > /dev/null
+      - name: Install iOS platform
+        run: |
+          xcodebuild -downloadPlatform iOS
       - name: Install Node.js, NPM and Yarn
         uses: actions/setup-node@v4
         with:
@@ -63,6 +69,19 @@ jobs:
           LOGSEQ_SENTRY_DSN: ${{ secrets.LOGSEQ_SENTRY_DSN }}
           LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
 
+      - name: Upload Sentry Sourcemaps (beta only)
+        # if: ${{ github.repository == 'logseq/logseq' && (inputs.build-target == 'beta' || github.event.inputs.build-target == 'beta') }}
+        run: |
+          curl -sL https://sentry.io/get-cli/ | SENTRY_CLI_VERSION=2.58.4 bash
+          release_name="logseq-ios@${{ steps.ref.outputs.version }}"
+          sentry-cli releases new "${release_name}"
+          sentry-cli releases files "${release_name}" upload-sourcemaps --ext map --ext js ./static/js --url-prefix '~/static/js'
+          sentry-cli releases finalize "${release_name}"
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: logseq
+          SENTRY_PROJECT: logseq
+
       - name: Prepare iOS build
         run: npx cap sync ios
 
@@ -77,9 +96,11 @@ jobs:
           SLACK_URL: ${{ secrets.SLACK_URL }}
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
           MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+          XCODE_XCARGS: "-allowProvisioningUpdates"
 
       - name: Save Static File
         uses: actions/upload-artifact@v4
         with:
           name: static
           path: static
+          retention-days: 3

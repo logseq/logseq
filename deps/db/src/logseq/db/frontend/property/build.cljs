@@ -97,38 +97,54 @@
   transacted, given a block and a properties map with raw property values. The
   properties map can have keys that are db-idents or they can be maps. If a map,
   it should have :original-property-id and :db/ident keys.  See
-  ->property-value-tx-m for such an example
+  ->property-value-tx-m for such an example. Options:
 
-  :pure? - ensure this fn is a pure function"
-  [block properties & {:keys [pure?]}]
+  * :pure? - ensure this fn is a pure function
+  * :pvalue-map? - When set, property value is passed as a map with keys :value and :attributes. This
+   allows property values to have additional attributes"
+  [block properties & {:keys [pure? pvalue-map?]}]
   ;; Build :db/id out of uuid if block doesn't have one for tx purposes
   (let [block' (if (:db/id block) block (assoc block :db/id [:block/uuid (:block/uuid block)]))]
     (->> properties
-         (map (fn [[k v]]
-                (let [{:keys [property-value-properties] :as property-map} (if (map? k) k {:db/ident k})
+         (map (fn [[k v*]]
+                (let [property-map (if (map? k) k {:db/ident k})
                       gen-uuid-value-prefix (when pure?
-                                              (or (:db/ident block) (:block/uuid block)))]
+                                              (or (:db/ident block) (:block/uuid block)))
+                      ->pvalue #(if pvalue-map? (:value %) %)
+                      v (if (set? v*)
+                          (set (map ->pvalue v*))
+                          (->pvalue v*))
+                      ->value-block-opts
+                      (fn ->value-block-opts [v']
+                        (cond-> {}
+                          (and pvalue-map? (seq (:attributes v')))
+                          (assoc :properties (:attributes v'))
+                          pure?
+                          (assoc :block-uuid
+                                 (common-uuid/gen-uuid :builtin-block-uuid
+                                                       (str gen-uuid-value-prefix "-" (->pvalue v'))))))]
                   (assert (:db/ident property-map) "Key in map must have a :db/ident")
                   (when pure? (assert (some? gen-uuid-value-prefix) block))
                   [(or (:original-property-id property-map) (:db/ident property-map))
-                   (if (set? v)
-                     (set (map #(build-property-value-block
-                                 block' property-map %
-                                 (cond-> {}
-                                   property-value-properties
-                                   (assoc :properties property-value-properties)
-                                   pure?
-                                   (assoc :block-uuid
-                                          (common-uuid/gen-uuid :builtin-block-uuid (str gen-uuid-value-prefix "-" %)))))
-                               v))
-                     (build-property-value-block block' property-map v
-                                                 (cond-> {}
-                                                   property-value-properties
-                                                   (assoc :properties property-value-properties)
-                                                   pure?
-                                                   (assoc :block-uuid
-                                                          (common-uuid/gen-uuid :builtin-block-uuid (str gen-uuid-value-prefix "-" v))))))])))
+                   (cond
+                     (and (set? v) (every? uuid? v))
+                     (set (map #(vector :block/uuid %) v))
+                     (set? v*)
+                     (set
+                      (map #(build-property-value-block block' property-map (->pvalue %) (->value-block-opts %))
+                           v*))
+                     (uuid? v)
+                     [:block/uuid v]
+                     :else
+                     (build-property-value-block block' property-map v (->value-block-opts v*)))])))
          (into {}))))
+
+(defn- lookup-id?
+  [v]
+  (and (vector? v)
+       (= 2 (count v))
+       (= :block/uuid (first v))
+       (uuid? (second v))))
 
 (defn build-properties-with-ref-values
   "Given a properties map with property values to be transacted e.g. from
@@ -136,6 +152,12 @@
   [prop-vals-tx-m]
   (update-vals prop-vals-tx-m
                (fn [v]
-                 (if (set? v)
+                 (cond
+                   (and (set? v) (every? lookup-id? v))
+                   v
+                   (set? v)
                    (set (map #(vector :block/uuid (:block/uuid %)) v))
+                   (lookup-id? v)
+                   v
+                   :else
                    (vector :block/uuid (:block/uuid v))))))

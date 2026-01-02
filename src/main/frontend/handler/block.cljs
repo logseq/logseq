@@ -1,57 +1,24 @@
 (ns ^:no-doc frontend.handler.block
   (:require [clojure.string :as string]
-            [clojure.walk :as walk]
             [datascript.impl.entity :as de]
             [dommy.core :as dom]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
-            [frontend.handler.file-based.property.util :as property-util]
             [frontend.handler.property.util :as pu]
             [frontend.mobile.haptics :as haptics]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.util.file-based.drawer :as drawer]
             [goog.object :as gobj]
             [logseq.db :as ldb]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.graph-parser.block :as gp-block]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op]
             [promesa.core :as p]))
 
 ;;  Fns
-
-;; TODO: reduced version
-(defn- walk-block
-  [block check? transform]
-  (let [result (atom nil)]
-    (walk/postwalk
-     (fn [x]
-       (if (check? x)
-         (reset! result (transform x))
-         x))
-     (:block.temp/ast-body block))
-    @result))
-
-(defn get-timestamp
-  [block typ]
-  (walk-block block
-              (fn [x]
-                (and (gp-block/timestamp-block? x)
-                     (= typ (first (second x)))))
-              #(second (second %))))
-
-(defn get-scheduled-ast
-  [block]
-  (get-timestamp block "Scheduled"))
-
-(defn get-deadline-ast
-  [block]
-  (get-timestamp block "Deadline"))
 
 (defn select-block!
   [block-uuid]
@@ -124,38 +91,52 @@
                            :container-id container-id :direction direction :event event :pos pos}))
     (mark-last-input-time! repo)))
 
-(defn sanity-block-content
-  [repo format content]
-  (if (sqlite-util/db-based-graph? repo)
-    content
-    (-> (property-util/remove-built-in-properties format content)
-        (drawer/remove-logbook))))
-
 (defn block-unique-title
   "Multiple pages/objects may have the same `:block/title`.
    Notice: this doesn't prevent for pages/objects that have the same tag or created by different clients."
-  [block]
-  (let [block-e (cond
-                  (de/entity? block)
-                  block
-                  (uuid? (:block/uuid block))
-                  (db/entity [:block/uuid (:block/uuid block)])
+  [block & {:keys [with-tags? alias]
+            :or {with-tags? true}}]
+  (if (ldb/built-in? block)
+    (:block/title block)
+    (let [block-e (cond
+                    (de/entity? block)
+                    block
+                    (uuid? (:block/uuid block))
+                    (db/entity [:block/uuid (:block/uuid block)])
+                    :else
+                    block)
+          tags (remove (fn [t]
+                         (or (some-> (:block/raw-title block-e) (ldb/inline-tag? t))
+                             (ldb/private-tags (:db/ident t))))
+                       (map (fn [tag] (if (number? tag) (db/entity tag) tag)) (:block/tags block)))
+          title (cond
+                  (ldb/class? block)
+                  (ldb/get-class-title-with-extends block)
+
+                  (and with-tags? (seq tags))
+                  (str (:block/title block)
+                       " "
+                       (string/join
+                        ", "
+                        (keep (fn [tag]
+                                (when-let [title (:block/title tag)]
+                                  (str "#" title)))
+                              tags)))
                   :else
-                  block)
-        tags (remove (fn [t]
-                       (or (some-> (:block/raw-title block-e) (ldb/inline-tag? t))
-                           (ldb/private-tags (:db/ident t))))
-                     (map (fn [tag] (if (number? tag) (db/entity tag) tag)) (:block/tags block)))]
-    (if (seq tags)
-      (str (:block/title block)
-           " "
-           (string/join
-            ", "
-            (keep (fn [tag]
-                    (when-let [title (:block/title tag)]
-                      (str "#" title)))
-                  tags)))
-      (:block/title block))))
+                  (:block/title block))]
+      (when title
+        (str (subs title 0 256)
+             (when alias
+               (str " -> alias: " alias)))))))
+
+(defn block-title-with-icon
+  "Used for select item"
+  [block title icon-cp]
+  (if-let [icon (:logseq.property/icon block)]
+    [:div.flex.flex-row.items-center.gap-1
+     (icon-cp icon {:size 14})
+     title]
+    (or title (:block/title block))))
 
 (defn edit-block!
   [block pos & {:keys [_container-id custom-content tail-len save-code-editor?]
@@ -184,8 +165,7 @@
                             content
 
                             :else
-                            (subs content 0 pos))
-               content (sanity-block-content repo (get block :block/format :markdown) content)]
+                            (subs content 0 pos))]
            (state/clear-selection!)
            (edit-block-aux repo block content text-range (assoc opts :pos pos))))))))
 
@@ -342,8 +322,11 @@
                       (reset! *swiped? true)
                       (dom/set-style! block-container :transform (util/format "translateX(%dpx)" left)))))))))))))
 
+(defonce ^:private *swipe-timeout (atom nil))
 (defn on-touch-end
   [event]
+  (when-let [timeout @*swipe-timeout]
+    (js/clearTimeout timeout))
   (util/stop-propagation event)
   (when @*swipe
     (let [target (.-target event)
@@ -368,10 +351,11 @@
               (when (:mobile/show-action-bar? @state/state)
                 (state/set-state! :mobile/show-action-bar? false)))
             (haptics/haptics)))
-        (reset! *swiped? false)
         (catch :default e
           (js/console.error e))
         (finally
+          (reset! *swipe-timeout
+                  (js/setTimeout #(reset! *swiped? false) 50))
           (reset! *swipe nil)
           (reset! *touch-start nil))))))
 

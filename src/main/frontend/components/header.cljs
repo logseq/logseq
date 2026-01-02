@@ -7,7 +7,6 @@
             [frontend.common.missionary :as c.m]
             [frontend.components.block :as component-block]
             [frontend.components.export :as export]
-            [frontend.components.file-sync :as fs-sync]
             [frontend.components.page-menu :as page-menu]
             [frontend.components.plugins :as plugins]
             [frontend.components.right-sidebar :as sidebar]
@@ -125,17 +124,19 @@
         page-menu (if (and working-page? (ldb/page? page))
                     (page-menu/page-menu page)
                     (when-not config/publishing?
-                      (when (config/db-based-graph?)
-                        (let [block-id-str (str (:block/uuid page))
-                              favorited? (page-handler/favorited? block-id-str)]
-                          [{:title   (if favorited?
-                                       (t :page/unfavorite)
-                                       (t :page/add-to-favorites))
-                            :options {:on-click
-                                      (fn []
-                                        (if favorited?
-                                          (page-handler/<unfavorite-page! block-id-str)
-                                          (page-handler/<favorite-page! block-id-str)))}}]))))
+                      (let [block-id-str (str (:block/uuid page))
+                            favorited? (page-handler/favorited? block-id-str)]
+                        [{:title   (if favorited?
+                                     (t :page/unfavorite)
+                                     (t :page/add-to-favorites))
+                          :options {:on-click
+                                    (fn []
+                                      (if favorited?
+                                        (page-handler/<unfavorite-page! block-id-str)
+                                        (page-handler/<favorite-page! block-id-str)))}}
+                         {:title   "Publish page"
+                          :options {:on-click #(shui/dialog-open! (fn [] (page-menu/publish-page-dialog page))
+                                                                  {:class "w-auto max-w-md"})}}])))
         page-menu-and-hr (concat page-menu [{:hr true}])
         login? (and (state/sub :auth/id-token) (user-handler/logged-in?))
         items (fn []
@@ -335,7 +336,9 @@
   [page-name]
   (when-let [page (when (and page-name (common-util/uuid-string? page-name))
                     (db/entity [:block/uuid (uuid page-name)]))]
-    (when (and (ldb/page? page) (:block/parent page))
+    ;; FIXME: in publishing? :block/tags incorrectly returns integer until fully restored
+    (when (and (if config/publishing? (not (state/sub :db/restoring?)) true)
+               (ldb/page? page) (:block/parent page))
       [:div.ls-block-breadcrumb
        [:div.text-sm
         (component-block/breadcrumb {}
@@ -374,8 +377,7 @@
                                                  (state/set-left-sidebar-open!
                                                   (not (:ui/left-sidebar-open? @state/state))))})
         custom-home-page? (and (state/custom-home-page?)
-                               (= (state/sub-default-home-page) (state/get-current-page)))
-        db-based? (config/db-based-graph? current-repo)]
+                               (= (state/sub-default-home-page) (state/get-current-page)))]
     [:div.cp__header.drag-region#head
      {:class           (util/classnames [{:electron-mac   electron-mac?
                                           :native-ios     (mobile-util/native-ios?)
@@ -394,7 +396,7 @@
       [left-menu
        (if (mobile-util/native-platform?)
          ;; back button for mobile
-         (when-not (or (state/home?) custom-home-page? (state/whiteboard-dashboard?))
+         (when-not (or (state/home?) custom-home-page?)
            (ui/with-shortcut :go/backward "bottom"
              [:button.it.navigation.nav-left.button.icon.opacity-70
               {:title (t :header/go-back) :on-click #(js/window.history.back)}
@@ -418,7 +420,6 @@
        (when (and current-repo
                   (ldb/get-graph-rtc-uuid (db/get-db))
                   (user-handler/logged-in?)
-                  db-based?
                   (user-handler/rtc-group?))
          [:<>
           (recent-slider)
@@ -431,14 +432,7 @@
        (when (user-handler/logged-in?)
          (rtc-indicator/uploading-detail))
 
-       (when db-based?
-         (semantic-search-progressing current-repo))
-
-       (when (and current-repo
-                  (not (config/demo-graph? current-repo))
-                  (not db-based?)
-                  (user-handler/alpha-or-beta-user?))
-         (fs-sync/indicator))
+       (semantic-search-progressing current-repo)
 
        (when (and (not= (state/get-current-route) :home)
                   (not custom-home-page?))

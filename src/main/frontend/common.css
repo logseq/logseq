@@ -20,6 +20,10 @@ html:not(.is-native-android) {
   serif, Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol !important;
 }
 
+:root {
+  text-autospace: normal;
+}
+
 /* region Reset top elements */
 html {
   overflow: hidden;
@@ -142,10 +146,13 @@ body {
     margin: 0.25rem 0;
   }
 
-  img,
-  video {
+  img {
     margin-left: auto;
     margin-right: auto;
+  }
+
+  video {
+    max-height: 557px;
   }
 
   ::selection {

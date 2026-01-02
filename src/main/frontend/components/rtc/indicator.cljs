@@ -1,6 +1,7 @@
 (ns frontend.components.rtc.indicator
   "RTC state indicator"
   (:require [clojure.pprint :as pprint]
+            [clojure.string :as string]
             [frontend.common.missionary :as c.m]
             [frontend.config :as config]
             [frontend.db :as db]
@@ -19,7 +20,7 @@
   (def rtc-state-schema
     [:enum :open :close]))
 
-(defonce ^:private *detail-info
+(defonce *detail-info
   (atom {:pending-local-ops 0
          :pending-asset-ops 0
          :graph-uuid nil
@@ -109,8 +110,9 @@
             (:block/title block)])]])]))
 
 (rum/defc details
-  [online?]
-  (let [[expand-debug? set-expand-debug!] (hooks/use-state false)
+  []
+  (let [online? (hooks/use-flow-state flows/network-online-event-flow)
+        [expand-debug? set-expand-debug!] (hooks/use-state false)
         {:keys [graph-uuid local-tx remote-tx rtc-state
                 download-logs upload-logs misc-logs pending-local-ops pending-server-ops]}
         (hooks/use-flow-state (m/watch *detail-info))]
@@ -163,7 +165,7 @@
      [:div.cp__rtc-sync-indicator.flex.flex-row.items-center.gap-1
       (shui/button-ghost-icon :cloud
                               {:on-click #(shui/popup-show! (.-target %)
-                                                            (details online?)
+                                                            (details)
                                                             {:align "end"
                                                              :dropdown-menu? true})
                                :class (util/classnames [{:cloud true
@@ -205,16 +207,16 @@
         (map (fn [logs]
                (when-let [first-log (first logs)]
                  (let [graph-uuid (:graph-uuid first-log)]
-                   (take-while (fn [log] (= graph-uuid (:graph-uuid log))) logs))))))))
+                   (take-while (fn [log] (= (str graph-uuid) (str (:graph-uuid log)))) logs))))))))
 
 (rum/defc downloading-logs
   []
   (let [download-logs-flow (accumulated-logs-flow *accumulated-download-logs)
         download-logs (hooks/use-flow-state download-logs-flow)]
     (when (seq download-logs)
-      [:div.capitalize.flex.flex-col.gap-1
+      [:div.flex.flex-col.gap-1
        (for [log download-logs]
-         [:div (:message log)])])))
+         [:div (string/capitalize (:message log))])])))
 
 (rum/defc uploading-logs
   []

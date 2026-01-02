@@ -172,8 +172,15 @@
                                    :popup-opts {:align "start"}
                                    :del-btn? (boolean (:icon form-data))
                                    :empty-label "?"})
-      (shui/input {:ref *input-ref :size "sm" :default-value title :placeholder "name"
-                   :disabled disabled? :on-change (fn [^js e] (set-form-data! (assoc form-data :title (util/trim-safe (util/evalue e)))))})]
+      (shui/input {:ref *input-ref
+                   :size "sm"
+                   :default-value title
+                   :placeholder "name"
+                   :disabled disabled?
+                   :on-key-down (fn [e]
+                                  (when (contains? #{"ArrowLeft" "ArrowRight"} (util/ekey e))
+                                    (util/stop-propagation e)))
+                   :on-change (fn [^js e] (set-form-data! (assoc form-data :title (util/trim-safe (util/evalue e)))))})]
      [:div.pt-2 (shui/textarea {:placeholder "description" :default-value description
                                 :disabled disabled? :on-change (fn [^js e] (set-form-data! (assoc form-data :description (util/trim-safe (util/evalue e)))))})]
 
@@ -307,7 +314,7 @@
                           (re-init-commands! property)))
         update-icon! (fn [icon]
                        (property-handler/set-block-property!
-                        (state/get-current-repo) (:block/uuid block) :logseq.property/icon
+                        (:block/uuid block) :logseq.property/icon
                         (select-keys icon [:id :type :color])))
         icon (:logseq.property/icon block)
         value (db-property/closed-value-content block)]
@@ -521,10 +528,9 @@
 (defn- handle-delete-property!
   [block property & {:keys [class? class-schema?]}]
   (let [class? (or class? (ldb/class? block))
-        remove! #(let [repo (state/get-current-repo)]
-                   (if (and class? class-schema?)
-                     (db-property-handler/class-remove-property! (:db/id block) (:db/id property))
-                     (property-handler/remove-block-property! repo (:block/uuid block) (:db/ident property))))]
+        remove! #(if (and class? class-schema?)
+                   (db-property-handler/class-remove-property! (:db/id block) (:db/id property))
+                   (property-handler/remove-block-property! (:block/uuid block) (:db/ident property)))]
     (if (and class? class-schema?)
       (-> (shui/dialog-confirm!
            [:p (str "Are you sure you want to delete the property from this tag?")]
@@ -596,7 +602,7 @@
         special-built-in-prop? (contains? #{:block/title :block/tags :block/created-at :block/updated-at} (:db/ident property))]
     (->>
      [(when with-title?
-        [:h3.font-medium.px-2.py-4.opacity-90.flex.items-center.gap-1
+        [:h3.font-medium.px-2.py-2.opacity-80.flex.items-center.gap-1
          "Configure property"])
       (when-not special-built-in-prop?
         (dropdown-editor-menuitem {:icon :pencil :title "Property name" :desc [:span.flex.items-center.gap-1 icon title]

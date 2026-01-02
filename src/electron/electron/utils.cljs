@@ -1,14 +1,13 @@
 (ns electron.utils
-  (:require ["@logseq/rsapi" :as rsapi]
-            ["electron" :refer [app BrowserWindow]]
+  (:require ["electron" :refer [app BrowserWindow]]
             ["fs-extra" :as fs]
             ["path" :as node-path]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.configs :as cfgs]
             [electron.logger :as logger]
-            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.cli.common.graph :as cli-common-graph]
+            [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
 
 (defonce *win (atom nil)) ;; The main window
@@ -81,14 +80,6 @@
         (logger/error "Unknown proxy protocol:" protocol)))
     (reset! *fetchAgent nil)))
 
-(defn- set-rsapi-proxy
-  "Set proxy for Logseq Sync(rsapi)"
-  [{:keys [protocol host port]}]
-  (if (and protocol host port (or (= protocol "http") (= protocol "socks5")))
-    (let [proxy-url (str protocol "://" host ":" port)]
-      (rsapi/setProxy proxy-url))
-    (rsapi/setProxy nil)))
-
 (defn <set-electron-proxy
   "Set proxy for electron
   type: system | direct | socks5 | http"
@@ -159,27 +150,24 @@
          (first pac-opts))))))
 
 (defn <set-proxy
-  "Set proxy for electron, fetch, and rsapi"
+  "Set proxy for electron, fetch"
   ([{:keys [type host port] :or {type "system"} :as opts}]
    (logger/info "set proxy to" opts)
    (cond
      (= type "system")
      (p/let [_ (<set-electron-proxy {:type "system"})
              proxy (<get-system-proxy)]
-       (set-fetch-agent-proxy proxy)
-       (set-rsapi-proxy proxy))
+       (set-fetch-agent-proxy proxy))
 
      (= type "direct")
      (do
        (<set-electron-proxy {:type "direct"})
-       (set-fetch-agent-proxy nil)
-       (set-rsapi-proxy nil))
+       (set-fetch-agent-proxy nil))
 
      (or (= type "socks5") (= type "http"))
      (do
        (<set-electron-proxy {:type type :host host :port port})
-       (set-fetch-agent-proxy {:protocol type :host host :port port})
-       (set-rsapi-proxy {:protocol type :host host :port port}))
+       (set-fetch-agent-proxy {:protocol type :host host :port port}))
 
      :else
      (logger/error "Unknown proxy type:" type))))
@@ -208,11 +196,9 @@
     (cfgs/set-item! :settings/agent {:type type :test test'})
     (cfgs/set-item! :settings/agent {:type type :protocol type :host host :port port :test test'})))
 
-(defn should-read-content?
-  "Skip reading content of file while using file-watcher"
+(defn read-file-raw
   [path]
-  (let [ext (string/lower-case (node-path/extname path))]
-    (contains? #{".md" ".markdown" ".org" ".js" ".edn" ".css"} ext)))
+  (fs/readFileSync path))
 
 (defn read-file
   [path]
@@ -254,18 +240,14 @@
 (defn get-graph-dir
   "required by all internal state in the electron section"
   [graph-name]
-  (cond (string/starts-with? graph-name sqlite-util/db-version-prefix)
-        (node-path/join (cli-common-graph/get-db-graphs-dir) (string/replace-first graph-name sqlite-util/db-version-prefix ""))
-        (string/includes? graph-name "logseq_local_")
-        (string/replace-first graph-name "logseq_local_" "")))
+  (when (string/starts-with? graph-name sqlite-util/db-version-prefix)
+    (node-path/join (cli-common-graph/get-db-graphs-dir) (string/replace-first graph-name sqlite-util/db-version-prefix ""))))
 
 (comment
   (defn get-graph-name
     "Reverse `get-graph-dir`"
     [graph-dir]
-    (if (= (cli-common-graph/get-db-graphs-dir) (node-path/dirname graph-dir))
-      (str sqlite-util/db-version-prefix (node-path/basename graph-dir))
-      (str "logseq_local_" graph-dir))))
+    (str sqlite-util/db-version-prefix (node-path/basename graph-dir))))
 
 (defn decode-protected-assets-schema-path
   [schema-path]

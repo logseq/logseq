@@ -207,6 +207,16 @@
     :file/path (str "logseq/" "custom.js")
     :file/content ""
     :file/created-at (js/Date.)
+    :file/last-modified-at (js/Date.)}
+   {:block/uuid (common-uuid/gen-uuid :builtin-block-uuid "logseq/publish.css")
+    :file/path (str "logseq/" "publish.css")
+    :file/content ""
+    :file/created-at (js/Date.)
+    :file/last-modified-at (js/Date.)}
+   {:block/uuid (common-uuid/gen-uuid :builtin-block-uuid "logseq/publish.js")
+    :file/path (str "logseq/" "publish.js")
+    :file/content ""
+    :file/created-at (js/Date.)
     :file/last-modified-at (js/Date.)}])
 
 (defn build-db-initial-data
@@ -225,7 +235,10 @@
                        import-type
                        (into (sqlite-util/import-tx import-type))
                        graph-git-sha
-                       (conj (sqlite-util/kv :logseq.kv/graph-git-sha graph-git-sha)))
+                       (conj (sqlite-util/kv :logseq.kv/graph-git-sha graph-git-sha))
+                       true
+                       (conj (sqlite-util/kv :logseq.kv/local-graph-uuid
+                                             (uuid (str "loc" (subs (str (common-uuid/gen-uuid)) 3))))))
         initial-files (build-initial-files config-content)
         {properties-tx :tx :keys [properties]} (build-initial-properties)
         db-ident->properties (zipmap (map :db/ident properties) properties)

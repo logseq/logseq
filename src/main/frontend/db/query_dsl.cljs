@@ -8,7 +8,7 @@
             [clojure.walk :as walk]
             [frontend.config :as config]
             [frontend.date :as date]
-            [frontend.db.file-based.model :as file-model]
+            [frontend.db.conn :as db-conn]
             [frontend.db.query-react :as query-react]
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
@@ -18,7 +18,9 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
+            [logseq.db :as ldb]
             [logseq.db.file-based.rules :as file-rules]
+            [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.rules :as rules]
             [logseq.graph-parser.text :as text]))
@@ -175,32 +177,51 @@
 
 (defonce remove-nil? (partial remove nil?))
 
+(defn- not-clause? [c]
+  (and (seq? c) (= 'not (first c))))
+
+(defn- distinct-preserve-order [xs]
+  (let [seen (volatile! #{})]
+    (reduce (fn [acc x]
+              (if (contains? @seen x)
+                acc
+                (do (vswap! seen conj x)
+                    (conj acc x))))
+            [] xs)))
+
 (defn- build-and-or-not
   [e {:keys [current-filter vars] :as env} level fe]
   (let [raw-clauses (map (fn [form]
                            (build-query form (assoc env :current-filter fe) (inc level)))
                          (rest e))
+
+        ;; preserve order (no hash-order surprises)
         clauses (->> raw-clauses
                      (map :query)
                      remove-nil?
-                     (distinct))
+                     (distinct-preserve-order))
+
+        ;; for (and ...), ensure any (not ...) comes AFTER positive binders
+        clauses (if (= fe 'and)
+                  (let [[nots others] (reduce (fn [[ns os] c]
+                                                (if (not-clause? c)
+                                                  [(conj ns c) os]
+                                                  [ns (conj os c)]))
+                                              [[] []]
+                                              clauses)]
+                    (concat others nots))
+                  clauses)
+
         nested-and? (and (= fe 'and) (= current-filter 'and))]
+
     (when (seq clauses)
-      (let [result (build-and-or-not-result
-                    fe clauses current-filter nested-and?)
-            vars' (set/union (set @vars) (collect-vars result))
-            query (cond
-                    nested-and?
-                    result
-
-                    (and (zero? level) (contains? #{'and 'or} fe))
-                    result
-
-                    (and (= 'not fe) (some? current-filter))
-                    result
-
-                    :else
-                    [result])]
+      (let [result (build-and-or-not-result fe clauses current-filter nested-and?)
+            vars'  (set/union (set @vars) (collect-vars result))
+            query  (cond
+                     nested-and? result
+                     (and (zero? level) (contains? #{'and 'or} fe)) result
+                     (and (= 'not fe) (some? current-filter)) result
+                     :else [result])]
         (reset! vars vars')
         {:query query
          :rules (distinct (mapcat :rules raw-clauses))}))))
@@ -340,13 +361,38 @@
   [e {:keys [db-graph? private-property?]}]
   (let [k (if db-graph? (->db-keyword-property (nth e 1)) (->file-keyword-property (nth e 1)))
         v (nth e 2)
-        v' (if db-graph? (->db-property-value k v) (->file-property-value v))]
+        v' (if db-graph? (->db-property-value k v) (->file-property-value v))
+        property (when (qualified-keyword? k)
+                   (db-utils/entity k))
+        ref-type? (= :db.type/ref (:db/valueType property))]
     (if db-graph?
-      (if private-property?
-        {:query (list 'private-simple-query-property '?b k v')
-         :rules [:private-simple-query-property]}
-        {:query (list 'simple-query-property '?b k v')
-         :rules [:simple-query-property]})
+      (let [default-value (if ref-type?
+                            (when-let [value (:logseq.property/default-value property)]
+                              (or (:block/title value)
+                                  (:logseq.property/value value)))
+                            (:logseq.property/scalar-default-value property))
+            default-value? (and (some? v') (= default-value v'))
+            rule (if private-property?
+                   (cond
+                     (and ref-type? default-value?)
+                     :private-ref-property-with-default
+                     ref-type?
+                     :private-ref-property
+                     default-value?
+                     :private-scalar-property-with-default
+                     :else
+                     :private-scalar-property)
+                   (cond
+                     (and ref-type? default-value?)
+                     :ref-property-with-default
+                     ref-type?
+                     :ref-property
+                     default-value?
+                     :scalar-property-with-default
+                     :else
+                     :scalar-property))]
+        {:query (list (symbol (name rule)) '?b k v')
+         :rules [rule]})
       {:query (list 'property '?b k v')
        :rules [:property]})))
 
@@ -414,10 +460,24 @@
   (let [tags (if (coll? (first (rest e)))
                (first (rest e))
                (rest e))
-        tags (map (comp string/lower-case name) tags)]
+        tags (map name tags)]
     (when (seq tags)
-      (let [tags (set (map (comp page-ref/get-page-name! string/lower-case name) tags))]
-        {:query (list 'tags (if db-graph? '?b '?p) tags)
+      (let [tags (set (map (comp page-ref/get-page-name!) tags))
+            lower-cased-tags (set (map (comp page-ref/get-page-name! string/lower-case) tags))]
+        {:query (list 'tags
+                      (if db-graph? '?b '?p)
+                      (if db-graph?
+                        (let [db (db-conn/get-db)]
+                          (->> tags
+                               (mapcat (fn [tag-name]
+                                         (when-let [tag-id (if (common-util/uuid-string? tag-name)
+                                                             [:block/uuid (uuid tag-name)]
+                                                             (first (ldb/page-exists? db tag-name #{:logseq.class/Tag})))]
+                                           (when-let [tag (db-utils/entity tag-id)]
+                                             (->> (db-class/get-structured-children db (:db/id tag))
+                                                  (cons (:db/id tag)))))))
+                               set))
+                        lower-cased-tags))
          :rules [:tags]}))))
 
 (defn- build-page-tags
@@ -482,9 +542,20 @@
 (defn- build-page-ref
   [e]
   (let [page-name (-> (page-ref/get-page-name! e)
-                      (util/page-name-sanity-lc))]
-    {:query (list 'page-ref '?b page-name)
-     :rules [:page-ref]}))
+                      (util/page-name-sanity-lc))
+        page (ldb/get-page (db-conn/get-db) page-name)]
+    (when page
+      {:query (list 'page-ref '?b (:db/id page))
+       :rules [:page-ref]})))
+
+(defn- build-self-ref
+  [e]
+  (let [page-name (-> (page-ref/get-page-name! e)
+                      (util/page-name-sanity-lc))
+        page (ldb/get-page (db-conn/get-db) page-name)]
+    (when page
+      {:query (list 'self-ref '?b (:db/id page))
+       :rules [:self-ref]})))
 
 (defn- build-block-content [e]
   {:query (list 'block-content '?b e)
@@ -532,7 +603,7 @@ Some bindings in this fn:
 * fe - the query operator e.g. `property`"
   ([e env]
    (build-query e (assoc env :vars (atom {})) 0))
-  ([e {:keys [blocks? sample] :as env :or {blocks? (atom nil)}} level]
+  ([e {:keys [form blocks? sample current-filter] :as env :or {blocks? (atom nil)}} level]
    ; {:post [(or (nil? %) (map? %))]}
    (let [fe (first e)
          fe (when fe
@@ -547,7 +618,7 @@ Some bindings in this fn:
      (when (or
             (:db-graph? env)
             (and page-ref?
-                 (not (contains? #{'page-property 'page-tags} (:current-filter env))))
+                 (not (contains? #{'page-property 'page-tags} current-filter)))
             (contains? #{'between 'property 'private-property 'todo 'task 'priority 'page} fe)
             (and (not page-ref?) (string? e)))
        (reset! blocks? true))
@@ -559,8 +630,13 @@ Some bindings in this fn:
        {:query [e]
         :rules []}
 
+       (and (= fe 'and) (every? page-ref/page-ref? (rest e)))
+       (build-query (concat e [(cons 'or (rest e))]) env level)
+
        page-ref?
-       (build-page-ref e)
+       (if (or (= current-filter 'or) (= form e))
+         (build-self-ref e)
+         (build-page-ref e))
 
        (string? e)                      ; block content full-text search, could be slow
        (build-block-content e)
@@ -629,35 +705,69 @@ Some bindings in this fn:
               (string/replace #"^#" "#tag ")
               (string/replace tag-placeholder "#")))))
 
+(defn- lvar? [x]
+  (and (symbol? x) (= \? (first (name x)))))
+
+(defn- collect-vars-by-polarity
+  "Returns {:pos #{?vars} :neg #{?vars}}.
+   Vars inside (not ...) are counted as negative."
+  [form]
+  (let [pos (volatile! #{})
+        neg (volatile! #{})]
+    (letfn [(walk* [x positive?]
+              (cond
+                (lvar? x)
+                (vswap! (if positive? pos neg) conj x)
+
+                (and (seq? x) (= 'not (first x)))
+                (doseq [c (rest x)] (walk* c false))
+
+                (sequential? x)
+                (doseq [c x] (walk* c positive?))
+
+                (map? x)
+                (do (doseq [k (keys x)] (walk* k positive?))
+                    (doseq [v (vals x)] (walk* v positive?)))
+
+                :else nil))]
+      (walk* form true)
+      {:pos @pos :neg @neg})))
+
 (defn- add-bindings!
   [q {:keys [db-graph?]}]
-  (let [forms (set (flatten q))
-        syms ['?b '?p 'not]
-        [b? p? not?] (-> (set/intersection (set syms) forms)
-                         (map syms))]
-    (cond
-      not?
-      (cond
-        (and b? p?)
-        (concat [['?b :block/uuid] ['?p :block/name] ['?b :block/page '?p]] q)
+  (let [{:keys [pos neg]} (collect-vars-by-polarity q)
 
-        b?
-        (if db-graph?
-          ;; This keeps built-in properties from showing up in not results.
-          ;; May need to be revisited as more class and property filters are explored
-          (concat [['?b :block/uuid] '[(missing? $ ?b :logseq.property/built-in?)]] q)
-          (concat [['?b :block/uuid]] q))
+        appears?      (fn [v] (or (contains? pos v) (contains? neg v)))
+        needs-domain? (fn [v] (and (appears? v) (not (contains? pos v))))
 
-        p?
-        (concat [['?p :block/name]] q)
+        b-need? (needs-domain? '?b)
+        p-need? (needs-domain? '?p)
 
-        :else
-        q)
+        ;; CASE 1: both needed → link them, do NOT enumerate all blocks
+        bindings
+        (cond
+          (and b-need? p-need?)
+          [['?b :block/page '?p]]
 
-      (and b? p?)
-      (concat [['?b :block/page '?p]] q)
+          ;; CASE 2: only ?b needed → last-resort domain (true global negation)
+          b-need?
+          (if db-graph?
+            [['?b :block/uuid]
+             '[(missing? $ ?b :logseq.property/built-in?)]]
+            [['?b :block/uuid]])
 
-      :else
+          ;; CASE 3: only ?p needed
+          p-need?
+          [['?p :block/name]]
+
+          ;; CASE 4: both already positive → optional link (cheap + useful)
+          (and (contains? pos '?b) (contains? pos '?p))
+          [['?b :block/page '?p]]
+
+          :else
+          nil)]
+    (if (seq bindings)
+      (concat bindings q)   ;; IMPORTANT: bindings FIRST
       q)))
 
 (defn simplify-query
@@ -688,7 +798,8 @@ Some bindings in this fn:
           sample (atom nil)
           form (simplify-query form)
           {result :query rules :rules}
-          (when form (build-query form {:sort-by sort-by
+          (when form (build-query form {:form form
+                                        :sort-by sort-by
                                         :blocks? blocks?
                                         :db-graph? db-graph?
                                         :sample sample
@@ -699,11 +810,21 @@ Some bindings in this fn:
                                 ;; [(not (page-ref ?b "page 2"))]
                                 (keyword (ffirst result))
                                 (keyword (first result)))]
-                      (add-bindings! (if (= key :and) (rest result) result) opts)))]
+                      (add-bindings! (if (= key :and) (rest result) result) opts)))
+          extract-rules (fn [rules]
+                          (rules/extract-rules rules/db-query-dsl-rules rules {:deps rules/rules-dependencies}))
+          rules' (if db-graph?
+                   (let [rules' (if (contains? (set rules) :page-ref)
+                                  (conj (set rules) :self-ref)
+                                  rules)]
+                     (extract-rules rules'))
+                   (->> (concat (map file-rules/query-dsl-rules (remove #{:page-ref} rules))
+                                (when (some #{:page-ref :self-ref} rules)
+                                  (extract-rules [:self-ref :page-ref])))
+                        (remove nil?)
+                        vec))]
       {:query result'
-       :rules (if db-graph?
-                (rules/extract-rules rules/db-query-dsl-rules rules {:deps rules/rules-dependencies})
-                (mapv file-rules/query-dsl-rules rules))
+       :rules rules'
        :sort-by @sort-by
        :blocks? (boolean @blocks?)
        :sample sample})))
@@ -713,7 +834,7 @@ Some bindings in this fn:
 
 (defn query-wrapper
   [where {:keys [blocks? block-attrs]}]
-  (let [block-attrs (or block-attrs (butlast file-model/file-graph-block-attrs))
+  (let [block-attrs (or block-attrs '[*])
         q (if blocks?                   ; FIXME: it doesn't need to be either blocks or pages
             `[:find (~'pull ~'?b ~block-attrs)
               :in ~'$ ~'%
@@ -758,7 +879,7 @@ Some bindings in this fn:
            blocks? (if db-graph? true blocks?)]
        (when-let [query' (some-> query* (query-wrapper {:blocks? blocks?
                                                         :block-attrs (when db-graph? db-block-attrs)}))]
-         (let [random-samples (if @sample
+         (let [random-samples (if (and sample @sample)
                                 (fn [col]
                                   (take @sample (shuffle col)))
                                 identity)
@@ -795,10 +916,6 @@ Some bindings in this fn:
                                            (if db-graph?
                                              identity
                                              #(sort-by % (fn [m prop] (get-in m [:block/properties prop]))))}))))))))
-
-(defn query-contains-filter?
-  [query' filter-name]
-  (string/includes? query' (str "(" filter-name)))
 
 (comment
   (query "(and [[foo]] [[bar]])")

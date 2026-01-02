@@ -1,16 +1,16 @@
 (ns frontend.extensions.fsrs
   "Flashcards functions based on FSRS, only works in db-based graphs"
   (:require [clojure.string :as string]
+            [frontend.commands :as commands]
             [frontend.common.missionary :as c.m]
             [frontend.components.block :as component-block]
-            [frontend.config :as config]
+            [frontend.components.macro :as component-macro]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
             [frontend.db.query-dsl :as query-dsl]
-            [frontend.extensions.srs :as srs]
             [frontend.handler.block :as block-handler]
             [frontend.handler.property :as property-handler]
             [frontend.modules.shortcut.core :as shortcut]
@@ -25,6 +25,9 @@
             [promesa.core :as p]
             [rum.core :as rum]
             [tick.core :as tick]))
+
+(commands/register-slash-command ["Cloze"
+                                  [[:editor/input "{{cloze }}" {:backward-pos 2}]]])
 
 (def ^:private instant->inst-ms (comp inst-ms tick/inst))
 (defn- inst-ms->instant [ms] (tick/instant (js/Date. ms)))
@@ -44,13 +47,10 @@
       (update :due inst-ms->instant)))
 
 (defn- get-card-map
-  "Return nil if block is not #card.
+  "Return nil if block is not #Card.
   Return default card-map if `:logseq.property.fsrs/state` or `:logseq.property.fsrs/due` is nil"
   [block-entity]
-  (when (some (fn [tag]
-                (assert (some? (:db/ident tag)) tag)
-                (= :logseq.class/Card (:db/ident tag))) ;block should contains #Card
-              (:block/tags block-entity))
+  (when (ldb/class-instance? (db/entity :logseq.class/Card) block-entity)
     (let [fsrs-state (:logseq.property.fsrs/state block-entity)
           fsrs-due (:logseq.property.fsrs/due block-entity)
           return-default-card-map? (not (and fsrs-state fsrs-due))]
@@ -74,7 +74,7 @@
                                 (assoc :logseq/last-rating rating))
             prop-fsrs-due (:due prop-card-map)]
         (property-handler/set-block-properties!
-         repo (:block/uuid block-entity)
+         (:block/uuid block-entity)
          {:logseq.property.fsrs/state prop-fsrs-state
           :logseq.property.fsrs/due prop-fsrs-due})))))
 
@@ -84,10 +84,13 @@
         cards (when (and cards-id (not= (keyword cards-id) :global)) (db/entity cards-id))
         query (:block/title cards)
         result (query-dsl/parse query {:db-graph? true})
+        card-tag-id (:db/id (db/entity :logseq.class/Card))
+        card-tag-children-ids (db-model/get-structured-children repo card-tag-id)
+        card-ids (cons card-tag-id card-tag-children-ids)
         q '[:find [?b ...]
-            :in $ ?now-inst-ms %
+            :in $ [?t ...] ?now-inst-ms %
             :where
-            [?b :block/tags :logseq.class/Card]
+            [?b :block/tags ?t]
             (or-join [?b ?now-inst-ms]
                      (and
                       [?b :logseq.property.fsrs/due ?due]
@@ -100,7 +103,7 @@
                 q
                 (if (coll? (first query*)) query* [query*])))
              q)]
-    (db-async/<q repo {:transact-db? false} q' now-inst-ms (:rules result))))
+    (db-async/<q repo {:transact-db? false} q' card-ids now-inst-ms (:rules result))))
 
 (defn- btn-with-shortcut [{:keys [shortcut id btn-text due on-click class]}]
   (let [bg-class (case id
@@ -200,7 +203,8 @@
             _card-index (rum/react *card-index)
             next-phase (phase->next-phase block-entity phase)]
         [:div.ls-card.content.flex.flex-col.overflow-y-auto.overflow-x-hidden
-         [:div (component-block/breadcrumb {} repo (:block/uuid block-entity) {})]
+         [:div.mb-4.ml-2.opacity-70.text-sm
+          (component-block/breadcrumb {} repo (:block/uuid block-entity) {})]
          (let [option (case phase
                         :init
                         {:hide-children? true}
@@ -211,16 +215,15 @@
            (component-block/blocks-container option [block-entity]))
          [:div.mt-8.pb-2
           (if (contains? #{:show-cloze :show-answer} next-phase)
-            (btn-with-shortcut {:btn-text (t
-                                           (case next-phase
-                                             :show-answer
-                                             :flashcards/modal-btn-show-answers
-                                             :show-cloze
-                                             :flashcards/modal-btn-show-clozes
-                                             :init
-                                             :flashcards/modal-btn-hide-answers))
+            (btn-with-shortcut {:btn-text (case next-phase
+                                            :show-answer
+                                            (t :flashcards/modal-btn-show-answers)
+                                            :show-cloze
+                                            (t :flashcards/modal-btn-show-clozes)
+                                            :init
+                                            (t :flashcards/modal-btn-hide-answers))
                                 :shortcut "s"
-                                :id (str "card-answers")
+                                :id "card-answers"
                                 :on-click #(swap! *phase
                                                   (fn [phase]
                                                     (phase->next-phase block-entity phase)))})
@@ -252,7 +255,9 @@
         all-cards (concat
                    [{:db/id :global
                      :block/title "All cards"}]
-                   (db-model/get-class-objects repo (:db/id (entity-plus/entity-memoized (db/get-db) :logseq.class/Cards))))
+                   (db-model/get-class-objects repo (:db/id (entity-plus/entity-memoized (db/get-db) :logseq.class/Cards)))
+                   ;; TODO: list all children tags of #Card
+                   )
         *block-ids (::block-ids state)
         block-ids (rum/react *block-ids)
         loading? (rum/react (::loading? state))
@@ -292,7 +297,7 @@
             [:h2.font-medium (t :flashcards/modal-welcome-title)]
 
             [:div
-             [:p (t :flashcards/modal-welcome-desc-1)]]]
+             [:p (t :flashcards/modal-welcome-desc-1 "#Card")]]]
 
            :else
            [:p (t :flashcards/modal-finished)]))])))
@@ -302,14 +307,12 @@
   "Return a task that update `:srs/cards-due-count` periodically."
   (m/sp
     (let [repo (state/get-current-repo)]
-      (if (config/db-based-graph? repo)
-        (m/?
-         (m/reduce
-          (fn [_ _]
-            (p/let [due-cards (<get-due-card-block-ids repo nil)]
-              (state/set-state! :srs/cards-due-count (count due-cards))))
-          (c.m/clock (* 3600 1000))))
-        (srs/update-cards-due-count!)))))
+      (m/?
+       (m/reduce
+        (fn [_ _]
+          (p/let [due-cards (<get-due-card-block-ids repo nil)]
+            (state/set-state! :srs/cards-due-count (count due-cards))))
+        (c.m/clock (* 3600 1000)))))))
 
 (defn update-due-cards-count
   []
@@ -332,14 +335,55 @@
 (defn batch-make-cards!
   ([] (batch-make-cards! (state/get-selection-block-ids)))
   ([block-ids]
-   (let [repo (state/get-current-repo)
-         blocks (get-operating-blocks block-ids)]
+   (let [blocks (get-operating-blocks block-ids)]
      (when-let [block-ids (not-empty (map :block/uuid blocks))]
        (property-handler/batch-set-block-property!
-        repo
         block-ids
         :block/tags
         (:db/id (db/entity :logseq.class/Card)))))))
+
+;;; register cloze macro
+
+(def ^:private cloze-cue-separator "\\\\")
+
+(defn- cloze-parse
+  "Parse the cloze content, and return [answer cue]."
+  [content]
+  (let [parts (string/split content cloze-cue-separator -1)]
+    (if (<= (count parts) 1)
+      [content nil]
+      (let [cue (string/trim (last parts))]
+        ;; If there are more than one separator, only the last component is considered the cue.
+        [(string/trimr (string/join cloze-cue-separator (drop-last parts))) cue]))))
+
+(rum/defcs cloze-macro-show < rum/reactive
+  {:init (fn [state]
+           (let [config (first (:rum/args state))
+                 shown? (atom (:show-cloze? config))]
+             (assoc state :shown? shown?)))}
+  [state config options]
+  (let [shown?* (:shown? state)
+        shown? (rum/react shown?*)
+        toggle! #(swap! shown?* not)
+        [answer cue] (cloze-parse (string/join ", " (:arguments options)))]
+    (if (or shown? (:show-cloze? config))
+      [:a.cloze-revealed {:on-click toggle!}
+       (util/format "[%s]" answer)]
+      [:a.cloze {:on-click toggle!}
+       (if (string/blank? cue)
+         "[...]"
+         (str "(" cue ")"))])))
+
+(def cloze-macro-name
+  "cloze syntax: {{cloze: ...}}"
+  "cloze")
+
+;; TODO: support {{cards ...}}
+;; (def query-macro-name
+;;   "{{cards ...}}"
+;;   "cards")
+
+(component-macro/register cloze-macro-name cloze-macro-show)
 
 (comment
   (defn- cards-in-time-range

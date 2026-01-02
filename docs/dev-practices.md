@@ -336,24 +336,13 @@ These tasks are specific to database graphs. For these tasks there is a one time
 ```sh
   $ cd deps/db && yarn install && cd ../outliner && yarn install && cd ../graph-parser && yarn install && cd ../..
 ```
-
-* `dev:validate-db` - Validates a DB graph's datascript schema
-
-  ```sh
-  # One or more graphs can be validated e.g.
-  $ bb dev:validate-db test-db schema
-  Read graph test-db with 1572 datoms, 220 entities and 13 properties
-  Valid!
-  Read graph schema with 26105 datoms, 2320 entities and 3168 properties
-  Valid!
-  ```
-
+* `dev:db-cli` - Run a CLI command from deps/db using latest deps/db code
 * `dev:db-query` - Query a DB graph
 
   ```sh
   $ bb dev:db-query woot '[:find (pull ?b [*]) :where (block-content ?b "Dogma")]'
   DB contains 833 datoms
-  [{:block/tx-id 536870923, :block/link #:db{:id 100065}, :block/uuid #uuid "65565c26-f972-4400-bce4-a15df488784d", :block/updated-at 1700158508564, :block/order "a0", :block/refs [#:db{:id 100064}], :block/created-at 1700158502056, :block/format :markdown, :block/tags [#:db{:id 100064}], :block/title "Dogma #[[65565c2a-b1c5-4dc8-a0f0-81b786bc5c6d]]", :db/id 100090, :block/path-refs [#:db{:id 100051} #:db{:id 100064}], :block/parent #:db{:id 100051}, :block/page #:db{:id 100051}}]
+  [{:block/tx-id 536870923, :block/link #:db{:id 100065}, :block/uuid #uuid "65565c26-f972-4400-bce4-a15df488784d", :block/updated-at 1700158508564, :block/order "a0", :block/refs [#:db{:id 100064}], :block/created-at 1700158502056, :block/format :markdown, :block/tags [#:db{:id 100064}], :block/title "Dogma #[[65565c2a-b1c5-4dc8-a0f0-81b786bc5c6d]]", :db/id 100090, :block/parent #:db{:id 100051}, :block/page #:db{:id 100051}}]
   ```
 
 * `dev:db-transact` - Run a `d/transact!` against the queried results of a DB graph
@@ -424,9 +413,6 @@ These tasks are specific to database graphs. For these tasks there is a one time
     [162 :block/format :markdown 536871037 true]
     [162 :block/page 149 536871037 true]
     [162 :block/parent 149 536871037 true]
-    [162 :block/path-refs 108 536871044 true]
-    [162 :block/path-refs 149 536871044 true]
-    [162 :block/path-refs 160 536871044 true]
     [162
     :block/properties
     {#uuid "21be4275-bba9-48b8-9351-c9ca27883159"
@@ -462,9 +448,6 @@ These tasks are specific to database graphs. For these tasks there is a one time
     [162 :block/order "a0" 536871037 true]
     [162 :block/page 149 536871037 true]
     [162 :block/parent 149 536871037 true]
-    [162 :block/path-refs 108 536871044 true]
-    [162 :block/path-refs 149 536871044 true]
-    [162 :block/path-refs 160 536871044 true]
     [162
     :block/properties
     {#uuid "21be4275-bba9-48b8-9351-c9ca27883159"

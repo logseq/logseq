@@ -116,11 +116,6 @@
  ;;  :enabled-in-timestamped-blocks false ;don't display logbook at all
  ;; }
 
- ;; File sync options
- ;; Ignore these files when syncing, regexp is supported.
- ;; This is _only_ for file graphs.
- ;; :file-sync/ignore-files []
-
  ;; Configure the escaping method for special characters in page titles.
  ;; This is _only_ for file graphs.
  ;; Warning:
@@ -391,17 +386,4 @@
  ;;  :redirect-page? false          ;; Default value: false
  ;;  :default-page "quick capture"} ;; Default page: "quick capture"
 
- ;; Configure the Enter key behavior for
- ;; context-aware editing with DWIM (Do What I Mean).
- ;; context-aware Enter key behavior implies that pressing Enter will
- ;; have different outcomes based on the context.
- ;; For instance, pressing Enter within a list generates a new list item,
- ;; whereas pressing Enter in a block reference opens the referenced block.
- ;; :dwim/settings
- ;; {:admonition&src?  true        ;; Default value: true
- ;;  :markup?          false       ;; Default value: false
- ;;  :block-ref?       true        ;; Default value: true
- ;;  :page-ref?        true        ;; Default value: true
- ;;  :properties?      true        ;; Default value: true
- ;;  :list?            false}      ;; Default value: false
  }

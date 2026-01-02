@@ -4,6 +4,7 @@
   (:require [babashka.cli :as cli]
             [babashka.fs :as fs]
             [babashka.process :refer [shell]]
+            [babashka.tasks :refer [clojure]]
             [clojure.core.async :as async]
             [clojure.data :as data]
             [clojure.edn :as edn]
@@ -26,16 +27,15 @@
   (dev-lint/dev)
   (test "-e" "long" "-e" "fix-me"))
 
-(defn rtc-e2e-test
-  "Run karma rtc-e2e-test"
-  [& [skip-compile?]]
-  (let [seed (hash (rand))
-        r0 (when-not skip-compile? (shell (str "clj -M:rtc-e2e-test compile rtc-e2e-test")))
-        c1 (async/go (shell (str "npx karma start --testvar=client1 --single-run --seed=" seed)))
-        c2 (async/go (shell (str "npx karma start --testvar=client2 --single-run --seed=" seed)))]
-    (when (and r0 (not= 0 (:exit r0)))
-      (throw (ex-info "compile failed" {:r r0})))
-    (prn :exit-code :client1 (:exit (async/<!! c1)) :client2 (:exit (async/<!! c2)))))
+(defn e2e-basic-test
+  "Run e2e basic tests. HTTP server should be available at localhost:3001"
+  [& _]
+  (clojure {:dir "clj-e2e"} "-X:dev-run-all-basic-test"))
+
+(defn e2e-rtc-extra-test
+  "Run e2e rtc extra tests. HTTP server should be available at localhost:3001"
+  [& _]
+  (clojure {:dir "clj-e2e"} "-X:dev-run-rtc-extra-test"))
 
 (defn gen-malli-kondo-config
   "Generate clj-kondo type-mismatch config from malli schema
@@ -75,7 +75,7 @@
                                                     (fs/glob "." "{src/main,deps/graph-parser/src}/**")))))]
     (do
       (println "Building publishing js asset...")
-      (shell "clojure -M:cljs release publishing workers"))
+      (shell "clojure -M:cljs release publishing db-worker inference-worker"))
     (println "Publishing js asset is up to date")))
 
 (defn publishing-backend
@@ -109,5 +109,4 @@
     (doseq [file-graph file-graphs]
       (let [db-graph (fs/path parent-graph-dir (fs/file-name file-graph))]
         (println "Importing" (str db-graph) "...")
-        (apply shell "bb" "dev:db-import" file-graph db-graph import-options)
-        (shell "bb" "dev:validate-db" db-graph "-gHc")))))
+        (apply shell "bb" "dev:db-import" file-graph db-graph (concat import-options ["--validate"]))))))

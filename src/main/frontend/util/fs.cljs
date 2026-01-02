@@ -3,12 +3,8 @@
 (ns frontend.util.fs
   "Misc util fns built on top of frontend.fs"
   (:require ["path" :as node-path]
-            [cljs.reader :as reader]
             [clojure.string :as string]
-            [frontend.common.file.util :as wfu]
-            [frontend.config :as config]
-            [frontend.fs :as fs]
-            [promesa.core :as p]))
+            [frontend.common.file.util :as wfu]))
 
 ;; NOTE: This is not the same ignored-path? as src/electron/electron/utils.cljs.
 ;;       The assets directory is ignored.
@@ -40,23 +36,6 @@
           (not
            (some #(string/ends-with? path %)
                  [".md" ".markdown" ".org" ".js" ".edn" ".css"]))))))))
-
-(defn read-graphs-txid-info
-  [root]
-  (when (string? root)
-    (p/let [exists? (fs/file-exists? root "logseq/graphs-txid.edn")]
-      (when exists?
-        (-> (p/let [txid-str (fs/read-file root "logseq/graphs-txid.edn")
-                    txid-meta (and txid-str (reader/read-string txid-str))]
-              txid-meta)
-            (p/catch
-             (fn [^js e]
-               (js/console.error "[fs read txid data error]" e))))))))
-
-(defn read-repo-file
-  [repo-url file-rpath]
-  (when-let [repo-dir (config/get-repo-dir repo-url)]
-    (fs/read-file repo-dir file-rpath)))
 
 (def include-reserved-chars? wfu/include-reserved-chars?)
 (def windows-reserved-filebodies wfu/windows-reserved-filebodies)

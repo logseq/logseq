@@ -55,7 +55,7 @@ when a plugin is installed, updated or removed"
                     (update-vals #(select-keys % common-plugin-keys))
                     pprint/pprint
                     with-out-str)]
-    (fs/create-if-not-exists "" nil (plugin-config-path) content)))
+    (fs/create-if-not-exists (state/get-current-repo) nil (plugin-config-path) content)))
 
 (defn- determine-plugins-to-change
   "Given installed plugins state and plugins from plugins.edn,

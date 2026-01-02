@@ -6,6 +6,53 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]))
 
+(defn remove-conflict-same-block-datoms
+  "remove conflict entity-datoms for same-block(same block/uuid) in same-entity-datoms-coll."
+  [same-entity-datoms-coll]
+  (let [entity-info (map (fn [datoms]
+                           (let [first-datom (first datoms)
+                                 e           (nth first-datom 0)
+                                 t           (nth first-datom 3)
+                                 uuid-datom  (some (fn [d]
+                                                     (when (keyword-identical? :block/uuid (nth d 1))
+                                                       d))
+                                                   datoms)
+                                 uuid        (when uuid-datom (nth uuid-datom 2))
+                                 added?      (when uuid-datom (nth uuid-datom 4))]
+                             {:e e :t t :uuid uuid :added? added? :datoms datoms}))
+                         same-entity-datoms-coll)
+        uuid-groups (group-by :uuid (filter :uuid entity-info))
+        loser-eids  (reduce
+                     (fn [acc [_uuid infos]]
+                       (let [t-groups (group-by :t infos)]
+                         (reduce
+                          (fn [acc* [_t infos*]]
+                            (if (> (count infos*) 1)
+                              (let [sorted-infos (sort-by (fn [x] [(if (:added? x) 1 0) (:e x)])
+                                                          (fn [a b] (compare b a))
+                                                          infos*)
+                                    losers       (rest sorted-infos)]
+                                (into acc* (map :e losers)))
+                              acc*))
+                          acc
+                          t-groups)))
+                     #{}
+                     uuid-groups)]
+    (if (seq loser-eids)
+      (map :datoms (remove #(contains? loser-eids (:e %)) entity-info))
+      same-entity-datoms-coll)))
+
+(defn group-datoms-by-entity
+  "Groups transaction datoms by entity and returns a map of entity-id to datoms."
+  [tx-data]
+  (let [datom-vec-coll (map vec tx-data)
+        id->same-entity-datoms (group-by first datom-vec-coll)
+        id-order (distinct (map first datom-vec-coll))
+        same-entity-datoms-coll (map id->same-entity-datoms id-order)
+        same-entity-datoms-coll (remove-conflict-same-block-datoms same-entity-datoms-coll)]
+    {:same-entity-datoms-coll same-entity-datoms-coll
+     :id->same-entity-datoms  id->same-entity-datoms}))
+
 (defn- latest-add?->v->t
   [add?->v->t]
   (let [latest-add     (first (sort-by second > (seq (add?->v->t true))))
@@ -128,24 +175,36 @@
    {} entity-datoms))
 
 (defn generate-rtc-ops
-  [db-before db-after same-entity-datoms-coll e->a->v->add?->t]
+  [db-before db-after same-entity-datoms-coll e->a->add?->v->t]
   (mapcat
    (partial entity-datoms=>ops
-            db-before db-after e->a->v->add?->t rtc-const/ignore-attrs-when-syncing)
+            db-before db-after e->a->add?->v->t rtc-const/ignore-attrs-when-syncing)
    same-entity-datoms-coll))
 
 (defn- generate-rtc-ops-from-entities
   [ents]
-  (let [db (d/entity-db (first ents))
-        id->same-entity-datoms
-        (into {}
-              (map (fn [ent]
-                     (let [e (:db/id ent)
-                           datoms (d/datoms db :eavt e)]
-                       [e datoms])))
-              ents)
-        e->a->v->add?->t (update-vals id->same-entity-datoms entity-datoms=>a->add?->v->t)]
-    (generate-rtc-ops db db (vals id->same-entity-datoms) e->a->v->add?->t)))
+  (when (seq ents)
+    (let [db (d/entity-db (first ents))
+          id->same-entity-datoms
+          (into {}
+                (map (fn [ent]
+                       (let [e (:db/id ent)
+                             datoms (d/datoms db :eavt e)]
+                         [e datoms])))
+                ents)
+          e->a->add?->v->t (update-vals id->same-entity-datoms entity-datoms=>a->add?->v->t)]
+      (generate-rtc-ops db db (vals id->same-entity-datoms) e->a->add?->v->t))))
+
+(defn generate-rtc-ops-from-entities+parents
+  "generate ents and their parents as rtc-ops"
+  [ents]
+  (let [ents*
+        (set
+         (mapcat
+          (fn [ent]
+            (take 20 (take-while some? (iterate :block/parent ent))))
+          ents))]
+    (generate-rtc-ops-from-entities ents*)))
 
 (defn generate-rtc-ops-from-property-entities
   [property-ents]
@@ -158,3 +217,15 @@
   (when (seq class-ents)
     (assert (every? ldb/class? class-ents))
     (generate-rtc-ops-from-entities class-ents)))
+
+(defn generate-rtc-rename-db-ident-ops
+  [rename-db-idents]
+  (assert (every? (fn [{:keys [db-ident-or-block-uuid new-db-ident]}]
+                    (and (or (keyword? db-ident-or-block-uuid) (uuid? db-ident-or-block-uuid))
+                         (keyword? new-db-ident)))
+                  rename-db-idents)
+          rename-db-idents)
+  (map
+   (fn [{:keys [db-ident-or-block-uuid new-db-ident]}]
+     [:rename-db-ident 0 {:db-ident-or-block-uuid db-ident-or-block-uuid :new-db-ident new-db-ident}])
+   rename-db-idents))

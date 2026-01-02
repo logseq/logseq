@@ -2,13 +2,21 @@
   "Babashka.cli specs for commands. Normally these would live alongside their
   commands but are separate because command namespaces are lazy loaded")
 
+(def export
+  {:graph {:alias :g
+           :desc "Local graph to export"}
+   :file {:alias :f
+          :desc "File to save export"}})
+
 (def export-edn
-  {:include-timestamps? {:alias :T
+  {:api-server-token {:alias :a
+                      :desc "API server token to export current graph"}
+   :graph {:alias :g
+           :desc "Local graph to export"}
+   :include-timestamps? {:alias :T
                          :desc "Include timestamps in export"}
    :file {:alias :f
-          :desc "Saves edn to file"}
-   :catch-validation-errors? {:alias :c
-                              :desc "Catch validation errors for dev"}
+          :desc "File to save export"}
    :exclude-namespaces {:alias :e
                         :coerce #{}
                         :desc "Namespaces to exclude from properties and classes"}
@@ -19,25 +27,69 @@
    :export-type {:alias :t
                  :coerce :keyword
                  :desc "Export type"
-                 :default :graph}})
+                 :default :graph}
+   :validate {:alias :v
+              :desc "(Dev) Validate export with a temp graph built on exported EDN"}
+   :catch-validation-errors? {:alias :c
+                              :desc "(Dev) Catch validation errors and still write invalid EDN"}})
+
+(def import-edn
+  {:api-server-token {:alias :a
+                      :desc "API server token to import into current graph"}
+   :graph {:alias :g
+           :desc "Local graph to import into"}
+   :file {:alias :f
+          :require true
+          :desc "EDN File to import"}})
 
 (def query
-  {:graphs {:alias :g
+  {:api-server-token {:alias :a
+                      :desc "API server token to query current graph"}
+   :graphs {:alias :g
             :coerce []
-            :desc "Additional graphs to query"}
+            :desc "Local graph(s) to query"}
    :properties-readable {:alias :p
                          :coerce :boolean
-                         :desc "Make properties on entity queries show property values instead of ids"}
+                         :desc "Make properties on local, entity queries show property values instead of ids"}
    :title-query {:alias :t
-                 :desc "Invokes local query on :block/title"}
-   :api-query-token {:alias :a
-                     :desc "Query current graph with api server token"}})
+                 :desc "Invoke local query on :block/title"}})
 
 (def search
-  {:api-query-token {:alias :a
-                     :desc "Api server token"}
+  {:api-server-token {:alias :a
+                      :desc "API server token to search current graph"}
+   :graph {:alias :g
+           :desc "Local graph to search"}
    :raw {:alias :r
          :desc "Print raw response"}
    :limit {:alias :l
            :default 100
            :desc "Limit max number of results"}})
+
+(def append
+  {:api-server-token {:alias :a
+                      :desc "API server token to modify current graph"}})
+
+(def mcp-server
+  {:api-server-token {:alias :a
+                      :desc "API server token to connect to current graph"}
+   :graph {:alias :g
+           :desc "Local graph to use with MCP server"}
+   :stdio {:alias :s
+           :desc "Run the MCP server via stdio transport"}
+   :port {:alias :p
+          :default 12315
+          :coerce :long
+          :desc "Port for streamable HTTP server"}
+   :host {:default "127.0.0.1"
+          :desc "Host for streamable HTTP server"}
+   :debug-tool {:alias :t
+                :coerce :keyword
+                :desc "Debug mcp tool with direct invocation"}})
+
+(def validate
+  {:graphs {:alias :g
+            :coerce []
+            :require true
+            :desc "Local graph(s) to validate"}
+   :open-schema {:alias :o
+                 :desc "Validate with open schema to allow extra keys/attributes in an entity map"}})

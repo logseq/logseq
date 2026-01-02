@@ -10,17 +10,10 @@
             [frontend.handler.notification :as notification]
             [frontend.search :as search]
             [frontend.state :as state]
-            [frontend.storage :as storage]
             [frontend.util :as util]
             [logseq.db :as ldb]
-            [logseq.graph-parser.text :as text]
             [missionary.core :as m]
             [promesa.core :as p]))
-
-(defn sanity-search-content
-  "Convert a block to the display contents for searching"
-  [format content]
-  (text/remove-level-spaces content format (config/get-block-pattern format)))
 
 (defn search
   "The aggretation of search results"
@@ -147,7 +140,7 @@
                  (not (util/safe-re-find #" " q)))
           (let [i (string/index-of lc-content lc-q)
                 [before after] [(subs content 0 i) (subs content (+ i (count q)))]]
-            [:div
+            [:span
              (when-not (string/blank? before)
                [:span before])
              [:mark.p-0.rounded-none (subs content i (+ i (count q)))]
@@ -171,19 +164,4 @@
                                         content
                                         result)))
                              (conj result [:span content])))]
-            [:p {:class "m-0"} elements]))))))
-
-(defn get-recents
-  []
-  (storage/get :recent-search-items))
-
-(defn add-recent!
-  [item]
-  (when-not (string/blank? item)
-    (let [recents (get-recents)]
-      (storage/set :recent-search-items
-                   (distinct (take 20 (cons item recents)))))))
-
-(defn clear-recents!
-  []
-  (storage/remove :recent-search-items))
+            [:span {:class "m-0"} elements]))))))

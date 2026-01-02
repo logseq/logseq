@@ -29,8 +29,8 @@ var config = {
 var AppConfig = Object.assign({}, config, {
   name: "app",
   entry: {
-    main : "./target/main.js",
-    workers : "./target/workers.js",
+    "db-worker" : "./target/db-worker.js",
+    "inference-worker" : "./target/inference-worker.js"
   },
 
   output: {
@@ -44,8 +44,7 @@ var AppConfig = Object.assign({}, config, {
 var MobileConfig = Object.assign({}, config, {
   name: "mobile",
   entry: {
-    main : "./target/mobile.js",
-    workers : "./target/workers.js",
+    "db-worker" : "./target/db-worker.js",
   },
 
   output: {

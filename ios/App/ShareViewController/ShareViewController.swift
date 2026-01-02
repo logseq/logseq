@@ -50,6 +50,21 @@ class ShareViewController: UIViewController {
         return copyFileUrl
     }
 
+    private func saveData(_ data: Data, fileExtension: String) -> URL? {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd-HH-mm-ss"
+        let filename = dateFormatter.string(from: Date()) + "." + fileExtension
+
+        let copyFileUrl = groupContainerUrl!.appendingPathComponent(filename)
+        do {
+            try data.write(to: copyFileUrl)
+            return copyFileUrl
+        } catch {
+            print(error.localizedDescription)
+            return nil
+        }
+    }
+
     // Screenshots, shared images from some system App are passed as UIImage
     func saveUIImage(_ image: UIImage) -> URL? {
         let dateFormatter = DateFormatter()
@@ -83,6 +98,28 @@ class ShareViewController: UIViewController {
             res.url = createSharedFileUrl(url)
         } else {
             res.name = url!.absoluteString
+            res.type = "text/plain"
+        }
+
+        return res
+    }
+
+    // Some shares (notably system screenshots) can come through as a file URL item.
+    fileprivate func handleTypeFileUrl(_ attachment: NSItemProvider)
+    async throws -> SharedResource
+    {
+        let results = try await attachment.loadItem(forTypeIdentifier: kUTTypeFileURL as String, options: nil)
+        let url = results as! URL?
+
+        var res = SharedResource()
+
+        if let url, url.isFileURL {
+            res.name = url.lastPathComponent
+            res.ext = url.pathExtension.lowercased()
+            res.type = url.pathExtensionAsMimeType()
+            res.url = createSharedFileUrl(url)
+        } else if let url {
+            res.name = url.absoluteString
             res.type = "text/plain"
         }
 
@@ -127,6 +164,22 @@ class ShareViewController: UIViewController {
             res.ext = "png"
             res.name = res.url?.lastPathComponent
             res.type = res.url?.pathExtensionAsMimeType()
+        case let data as Data:
+            let ext: String
+            if attachment.hasItemConformingToTypeIdentifier(UTType.png.identifier) {
+                ext = "png"
+            } else if attachment.hasItemConformingToTypeIdentifier(UTType.jpeg.identifier) {
+                ext = "jpg"
+            } else if attachment.hasItemConformingToTypeIdentifier(UTType.heic.identifier) {
+                ext = "heic"
+            } else {
+                ext = "png"
+            }
+
+            res.url = self.saveData(data, fileExtension: ext)
+            res.ext = ext
+            res.name = res.url?.lastPathComponent
+            res.type = res.url?.pathExtensionAsMimeType()
         case let url as URL:
             res.name = url.lastPathComponent
             res.ext = url.pathExtension.lowercased()
@@ -155,6 +208,10 @@ class ShareViewController: UIViewController {
                                 taskGroup.addTask {
                                     return try await self.handleTypeUrl(attachment)
                                 }
+                            } else if attachment.hasItemConformingToTypeIdentifier(kUTTypeFileURL as String) {
+                                taskGroup.addTask {
+                                    return try await self.handleTypeFileUrl(attachment)
+                                }
                             } else if attachment.hasItemConformingToTypeIdentifier(kUTTypeText as String) {
                                 taskGroup.addTask {
                                     return try await self.handleTypeText(attachment)
@@ -167,6 +224,9 @@ class ShareViewController: UIViewController {
                                 taskGroup.addTask {
                                     return try await self.handleTypeImage(attachment)
                                 }
+                            } else {
+                                // Useful for diagnosing shares that don't match the legacy kUTType checks.
+                                print("Unhandled attachment types:", attachment.registeredTypeIdentifiers)
                             }
                         }
                     }
@@ -184,15 +244,15 @@ class ShareViewController: UIViewController {
     }
 
     @discardableResult
-    @objc func openURL(_ url: URL) -> Bool {
+    @objc func openURL(_ url: URL) {
         var responder: UIResponder? = self
         while responder != nil {
             if let application = responder as? UIApplication {
-                return application.perform(#selector(openURL(_:)), with: url) != nil
+                application.open(url, options: [:], completionHandler: nil)
+                return
             }
             responder = responder?.next
         }
-        return false
     }
 
 
@@ -204,4 +264,3 @@ extension URL {
         return type?.preferredMIMEType
     }
 }
-

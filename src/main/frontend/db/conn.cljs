@@ -37,9 +37,6 @@
     (mobile-util/native-platform?)
     (text-util/get-graph-name-from-path repo-url)
 
-    (config/local-file-based-graph? repo-url)
-    (config/get-local-dir repo-url)
-
     :else
     (db-conn-state/get-repo-path repo-url)))
 
@@ -75,6 +72,10 @@
     ([repo tx-data tx-meta]
      (ldb/transact! repo tx-data tx-meta))))
 
+(defn destroy-all!
+  []
+  (reset! conns {}))
+
 (defn start!
   ([repo]
    (start! repo {}))
@@ -83,10 +84,7 @@
          db-conn (if (config/db-based-graph? repo)
                    (d/create-conn db-schema/schema)
                    (gp-db/start-conn))]
+     (destroy-all!)
      (swap! conns assoc db-name db-conn)
      (when listen-handler
        (listen-handler db-conn)))))
-
-(defn destroy-all!
-  []
-  (reset! conns {}))

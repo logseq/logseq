@@ -3,14 +3,12 @@
   cursors"
   (:require [cljs-bean.core :as bean]
             [cljs.core.async :as async :refer [>!]]
-            [cljs.spec.alpha :as s]
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
             [frontend.db.conn-state :as db-conn-state]
-            [frontend.db.transact :as db-transact]
             [frontend.flows :as flows]
             [frontend.mobile.util :as mobile-util]
             [frontend.spec.storage :as storage-spec]
@@ -22,7 +20,6 @@
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
-            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
@@ -33,7 +30,9 @@
 (defonce *profile-state (volatile! {}))
 
 (defonce *db-worker (atom nil))
+(defonce *db-worker-client-id (atom (storage/get :db-worker-client-id)))
 (defonce *editor-info (atom nil))
+(defonce app-ready-promise (p/deferred))
 
 (def db-worker-ready-flow
   "`<invoke-db-worker` throws err if `*db-worker` not ready yet.
@@ -74,17 +73,13 @@
       :route-match                           nil
       :today                                 nil
       :system/events                         (async/chan 1000)
-      :file/unlinked-dirs                    #{}
       :reactive/custom-queries               (async/chan 1000)
       :notification/show?                    false
       :notification/content                  nil
-      :repo/loading-files?                   {}
-      :nfs/refreshing?                       nil
       :instrument/disabled?                  (storage/get "instrument-disabled")
       ;; TODO: how to detect the network reliably?
       ;; NOTE: prefer to use flows/network-online-event-flow
       :network/online?         true
-      :indexeddb/support?      true
       :me                      nil
       :git/current-repo        current-graph
       :draw?                   false
@@ -176,9 +171,6 @@
       ;; Stores deleted refed blocks, indexed by repo
       :editor/last-replace-ref-content-tx    nil
 
-      ;; for audio record
-      :editor/record-status                  "NONE"
-
       :editor/code-block-context             nil
       :editor/latest-shortcut                (atom nil)
 
@@ -224,7 +216,6 @@
       ;; mobile
       :mobile/container-urls                 nil
       :mobile/show-action-bar?               false
-      :mobile/show-recording-bar?            false
 
       ;; plugin
       :plugin/enabled                        (and util/plugin-platform?
@@ -263,9 +254,6 @@
 
       ;; all notification contents as k-v pairs
       :notification/contents                 {}
-      :graph/syncing?                        false
-      ;; graph -> state
-      :graph/parsing-state                   {}
 
       :copy/export-block-text-indent-style   (or (storage/get :copy/export-block-text-indent-style)
                                                  "dashes")
@@ -290,28 +278,13 @@
       :reactive/query-dbs                    {}
 
       ;; login, userinfo, token, ...
-      :auth/refresh-token                    (storage/get "refresh-token")
+      :auth/refresh-token                    (some-> (storage/get "refresh-token") str)
       :auth/access-token                     nil
       :auth/id-token                         nil
 
-      ;; file-sync
-      :file-sync/jstour-inst                   nil
-      :file-sync/onboarding-state            (or (storage/get :file-sync/onboarding-state)
-                                                 {:welcome false})
-      :file-sync/remote-graphs               {:loading false :graphs nil}
-      :file-sync/set-remote-graph-password-result {}
-
-      ;; graph-uuid -> {:graphs-txid {}
-      ;;                :file-sync/sync-manager {}
-      ;;                :file-sync/sync-state {}
-      ;;                ;; {file-path -> payload}
-      ;;                :file-sync/progress {}
-      ;;                :file-sync/start-time {}
-      ;;                :file-sync/last-synced-at {}}
-      :file-sync/graph-state                 {:current-graph-uuid nil}
       ;; graph-uuid -> ...
-
       :rtc/state                             (atom {})
+      :rtc/loading-graphs?                   nil
       ;; only latest rtc-log stored here, when a log stream is needed,
       ;; use missionary to create a rtc-log-flow, use (missionary.core/watch <atom>)
       :rtc/log                               (atom nil)
@@ -320,6 +293,7 @@
       :rtc/graphs                            []
       :rtc/online-info                       (atom {})
       :rtc/asset-upload-download-progress    (atom {})
+      :rtc/users-info                        (atom {})
 
       :user/info                             {:UserGroups (storage/get :user-groups)}
       :encryption/graph-parsing?             false
@@ -328,19 +302,13 @@
       :ui/container-id                       (atom 0)
       :ui/cached-key->container-id           (atom {})
       :feature/enable-sync?                  (storage/get :logseq-sync-enabled)
-      :feature/enable-sync-diff-merge?       ((fnil identity true) (storage/get :logseq-sync-diff-merge-enabled))
 
-      :file/rename-event-chan                (async/chan 100)
       :ui/find-in-page                       nil
       :graph/importing                       nil
       :graph/importing-state                 {}
       :graph/loading?                        nil
       :handbook/route-chan                   (async/chan (async/sliding-buffer 1))
 
-      :whiteboard/onboarding-whiteboard?     (or (storage/get :ls-onboarding-whiteboard?) false)
-      :whiteboard/onboarding-tour?           (or (storage/get :whiteboard-onboarding-tour?) false)
-      :whiteboard/last-persisted-at          {}
-      :whiteboard/pending-tx-data            {}
       :system/info                           {}
       ;; Whether block is selected
       :ui/select-query-cache                 (atom {})
@@ -372,41 +340,6 @@
    ;; For not upgraded graphs, the config will have no key `:file/name-format`
    ;; Then the default value is applied
    :file/name-format :legacy})
-
-(def file-default-config
-  "Default repo config for file graphs"
-  (merge common-default-config
-         ;; The "NOW" query returns tasks with "NOW" or "DOING" status.
-         ;; The "NEXT" query returns tasks with "NOW", "LATER", or "TODO" status.
-         {:default-queries
-          {:journals
-           [{:title "🔨 NOW"
-             :query '[:find (pull ?h [*])
-                      :in $ ?start ?today
-                      :where
-                      (task ?h #{"NOW" "DOING"})
-                      [?h :block/page ?p]
-                      [?p :block/journal-day ?d]
-                      [(>= ?d ?start)]
-                      [(<= ?d ?today)]]
-             :inputs [:14d :today]
-             :result-transform '(fn [result]
-                                  (sort-by (fn [h]
-                                             (get h :block/priority "Z")) result))
-             :group-by-page? false
-             :collapsed? false}
-            {:title "📅 NEXT"
-             :query '[:find (pull ?h [*])
-                      :in $ ?start ?next
-                      :where
-                      (task ?h #{"NOW" "LATER" "TODO"})
-                      [?h :block/page ?p]
-                      [?p :block/journal-day ?d]
-                      [(> ?d ?start)]
-                      [(< ?d ?next)]]
-             :inputs [:today :7d-after]
-             :group-by-page? false
-             :collapsed? false}]}}))
 
 (def db-default-config
   "Default repo config for DB graphs"
@@ -474,7 +407,7 @@ should be done through this fn in order to get global config and config defaults
    (get-config (get-current-repo)))
   ([repo-url]
    (merge-configs
-    (if (sqlite-util/db-based-graph? repo-url) db-default-config file-default-config)
+    db-default-config
     (get-global-config)
     (get-graph-config repo-url))))
 
@@ -513,12 +446,6 @@ should be done through this fn in order to get global config and config defaults
 (defn get-custom-js-link
   []
   (:custom-js-url (get-config)))
-
-(defn get-default-journal-template
-  []
-  (when-let [template (get-in (get-config) [:default-templates :journals])]
-    (when-not (string/blank? template)
-      (string/trim template))))
 
 (defn all-pages-public?
   []
@@ -562,13 +489,6 @@ should be done through this fn in order to get global config and config defaults
      (:journals-directory (get-config repo)))
    "journals"))
 
-(defn get-whiteboards-directory
-  []
-  (or
-   (when-let [repo (get-current-repo)]
-     (:whiteboards-directory (get-config repo)))
-   "whiteboards"))
-
 (defn org-mode-file-link?
   [repo]
   (:org-mode/insert-file-link? (get-config repo)))
@@ -597,13 +517,12 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-date-formatter
   []
-  (let [repo (get-current-repo)]
-    (if (sqlite-util/db-based-graph? repo)
-      (when-let [conn (db-conn-state/get-conn repo)]
-        (get (entity-plus/entity-memoized @conn :logseq.class/Journal)
-             :logseq.property.journal/title-format
-             "MMM do, yyyy"))
-      (common-config/get-date-formatter (get-config)))))
+  (or
+   (when-let [repo (get-current-repo)]
+     (when-let [conn (db-conn-state/get-conn repo)]
+       (get (entity-plus/entity-memoized @conn :logseq.class/Journal)
+            :logseq.property.journal/title-format)))
+   "MMM do, yyyy"))
 
 (defn custom-shortcuts []
   (merge (storage/get :ls-shortcuts)
@@ -626,11 +545,11 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-ref-open-blocks-level
   []
-  (or
-   (when-let [value (:ref/default-open-blocks-level (get-config))]
-     (when (pos-int? value)
-       (min value 9)))
-   2))
+  (if-let [value (:ref/default-open-blocks-level (get-config))]
+    (if (and (int? value) (>= value 0))
+      (min value 9)
+      2)
+    2))
 
 (defn get-export-bullet-indentation
   []
@@ -705,7 +624,7 @@ Similar to re-frame subscriptions"
   ([] (sub-config (get-current-repo)))
   ([repo]
    (let [config (sub :config)]
-     (merge-configs (if (and (string? repo) (sqlite-util/db-based-graph? repo)) db-default-config file-default-config)
+     (merge-configs db-default-config
                     (get config ::global-config)
                     (get config repo)))))
 
@@ -730,32 +649,14 @@ Similar to re-frame subscriptions"
 (defn enable-journals?
   ([]
    (enable-journals? (get-current-repo)))
-  ([repo]
-   (not (false? (:feature/enable-journals? (sub-config repo))))))
+  ([_repo]
+   true))
 
 (defn enable-flashcards?
   ([]
    (enable-flashcards? (get-current-repo)))
   ([repo]
    (not (false? (:feature/enable-flashcards? (sub-config repo))))))
-
-(defn enable-sync?
-  []
-  (sub :feature/enable-sync?))
-
-(defn enable-sync-diff-merge?
-  []
-  (sub :feature/enable-sync-diff-merge?))
-
-(defn enable-whiteboards?
-  ([]
-   (enable-whiteboards? (get-current-repo)))
-  ([repo]
-   (not (false? (:feature/enable-whiteboards? (sub-config repo))))))
-
-(defn enable-git-auto-push?
-  [repo]
-  (not (false? (:git-auto-push (sub-config repo)))))
 
 (defn graph-settings
   []
@@ -900,10 +801,6 @@ Similar to re-frame subscriptions"
   []
   (= :home (get-current-route)))
 
-(defn whiteboard-dashboard?
-  []
-  (= :whiteboards (get-current-route)))
-
 (defn get-current-page
   []
   (when (= :page (get-current-route))
@@ -919,22 +816,14 @@ Similar to re-frame subscriptions"
   []
   (:git/current-repo @state))
 
-(defn get-remote-file-graphs
-  []
-  (get-in @state [:file-sync/remote-graphs :graphs]))
-
 (defn get-rtc-graphs
   []
   (:rtc/graphs @state))
 
-(defn get-remote-graph-info-by-uuid
-  [uuid]
-  (when-let [graphs (seq (get-in @state [:file-sync/remote-graphs :graphs]))]
-    (some #(when (= (:GraphUUID %) (str uuid)) %) graphs)))
-
-(defn get-remote-graph-usage
-  []
-  (when-let [graphs (seq (get-in @state [:file-sync/remote-graphs :graphs]))]
+;; TODO: rtc version
+(comment
+  (defn get-remote-graph-usage
+    [graphs]
     (->> graphs
          (map #(hash-map :uuid (:GraphUUID %)
                          :name (:GraphName %)
@@ -943,24 +832,6 @@ Similar to re-frame subscriptions"
                          :used-percent (/ (:GraphStorageUsage %) (:GraphStorageLimit %) 0.01)))
          (map #(assoc % :free-gbs (- (:limit-gbs %) (:used-gbs %))))
          (vec))))
-
-(defn delete-remote-graph!
-  [repo]
-  (let [remove-repo! (fn [repos]
-                       (remove #(and
-                                 (:GraphUUID repo)
-                                 (:GraphUUID %)
-                                 (= (:GraphUUID repo) (:GraphUUID %))) repos))]
-    (if (:rtc-graph? repo)
-      (swap! state update :rtc/graphs remove-repo!)
-      (swap! state update-in [:file-sync/remote-graphs :graphs] remove-repo!))))
-
-(defn add-remote-graph!
-  [repo]
-  (swap! state update-in [:file-sync/remote-graphs :graphs]
-         (fn [repos]
-           (->> (conj repos repo)
-                (distinct)))))
 
 (defn get-repos
   []
@@ -986,14 +857,6 @@ Similar to re-frame subscriptions"
     (storage/set :git/current-repo repo)
     (storage/remove :git/current-repo))
   (ipc/ipc "setCurrentGraph" repo))
-
-(defn set-preferred-format!
-  [format]
-  (swap! state assoc-in [:me :preferred_format] (name format)))
-
-(defn set-preferred-workflow!
-  [workflow]
-  (swap! state assoc-in [:me :preferred_workflow] (name workflow)))
 
 (defn set-preferred-language!
   [language]
@@ -1302,12 +1165,21 @@ Similar to re-frame subscriptions"
   [item]
   (update-state! [:ui/navigation-item-collapsed? item] not))
 
+(declare sidebar-add-block!)
+(defn- sidebar-add-content-when-open!
+  []
+  (when (empty? (:sidebar/blocks @state))
+    (sidebar-add-block! (get-current-repo) "contents" :contents)))
+
 (defn toggle-sidebar-open?!
   []
+  (when-not (:ui/sidebar-open? @state)
+    (sidebar-add-content-when-open!))
   (swap! state update :ui/sidebar-open? not))
 
 (defn open-right-sidebar!
   []
+  (sidebar-add-content-when-open!)
   (swap! state assoc :ui/sidebar-open? true))
 
 (defn hide-right-sidebar!
@@ -1404,11 +1276,6 @@ Similar to re-frame subscriptions"
   (set-state! :editor/action-data nil)
   (set-state! :view/selected-blocks nil))
 
-(defn into-code-editor-mode!
-  []
-  (set-state! :editor/cursor-range nil)
-  (swap! state assoc :editor/code-mode? true))
-
 (defn set-editor-last-pos!
   [new-pos]
   (update-state! :editor/last-saved-cursor
@@ -1425,29 +1292,36 @@ Similar to re-frame subscriptions"
     (set-editor-last-pos! new-pos)))
 
 (defn set-theme-mode!
-  [mode]
-  (when (mobile-util/native-platform?)
-    (if (= mode "light")
-      (util/set-theme-light)
-      (util/set-theme-dark)))
-  (set-state! :ui/theme mode)
-  (storage/set :ui/theme mode))
+  ([mode] (set-theme-mode! mode (:ui/system-theme? @state)))
+  ([mode system-theme?]
+   (when (mobile-util/native-platform?)
+     (if (= mode "light")
+       (util/set-theme-light)
+       (util/set-theme-dark)))
+   (when (mobile-util/native-platform?)
+     (mobile-util/set-native-interface-style! mode system-theme?))
+   (set-state! :ui/theme mode)
+   (storage/set :ui/theme mode)))
 
 (defn sync-system-theme!
   []
-  (let [system-dark? (.-matches (js/window.matchMedia "(prefers-color-scheme: dark)"))]
-    (set-theme-mode! (if system-dark? "dark" "light"))
-    (set-state! :ui/system-theme? true)
-    (storage/set :ui/system-theme? true)))
+  (when (:ui/system-theme? @state)
+    (let [system-dark? (.-matches (js/window.matchMedia "(prefers-color-scheme: dark)"))]
+      (set-theme-mode! (if system-dark? "dark" "light") true)
+      (set-state! :ui/system-theme? true)
+      (storage/set :ui/system-theme? true))))
 
 (defn use-theme-mode!
   [theme-mode]
   (if (= theme-mode "system")
-    (sync-system-theme!)
     (do
-      (set-theme-mode! theme-mode)
+      (set-state! :ui/system-theme? true)
+      (storage/set :ui/system-theme? true)
+      (sync-system-theme!))
+    (do
       (set-state! :ui/system-theme? false)
-      (storage/set :ui/system-theme? false))))
+      (storage/set :ui/system-theme? false)
+      (set-theme-mode! theme-mode false))))
 
 (defn- toggle-theme
   [theme]
@@ -1469,6 +1343,8 @@ Similar to re-frame subscriptions"
   []
   (let [mode (or (storage/get :ui/theme) "light")
         system-theme? (storage/get :ui/system-theme?)]
+    (when (mobile-util/native-platform?)
+      (mobile-util/set-native-interface-style! mode system-theme?))
     (when (and (not system-theme?)
                (mobile-util/native-platform?))
       (if (= mode "light")
@@ -1540,10 +1416,6 @@ Similar to re-frame subscriptions"
 (defn set-db-restoring!
   [value]
   (set-state! :db/restoring? value))
-
-(defn set-indexedb-support!
-  [value]
-  (set-state! :indexeddb/support? value))
 
 (defn modal-opened?
   []
@@ -1747,21 +1619,6 @@ Similar to re-frame subscriptions"
     (when-let [hooks (sub :plugin/installed-hooks)]
       (contains? hooks (str "hook:editor:slot_" type)))))
 
-(defn active-tldraw-app
-  []
-  (when-let [tldraw-el (.querySelector js/document.body ".logseq-tldraw[data-tlapp]")]
-    (gobj/get js/window.tlapps (.. tldraw-el -dataset -tlapp))))
-
-(defn tldraw-editing-logseq-block?
-  []
-  (when-let [app (active-tldraw-app)]
-    (and (= 1 (.. app -selectedShapesArray -length))
-         (= (.. app -editingShape) (.. app -selectedShapesArray (at 0))))))
-
-(defn set-graph-syncing?
-  [value]
-  (set-state! :graph/syncing? value))
-
 (defn set-editor-in-composition!
   [value]
   (set-state! :editor/in-composition? value))
@@ -1769,15 +1626,6 @@ Similar to re-frame subscriptions"
 (defn editor-in-composition?
   []
   (:editor/in-composition? @state))
-
-(defn set-loading-files!
-  [repo value]
-  (when repo
-    (set-state! [:repo/loading-files? repo] value)))
-
-(defn loading-files?
-  [repo]
-  (get-in @state [:repo/loading-files? repo]))
 
 (defn set-editor-last-input-time!
   [repo time]
@@ -1795,16 +1643,7 @@ Similar to re-frame subscriptions"
          (>= (- now last-input-time) diff))
 
        ;; not in editing mode
-       ;; Is this a good idea to put whiteboard check here?
        (not (get-edit-input-id))))))
-
-(defn set-nfs-refreshing!
-  [value]
-  (set-state! :nfs/refreshing? value))
-
-(defn nfs-refreshing?
-  []
-  (:nfs/refreshing? @state))
 
 (defn set-search-result!
   [value]
@@ -1855,8 +1694,7 @@ Similar to re-frame subscriptions"
 (defn sidebar-add-block!
   [repo db-id block-type]
   (when (not (util/sm-breakpoint?))
-    (let [page (and (sqlite-util/db-based-graph? repo)
-                    (= :page block-type)
+    (let [page (and (= :page block-type)
                     (some-> (db-conn-state/get-conn repo) deref (d/entity db-id)))]
       (if (and page
                ;; TODO: Use config/dev? when it's not a circular dep
@@ -1913,14 +1751,9 @@ Similar to re-frame subscriptions"
   [args]
   (set-state! :editor/args args))
 
-(defn editing-whiteboard-portal?
-  []
-  (and (active-tldraw-app) (tldraw-editing-logseq-block?)))
-
 (defn block-component-editing?
   []
-  (and (:block/component-editing-mode? @state)
-       (not (editing-whiteboard-portal?))))
+  (:block/component-editing-mode? @state))
 
 (defn set-block-component-editing-mode!
   [value]
@@ -2000,16 +1833,8 @@ Similar to re-frame subscriptions"
             (when (and move-cursor? (not (block-component-editing?)))
               (cursor/move-cursor-to input pos))
 
-            (when (or (util/mobile?) (mobile-util/native-platform?))
+            (when (mobile-util/native-platform?)
               (set-state! :mobile/show-action-bar? false))))))))
-
-(defn get-git-auto-commit-enabled?
-  []
-  (false? (sub [:electron/user-cfgs :git/disable-auto-commit?])))
-
-(defn get-git-commit-on-close-enabled?
-  []
-  (sub [:electron/user-cfgs :git/commit-on-close?]))
 
 (defn set-last-key-code!
   [key-code]
@@ -2156,49 +1981,8 @@ Similar to re-frame subscriptions"
 (defn get-auth-refresh-token []
   (:auth/refresh-token @state))
 
-(defn set-file-sync-manager [graph-uuid v]
-  (when (and graph-uuid v)
-    (set-state! [:file-sync/graph-state graph-uuid :file-sync/sync-manager] v)))
-
-(defn get-file-sync-manager [graph-uuid]
-  (get-in @state [:file-sync/graph-state graph-uuid :file-sync/sync-manager]))
-
-(defn clear-file-sync-state! [graph-uuid]
-  (set-state! [:file-sync/graph-state graph-uuid] nil))
-
-(defn clear-file-sync-progress! [graph-uuid]
-  (set-state! [:file-sync/graph-state
-               graph-uuid
-               :file-sync/progress]
-              nil))
-
-(defn set-file-sync-state [graph-uuid v]
-  (when v (s/assert :frontend.fs.sync/sync-state v))
-  (set-state! [:file-sync/graph-state graph-uuid :file-sync/sync-state] v))
-
-(defn get-current-file-sync-graph-uuid
-  []
-  (get-in @state [:file-sync/graph-state :current-graph-uuid]))
-
-(defn sub-current-file-sync-graph-uuid
-  []
-  (sub [:file-sync/graph-state :current-graph-uuid]))
-
-(defn get-file-sync-state
-  ([]
-   (get-file-sync-state (get-current-file-sync-graph-uuid)))
-  ([graph-uuid]
-   (get-in @state [:file-sync/graph-state graph-uuid :file-sync/sync-state])))
-
-(defn sub-file-sync-state
-  [graph-uuid]
-  (sub [:file-sync/graph-state graph-uuid :file-sync/sync-state]))
-
-(defn reset-parsing-state!
-  []
-  (set-state! [:graph/parsing-state (get-current-repo)] {}))
-
 (defn set-parsing-state!
+  "Leave for tests"
   [m]
   (update-state! [:graph/parsing-state (get-current-repo)]
                  (if (fn? m) m
@@ -2209,47 +1993,6 @@ Similar to re-frame subscriptions"
     (when (and  (not (contains? #{"system"} type))
                 (every? not-empty (vals agent-opts)))
       (str protocol "://" host ":" port))))
-
-(defn get-sync-graph-by-id
-  [graph-uuid]
-  (when graph-uuid
-    (let [graph (first (filter #(= graph-uuid (:GraphUUID %))
-                               (get-repos)))]
-      (when (:url graph)
-        graph))))
-
-(defn unlinked-dir?
-  [dir]
-  (contains? (:file/unlinked-dirs @state) dir))
-
-(defn get-file-rename-event-chan
-  []
-  (:file/rename-event-chan @state))
-
-(defn offer-file-rename-event-chan!
-  [v]
-  {:pre [(map? v)
-         (= #{:repo :old-path :new-path} (set (keys v)))]}
-  (async/offer! (get-file-rename-event-chan) v))
-
-(defn set-onboarding-whiteboard!
-  [v]
-  (set-state! :whiteboard/onboarding-whiteboard? v)
-  (storage/set :ls-onboarding-whiteboard? v))
-
-(defn get-onboarding-whiteboard?
-  []
-  (get-in @state [:whiteboard/onboarding-whiteboard?]))
-
-(defn get-local-container-root-url
-  []
-  (when (mobile-util/native-ios?)
-    (get-in @state [:mobile/container-urls :localContainerUrl])))
-
-(defn get-icloud-container-root-url
-  []
-  (when (mobile-util/native-ios?)
-    (get-in @state [:mobile/container-urls :iCloudContainerUrl])))
 
 (defn get-current-pdf
   []
@@ -2263,15 +2006,6 @@ Similar to re-frame subscriptions"
       (when (apply not= (map :identity [inflated-file (get-current-pdf)]))
         (set-state! :pdf/current nil)
         (js/setTimeout #(settle-file!) 16)))))
-
-(defn focus-whiteboard-shape
-  ([shape-id]
-   (focus-whiteboard-shape (active-tldraw-app) shape-id))
-  ([tln shape-id]
-   (when-let [^js api (gobj/get tln "api")]
-     (when (and shape-id (parse-uuid shape-id))
-       (. api selectShapes shape-id)
-       (. api zoomToSelection)))))
 
 (defn set-user-info!
   [info]
@@ -2292,10 +2026,11 @@ Similar to re-frame subscriptions"
   (swap! state assoc :ui/radix-color color)
   (storage/set :ui/radix-color color))
 
-(defn set-editor-font! [font]
-  (let [font (if (keyword? font) (name font) (str font))]
-    (swap! state assoc :ui/editor-font font)
-    (storage/set :ui/editor-font font)))
+(defn set-editor-font! [config]
+  (let [config' (:ui/editor-font @state)
+        config (if (map? config') (merge config' config) {})]
+    (swap! state assoc :ui/editor-font config)
+    (storage/set :ui/editor-font config)))
 
 (defn handbook-open?
   []
@@ -2315,9 +2050,6 @@ Similar to re-frame subscriptions"
 (defn update-favorites-updated!
   []
   (update-state! :favorites/updated? inc))
-
-(def get-worker-next-request-id db-transact/get-next-request-id)
-(def add-worker-request! db-transact/add-request!)
 
 (defn get-next-container-id
   []
@@ -2363,3 +2095,9 @@ Similar to re-frame subscriptions"
   [days]
   (reset! (:ui/highlight-recent-days @state) days)
   (storage/set :ui/highlight-recent-days days))
+
+(defn set-db-worker-client-id!
+  [new-id]
+  (when new-id
+    (reset! *db-worker-client-id new-id)
+    (storage/set :db-worker-client-id new-id)))

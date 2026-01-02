@@ -7,6 +7,7 @@
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.db.common.initial-data :as common-initial-data]
             [logseq.db.common.reference :as db-reference]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-util :as entity-util]
@@ -289,19 +290,15 @@
    (map :e)
    set))
 
-(defn- get-entities-for-all-pages [db sorting property-ident {:keys [db-based?]}]
+(defn- get-entities-for-all-pages [db sorting property-ident]
   (let [refs-count? (and (coll? sorting) (some (fn [m] (= (:id m) :block.temp/refs-count)) sorting))
-        exclude-ids (when db-based? (get-exclude-page-ids db))]
+        exclude-ids (get-exclude-page-ids db)]
     (keep (fn [d]
-            (let [e (d/entity db (:e d))]
-              (when-not (if db-based?
-                          (exclude-ids (:db/id e))
-                          (or (ldb/hidden-or-internal-tag? e)
-                              (entity-util/property? e)
-                              (entity-util/built-in? e)))
+            (let [e (entity-plus/unsafe->Entity db (:e d))]
+              (when-not (exclude-ids (:db/id e))
                 (cond-> e
                   refs-count?
-                  (assoc :block.temp/refs-count (count (:block/_refs e)))))))
+                  (assoc :block.temp/refs-count (common-initial-data/get-block-refs-count db (:e d)))))))
           (d/datoms db :avet property-ident))))
 
 (defn- get-entities
@@ -310,18 +307,13 @@
         view-for-id (or (:db/id view-for) view-for-id*)
         non-hidden-e (fn [id] (let [e (d/entity db id)]
                                 (when-not (entity-util/hidden? e)
-                                  e)))
-        db-based? (entity-plus/db-based-graph? db)]
+                                  e)))]
     (case feat-type
       :all-pages
-      (get-entities-for-all-pages db sorting property-ident {:db-based? db-based?})
+      (get-entities-for-all-pages db sorting property-ident)
 
       :class-objects
-      (let [class-id view-for-id
-            class-children (db-class/get-structured-children db class-id)
-            class-ids (distinct (conj class-children class-id))
-            datoms (mapcat (fn [id] (d/datoms db :avet :block/tags id)) class-ids)]
-        (keep (fn [d] (non-hidden-e (:e d))) datoms))
+      (db-class/get-class-objects db view-for-id)
 
       :property-objects
       (->>
@@ -424,11 +416,17 @@
      (common-util/distinct-by :label))))
 
 (defn- get-query-properties
-  [entities]
-  (distinct (mapcat keys entities)))
+  [query entities]
+  (let [properties (when (and (coll? query) (= :find (first query)))
+                     (let [expr (second query)]
+                       (when (= 'pull (first expr))
+                         (last expr))))]
+    (if (and (seq properties) (not= properties ['*]))
+      properties
+      (distinct (mapcat keys entities)))))
 
 (defn ^:api ^:large-vars/cleanup-todo get-view-data
-  [db view-id {:keys [journals? _view-for-id view-feature-type group-by-property-ident input query-entity-ids filters sorting]
+  [db view-id {:keys [journals? _view-for-id view-feature-type group-by-property-ident input query-entity-ids query filters sorting]
                :as opts}]
   ;; TODO: create a view for journals maybe?
   (cond
@@ -440,18 +438,20 @@
     :else
     (let [view (d/entity db view-id)
           group-by-property (:logseq.property.view/group-by-property view)
-          db-based? (entity-plus/db-based-graph? db)
-          list-view? (or (= :logseq.property.view/type.list (:db/ident (:logseq.property.view/type view)))
-                         (and (not db-based?)
-                              (contains? #{:linked-references :unlinked-references} view-feature-type)))
+          list-view? (= :logseq.property.view/type.list (:db/ident (:logseq.property.view/type view)))
           group-by-property-ident (or (:db/ident group-by-property) group-by-property-ident)
           group-by-closed-values? (some? (:property/closed-values group-by-property))
           ref-property? (= (:db/valueType group-by-property) :db.type/ref)
           filters (or (:logseq.property.table/filters view) filters)
           feat-type (or view-feature-type (:logseq.property.view/feature-type view))
           query? (= feat-type :query-result)
+          query-entity-ids (when (seq query-entity-ids) (set query-entity-ids))
           entities-result (if query?
-                            (keep #(d/entity db %) query-entity-ids)
+                            (keep (fn [id]
+                                    (let [e (d/entity db id)]
+                                      (when-not (= :logseq.property/query (:db/ident (:logseq.property/created-from-property e)))
+                                        e)))
+                                  query-entity-ids)
                             (get-view-entities db view-id opts))
           entities (if (= feat-type :linked-references)
                      (:ref-blocks entities-result)
@@ -535,4 +535,4 @@
         (= feat-type :linked-references)
         (merge (select-keys entities-result [:ref-pages-count :ref-matched-children-ids]))
         query?
-        (assoc :properties (get-query-properties entities-result))))))
+        (assoc :properties (get-query-properties query entities-result))))))

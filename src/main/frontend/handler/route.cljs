@@ -27,6 +27,7 @@
   (shui/popup-hide!)
   (let [route-fn (if push rfe/push-state rfe/replace-state)]
     (route-fn to path-params query-params))
+
   ;; force return nil for usage in render phase of React
   nil)
 
@@ -48,10 +49,6 @@
 (defn redirect-to-all-graphs
   []
   (redirect! {:to :graphs}))
-
-(defn redirect-to-whiteboard-dashboard!
-  []
-  (redirect! {:to :whiteboards}))
 
 ;; Named block links only works on web (and publishing)
 (if util/web-platform?
@@ -76,48 +73,39 @@
   "`page-name` can be a block uuid or name, prefer to use uuid than name when possible"
   ([page-name]
    (redirect-to-page! page-name {}))
-  ([page-name {:keys [anchor push click-from-recent? block-id new-whiteboard? ignore-alias?]
+  ([page-name {:keys [anchor push click-from-recent? block-id ignore-alias?]
                :or {click-from-recent? false}
                :as opts}]
    (when (or (uuid? page-name)
              (and (string? page-name) (not (string/blank? page-name))))
-     (let [page (db/get-page page-name)
-           whiteboard? (db/whiteboard-page? page)]
+     (let [page (db/get-page page-name)]
        (if (and (not config/dev?)
                 (or (and (ldb/hidden? page) (not (ldb/property? page)))
                     (and (ldb/built-in? page) (ldb/private-built-in-page? page))))
          (notification/show! "Cannot go to an internal page." :warning)
          (if-let [source (and (not ignore-alias?) (db/get-alias-source-page (state/get-current-repo) (:db/id page)))]
-           (redirect-to-page! (:block/uuid source) opts)
+           (redirect-to-page! (:block/uuid source) (assoc opts :ignore-alias? true))
            (do
-           ;; Always skip onboarding when loading an existing whiteboard
-             (when-not new-whiteboard? (state/set-onboarding-whiteboard! true))
              (when-let [db-id (:db/id page)]
                (recent-handler/add-page-to-recent! db-id click-from-recent?))
-             (if (and whiteboard?  (= (str page-name) (state/get-current-page)) block-id)
-               (state/focus-whiteboard-shape block-id)
-               (let [m (cond->
-                        (default-page-route (str page-name))
+             (let [m (cond->
+                      (default-page-route (str page-name))
 
-                         block-id
-                         (assoc :query-params (if whiteboard?
-                                                {:block-id block-id}
-                                                {:anchor (str "ls-block-" block-id)}))
+                       block-id
+                       (assoc :query-params {:anchor (str "ls-block-" block-id)})
 
-                         anchor
-                         (assoc :query-params {:anchor anchor})
+                       anchor
+                       (assoc :query-params {:anchor anchor})
 
-                         (boolean? push)
-                         (assoc :push push))]
-                 (redirect! m))))))))))
+                       (boolean? push)
+                       (assoc :push push))]
+               (redirect! m)))))))))
 
 (defn get-title
   [name path-params]
   (case name
     :home
     "Logseq"
-    :whiteboards
-    (t :whiteboards)
     :graphs
     "Graphs"
     :graph

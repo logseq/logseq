@@ -1,20 +1,58 @@
 (ns mobile.core
   "Mobile core"
   (:require ["react-dom/client" :as rdc]
+            [clojure.string :as string]
             [frontend.background-tasks]
-            [frontend.components.page :as page]
-            [frontend.db.async :as db-async]
             [frontend.handler :as fhandler]
             [frontend.handler.db-based.rtc-background-tasks]
+            [frontend.handler.notification :as notification]
+            [frontend.handler.route :as route-handler]
+            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
-            [frontend.util :as util]
+            [lambdaisland.glogi :as log]
             [mobile.components.app :as app]
+            [mobile.components.selection-toolbar :as selection-toolbar]
             [mobile.events]
             [mobile.init :as init]
+            [mobile.navigation :as mobile-nav]
+            [mobile.routes :refer [routes] :as mobile-routes]
             [mobile.state :as mobile-state]
-            [promesa.core :as p]
             [reitit.frontend :as rf]
             [reitit.frontend.easy :as rfe]))
+
+(defn- alert*
+  [content status timeout]
+  (if (string? content)
+    (mobile-util/alert {:title content
+                        :type (or (when (keyword? status) (name status)) "info")
+                        :duration timeout
+                        :position "top"})
+    (log/warn ::native-alert-non-string {:content content})))
+
+(defn- alert
+  "Native mobile alert replacement for `frontend.handler.notification/show!`."
+  ([content]
+   (alert content :info nil nil nil nil))
+  ([content status]
+   (alert content status nil nil nil nil))
+  ([content status clear?]
+   (alert content status clear? nil nil nil))
+  ([content status clear? uid]
+   (alert content status clear? uid nil nil))
+  ([content status clear? uid timeout]
+   (alert content status clear? uid timeout nil))
+  ([content status _clear? _uid timeout _close-cb]
+   (alert* content status timeout)))
+
+(set! notification/show! alert)
+
+(set! notification/clear!
+      (fn [_]
+        (mobile-util/hide-alert)))
+
+(set! notification/clear-all!
+      (fn [_]
+        (mobile-util/hide-alert)))
 
 (defonce ^js root (rdc/createRoot (.getElementById js/document "root")))
 
@@ -22,45 +60,37 @@
   []
   (.render root (app/main)))
 
-(def routes
-  [["/"
-    {:name :home}]
-   ["/page/:name"
-    {:name :page
-     :view (fn [route-match]
-             (page/page-cp (assoc route-match :current-page? true)))}]])
-
 (defn set-router!
   []
-  (rfe/start!
-   (rf/router routes nil)
-   (fn [route]
-     (when (= :page (get-in route [:data :name]))
-       (let [id-str (get-in route [:path-params :name])]
-         (when (util/uuid-string? id-str)
-           (let [page-uuid (uuid id-str)
-                 repo (state/get-current-repo)]
-             (when (and repo page-uuid)
-               (p/let [entity (db-async/<get-block repo page-uuid
-                                                   {:children? false
-                                                    :skip-refresh? true})]
-                 (when entity
-                   ;; close sidebar
-                   (when (mobile-state/left-sidebar-open?)
-                     (mobile-state/close-left-sidebar!))
-                   (when (state/get-edit-block)
-                     (state/clear-edit!))
+  (mobile-nav/install-navigation-hooks!)
+  (let [router (rf/router routes nil)]
+    (rfe/start!
+     router
+     (fn [route]
+       (when (state/get-edit-block)
+         (state/clear-edit!))
+       (selection-toolbar/close-selection-bar!)
+       (let [route-name (get-in route [:data :name])
+             path (-> js/location .-hash (string/replace-first #"^#" ""))]
+         (mobile-nav/notify-route-change!
+          {:route {:to route-name
+                   :path-params (:path-params route)
+                   :query-params (:query-params route)}
+           :route-match route
+           :path path
+           :stack (mobile-nav/current-stack)})
+         (route-handler/set-route-match! route)))
 
-                   (mobile-state/open-block-modal! entity)))))))))
-
-   ;; set to false to enable HistoryAPI
-   {:use-fragment true}))
+     ;; set to false to enable HistoryAPI
+     {:use-fragment true})))
 
 (defn ^:export init []
   ;; init is called ONCE when the page loads
   ;; this is called in the index.html and must be exported
   ;; so it is available even in :advanced release builds
   (prn "[Mobile] init!")
+  (log/add-handler mobile-state/log-append!)
+  (mobile-nav/install-native-bridge!)
   (set-router!)
   (init/init!)
   (fhandler/start! render!))

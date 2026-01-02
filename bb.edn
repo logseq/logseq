@@ -10,7 +10,9 @@
   logseq/graph-parser
   {:local/root "deps/graph-parser"}
   org.clj-commons/digest
-  {:mvn/version "1.4.100"}}
+  {:mvn/version "1.4.100"}
+  cheshire/cheshire
+  {:mvn/version "5.12.0"}}
  :pods
  {clj-kondo/clj-kondo {:version "2024.09.27"}
   org.babashka/fswatcher {:version "0.0.3"}
@@ -18,6 +20,11 @@
  :tasks
  {dev:desktop-watch
   logseq.tasks.dev.desktop/watch
+
+  libs:generate-cljs-sdk
+  {:doc "Generate CLJS wrappers based on the JS SDK declarations"
+   :requires ([logseq.libs.sdk-generator :as sdk-gen])
+   :task (sdk-gen/run! (sdk-gen/parse-args *command-line-args*))}
 
   dev:open-dev-electron-app
   logseq.tasks.dev.desktop/open-dev-electron-app
@@ -60,13 +67,10 @@
            (run '-dev:publishing-dev {:parallel true})
            (run '-dev:publishing-release))}
 
-  dev:validate-db
-  {:doc "Validate a DB graph's datascript schema"
-   :requires ([babashka.fs :as fs])
-   :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
-                "yarn -s nbb-logseq script/validate_db.cljs"
-                *command-line-args*)}
-
+  dev:cli
+  {:doc "Run CLI with current deps/db code. Commands with JS deps are not usable e.g. mcp-server"
+   :task (apply shell {:dir "deps/db"}
+                "yarn nbb-logseq -cp src:../cli/src:../graph-parser/src:../outliner/src -m logseq.cli" *command-line-args*)}
   dev:db-query
   {:doc "Query a DB graph's datascript db"
    :requires ([babashka.fs :as fs])
@@ -84,12 +88,6 @@
    :requires ([babashka.fs :as fs])
    :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
                 "yarn -s nbb-logseq -cp src:../outliner/src:script script/create_graph.cljs" *command-line-args*)}
-
-  dev:db-export
-  {:doc "Export a DB graph to a sqlite.build EDN file"
-   :requires ([babashka.fs :as fs])
-   :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
-                "yarn -s nbb-logseq script/export_graph.cljs" *command-line-args*)}
 
   dev:db-diff
   {:doc "Diffs two DB graphs"
@@ -164,8 +162,16 @@
   dev:lint-and-test
   logseq.tasks.dev/lint-and-test
 
-  dev:rtc-e2e-test
-  logseq.tasks.dev/rtc-e2e-test
+  dev:e2e-basic-test
+  logseq.tasks.dev/e2e-basic-test
+
+  dev:e2e-rtc-extra-test
+  {:doc "Run e2e rtc extra tests. HTTP server should be available at localhost:3001"
+   :task (clojure {:dir "clj-e2e"} "-X:dev-run-rtc-extra-test")}
+
+  dev:e2e-rtc-extra-part2-test
+  {:doc "Run e2e rtc extra part2 tests. HTTP server should be available at localhost:3001"
+   :task (clojure {:dir "clj-e2e"} "-X:dev-run-rtc-extra-part2-test")}
 
   dev:gen-malli-kondo-config
   logseq.tasks.dev/gen-malli-kondo-config

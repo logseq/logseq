@@ -2,9 +2,9 @@
 # yarn lockfile v1
 
 
-"@logseq/nbb-logseq@logseq/nbb-logseq#feat-db-v26":
-  version "1.2.173-feat-db-v25"
-  resolved "https://codeload.github.com/logseq/nbb-logseq/tar.gz/b26d290944234b20762ff109e5328b87ea240692"
+"@logseq/nbb-logseq@github:logseq/nbb-logseq#feat-db-v31":
+  version "1.2.173-feat-db-v31"
+  resolved "https://codeload.github.com/logseq/nbb-logseq/tar.gz/d5b76a675f484dbfb5fbff8235aec6ff84b2f980"
   dependencies:
     import-meta-resolve "^4.1.0"
 

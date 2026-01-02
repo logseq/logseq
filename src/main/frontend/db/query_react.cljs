@@ -2,7 +2,6 @@
   "Custom queries."
   (:require [clojure.string :as string]
             [clojure.walk :as walk]
-            [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db.conn :as conn]
             [frontend.db.model :as model]
@@ -25,6 +24,7 @@
                             input
                             (merge {:current-page-fn (fn []
                                                        (or (when-let [name-or-uuid (state/get-current-page)]
+                                                             ;; `ldb/db-based-graph?` left here for testing
                                                              (if (ldb/db-based-graph? db)
                                                                (:block/title (model/get-block-by-uuid name-or-uuid))
                                                                name-or-uuid))
@@ -94,24 +94,16 @@
 
 (defn react-query
   [repo {:keys [query inputs rules] :as query'} query-opts]
-  (let [pprint (if config/dev? #(when (state/developer-mode?) (apply prn %&)) (fn [_] nil))
-        start-time (.now js/performance)]
-    (when config/dev? (js/console.groupCollapsed "react-query logs:"))
-    (pprint "================")
-    (pprint "Use the following to debug your datalog queries:")
-    (pprint query')
-
-    (let [query (resolve-query query)
-          repo (or repo (state/get-current-repo))
-          db (conn/get-db repo)
-          resolve-with (select-keys query-opts [:current-page-fn :current-block-uuid])
-          resolved-inputs (mapv #(resolve-input db % resolve-with) inputs)
-          inputs (cond-> resolved-inputs
-                   rules
-                   (conj rules))
-          k [:custom (or (:query-string query') query') inputs]]
-      (pprint "inputs (post-resolution):" resolved-inputs)
-      (pprint "query-opts:" query-opts)
-      (pprint (str "time elapsed: " (.toFixed (- (.now js/performance) start-time) 2) "ms"))
-      (when config/dev? (js/console.groupEnd))
-      [k (apply react/q repo k query-opts query inputs)])))
+  (let [query (resolve-query query)
+        repo (or repo (state/get-current-repo))
+        db (conn/get-db repo)
+        resolve-with (select-keys query-opts [:current-page-fn :current-block-uuid])
+        resolved-inputs (mapv #(resolve-input db % resolve-with) inputs)
+        inputs (cond-> resolved-inputs
+                 rules
+                 (conj rules))
+        k [:custom
+           (or (:query-string query') (dissoc query' :title))
+           (:today-query? query-opts)
+           inputs]]
+    [k (apply react/q repo k query-opts query inputs)]))

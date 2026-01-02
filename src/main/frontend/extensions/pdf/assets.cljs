@@ -1,7 +1,5 @@
 (ns frontend.extensions.pdf.assets
-  (:require [cljs.reader :as reader]
-            [clojure.string :as string]
-            [fipp.edn :refer [pprint]]
+  (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -15,7 +13,6 @@
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
-            [frontend.handler.page :as page-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.route :as route-handler]
@@ -24,10 +21,8 @@
             [frontend.util :as util]
             [frontend.util.ref :as ref]
             [logseq.common.config :as common-config]
-            [logseq.common.path :as path]
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.publishing.db :as publish-db]
-            [medley.core :as medley]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
@@ -35,26 +30,28 @@
 (defn get-in-repo-assets-full-filename
   [url]
   (let [repo-dir (config/get-repo-dir (state/get-current-repo))]
-    (when (some-> url (string/trim) (string/includes? repo-dir))
+    (if (some-> url (string/trim) (string/includes? repo-dir))
       (some-> (string/split url repo-dir)
               (last)
-              (string/replace-first "/assets/" "")))))
+              (string/replace-first "/assets/" ""))
+      url)))
 
 (defn inflate-asset
   [original-path & {:keys [href block]}]
   (let [web-link? (string/starts-with? original-path "http")
-        blob-res? (some-> href (string/starts-with? "blob"))
-        asset-res? (some-> href (string/starts-with? "assets"))
-        filename  (util/node-path.basename original-path)
-        ext-name  "pdf"
-        url       (if blob-res? href
-                      (assets-handler/normalize-asset-resource-url original-path))
-        filename' (if (or asset-res? web-link? blob-res?) filename
-                      (some-> url (js/decodeURIComponent)
-                              (get-in-repo-assets-full-filename)
-                              (string/replace '"/" "_")))
-        filekey   (gp-exporter/safe-sanitize-file-name
-                   (subs filename' 0 (- (count filename') (inc (count ext-name)))))]
+        protocol-link? (common-config/protocol-path? href)
+        filename (util/node-path.basename original-path)
+        ext-name "pdf"
+        url (if protocol-link?
+              href
+              (assets-handler/normalize-asset-resource-url original-path))
+        filename' (if protocol-link?
+                    filename
+                    (some-> url (js/decodeURIComponent)
+                            (get-in-repo-assets-full-filename)
+                            (string/replace '"/" "_")))
+        filekey (gp-exporter/safe-sanitize-file-name
+                 (subs filename' 0 (- (count filename') (inc (count ext-name)))))]
     (when-let [key (and (not (string/blank? filekey))
                         (if web-link?
                           (str filekey "__" (hash url))
@@ -67,86 +64,6 @@
        :hls-file      (str "assets/" key ".edn")
        :original-path original-path})))
 
-(defn resolve-area-image-file
-  [img-stamp current {:keys [page id] :as _hl}]
-  (when-let [key (:key current)]
-    (-> common-config/local-assets-dir
-        (str (if (config/db-based-graph?)
-               (let [image-id (some-> id (db-utils/entity) :logseq.property.pdf/hl-image :block/uuid)]
-                 (util/format "/%s.png" image-id))
-               (util/format "/%s/%s_%s_%s.png" key page id img-stamp))))))
-
-(defn file-based-ensure-ref-page!
-  [pdf-current]
-  ;; db version doesn't need a page for highlights data
-  (when-not (config/db-based-graph? (state/get-current-repo))
-    (when-let [page-name (util/trim-safe (:key pdf-current))]
-      (p/let [page-name (str "hls__" page-name)
-              repo (state/get-current-repo)
-              page (db-async/<get-block repo page-name)
-              file-path (:original-path pdf-current)
-              format (state/get-preferred-format)
-              repo-dir (config/get-repo-dir repo)
-              asset-dir (util/node-path.join repo-dir common-config/local-assets-dir)
-              url (if (string/includes? file-path asset-dir)
-                    (str ".." (last (string/split file-path repo-dir)))
-                    file-path)]
-        (if-not page
-          (let [label (:filename pdf-current)]
-            (p/do!
-             (page-handler/<create! page-name {:redirect?        false
-                                               :split-namespace? false
-                                               :format           format
-                                               :properties       {:file
-                                                                  (case format
-                                                                    :markdown
-                                                                    (util/format "[%s](%s)" label url)
-
-                                                                    :org
-                                                                    (util/format "[[%s][%s]]" url label)
-
-                                                                    url)
-                                                                  :file-path
-                                                                  url}})
-             (db-model/get-page page-name)))
-
-          (do
-          ;; try to update file path
-            (when (nil? (some-> page
-                                (:block/properties)
-                                :file-path))
-              (property-handler/add-page-property! page-name :file-path url))
-            page))))))
-
-(defn file-based-ensure-ref-block!
-  [pdf-current {:keys [id content page properties] :as _hl} insert-opts]
-  (p/let [ref-page (when pdf-current (file-based-ensure-ref-page! pdf-current))]
-    (when ref-page
-      (let [ref-block (db-model/query-block-by-uuid id)]
-        (if-not (nil? (:block/title ref-block))
-          (do
-            (println "[existed ref block]" ref-block)
-            ref-block)
-          (let [text (:text content)
-                area? (not (nil? (:image content)))
-                wrap-props #(if-let [stamp (:image content)]
-                              (assoc %
-                                     :hl-type :area
-                                     :hl-stamp stamp)
-                              %)
-                props {:id (if (string? id) (uuid id) id)
-                       (pu/get-pid :logseq.property/ls-type) :annotation
-                       (pu/get-pid :logseq.property.pdf/hl-page) page
-                       (pu/get-pid :logseq.property.pdf/hl-color) (:color properties)}
-                properties (wrap-props props)]
-            (when (string? text)
-              (editor-handler/api-insert-new-block!
-               text (merge {:page (:block/name ref-page)
-                            :custom-uuid id
-                            :edit-block? (not area?)
-                            :properties properties}
-                           insert-opts)))))))))
-
 (defn db-based-ensure-ref-block!
   [pdf-current {:keys [id content page properties] :as hl} insert-opts]
   (when-let [pdf-block (:block pdf-current)]
@@ -155,21 +72,26 @@
         (do
           (println "[existed ref block]" ref-block)
           ref-block)
-        (let [text       (:text content)
-              colors     (:property/closed-values (db/entity :logseq.property.pdf/hl-color))
-              color-id   (some (fn [color] (when (= (:block/title color) (:color properties))
-                                             (:db/id color))) colors)]
+        (let [ref-asset-id (:image content)
+              image? (not (nil? ref-asset-id))
+              text (if image? (.toLocaleString (js/Date.))
+                       (:text content))
+              colors (:property/closed-values (db/entity :logseq.property.pdf/hl-color))
+              color-id (some (fn [color] (when (= (:block/title color) (:color properties))
+                                           (:db/id color))) colors)]
           (when color-id
             (let [properties (cond->
-                              {:block/tags :logseq.class/Pdf-annotation
+                              {:block/tags #{(:db/id (db/entity :logseq.class/Pdf-annotation))}
+                               :block/collapsed? image?
                                :logseq.property/ls-type  :annotation
                                :logseq.property.pdf/hl-color color-id
                                :logseq.property/asset (:db/id pdf-block)
                                :logseq.property.pdf/hl-page  page
                                :logseq.property.pdf/hl-value hl}
-                               (:image content)
+
+                               image?
                                (assoc :logseq.property.pdf/hl-type :area
-                                      :logseq.property.pdf/hl-image (:image content)))]
+                                      :logseq.property.pdf/hl-image ref-asset-id))]
               (when (string? text)
                 (editor-handler/api-insert-new-block!
                  text (merge {:block-uuid (:block/uuid pdf-block)
@@ -180,66 +102,28 @@
 
 (defn ensure-ref-block!
   [pdf-current hl insert-opts]
-  (if (config/db-based-graph? (state/get-current-repo))
-    (db-based-ensure-ref-block! pdf-current hl insert-opts)
-    (file-based-ensure-ref-block! pdf-current hl insert-opts)))
+  (p/let [ref-block (db-based-ensure-ref-block! pdf-current hl insert-opts)
+          asset-block (:logseq.property.pdf/hl-image ref-block)]
+      ;; try to move the asset block to the ref block
+    (p/do!
+     (when asset-block
+       (editor-handler/move-blocks! [asset-block] ref-block {:sibling? false}))
+     ref-block)))
 
-(defn construct-highlights-from-hls-page
-  [hls-page]
-  (p/let [result (db-async/<get-block (state/get-current-repo)
-                                      (:block/uuid hls-page)
-                                      {:children? true})]
-    {:highlights (keep :logseq.property.pdf/hl-value result)}))
-
-(defn file-based-load-hls-data$
-  [{:keys [hls-file]}]
-  (when hls-file
-    (let [repo (state/get-current-repo)
-          repo-dir (config/get-repo-dir repo)
-          db-base? (config/db-based-graph? repo)]
-      (p/let [_    (fs/create-if-not-exists repo repo-dir hls-file "{:highlights []}")
-              res  (fs/read-file repo-dir hls-file)
-              data (if res (reader/read-string res) {})]
-        (if db-base?
-          (p/let [hls-page (file-based-ensure-ref-page! (state/get-current-pdf))]
-            (construct-highlights-from-hls-page hls-page))
-          data)))))
-
-(defn file-based-persist-hls-data$
-  [{:keys [hls-file]} highlights extra]
-  (when hls-file
-    (let [repo-cur (state/get-current-repo)
-          repo-dir (config/get-repo-dir repo-cur)
-          data     (with-out-str (pprint {:highlights highlights :extra extra}))]
-      (fs/write-plain-text-file! repo-cur repo-dir hls-file data {:skip-compare? true}))))
-
-(defn file-based-resolve-hls-data-by-key$
-  [target-key]
-  ;; TODO: fuzzy match
-  (when-let [hls-file (and target-key (str common-config/local-assets-dir "/" target-key ".edn"))]
-    (file-based-load-hls-data$ {:hls-file hls-file})))
+(defn db-based-load-hls-data$
+  [{:keys [block]}]
+  (p/let [ref-id (:db/id block)
+          data (db-async/<q (state/get-current-repo) {:transact-db? false}
+                            '[:find (pull ?e [*])
+                              :in $ ?ref-id
+                              :where [?e :logseq.property/asset ?ref-id]]
+                            ref-id)]
+    (let [highlights (some->> data (flatten) (map #(:logseq.property.pdf/hl-value %)) (vec))]
+      {:highlights highlights})))
 
 (defn area-highlight?
   [hl]
   (and hl (not (nil? (get-in hl [:content :image])))))
-
-(defn- file-based-persist-hl-area-image
-  [repo-url repo-dir current new-hl old-hl png]
-  (p/let [_          (js/console.time :write-area-image)
-          ^js png    (.arrayBuffer png)
-          {:keys [key]} current
-                                  ;; dir
-          fstamp     (get-in new-hl [:content :image])
-          old-fstamp (and old-hl (get-in old-hl [:content :image]))
-          fname      (str (:page new-hl) "_" (:id new-hl))
-          fdir       (str common-config/local-assets-dir "/" key)
-          _          (fs/mkdir-if-not-exists (path/path-join repo-dir fdir))
-          new-fpath  (str fdir "/" fname "_" fstamp ".png")
-          old-fpath  (and old-fstamp (str fdir "/" fname "_" old-fstamp ".png"))
-          _          (and old-fpath (fs/rename! repo-url old-fpath new-fpath))
-          _          (fs/write-plain-text-file! repo-url repo-dir new-fpath png {:skip-compare? true})]
-
-    (js/console.timeEnd :write-area-image)))
 
 (defn- db-based-persist-hl-area-image
   [repo png]
@@ -247,11 +131,9 @@
     (editor-handler/db-based-save-assets! repo [file] {:pdf-area? true})))
 
 (defn- persist-hl-area-image
-  [repo-url repo-dir current new-hl old-hl png]
-  (if (config/db-based-graph?)
-    (p/let [result (db-based-persist-hl-area-image repo-url png)]
-      (first result))
-    (file-based-persist-hl-area-image repo-url repo-dir current new-hl old-hl png)))
+  [repo-url _repo-dir _current _new-hl _old-hl png]
+  (p/let [result (db-based-persist-hl-area-image repo-url png)]
+    (first result)))
 
 (defn persist-hl-area-image$
   "Save pdf highlight area image"
@@ -290,12 +172,10 @@
   (when-let [block (db-model/get-block-by-uuid (:id highlight))]
     (when-let [color (get-in highlight [:properties :color])]
       (let [k (pu/get-pid :logseq.property.pdf/hl-color)
-            color' (if (config/db-based-graph?)
-                     (let [colors     (:property/closed-values (db/entity :logseq.property.pdf/hl-color))]
-                       (some (fn [color-block] (when (= (:block/title color-block) color)
-                                                 (:db/id color-block))) colors))
-                     color)]
-        (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block) k color')))))
+            color' (let [colors (:property/closed-values (db/entity :logseq.property.pdf/hl-color))]
+                     (some (fn [color-block] (when (= (:block/title color-block) color)
+                                               (:db/id color-block))) colors))]
+        (property-handler/set-block-property! (:block/uuid block) k color')))))
 
 (defn unlink-hl-area-image$
   [^js _viewer current hl]
@@ -322,37 +202,17 @@
        (ref/->block-ref (:block/uuid ref-block))
        :owner-window (pdf-windows/resolve-own-window viewer)))))
 
-(defn file-based-open-block-ref!
-  [block]
-  (let [id (:block/uuid block)
-        page (db/entity (:db/id (:block/page block)))
-        page-name (:block/title page)
-        file-path (get-in block [:block/properties :file-path])
-        hl-page (pu/get-block-property-value block :logseq.property.pdf/hl-page)
-        hl-value (pu/get-block-property-value block :logseq.property.pdf/hl-value)]
-    (when-let [target-key (and page-name (subs page-name 5))]
-      (p/let [hls (file-based-resolve-hls-data-by-key$ target-key)
-              hls (and hls (:highlights hls))
-              file-path (or file-path (str "../assets/" target-key ".pdf"))]
-        (if-let [matched (or (and hls (medley/find-first #(= id (:id %)) hls))
-                             (if hl-page {:page hl-page}
-                                 (when-let [page (some-> hl-value :page)] {:page page})))]
-          (do
-            (state/set-state! :pdf/ref-highlight matched)
-            ;; open pdf viewer
-            (state/set-current-pdf! (inflate-asset file-path)))
-          (js/console.debug "[Unmatched highlight ref]" block))))))
-
 (defn db-based-open-block-ref!
   [block]
   (let [hl-value (:logseq.property.pdf/hl-value block)
         asset (:logseq.property/asset block)
-        file-path (str "../assets/" (:block/uuid asset) ".pdf")]
+        external-url (:logseq.property.asset/external-url asset)
+        file-path (or external-url (str "../assets/" (:block/uuid asset) ".pdf"))]
     (if asset
       (->
        (p/let [href (assets-handler/<make-asset-url file-path)]
          (state/set-state! :pdf/ref-highlight hl-value)
-        ;; open pdf viewer
+         ;; open pdf viewer
          (state/set-current-pdf! (inflate-asset file-path {:href href :block asset})))
        (p/catch (fn [error]
                   (js/console.error error))))
@@ -360,9 +220,7 @@
 
 (defn open-block-ref!
   [block]
-  (if (config/db-based-graph? (state/get-current-repo))
-    (db-based-open-block-ref! block)
-    (file-based-open-block-ref! block)))
+  (db-based-open-block-ref! block))
 
 (defn goto-block-ref!
   [{:keys [id] :as hl}]
@@ -376,10 +234,7 @@
   ([current] (goto-annotations-page! current nil))
   ([current id]
    (when current
-     (if (config/db-based-graph?)
-       (rfe/push-state :page {:name (:block/uuid (:block current))} (if id {:anchor (str "block-content-" + id)} nil))
-       (when-let [e (some->> (:key current) (str "hls__") (db-model/get-page))]
-         (rfe/push-state :page {:name (str (:block/uuid e))} (if id {:anchor (str "block-content-" + id)} nil)))))))
+     (rfe/push-state :page {:name (:block/uuid (:block current))} (if id {:anchor (str "block-content-" + id)} nil)))))
 
 (defn open-lightbox!
   [e]
@@ -420,8 +275,7 @@
            [:div.asset-container
             {:style {:width (if style "100%" "auto")}}
             [:span.asset-action-bar
-             (when-let [asset-uuid (and (config/db-based-graph?)
-                                        (some-> asset-block (:block/uuid)))]
+             (when-let [asset-uuid (some-> asset-block (:block/uuid))]
                [:button.asset-action-btn
                 {:title (t :asset/ref-block)
                  :tabIndex "-1"

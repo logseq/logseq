@@ -13,7 +13,6 @@
             [logseq.common.util.namespace :as ns-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
-            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.text :as text]
             [missionary.core :as m]))
 
@@ -192,12 +191,12 @@ DROP TRIGGER IF EXISTS blocks_au;
                              :rowMode "array"}))
           blocks (bean/->clj result)]
       (keep (fn [block]
-              (let [[id page title rank snippet] (if enable-snippet?
-                                                   (update block 4 get-snippet-result)
-                                                   block)]
+              (let [[id page title _rank snippet] (if enable-snippet?
+                                                    (update block 4 get-snippet-result)
+                                                    block)]
                 (when title
                   {:id id
-                   :keyword-score (+ (fuzzy/score q title) (js/Math.abs rank))
+                   :keyword-score (fuzzy/score q title)
                    :page page
                    :title title
                    :snippet snippet}))) blocks))
@@ -236,9 +235,8 @@ DROP TRIGGER IF EXISTS blocks_au;
   [db]
   (let [page-ids (->> (d/datoms db :avet :block/name)
                       (map :e))
-        object-ids (when (ldb/db-based-graph? db)
-                     (->> (d/datoms db :avet :block/tags)
-                          (map :e)))
+        object-ids (->> (d/datoms db :avet :block/tags)
+                        (map :e))
         blocks (->> (distinct (concat page-ids object-ids))
                     (map #(d/entity db %)))]
     (remove hidden-entity? blocks)))
@@ -320,11 +318,14 @@ DROP TRIGGER IF EXISTS blocks_au;
                             k-result (first (filter #(= (:id %) id) keyword-results))
                             s-result (first (filter #(= (:id %) id) semantic-results))
                             result (merge s-result k-result)
-                            k-score (or (:keyword-score k-result) 0.0)
+                            page? (ldb/page? block)
+                            keyword-score (if page? (+ (:keyword-score k-result) 2) (:keyword-score k-result))
+                            k-score (or keyword-score 0.0)
                             s-score (or (:semantic-score s-result) 0.0)
                             norm-k-score (normalize-score k-score k-min k-max)
                             ;; Weighted combination
-                            combined-score (+ (* (:keyword-weight config) norm-k-score)
+                            combined-score (+ (* (:keyword-weight config)
+                                                 norm-k-score)
                                               (* (:semantic-weight config) s-score)
                                               (cond
                                                 (ldb/page? block)
@@ -420,16 +421,17 @@ DROP TRIGGER IF EXISTS blocks_au;
                                                     (ldb/class? block))))
                                         {:db/id (:db/id block)
                                          :block/uuid (:block/uuid block)
-                                         :block/title (if (ldb/page? block)
-                                                        (ldb/get-title-with-parents block)
-                                                        (or snippet title))
+                                         :block/title (or snippet title)
+                                         :block.temp/original-title (:block/title block)
                                          :block/page (or
                                                       (:block/uuid (:block/page block))
                                                       (when page
                                                         (if (common-util/uuid-string? page)
                                                           (uuid page)
                                                           nil)))
+                                         :block/parent (:db/id (:block/parent block))
                                          :block/tags (seq (map :db/id (:block/tags block)))
+                                         :logseq.property/icon (:logseq.property/icon block)
                                          :page? (ldb/page? block)
                                          :alias (some-> (first (:block/_alias block))
                                                         (select-keys [:block/uuid :block/title]))})))))))]
@@ -455,7 +457,7 @@ DROP TRIGGER IF EXISTS blocks_au;
        (keep block->index)))
 
 (defn- get-blocks-from-datoms-impl
-  [repo {:keys [db-after db-before]} datoms]
+  [{:keys [db-after db-before]} datoms]
   (when (seq datoms)
     (let [blocks-to-add-set (->> (filter :added datoms)
                                  (map :e)
@@ -464,7 +466,7 @@ DROP TRIGGER IF EXISTS blocks_au;
                                     (filter #(= :block/uuid (:a %)))
                                     (map :e)
                                     (set))
-          blocks-to-add-set' (if (and (sqlite-util/db-based-graph? repo) (seq blocks-to-add-set))
+          blocks-to-add-set' (if (seq blocks-to-add-set)
                                (->> blocks-to-add-set
                                     (mapcat (fn [id] (map :db/id (:block/_refs (d/entity db-after id)))))
                                     (concat blocks-to-add-set)
@@ -477,7 +479,7 @@ DROP TRIGGER IF EXISTS blocks_au;
                               (remove hidden-entity?))})))
 
 (defn- get-affected-blocks
-  [repo tx-report]
+  [tx-report]
   (let [data (:tx-data tx-report)
         datoms (filter
                 (fn [datom]
@@ -485,11 +487,11 @@ DROP TRIGGER IF EXISTS blocks_au;
                   (contains? #{:block/uuid :block/name :block/title :block/properties} (:a datom)))
                 data)]
     (when (seq datoms)
-      (get-blocks-from-datoms-impl repo tx-report datoms))))
+      (get-blocks-from-datoms-impl tx-report datoms))))
 
 (defn sync-search-indice
   [repo tx-report]
-  (let [{:keys [blocks-to-add blocks-to-remove]} (get-affected-blocks repo tx-report)]
+  (let [{:keys [blocks-to-add blocks-to-remove]} (get-affected-blocks tx-report)]
     ;; update page title indice
     (let [fuzzy-blocks-to-add (filter page-or-object? blocks-to-add)
           fuzzy-blocks-to-remove (filter page-or-object? blocks-to-remove)]

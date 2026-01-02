@@ -27,9 +27,9 @@
   [state page-name]
   (let [scheduled-or-deadlines (rum/react (::result state))]
     (when (seq scheduled-or-deadlines)
-      [:div.scheduled-or-deadlines.mt-8
+      [:div.scheduled-or-deadlines
        (ui/foldable
-        [:div "SCHEDULED AND DEADLINE"]
+        [:div.text-sm.font-medium "Scheduled and Deadline"]
         (fn []
           [:div.scheduled-deadlines.references-blocks.mb-6
            (let [ref-hiccup (block/->hiccup scheduled-or-deadlines

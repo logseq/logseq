@@ -7,19 +7,12 @@
             [frontend.format.protocol :as protocol]
             [frontend.state :as state]
             [goog.object :as gobj]
-            [lambdaisland.glogi :as log]
-            [logseq.common.util :as common-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]))
 
 (defonce anchorLink (gobj/get Mldoc "anchorLink"))
-(defonce parseOPML (gobj/get Mldoc "parseOPML"))
 (defonce parseAndExportMarkdown (gobj/get Mldoc "parseAndExportMarkdown"))
 (defonce parseAndExportOPML (gobj/get Mldoc "parseAndExportOPML"))
 (defonce export (gobj/get Mldoc "export"))
-
-(defn parse-opml
-  [content]
-  (parseOPML content))
 
 (defn parse-export-markdown
   [content config references]
@@ -35,17 +28,6 @@
                       (or references gp-mldoc/default-references)))
 
 (def block-with-title? gp-mldoc/block-with-title?)
-
-(defn opml->edn
-  [config content]
-  (try
-    (if (string/blank? content)
-      {}
-      (let [[headers blocks] (-> content (parse-opml) (common-util/json->clj))]
-        [headers (gp-mldoc/collect-page-properties blocks config)]))
-    (catch :default e
-      (log/error :edn/convert-failed e)
-      [])))
 
 (defn get-default-config
   [format]
@@ -70,13 +52,6 @@
   [plains]
   (string/join (map last plains)))
 
-(def properties? gp-mldoc/properties?)
-
-(defn typ-drawer?
-  [ast typ]
-  (and (contains? #{"Drawer"} (ffirst ast))
-       (= typ (second (first ast)))))
-
 (defn extract-first-query-from-ast [ast]
   (let [*result (atom nil)]
     (walk/postwalk
@@ -88,10 +63,3 @@
          f))
      ast)
     @*result))
-
-(defn get-title&body
-  "parses content and returns [title body]
-   returns nil if no title"
-  [content format]
-  (when-let [repo (state/get-current-repo)]
-    (gp-mldoc/get-title&body repo content format)))

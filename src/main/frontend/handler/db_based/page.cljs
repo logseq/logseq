@@ -11,7 +11,7 @@
             [frontend.state :as state]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
-            [logseq.db]
+            [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.content :as db-content]
             [logseq.outliner.validate :as outliner-validate]
@@ -49,8 +49,8 @@
         (notification/show! (str "A tag with the name \"" (:block/title page-entity) "\" already exists.") :warning false)
         (:block/parent page-entity)
         (notification/show! "Namespaced pages can't be tags" :error false)
-        (outliner-validate/uneditable-page? page-entity)
-        (notification/show! "Built-in pages can't be edited" :error)
+        (ldb/built-in? page-entity)
+        (notification/show! "Built-in pages can't be used as tags" :error)
         :else
         (let [txs [(db-class/build-new-class (db/get-db)
                                              {:db/id (:db/id page-entity)
@@ -64,8 +64,8 @@
   [entity]
   (cond (db/page-exists? (:block/title entity) #{:logseq.class/Page})
         (notification/show! (str "A page with the name \"" (:block/title entity) "\" already exists.") :warning false)
-        (outliner-validate/uneditable-page? entity)
-        (notification/show! "Built-in tags can't be edited" :error)
+        (ldb/built-in? entity)
+        (notification/show! "Built-in tags can't be converted to pages" :error)
         :else
         (if (seq (:logseq.property.class/_extends entity))
           (notification/show! "This tag cannot be converted because it has tag children. All tag children must be removed or converted before converting this tag." :error false)

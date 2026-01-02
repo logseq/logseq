@@ -4,32 +4,19 @@
   (:require [cljs-http.client :as http]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
-            [cljs.core.async :as async :refer [<! go]]
+            [cljs.core.async :as async :refer [<! go timeout]]
             [clojure.set :as set]
             [clojure.string :as string]
             [frontend.common.missionary :as c.m]
             [frontend.config :as config]
             [frontend.debug :as debug]
             [frontend.flows :as flows]
-            [frontend.handler.config :as config-handler]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [goog.crypt :as crypt]
             [goog.crypt.Hmac]
             [goog.crypt.Sha256]
             [missionary.core :as m]))
-
-(defn set-preferred-format!
-  [format]
-  (when format
-    (config-handler/set-config! :preferred-format format)
-    (state/set-preferred-format! format)))
-
-(defn set-preferred-workflow!
-  [workflow]
-  (when workflow
-    (config-handler/set-config! :preferred-workflow workflow)
-    (state/set-preferred-workflow! workflow)))
 
 ;;; userinfo, token, login/logout, ...
 
@@ -87,7 +74,9 @@
    :sub))
 
 (defn logged-in? []
-  (some? (state/get-auth-refresh-token)))
+  (let [token (state/get-auth-refresh-token)]
+    (when (string? token)
+      (not (string/blank? token)))))
 
 (defn- set-token-to-localstorage!
   ([id-token access-token]
@@ -107,6 +96,19 @@
     (doseq [key (js/Object.keys js/localStorage)]
       (when (string/starts-with? key prefix)
         (js/localStorage.removeItem key)))))
+
+(defn auto-fill-refresh-token-from-cognito!
+  []
+  (let [prefix "CognitoIdentityServiceProvider."
+        refresh-token-key (some #(when (string/starts-with? % prefix)
+                                   (when (string/ends-with? % "refreshToken")
+                                     %))
+                                (js/Object.keys js/localStorage))]
+    (when refresh-token-key
+      (let [refresh-token (js/localStorage.getItem refresh-token-key)]
+        (when (and refresh-token (not= refresh-token "undefined"))
+          (state/set-auth-refresh-token refresh-token)
+          (js/localStorage.setItem "refresh-token" refresh-token))))))
 
 (defn- clear-tokens
   ([]
@@ -195,17 +197,13 @@
         ;; refresh remote graph list by pub login event
         (when (user-uuid) (state/pub-event! [:user/fetch-info-and-graphs]))))))
 
-(defn has-refresh-token?
-  "Has refresh-token"
-  []
-  (boolean (js/localStorage.getItem "refresh-token")))
-
 (defn login-callback
   [session]
   (set-tokens!
    (:jwtToken (:idToken session))
    (:jwtToken (:accessToken session))
    (:token (:refreshToken session)))
+  (auto-fill-refresh-token-from-cognito!)
   (state/pub-event! [:user/fetch-info-and-graphs]))
 
 (defn ^:export login-with-username-password-e2e
@@ -273,13 +271,6 @@
                   (-> (state/get-auth-id-token) parse-jwt expired?))
           (throw (ex-info "empty or expired token and refresh failed" {:type :expired-token})))))))
 
-(defn <user-uuid
-  []
-  (go
-    (if-some [exp (<! (<ensure-id&access-token))]
-      exp
-      (user-uuid))))
-
 ;;; user groups
 
 (defn rtc-group?
@@ -330,6 +321,116 @@
               {:keys [status]} (c.m/<? (http/put presigned-url {:body avatar-str :with-credentials? false}))]
           (when-not (http/unexceptional-status? status)
             (throw (ex-info "failed to upload avatar" {:resp resp}))))))))
+
+(defn- guard-ex
+  [x]
+  (when (instance? ExceptionInfo x) x))
+
+(defn- get-json-body [body]
+  (or (and (not (string? body)) body)
+      (when (string/blank? body) nil)
+      (try (js->clj (js/JSON.parse body) :keywordize-keys true)
+           (catch :default e
+             (prn :invalid-json body)
+             e))))
+
+(defn- get-resp-json-body [resp]
+  (-> resp (:body) (get-json-body)))
+
+(defn- <request-once [api-name body token]
+  (go
+    (let [resp (http/post (str "https://" config/API-DOMAIN "/file-sync/" api-name)
+                          {:oauth-token token
+                           :body (js/JSON.stringify (clj->js body))
+                           :with-credentials? false})]
+      {:resp (<! resp)
+       :api-name api-name
+       :body body})))
+
+(defn- <request*
+  "max retry count is 5.
+  *stop: volatile var, stop retry-request when it's true,
+          and return :stop"
+  ([api-name body token] (<request* api-name body token 0))
+  ([api-name body token retry-count]
+   (go
+     (let [resp (<! (<request-once api-name body token))]
+       (if (and
+            (= 401 (get-in resp [:resp :status]))
+            (= "Unauthorized" (:message (get-json-body (get-in resp [:resp :body])))))
+         (if (> retry-count 5)
+           (throw (js/Error. :file-sync-request))
+           (do (println "will retry after" (min 60000 (* 1000 retry-count)) "ms")
+               (<! (timeout (min 60000 (* 1000 retry-count))))
+               (<! (<request* api-name body token (inc retry-count)))))
+         (:resp resp))))))
+
+(defn <request [api-name & args]
+  (apply <request* api-name args))
+
+(defn storage-exceed-limit?
+  [exp]
+  (some->> (ex-data exp)
+           :err
+           ((juxt :status (comp :message :body)))
+           ((fn [[status msg]] (and (= 403 status) (= msg "storage-limit"))))))
+
+(defn graph-count-exceed-limit?
+  [exp]
+  (some->> (ex-data exp)
+           :err
+           ((juxt :status (comp :message :body)))
+           ((fn [[status msg]] (and (= 403 status) (= msg "graph-count-exceed-limit"))))))
+
+(defn- fire-file-sync-storage-exceed-limit-event!
+  [exp]
+  (when (storage-exceed-limit? exp)
+    (state/pub-event! [:rtc/storage-exceed-limit])
+    true))
+
+(defn- fire-file-sync-graph-count-exceed-limit-event!
+  [exp]
+  (when (graph-count-exceed-limit? exp)
+    (state/pub-event! [:rtc/graph-count-exceed-limit])
+    true))
+
+(defprotocol IToken
+  (<get-token [this]))
+
+(deftype RemoteAPI [*stopped?]
+  Object
+
+  (<request [this api-name body]
+    (go
+      (let [token-or-exp (<! (<get-token this))]
+        (or (guard-ex token-or-exp)
+            (let [resp (<! (<request api-name body token-or-exp *stopped?))]
+              (if (http/unexceptional-status? (:status resp))
+                (get-resp-json-body resp)
+                (let [exp (ex-info "request failed"
+                                   {:err          resp
+                                    :body         (:body resp)
+                                    :api-name     api-name
+                                    :request-body body})]
+                  (fire-file-sync-storage-exceed-limit-event! exp)
+                  (fire-file-sync-graph-count-exceed-limit-event! exp)
+                  exp)))))))
+
+  IToken
+  (<get-token [_this]
+    (frontend.handler.user/<wrap-ensure-id&access-token
+     (state/get-auth-id-token))))
+
+(defprotocol IRemoteAPI
+  (<user-info [this] "user info"))
+
+(extend-type RemoteAPI
+  IRemoteAPI
+  (<user-info [this]
+    (frontend.handler.user/<wrap-ensure-id&access-token
+     (<! (.<request this "user_info" {})))))
+
+(def remoteapi (->RemoteAPI nil))
 
 (comment
   ;; We probably need this for some new features later

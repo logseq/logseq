@@ -1274,9 +1274,11 @@
                                                                 (if-not (state/get-left-sidebar-open?)
                                                                   (- width-t width-l) width-t))]
                                           (set-max-width! (max (- width-t width-c' 100) 76))))]
-             (.addEventListener js/window "resize" calc-wrap-max-width)
-             (js/setTimeout calc-wrap-max-width 16)
-             #(.removeEventListener js/window "resize" calc-wrap-max-width)))))
+             (when (util/electron?)
+               (.addEventListener js/window "resize" calc-wrap-max-width)
+               (js/setTimeout calc-wrap-max-width 16))
+             #(when (util/electron?)
+                (.removeEventListener js/window "resize" calc-wrap-max-width))))))
      [right-sidebar-resized])
 
     [:div.list-wrap
@@ -1600,15 +1602,16 @@
   (cond-> routes
     config/lsp-enabled?
     (concat (some->> (plugin-handler/get-route-renderers)
-                     (mapv #(when-let [{:keys [name path render]} %]
-                              (when (not (string/blank? path))
-                                [path {:name name :view (fn [r] (render r %))}])))
+                     (mapv (fn [custom-route]
+                             (when-let [{:keys [name path render]} custom-route]
+                               (when (not (string/blank? path))
+                                 [path {:name name :view (fn [r] (render r custom-route))}]))))
                      (remove nil?)))))
 
 (defn hook-daemon-renderers
   []
   (when-let [rs (seq (plugin-handler/get-daemon-renderers))]
-    [:div.lsp-daemon-container.fixed.z-10
+    [:div.lsp-daemon-container
      (for [{:keys [key _pid render]} rs]
        (when (fn? render)
          [:div.lsp-daemon-container-card {:data-key key} (render)]))]))

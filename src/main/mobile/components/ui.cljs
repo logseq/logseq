@@ -3,22 +3,13 @@
   (:require [frontend.handler.notification :as notification]
             [frontend.rum :as r]
             [frontend.state :as state]
-            [logseq.shui.silkhq :as silkhq]
             [logseq.shui.ui :as shui]
-            [medley.core :as medley]
-            [mobile.state :as mobile-state]
+            [mobile.components.popup :as popup]
             [react-transition-group :refer [CSSTransition TransitionGroup]]
             [rum.core :as rum]))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
-
-(rum/defc classic-app-container-wrap
-  [content]
-  [:main#app-container-wrapper.ls-fold-button-on-right
-   [:div#app-container.pt-2
-    [:div#main-container.flex.flex-1
-     [:div.w-full content]]]])
 
 (rum/defc notification-clear-all
   []
@@ -103,79 +94,6 @@
            items (if clear-all (cons clear-all notifications) notifications)]
        (doall items)))))
 
-(defonce *modals (atom []))
-
-(rum/defc x-modal
-  [{:keys [close! _as-page? type on-action title buttons _inputs modal-props]} content]
-  (let [{:keys [_class header]} modal-props]
-    (case type
-      :action-sheet
-      (silkhq/bottom-sheet
-       (merge modal-props
-              {:presented true
-               :onPresentedChange (fn [v?] (when (false? v?)
-                                             (js/setTimeout #(close!) 200)))})
-       (let [title (or title header content)
-             content (for [{:keys [role text] :as item} buttons]
-                       [:a.as-item-btn
-                        {:data-role role
-                         :on-pointer-down (fn []
-                                            (some-> on-action (apply [item]))
-                                            (close!))}
-                        text])]
-         (silkhq/bottom-sheet-portal
-          (silkhq/bottom-sheet-view {:as-child true}
-                                    (silkhq/bottom-sheet-backdrop)
-                                    (silkhq/bottom-sheet-content
-                                     [:div.flex.flex-col.items-center.gap-2.app-silk-action-sheet-modal-content
-                                      (silkhq/bottom-sheet-handle {:class "my-2"})
-                                      (some-> title (silkhq/bottom-sheet-title))
-                                      [:div.as-list-container content]])))))
-
-      ;; default
-      (silkhq/bottom-sheet
-       (merge modal-props
-              {:presented true
-               :onPresentedChange (fn [v?] (when (false? v?) (close!)))})
-       (silkhq/bottom-sheet-portal
-        (silkhq/bottom-sheet-view {:as-child true}
-                                  (silkhq/bottom-sheet-backdrop)
-                                  (silkhq/bottom-sheet-content
-                                   (if (fn? content)
-                                     (content) content))))))))
-
-(defn get-modal
-  ([] (some-> @*modals last))
-  ([id]
-   (when id
-     (some->> (medley/indexed @*modals)
-              (filter #(= id (:id (second %)))) (first)))))
-
-(defn- delete-modal!
-  [id]
-  (when-let [[index _] (get-modal id)]
-    (swap! *modals #(->> % (medley/remove-nth index) (vec)))))
-
-(defn close-modal!
-  ([] (some-> @*modals (last) :id (close-modal!)))
-  ([id] (delete-modal! id)))
-
 (defn open-popup!
   [content-fn opts]
-  (mobile-state/set-popup!
-   {:open? true
-    :content-fn content-fn
-    :opts opts}))
-
-(defn close-popup! []
-  (some-> mobile-state/*popup-data
-          (swap! assoc :open? false)))
-
-(rum/defc install-modals []
-  (let [_ (r/use-atom *modals)]
-    [:<>
-     (for [{:keys [id content] :as props} @*modals
-           :let [close! #(close-modal! id)
-                 props' (assoc props :close! close!)]]
-       (x-modal props'
-                (if (fn? content) (content props') content)))]))
+  (popup/popup-show! nil content-fn opts))

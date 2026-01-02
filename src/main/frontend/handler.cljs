@@ -9,7 +9,7 @@
             [frontend.components.editor :as editor]
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
-            [frontend.components.whiteboard :as whiteboard]
+            [frontend.components.user.login :as user.login]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
             [frontend.db.react :as react]
@@ -17,13 +17,13 @@
             [frontend.error :as error]
             [frontend.handler.command-palette :as command-palette]
             [frontend.handler.db-based.vector-search-flows :as vector-search-flows]
+            [frontend.handler.e2ee]
             [frontend.handler.events :as events]
+            [frontend.handler.events.rtc]
             [frontend.handler.events.ui]
-            [frontend.handler.file-based.events]
-            [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.global-config :as global-config-handler]
-            [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.repo-config :as repo-config-handler]
@@ -37,7 +37,6 @@
             [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.util.persist-var :as persist-var]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]))
@@ -52,16 +51,9 @@
 (defn- watch-for-date!
   []
   (let [f (fn []
-            (let [repo (state/get-current-repo)]
-              (when (or
-                     (config/db-based-graph? repo)
-                     (and (not (state/nfs-refreshing?))
-                          (not (contains? (:file/unlinked-dirs @state/state)
-                                          (config/get-repo-dir repo)))))
-                ;; Don't create the journal file until user writes something
-                (page-handler/create-today-journal!))))]
+            (page-handler/create-today-journal!))]
     (f)
-    (js/setInterval f 5000)))
+    (js/setInterval f 3000)))
 
 (defn restore-and-setup!
   [repo]
@@ -91,9 +83,7 @@
 
            (page-handler/init-commands!)
 
-           (watch-for-date!)
-           (when (and (not (config/db-based-graph? repo)) (util/electron?))
-             (file-handler/watch-for-current-graph-dir!))))
+           (watch-for-date!)))
         (p/catch (fn [error]
                    (log/error :exception error))))))
 
@@ -112,15 +102,12 @@
   (state/set-page-blocks-cp! page/page-cp)
   (state/set-component! :block/->hiccup block/->hiccup)
   (state/set-component! :block/linked-references reference/references)
-  (state/set-component! :whiteboard/tldraw-preview whiteboard/tldraw-preview)
-  (state/set-component! :block/single-block block/single-block-cp)
   (state/set-component! :block/container block/block-container)
   (state/set-component! :block/inline-title block/inline-title)
   (state/set-component! :block/breadcrumb block/breadcrumb)
   (state/set-component! :block/reference block/block-reference)
   (state/set-component! :block/blocks-container block/blocks-container)
   (state/set-component! :block/properties-cp block/db-properties-cp)
-  (state/set-component! :block/embed block/block-embed)
   (state/set-component! :block/page-cp block/page-cp)
   (state/set-component! :block/inline-text block/inline-text)
   (state/set-component! :block/asset-cp block/asset-cp)
@@ -136,60 +123,62 @@
 
 (defn start!
   [render]
+  (let [t1 (util/time-ms)]
+    (p/do!
+     (idb/start)
+     (plugin-handler/setup!)
+     (render))
 
-  (idb/start)
-  (get-system-info)
-  (set-global-error-notification!)
+    (get-system-info)
+    (set-global-error-notification!)
 
-  (register-components-fns!)
-  (user-handler/restore-tokens-from-localstorage)
-  (state/set-db-restoring! true)
-  (when (util/electron?)
-    (el/listen!))
-  (render)
-  (i18n/start)
-  (instrument/init)
-  (state/set-online! js/navigator.onLine)
+    (register-components-fns!)
+    (user-handler/restore-tokens-from-localstorage)
+    (user.login/setup-configure!)
+    (state/set-db-restoring! true)
+    (when (util/electron?)
+      (el/listen!))
 
-  (-> (util/indexeddb-check?)
-      (p/catch (fn [_e]
-                 (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
-                 (state/set-indexedb-support! false))))
+    (i18n/start)
+    (instrument/init)
 
-  (react/run-custom-queries-when-idle!)
+    (react/run-custom-queries-when-idle!)
 
-  (events/run!)
+    (events/run!)
 
-  (p/do!
-   (-> (p/let [_ (db-browser/start-db-worker!)
-               repos (repo-handler/get-repos)
-               _ (state/set-repos! repos)
-               _ (mobile-util/hide-splash) ;; hide splash as early as ui is stable
-               repo (or (state/get-current-repo) (:url (first repos)))
-               _ (if (empty? repos)
-                   (repo-handler/new-db! config/demo-repo)
-                   (restore-and-setup! repo))]
-         (set-network-watcher!)
+    (log/info ::start-web-worker {})
 
-         (when (util/electron?)
-           (persist-db/run-export-periodically!))
-         (when (mobile-util/native-platform?)
-           (state/restore-mobile-theme!)))
-       (p/catch (fn [e]
-                  (js/console.error "Error while restoring repos: " e)))
-       (p/finally (fn []
-                    (state/set-db-restoring! false)
-                    (when-not (util/mobile?)
-                      (p/let [webgpu-available? (db-browser/<check-webgpu-available?)]
-                        (log/info :webgpu-available? webgpu-available?)
-                        (when webgpu-available?
-                          (p/do! (db-browser/start-inference-worker!)
-                                 (db-browser/<connect-db-worker-and-infer-worker!)
-                                 (reset! vector-search-flows/*infer-worker-ready true))))))))
+    (p/do!
+     (-> (p/let [t2 (util/time-ms)
+                 _ (db-browser/start-db-worker!)
+                 _ (log/info ::db-worker-spent-time (- (util/time-ms) t2))
+                 repos (repo-handler/get-repos)
+                 _ (state/set-repos! repos)
+                 _ (mobile-util/hide-splash) ;; hide splash as early as ui is stable
+                 repo (or (state/get-current-repo) (:url (first repos)))
+                 _ (if (empty? repos)
+                     (repo-handler/new-db! config/demo-repo)
+                     (restore-and-setup! repo))]
+           (set-network-watcher!)
 
-   (util/<app-wake-up-from-sleep-loop (atom false))
-
-   (persist-var/load-vars)))
+           (when (util/electron?)
+             (persist-db/run-export-periodically!))
+           (when (mobile-util/native-platform?)
+             (state/restore-mobile-theme!)))
+         (p/catch (fn [e]
+                    (js/console.error "Error while restoring repos: " e)))
+         (p/finally (fn []
+                      (state/set-db-restoring! false)
+                      (p/resolve! state/app-ready-promise true)
+                      (log/info ::app-init-spent-time (- (util/time-ms) t1))
+                      (when-not (util/mobile?)
+                        (p/let [webgpu-available? (db-browser/<check-webgpu-available?)]
+                          (log/info :webgpu-available? webgpu-available?)
+                          (when webgpu-available?
+                            (p/do! (db-browser/start-inference-worker!)
+                                   (db-browser/<connect-db-worker-and-infer-worker!)
+                                   (reset! vector-search-flows/*infer-worker-ready true))))
+                        nil)))))))
 
 (defn stop! []
   (prn "stop!"))
