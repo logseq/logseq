@@ -832,14 +832,4 @@ tags:: tag1, tag2
                :block/uuid #uuid "62f4b8c6-072e-4133-90e2-0591021a7fea",
                :block/parent #:db{:id 2333},
                :block/page #:db{:id 2313},
-               :block/level 3}]}]})))))
-
-(comment
-  (dotimes [i 5]
-    (do
-      (frontend.test.fixtures/reset-datascript test-db)
-      (cljs.test/run-tests)))
-
-  (do
-    (frontend.test.fixtures/reset-datascript test-db)
-    (cljs.test/test-vars [#'test-paste-first-empty-block])))
+                :block/level 3}]}]})))))

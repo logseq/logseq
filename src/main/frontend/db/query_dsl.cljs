@@ -914,31 +914,5 @@ Some bindings in this fn:
                                         (when sort-by
                                           {:transform-fn
                                            (if db-graph?
-                                             identity
-                                             #(sort-by % (fn [m prop] (get-in m [:block/properties prop]))))}))))))))
-
-(comment
-  (query "(and [[foo]] [[bar]])")
-
-  (query "(or [[foo]] [[bar]])")
-
-  (query "(not (or [[foo]] [[bar]]))")
-
-  (query "(between -7d +7d)")
-
-  (query "(between -7d today)")
-
-  (query "(between created_at yesterday today)")
-
-  (query "(and [[some page]] (property foo bar))")
-
-  (query "(and [[some page]] (task now later))")
-
-  (query "(and [[some page]] (priority A))")
-
-  ;; nested query
-  (query "(and [[baz]] (or [[foo]] [[bar]]))")
-
-  (query "(and [[some page]] (sort-by created-at))")
-
-  (query "(and (page-property foo bar) [[hello]])"))
+                                              identity
+                                              #(sort-by % (fn [m prop] (get-in m [:block/properties prop]))))}))))))))

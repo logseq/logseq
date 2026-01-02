@@ -258,17 +258,8 @@
    (c.m/throttle 300 (m/watch *vector-search-state))))
 
 (when-not common-config/PUBLISHING ; NOTE: we may support vector-search in publishing mode later
-  (c.m/run-background-task
-   ::subscribe-state
-   (m/reduce
-    (fn [_ m] (worker-util/post-message :vector-search-sync-state m))
-    vector-search-state-flow)))
-
-(comment
-  (def repo (frontend.worker.state/get-current-repo))
-  (def conn (frontend.worker.state/get-datascript-conn (frontend.worker.state/get-current-repo)))
-  (.force-reset-index! @worker-state/*infer-worker repo)
-  ((task--embedding-stale-blocks! repo) prn js/console.log)
-  ((task--re-embedding-graph-data! repo) prn js/console.log)
-
-  ((task--search repo "perf performance datomic stat" 10) prn js/console.log))
+   (c.m/run-background-task
+    ::subscribe-state
+    (m/reduce
+     (fn [_ m] (worker-util/post-message :vector-search-sync-state m))
+     vector-search-state-flow)))

@@ -45,10 +45,19 @@
    ;; Disable until we decide to use conj! as recommended in docs
    :unused-value {:level :off}
    :unresolved-symbol {:exclude [goog.DEBUG
-                                 goog.string.unescapeEntities
-                                 ;; TODO:lint: Fix when fixing all type hints
-                                 object
-                                 ;; CLJS-specific patterns that clj-kondo doesn't understand
+                                  goog.string.unescapeEntities
+                                  ;; TODO:lint: Fix when fixing all type hints
+                                  object
+
+                                  ;; crypto test bindings (promesa p/let)
+                                  password rsa-key-pair aes-key
+                                  encrypted-private-key encrypted-aes-key
+                                  decrypted-private-key decrypted-aes-key
+                                  exported-original-private-key exported-decrypted-private-key
+                                  exported-original-aes-key exported-decrypted-aes-key
+                                  another-rsa-key-pair
+
+                                  ;; CLJS-specific patterns that clj-kondo doesn't understand
                                  _ *el-popup *timer *timer1 visible? set-visible! render
                                  *control-show? edit? selected? top? bottom?
                                  *show-query? _skip-async-load? collapsed?
