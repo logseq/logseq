@@ -576,10 +576,10 @@ prop-d:: [[nada]]"}])
                     {:file/path "pages/page2.md"
                      :file/content "bar"}])
 
-  (is (= ["page1"]
-         (map (fn [result]
-                (:block/title (db/entity (:db/id (:block/page result)))))
-              (dsl-query "(page page1)"))))
+   (is (= ["page1"]
+          (map (fn [result]
+                 (:block/title (db/entity (:db/id (:block/page result)))))
+               (dsl-query "(page page1)"))))
 
   (is (= []
          (map (fn [result]
