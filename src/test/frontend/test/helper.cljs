@@ -6,6 +6,7 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
+            [frontend.db.performance :as db-perf]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
@@ -46,7 +47,12 @@
                    (worker-pipeline/invoke-hooks conn tx-report {}))))))
 
 (defn destroy-test-db!
+  "Destroy test database and clear all connection pools to ensure test isolation.
+   For DB graphs, this also clears the pooled connection to ensure a fresh database."
   []
+  (when node?
+    ;; Clear the connection pool for the test database to ensure fresh state
+    (swap! db-perf/conn-pool dissoc test-db-name-db-version))
   (conn/destroy-all!))
 
 (defn- parse-property-value [value]
