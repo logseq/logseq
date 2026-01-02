@@ -1,9 +1,7 @@
 (ns frontend.components.journal
-  (:require [frontend.components.page :as page]
-            [frontend.components.views :as views]
-            [frontend.db-mixins :as db-mixins]
-            [frontend.db.react :as react]
-            [frontend.state :as state]
+   (:require [frontend.components.page :as page]
+             [frontend.components.views :as views]
+             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [promesa.core :as p]
@@ -21,7 +19,7 @@
 
 (defn- load-journals
   [offset limit]
-  (when-let [repo (state/get-current-repo)]
+  (when-let [_ (state/get-current-repo)]
     (p/let [{:keys [data count has-more?]} (views/<load-view-data nil {:journals? true
                                                                         :journal-limit limit
                                                                         :journal-offset offset})]

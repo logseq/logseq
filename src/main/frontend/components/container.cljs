@@ -144,8 +144,8 @@
                   (empty? latest-journals))))
        (route-handler/redirect! {:to :all-pages})
 
-       :else
-       (journal/all-journals))]))
+        :else
+        (journal/all-journals {}))]))
 
 (defn- hide-context-menu-and-clear-selection
   [e & {:keys [esc?]}]

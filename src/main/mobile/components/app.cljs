@@ -41,8 +41,8 @@
   {:did-mount (fn [state]
                 (ui/inject-document-devices-envs!)
                 state)}
-  []
-  (component-with-restoring (journal/all-journals)))
+   []
+   (component-with-restoring (journal/all-journals {})))
 
 (defn use-theme-effects!
   [current-repo theme]
