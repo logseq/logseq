@@ -1,11 +1,17 @@
-{:ns-groups [{:pattern "frontend.components.*" :name all-components}
-             {:pattern "frontend.*" :name all-frontend}]
+ {:ns-groups [{:pattern "frontend.components.*" :name all-components}
+              {:pattern "frontend.*" :name all-frontend}]
 
- :config-in-ns
- ;; :used-underscored-binding is turned off for components because of false positive
- ;; for rum/defcs and _state.
- {all-components
-  {:linters {:used-underscored-binding {:level :off}}}
+  :config-in-ns
+  ;; :used-underscored-binding is turned off for components because of false positive
+  ;; for rum/defcs and _state.
+  {all-components
+   {:linters {:used-underscored-binding {:level :off}}}
+
+   ;; ClojureScript Java interop configuration
+   logseq.common.security
+   {:linters {:unresolved-symbol {:exclude [byte-array String Exception]}
+              :unresolved-namespace {:exclude [java.util.Base64 java.security.MessageDigest]}
+              :shadowed-var {:exclude [bytes key]}}}
 
   all-frontend
   {:linters {:discouraged-namespace
@@ -17,27 +23,27 @@
   frontend.db {:linters {:aliased-namespace-symbol
                          {:exclude [frontend.db.conn frontend.db.react]}}}}
 
- :linters
- {:path-invalid-construct/string-join {:level :info}
-  :defkeywords/invalid-arg {:level :warning}
-  :regex-checks/double-escaped-regex {:level :warning}
-  :aliased-namespace-symbol {:level :warning}
-  :shadowed-var {:level :warning
-                 :exclude [key val name binding type uuid
-                           ;; FIXME: Remove the shadowed below as shadowing core fns isn't a good practice
-                           ;; FIXME: At least remove the first two lines as they have few uses
-                           re-pattern sequence dispatch-fn comp vec delay chunk
-                           fn t ex-data list int? hash range
-                           time sort-by namespace count parents exists? min
-                           new var ns resolve identity next meta vals keys exists?]}
-  ;; Disable until it doesn't trigger false positives on rum/defcontext
-  :earmuffed-var-not-dynamic {:level :off}
-  ;; Disable until we decide to use conj! as recommended in docs
-  :unused-value {:level :off}
-  :unresolved-symbol {:exclude [goog.DEBUG
-                                goog.string.unescapeEntities
-                                ;; TODO:lint: Fix when fixing all type hints
-                                object]}
+  :linters
+  {:path-invalid-construct/string-join {:level :info}
+   :defkeywords/invalid-arg {:level :warning}
+   :regex-checks/double-escaped-regex {:level :warning}
+   :aliased-namespace-symbol {:level :warning}
+   :shadowed-var {:level :warning
+                  :exclude [key val name binding type uuid
+                            ;; FIXME: Remove the shadowed below as they have few uses
+                            ;; FIXME: At least remove the first two lines as they have few uses
+                            re-pattern sequence dispatch-fn comp vec delay chunk
+                            fn t ex-data list int? hash range
+                            time sort-by namespace count parents exists? min
+                            new var ns resolve identity next meta vals keys exists?]}
+   ;; Disable until it doesn't trigger false positives on rum/defcontext
+   :earmuffed-var-not-dynamic {:level :off}
+   ;; Disable until we decide to use conj! as recommended in docs
+   :unused-value {:level :off}
+   :unresolved-symbol {:exclude [goog.DEBUG
+                                 goog.string.unescapeEntities
+                                 ;; TODO:lint: Fix when fixing all type hints
+                                 object]}}
 
   :discouraged-var
   {rum.core/use-effect! {:message "Use frontend.hooks/use-effect! instead" :level :info}
