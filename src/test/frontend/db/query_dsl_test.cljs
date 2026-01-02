@@ -208,8 +208,8 @@ prop-d:: [[nada]]"}])
     (is (= ["b1"]
            (map :block/title (dsl-query "(property Foo)")))
         "filter is case sensitive")
-    (is (= ["page1" "page2" "Dec 26th, 2020" "b2"]
-            (map :block/title (dsl-query "(property :user.property/foo)")))
+    (is (= ["b2"]
+           (map :block/title (dsl-query "(property :user.property/foo)")))
         "filter can handle qualified keyword properties")
     (is (= ["b3"]
            (map :block/title (dsl-query "(property \"zzz name!\")")))
@@ -236,8 +236,8 @@ prop-d:: [[nada]]"}])
     (is (= (set ["b3" "b2" "b1"])
            (set (map :block/title (dsl-query "(property :user.property/default)"))))
         "Blocks with any :default property or tagged with a tag that has that default-value property")
-    (is (= ["b1" "b3" "b3"]
-            (map :block/title (dsl-query "(property :user.property/default \"foo\")")))
+    (is (= ["b1" "b3"]
+           (map :block/title (dsl-query "(property :user.property/default \"foo\")")))
         "Blocks with :default property value or tagged with a tag that has that default-value property value")
     (is (= ["b2"]
            (map :block/title (dsl-query "(property :user.property/default \"bar\")")))
@@ -397,32 +397,32 @@ prop-d:: [[nada]]"}])
 - DOING b5 [[B]]"}])
 
   (testing "Lowercase query"
-    (is (= ["DONE b1" "DONE b2Z" "DONE 26-b1" "DONE 26-b3" "DONE b1"]
-            (map testable-content (dsl-query "(task done)"))))
+    (is (= ["DONE b1"]
+           (map testable-content (dsl-query "(task done)"))))
 
-    (is (= #{"NOW b3" "DOING b3" "DOING b4" "DOING b5"}
-            (set (map testable-content (dsl-query "(task doing)"))))))
+    (is (= #{"DOING b3" "DOING b4" "DOING b5"}
+           (set (map testable-content (dsl-query "(task doing)"))))))
 
-  (is (= #{"NOW b3" "DOING b3" "DOING b4" "DOING b5"}
-          (set (map testable-content (dsl-query "(task DOING)"))))
-       "Uppercase query")
+  (is (= #{"DOING b3" "DOING b4" "DOING b5"}
+         (set (map testable-content (dsl-query "(task DOING)"))))
+      "Uppercase query")
 
   (testing "Multiple specified tasks results in ORed results"
-    (is (= #{"DONE b2Z" "NOW b3" "DOING b4" "DONE b1" "DOING b5" "DONE 26-b3" "DOING b3" "DONE 26-b1"}
-            (set (map testable-content (dsl-query "(task done doing)")))))
+    (is (= #{"DONE b1" "DOING b3" "DOING b4" "DOING b5"}
+           (set (map testable-content (dsl-query "(task done doing)")))))
 
-    (is (= #{"DONE b2Z" "NOW b3" "DOING b4" "DONE b1" "DOING b5" "DONE 26-b3" "DOING b3" "DONE 26-b1"}
-            (set (map testable-content (dsl-query "(task [done doing])"))))
+    (is (= #{"DONE b1" "DOING b3" "DOING b4" "DOING b5"}
+           (set (map testable-content (dsl-query "(task [done doing])"))))
         "Multiple arguments specified with vector notation"))
 
-  (is (= ["DONE b1" "DONE b2Z" "DONE 26-b1" "DONE 26-b3" "DONE b1"]
-          (map testable-content
-               (dsl-query "(or (task done) (and (task doing) [[A]]))")))
-       "Multiple boolean operators with todo and priority operators")
+  (is (= ["DONE b1" "DOING b4"]
+         (map testable-content
+              (dsl-query "(or (task done) (and (task doing) [[A]]))")))
+      "Multiple boolean operators with todo and priority operators")
 
-  (is (= ["DOING b5"]
-          (map testable-content
-               (dsl-query "(and (task doing) (or [[A]] [[B]]))")))))
+  (is (= ["DOING b4" "DOING b5"]
+         (map testable-content
+              (dsl-query "(and (task doing) (or [[A]] [[B]]))")))))
 
 (when js/process.env.DB_GRAPH
 
@@ -430,7 +430,7 @@ prop-d:: [[nada]]"}])
   (deftest queries-with-no-data
     (load-test-files [])
     (is (= [] (dsl-query "(task todo)")))
-    (is (= 1 (count (dsl-query "(priority high)")))))
+    (is (= [] (dsl-query "(priority high)")))))
 
 (deftest sample-queries
   (load-test-files [{:file/path "pages/page1.md"
@@ -515,11 +515,11 @@ prop-d:: [[nada]]"}])
                                      (if js/process.env.DB_GRAPH "(task doing todo done)" "(task now later done)")
                                      " (or [[page 1]] (not [[page 1]])))"))))))
 
-     (is (= (if js/process.env.DB_GRAPH #{"bar" "DONE b1" "DONE b2Z"} #{"bar" "DONE b1" "DONE b2Z"})
-            (->> (dsl-query (str "(not (and " task-filter " (or [[page 1]] [[page 2]])))"))
-                 (keep testable-content)
-                 (remove (fn [s] (db/page? (db/get-page s))))
-                 set)))
+    (is (= (if js/process.env.DB_GRAPH #{"bar" "DONE b1" "DONE b2Z"} #{"foo:: bar" "DONE b1" "DONE b2Z"})
+           (->> (dsl-query (str "(not (and " task-filter " (or [[page 1]] [[page 2]])))"))
+                (keep testable-content)
+                (remove (fn [s] (db/page? (db/get-page s))))
+                set)))
 
     (is (= #{"DONE b2Z" "LATER b4Z"}
            (->> (dsl-query "(and \"Z\" (or \"b2\" \"b4\"))")
@@ -576,10 +576,10 @@ prop-d:: [[nada]]"}])
                     {:file/path "pages/page2.md"
                      :file/content "bar"}])
 
-   (is (= (repeat 12 "page1")
-          (map (fn [result]
-                 (:block/title (db/entity (:db/id (:block/page result)))))
-               (dsl-query "(page page1)"))))
+  (is (= ["page1"]
+         (map (fn [result]
+                (:block/title (db/entity (:db/id (:block/page result)))))
+              (dsl-query "(page page1)"))))
 
   (is (= []
          (map (fn [result]
@@ -692,8 +692,8 @@ created-at:: 1608968448116
       3)
 
     (when js/process.env.DB_GRAPH
-      (is (= 6 (count (dsl-query "(and (task todo done) (between created-at [[Dec 26th, 2020]]))"))))
-      (is (= 6 (count (dsl-query "(and (task todo done) (between created-at [[Dec 26th, 2020]] +1d))")))))))
+      (is (= 3 (count (dsl-query "(and (task todo done) (between created-at [[Dec 26th, 2020]]))"))))
+      (is (= 3 (count (dsl-query "(and (task todo done) (between created-at [[Dec 26th, 2020]] +1d))")))))))
 
 (deftest custom-query-test
   (load-test-files [{:file/path "pages/page1.md"
@@ -706,10 +706,10 @@ created-at:: 1608968448116
   (let [task-query (if js/process.env.DB_GRAPH
                      '(task doing)
                      '(task now))]
-    (is (= ["NOW b3 [[053206f2-aa77-499c-b819-628711b8f357]]" "DOING b3" "DOING b4 [[14927e2e-2c72-4fe8-bf74-b77f7fadee72]]" "DOING b5 [[b4bdcd74-67d6-4175-8b05-671e7394de4d]]" "NOW b1"]
-            (map :block/title (custom-query {:query task-query}))))
+    (is (= ["NOW b1"]
+           (map :block/title (custom-query {:query task-query}))))
 
-    (is (= ["NOW b3 [[053206f2-aa77-499c-b819-628711b8f357]]" "DOING b3" "DOING b4 [[14927e2e-2c72-4fe8-bf74-b77f7fadee72]]" "DOING b5 [[b4bdcd74-67d6-4175-8b05-671e7394de4d]]" "NOW b1"]
+    (is (= ["NOW b1"]
            (map :block/title (custom-query {:query (list 'and task-query "b")})))
         "Query with rule that can't be derived from the form itself")))
 
