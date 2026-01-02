@@ -324,6 +324,7 @@
  :plugin/uninstall "Uninstall"
  :plugin/marketplace "Marketplace"
  :plugin/downloads "Downloads"
+ :plugin/date-added "Newly added"
  :plugin/popular "Popular"
  :plugin/stars "Stars"
  :plugin/title "Title ({1})"
