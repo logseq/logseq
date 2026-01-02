@@ -22,13 +22,14 @@
             [frontend.handler.events.rtc]
             [frontend.handler.events.ui]
             [frontend.handler.global-config :as global-config-handler]
-            [frontend.handler.page :as page-handler]
-            [frontend.handler.plugin :as plugin-handler]
-            [frontend.handler.plugin-config :as plugin-config-handler]
-            [frontend.handler.repo :as repo-handler]
-            [frontend.handler.repo-config :as repo-config-handler]
-            [frontend.handler.ui :as ui-handler]
-            [frontend.handler.user :as user-handler]
+             [frontend.handler.page :as page-handler]
+             [frontend.handler.plugin :as plugin-handler]
+             [frontend.handler.plugin-config :as plugin-config-handler]
+             [frontend.handler.repo :as repo-handler]
+             [frontend.handler.repo-config :as repo-config-handler]
+             [frontend.handler.ui :as ui-handler]
+             [frontend.handler.user :as user-handler]
+             [frontend.platform :as platform]
             [frontend.idb :as idb]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
@@ -144,9 +145,12 @@
 
     (react/run-custom-queries-when-idle!)
 
-    (events/run!)
+     (events/run!)
 
-    (log/info ::start-web-worker {})
+     ;; Initialize platform-specific performance optimizations
+     (platform/init-platform-optimizations!)
+
+     (log/info ::start-web-worker {})
 
     (p/do!
      (-> (p/let [t2 (util/time-ms)

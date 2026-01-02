@@ -2,19 +2,21 @@
   (:require ["/frontend/utils" :as utils]
             [clojure.string :as string]
             [dommy.core :as dom]
-            [frontend.components.block :as component-block]
-            [frontend.components.class :as class-component]
-            [frontend.components.content :as content]
-            [frontend.components.db-based.page :as db-page]
-            [frontend.components.editor :as editor]
-            [frontend.components.library :as library]
-            [frontend.components.objects :as objects]
-            [frontend.components.plugins :as plugins]
-            [frontend.components.property.config :as property-config]
-            [frontend.components.query :as query]
-            [frontend.components.reference :as reference]
-            [frontend.components.scheduled-deadlines :as scheduled]
-            [frontend.components.svg :as svg]
+             [frontend.components.block :as component-block]
+             [frontend.components.class :as class-component]
+             [frontend.components.content :as content]
+             [frontend.components.db-based.page :as db-page]
+             [frontend.components.editor :as editor]
+             [frontend.components.lazy :as lazy]
+             [frontend.components.library :as library]
+             [frontend.components.objects :as objects]
+             [frontend.components.performance :as perf]
+             [frontend.components.plugins :as plugins]
+             [frontend.components.property.config :as property-config]
+             [frontend.components.query :as query]
+             [frontend.components.reference :as reference]
+             [frontend.components.scheduled-deadlines :as scheduled]
+             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -82,18 +84,37 @@
         (editor-handler/edit-block! block :max)))))
 
 (rum/defc page-blocks-inner <
-  {:did-mount (fn [state]
-                (open-root-block! state)
-                state)}
-  [page-e blocks config sidebar? _preview? _block-uuid]
-  (when page-e
-    (let [hiccup (component-block/->hiccup blocks config {})]
-      [:div.page-blocks-inner {:style {:min-height 29}}
-       (rum/with-key
-         (content/content (str (:block/uuid page-e))
-                          {:hiccup   hiccup
-                           :sidebar? sidebar?})
-         (str (:block/uuid page-e) "-hiccup"))])))
+   {:did-mount (fn [state]
+                 (open-root-block! state)
+                 state)}
+   [page-e blocks config sidebar? _preview? _block-uuid]
+   (when page-e
+     (let [platform-config (perf/get-platform-config)
+           block-count (count blocks)
+           use-lazy-loading (> block-count (:virtual-scroll-threshold platform-config))]
+
+       (if use-lazy-loading
+         ;; Use lazy loading for large block collections
+         (lazy/virtual-list
+          blocks
+          50 ; item-height
+          600 ; container-height
+          (fn [block idx]
+            (let [hiccup (component-block/->hiccup [block] config {})]
+              (rum/with-key
+                (content/content (str (:block/uuid page-e) "-" idx)
+                                 {:hiccup   hiccup
+                                  :sidebar? sidebar?})
+                (str (:block/uuid page-e) "-block-" idx)))))
+
+         ;; Regular rendering for smaller collections
+         (let [hiccup (component-block/->hiccup blocks config {})]
+           [:div.page-blocks-inner {:style {:min-height 29}}
+            (rum/with-key
+              (content/content (str (:block/uuid page-e))
+                               {:hiccup   hiccup
+                                :sidebar? sidebar?})
+              (str (:block/uuid page-e) "-hiccup"))])))))
 
 (declare page-cp)
 

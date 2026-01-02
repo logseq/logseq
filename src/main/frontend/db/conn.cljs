@@ -4,7 +4,9 @@
             [datascript.core :as d]
             [frontend.config :as config]
             [frontend.db.conn-state :as db-conn-state]
+            [frontend.db.performance :as db-perf]
             [frontend.mobile.util :as mobile-util]
+            [frontend.platform :as platform]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.text :as text-util]
@@ -61,16 +63,24 @@
   (swap! conns dissoc (db-conn-state/get-repo-path repo)))
 
 (if util/node-test?
-  (defn transact!
-    ([repo tx-data]
-     (transact! repo tx-data nil))
-    ([repo tx-data tx-meta]
-     (ldb/transact! (get-db repo false) tx-data tx-meta)))
-  (defn transact!
-    ([repo tx-data]
-     (transact! repo tx-data nil))
-    ([repo tx-data tx-meta]
-     (ldb/transact! repo tx-data tx-meta))))
+   (defn transact!
+     ([repo tx-data]
+      (transact! repo tx-data nil))
+     ([repo tx-data tx-meta]
+      (let [platform-config (platform/get-platform-capabilities)]
+        (if (:reduced-concurrency platform-config)
+          ;; Use batching for better mobile performance
+          (db-perf/batch-transact! (get-db repo false) tx-data)
+          (ldb/transact! (get-db repo false) tx-data tx-meta)))))
+   (defn transact!
+     ([repo tx-data]
+      (transact! repo tx-data nil))
+     ([repo tx-data tx-meta]
+      (let [platform-config (platform/get-platform-capabilities)]
+        (if (:reduced-concurrency platform-config)
+          ;; Use batching for better mobile performance
+          (db-perf/batch-transact! (get-db false) tx-data)
+          (ldb/transact! repo tx-data tx-meta))))))
 
 (defn destroy-all!
   []
@@ -78,13 +88,15 @@
 
 (defn start!
   ([repo]
-   (start! repo {}))
+    (start! repo {}))
   ([repo {:keys [listen-handler]}]
-   (let [db-name (db-conn-state/get-repo-path repo)
-         db-conn (if (config/db-based-graph? repo)
-                   (d/create-conn db-schema/schema)
-                   (gp-db/start-conn))]
-     (destroy-all!)
-     (swap! conns assoc db-name db-conn)
-     (when listen-handler
-       (listen-handler db-conn)))))
+    (let [db-name (db-conn-state/get-repo-path repo)
+          db-conn (if (config/db-based-graph? repo)
+                    (db-perf/get-pooled-connection db-name db-schema/schema)
+                    (gp-db/start-conn))]
+      (destroy-all!)
+      (swap! conns assoc db-name db-conn)
+      (when listen-handler
+        (listen-handler db-conn))
+      ;; Initialize performance monitoring
+      (db-perf/setup-memory-management!))))

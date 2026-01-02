@@ -1,15 +1,17 @@
 (ns frontend.components.query
   (:require [clojure.string :as string]
-            [frontend.components.query.result :as query-result]
-            [frontend.components.query.view :as query-view]
-            [frontend.context.i18n :refer [t]]
-            [frontend.db :as db]
-            [frontend.db-mixins :as db-mixins]
-            [frontend.db.react :as react]
-            [frontend.extensions.sci :as sci]
-            [frontend.state :as state]
-            [frontend.ui :as ui]
-            [frontend.util :as util]
+             [frontend.components.lazy :as lazy]
+             [frontend.components.query.result :as query-result]
+             [frontend.components.query.view :as query-view]
+             [frontend.context.i18n :refer [t]]
+             [frontend.db :as db]
+             [frontend.db-mixins :as db-mixins]
+             [frontend.db.react :as react]
+             [frontend.extensions.sci :as sci]
+             [frontend.performance :as perf]
+             [frontend.state :as state]
+             [frontend.ui :as ui]
+             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [rum.core :as rum]))
@@ -61,21 +63,48 @@
                                              :query query)
                                       current-block result)))
 
-         ;; Normally displays built-in-query results
-         (and (seq result) (or only-blocks? blocks-grouped-by-page?))
-         (->hiccup result
-                   (assoc config
-                          :custom-query? true
-                          :current-block (:db/id current-block)
-                          :dsl-query? dsl-query?
-                          :query query
-                          :breadcrumb-show? (if (some? breadcrumb-show?)
-                                              breadcrumb-show?
-                                              true)
-                          :group-by-page? blocks-grouped-by-page?
-                          :ref? true)
-                   {:style {:margin-top "0.25rem"
-                            :margin-left "0.25rem"}})
+          ;; Normally displays built-in-query results
+          (and (seq result) (or only-blocks? blocks-grouped-by-page?))
+          (let [platform-config (perf/get-platform-config)
+                result-count (count result)
+                use-lazy (> result-count (:virtual-scroll-threshold platform-config))]
+
+            (if use-lazy
+              ;; Use lazy loading for large result sets
+              (lazy/virtual-list
+               result
+               40 ; item-height
+               400 ; container-height
+               (fn [item idx]
+                 (->hiccup [item]
+                           (assoc config
+                                  :custom-query? true
+                                  :current-block (:db/id current-block)
+                                  :dsl-query? dsl-query?
+                                  :query query
+                                  :breadcrumb-show? (if (some? breadcrumb-show?)
+                                                     breadcrumb-show?
+                                                     true)
+                                  :group-by-page? blocks-grouped-by-page?
+                                  :ref? true)
+                           {:style {:margin-top "0.25rem"
+                                    :margin-left "0.25rem"}
+                            :key (str "query-result-" idx)})))
+
+              ;; Regular rendering for smaller result sets
+              (->hiccup result
+                        (assoc config
+                               :custom-query? true
+                               :current-block (:db/id current-block)
+                               :dsl-query? dsl-query?
+                               :query query
+                               :breadcrumb-show? (if (some? breadcrumb-show?)
+                                                   breadcrumb-show?
+                                                   true)
+                               :group-by-page? blocks-grouped-by-page?
+                               :ref? true)
+                        {:style {:margin-top "0.25rem"
+                                 :margin-left "0.25rem"}})))
 
          (seq result)
          (let [result (->>

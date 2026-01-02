@@ -1,16 +1,18 @@
 (ns frontend.components.query.result
   "Query result related functionality for query components"
   (:require [clojure.string :as string]
-            [frontend.db :as db]
-            [frontend.db.query-custom :as query-custom]
-            [frontend.db.query-dsl :as query-dsl]
-            [frontend.db.query-react :as query-react]
-            [frontend.db.utils :as db-utils]
-            [frontend.modules.outliner.tree :as tree]
-            [frontend.search :as search]
-            [frontend.state :as state]
-            [frontend.template :as template]
-            [frontend.util :as util]
+             [frontend.components.lazy :as lazy]
+             [frontend.db :as db]
+             [frontend.db.query-custom :as query-custom]
+             [frontend.db.query-dsl :as query-dsl]
+             [frontend.db.query-react :as query-react]
+             [frontend.db.utils :as db-utils]
+             [frontend.modules.outliner.tree :as tree]
+             [frontend.performance :as perf]
+             [frontend.search :as search]
+             [frontend.state :as state]
+             [frontend.template :as template]
+             [frontend.util :as util]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [promesa.core :as p]
@@ -74,21 +76,29 @@
   "Transforms a query result if query conditions and config indicate a transformation"
   [{:keys [current-block-uuid] :as config} query-m query-result]
   (let [;; exclude the current one, otherwise it'll loop forever
-        remove-blocks (if current-block-uuid [current-block-uuid] nil)
-        transformed-query-result (when query-result
-                                   (let [result (query-react/custom-query-result-transform query-result remove-blocks query-m)]
-                                     (if (and query-result (coll? result) (:block/uuid (first result)))
-                                       (cond-> result
-                                         (and (not (:db-graph? config)) (get query-m :remove-block-children? true))
-                                         tree/filter-top-level-blocks)
-                                       result)))
-        group-by-page? (get-group-by-page query-m config)
-        result (if (and group-by-page? (:block/uuid (first transformed-query-result)))
-                 (let [result (db-utils/group-by-page transformed-query-result)]
-                   (if (map? result)
-                     (dissoc result nil)
-                     result))
-                 transformed-query-result)]
+         remove-blocks (if current-block-uuid [current-block-uuid] nil)
+         transformed-query-result (when query-result
+                                    (let [result (query-react/custom-query-result-transform query-result remove-blocks query-m)]
+                                      (if (and query-result (coll? result) (:block/uuid (first result)))
+                                        (cond-> result
+                                          (and (not (:db-graph? config)) (get query-m :remove-block-children? true))
+                                          tree/filter-top-level-blocks)
+                                        result)))
+         group-by-page? (get-group-by-page query-m config)
+         result (if (and group-by-page? (:block/uuid (first transformed-query-result)))
+                  (let [result (db-utils/group-by-page transformed-query-result)]
+                    (if (map? result)
+                      (dissoc result nil)
+                      result))
+                  transformed-query-result)
+
+         ;; Apply lazy loading for large result sets
+         platform-config (perf/get-platform-config)
+         result-count (count result)
+         optimized-result (if (> result-count (:virtual-scroll-threshold platform-config))
+                           (perf/optimize-collection-for-reads result true)
+                           result)]
+
     (when-let [query-result (:query-result config)]
-      (reset! query-result result))
-    result))
+      (reset! query-result optimized-result))
+    optimized-result))
