@@ -82,18 +82,19 @@
 
 (def ^:large-vars/data-var db-query-dsl-rules
   "Rules used by frontend.query.dsl for DB graphs"
-  (merge
-   (dissoc file-rules/query-dsl-rules :namespace
-           :page-property :has-page-property
-           :page-tags :all-page-tags)
-   rules
+   (merge
+    (dissoc file-rules/query-dsl-rules :namespace
+            :page-property :has-page-property
+            :page-tags :all-page-tags
+            :page)
+    rules
 
-    {:page
-     '[(page ?b ?page-name)
-       [?b :block/page ?p]
-       [?p :block/title ?page-name]]
+     {:page
+      '[(page ?b ?page-name)
+        [?b :block/page ?p]
+        [?p :block/title ?page-name]]
 
-     :between
+      :between
     '[(between ?b ?start ?end)
       [?b :block/page ?p]
       [?p :block/tags :logseq.class/Journal]
