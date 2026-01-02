@@ -88,12 +88,12 @@
            :page-tags :all-page-tags)
    rules
 
-    :page
-    '[(page ?b ?page-name)
-      [?b :block/page ?p]
-      [?p :block/title ?page-name]]
+    {:page
+     '[(page ?b ?page-name)
+       [?b :block/page ?p]
+       [?p :block/title ?page-name]]
 
-    :between
+     :between
     '[(between ?b ?start ?end)
       [?b :block/page ?p]
       [?p :block/tags :logseq.class/Journal]
