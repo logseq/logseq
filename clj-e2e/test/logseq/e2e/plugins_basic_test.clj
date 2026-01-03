@@ -349,6 +349,14 @@
       (is (= (get tag3 "title") title) "get tag with ident")
       (is (= (get tag4 "title") title) "get tag with uuid")))
 
+  (testing "create tag with tagProperties"
+    (let [tag-props [{:name "prop1" :schema {:type "string"}}
+                     {:name "prop2" :schema {:type "number"}}
+                     {:name "prop3" :schema {:type "checkbox"}}]
+          tag (ls-api-call! :editor.createTag "tag-with-props" {:tagProperties tag-props})
+          props (get tag ":logseq.property.class/properties")]
+      (is (= 3 (count props)) "tag has 3 properties")))
+
   (testing "add and remove tag extends"
     (let [tag1 (ls-api-call! :editor.createTag "tag1")
           tag2 (ls-api-call! :editor.createTag "tag2")
@@ -395,8 +403,8 @@
       (is (empty? result) "should not return regular pages, only tags")))
 
   (testing "get tags by name with multiple tags having similar names"
-    (let [tag1 (ls-api-call! :editor.createTag "category")
-          tag2 (ls-api-call! :editor.createTag "Category")
+    (let [_tag1 (ls-api-call! :editor.createTag "category")
+          _tag2 (ls-api-call! :editor.createTag "Category")
           result (ls-api-call! :editor.getTagsByName "category")]
       ;; Due to case-insensitive name normalization, both tags should be the same
       (is (>= (count result) 1) "should return at least one tag")
