@@ -361,6 +361,11 @@
       (and (qualified-keyword? v) (not= :keyword property-type))
       (db-ident->eid @conn v)
 
+      (and (coll? v)
+           (every? integer? v)
+           (not number-property?))
+      v
+
       (and (integer? v)
            (or (not number-property?)
                ;; Allows :number property to use number as a ref (for closed value) or value
@@ -566,10 +571,16 @@
           :else
           (let [_ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
                 ref? (db-property-type/all-ref-property-types property-type)
-                existing-value (get block property-id)]
+                existing-value (get block property-id)
+                many? (= :db.cardinality/many (:db/cardinality property))
+                value-matches? (if ref?
+                                 (if (and many? (coll? v'))
+                                   (= (set (map :db/id existing-value)) (set v'))
+                                   (= existing-value v'))
+                                 (= existing-value v'))]
             (throw-error-if-self-value block v' ref?)
 
-            (when-not (= existing-value v')
+            (when-not value-matches?
               (raw-set-block-property! conn block property v'))))))))
 
 (defn upsert-property!
