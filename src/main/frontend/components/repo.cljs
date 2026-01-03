@@ -107,8 +107,7 @@
                                    [:span.my-2.flex.font-normal.opacity-75
                                     [:small "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."]]])
                                  (p/then (fn []
-                                           (repo-handler/remove-repo! repo)
-                                           (state/pub-event! [:graph/unlinked repo (state/get-current-repo)]))))))}
+                                           (repo-handler/remove-repo! repo))))))}
               "Delete local graph"))
            (when (and root
                       (user-handler/logged-in?)
