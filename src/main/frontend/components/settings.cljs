@@ -921,11 +921,19 @@
   (let [[invite-email set-invite-email!] (hooks/use-state "")
         current-repo (state/get-current-repo)
         [users-info] (hooks/use-atom (:rtc/users-info @state/state))
-        users (get users-info current-repo)]
+        users (get users-info current-repo)
+        invite-user! (fn []
+                       (let [graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]
+                         (when-not (string/blank? invite-email)
+                           (when graph-uuid
+                             (rtc-handler/<rtc-invite-email graph-uuid invite-email)))))]
     (hooks/use-effect!
      #(c.m/run-task* (m/sp (c.m/<? (rtc-handler/<rtc-get-users-info))))
      [])
     [:div.flex.flex-col.gap-2.mt-4
+     {:on-key-press (fn [e]
+                      (when (= "Enter" (.-key e))
+                        (invite-user!)))}
      [:h2.opacity-50.font-medium "Members:"]
      [:div.users.flex.flex-col.gap-1
       (for [{user-name :user/name
@@ -938,14 +946,10 @@
      [:div.flex.flex-col.gap-4.mt-4
       (shui/input
        {:placeholder   "Email address"
-        :on-change     #(set-invite-email! (util/evalue %))})
+        :on-change     #(set-invite-email!
+                         (string/trim (util/evalue %)))})
       (shui/button
-       {:on-click (fn []
-                    (let [user-email invite-email
-                          graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]
-                      (when-not (string/blank? user-email)
-                        (when graph-uuid
-                          (rtc-handler/<rtc-invite-email graph-uuid user-email)))))}
+       {:on-click invite-user!}
        "Invite")]]))
 
 (rum/defc settings-collaboration
