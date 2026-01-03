@@ -350,7 +350,7 @@
       (is (= (get tag4 "title") title) "get tag with uuid")))
 
   (testing "create tag with tagProperties"
-    (let [tag-props [{:name "prop1" :schema {:type "string"}}
+    (let [tag-props [{:name "prop1"}
                      {:name "prop2" :schema {:type "number"}}
                      {:name "prop3" :schema {:type "checkbox"}}]
           tag (ls-api-call! :editor.createTag "tag-with-props" {:tagProperties tag-props})
