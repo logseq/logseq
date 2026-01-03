@@ -229,12 +229,12 @@
            tag (db-page-handler/<create-class! title opts')
            properties (when (seq tag-properties)
                         (p/all (map
-                                (fn [{:keys [property schema opts]}]
-                                  (let [property' (api-block/sanitize-user-property-name property)
-                                        property-ident (api-block/get-db-ident-from-property-name property' this)
+                                (fn [{:keys [name schema properties]}]
+                                  (let [name' (api-block/sanitize-user-property-name name)
+                                        property-ident (api-block/get-db-ident-from-property-name name' this)
                                         property-entity (db/entity property-ident)]
                                     (or property-entity ; property exists already
-                                        (upsert-property-aux this property schema opts))))
+                                        (upsert-property-aux this name schema {:properties properties}))))
                                 tag-properties)))]
      (when (seq properties)
        (db-property-handler/set-block-property! (:db/id tag)
