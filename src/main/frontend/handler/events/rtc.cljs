@@ -9,10 +9,15 @@
             [logseq.shui.ui :as shui]
             [promesa.core :as p]))
 
+(defn rtc-collaborators-dialog?
+  []
+  (= :rtc-collaborators (state/get-modal-id)))
+
 (defmethod events/handle :rtc/decrypt-user-e2ee-private-key [[_ encrypted-private-key]]
   (let [private-key-promise (p/deferred)
         refresh-token (str (state/get-auth-refresh-token))]
-    (shui/dialog-close-all!)
+    (when-not (rtc-collaborators-dialog?)
+      (shui/dialog-close-all!))
     (->
      (p/let [{:keys [password]} (state/<invoke-db-worker :thread-api/get-e2ee-password refresh-token)
              private-key (crypt/<decrypt-private-key password encrypted-private-key)]
@@ -31,7 +36,8 @@
 
 (defmethod events/handle :rtc/request-e2ee-password [[_]]
   (let [password-promise (p/deferred)]
-    (shui/dialog-close-all!)
+    (when-not (rtc-collaborators-dialog?)
+      (shui/dialog-close-all!))
     (shui/dialog-open!
      #(e2ee/e2ee-request-new-password password-promise)
      {:auto-width? true

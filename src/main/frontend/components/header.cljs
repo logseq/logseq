@@ -73,7 +73,8 @@
                                             (fn []
                                               [:div.p-2.-mb-8
                                                [:h1.text-3xl.-mt-2.-ml-2 "Collaborators:"]
-                                               (settings/settings-collaboration)]))})
+                                               (settings/settings-collaboration)])
+                                            {:id :rtc-collaborators})})
 
        (when (seq online-users)
          (for [{user-email :user/email
