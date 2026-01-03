@@ -67,7 +67,7 @@
         origin (.. js/window -location -origin)
         origin-valid? (and (string? origin)
                            (re-matches #"^https?://.+" origin))
-        base-url (str "https://www.youtube-nocookie.com/embed/"
+        base-url (str "https://www.youtube.com/embed/"
                       (js/encodeURIComponent id)
                       "?enablejsapi=1"
                       (when origin-valid?
