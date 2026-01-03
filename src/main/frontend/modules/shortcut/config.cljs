@@ -2,7 +2,6 @@
   (:require [clojure.data :as data]
             [clojure.string :as string]
             [frontend.commands :as commands]
-            [frontend.components.commit :as commit]
             [frontend.config :as config]
             [frontend.dicts :as dicts]
             [frontend.extensions.pdf.utils :as pdf-utils]
@@ -481,10 +480,6 @@
    :ui/customize-appearance                 {:binding "c c"
                                              :fn      #(state/pub-event! [:ui/toggle-appearance])}
 
-   :git/commit {:binding "mod+g c"
-                :inactive (not (util/electron?))
-                :fn commit/show-commit-modal!}
-
    :dev/gc-graph {:binding []
                   :inactive (not (state/developer-mode?))
                   :fn #(repo-handler/gc-graph! (state/get-current-repo))}
@@ -711,7 +706,6 @@
           :ui/install-plugin-from-github
           :editor/toggle-open-blocks
           :ui/clear-all-notifications
-          :git/commit
           :sidebar/close-top
           :misc/export-block-data
           :misc/export-page-data
@@ -875,7 +869,6 @@
      :auto-complete/complete
      :auto-complete/shift-complete
      :auto-complete/meta-complete
-     :git/commit
      :misc/export-block-data
      :misc/export-page-data
      :misc/export-graph-ontology-data
