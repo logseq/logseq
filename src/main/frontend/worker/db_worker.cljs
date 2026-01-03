@@ -52,6 +52,7 @@
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.sqlite.gc :as sqlite-gc]
             [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
             [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]
             [missionary.core :as m]
@@ -779,10 +780,6 @@
             dbs (ldb/read-transit-str r)]
       (p/all (map #(.unsafeUnlinkDB this (:name %)) dbs)))))
 
-(defn- rename-page!
-  []
-  (throw (ex-info "Rename page is a file graph only operation" {})))
-
 (defn- delete-page!
   [conn page-uuid]
   (let [error-handler (fn [{:keys [msg]}]
@@ -803,8 +800,13 @@
   (outliner-op/register-op-handlers!
    {:create-page (fn [conn [title options]]
                    (create-page! conn title options))
-    :rename-page (fn [& _]
-                   (rename-page!))
+    :rename-page (fn [conn [page-uuid new-title]]
+                   (if (string/blank? new-title)
+                     (throw (ex-info "Page name shouldn't be blank" {:block/uuid page-uuid
+                                                                     :block/title new-title}))
+                     (outliner-core/save-block! conn
+                                                {:block/uuid page-uuid
+                                                 :block/title new-title})))
     :delete-page (fn [conn [page-uuid]]
                    (delete-page! conn page-uuid))}))
 
