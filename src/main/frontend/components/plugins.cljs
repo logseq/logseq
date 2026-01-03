@@ -672,8 +672,8 @@
                       :icon (ui/icon (aim-icon :letters))}
 
                      {:title   (t :plugin/date-added)
-                      :options {:on-click #(reset! *sort-by :date-added)}
-                      :icon    (ui/icon (aim-icon :date-added))}]]
+                      :options {:on-click #(reset! *sort-by :addedAt)}
+                      :icon    (ui/icon (aim-icon :addedAt))}]]
 
           (ui/button
            (ui/icon "arrows-sort")
