@@ -76,23 +76,16 @@
       (<favorite-page! page-name))))
 
 (defn rename!
-  [page-uuid-or-old-name new-name & {:as _opts}]
-  (p/let [page-uuid (cond
-                      (uuid? page-uuid-or-old-name)
-                      page-uuid-or-old-name
-                      (common-util/uuid-string? page-uuid-or-old-name)
-                      page-uuid-or-old-name
-                      :else
-                      (:block/uuid (db/get-page page-uuid-or-old-name)))
-          result (ui-outliner-tx/transact!
-                  {:outliner-op :rename-page}
-                  (outliner-op/rename-page! page-uuid new-name))]
-    (case (if (string? result) (keyword result) result)
-      :invalid-empty-name
-      (notification/show! "Please use a valid name, empty name is not allowed!" :warning)
-      :rename-page-exists
-      (notification/show! "Another page with the new name exists already" :warning)
-      nil)))
+  [page-uuid new-name & {:as _opts}]
+  (let [page-uuid (if (util/uuid-string? page-uuid)
+                    (uuid page-uuid)
+                    (throw (ex-info "Invalid page uuid"
+                                    {:page-uuid page-uuid})))]
+    (p/do!
+     (ui-outliner-tx/transact!
+      {:outliner-op :rename-page}
+      (outliner-op/rename-page! page-uuid new-name))
+     true)))
 
 (defn <reorder-favorites!
   [favorites]
