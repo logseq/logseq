@@ -327,6 +327,13 @@ export type SearchBlockItem = {
 export type SearchPageItem = string
 export type SearchFileItem = string
 
+export type PropertySchema = {
+  type: 'default' | 'number' | 'node' | 'date' | 'checkbox' | 'url' | string,
+  cardinality: 'many' | 'one',
+  hide: boolean
+  public: boolean
+}
+
 export interface IPluginSearchServiceHooks {
   name: string
   options?: Record<string, any>
@@ -767,7 +774,12 @@ export interface IEditorProxy extends Record<string, any> {
   getAllTags: () => Promise<PageEntity[] | null>
   getAllProperties: () => Promise<PageEntity[] | null>
   getTagObjects: (nameOrIdent: string) => Promise<BlockEntity[] | null>
-  createTag: (tagName: string, opts?: Partial<{ uuid: string }>) => Promise<PageEntity | null>
+  createTag: (
+    tagName: string,
+    opts?: Partial<{
+      uuid: string, // custom uuid
+      tagProperties: Array<{ name: string, schema?: Partial<PropertySchema>, properties?: {}  }>
+    }>) => Promise<PageEntity | null>
   getTag: (nameOrIdent: string | EntityID) => Promise<PageEntity | null>
   getTagsByName: (tagName: string) => Promise<Array<PageEntity> | null>
   addTagProperty: (tagId: BlockIdentity, propertyIdOrName: BlockIdentity) => Promise<void>
@@ -819,12 +831,7 @@ export interface IEditorProxy extends Record<string, any> {
   // insert or update property entity
   upsertProperty: (
     key: string,
-    schema?: Partial<{
-      type: 'default' | 'number' | 'node' | 'date' | 'checkbox' | 'url' | string,
-      cardinality: 'many' | 'one',
-      hide: boolean
-      public: boolean
-    }>,
+    schema?: Partial<PropertySchema>,
     opts?: { name?: string }) => Promise<IEntityID>
 
   // remove property entity
