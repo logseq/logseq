@@ -6,7 +6,7 @@
             [frontend.db.conn :as db-conn]
             [frontend.persist-db :as persist-db]
             [frontend.util :as util]
-            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.db.common.sqlite :as common-sqlite]
             [promesa.core :as p]))
 
 (defn get-all-graphs
@@ -14,7 +14,7 @@
   (p/let [repos (persist-db/<list-db)
           repos' (->> repos
                       (remove (fn [{:keys [name]}]
-                                (sqlite-util/local-file-based-graph? name)))
+                                (common-sqlite/local-file-based-graph? name)))
                       (map
                        (fn [{:keys [name] :as repo}]
                          (assoc repo :name
