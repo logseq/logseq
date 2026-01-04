@@ -595,6 +595,30 @@
       :else
       id)))
 
+(defn- normalize-choice-ids
+  [values]
+  (set (keep :db/id values)))
+
+(defn- scoped-closed-values
+  [property block]
+  (let [values (:property/closed-values property)
+        classes (:block/tags block)
+        class-ids (set (keep :db/id classes))
+        excluded-ids (normalize-choice-ids
+                      (mapcat :logseq.property/choice-exclusions classes))]
+    (filter (fn [value]
+              (let [scope-ids (set (keep :db/id (:logseq.property/choice-classes value)))]
+                (cond
+                  (empty? scope-ids)
+                  (not (contains? excluded-ids (:db/id value)))
+
+                  (seq class-ids)
+                  (seq (set/intersection scope-ids class-ids))
+
+                  :else
+                  false)))
+            values)))
+
 (defn- sort-select-items
   [property selected-choices items]
   (if (:property/closed-values property)
@@ -935,7 +959,7 @@
                     (let [date? (and
                                  (= (:db/ident property) :logseq.property.repeat/recur-unit)
                                  (= :date (:logseq.property/type (:property opts))))
-                          values (cond->> (:property/closed-values property)
+                          values (cond->> (scoped-closed-values property block)
                                    date?
                                    (remove (fn [b] (contains? #{:logseq.property.repeat/recur-unit.minute :logseq.property.repeat/recur-unit.hour} (:db/ident b)))))]
                       (keep (fn [block]
