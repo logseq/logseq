@@ -304,7 +304,7 @@
    (when-not config/publishing?
      (shui/button {:size :sm :variant :ghost
                    :on-click (fn []
-                               (if (util/mobile?)
+                               (if (util/capacitor?)
                                  (state/pub-event! [:mobile/set-tab "graphs"])
                                  (route-handler/redirect-to-all-graphs)))}
                   (shui/tabler-icon "layout-2") [:span (t :all-graphs)]))])
