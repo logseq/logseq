@@ -1,7 +1,6 @@
 (ns logseq.db
   "Main namespace for db fns that handles DB and file graphs. For db graph only
-  fns, use logseq.db.frontend.db and for file graph only fns, use
-  logseq.graph-parser.db"
+  fns, you can also use logseq.db.frontend.db."
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
