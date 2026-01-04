@@ -275,9 +275,19 @@
       :schema {:type :checkbox
                :hide? true}
       :queryable? false}
+     ;; tag-scoped choice, a choice can be specificed locally for specific tags
      :logseq.property/choice-classes
      {:title "Choice classes"
       :schema {:type :class
+               :cardinality :many
+               :public? false
+               :hide? true
+               :view-context :never}
+      :queryable? false}
+     ;; tag can define which global choices are hidden for its objects
+     :logseq.property/choice-exclusions
+     {:title "Choice exclusions"
+      :schema {:type :node
                :cardinality :many
                :public? false
                :hide? true

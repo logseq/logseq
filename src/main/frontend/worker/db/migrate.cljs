@@ -185,7 +185,7 @@
    ["65.16" {:properties [:logseq.property.asset/external-file-name]}]
    ["65.17" {:properties [:logseq.property.publish/published-url]}]
    ["65.18" {:fix deprecated-ensure-graph-uuid}]
-   ["65.19" {:properties [:logseq.property/choice-classes]}]])
+   ["65.19" {:properties [:logseq.property/choice-classes :logseq.property/choice-exclusions]}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]

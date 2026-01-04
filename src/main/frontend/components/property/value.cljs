@@ -595,23 +595,28 @@
       :else
       id)))
 
-(defn- block-class-ids
-  [block]
-  (when block
-    (let [classes (cond-> (:block/tags block)
-                    (entity-util/class? block)
-                    (conj block))]
-      (set (map :db/id classes)))))
+(defn- normalize-choice-ids
+  [values]
+  (set (keep :db/id values)))
 
 (defn- scoped-closed-values
   [property block]
   (let [values (:property/closed-values property)
-        class-ids (block-class-ids block)]
+        classes (:block/tags block)
+        class-ids (set (keep :db/id classes))
+        excluded-ids (normalize-choice-ids
+                      (mapcat :logseq.property/choice-exclusions classes))]
     (filter (fn [value]
               (let [scope-ids (set (keep :db/id (:logseq.property/choice-classes value)))]
-                (or (empty? scope-ids)
-                    (and (seq class-ids)
-                         (seq (set/intersection scope-ids class-ids))))))
+                (cond
+                  (empty? scope-ids)
+                  (not (contains? excluded-ids (:db/id value)))
+
+                  (seq class-ids)
+                  (seq (set/intersection scope-ids class-ids))
+
+                  :else
+                  false)))
             values)))
 
 (defn- sort-select-items
