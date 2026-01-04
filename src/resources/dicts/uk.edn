@@ -341,7 +341,6 @@
  :command.ui/goto-plugins                                  "Перейти до списку плагінів"
  :command.ui/install-plugins-from-file                     "Встановити плагіни з plugins.edn"
  :command.editor/toggle-open-blocks                        "Згорнути/Розгорнути всі блоки"
- :command.git/commit                                       "Виконати команду git commit із повідомленням"
  :command.ui/clear-all-notifications                       "Очистити всі сповіщення"
  :command.dev/show-block-ast                               "(Dev) Показати блок AST"
  :command.dev/show-block-data                              "(Dev) Показати дані блоку"

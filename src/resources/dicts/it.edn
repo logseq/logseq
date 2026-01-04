@@ -240,7 +240,6 @@
  :command.ui/select-theme-color "Seleziona i colori del tema disponibili"
  :command.ui/goto-plugins "Vai alla dashboard dei plugin"
  :command.editor/toggle-open-blocks "Attiva/disattiva i blocchi aperti (collassa o espandi tutti i blocchi)"
- :command.git/commit "Messaggio di commit Git"
  :shortcut.category/basics "Nozioni di base"
  :shortcut.category/formatting "Formattazione"
  :shortcut.category/navigating "Navigazione"

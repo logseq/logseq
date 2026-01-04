@@ -151,7 +151,6 @@
  :command.editor/up                                 "Mover cursor arriba / Seleccionar arriba"
  :command.editor/zoom-in                            "Acercar / Adelante"
  :command.editor/zoom-out                           "Alejar / Atrás"
- :command.git/commit                                "Confirmar"
  :command.go/all-graphs                             "Ir a todos los grafos"
  :command.go/all-pages                              "Ir a todas las páginas"
  :command.go/backward                               "Hacia atrás"

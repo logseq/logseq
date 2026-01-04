@@ -489,7 +489,6 @@
  :command.ui/install-plugins-from-file "プラグインをplugins.ednからインストール"
  :command.editor/toggle-open-blocks "ブロック展開の切り替え（全てのブロックを折り畳む／展開する）"
  :command.ui/clear-all-notifications "通知をすべてクリア"
- :command.git/commit "Git コミットする"
  :command.dev/show-block-data "(開発) ブロックのデータを表示"
  :command.dev/show-block-ast "(開発) ブロックの抽象構文木の表示"
  :command.dev/show-page-data "(開発) ページのデータを表示"
