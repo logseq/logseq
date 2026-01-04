@@ -341,6 +341,37 @@
         (:block/title property)]
        (property-key-title block property class-schema?))]))
 
+(rum/defc bidirectional-page-link
+  [page]
+  (let [title (ldb/get-title-with-parents page)]
+    [:a.page-ref
+     {:on-click (fn [e]
+                  (util/stop e)
+                  (route-handler/redirect-to-page! (:block/uuid page)))}
+     title]))
+
+(rum/defc bidirectional-properties-section < rum/static
+  [bidirectional-properties]
+  (when (seq bidirectional-properties)
+    (for [{:keys [title entities]} bidirectional-properties]
+      [:div.property-pair.items-start {:key (str "bidirectional-" title)}
+       [:div.property-key
+        [:div.property-key-inner
+         [:div.property-k.flex.select-none.w-full title]]]
+       [:div.ls-block.property-value-container.flex.flex-row.gap-1.items-start
+        [:div.property-value.flex.flex-1
+         [:div.multi-values.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
+          (let [items (map (fn [entity]
+                             (rum/with-key
+                               (bidirectional-page-link entity)
+                               (str "bi-property-" title "-" (:db/id entity))))
+                           entities)]
+            (if (seq items)
+              [:div.flex.flex-col
+               (for [item items]
+                 item)]
+              [:span.opacity-60 "Empty"]))]]]])))
+
 (rum/defcs ^:large-vars/cleanup-todo property-input < rum/reactive
   (rum/local false ::show-new-property-config?)
   (rum/local false ::show-class-select?)
@@ -678,15 +709,18 @@
         hidden-properties (-> (concat block-hidden-properties
                                       (filter property-hide-f (map (fn [p] [p (get block p)]) class-properties)))
                               (remove-built-in-or-other-position-properties true))
+        bidirectional-properties (ldb/get-bidirectional-properties (db/get-db) (:db/id block))
+        has-bidirectional-properties? (seq bidirectional-properties)
         root-block? (or (= (str (:block/uuid block))
                            (state/get-current-page))
                         (and (= (str (:block/uuid block)) (:id opts))
                              (not (entity-util/page? block))))]
     (cond
-      (and (empty? full-properties) (seq hidden-properties) (not root-block?) (not sidebar-properties?))
+      (and (empty? full-properties) (seq hidden-properties) (not root-block?) (not sidebar-properties?)
+           (not has-bidirectional-properties?))
       nil
 
-      (and (empty? full-properties) (empty? hidden-properties))
+      (and (empty? full-properties) (empty? hidden-properties) (not has-bidirectional-properties?))
       (when show-properties?
         (rum/with-key (new-property block opts) (str id "-add-property")))
 
@@ -703,6 +737,7 @@
           :tab-index 0}
          [:<>
           (properties-section block properties' opts)
+          (bidirectional-properties-section bidirectional-properties)
 
           (when-not class?
             (hidden-properties-cp block hidden-properties
