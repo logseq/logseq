@@ -709,8 +709,9 @@
 
 (defn get-bidirectional-properties
   "Given a target entity id, returns a seq of maps with:
+   * :class - class entity
    * :title - pluralized class title
-   * :entities - page entities that reference the target via ref properties"
+   * :entities - node entities that reference the target via ref properties"
   [db target-id]
   (when (and db target-id (d/entity db target-id))
     (let [add-entity
@@ -734,9 +735,10 @@
                                   (not (entity-util/property? entity)))
                          (let [classes (filter entity-util/class? (:block/tags entity))]
                            (when (seq classes)
-                             (map (fn [class-ent]
-                                    [(:db/id class-ent) entity])
-                                  classes))))))))
+                             (keep (fn [class-ent]
+                                     (when-not (built-in? class-ent)
+                                       [(:db/id class-ent) entity]))
+                                   classes))))))))
            (mapcat identity)
            (reduce (fn [acc [class-ent entity]]
                      (add-entity acc class-ent entity))
@@ -745,9 +747,8 @@
                   (let [class (d/entity db class-id)
                         title (pluralize-class-title (:block/title class))]
                     {:title title
-                     :class class
+                     :class (-> (into {} class)
+                                (assoc :db/id (:db/id class)))
                      :entities (->> entities
-                                    (sort-by :block/created-at)
-                                    vec)})))
-           (sort-by (comp :block/created-at :class))
-           vec))))
+                                    (sort-by :block/created-at))})))
+           (sort-by (comp :block/created-at :class))))))

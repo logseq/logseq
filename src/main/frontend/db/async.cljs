@@ -49,6 +49,12 @@
     (state/<invoke-db-worker :thread-api/get-property-values (state/get-current-repo)
                              (assoc opts :property-ident property-id))))
 
+(defn <get-bidirectional-properties
+  [target-id]
+  (when target-id
+    (state/<invoke-db-worker :thread-api/get-bidirectional-properties (state/get-current-repo)
+                             {:target-id target-id})))
+
 (defn <get-block
   [graph id-uuid-or-name & {:keys [children? include-collapsed-children? skip-transact? skip-refresh? properties]
                             :or {children? true}
