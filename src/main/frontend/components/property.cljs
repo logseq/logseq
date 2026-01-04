@@ -341,6 +341,47 @@
         (:block/title property)]
        (property-key-title block property class-schema?))]))
 
+(defn- bidirectional-property-icon-cp
+  [property]
+  (if-let [icon (:logseq.property/icon property)]
+    (icon-component/icon icon {:size 15 :color? true})
+    (ui/icon "letter-b" {:class "opacity-50" :size 15})))
+
+(rum/defcs bidirectional-values-cp < rum/static
+  {:init (fn [state]
+           (assoc state ::container-id (state/get-next-container-id)))}
+  [state entities]
+  (let [blocks-container (state/get-component :block/blocks-container)
+        container-id (::container-id state)
+        config {:id (str "bidirectional-" container-id)
+                :container-id container-id
+                :editor-box (state/get-component :editor/box)
+                :view? true}]
+    (if (and blocks-container (seq entities))
+      [:div.property-block-container.content.w-full
+       (blocks-container config entities)]
+      [:span.opacity-60 "Empty"])))
+
+(rum/defc bidirectional-properties-section < rum/static
+  [bidirectional-properties]
+  (when (seq bidirectional-properties)
+    (for [{:keys [class title entities]} bidirectional-properties]
+      [:div.property-pair.items-start {:key (str "bidirectional-" title)}
+       [:div.property-key
+        [:div.property-key-inner
+         [:div.property-icon
+          (bidirectional-property-icon-cp class)]
+         (if class
+           [:a.property-k.flex.select-none.w-full.jtrigger
+            {:on-click (fn [e]
+                         (util/stop e)
+                         (route-handler/redirect-to-page! (:block/uuid class)))}
+            title]
+           [:div.property-k.flex.select-none.w-full title])]]
+       [:div.ls-block.property-value-container.flex.flex-row.gap-1.items-start
+        [:div.property-value.flex.flex-1
+         (bidirectional-values-cp entities)]]])))
+
 (rum/defcs ^:large-vars/cleanup-todo property-input < rum/reactive
   (rum/local false ::show-new-property-config?)
   (rum/local false ::show-class-select?)
@@ -678,15 +719,18 @@
         hidden-properties (-> (concat block-hidden-properties
                                       (filter property-hide-f (map (fn [p] [p (get block p)]) class-properties)))
                               (remove-built-in-or-other-position-properties true))
+        bidirectional-properties (ldb/get-bidirectional-properties (db/get-db) (:db/id block))
+        has-bidirectional-properties? (seq bidirectional-properties)
         root-block? (or (= (str (:block/uuid block))
                            (state/get-current-page))
                         (and (= (str (:block/uuid block)) (:id opts))
                              (not (entity-util/page? block))))]
     (cond
-      (and (empty? full-properties) (seq hidden-properties) (not root-block?) (not sidebar-properties?))
+      (and (empty? full-properties) (seq hidden-properties) (not root-block?) (not sidebar-properties?)
+           (not has-bidirectional-properties?))
       nil
 
-      (and (empty? full-properties) (empty? hidden-properties))
+      (and (empty? full-properties) (empty? hidden-properties) (not has-bidirectional-properties?))
       (when show-properties?
         (rum/with-key (new-property block opts) (str id "-add-property")))
 
@@ -703,6 +747,7 @@
           :tab-index 0}
          [:<>
           (properties-section block properties' opts)
+          (bidirectional-properties-section bidirectional-properties)
 
           (when-not class?
             (hidden-properties-cp block hidden-properties
