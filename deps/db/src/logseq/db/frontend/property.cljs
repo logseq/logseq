@@ -275,7 +275,7 @@
       :schema {:type :checkbox
                :hide? true}
       :queryable? false}
-     ;; tag-scoped choice, a choice can be specificed locally for specific tags
+     ;; tag-scoped choice, a choice can be specified locally for specified tags
      :logseq.property/choice-classes
      {:title "Choice classes"
       :schema {:type :class
