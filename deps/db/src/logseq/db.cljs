@@ -705,7 +705,9 @@
       (and (or (db-property/user-property-namespace? attr-ns)
                (db-property/plugin-property? attr))
            (when-let [property (d/entity db attr)]
-             (= :db.type/ref (:db/valueType property)))))))
+             (and
+              (seq (:logseq.property/classes property))
+              (= :db.type/ref (:db/valueType property))))))))
 
 (defn get-bidirectional-properties
   "Given a target entity id, returns a seq of maps with:
