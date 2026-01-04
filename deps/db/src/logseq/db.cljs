@@ -705,48 +705,49 @@
       (and (or (db-property/user-property-namespace? attr-ns)
                (db-property/plugin-property? attr))
            (when-let [property (d/entity db attr)]
-             (and
-              (seq (:logseq.property/classes property))
-              (= :db.type/ref (:db/valueType property))))))))
+             (= :db.type/ref (:db/valueType property)))))))
 
 (defn get-bidirectional-properties
   "Given a target entity id, returns a seq of maps with:
    * :title - pluralized class title
    * :entities - page entities that reference the target via ref properties"
   [db target-id]
-  (when (and db target-id)
-    (let [target (d/entity db target-id)]
-      (when target
-        (let [add-entity
-              (fn [acc class-ent entity]
-                (if-let [title (pluralize-class-title (:block/title class-ent))]
-                  (update acc title (fnil conj #{}) entity)
-                  acc))]
-          (->> (d/q '[:find ?e ?a
-                      :in $ ?v
-                      :where [?e ?a ?v]]
-                    db
-                    target-id)
-               (keep (fn [[e a]]
-                       (when (bidirectional-property-attr? db a)
-                         (when-let [entity (d/entity db e)]
-                           (when (and (not= (:db/id entity) target-id)
-                                      (not (entity-util/class? entity))
-                                      (not (entity-util/property? entity)))
-                             (let [classes (->> (:block/tags entity)
-                                                (filter entity-util/class?))]
-                               (when (seq classes)
-                                 (map (fn [class-ent]
-                                        [class-ent entity])
-                                      classes))))))))
-               (mapcat identity)
-               (reduce (fn [acc [class-ent entity]]
-                         (add-entity acc class-ent entity))
-                       {})
-               (map (fn [[title entities]]
-                      {:title title
-                       :entities (->> entities
-                                      (sort-by (comp string/lower-case :block/title))
-                                      vec)}))
-               (sort-by (comp string/lower-case :title))
-               vec))))))
+  (when (and db target-id (d/entity db target-id))
+    (let [add-entity
+          (fn [acc class-id entity]
+            (if class-id
+              (update acc class-id (fnil conj #{}) entity)
+              acc))]
+      (->> (d/q '[:find ?e ?a
+                  :in $ ?v
+                  :where
+                  [?e ?a ?v]
+                  [?ea :db/ident ?a]
+                  [?ea :logseq.property/classes]]
+                db
+                target-id)
+           (keep (fn [[e a]]
+                   (when (bidirectional-property-attr? db a)
+                     (when-let [entity (d/entity db e)]
+                       (when (and (not= (:db/id entity) target-id)
+                                  (not (entity-util/class? entity))
+                                  (not (entity-util/property? entity)))
+                         (let [classes (filter entity-util/class? (:block/tags entity))]
+                           (when (seq classes)
+                             (map (fn [class-ent]
+                                    [(:db/id class-ent) entity])
+                                  classes))))))))
+           (mapcat identity)
+           (reduce (fn [acc [class-ent entity]]
+                     (add-entity acc class-ent entity))
+                   {})
+           (map (fn [[class-id entities]]
+                  (let [class (d/entity db class-id)
+                        title (pluralize-class-title (:block/title class))]
+                    {:title title
+                     :class class
+                     :entities (->> entities
+                                    (sort-by :block/created-at)
+                                    vec)})))
+           (sort-by (comp :block/created-at :class))
+           vec))))
