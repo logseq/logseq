@@ -182,6 +182,10 @@
                                                  :cardinality :many
                                                  :public? true
                                                  :view-context :never}}
+     :logseq.property.class/title-plural {:title "Plural title"
+                                          :schema {:type :string
+                                                   :public? true
+                                                   :view-context :class}}
      :logseq.property/hide-empty-value {:title "Hide empty value"
                                         :schema {:type :checkbox
                                                  :public? true
