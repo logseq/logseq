@@ -396,7 +396,7 @@
           "Delete"))))]))
 
 (rum/defc add-existing-values
-  [property values {:keys [toggle-fn class-ids]}]
+  [property values {:keys [toggle-fn]}]
   [:div.flex.flex-col.gap-1.w-64.p-4.overflow-y-auto
    {:class "max-h-[50dvh]"}
    [:div "Existing values:"]
@@ -407,16 +407,7 @@
     {:on-click (fn []
                  (p/let [_ (db-property-handler/add-existing-values-to-closed-values! (:db/id property)
                                                                                       (map (fn [{:keys [value]}]
-                                                                                             (:block/uuid value)) values))
-                         _ (when (seq class-ids)
-                             (p/all (map (fn [{:keys [value]}]
-                                           (let [existing-ids (set (keep :db/id (:logseq.property/choice-classes value)))
-                                                 next-ids (set/union existing-ids (set class-ids))]
-                                             (db-property-handler/set-block-property!
-                                              (:block/uuid value)
-                                              :logseq.property/choice-classes
-                                              next-ids)))
-                                         values)))]
+                                                                                             (:block/uuid value)) values))]
                    (toggle-fn)))}
     "Add choices")])
 

@@ -729,19 +729,6 @@
          (map #(d/entity db %))
          (ldb/sort-by-order))))
 
-(defn- normalize-choice-class-ids
-  [db classes]
-  (->> classes
-       (keep (fn [class]
-               (cond
-                 (integer? class) class
-                 (map? class) (:db/id class)
-                 (uuid? class) (:db/id (d/entity db [:block/uuid class]))
-                 (qualified-keyword? class) (:db/id (d/entity db class))
-                 :else nil)))
-       distinct
-       seq))
-
 (defn- build-closed-value-tx
   [db property resolved-value {:keys [id icon scoped-class-id]}]
   (let [block (when id (d/entity db [:block/uuid id]))
