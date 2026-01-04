@@ -341,36 +341,46 @@
         (:block/title property)]
        (property-key-title block property class-schema?))]))
 
-(rum/defc bidirectional-page-link
-  [page]
-  (let [title (ldb/get-title-with-parents page)]
-    [:a.page-ref
-     {:on-click (fn [e]
-                  (util/stop e)
-                  (route-handler/redirect-to-page! (:block/uuid page)))}
-     title]))
+(defn- bidirectional-property-icon-cp
+  [property]
+  (if-let [icon (:logseq.property/icon property)]
+    (icon-component/icon icon {:size 15 :color? true})
+    (ui/icon "letter-b" {:class "opacity-50" :size 15})))
+
+(rum/defcs bidirectional-values-cp < rum/static
+  {:init (fn [state]
+           (assoc state ::container-id (state/get-next-container-id)))}
+  [state entities]
+  (let [blocks-container (state/get-component :block/blocks-container)
+        container-id (::container-id state)
+        config {:id (str "bidirectional-" container-id)
+                :container-id container-id
+                :editor-box (state/get-component :editor/box)
+                :view? true}]
+    (if (and blocks-container (seq entities))
+      [:div.property-block-container.content.w-full
+       (blocks-container config entities)]
+      [:span.opacity-60 "Empty"])))
 
 (rum/defc bidirectional-properties-section < rum/static
   [bidirectional-properties]
   (when (seq bidirectional-properties)
-    (for [{:keys [title entities]} bidirectional-properties]
+    (for [{:keys [class title entities]} bidirectional-properties]
       [:div.property-pair.items-start {:key (str "bidirectional-" title)}
        [:div.property-key
         [:div.property-key-inner
-         [:div.property-k.flex.select-none.w-full title]]]
+         [:div.property-icon
+          (bidirectional-property-icon-cp class)]
+         (if class
+           [:a.property-k.flex.select-none.w-full.jtrigger
+            {:on-click (fn [e]
+                         (util/stop e)
+                         (route-handler/redirect-to-page! (:block/uuid class)))}
+            title]
+           [:div.property-k.flex.select-none.w-full title])]]
        [:div.ls-block.property-value-container.flex.flex-row.gap-1.items-start
         [:div.property-value.flex.flex-1
-         [:div.multi-values.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
-          (let [items (map (fn [entity]
-                             (rum/with-key
-                               (bidirectional-page-link entity)
-                               (str "bi-property-" title "-" (:db/id entity))))
-                           entities)]
-            (if (seq items)
-              [:div.flex.flex-col
-               (for [item items]
-                 item)]
-              [:span.opacity-60 "Empty"]))]]]])))
+         (bidirectional-values-cp entities)]]])))
 
 (rum/defcs ^:large-vars/cleanup-todo property-input < rum/reactive
   (rum/local false ::show-new-property-config?)
