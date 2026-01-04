@@ -353,7 +353,6 @@
  :command.pdf/next-page                   "下一页PDF文档"
  :command.pdf/close                       "关闭当前PDF文档"
  :command.ui/toggle-help                  "显示/关闭帮助"
- :command.git/commit                      "提交消息"
  :command.go/search                       "搜索页面和块"
  :command.go/backward                     "回退"
  :command.go/forward                      "前进"

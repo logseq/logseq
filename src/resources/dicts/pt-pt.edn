@@ -230,7 +230,6 @@
  :command.editor/select-block-down        "Selecionar bloco abaixo"
  :command.editor/select-all-blocks        "Selecionar todos os blocos"
  :command.ui/toggle-help                  "Alternar ajuda"
- :command.git/commit                      "Confirmar"
  :command.go/search                       "Pesquisar no grafo"
  :command.ui/toggle-document-mode         "Alternar modo de documento"
  :command.ui/toggle-contents              "Alternar Conteúdo na barra lateral"

@@ -152,7 +152,6 @@
  :command.editor/up                                 "Moure cursor amunt / Seleccionar amunt"
  :command.editor/zoom-in                            "Apropar / Endavant"
  :command.editor/zoom-out                           "Allunyar / Enrere"
- :command.git/commit                                "Confirmar"
  :command.go/all-graphs                             "Anar a tots els grafs"
  :command.go/all-pages                              "Anar a totes les pàgines"
  :command.go/backward                               "Enrere"

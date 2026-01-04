@@ -62,7 +62,6 @@
  :command.editor/select-block-down       "Kies blok onder"
  :command.editor/select-all-blocks       "Kies alle blokke"
  :command.ui/toggle-help                 "Wissel help"
- :command.git/commit                     "Jou git stoor boodskap"
  :command.go/search                      "Volteks soek"
  :command.ui/toggle-document-mode        "Wissel dokument modus"
  :command.go/journals                    "Spring na joernale"

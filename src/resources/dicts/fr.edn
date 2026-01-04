@@ -210,7 +210,6 @@
     :command.editor/select-block-down       "Sélectionner le bloc en dessous"
     :command.editor/select-all-blocks       "Sélectionner tous les blocs"
     :command.ui/toggle-help                 "Afficher l'aide"
-    :command.git/commit                     "Message de validation Git"
     :command.go/search                      "Recherche globale dans le texte"
     :command.go/search-in-page "Rechercher des blocs dans la page"
     :command.ui/toggle-document-mode        "Intervertir le mode document"

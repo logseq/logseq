@@ -216,7 +216,6 @@
  :command.editor/up                      "Verplaats cursor omhoog / Selecteer omhoog"
  :command.editor/zoom-in                 "Zoom in bewerkingsblok / Vooruit anders"
  :command.editor/zoom-out                "Zoom uit bewerkingsblok / Achteruit anders"
- :command.git/commit                     "Maak git commit met bericht"
  :command.go/all-pages                   "Ga naar alle pagina's"
  :command.go/backward                    "Achteruit"
  :command.go/forward                     "Vooruit"

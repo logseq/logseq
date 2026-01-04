@@ -243,7 +243,6 @@
  :command.editor/select-block-down        "Velg blokk under"
  :command.editor/select-all-blocks        "Velg alle blokker"
  :command.ui/toggle-help                  "Vis hjelp"
- :command.git/commit                      "Git commit beskjed"
  :command.go/search                       "Fulltekst søk"
  :command.ui/toggle-document-mode         "Aktiver dokumentmodus"
  :command.ui/toggle-contents              "Åpne favoritter i sidestolpen"

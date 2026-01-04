@@ -489,7 +489,6 @@
  :command.editor/up "Mover cursor para cima / Selecionar para cima"
  :command.editor/zoom-in "Dar zoom no bloco em edição / Avançar caso contrário"
  :command.editor/zoom-out "Dar zoom out no bloco em edição / Retroceder caso contrário"
- :command.git/commit "Criar commit git com mensagem"
  :command.misc/export-block-data "Exportar dados EDN do bloco"
  :command.misc/export-page-data "Exportar dados EDN da página"
  :command.misc/export-graph-ontology-data "Exportar tags e propriedades EDN do grafo"

@@ -466,7 +466,6 @@
  :command.ui/install-plugins-from-file             "Nainstalovat zásuvné moduly ze souboru plugins.edn“"
  :command.editor/toggle-open-blocks                "Přepnout otevřené bloky (sbalit nebo rozbalit všechny bloky)"
  :command.ui/clear-all-notifications               "Vymazat všechna oznámení"
- :command.git/commit                               "Spustiť příkaz git commit so zprávou"
  :command.dev/show-block-data                      "(Dev) Zobrazit údaje bloku"
  :command.dev/show-block-ast                       "(Dev) Zobrazit AST bloku"
  :command.dev/show-page-data                       "(Dev) Zobrazit údaje stránky"
