@@ -34,7 +34,8 @@
         (->> (m/watch state/state)
              (m/eduction
               (map #(select-keys % [:git/current-repo :config
-                                    :auth/id-token :auth/access-token :auth/refresh-token]))
+                                    :auth/id-token :auth/access-token :auth/refresh-token
+                                    :user/info]))
               (dedupe)))
         <init-sync-done? (p/deferred)
         task (m/reduce

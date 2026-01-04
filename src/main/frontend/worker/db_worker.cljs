@@ -28,6 +28,7 @@
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.core :as rtc.core]
             [frontend.worker.rtc.db-listener]
+            [frontend.worker.rtc.debug-log :as rtc-debug-log]
             [frontend.worker.rtc.migrate :as rtc-migrate]
             [frontend.worker.search :as search]
             [frontend.worker.shared-service :as shared-service]
@@ -94,12 +95,15 @@
       nil)))
 
 (def repo-path "/db.sqlite")
+(def debug-log-path "/debug-log/db.sqlite")
 
 (defn- <export-db-file
-  [repo]
-  (p/let [^js pool (<get-opfs-pool repo)]
-    (when pool
-      (.exportFile ^js pool repo-path))))
+  ([repo]
+   (<export-db-file repo repo-path))
+  ([repo path]
+   (p/let [^js pool (<get-opfs-pool repo)]
+     (when pool
+       (.exportFile ^js pool path)))))
 
 (defn- <import-db
   [^js pool data]
@@ -153,27 +157,28 @@
       (restore-data-from-addr db addr))))
 
 (defn- close-db-aux!
-  [repo ^Object db ^Object search ^Object client-ops]
+  [repo ^Object db ^Object search ^Object client-ops ^Object debug-log]
   (swap! *sqlite-conns dissoc repo)
   (swap! *datascript-conns dissoc repo)
   (swap! *client-ops-conns dissoc repo)
   (when db (.close db))
   (when search (.close search))
   (when client-ops (.close client-ops))
+  (when debug-log (.close debug-log))
   (when-let [^js pool (worker-state/get-opfs-pool repo)]
     (.pauseVfs pool))
   (swap! *opfs-pools dissoc repo))
 
 (defn- close-other-dbs!
   [repo]
-  (doseq [[r {:keys [db search client-ops]}] @*sqlite-conns]
+  (doseq [[r {:keys [db search client-ops debug-log]}] @*sqlite-conns]
     (when-not (= repo r)
-      (close-db-aux! r db search client-ops))))
+      (close-db-aux! r db search client-ops debug-log))))
 
 (defn close-db!
   [repo]
-  (let [{:keys [db search client-ops]} (get @*sqlite-conns repo)]
-    (close-db-aux! repo db search client-ops)))
+  (let [{:keys [db search client-ops debug-log]} (get @*sqlite-conns repo)]
+    (close-db-aux! repo db search client-ops debug-log)))
 
 (defn reset-db!
   [repo db-transit-str]
@@ -198,8 +203,9 @@
                 (.unpauseVfs pool))
             db (new (.-OpfsSAHPoolDb pool) repo-path)
             search-db (new (.-OpfsSAHPoolDb pool) (str "search" repo-path))
-            client-ops-db (new (.-OpfsSAHPoolDb pool) (str "client-ops-" repo-path))]
-      [db search-db client-ops-db])))
+            client-ops-db (new (.-OpfsSAHPoolDb pool) (str "client-ops-" repo-path))
+            debug-log-db (new (.-OpfsSAHPoolDb pool) (str "debug-log" repo-path))]
+      [db search-db client-ops-db debug-log-db])))
 
 (defn- enable-sqlite-wal-mode!
   [^Object db]
@@ -224,18 +230,20 @@
 (defn- <create-or-open-db!
   [repo {:keys [config datoms] :as opts}]
   (when-not (worker-state/get-sqlite-conn repo)
-    (p/let [[db search-db client-ops-db :as dbs] (get-dbs repo)
+    (p/let [[db search-db client-ops-db debug-log-db :as dbs] (get-dbs repo)
             storage (new-sqlite-storage db)
             client-ops-storage (when-not @*publishing?
                                  (new-sqlite-storage client-ops-db))
             db-based? true]
       (swap! *sqlite-conns assoc repo {:db db
                                        :search search-db
-                                       :client-ops client-ops-db})
+                                       :client-ops client-ops-db
+                                       :debug-log debug-log-db})
       (doseq [db' dbs]
         (enable-sqlite-wal-mode! db'))
       (common-sqlite/create-kvs-table! db)
       (when-not @*publishing? (common-sqlite/create-kvs-table! client-ops-db))
+      (rtc-debug-log/create-tables! debug-log-db)
       (search/create-tables-and-triggers! search-db)
       (ldb/register-transact-pipeline-fn!
        (fn [tx-report]
@@ -563,6 +571,18 @@
     (.exec db "PRAGMA wal_checkpoint(2)"))
   (p/let [data (<export-db-file repo)]
     (Comlink/transfer data #js [(.-buffer data)])))
+
+(def-thread-api :thread-api/export-debug-log-db
+  [repo]
+  (when-let [^js db (worker-state/get-sqlite-conn repo :debug-log)]
+    (.exec db "PRAGMA wal_checkpoint(2)"))
+  (-> (p/let [data (<export-db-file
+                    repo
+                    debug-log-path)]
+        (when data
+          (Comlink/transfer data #js [(.-buffer data)])))
+      (p/catch (fn [error]
+                 (throw error)))))
 
 (def-thread-api :thread-api/import-db
   [repo data]

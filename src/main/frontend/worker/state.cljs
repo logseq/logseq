@@ -38,6 +38,8 @@
                        :auth/access-token nil
                        :auth/refresh-token nil
 
+                       :user/info nil
+
                        :rtc/downloading-graph? false
 
                        ;; thread atoms, these atoms' value are syncing from ui-thread
@@ -46,7 +48,7 @@
 (defonce *rtc-ws-url (atom nil))
 
 (defonce *sqlite (atom nil))
-;; repo -> {:db conn :search conn :client-ops conn}
+;; repo -> {:db conn :search conn :client-ops conn :debug-log conn}
 (defonce *sqlite-conns (atom {}))
 ;; repo -> conn
 (defonce *datascript-conns (atom nil))
@@ -61,7 +63,7 @@
 (defn get-sqlite-conn
   ([repo] (get-sqlite-conn repo :db))
   ([repo which-db]
-   (assert (contains? #{:db :search :client-ops} which-db) which-db)
+   (assert (contains? #{:db :search :client-ops :debug-log} which-db) which-db)
    (get-in @*sqlite-conns [repo which-db])))
 
 (defn get-datascript-conn
@@ -118,6 +120,15 @@
 (defn get-id-token
   []
   (:auth/id-token @*state))
+
+(defn get-user-groups
+  []
+  (set (get-in @*state [:user/info :UserGroups])))
+
+(defn rtc-debug-enabled?
+  []
+  (and (get-id-token)
+       (contains? (get-user-groups) "team")))
 
 (comment
   (defn mobile?

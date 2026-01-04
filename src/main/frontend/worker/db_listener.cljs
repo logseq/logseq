@@ -4,6 +4,7 @@
             [datascript.core :as d]
             [frontend.common.thread-api :as thread-api]
             [frontend.worker.pipeline :as worker-pipeline]
+            [frontend.worker.rtc.debug-log :as rtc-debug-log]
             [frontend.worker.rtc.gen-client-op :as gen-client-op]
             [frontend.worker.search :as search]
             [frontend.worker.shared-service :as shared-service]
@@ -84,6 +85,7 @@
       (d/listen! conn ::listen-db-changes!
                  (fn listen-db-changes!-inner
                    [{:keys [tx-data _db-before _db-after tx-meta] :as tx-report}]
+                   (rtc-debug-log/log-tx! repo tx-data tx-meta)
                    (remove-old-embeddings-and-reset-new-updates! conn tx-data tx-meta)
 
                    (let [tx-meta (merge (batch-tx/get-batch-opts) tx-meta)
