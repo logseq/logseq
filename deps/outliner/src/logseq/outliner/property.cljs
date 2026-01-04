@@ -580,6 +580,7 @@
                                  (= existing-value v'))]
             (throw-error-if-self-value block v' ref?)
 
+            (prn :debug :value-matches? value-matches?)
             (when-not value-matches?
               (raw-set-block-property! conn block property v'))))))))
 
@@ -728,8 +729,21 @@
          (map #(d/entity db %))
          (ldb/sort-by-order))))
 
+(defn- normalize-choice-class-ids
+  [db classes]
+  (->> classes
+       (keep (fn [class]
+               (cond
+                 (integer? class) class
+                 (map? class) (:db/id class)
+                 (uuid? class) (:db/id (d/entity db [:block/uuid class]))
+                 (qualified-keyword? class) (:db/id (d/entity db class))
+                 :else nil)))
+       distinct
+       seq))
+
 (defn- build-closed-value-tx
-  [db property resolved-value {:keys [id icon]}]
+  [db property resolved-value {:keys [id icon scoped-class-id]}]
   (let [block (when id (d/entity db [:block/uuid id]))
         block-id (or id (ldb/new-block-id))
         icon (when-not (and (string? icon) (string/blank? icon)) icon)
@@ -754,11 +768,13 @@
         tx-data' (if (and (:db/id block) (nil? icon))
                    (conj tx-data [:db/retract (:db/id block) :logseq.property/icon])
                    tx-data)]
-    tx-data'))
+    (cond-> (vec tx-data')
+      scoped-class-id
+      (conj [:db/add [:block/uuid block-id] :logseq.property/choice-classes scoped-class-id]))))
 
 (defn upsert-closed-value!
   "id should be a block UUID or nil"
-  [conn property-id {:keys [id value description] :as opts}]
+  [conn property-id {:keys [id value description _scoped-class-id] :as opts}]
   (assert (or (nil? id) (uuid? id)))
   (let [db @conn
         property (d/entity db property-id)
@@ -797,8 +813,8 @@
 
           :else
           (let [tx-data (build-closed-value-tx @conn property resolved-value opts)]
+            (prn :debug :tx-data tx-data)
             (ldb/transact! conn tx-data {:outliner-op :save-block})
-
             (when (seq description)
               (if-let [desc-ent (and id (:logseq.property/description (d/entity db [:block/uuid id])))]
                 (ldb/transact! conn

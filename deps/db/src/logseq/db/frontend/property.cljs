@@ -275,6 +275,14 @@
       :schema {:type :checkbox
                :hide? true}
       :queryable? false}
+     :logseq.property/choice-classes
+     {:title "Choice classes"
+      :schema {:type :class
+               :cardinality :many
+               :public? false
+               :hide? true
+               :view-context :never}
+      :queryable? false}
      :logseq.property/checkbox-display-properties
      {:title "Properties displayed as checkbox"
       :schema {:type :property

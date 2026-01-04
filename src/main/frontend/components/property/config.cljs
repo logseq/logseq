@@ -1,5 +1,6 @@
 (ns frontend.components.property.config
-  (:require [clojure.string :as string]
+  (:require [clojure.set :as set]
+            [clojure.string :as string]
             [frontend.components.dnd :as dnd]
             [frontend.components.icon :as icon-component]
             [frontend.components.property.default-value :as pdv]
@@ -204,7 +205,7 @@
                      "Save")])]))
 
 (rum/defc choice-base-edit-form
-  [own-property block]
+  [own-property block owner-block]
   (let [create? (:create? block)
         uuid (:block/uuid block)
         *form-data (rum/use-ref
@@ -242,7 +243,11 @@
                       :disabled (not dirty?)
                       :on-click (fn []
                                   (-> (<upsert-closed-value! own-property
-                                                             (cond-> form-data uuid (assoc :id uuid)))
+                                                             (cond-> form-data
+                                                               uuid
+                                                               (assoc :id uuid)
+                                                               (ldb/class? owner-block)
+                                                               (assoc :scoped-class-id (:db/id owner-block))))
                                       (p/then #(shui/popup-hide!))
                                       (p/catch #(shui/toast! (str %) :error))))
                       :variant (if dirty? :default :secondary)}
@@ -307,7 +312,7 @@
          (when disabled? (shui/tabler-icon "forbid-2" {:size 15}))])])))
 
 (rum/defc choice-item-content < rum/reactive db-mixins/query
-  [property block {:keys [disabled?]}]
+  [property block {:keys [disabled? owner-block]}]
   (let [delete-choice! (fn []
                          (p/do!
                           (db-property-handler/delete-closed-value! (:db/id property) (:db/id block))
@@ -328,7 +333,7 @@
                                        :button-opts {:title "Set Icon"}})
      [:strong {:on-click (fn [^js e]
                            (shui/popup-show! (.-target e)
-                                             (fn [] (choice-base-edit-form property block))
+                                             (fn [] (choice-base-edit-form property block owner-block))
                                              {:id :ls-base-edit-form
                                               :align "start"}))}
       value]
@@ -368,7 +373,7 @@
         "Delete")))]))
 
 (rum/defc add-existing-values
-  [property values {:keys [toggle-fn]}]
+  [property values {:keys [toggle-fn class-ids]}]
   [:div.flex.flex-col.gap-1.w-64.p-4.overflow-y-auto
    {:class "max-h-[50dvh]"}
    [:div "Existing values:"]
@@ -379,23 +384,37 @@
     {:on-click (fn []
                  (p/let [_ (db-property-handler/add-existing-values-to-closed-values! (:db/id property)
                                                                                       (map (fn [{:keys [value]}]
-                                                                                             (:block/uuid value)) values))]
+                                                                                             (:block/uuid value)) values))
+                         _ (when (seq class-ids)
+                             (p/all (map (fn [{:keys [value]}]
+                                           (let [existing-ids (set (keep :db/id (:logseq.property/choice-classes value)))
+                                                 next-ids (set/union existing-ids (set class-ids))]
+                                             (db-property-handler/set-block-property!
+                                              (:block/uuid value)
+                                              :logseq.property/choice-classes
+                                              next-ids)))
+                                         values)))]
                    (toggle-fn)))}
     "Add choices")])
 
 (rum/defc choices-sub-pane < rum/reactive db-mixins/query
-  [property {:keys [disabled?] :as opts}]
+  [property {:keys [disabled? owner-block] :as opts}]
   (let [values (:property/closed-values property)
-        choices (doall
-                 (keep (fn [value]
-                         (db/sub-block (:db/id value)))
-                       values))
+        choices (->> values
+                     (keep (fn [value]
+                             (db/sub-block (:db/id value))))
+                     (filter (fn [block]
+                               (let [classes (set (map :db/id (:logseq.property/choice-classes block)))]
+                                 (if (and (seq classes) (ldb/class? owner-block))
+                                   (contains? classes (:db/id owner-block))
+                                   true)))))
         choice-items (map
                       (fn [block]
                         (let [id (:block/uuid block)]
                           {:id (str id)
                            :value id
-                           :content (choice-item-content property block opts)}))
+                           :content (choice-item-content property block
+                                                         (assoc opts :owner-block owner-block))}))
                       choices)]
 
     [:div.ls-property-dropdown.ls-property-choices-sub-pane
@@ -449,7 +468,7 @@
                                                (let [opts {:toggle-fn (fn [] (shui/popup-hide! id))}]
                                                  (if (seq values')
                                                    (add-existing-values property values' opts)
-                                                   (choice-base-edit-form property {:create? true}))))
+                                                   (choice-base-edit-form property {:create? true} owner-block))))
                                              {:id :ls-base-edit-form
                                               :align "start"}))))}}))]))
 
@@ -641,7 +660,11 @@
         (let [values (:property/closed-values property)]
           (dropdown-editor-menuitem {:icon :list :title "Available choices"
                                      :desc (when (seq values) (str (count values) " choices"))
-                                     :submenu-content (fn [] (choices-sub-pane property {:disabled? config/publishing?}))})))
+                                     :submenu-content (fn []
+                                                        (choices-sub-pane property
+                                                                          {:disabled? config/publishing?
+                                                                           :owner-block owner-block
+                                                                           :class-schema? class-schema?}))})))
 
       (when enable-closed-values?
         (let [values (:property/closed-values property)]
