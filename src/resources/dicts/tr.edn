@@ -479,7 +479,6 @@
  :command.ui/install-plugins-from-file    "Eklentileri plugins.edn dosyasından yükleyin"
  :command.editor/toggle-open-blocks       "Açık blokları kapat/aç (tüm blokları daralt veya genişlet)"
  :command.ui/clear-all-notifications      "Tüm bildirimleri temizle"
- :command.git/commit                      "Mesajlı git commit oluştur"
  :command.editor/select-parent            "Üst bloğu seçin"
  :command.dev/show-block-data             "(Dev) Blok verilerini göster"
  :command.dev/show-block-ast              "(Dev) Blok AST'sini göster"

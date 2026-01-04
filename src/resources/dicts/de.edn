@@ -488,7 +488,6 @@
  :command.editor/up                      "Cursor nach oben bewegen / Nach oben auswählen"
  :command.editor/zoom-in                 "Heranzoomen"
  :command.editor/zoom-out                "Herauszoomen"
- :command.git/commit                     "Git Commit-Nachricht"
  :command.go/all-graphs                  "Zu allen Graphen springen"
  :command.go/all-pages                   "Zu allen Seiten springen"
  :command.go/backward                    "Zurück"
