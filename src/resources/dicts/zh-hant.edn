@@ -229,7 +229,6 @@
  :command.editor/select-block-down       "選擇下方的塊"
  :command.editor/select-all-blocks       "選擇所有塊"
  :command.ui/toggle-help                 "顯示/關閉幫助"
- :command.git/commit                     "提交消息"
  :command.go/search                      "全文搜索"
  :command.ui/toggle-document-mode        "切換文檔模式"
  :command.ui/toggle-theme                "“在暗色/亮色主題之間切換”"

@@ -424,7 +424,6 @@
  :command.editor/up "Geser kursor ke atas / Pilih ke atas"
  :command.editor/zoom-in "Perbesar blok yang sedang disunting / Maju sebaliknya"
  :command.editor/zoom-out "Perkecil blok yang sedang disunting / Mundur sebaliknya"
- :command.git/commit "Buat commit git dengan pesan"
  :command.go/all-graphs "Buka semua grafik"
  :command.go/all-pages "Buka semua halaman"
  :command.go/backward "Mundur"

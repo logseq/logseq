@@ -391,7 +391,6 @@
  :command.ui/install-plugins-from-file                 "Установить расширения из plugins.edn"
  :command.editor/toggle-open-blocks                    "Переключить открытые блоки (свернуть или развернуть все блоки)"
  :command.ui/clear-all-notifications                   "Очистить все уведомления"
- :command.git/commit                                   "Создать git-коммит с сообщением"
  :command.dev/show-block-data                          "(Dev) Показать данные блока"
  :command.dev/show-block-ast                           "(Dev) Показать AST блока"
  :command.dev/show-page-data                           "(Dev) Показать данные страницы"}
