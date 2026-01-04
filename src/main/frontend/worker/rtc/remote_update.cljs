@@ -408,7 +408,8 @@
                         (ldb/read-transit-str remote-v))]
         (when (not= local-v remote-v*)
           (if (nil? remote-v*)
-            [[:db/retract e k]]
+            (when-not (contains? #{:block/created-at :block/updated-at} k)
+              [[:db/retract e k]])
             [[:db/add e k remote-v*]])))
 
       [false true]
