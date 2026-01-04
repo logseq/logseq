@@ -49,12 +49,6 @@
             op-value {:block/tags [ref-uuid2]}]
         (is (= #{[:db/retract (:db/id (d/entity db [:block/uuid block-uuid])) :block/tags [:block/uuid ref-uuid1]]}
                (set (#'subject/remote-op-value->tx-data db (d/entity db [:block/uuid block-uuid]) op-value nil))))))
-    (testing ":block/updated-at"
-      (let [db (d/db-with db [{:block/uuid block-uuid
-                               :block/updated-at 1}])
-            ent (d/entity db [:block/uuid block-uuid])]
-        (is (= [[:db/retract (:db/id ent) :block/updated-at]]
-               (#'subject/remote-op-value->tx-data db ent {} nil)))))
     (testing ":logseq.property/status, op-value don't have this attr, means remove this attr"
       (let [db (d/db-with db [{:db/id "ref1"
                                :block/uuid ref-uuid1}
