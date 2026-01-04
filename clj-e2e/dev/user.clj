@@ -13,6 +13,7 @@
             [logseq.e2e.outliner-basic-test]
             [logseq.e2e.plugins-basic-test]
             [logseq.e2e.property-basic-test]
+            [logseq.e2e.property-scoped-choices-test]
             [logseq.e2e.reference-basic-test]
             [logseq.e2e.rtc-basic-test]
             [logseq.e2e.rtc-extra-part2-test]
@@ -44,6 +45,11 @@
   []
   (->> (future (run-tests 'logseq.e2e.property-basic-test))
        (swap! *futures assoc :property-test)))
+
+(defn run-property-scoped-choices-test
+  []
+  (->> (future (run-tests 'logseq.e2e.property-scoped-choices-test))
+       (swap! *futures assoc :property-scoped-choices-test)))
 
 (defn run-outliner-test
   []
