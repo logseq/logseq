@@ -1,6 +1,5 @@
 (ns frontend.components.property.config
-  (:require [clojure.set :as set]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [frontend.components.dnd :as dnd]
             [frontend.components.icon :as icon-component]
             [frontend.components.property.default-value :as pdv]

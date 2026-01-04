@@ -526,6 +526,17 @@
         :else
         (batch-remove-property! conn [eid] property-id)))))
 
+(defn- set-block-db-attribute!
+  [conn db block property property-id v]
+  (throw-error-if-invalid-property-value db property v)
+  (when-not (and (= property-id :block/alias) (= v (:db/id block))) ; alias can't be itself
+    (let [tx-data (cond->
+                   [{:db/id (:db/id block) property-id v}]
+                    (= property-id :logseq.property.class/extends)
+                    (conj [:db/retract (:db/id block) :logseq.property.class/extends :logseq.class/Root]))]
+      (ldb/transact! conn tx-data
+                     {:outliner-op :save-block}))))
+
 (defn set-block-property!
   "Updates a block property's value for an existing property-id and block.  If
   property is a ref type, automatically handles a raw property value i.e. you
@@ -559,15 +570,8 @@
           (outliner-validate/validate-extends-property @conn v' [block]))
         (cond
           db-attribute?
-          (do
-            (throw-error-if-invalid-property-value db property v')
-            (when-not (and (= property-id :block/alias) (= v' (:db/id block))) ; alias can't be itself
-              (let [tx-data (cond->
-                             [{:db/id (:db/id block) property-id v'}]
-                              (= property-id :logseq.property.class/extends)
-                              (conj [:db/retract (:db/id block) :logseq.property.class/extends :logseq.class/Root]))]
-                (ldb/transact! conn tx-data
-                               {:outliner-op :save-block}))))
+          (set-block-db-attribute! conn db block property property-id v)
+
           :else
           (let [_ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
                 ref? (db-property-type/all-ref-property-types property-type)
