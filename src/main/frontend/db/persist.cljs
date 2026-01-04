@@ -6,16 +6,19 @@
             [frontend.db.conn :as db-conn]
             [frontend.persist-db :as persist-db]
             [frontend.util :as util]
+            [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
 
 (defn get-all-graphs
   []
   (p/let [repos (persist-db/<list-db)
-          repos' (map
-                  (fn [{:keys [name] :as repo}]
-                    (assoc repo :name
-                           (str config/db-version-prefix name)))
-                  repos)
+          repos' (->> repos
+                      (remove (fn [{:keys [name]}]
+                                (sqlite-util/local-file-based-graph? name)))
+                      (map
+                       (fn [{:keys [name] :as repo}]
+                         (assoc repo :name
+                                (str config/db-version-prefix name)))))
           electron-disk-graphs (when (util/electron?) (ipc/ipc "getGraphs"))]
     (distinct
      (concat
