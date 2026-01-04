@@ -526,6 +526,17 @@
         :else
         (batch-remove-property! conn [eid] property-id)))))
 
+(defn- set-block-db-attribute!
+  [conn db block property property-id v]
+  (throw-error-if-invalid-property-value db property v)
+  (when-not (and (= property-id :block/alias) (= v (:db/id block))) ; alias can't be itself
+    (let [tx-data (cond->
+                   [{:db/id (:db/id block) property-id v}]
+                    (= property-id :logseq.property.class/extends)
+                    (conj [:db/retract (:db/id block) :logseq.property.class/extends :logseq.class/Root]))]
+      (ldb/transact! conn tx-data
+                     {:outliner-op :save-block}))))
+
 (defn set-block-property!
   "Updates a block property's value for an existing property-id and block.  If
   property is a ref type, automatically handles a raw property value i.e. you
@@ -559,15 +570,8 @@
           (outliner-validate/validate-extends-property @conn v' [block]))
         (cond
           db-attribute?
-          (do
-            (throw-error-if-invalid-property-value db property v')
-            (when-not (and (= property-id :block/alias) (= v' (:db/id block))) ; alias can't be itself
-              (let [tx-data (cond->
-                             [{:db/id (:db/id block) property-id v'}]
-                              (= property-id :logseq.property.class/extends)
-                              (conj [:db/retract (:db/id block) :logseq.property.class/extends :logseq.class/Root]))]
-                (ldb/transact! conn tx-data
-                               {:outliner-op :save-block}))))
+          (set-block-db-attribute! conn db block property property-id v)
+
           :else
           (let [_ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
                 ref? (db-property-type/all-ref-property-types property-type)
@@ -580,6 +584,7 @@
                                  (= existing-value v'))]
             (throw-error-if-self-value block v' ref?)
 
+            (prn :debug :value-matches? value-matches?)
             (when-not value-matches?
               (raw-set-block-property! conn block property v'))))))))
 
@@ -729,7 +734,7 @@
          (ldb/sort-by-order))))
 
 (defn- build-closed-value-tx
-  [db property resolved-value {:keys [id icon]}]
+  [db property resolved-value {:keys [id icon scoped-class-id]}]
   (let [block (when id (d/entity db [:block/uuid id]))
         block-id (or id (ldb/new-block-id))
         icon (when-not (and (string? icon) (string/blank? icon)) icon)
@@ -754,11 +759,13 @@
         tx-data' (if (and (:db/id block) (nil? icon))
                    (conj tx-data [:db/retract (:db/id block) :logseq.property/icon])
                    tx-data)]
-    tx-data'))
+    (cond-> (vec tx-data')
+      scoped-class-id
+      (conj [:db/add [:block/uuid block-id] :logseq.property/choice-classes scoped-class-id]))))
 
 (defn upsert-closed-value!
   "id should be a block UUID or nil"
-  [conn property-id {:keys [id value description] :as opts}]
+  [conn property-id {:keys [id value description _scoped-class-id] :as opts}]
   (assert (or (nil? id) (uuid? id)))
   (let [db @conn
         property (d/entity db property-id)
@@ -797,8 +804,8 @@
 
           :else
           (let [tx-data (build-closed-value-tx @conn property resolved-value opts)]
+            (prn :debug :tx-data tx-data)
             (ldb/transact! conn tx-data {:outliner-op :save-block})
-
             (when (seq description)
               (if-let [desc-ent (and id (:logseq.property/description (d/entity db [:block/uuid id])))]
                 (ldb/transact! conn
