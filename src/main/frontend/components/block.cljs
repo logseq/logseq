@@ -1947,21 +1947,7 @@
                               (= 1 (count block-ast-title))
                               (= "Link" (ffirst block-ast-title)))
                          (assoc :node-ref-link-only? true))]
-           (map-inline config' block-ast-title))
-
-         (when (and (seq block-ast-title) (ldb/class-instance?
-                                           (entity-plus/entity-memoized (db/get-db) :logseq.class/Cards)
-                                           block))
-           [(ui/tooltip
-             (shui/button
-              {:variant :ghost
-               :size :sm
-               :class "ml-2 !px-1 !h-5 text-xs text-muted-foreground"
-               :on-click (fn [e]
-                           (util/stop e)
-                           (state/pub-event! [:modal/show-cards (:db/id block)]))}
-              "Practice")
-             [:div "Practice cards"])])))))))
+           (map-inline config' block-ast-title))))))))
 
 (rum/defc block-title-aux
   [config block {:keys [query? *show-query?]}]
@@ -1995,13 +1981,26 @@
         (when (fn? on-title-click)
           {:on-click on-title-click})))
      (cond
-       (and query? (and blank? (or advanced-query? show-query?)))
+       (and query? blank? (or advanced-query? show-query?))
        [:span.opacity-75.hover:opacity-100 "Untitled query"]
        (and query? blank?)
        (query-builder-component/builder query {})
        :else
        (text-block-title config block))
      query-setting
+     (when (ldb/class-instance?
+            (entity-plus/entity-memoized (db/get-db) :logseq.class/Cards)
+            block)
+       [(ui/tooltip
+         (shui/button
+          {:variant :ghost
+           :size :sm
+           :class "!px-1 text-xs text-muted-foreground"
+           :on-click (fn [e]
+                       (util/stop e)
+                       (state/pub-event! [:modal/show-cards (:db/id block)]))}
+          "Practice")
+         [:div "Practice cards"])])
      (when-let [property (:logseq.property/created-from-property block)]
        (when-let [message (when (= :url (:logseq.property/type property))
                             (first (outliner-property/validate-property-value (db/get-db) property (:db/id block))))]
