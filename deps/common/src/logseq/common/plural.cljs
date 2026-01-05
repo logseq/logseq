@@ -182,7 +182,7 @@
 ;; Data initialization (same as original JS)
 ;; -----------------------------------------------------------------------------
 
-(defn- init-irregulars! []
+(defn- ^:large-vars/cleanup-todo init-irregulars! []
   (doseq [[s p]
           ;; Pronouns + irregulars
           [["I" "we"]
