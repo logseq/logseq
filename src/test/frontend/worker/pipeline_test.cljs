@@ -93,3 +93,38 @@
 
     ;; return global fn back to previous behavior
     (ldb/register-transact-pipeline-fn! identity)))
+
+(deftest ensure-query-property-on-tag-additions-test
+  (let [graph test-helper/test-db-name-db-version
+        conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "b1"}
+                                            {:block/title "b2"}]}]
+               :classes {:QueryChild {:build/class-extends [:logseq.class/Query]}}})
+        page (ldb/get-page @conn "page1")
+        blocks (:block/_page page)
+        b1 (some #(when (= "b1" (:block/title %)) %) blocks)
+        b2 (some #(when (= "b2" (:block/title %)) %) blocks)
+        query-child (ldb/get-page @conn "QueryChild")]
+    (ldb/register-transact-pipeline-fn!
+     (fn [tx-report]
+       (worker-pipeline/transact-pipeline graph tx-report)))
+
+    (testing "tagging with #Query adds query property"
+      (ldb/transact! conn [[:db/add (:db/id b1) :block/tags :logseq.class/Query]])
+      (let [block (d/entity @conn (:db/id b1))
+            query (:logseq.property/query block)]
+        (is query)
+        (is (uuid? (:block/uuid query)))
+        (is (= "" (:block/title query)))))
+
+    (testing "tagging with class extending #Query adds query property"
+      (ldb/transact! conn [[:db/add (:db/id b2) :block/tags (:db/id query-child)]])
+      (let [block (d/entity @conn (:db/id b2))
+            query (:logseq.property/query block)]
+        (is query)
+        (is (uuid? (:block/uuid query)))
+        (is (= "" (:block/title query)))))
+
+    ;; return global fn back to previous behavior
+    (ldb/register-transact-pipeline-fn! identity)))
