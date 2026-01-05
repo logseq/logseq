@@ -31,5 +31,5 @@
 
 ## Review Checklist
 - Linters and unit-tests must pass
-- Check the review notes listed in `prompts/review.md`.
+- Check the review notes listed in @prompts/review.md
 

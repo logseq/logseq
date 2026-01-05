@@ -29,3 +29,5 @@ You're Clojure(script) expert, you're responsible to check those common errors:
 
 - Prohibit converting js/Uint8Array to vector. e.g. `(vec uint8-array)`
   - This operation is very slow when the Uint8Array is large (e.g. an asset). 
+
+- `:block/content` attribute is not used in the DB version; `:block/title` is the attribute that stores the main content of the block.
