@@ -94,3 +94,36 @@
     (open-property-value-select property-name)
     (assert/assert-is-visible (loc/filter ".cp__select-results" :has-text scoped-choice))
     (assert/assert-have-count (loc/filter ".cp__select-results" :has-text global-choice) 0)))
+
+(deftest tag-scoped-property-choices-isolated-test
+  (let [tag-a "Device2"
+        tag-b "Vehicle"
+        property-name "device2-type"
+        choice-a "wired2"
+        choice-b "gas"]
+    (add-property property-name)
+    (page/new-page tag-a)
+    (page/convert-to-tag tag-a)
+    (add-tag-property property-name)
+    (add-choice property-name choice-a)
+    (util/wait-timeout 100)
+    (k/esc)
+    (page/new-page tag-b)
+    (page/convert-to-tag tag-b)
+    (add-tag-property property-name)
+    (add-choice property-name choice-b)
+    (util/wait-timeout 100)
+    (k/esc)
+    (page/new-page "scoped-choices-device2")
+    (b/new-block "Device2 item")
+    (util/set-tag tag-a)
+    (open-property-value-select property-name)
+    (assert/assert-is-visible (loc/filter ".cp__select-results" :has-text choice-a))
+    (assert/assert-have-count (loc/filter ".cp__select-results" :has-text choice-b) 0)
+    (k/esc)
+    (page/new-page "scoped-choices-vehicle")
+    (b/new-block "Vehicle item")
+    (util/set-tag tag-b)
+    (open-property-value-select property-name)
+    (assert/assert-is-visible (loc/filter ".cp__select-results" :has-text choice-b))
+    (assert/assert-have-count (loc/filter ".cp__select-results" :has-text choice-a) 0)))
