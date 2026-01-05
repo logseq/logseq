@@ -49,6 +49,7 @@
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.mixins :as mixins]
             [frontend.mobile.haptics :as haptics]
@@ -1544,10 +1545,21 @@
         (hiccups.core/html)
         (security/sanitize-html))))
 
+(defn- highlight-query-text
+  [content query]
+  (if (and (string? content)
+           (not (string/blank? query))
+           (string/includes? (string/lower-case content)
+                             (string/lower-case query)))
+    (search-handler/highlight-exact-query content query)
+    content))
+
 (defn ^:large-vars/cleanup-todo inline
   [{:keys [html-export?] :as config} item]
   (match item
-    [(:or "Plain" "Spaces") s]
+    ["Plain" s]
+    (highlight-query-text s (:highlight-query config))
+    ["Spaces" s]
     s
 
     ["Superscript" l]

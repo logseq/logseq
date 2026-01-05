@@ -83,10 +83,11 @@
              (set-has-references! result))))
        [])
       (when has-references?
-        [:div.unlinked-references
-         (views/view
-          {:view-parent entity
-           :view-feature-type :unlinked-references
-           :columns (views/build-columns config [] {})
-           :foldable-options {:default-collapsed? true}
-           :config config})]))))
+        (let [config (assoc config :highlight-query (:block/title entity))]
+          [:div.unlinked-references
+           (views/view
+            {:view-parent entity
+             :view-feature-type :unlinked-references
+             :columns (views/build-columns config [] {})
+             :foldable-options {:default-collapsed? true}
+             :config config})])))))
