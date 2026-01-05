@@ -1649,9 +1649,10 @@
          (when (and (get-in table [:data-fns :add-new-object!]) (or (empty? rows) items-rendered?))
            (shui/table-footer (add-new-row (:view-entity option) table)))]]))))
 
-(rum/defc list-view < rum/static
-  [{:keys [config ref-matched-children-ids disable-virtualized?] :as option} view-entity {:keys [rows]} *scroller-ref]
-  (let [lazy-item-render (fn [rows idx]
+(rum/defcs list-view < rum/static mixins/container-id
+  [state {:keys [config ref-matched-children-ids disable-virtualized?] :as option} view-entity {:keys [rows]} *scroller-ref]
+  (let [config (assoc config :container-id (:container-id state))
+        lazy-item-render (fn [rows idx]
                            (lazy-item rows idx (assoc option :list-view? true)
                                       (fn [block]
                                         (let [config' (cond->
