@@ -707,6 +707,17 @@
            (when-let [property (d/entity db attr)]
              (= :db.type/ref (:db/valueType property)))))))
 
+(defn- get-ea-by-v
+  [db v]
+  (d/q '[:find ?e ?a
+         :in $ ?v
+         :where
+         [?e ?a ?v]
+         [?ea :db/ident ?a]
+         [?ea :logseq.property/classes]]
+       db
+       v))
+
 (defn get-bidirectional-properties
   "Given a target entity id, returns a seq of maps with:
    * :class - class entity
@@ -719,14 +730,7 @@
             (if class-id
               (update acc class-id (fnil conj #{}) entity)
               acc))]
-      (->> (d/q '[:find ?e ?a
-                  :in $ ?v
-                  :where
-                  [?e ?a ?v]
-                  [?ea :db/ident ?a]
-                  [?ea :logseq.property/classes]]
-                db
-                target-id)
+      (->> (get-ea-by-v db target-id)
            (keep (fn [[e a]]
                    (when (bidirectional-property-attr? db a)
                      (when-let [entity (d/entity db e)]
