@@ -17,9 +17,8 @@
 
 ## Testing Commands
 - Run linters and unit-tests: `bb dev:lint-and-test`
-- Run single focused unit-test:
-  - Add the `:focus` keyword to the test case: `(deftest ^:focus test-name ...)`
-  - `bb dev:test -i focus`
+- Run a single unit-test:
+  - `bb dev:test -v <namespace/testcase-name>`
 - E2E tests files are located in `/clj-e2e`
 
 ## Common used cljs keywords
