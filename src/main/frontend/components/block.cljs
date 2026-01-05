@@ -1744,6 +1744,7 @@
         doc-mode? (state/sub :document/mode?)
         control-show? (util/react *control-show?)
         ref? (:ref? config)
+        container-id (:container-id config)
         empty-content? (block-content-empty? block)
         fold-button-right? (state/enable-fold-button-right?)
         own-number-list? (:own-order-number-list? config)
@@ -1774,9 +1775,10 @@
          :on-click (fn [event]
                      (util/stop event)
                      (state/clear-edit!)
+                     (state/set-state! :editor/container-id container-id)
                      (p/do!
                       (if ref?
-                        (state/toggle-collapsed-block! uuid)
+                        (state/toggle-collapsed-block! uuid container-id)
                         (if collapsed?
                           (editor-handler/expand-block! uuid)
                           (editor-handler/collapse-block! uuid)))
@@ -2984,7 +2986,7 @@
                          (:view? config)
                          (root-block? config block)
                          (and (or (ldb/class? block) (ldb/property? block)) (:page-title? config)))
-                     (state/sub-block-collapsed uuid)
+                     (state/sub-block-collapsed uuid container-id)
 
                      :else
                      db-collapsed?)
@@ -3244,10 +3246,12 @@
     (boolean result)))
 
 (defn- set-collapsed-block!
-  [block-id v]
+  [block-id v container-id]
   (if (false? v)
-    (editor-handler/expand-block! block-id {:skip-db-collpsing? true})
-    (state/set-collapsed-block! block-id v)))
+    (do
+      (editor-handler/expand-block! block-id {:skip-db-collpsing? true})
+      (state/set-collapsed-block! block-id v container-id))
+    (state/set-collapsed-block! block-id v container-id)))
 
 (rum/defcs loaded-block-container < rum/reactive db-mixins/query
   (rum/local false ::show-block-left-menu?)
@@ -3257,19 +3261,23 @@
            (let [[config block] (:rum/args state)
                  block-id (:block/uuid block)
                  linked-block? (or (:block/link block)
-                                   (:original-block config))]
+                                   (:original-block config))
+                 container-id (if (or linked-block? (nil? (:container-id config)))
+                                (state/get-next-container-id)
+                                (:container-id config))]
              (when-not (:property-block? config)
                (cond
                  (and (:page-title? config) (or (ldb/class? block) (ldb/property? block)) (not config/publishing?))
-                 (let [collapsed? (state/get-block-collapsed block-id)]
-                   (set-collapsed-block! block-id (if (some? collapsed?) collapsed? true)))
+                 (let [collapsed? (state/get-block-collapsed block-id container-id)]
+                   (set-collapsed-block! block-id (if (some? collapsed?) collapsed? true) container-id))
 
                  (root-block? config block)
-                 (set-collapsed-block! block-id false)
+                 (set-collapsed-block! block-id false container-id)
 
                  (or (:view? config) (:ref? config) (:custom-query? config))
                  (set-collapsed-block! block-id
-                                       (boolean (editor-handler/block-default-collapsed? block config)))
+                                       (boolean (editor-handler/block-default-collapsed? block config))
+                                       container-id)
 
                  :else
                  nil))
@@ -3277,14 +3285,15 @@
               (assoc state
                      ::control-show? (atom false)
                      ::navigating-block (atom (:block/uuid block)))
-               (or linked-block? (nil? (:container-id config)))
-               (assoc ::container-id (state/get-next-container-id)))))
+               (and container-id (or linked-block? (nil? (:container-id config))))
+               (assoc ::container-id container-id))))
    :will-unmount (fn [state]
                                                      ;; restore root block's collapsed state
                    (let [[config block] (:rum/args state)
-                         block-id (:block/uuid block)]
+                         block-id (:block/uuid block)
+                         container-id (or (:container-id config) (::container-id state))]
                      (when (root-block? config block)
-                       (set-collapsed-block! block-id nil)))
+                       (set-collapsed-block! block-id nil container-id)))
                    state)}
   [state config block & {:as opts}]
   (let [repo (state/get-current-repo)
@@ -3318,7 +3327,8 @@
          (p/let [block (db-async/<get-block (state/get-current-repo)
                                             id
                                             {:children? (not
-                                                         (if-some [result (state/get-block-collapsed (:block/uuid block))]
+                                                         (if-some [result (state/get-block-collapsed (:block/uuid block)
+                                                                                                     (:container-id config))]
                                                            result
                                                            (:block/collapsed? block)))
                                              :skip-refresh? false})]
