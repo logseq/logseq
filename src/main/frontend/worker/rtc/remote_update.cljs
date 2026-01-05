@@ -408,6 +408,8 @@
                         (ldb/read-transit-str remote-v))]
         (when (not= local-v remote-v*)
           (if (nil? remote-v*)
+            ;; FIXME: The following judgment is a temporary fix for incomplete server blocks,
+            ;;        remove it once it's confirmed that server blocks will not be incomplete.
             (when-not (contains? #{:block/created-at :block/updated-at} k)
               [[:db/retract e k]])
             [[:db/add e k remote-v*]])))
