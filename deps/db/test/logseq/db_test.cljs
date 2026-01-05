@@ -145,6 +145,6 @@
           target (db-test/find-page-by-title @conn "Bob")
           results (ldb/get-bidirectional-properties @conn (:db/id target))]
       (is (= 1 (count results)))
-      (is (= "Persons" (:title (first results))))
+      (is (= "People" (:title (first results))))
       (is (= ["Alice"]
              (map :block/title (:entities (first results))))))))
