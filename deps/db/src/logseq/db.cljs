@@ -743,18 +743,19 @@
            (reduce (fn [acc [class-ent entity]]
                      (add-entity acc class-ent entity))
                    {})
-           (map (fn [[class-id entities]]
-                  (let [class (d/entity db class-id)
-                        custom-title (when-let [custom (:logseq.property.class/title-plural class)]
-                                       (if (string? custom)
-                                         custom
-                                         (db-property/property-value-content custom)))
-                        title (if (string/blank? custom-title)
-                                (pluralize-class-title (:block/title class))
-                                custom-title)]
-                    {:title title
-                     :class (-> (into {} class)
-                                (assoc :db/id (:db/id class)))
-                     :entities (->> entities
-                                    (sort-by :block/created-at))})))
+           (keep (fn [[class-id entities]]
+                   (let [class (d/entity db class-id)]
+                     (when (true? (:logseq.property.class/enable-bidirectional? class))
+                       (let [custom-title (when-let [custom (:logseq.property.class/title-plural class)]
+                                            (if (string? custom)
+                                              custom
+                                              (db-property/property-value-content custom)))
+                             title (if (string/blank? custom-title)
+                                     (pluralize-class-title (:block/title class))
+                                     custom-title)]
+                         {:title title
+                          :class (-> (into {} class)
+                                     (assoc :db/id (:db/id class)))
+                          :entities (->> entities
+                                         (sort-by :block/created-at))})))))
            (sort-by (comp :block/created-at :class))))))

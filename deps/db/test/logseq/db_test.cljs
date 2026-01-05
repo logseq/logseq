@@ -109,3 +109,42 @@
          (ldb/transact! temp-conn [{:db/ident :logseq.class/Task
                                     :block/tags :logseq.class/Property}])
          (ldb/transact! temp-conn [[:db/retract :logseq.class/Task :block/tags :logseq.class/Property]]))))))
+
+(deftest get-bidirectional-properties
+  (testing "disabled by default"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:friend {:logseq.property/type :node
+                                       :build/property-classes [:Person]}}
+                 :classes {:Person {}
+                           :Project {}}
+                 :pages-and-blocks
+                 [{:page {:block/title "Alice"
+                          :build/tags [:Person]
+                          :build/properties {:friend [:build/page {:block/title "Bob"}]}}}
+                  {:page {:block/title "Bob"}}
+                  {:page {:block/title "Charlie"
+                          :build/tags [:Project]
+                          :build/properties {:friend [:build/page {:block/title "Bob"}]}}}]})
+          target (db-test/find-page-by-title @conn "Bob")]
+      (is (empty? (ldb/get-bidirectional-properties @conn (:db/id target))))))
+
+  (testing "enabled per class"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:friend {:logseq.property/type :node
+                                       :build/property-classes [:Person]}}
+                 :classes {:Person {:build/properties {:logseq.property.class/enable-bidirectional? true}}
+                           :Project {}}
+                 :pages-and-blocks
+                 [{:page {:block/title "Alice"
+                          :build/tags [:Person]
+                          :build/properties {:friend [:build/page {:block/title "Bob"}]}}}
+                  {:page {:block/title "Bob"}}
+                  {:page {:block/title "Charlie"
+                          :build/tags [:Project]
+                          :build/properties {:friend [:build/page {:block/title "Bob"}]}}}]})
+          target (db-test/find-page-by-title @conn "Bob")
+          results (ldb/get-bidirectional-properties @conn (:db/id target))]
+      (is (= 1 (count results)))
+      (is (= "Persons" (:title (first results))))
+      (is (= ["Alice"]
+             (map :block/title (:entities (first results))))))))
