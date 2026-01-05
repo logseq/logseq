@@ -1942,8 +1942,6 @@ Similar to re-frame subscriptions"
 (defn set-collapsed-block!
   ([block-id value] (set-collapsed-block! block-id value nil))
   ([block-id value container-id]
-   (when (nil? container-id)
-     (js/console.trace))
    (let [current-repo (get-current-repo)
          container-id (resolve-container-id container-id)]
      (set-state! [:ui/collapsed-blocks current-repo container-id block-id] value))))
