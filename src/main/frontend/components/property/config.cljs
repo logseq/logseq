@@ -337,7 +337,7 @@
                                        :button-opts {:title "Set Icon"}})
      [:strong {:on-click (fn [^js e]
                            (shui/popup-show! (.-target e)
-                                             (fn [] (choice-base-edit-form property block {}))
+                                             (fn [] (choice-base-edit-form property block owner-block))
                                              {:id :ls-base-edit-form
                                               :align "start"}))}
       value]
@@ -424,8 +424,6 @@
                                    (contains? classes (:db/id owner-block))
                                    true)))))
         excluded-ids (set (keep :db/id (:logseq.property/choice-exclusions owner-block)))
-        default-class-ids (when (ldb/class? owner-block)
-                            [(:db/id owner-block)])
         hidden-choices (filter (fn [block]
                                  (and (empty? (:logseq.property/choice-classes block))
                                       (contains? excluded-ids (:db/id block))))
@@ -507,7 +505,7 @@
                                                    (add-existing-values property values' opts)
                                                    (choice-base-edit-form property
                                                                           {:create? true}
-                                                                          {:default-class-ids default-class-ids}))))
+                                                                          owner-block))))
                                              {:id :ls-base-edit-form
                                               :align "start"}))))}}))]))
 
