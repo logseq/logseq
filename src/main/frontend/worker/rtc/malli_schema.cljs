@@ -24,53 +24,56 @@
    ])
 
 (def to-ws-op-schema
-  [:multi {:dispatch first :decode/string #(update % 0 keyword)}
-   [:update-kv-value
-    [:cat :keyword
-     [:map
-      [:db-ident :keyword]
-      [:value :string]]]]
-   [:rename-db-ident
-    [:cat :keyword
-     [:map
-      [:db-ident-or-block-uuid [:or :keyword :uuid]]
-      [:new-db-ident :keyword]]]]
-   [:move
-    [:cat :keyword
-     [:map
-      [:block-uuid :uuid]
-      [:pos block-pos-schema]]]]
-   [:remove
-    [:cat :keyword
-     [:map
-      [:block-uuids [:sequential :uuid]]]]]
-   [:update-page
-    [:cat :keyword
-     [:map
-      [:block-uuid :uuid]
-      [:db/ident {:optional true} :keyword]
-      [:page-name :string]
-      [:block/title :string]]]]
-   [:remove-page
-    [:cat :keyword
-     [:map
-      [:block-uuid :uuid]]]]
-   [:update
-    [:cat :keyword
-     [:map
-      [:block-uuid :uuid]
-      [:db/ident {:optional true} :keyword]
-      [:pos block-pos-schema]
-      [:av-coll [:sequential av-schema]]
-      [:card-one-attrs {:optional true} [:sequential :keyword]]]]]
-   [:update-schema
-    [:cat :keyword
-     [:map
-      [:block-uuid :uuid]
-      [:db/ident :keyword]
-      [:db/valueType :keyword]
-      [:db/cardinality {:optional true} :keyword]
-      [:db/index {:optional true} :boolean]]]]])
+  [:schema {:registry {::block-map
+                       [:map
+                        [:block-uuid :uuid]
+                        [:db/ident {:optional true} :keyword]
+                        [:pos block-pos-schema]
+                        [:av-coll [:sequential av-schema]]
+                        [:card-one-attrs {:optional true} [:sequential :keyword]]]}}
+   [:multi {:dispatch first :decode/string #(update % 0 keyword)}
+    [:update-kv-value
+     [:cat :keyword
+      [:map
+       [:db-ident :keyword]
+       [:value :string]]]]
+    [:rename-db-ident
+     [:cat :keyword
+      [:map
+       [:db-ident-or-block-uuid [:or :keyword :uuid]]
+       [:new-db-ident :keyword]]]]
+    [:add ;; new added block
+     [:cat :keyword ::block-map]]
+    [:move
+     [:cat :keyword
+      [:map
+       [:block-uuid :uuid]
+       [:pos block-pos-schema]]]]
+    [:remove
+     [:cat :keyword
+      [:map
+       [:block-uuids [:sequential :uuid]]]]]
+    [:update-page
+     [:cat :keyword
+      [:map
+       [:block-uuid :uuid]
+       [:db/ident {:optional true} :keyword]
+       [:page-name :string]
+       [:block/title :string]]]]
+    [:remove-page
+     [:cat :keyword
+      [:map
+       [:block-uuid :uuid]]]]
+    [:update
+     [:cat :keyword ::block-map]]
+    [:update-schema
+     [:cat :keyword
+      [:map
+       [:block-uuid :uuid]
+       [:db/ident :keyword]
+       [:db/valueType :keyword]
+       [:db/cardinality {:optional true} :keyword]
+       [:db/index {:optional true} :boolean]]]]]])
 
 (comment
   (def to-ws-ops-validator (m/validator [:sequential to-ws-op-schema])))
