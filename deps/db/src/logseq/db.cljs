@@ -9,6 +9,7 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.common.config :as common-config]
+            [logseq.common.plural :as common-plural]
             [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
             [logseq.db.common.delete-blocks :as delete-blocks] ;; Load entity extensions
@@ -678,26 +679,6 @@
 
 (def get-class-title-with-extends db-db/get-class-title-with-extends)
 
-(defn- pluralize-class-title
-  [title]
-  (let [title' (string/trim (or title ""))]
-    (if (string/blank? title')
-      title'
-      (let [lower (string/lower-case title')]
-        (cond
-          (or (string/ends-with? lower "s")
-              (string/ends-with? lower "x")
-              (string/ends-with? lower "z")
-              (string/ends-with? lower "ch")
-              (string/ends-with? lower "sh"))
-          (str title' "es")
-
-          (re-find #"[bcdfghjklmnpqrstvwxyz]y$" lower)
-          (str (subs title' 0 (dec (count title'))) "ies")
-
-          :else
-          (str title' "s"))))))
-
 (defn- bidirectional-property-attr?
   [db attr]
   (when (qualified-keyword? attr)
@@ -755,7 +736,7 @@
                                               custom
                                               (db-property/property-value-content custom)))
                              title (if (string/blank? custom-title)
-                                     (pluralize-class-title (:block/title class))
+                                     (common-plural/plural (:block/title class))
                                      custom-title)]
                          {:title title
                           :class (-> (into {} class)
