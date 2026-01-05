@@ -41,7 +41,7 @@
 (defonce library-page-name "Library")
 (defonce quick-add-page-name "Quick add")
 
-(defn local-asset?
+(defn local-relative-asset?
   [s]
   (and (string? s)
        (re-find (re-pattern (str "^[./]*" local-assets-dir)) s)))
@@ -50,6 +50,14 @@
   [s]
   (when (string? s)
     (string/starts-with? s asset-protocol)))
+
+(defn protocol-path?
+  [s]
+  (try
+    (let [url (js/URL. s)]
+      (some? (.-protocol url)))
+    (catch :default _
+      false)))
 
 (defn remove-asset-protocol
   [s]
@@ -83,7 +91,7 @@
 (defn text-formats
   []
   #{:json :org :md :yml :dat :asciidoc :rst :txt :markdown :adoc :html :js :ts :edn :clj :ml :rb :ex :erl :java :php :c :css
-    :excalidraw :tldr :sh})
+    :tldr :sh})
 
 (defn img-formats
   []

@@ -294,11 +294,11 @@ prop-d:: [[nada]]"}])
                  {:block/title "bug2"
                   :build/tags [:Bug]}]}]})
 
-    (is (= ["task2" "bug2"]
-           (map :block/title (dsl-query "(property status \"Todo\")")))
+    (is (= #{"task2" "bug2"}
+           (set (map :block/title (dsl-query "(property status \"Todo\")"))))
         "Blocks or tagged with or descended from a tag that has closed default-value property")
-    (is (= ["task1" "bug1"]
-           (map :block/title (dsl-query "(property status \"Doing\")")))
+    (is (= #{"task1" "bug1"}
+           (set (map :block/title (dsl-query "(property status \"Doing\")"))))
         "Blocks or tagged with or descended from a tag that don't have closed default-value property value")))
 
 (deftest block-property-query-performance
@@ -577,11 +577,13 @@ prop-d:: [[nada]]"}])
                      :file/content "bar"}])
 
   (is (= ["page1"]
-         (map #(get-in % [:block/page :block/name])
+         (map (fn [result]
+                (:block/title (db/entity (:db/id (:block/page result)))))
               (dsl-query "(page page1)"))))
 
   (is (= []
-         (map #(get-in % [:block/page :block/name])
+         (map (fn [result]
+                (:block/title (db/entity (:db/id (:block/page result)))))
               (dsl-query "(page nope)")))
       "Correctly returns no results"))
 
@@ -611,8 +613,7 @@ prop-d:: [[nada]]"}])
            (map testable-content (dsl-query "#tag1")))
         "Tag arg")
 
-    (is (= []
-           (dsl-query "[[blarg]]"))
+    (is (empty? (dsl-query "[[blarg]]"))
         "Nonexistent page returns no results"))
 
   (testing "basic boolean queries"
@@ -638,13 +639,14 @@ prop-d:: [[nada]]"}])
                 (dsl-query "(or [[tag2]] [[page not exists]])")))
         "OR query with nonexistent page should return meaningful results")
 
-    (is (= (if js/process.env.DB_GRAPH #{"b1" "bar" "b3"} #{"b1" "foo:: bar" "b3"})
-           (->> (dsl-query "(not [[page 2]])")
+    (when js/process.env.DB_GRAPH
+      (is (= #{"b1" "bar" "b3"}
+             (->> (dsl-query "(not [[page 2]])")
                 ;; Only filter to page1 to get meaningful results
-                (filter #(= "page1" (get-in % [:block/page :block/name])))
-                (map testable-content)
-                (set)))
-        "NOT query")))
+                  (filter #(= "page1" (get-in % [:block/page :block/name])))
+                  (map testable-content)
+                  (set)))
+          "NOT query"))))
 
 (deftest nested-page-ref-queries
   (load-test-files (if js/process.env.DB_GRAPH

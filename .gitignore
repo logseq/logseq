@@ -40,6 +40,7 @@ resources/electron.js
 .clj-kondo/rewrite-clj
 .clj-kondo/taoensso
 .clj-kondo/funcool
+.clj-kondo/com.lambdaisland
 /libs/dist/
 charlie/
 .vscode
@@ -66,9 +67,12 @@ packages/ui/.storybook/cljs
 deps/shui/.lsp
 deps/shui/.lsp-cache
 deps/shui/.clj-kondo
+deps/publish/worker/.wrangler
+deps/publish/worker/dist
+deps/publish/worker/.env*
+
 tx-log*
 clj-e2e/.wally
-clj-e2e/resources
 clj-e2e/e2e-dump
 .dir-locals.el
 .projectile

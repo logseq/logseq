@@ -2,36 +2,30 @@
   "Main ns for utility fns. This ns should be split up into more focused namespaces"
   #?(:clj (:refer-clojure :exclude [format]))
   #?(:cljs (:require-macros [frontend.util]))
-  #?(:cljs (:require
-            ["/frontend/selection" :as selection]
-            ["/frontend/utils" :as utils]
-            ["@capacitor/status-bar" :refer [^js StatusBar Style]]
-            ["@capacitor/core" :refer [Capacitor]]
-            ["@capacitor/clipboard" :as CapacitorClipboard]
-            ["grapheme-splitter" :as GraphemeSplitter]
-            ["sanitize-filename" :as sanitizeFilename]
-            ["check-password-strength" :refer [passwordStrength]]
-            ["path-complete-extname" :as pathCompleteExtname]
-            ["semver" :as semver]
-            [frontend.loader :refer [load]]
-            [cljs-bean.core :as bean]
-            [cljs-time.coerce :as tc]
-            [cljs-time.core :as t]
-            [clojure.pprint]
-            [dommy.core :as d]
-            [frontend.mobile.util :as mobile-util]
-            [logseq.common.util :as common-util]
-            [goog.dom :as gdom]
-            [goog.object :as gobj]
-            [goog.string :as gstring]
-            [goog.functions :as gfun]
-            [goog.userAgent]
-            [promesa.core :as p]
-            [rum.core :as rum]
-            [clojure.core.async :as async]
-            [frontend.pubsub :as pubsub]
-            [datascript.impl.entity :as de]
-            [logseq.common.config :as common-config]))
+  #?(:cljs (:require ["/frontend/selection" :as selection]
+                     ["/frontend/utils" :as utils]
+                     ["@capacitor/clipboard" :as CapacitorClipboard]
+                     ["@capacitor/core" :refer [Capacitor]]
+                     ["@capacitor/status-bar" :refer [^js StatusBar Style]]
+                     ["grapheme-splitter" :as GraphemeSplitter]
+                     ["path-complete-extname" :as pathCompleteExtname]
+                     ["semver" :as semver]
+                     [cljs-bean.core :as bean]
+                     [cljs-time.core :as t]
+                     [clojure.pprint]
+                     [datascript.impl.entity :as de]
+                     [dommy.core :as d]
+                     [frontend.loader :refer [load]]
+                     [frontend.mobile.util :as mobile-util]
+                     [goog.dom :as gdom]
+                     [goog.functions :as gfun]
+                     [goog.object :as gobj]
+                     [goog.string :as gstring]
+                     [goog.userAgent]
+                     [logseq.common.config :as common-config]
+                     [logseq.common.util :as common-util]
+                     [promesa.core :as p]
+                     [rum.core :as rum]))
   #?(:cljs (:import [goog.async Debouncer]))
   (:require
    [clojure.pprint]
@@ -77,7 +71,7 @@
        (when-not node-test?
          (safe-re-find #"Mobi" js/navigator.userAgent)))
      (def mobile? (memoize mobile*?))
-     (def capacitor-new? (memoize #(and js/window (gobj/get js/window "isCapacitorNew"))))))
+     (def capacitor? (memoize #(and js/window (gobj/get js/window "isCapacitorNew"))))))
 
 #?(:cljs
    (extend-protocol IPrintWithWriter
@@ -93,27 +87,20 @@
 #?(:cljs (defonce ^js node-path utils/nodePath))
 #?(:cljs (defonce ^js sem-ver semver))
 #?(:cljs (defonce ^js full-path-extname pathCompleteExtname))
-#?(:cljs
-   (defn mobile-page-scroll
-     ([] (some-> (js/document.querySelector ".app-silk-index-scroll-content") (.-parentNode)))
-     ([el] (if el
-             (some-> (or (.closest el ".app-silk-scroll-content")
-                         (.closest el ".app-silk-index-scroll-content")) (.-parentNode))
-             (mobile-page-scroll)))))
 
 #?(:cljs (defn app-scroll-container-node
            ([]
-            (if (capacitor-new?)
-              (mobile-page-scroll)
-              (gdom/getElement "main-content-container")))
+            (or
+             (gdom/getElement "main-content-container")
+             (gdom/getElement "app-main-home")))
            ([el]
-            (if (capacitor-new?)
-              (mobile-page-scroll el)
-              (if (some-> el (.closest "#main-content-container"))
-                (app-scroll-container-node)
-                (or
-                 (gdom/getElementByClass "sidebar-item-list")
-                 (app-scroll-container-node)))))))
+            (if (or
+                 (some-> el (.closest "#main-content-container"))
+                 (some-> el (.closest "#app-main-home")))
+              (app-scroll-container-node)
+              (or
+               (gdom/getElementByClass "sidebar-item-list")
+               (app-scroll-container-node))))))
 #?(:cljs (defonce el-visible-in-viewport? utils/elementIsVisibleInViewport))
 #?(:cljs (defonce convert-to-roman utils/convertToRoman))
 #?(:cljs (defonce convert-to-letters utils/convertToLetters))
@@ -123,24 +110,7 @@
 #?(:cljs (def string-join-path common-util/string-join-path))
 
 #?(:cljs
-   (do
-     (def uuid-string? common-util/uuid-string?)
-     (defn check-password-strength
-       {:malli/schema [:=> [:cat :string] [:maybe
-                                           [:map
-                                            [:contains [:sequential :string]]
-                                            [:length :int]
-                                            [:id :int]
-                                            [:value :string]]]]}
-       [input]
-       (when-let [^js ret (and (string? input)
-                               (not (string/blank? input))
-                               (passwordStrength input))]
-         (bean/->clj ret)))
-     (defn safe-sanitize-file-name
-       {:malli/schema [:=> [:cat :string] :string]}
-       [s]
-       (sanitizeFilename (str s)))))
+   (def uuid-string? common-util/uuid-string?))
 
 #?(:cljs
    (do
@@ -564,10 +534,6 @@
 #?(:cljs
    (def distinct-by-last-wins common-util/distinct-by-last-wins))
 
-(defn get-git-owner-and-repo
-  [repo-url]
-  (take-last 2 (string/split repo-url #"/")))
-
 (defn safe-lower-case
   [s]
   (if (string? s)
@@ -949,24 +915,6 @@
        (boolean (and (safe-re-find #"Chrome" user-agent)
                      (safe-re-find #"Google Inc" vendor))))))
 
-#?(:cljs
-   (defn indexeddb-check?
-     "Check if indexedDB support is available, reject if not"
-     []
-     (let [db-name "logseq-indexeddb-check"]
-       (if js/window.indexedDB
-         (js/Promise. (fn [resolve reject]
-                        (let [req (js/window.indexedDB.open db-name)]
-                          (set! (.-onerror req) reject)
-                          (set! (.-onsuccess req)
-                                (fn [_event]
-                                  (.close (.-result req))
-                                  (let [req (js/window.indexedDB.deleteDatabase db-name)]
-                                    (set! (.-onerror req) reject)
-                                    (set! (.-onsuccess req) (fn [_event]
-                                                              (resolve true)))))))))
-         (p/rejected "no indexeddb defined")))))
-
 (defonce mac? #?(:cljs goog.userAgent/MAC
                  :clj nil))
 
@@ -1024,13 +972,6 @@
                      (d/set-attr! :media "all"))]
            (d/append! parent-node link))))))
 
-(defn remove-common-preceding
-  [col1 col2]
-  (if (and (= (first col1) (first col2))
-           (seq col1))
-    (recur (rest col1) (rest col2))
-    [col1 col2]))
-
 ;; fs
 #?(:cljs
    (defn get-file-ext
@@ -1048,22 +989,6 @@
            dir (->> (butlast parts)
                     string-join-path)]
        [dir basename])))
-
-#?(:cljs
-   (defn get-relative-path
-     [current-file-path another-file-path]
-     (let [directories-f #(butlast (string/split % "/"))
-           parts-1 (directories-f current-file-path)
-           parts-2 (directories-f another-file-path)
-           [parts-1 parts-2] (remove-common-preceding parts-1 parts-2)
-           another-file-name (last (string/split another-file-path "/"))]
-       (->> (concat
-             (if (seq parts-1)
-               (repeat (count parts-1) "..")
-               ["."])
-             parts-2
-             [another-file-name])
-            string-join-path))))
 
 #?(:clj
    (defmacro profile
@@ -1099,22 +1024,6 @@
      "../e/f.org"))
 
 (defn keyname [key] (str (namespace key) "/" (name key)))
-
-;; FIXME: drain-chan was copied from frontend.worker-common.util due to shadow-cljs compile bug
-#?(:cljs
-   (defn drain-chan
-     "drop all stuffs in CH, and return all of them"
-     [ch]
-     (->> (repeatedly #(async/poll! ch))
-          (take-while identity))))
-
-#?(:cljs
-   (defn trace!
-     []
-     (js/console.trace)))
-
-#?(:cljs
-   (def remove-first common-util/remove-first))
 
 #?(:cljs
    (defn backward-kill-word
@@ -1389,13 +1298,44 @@
        (set! (.-src image) data-url))))
 
 #?(:cljs
-   (defn write-blob-to-clipboard
-     [blob]
-     (->> blob
-          (js-obj (.-type blob))
-          (js/ClipboardItem.)
-          (array)
-          (js/navigator.clipboard.write))))
+   (def native-clipboard (gobj/get CapacitorClipboard "Clipboard")))
+
+#?(:cljs
+   (do
+     ;; Helper: Blob -> data URL (returns a JS Promise)
+     (defn blob->data-url [blob]
+       (js/Promise.
+        (fn [resolve reject]
+          (let [reader (js/FileReader.)]
+            (set! (.-onload reader)
+                  (fn [_e]
+                    ;; result is a "data:<mime>;base64,..." string
+                    (resolve (.-result reader))))
+            (set! (.-onerror reader)
+                  (fn [_e]
+                    (reject (.-error reader))))
+            (.readAsDataURL reader blob)))))
+
+     (defn write-blob-to-clipboard [blob]
+       (if native-clipboard
+         ;; 1) Native (Capacitor) path – expects a data URL
+         (-> (blob->data-url blob)
+             (.then (fn [data-url]
+                        ;; Your Capacitor plugin signature: { image: <data-url> }
+                      (.write native-clipboard #js {:image data-url})))
+             (.then (fn []
+                      (js/console.log "Copied via native clipboard")))
+             (.catch (fn [err]
+                       (js/console.error "Native clipboard failed" err))))
+
+         ;; 2) Web Clipboard API path (desktop browsers etc.)
+         (let [item (js/ClipboardItem.
+                     (js-obj (.-type blob) blob))]
+           (-> (.write (.-clipboard js/navigator) (array item))
+               (.then (fn []
+                        (js/console.log "Copied via web clipboard")))
+               (.catch (fn [err]
+                         (js/console.error "Web clipboard failed" err)))))))))
 
 #?(:cljs
    (defn copy-image-to-clipboard
@@ -1425,24 +1365,6 @@
           (reset! last-mem ret)
           ret)
         @last-mem))))
-
-#?(:cljs
-   (do
-     (defn <app-wake-up-from-sleep-loop
-       "start a async/go-loop to check the app awake from sleep.
-Use (async/tap `pubsub/app-wake-up-from-sleep-mult`) to receive messages.
-Arg *stop: atom, reset to true to stop the loop"
-       [*stop]
-       (let [*last-activated-at (volatile! (tc/to-epoch (t/now)))]
-         (async/go-loop []
-           (if @*stop
-             (println :<app-wake-up-from-sleep-loop :stop)
-             (let [now-epoch (tc/to-epoch (t/now))]
-               (when (< @*last-activated-at (- now-epoch 10))
-                 (async/>! pubsub/app-wake-up-from-sleep-ch {:last-activated-at @*last-activated-at :now now-epoch}))
-               (vreset! *last-activated-at now-epoch)
-               (async/<! (async/timeout 5000))
-               (recur))))))))
 
 ;; from rum
 #?(:cljs
@@ -1477,16 +1399,6 @@ Arg *stop: atom, reset to true to stop the loop"
      [^js target]
      (when target
        (some-> target (.querySelector ".CodeMirror") (.-CodeMirror)))))
-
-#?(:cljs
-   (defn mobile-keep-keyboard-open
-     ([]
-      (mobile-keep-keyboard-open true))
-     ([schedule?]
-      (when (mobile?)
-        (let [f #(when-let [node (gdom/getElement "app-keep-keyboard-open-input")]
-                   (.focus node))]
-          (if schedule? (schedule f) (f)))))))
 
 #?(:cljs
    (defn rtc-test?

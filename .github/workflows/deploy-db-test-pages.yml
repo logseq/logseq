@@ -14,6 +14,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: e2e-success
+          path: .
+        continue-on-error: true
+
+      # FIXME: download not found for successful e2e
+      # - name: Check E2E success
+      #   run: |
+      #     if [ ! -f e2e-success.txt ]; then
+      #       echo "❌ E2E tests did not succeed — aborting release."
+      #       exit 1
+      #     fi
+
       - uses: actions/checkout@v4
 
       - name: Setup Java JDK

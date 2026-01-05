@@ -4,6 +4,7 @@
   (:require [babashka.cli :as cli]
             [babashka.fs :as fs]
             [babashka.process :refer [shell]]
+            [babashka.tasks :refer [clojure]]
             [clojure.core.async :as async]
             [clojure.data :as data]
             [clojure.edn :as edn]
@@ -25,6 +26,16 @@
   []
   (dev-lint/dev)
   (test "-e" "long" "-e" "fix-me"))
+
+(defn e2e-basic-test
+  "Run e2e basic tests. HTTP server should be available at localhost:3001"
+  [& _]
+  (clojure {:dir "clj-e2e"} "-X:dev-run-all-basic-test"))
+
+(defn e2e-rtc-extra-test
+  "Run e2e rtc extra tests. HTTP server should be available at localhost:3001"
+  [& _]
+  (clojure {:dir "clj-e2e"} "-X:dev-run-rtc-extra-test"))
 
 (defn gen-malli-kondo-config
   "Generate clj-kondo type-mismatch config from malli schema
@@ -98,5 +109,4 @@
     (doseq [file-graph file-graphs]
       (let [db-graph (fs/path parent-graph-dir (fs/file-name file-graph))]
         (println "Importing" (str db-graph) "...")
-        (apply shell "bb" "dev:db-import" file-graph db-graph import-options)
-        (shell "bb" "dev:validate-db" db-graph "-gHc")))))
+        (apply shell "bb" "dev:db-import" file-graph db-graph (concat import-options ["--validate"]))))))

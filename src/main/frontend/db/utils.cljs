@@ -36,10 +36,10 @@
                (str "Invalid entity eid: " (pr-str eid))))
      (let [eid (if (uuid? eid) [:block/uuid eid] eid)]
        (when-let [db (if (string? repo-or-db)
-                     ;; repo
+                       ;; repo
                        (let [repo (or repo-or-db (state/get-current-repo))]
                          (conn/get-db repo))
-                     ;; db
+                       ;; db
                        repo-or-db)]
          (d/entity db eid))))))
 
@@ -47,9 +47,7 @@
   "Replace `[[internal-id]]` with `[[page name]]`"
   [item eid]
   (if-let [db (conn/get-db)]
-    (if (entity-plus/db-based-graph? db)
-      (db-content/update-block-content db item eid)
-      item)
+    (db-content/update-block-content db item eid)
     item))
 
 (defn pull

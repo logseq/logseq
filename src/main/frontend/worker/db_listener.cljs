@@ -22,12 +22,12 @@
   (when repo (worker-state/set-db-latest-tx-time! repo))
   (when-not (:rtc-download-graph? tx-meta)
     (let [{:keys [from-disk?]} tx-meta
-          result (worker-pipeline/invoke-hooks repo conn tx-report (worker-state/get-context))
+          result (worker-pipeline/invoke-hooks conn tx-report (worker-state/get-context))
           tx-report' (:tx-report result)]
       (when result
         (let [data (merge
-                    {:request-id (:request-id tx-meta)
-                     :repo repo
+                    {:repo repo
+                     :request-id (:request-id tx-meta)
                      :tx-data (:tx-data tx-report')
                      :tx-meta tx-meta}
                     (dissoc result :tx-report))]
@@ -35,7 +35,7 @@
 
         (when-not from-disk?
           (p/do!
-         ;; Sync SQLite search
+           ;; Sync SQLite search
            (let [{:keys [blocks-to-remove-set blocks-to-add]} (search/sync-search-indice repo tx-report')]
              (when (seq blocks-to-remove-set)
                ((@thread-api/*thread-apis :thread-api/search-delete-blocks) repo blocks-to-remove-set))
@@ -52,22 +52,19 @@
 
 (defn- remove-old-embeddings-and-reset-new-updates!
   [conn tx-data tx-meta]
-  (when (ldb/db-based-graph? @conn)
-    (let [;; Remove old :logseq.property.embedding/hnsw-label-updated-at when importing a graph
-          remove-old-hnsw-tx-data (when (:import-db? tx-meta)
-                                    (->> (d/datoms @conn :avet :logseq.property.embedding/hnsw-label-updated-at)
-                                         (map (fn [d]
-                                                [:db/retract (:e d) :logseq.property.embedding/hnsw-label-updated-at]))))
+  (let [;; Remove old :logseq.property.embedding/hnsw-label-updated-at when importing a graph
+        remove-old-hnsw-tx-data (when (:import-db? tx-meta)
+                                  (->> (d/datoms @conn :avet :logseq.property.embedding/hnsw-label-updated-at)
+                                       (map (fn [d]
+                                              [:db/retract (:e d) :logseq.property.embedding/hnsw-label-updated-at]))))
           ;; Mark vector embedding
-          mark-embedding-tx-data (->> (keep (fn [datom] (when (and (= :block/title (:a datom)) (:added datom) (not (string/blank? (:v datom))))
-                                                          (:e datom))) tx-data)
+        mark-embedding-tx-data (->> (keep (fn [datom] (when (and (= :block/title (:a datom)) (:added datom) (not (string/blank? (:v datom))))
+                                                        (:e datom))) tx-data)
                                       ;; Mark block embedding to be computed
-                                      (map (fn [id] [:db/add id :logseq.property.embedding/hnsw-label-updated-at 0])))
-          tx-data (concat remove-old-hnsw-tx-data mark-embedding-tx-data)]
-      (when (seq tx-data)
-        (d/transact! conn tx-data
-                     {:skip-refresh? true
-                      :pipeline-replace? true})))))
+                                    (map (fn [id] [:db/add id :logseq.property.embedding/hnsw-label-updated-at 0])))
+        tx-data (concat remove-old-hnsw-tx-data mark-embedding-tx-data)]
+    (when (seq tx-data)
+      (ldb/transact! conn tx-data {:skip-validate-db? true}))))
 
 (defn listen-db-changes!
   [repo conn & {:keys [handler-keys]}]
@@ -90,39 +87,37 @@
                    (remove-old-embeddings-and-reset-new-updates! conn tx-data tx-meta)
 
                    (let [tx-meta (merge (batch-tx/get-batch-opts) tx-meta)
-                         pipeline-replace? (:pipeline-replace? tx-meta)
                          in-batch-tx-mode? (:batch-tx/batch-tx-mode? tx-meta)]
-                     (when-not pipeline-replace?
-                       (when in-batch-tx-mode?
-                         (batch-tx/set-batch-opts (dissoc tx-meta :pipeline-replace?)))
-                       (cond
-                         (and in-batch-tx-mode?
-                              (not (:batch-tx/exit? tx-meta)))
+                     (when in-batch-tx-mode?
+                       (batch-tx/set-batch-opts tx-meta))
+                     (cond
+                       (and in-batch-tx-mode?
+                            (not (:batch-tx/exit? tx-meta)))
                          ;; still in batch mode
-                         (vswap! *batch-all-txs into tx-data)
+                       (vswap! *batch-all-txs into tx-data)
 
-                         in-batch-tx-mode?
+                       in-batch-tx-mode?
                          ;; exit batch mode
-                         (when-let [tx-data (not-empty (get-batch-txs))]
-                           (vreset! *batch-all-txs [])
-                           (let [db-before (batch-tx/get-batch-db-before)
-                                 tx-meta (dissoc tx-meta :batch-tx/batch-tx-mode? :batch-tx/exit?)
-                                 tx-report (assoc tx-report
-                                                  :tx-data tx-data
-                                                  :db-before db-before
-                                                  :tx-meta tx-meta)
-                                 tx-report' (if sync-db-to-main-thread?
-                                              (sync-db-to-main-thread repo conn tx-report)
-                                              tx-report)
-                                 opt (assoc (additional-args (:tx-data tx-report')) :repo repo)]
-                             (doseq [[k handler-fn] handlers]
-                               (handler-fn k opt tx-report'))))
-
-                         (seq tx-data)
-                         ;; raw transact
-                         (let [tx-report' (if sync-db-to-main-thread?
+                       (when-let [tx-data (not-empty (get-batch-txs))]
+                         (vreset! *batch-all-txs [])
+                         (let [db-before (batch-tx/get-batch-db-before)
+                               tx-meta (dissoc tx-meta :batch-tx/batch-tx-mode? :batch-tx/exit?)
+                               tx-report (assoc tx-report
+                                                :tx-data tx-data
+                                                :db-before db-before
+                                                :tx-meta tx-meta)
+                               tx-report' (if sync-db-to-main-thread?
                                             (sync-db-to-main-thread repo conn tx-report)
                                             tx-report)
                                opt (assoc (additional-args (:tx-data tx-report')) :repo repo)]
                            (doseq [[k handler-fn] handlers]
-                             (handler-fn k opt tx-report')))))))))))
+                             (handler-fn k opt tx-report'))))
+
+                       (seq tx-data)
+                         ;; raw transact
+                       (let [tx-report' (if sync-db-to-main-thread?
+                                          (sync-db-to-main-thread repo conn tx-report)
+                                          tx-report)
+                             opt (assoc (additional-args (:tx-data tx-report')) :repo repo)]
+                         (doseq [[k handler-fn] handlers]
+                           (handler-fn k opt tx-report'))))))))))

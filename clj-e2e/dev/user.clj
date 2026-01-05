@@ -6,6 +6,7 @@
             [logseq.e2e.config :as config]
             [logseq.e2e.editor-basic-test]
             [logseq.e2e.fixtures :as fixtures]
+            [logseq.e2e.flashcards-basic-test]
             [logseq.e2e.graph :as graph]
             [logseq.e2e.keyboard :as k]
             [logseq.e2e.locator :as loc]
@@ -13,8 +14,10 @@
             [logseq.e2e.outliner-basic-test]
             [logseq.e2e.plugins-basic-test]
             [logseq.e2e.property-basic-test]
+            [logseq.e2e.property-scoped-choices-test]
             [logseq.e2e.reference-basic-test]
             [logseq.e2e.rtc-basic-test]
+            [logseq.e2e.rtc-extra-part2-test]
             [logseq.e2e.rtc-extra-test]
             [logseq.e2e.tag-basic-test]
             [logseq.e2e.util :as util]
@@ -43,6 +46,16 @@
   []
   (->> (future (run-tests 'logseq.e2e.property-basic-test))
        (swap! *futures assoc :property-test)))
+
+(defn run-flashcards-basic-test
+  []
+  (->> (future (run-tests 'logseq.e2e.flashcards-basic-test))
+       (swap! *futures assoc :flashcards-test)))
+
+(defn run-property-scoped-choices-test
+  []
+  (->> (future (run-tests 'logseq.e2e.property-scoped-choices-test))
+       (swap! *futures assoc :property-scoped-choices-test)))
 
 (defn run-outliner-test
   []
@@ -76,7 +89,13 @@
 
 (defn run-rtc-extra-test2
   [& _args]
-  (run-tests 'logseq.e2e.rtc-extra-test))
+  (run-tests 'logseq.e2e.rtc-extra-test)
+  (System/exit 0))
+
+(defn run-rtc-extra-part2-test2
+  [& _args]
+  (run-tests 'logseq.e2e.rtc-extra-part2-test)
+  (System/exit 0))
 
 (defn run-editor-basic-test
   []
@@ -89,7 +108,7 @@
        (swap! *futures assoc :tag-basic-test)))
 
 (defn run-all-basic-test
-  []
+  [& _]
   (run-tests 'logseq.e2e.editor-basic-test
              'logseq.e2e.commands-basic-test
              'logseq.e2e.multi-tabs-basic-test
@@ -98,7 +117,9 @@
              'logseq.e2e.plugins-basic-test
              'logseq.e2e.reference-basic-test
              'logseq.e2e.property-basic-test
-             'logseq.e2e.tag-basic-test))
+             'logseq.e2e.tag-basic-test
+             'logseq.e2e.flashcards-basic-test)
+  (System/exit 0))
 
 (defn start
   []

@@ -1,5 +1,9 @@
 [
 	{
+		"pkg": "@aparajita/capacitor-secure-storage",
+		"classpath": "com.aparajita.capacitor.securestorage.SecureStorage"
+	},
+	{
 		"pkg": "@capacitor-community/safe-area",
 		"classpath": "com.getcapacitor.community.safearea.SafeAreaPlugin"
 	},
@@ -22,6 +26,10 @@
 	{
 		"pkg": "@capacitor/device",
 		"classpath": "com.capacitorjs.plugins.device.DevicePlugin"
+	},
+	{
+		"pkg": "@capacitor/dialog",
+		"classpath": "com.capacitorjs.plugins.dialog.DialogPlugin"
 	},
 	{
 		"pkg": "@capacitor/filesystem",
@@ -50,6 +58,10 @@
 	{
 		"pkg": "@capacitor/status-bar",
 		"classpath": "com.capacitorjs.plugins.statusbar.StatusBarPlugin"
+	},
+	{
+		"pkg": "@capgo/capacitor-navigation-bar",
+		"classpath": "ee.forgr.capacitor_navigation_bar.NavigationBarPlugin"
 	},
 	{
 		"pkg": "send-intent",

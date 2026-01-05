@@ -11,6 +11,7 @@
             [electron.logger :as logger]
             [electron.utils :as utils]
             [electron.window :as window]
+            [logseq.cli.common.mcp.server :as cli-common-mcp-server]
             [promesa.core :as p]))
 
 (defonce ^:private *win (atom nil))
@@ -29,7 +30,8 @@
                   :host      (get-host)
                   :port      (get-port)
                   :tokens    (cfgs/get-item :server/tokens)
-                  :autostart (cfgs/get-item :server/autostart)}))
+                  :autostart (cfgs/get-item :server/autostart)
+                  :mcp-enabled? (cfgs/get-item :server/mcp-enabled?)}))
 
 (defn- set-status!
   ([status] (set-status! status nil))
@@ -108,7 +110,7 @@
       (-> (invoke-logseq-api! method (.-args body))
           (p/then #(do
                      ;; Responses with an :error key are unexpected failures from electron.listener
-                     (when-let [msg (aget % "error")]
+                     (when-let [msg (and % (aget % "error"))]
                        (.code rep 500)
                        (js/console.error "Unexpected API error:" msg))
                      (.send rep %)))
@@ -120,7 +122,7 @@
 
 (defn close!
   []
-  (when (and @*server (contains? #{:running :error} (:status @*state)))
+  (when (and @*server (contains? #{:running :error nil} (:status @*state)))
     (logger/debug "[server] closing ...")
     (set-status! :closing)
     (-> (.close @*server)
@@ -129,6 +131,19 @@
                   (set-status! :closed)))
         (p/catch (fn [^js e]
                    (set-status! :running e))))))
+
+(defn- initialize-mcp-routes [^js server]
+  (let [api-fn (fn api-fn [meth args]
+                 (if-let [meth' (resolve-real-api-method meth)]
+                   (invoke-logseq-api! meth' args)
+                   #js {:error (str "No method found for " (pr-str meth))}))
+        mcp-server (cli-common-mcp-server/create-mcp-api-server api-fn)]
+    (logger/debug "[server] MCP routes initialized")
+    (.post server "/mcp"
+           #(cli-common-mcp-server/handle-post-request mcp-server {:port (get-port)
+                                                                   :host (get-host)} %1 %2))
+    (.get server "/mcp" cli-common-mcp-server/handle-get-request)
+    (.delete server "/mcp" cli-common-mcp-server/handle-get-request)))
 
 (defn start!
   []
@@ -151,7 +166,9 @@
                                                  (string/replace-first "${HOST}" HOST)
                                                  (string/replace-first "${PORT}" PORT))]
                                     (doto rep (.type "text/html")
-                                              (.send html))))))
+                                          (.send html))))))
+              _ (when (:mcp-enabled? @*state)
+                  (initialize-mcp-routes s))
               ;; listen port
               _     (.listen s (bean/->js (select-keys @*state [:host :port])))]
         (reset! *server s)
@@ -167,7 +184,7 @@
     :start (when (contains? #{nil :closed :error} (:status @*state))
              (start!))
     :stop (close!)
-    :restart (start!)
+    :restart (p/do! (close!) (start!))
     :else :dune))
 
 (defn setup!

@@ -17,6 +17,8 @@
 
 (def arrow-up #(press "ArrowUp"))
 (def arrow-down #(press "ArrowDown"))
+(def arrow-left #(press "ArrowLeft"))
+(def arrow-right #(press "ArrowRight"))
 
 (def meta+shift+arrow-up #(press (str (if mac? "Meta" "Alt") "+Shift+ArrowUp")))
 (def meta+shift+arrow-down #(press (str (if mac? "Meta" "Alt") "+Shift+ArrowDown")))

@@ -2,28 +2,13 @@
   "Handle messages received from the webworkers"
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [frontend.undo-redo :as undo-redo]
             [lambdaisland.glogi :as log]
-            [logseq.db :as ldb]
-            [promesa.core :as p]))
+            [logseq.db :as ldb]))
 
 (defmulti handle identity)
-
-(defmethod handle :write-files [_ _worker data]
-  (let [{:keys [request-id page-id repo files]} data]
-    (->
-     (p/let [_ (file-handler/alter-files repo files {})]
-       (state/<invoke-db-worker :thread-api/page-file-saved request-id page-id))
-     (p/catch (fn [error]
-                (notification/show!
-                 [:div
-                  [:p "Write file failed, please copy the changes to other editors in case of losing data."]
-                  "Error: " (str (.-stack error))]
-                 :error)
-                (state/<invoke-db-worker :thread-api/page-file-saved request-id page-id))))))
 
 (defmethod handle :notification [_ _worker data]
   (apply notification/show! data))
@@ -56,7 +41,7 @@
 
 (defmethod handle :record-worker-client-id [_ _worker data]
   (when-let [client-id (:client-id data)]
-    (reset! state/*db-worker-client-id client-id)))
+    (state/set-db-worker-client-id! client-id)))
 
 (defmethod handle :capture-error [_ _worker data]
   (state/pub-event! [:capture-error data]))
@@ -88,7 +73,7 @@
                 ;; Log thrown exceptions from comlink
                 ;; https://github.com/GoogleChromeLabs/comlink/blob/dffe9050f63b1b39f30213adeb1dd4b9ed7d2594/src/comlink.ts#L223-L236
                 (if (and (= "HANDLER" (.-type data)) (= "throw" (.-name data)))
-                  (if (.-isError (.-value data))
+                  (if (.-isError (.-value ^js data))
                     (do (js/console.error "Unexpected webworker error:" (-> data bean/->clj (get-in [:value :value])))
                         (js/console.log (get-in (bean/->clj data) [:value :value :stack])))
                     (js/console.error "Unexpected webworker error :" data))

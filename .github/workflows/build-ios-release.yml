@@ -25,7 +25,7 @@ jobs:
           ref: ${{ github.event.inputs.git-ref }}
       - uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '26.0.0'
+          xcode-version: '26.0.1'
       - name: Show runtimes
         run: |
           xcrun simctl list > /dev/null
@@ -72,7 +72,7 @@ jobs:
       - name: Upload Sentry Sourcemaps (beta only)
         # if: ${{ github.repository == 'logseq/logseq' && (inputs.build-target == 'beta' || github.event.inputs.build-target == 'beta') }}
         run: |
-          curl -sL https://sentry.io/get-cli/ | bash
+          curl -sL https://sentry.io/get-cli/ | SENTRY_CLI_VERSION=2.58.4 bash
           release_name="logseq-ios@${{ steps.ref.outputs.version }}"
           sentry-cli releases new "${release_name}"
           sentry-cli releases files "${release_name}" upload-sourcemaps --ext map --ext js ./static/js --url-prefix '~/static/js'
@@ -96,6 +96,7 @@ jobs:
           SLACK_URL: ${{ secrets.SLACK_URL }}
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
           MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+          XCODE_XCARGS: "-allowProvisioningUpdates"
 
       - name: Save Static File
         uses: actions/upload-artifact@v4

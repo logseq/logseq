@@ -132,18 +132,33 @@
   (->> properties
        (keep (fn [[k v]]
                (when-let [property-map (build-property-map-for-pvalue-tx k v new-block properties-config all-idents)]
-                 [(let [pvalue-attrs (when (:build/property-value v)
-                                       (merge (:build/properties v)
-                                              {:block/tags (mapv #(hash-map :db/ident (get-ident all-idents %))
-                                                                 (:build/tags v))}
-                                              (select-keys v [:block/created-at :block/updated-at])))]
-                    (cond-> property-map
-                      (and (:build/property-value v) (seq pvalue-attrs))
-                      (assoc :property-value-properties pvalue-attrs)))
-                  (if (:build/property-value v)
-                    (or (:logseq.property/value v) (:block/title v))
-                    v)])))
-       (db-property-build/build-property-values-tx-m new-block)))
+                 [property-map
+                  (let [property (when (keyword? k) (get properties-config k))
+                        closed-value-id (when property (some (fn [item]
+                                                               (when (= (:value item) v)
+                                                                 (:uuid item)))
+                                                             (get property :build/closed-values)))
+                        build-pvalue
+                        (fn build-pvalue [v]
+                          {:attributes
+                           (when (:build/property-value v)
+                             (merge (:build/properties v)
+                                    {:block/tags (mapv #(hash-map :db/ident (get-ident all-idents %))
+                                                       (:build/tags v))}
+                                    (select-keys v [:block/created-at :block/updated-at :block/uuid])))
+                           :value
+                           (cond
+                             closed-value-id
+                             closed-value-id
+
+                             (:build/property-value v)
+                             (or (:logseq.property/value v) (:block/title v))
+
+                             :else
+                             v)})]
+                      (if (set? v) (set (map build-pvalue v)) (build-pvalue v)))])))
+       ((fn [x]
+          (db-property-build/build-property-values-tx-m new-block x {:pvalue-map? true})))))
 
 (defn- extract-basic-content-refs
   "Extracts basic refs from :block/title like `[[foo]]` or `[[UUID]]`. Can't
@@ -439,7 +454,7 @@
             "Class and property db-idents are unique and do not overlap")
     all-idents))
 
-(defn- build-page-tx [page all-idents page-uuids properties options]
+(defn- build-page-tx [page all-idents page-uuids properties {:keys [build-existing-tx?] :as options}]
   (let [page' (dissoc page :build/tags :build/properties :build/keep-uuid?)
         pvalue-tx-m (->property-value-tx-m page' (:build/properties page) properties all-idents)]
     (cond-> []
@@ -447,16 +462,18 @@
       (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))
       true
       (conj
-       (block-with-timestamps
-        (merge
-         page'
-         (when (seq (:build/properties page))
-           (->block-properties (merge (:build/properties page) (db-property-build/build-properties-with-ref-values pvalue-tx-m))
-                               page-uuids all-idents options))
-         (when-let [tag-idents (->> (:build/tags page) (map #(get-ident all-idents %)) seq)]
-           {:block/tags (cond-> (mapv #(hash-map :db/ident %) tag-idents)
-                          (empty? (set/intersection (set tag-idents) db-class/page-classes))
-                          (conj :logseq.class/Page))})))))))
+       (merge
+        (if build-existing-tx?
+          {:block/updated-at (common-util/time-ms)}
+          (select-keys (block-with-timestamps page') [:block/created-at :block/updated-at]))
+        page'
+        (when (seq (:build/properties page))
+          (->block-properties (merge (:build/properties page) (db-property-build/build-properties-with-ref-values pvalue-tx-m))
+                              page-uuids all-idents options))
+        (when-let [tag-idents (->> (:build/tags page) (map #(get-ident all-idents %)) seq)]
+          {:block/tags (cond-> (mapv #(hash-map :db/ident %) tag-idents)
+                         (empty? (set/intersection (set tag-idents) db-class/page-classes))
+                         (conj :logseq.class/Page))}))))))
 
 (defn- build-pages-and-blocks-tx
   [pages-and-blocks all-idents page-uuids {:keys [page-id-fn properties build-existing-tx?]
@@ -480,9 +497,10 @@
                           page-id-fn)]
         (into
          ;; page tx
-         (if build-existing-tx?'
+         (if (and build-existing-tx?' (not (:build/properties page')) (not (:build/tags page')))
+           ;; Minimally update existing unless there is useful data to update e.g. properties and tags
            [(select-keys page [:block/uuid :block/created-at :block/updated-at])]
-           (build-page-tx page' all-idents page-uuids properties options))
+           (build-page-tx page' all-idents page-uuids properties (assoc options :build-existing-tx? build-existing-tx?')))
          ;; blocks tx
          (reduce (fn [acc m]
                    (into acc
@@ -502,7 +520,9 @@
         [init-tx block-props-tx]
         (reduce (fn [[init-tx* block-props-tx*] m]
                   (let [props (select-keys m property-idents)]
-                    [(conj init-tx* (apply dissoc m property-idents))
+                    [(if (map? m)
+                       (conj init-tx* (apply dissoc m property-idents))
+                       init-tx*)
                      (if (seq props)
                        (conj block-props-tx*
                              (merge {:block/uuid (or (:block/uuid m)

@@ -104,8 +104,7 @@
    :block/marker :block/macros :block/type :block/format])
 
 (def retract-attributes
-  #{:block/refs
-    :block/tags
+  #{:block/tags
     :block/alias
     :block/marker
     :block/priority

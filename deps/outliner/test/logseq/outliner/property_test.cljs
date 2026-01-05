@@ -127,7 +127,9 @@
           ;; Use same args as outliner.op
           _ (outliner-property/set-block-property! conn [:block/uuid block-uuid] :user.property/num (:db/id property-value))]
       (is (= (:db/id property-value)
-             (:db/id (:user.property/num (db-test/find-block-by-content @conn "b2")))))))
+             (:db/id (:user.property/num (db-test/find-block-by-content @conn "b2")))))
+      (outliner-property/set-block-property! conn [:block/uuid block-uuid] :user.property/num (:db/id (d/entity @conn :logseq.property/empty-placeholder)))
+      (is (= 9 (:logseq.property/value (:user.property/num (d/entity @conn [:block/uuid block-uuid])))))))
 
   (testing "Update a :number value with existing value"
     (let [conn (db-test/create-conn-with-blocks
@@ -301,8 +303,8 @@
                [{:page {:block/title "page1"}
                  :blocks [{:block/title "b1" :user.property/default [:block/uuid used-closed-value-uuid]}]}]})
         _ (assert (:user.property/default (db-test/find-block-by-content @conn "b1")))
-        property-uuid (:block/uuid (d/entity @conn :user.property-default))
-        _ (outliner-property/delete-closed-value! conn property-uuid [:block/uuid closed-value-uuid])]
+        property-id (:db/id (d/entity @conn :user.property/default))
+        _ (outliner-property/delete-closed-value! conn property-id [:block/uuid closed-value-uuid])]
     (is (nil? (d/entity @conn [:block/uuid closed-value-uuid])))))
 
 (deftest class-add-property!

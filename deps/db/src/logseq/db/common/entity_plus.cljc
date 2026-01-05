@@ -53,26 +53,29 @@
   []
   (vreset! *seen-immutable-entities {}))
 
-(def ^:private *reset-cache-background-task-running?
-  ;; missionary is not compatible with nbb, so entity-memoized is disabled in nbb
-  (delay
-    ;; FIXME: Correct dependency ordering instead of resolve workaround
-    #?(:org.babashka/nbb false
-       :cljs (when-let [f (resolve 'frontend.common.missionary/background-task-running?)]
-               (f :logseq.db.common.entity-plus/reset-immutable-entities-cache!)))))
+(defonce *reset-cache-background-task-running-f (atom nil))
 
 (defn entity-memoized
   [db eid]
   (if (and (qualified-keyword? eid) (not (exists? js/process))) ; don't memoize on node
     (when-not (contains? nil-db-ident-entities eid) ;fast return nil
-      (if (and @*reset-cache-background-task-running?
-               (contains? immutable-db-ident-entities eid)) ;return cache entity if possible which isn't nil
-        (or (get @*seen-immutable-entities eid)
-            (let [r (d/entity db eid)]
-              (when r (vswap! *seen-immutable-entities assoc eid r))
-              r))
-        (d/entity db eid)))
+      (let [f @*reset-cache-background-task-running-f]
+        (if (and (fn? f)
+                 (f :logseq.db.common.entity-plus/reset-immutable-entities-cache!)
+                 (contains? immutable-db-ident-entities eid)) ;return cache entity if possible which isn't nil
+          (or (get @*seen-immutable-entities eid)
+              (let [r (d/entity db eid)]
+                (when r (vswap! *seen-immutable-entities assoc eid r))
+                r))
+          (d/entity db eid))))
     (d/entity db eid)))
+
+(defn unsafe->Entity
+  "Faster version of d/entity without checking e exists.
+  Only use it in performance-critical areas and where the existence of 'e' is confirmed."
+  [db e]
+  {:pre [(pos-int? e)]}
+  (Entity. db e (volatile! false) (volatile! {})))
 
 (defn db-based-graph?
   "Whether the current graph is db-only"
@@ -188,6 +191,30 @@
     (concat (seq v)
             (seq (.-kv this)))))
 
+(defn- entity-ish? [x]
+  (instance? Entity x))
+
+(defn- ->printable
+  "Convert values so printing won't recurse forever:
+   - Entity => {:db/id eid}
+   - coll of Entity => coll of {:db/id ...}
+   - maps are walked (rare but safe)"
+  [x]
+  (cond
+    (entity-ish? x)
+    {:db/id (.-eid ^Entity x)}
+
+    (map? x)
+    (reduce-kv (fn [m k v] (assoc m k (->printable v))) {} x)
+
+    (sequential? x)
+    (map ->printable x)
+
+    (set? x)
+    (into #{} (map ->printable x))
+
+    :else x))
+
 #?(:org.babashka/nbb
    nil
    :default
@@ -215,8 +242,11 @@
 
      IPrintWithWriter
      (-pr-writer [this writer opts]
-       (let [m (-> (into {} (cache-with-kv this))
-                   (assoc :db/id (.-eid this)))]
+       ;; Touch ONLY this entity, to materialize its forward attrs
+       (entity/touch this)
+       (let [m0 (into {} (cache-with-kv this))
+             m  (-> (reduce-kv (fn [m k v] (assoc m k (->printable v))) {} m0)
+                    (assoc :db/id (.-eid this)))]
          (-pr-writer m writer opts)))
 
      ICollection

@@ -12,14 +12,12 @@
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.order :as db-order]
-            [logseq.db.file-based.schema :as file-schema]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.db :as gp-db]
-            [logseq.graph-parser.property :as gp-property]
             [logseq.outliner.batch-tx :include-macros true :as batch-tx]
             [logseq.outliner.datascript :as ds]
             [logseq.outliner.pipeline :as outliner-pipeline]
@@ -27,8 +25,6 @@
             [logseq.outliner.validate :as outliner-validate]
             [malli.core :as m]
             [malli.util :as mu]))
-
-;; TODO: remove `repo` usage, use db to check `entity-plus/db-based-graph?`
 
 (def ^:private block-map
   (mu/optional-keys
@@ -207,7 +203,9 @@
                     db-graph?
                     ;; Remove tags changing case with `Escape`
                     ((fn [tags']
-                       (let [ref-titles (set (map :block/title (:block/refs m)))
+                       (let [ref-titles (->> (map :block/title (:block/refs m))
+                                             (remove nil?)
+                                             set)
                              lc-ref-titles (set (map string/lower-case ref-titles))]
                          (remove (fn [tag]
                                    (when-let [title (:block/title tag)]
@@ -237,60 +235,83 @@
           [:db/retract eid :block/tags :logseq.class/Page]])))
    tags))
 
-(defn- remove-inline-page-classes
+(defn- inline-tag-disallowed?
+  [db t]
+  ;; both disallowed tags and built-in pages shouldn't be used as inline tags
+  (let [disallowed-idents (into db-class/disallowed-inline-tags
+                                #{:logseq.property/query :logseq.property/asset})]
+    (and (map? t)
+         (or
+          (contains?
+           disallowed-idents
+           (or (:db/ident t)
+               (when-let [id (:block/uuid t)]
+                 (:db/ident (d/entity db [:block/uuid id])))))
+          (contains?
+           sqlite-create-graph/built-in-pages-names
+           (or (:block/title t)
+               (when-let [id (:block/uuid t)]
+                 (:block/title (d/entity db [:block/uuid id])))))))))
+
+(defn- remove-disallowed-inline-classes
   [db {:block/keys [tags] :as block}]
-  ;; Notice: should check `page?` for block from the current db
-  (if (ldb/page? (d/entity db (:db/id block)))
+  (if (or (ldb/page? (d/entity db (:db/id block))) (:block/name block))
     block
-    (let [page-class? (fn [t]
-                        (and (map? t) (contains? db-class/page-classes
-                                                 (or (:db/ident t)
-                                                     (when-let [id (:block/uuid t)]
-                                                       (:db/ident (d/entity db [:block/uuid id])))))))
-          page-classes (filter page-class? tags)]
-      (if (seq page-classes)
+    (let [tags' (cond
+                  (or (integer? tags)
+                      (qualified-keyword? tags)
+                      (and (vector? tags)
+                           (= :block/uuid (first tags))))
+                  [(d/entity db tags)]
+                  (every? qualified-keyword? tags)
+                  (map #(d/entity db %) tags)
+                  :else
+                  tags)
+          block (assoc block :block/tags tags')
+          disallowed-tag? (fn [tag] (inline-tag-disallowed? db tag))
+          disallowed-tags (filter disallowed-tag? tags')]
+      (if (and (seq disallowed-tags)
+               (some (fn [tag]
+                       (string/includes? (:block/title block) (str "#" (page-ref/->page-ref (:block/uuid tag)))))
+                     disallowed-tags))
         (-> block
             (update :block/tags
                     (fn [tags]
-                      (->> (remove page-class? tags)
+                      (->> (remove disallowed-tag? tags)
                            (remove nil?))))
             (update :block/refs
-                    (fn [refs] (->> (remove page-class? refs)
+                    (fn [refs] (->> (remove disallowed-tag? refs)
                                     (remove nil?))))
             (update :block/title (fn [title]
                                    (reduce
-                                    (fn [title page-class]
-                                      (-> (string/replace title (str "#" (page-ref/->page-ref (:block/uuid page-class))) "")
+                                    (fn [title tag]
+                                      (-> (string/replace title
+                                                          (str "#" (page-ref/->page-ref (:block/uuid tag)))
+                                                          (str "#" (:block/title tag)))
                                           string/trim))
                                     title
-                                    page-classes))))
+                                    disallowed-tags))))
         block))))
 
 (extend-type Entity
   otree/INode
-  (-save [this *txs-state db repo _date-formatter {:keys [retract-attributes? retract-attributes outliner-op]
-                                                   :or {retract-attributes? true}}]
+  (-save [this *txs-state db {:keys [retract-attributes? retract-attributes outliner-op]
+                              :or {retract-attributes? true}}]
     (assert (ds/outliner-txs-state? *txs-state)
             "db should be satisfied outliner-tx-state?")
-    (let [db-based? (sqlite-util/db-based-graph? repo)
-          data (cond->> this
-                 db-based?
-                 (remove-inline-page-classes db))
-          data' (cond->
-                 (if (de/entity? data)
-                   (assoc (.-kv ^js data) :db/id (:db/id data))
-                   data)
-                  db-based?
-                  (dissoc :block/properties))
+    (let [db-graph? (entity-plus/db-based-graph? db)
+          data (if (de/entity? this)
+                 (assoc (.-kv ^js this) :db/id (:db/id this))
+                 this)
+          data' (->> (dissoc data :block/properties)
+                     (remove-disallowed-inline-classes db))
           collapse-or-expand? (= outliner-op :collapse-expand-blocks)
           m* (cond->
               (-> data'
                   (dissoc :block/children :block/meta :block/unordered
                           :block.temp/ast-title :block.temp/ast-body :block/level :block.temp/load-status
                           :block.temp/has-children?)
-                  common-util/remove-nils
-
-                  (fix-tag-ids db {:db-graph? db-based?}))
+                  (fix-tag-ids db {:db-graph? db-graph?}))
                (not collapse-or-expand?)
                block-with-updated-at)
           db-id (:db/id this)
@@ -298,33 +319,27 @@
           eid (or db-id (when block-uuid [:block/uuid block-uuid]))
           block-entity (d/entity db eid)
           page? (ldb/page? block-entity)
-          m* (if (and db-based? (:block/title m*)
+          m* (if (and (:block/title m*)
                       (not (:logseq.property.node/display-type block-entity)))
                (update m* :block/title common-util/clear-markdown-heading)
                m*)
           block-title (:block/title m*)
           page-title-changed? (and page? block-title
                                    (not= block-title (:block/title block-entity)))
-          _ (when (and db-based? page? block-title)
+          _ (when (and page? block-title)
               (outliner-validate/validate-page-title-characters block-title {:node m*}))
-          m* (if (and db-based? page-title-changed?)
+          m* (if page-title-changed?
                (let [_ (outliner-validate/validate-page-title (:block/title m*) {:node m*})
                      page-name (common-util/page-name-sanity-lc (:block/title m*))]
                  (assoc m* :block/name page-name))
                m*)
-          _ (when (and db-based?
-                       ;; page or object changed?
-                       (or (ldb/page? block-entity) (ldb/object? block-entity))
-                       (:block/title m*)
-                       (not= (:block/title m*) (:block/title block-entity)))
+          _ (when (and ;; page or object changed?
+                   (or (ldb/page? block-entity) (ldb/object? block-entity))
+                   (:block/title m*)
+                   (not= (:block/title m*) (:block/title block-entity)))
               (outliner-validate/validate-block-title db (:block/title m*) block-entity))
-          _ (when (and db-based? (seq (:block/tags m*)))
-              ;; Add built-in? b/c it's not available here
-              (doseq [tag (map #(assoc % :logseq.property/built-in?
-                                       (contains? sqlite-create-graph/built-in-pages-names (:block/title %))) (:block/tags m*))]
-                (outliner-validate/validate-built-in-pages tag {:message "Built-in page can't be a tag"})))
           m (cond-> m*
-              db-based?
+              true
               (dissoc :block/format :block/pre-block? :block/priority :block/marker :block/properties-order))]
       ;; Ensure block UUID never changes
       (let [e (d/entity db db-id)]
@@ -339,9 +354,7 @@
         (when (or (and retract-attributes? (:block/title m))
                   (seq retract-attributes))
           (let [retract-attributes (concat
-                                    (if db-based?
-                                      db-schema/retract-attributes
-                                      file-schema/retract-attributes)
+                                    db-schema/retract-attributes
                                     retract-attributes)]
             (swap! *txs-state (fn [txs]
                                 (vec
@@ -355,7 +368,7 @@
           (update-page-when-save-block *txs-state block-entity m))
         ;; Remove orphaned refs from block
         (when (and (:block/title m) (not= (:block/title m) (:block/title block-entity)))
-          (remove-orphaned-refs-when-save db *txs-state block-entity m {:db-graph? db-based?})))
+          (remove-orphaned-refs-when-save db *txs-state block-entity m {:db-graph? db-graph?})))
 
       ;; handle others txs
       (let [other-tx (:db/other-tx m)]
@@ -365,16 +378,15 @@
         (swap! *txs-state conj
                (dissoc m :db/other-tx)))
 
-      (when (and db-based? (:block/tags block-entity) block-entity)
+      (when (and (:block/tags block-entity) block-entity)
         (let [;; delete tags when title changed
               tx-data (remove-tags-when-title-changed block-entity (:block/title m))]
           (when (seq tx-data)
             (swap! *txs-state (fn [txs] (concat txs tx-data))))))
 
-      (when db-based?
-        (let [tx-data (add-missing-tag-idents db (:block/tags m))]
-          (when (seq tx-data)
-            (swap! *txs-state (fn [txs] (concat txs tx-data))))))
+      (let [tx-data (add-missing-tag-idents db (:block/tags m))]
+        (when (seq tx-data)
+          (swap! *txs-state (fn [txs] (concat txs tx-data)))))
 
       this))
 
@@ -387,7 +399,7 @@
         (swap! *txs-state concat [[:db/retract (:db/id block) :block/parent]
                                   [:db/retract (:db/id block) :block/order]
                                   [:db/retract (:db/id block) :block/page]])
-        (let [ids (cons (:db/id this) (ldb/get-block-full-children-ids db block-id))
+        (let [ids (cons (:db/id this) (ldb/get-block-full-children-ids db (:db/id block)))
               txs (map (fn [id] [:db.fn/retractEntity id]) ids)
               page-tx (let [block (d/entity db [:block/uuid block-id])]
                         (when (:block/pre-block? block)
@@ -414,7 +426,7 @@
   (assoc-level-aux tree-vec children-key 1))
 
 (defn- assign-temp-id
-  [blocks replace-empty-target? target-block]
+  [db blocks replace-empty-target? target-block]
   (->> blocks
        (map-indexed
         (fn [idx block]
@@ -428,8 +440,23 @@
                 [(assoc block
                         :db/id (:db/id target-block)
                         :block/uuid (:block/uuid target-block))]
-                [[:db/retractEntity (:db/id target-block)] ; retract target-block first
-                 (assoc block :db/id db-id)])
+                (let [old-property-values (d/q
+                                           '[:find ?b ?a
+                                             :in $ ?v
+                                             :where
+                                             [?b ?a ?v]
+                                             [?v :block/uuid]]
+                                           db
+                                           (:db/id target-block))
+                      from-property (:logseq.property/created-from-property target-block)]
+                  (concat
+                   [[:db/retractEntity (:db/id target-block)] ; retract target-block first
+                    (cond-> (assoc block :db/id db-id)
+                      from-property
+                      (assoc :logseq.property/created-from-property (:db/id from-property)))]
+                   (map (fn [[b a]]
+                          [:db/add b a db-id])
+                        old-property-values))))
               [(assoc block :db/id db-id)]))))
        (apply concat)))
 
@@ -482,7 +509,7 @@
 
 (defn ^:api save-block
   "Save the `block`."
-  [repo db date-formatter block opts]
+  [db block opts]
   {:pre [(map? block)]}
   (let [*txs-state (atom [])
         block' (if (de/entity? block)
@@ -493,7 +520,7 @@
                      (let [ent (d/entity db eid)]
                        (assert (some? ent) "save-block entity not exists")
                        (merge ent block)))))]
-    (otree/-save block' *txs-state db repo date-formatter opts)
+    (otree/-save block' *txs-state db opts)
     {:tx-data @*txs-state}))
 
 (defn- get-right-siblings
@@ -506,28 +533,19 @@
            rest))))
 
 (defn- blocks-with-ordered-list-props
-  [repo blocks target-block sibling?]
+  [blocks target-block sibling?]
   (let [target-block (if sibling? target-block (when target-block (ldb/get-down target-block)))
         list-type-fn (fn [block]
-                       (if (sqlite-util/db-based-graph? repo)
-                         ;; Get raw id since insert-blocks doesn't auto-handle raw property values
-                         (:db/id (:logseq.property/order-list-type block))
-                         (get (:block/properties block) :logseq.order-list-type)))
-        db-based? (sqlite-util/db-based-graph? repo)]
+                       (:db/id (:logseq.property/order-list-type block)))]
     (if-let [list-type (and target-block (list-type-fn target-block))]
       (mapv
-       (fn [{:block/keys [title format] :as block}]
+       (fn [block]
          (let [list?' (and (some? (:block/uuid block))
                            (nil? (list-type-fn block)))]
            (cond-> block
              list?'
              ((fn [b]
-                (if db-based?
-                  (assoc b :logseq.property/order-list-type list-type)
-                  (update b :block/properties assoc :logseq.order-list-type list-type))))
-
-             (not db-based?)
-             (assoc :block/title (gp-property/insert-property repo format title :logseq.order-list-type list-type)))))
+                (assoc b :logseq.property/order-list-type list-type))))))
        blocks)
       blocks)))
 
@@ -578,13 +596,12 @@
 
 (defn- build-insert-blocks-tx
   [db target-block blocks uuids get-new-id {:keys [sibling? outliner-op replace-empty-target? insert-template? keep-block-order?]}]
-  (let [db-based? (entity-plus/db-based-graph? db)
-        block-ids (set (map :block/uuid blocks))
+  (let [block-ids (set (map :block/uuid blocks))
         target-page (get-target-block-page target-block sibling?)
         orders (get-block-orders blocks target-block sibling? keep-block-order?)]
     (map-indexed (fn [idx {:block/keys [parent] :as block}]
                    (when-let [uuid' (get uuids (:block/uuid block))]
-                     (let [block (if db-based? (remove-inline-page-classes db block) block)
+                     (let [block (remove-disallowed-inline-classes db block)
                            top-level? (= (:block/level block) 1)
                            parent (compute-block-parent block parent target-block top-level? sibling? get-new-id outliner-op replace-empty-target? idx)
 
@@ -657,7 +674,7 @@
      :id->new-uuid id->new-uuid}))
 
 (defn- get-target-block
-  [db blocks target-block {:keys [outliner-op bottom? top? indent? sibling? up?]}]
+  [db blocks target-block {:keys [outliner-op bottom? top? indent? sibling? up? replace-empty-target?]}]
   (when-let [block (if (:db/id target-block)
                      (d/entity db (:db/id target-block))
                      (when (:block/uuid target-block)
@@ -690,7 +707,7 @@
                                top?
                                [block false]
 
-                               bottom?
+                               (and bottom? (not replace-empty-target?))
                                (if-let [last-child (last (ldb/sort-by-order (:block/_parent block)))]
                                  [last-child true]
                                  [block false])
@@ -753,30 +770,35 @@
                                to replace it, it defaults to be `false`.
       `update-timestamps?`: whether to update `blocks` timestamps.
     ``"
-  [repo db blocks target-block {:keys [_sibling? keep-uuid? keep-block-order?
-                                       outliner-op replace-empty-target? update-timestamps?
-                                       insert-template?]
-                                :as opts
-                                :or {update-timestamps? true}}]
+  [db blocks target-block {:keys [_sibling? keep-uuid? keep-block-order?
+                                  outliner-op outliner-real-op replace-empty-target? update-timestamps?
+                                  insert-template?]
+                           :as opts
+                           :or {update-timestamps? true}}]
   {:pre [(seq blocks)
          (m/validate block-map-or-entity target-block)]}
-  (let [blocks (keep (fn [b]
-                       (if-let [eid (or (:db/id b)
-                                        (when-let [id (:block/uuid b)]
-                                          [:block/uuid id]))]
-                         (let [b' (if-let [e (if (de/entity? b) b (d/entity db eid))]
-                                    (merge
-                                     (into {} e)
-                                     {:db/id (:db/id e)
-                                      :block/title (or (:block/raw-title e) (:block/title e))}
+  (let [blocks (cond->>
+                (keep (fn [b]
+                        (if-let [eid (or (:db/id b)
+                                         (when-let [id (:block/uuid b)]
+                                           [:block/uuid id]))]
+                          (let [b' (if-let [e (if (de/entity? b) b (d/entity db eid))]
+                                     (merge
+                                      (into {} e)
+                                      {:db/id (:db/id e)
+                                       :block/title (or (:block/raw-title e) (:block/title e))}
+                                      b)
                                      b)
-                                    b)
-                               dissoc-keys (concat [:block/tx-id]
-                                                   (when (contains? #{:insert-template-blocks :paste} outliner-op)
-                                                     [:block/refs]))]
-                           (apply dissoc b' dissoc-keys))
-                         b))
-                     blocks)
+                                dissoc-keys (concat [:block/tx-id]
+                                                    (when (and (contains? #{:insert-template-blocks :paste} outliner-op)
+                                                               (not (contains? #{:paste-text} outliner-real-op)))
+                                                      [:block/refs]))]
+                            (apply dissoc b' dissoc-keys))
+                          b))
+                      blocks)
+                 (or (= outliner-op :paste)
+                     insert-template?)
+                 (remove ldb/asset?))
         [target-block sibling?] (get-target-block db blocks target-block opts)
         _ (assert (some? target-block) (str "Invalid target: " target-block))
         replace-empty-target? (if (and (some? replace-empty-target?)
@@ -786,16 +808,15 @@
                                 (and sibling?
                                      (:block/title target-block)
                                      (string/blank? (:block/title target-block))
-                                     (> (count blocks) 1)))
-        db-based? (sqlite-util/db-based-graph? repo)]
+                                     (> (count blocks) 1)))]
     (when (seq blocks)
       (let [blocks' (let [blocks' (blocks-with-level blocks)]
-                      (cond->> (blocks-with-ordered-list-props repo blocks' target-block sibling?)
+                      (cond->> (blocks-with-ordered-list-props blocks' target-block sibling?)
                         update-timestamps?
                         (mapv #(dissoc % :block/created-at :block/updated-at))
                         true
                         (mapv block-with-timestamps)
-                        db-based?
+                        true
                         (mapv #(-> % (dissoc :block/properties)))))
             insert-opts {:sibling? sibling?
                          :replace-empty-target? replace-empty-target?
@@ -810,7 +831,7 @@
                            :tx (vec blocks-tx)
                            :blocks (vec blocks)
                            :target-block target-block}))
-          (let [tx (assign-temp-id blocks-tx replace-empty-target? target-block)
+          (let [tx (assign-temp-id db blocks-tx replace-empty-target? target-block)
                 old-db-id-blocks (->> (filter :block.temp/use-old-db-id? tx)
                                       (map :block/uuid)
                                       (set))
@@ -913,10 +934,8 @@
   (let [target-block (d/entity db (:db/id target-block))
         block (d/entity db (:db/id block))]
     (if (or
-         ;; target-block doesn't have parent or moving non-page block to library
-         (and sibling? (or (nil? (:block/parent target-block))
-                           (and (not (ldb/page? block))
-                                (ldb/library? (:block/parent target-block)))))
+         ;; target-block doesn't have parent
+         (and sibling? (nil? (:block/parent target-block)))
          ;; move page to be a child of block
          (and (not sibling?)
               (not (ldb/page? target-block))
@@ -940,7 +959,7 @@
                        (not (ldb/page? block))
                        (assoc :block/page target-page))]
             children-page-tx (when (and not-same-page? (not (ldb/page? block)))
-                               (let [children-ids (ldb/get-block-full-children-ids db (:block/uuid block))]
+                               (let [children-ids (ldb/get-block-full-children-ids db (:db/id block))]
                                  (keep (fn [id]
                                          (let [child (d/entity db id)]
                                            (when-not (ldb/page? child)
@@ -959,8 +978,8 @@
 
 (defn- move-blocks
   "Move `blocks` to `target-block` as siblings or children."
-  [_repo conn blocks target-block {:keys [_sibling? _top? _bottom? _up? outliner-op _indent?]
-                                   :as opts}]
+  [conn blocks target-block {:keys [_sibling? _top? _bottom? _up? outliner-op _indent?]
+                             :as opts}]
   {:pre [(seq blocks)
          (m/validate block-map-or-entity target-block)]}
   (let [db @conn
@@ -999,7 +1018,7 @@
 
 (defn- move-blocks-up-down
   "Move blocks up/down."
-  [repo conn blocks up?]
+  [conn blocks up?]
   {:pre [(seq blocks) (boolean? up?)]}
   (let [db @conn
         top-level-blocks (filter-top-level-blocks db blocks)
@@ -1018,8 +1037,8 @@
                          (:db/id left-left))
                    (not (and (:logseq.property/created-from-property first-block)
                              (nil? first-block-left-sibling))))
-          (move-blocks repo conn top-level-blocks left-left (merge opts {:sibling? sibling?
-                                                                         :up? up?}))))
+          (move-blocks conn top-level-blocks left-left (merge opts {:sibling? sibling?
+                                                                    :up? up?}))))
 
       (let [last-top-block (last top-level-blocks)
             last-top-block-right (ldb/get-right-sibling last-top-block)
@@ -1032,12 +1051,12 @@
         (when (and right
                    (not (and (:logseq.property/created-from-property last-top-block)
                              (nil? last-top-block-right))))
-          (move-blocks repo conn blocks right (merge opts {:sibling? sibling?
-                                                           :up? up?})))))))
+          (move-blocks conn blocks right (merge opts {:sibling? sibling?
+                                                      :up? up?})))))))
 
 (defn- ^:large-vars/cleanup-todo indent-outdent-blocks
   "Indent or outdent `blocks`."
-  [repo conn blocks indent? & {:keys [parent-original logical-outdenting?]}]
+  [conn blocks indent? & {:keys [parent-original logical-outdenting?]}]
   {:pre [(seq blocks) (boolean? indent?)]}
   (let [db @conn
         top-level-blocks (filter-top-level-blocks db blocks)
@@ -1065,30 +1084,30 @@
               (when (seq blocks')
                 (if last-direct-child-id
                   (let [last-direct-child (d/entity db last-direct-child-id)
-                        result (move-blocks repo conn blocks' last-direct-child (merge opts {:sibling? true
-                                                                                             :indent? true}))
+                        result (move-blocks conn blocks' last-direct-child (merge opts {:sibling? true
+                                                                                        :indent? true}))
                         ;; expand `left` if it's collapsed
                         collapsed-tx (when (:block/collapsed? left)
                                        {:tx-data [{:db/id (:db/id left)
                                                    :block/collapsed? false}]})]
                     (concat-tx-fn result collapsed-tx))
-                  (move-blocks repo conn blocks' left (merge opts {:sibling? false
-                                                                   :indent? true}))))))
+                  (move-blocks conn blocks' left (merge opts {:sibling? false
+                                                              :indent? true}))))))
           (if parent-original
             (let [blocks' (take-while (fn [b]
                                         (not= (:db/id (:block/parent b))
                                               (:db/id (:block/parent parent))))
                                       top-level-blocks)]
-              (move-blocks repo conn blocks' parent-original (merge opts {:outliner-op :indent-outdent-blocks
-                                                                          :sibling? true
-                                                                          :indent? false})))
+              (move-blocks conn blocks' parent-original (merge opts {:outliner-op :indent-outdent-blocks
+                                                                     :sibling? true
+                                                                     :indent? false})))
 
             (when parent
               (let [blocks' (take-while (fn [b]
                                           (not= (:db/id (:block/parent b))
                                                 (:db/id (:block/parent parent))))
                                         top-level-blocks)
-                    result (move-blocks repo conn blocks' parent (merge opts {:sibling? true}))]
+                    result (move-blocks conn blocks' parent (merge opts {:sibling? true}))]
                 (if logical-outdenting?
                   result
                   ;; direct outdenting (default behavior)
@@ -1096,54 +1115,59 @@
                         right-siblings (get-right-siblings last-top-block)]
                     (if (seq right-siblings)
                       (if-let [last-direct-child-id (ldb/get-block-last-direct-child-id db (:db/id last-top-block))]
-                        (move-blocks repo conn right-siblings (d/entity db last-direct-child-id) (merge opts {:sibling? true}))
-                        (move-blocks repo conn right-siblings last-top-block (merge opts {:sibling? false})))
+                        (move-blocks conn right-siblings (d/entity db last-direct-child-id) (merge opts {:sibling? true}))
+                        (move-blocks conn right-siblings last-top-block (merge opts {:sibling? false})))
                       result)))))))))))
 
 ;;; ### write-operations have side-effects (do transactions) ;;;;;;;;;;;;;;;;
 
 (defn- op-transact!
-  [f & args]
+  [outliner-op f & args]
   {:pre [(fn? f)]}
   (try
     (let [result (apply f args)]
       (when result
-        (let [tx-meta (assoc (:tx-meta result) :skip-store? true)]
-          (ldb/transact! (second args) (:tx-data result) tx-meta)))
+        (let [tx-meta (assoc (:tx-meta result)
+                             :outliner-op outliner-op)]
+          (ldb/transact! (first args) (:tx-data result) tx-meta)))
       result)
     (catch :default e
+      (js/console.error e)
       (when-not (= "not-allowed-move-block-page" (ex-message e))
         (throw e)))))
 
-(let [f (fn [repo conn date-formatter block opts]
-          (save-block repo @conn date-formatter block opts))]
+(let [f (fn [conn block opts]
+          (save-block @conn block opts))]
   (defn save-block!
-    [repo conn date-formatter block & {:as opts}]
-    (op-transact! f repo conn date-formatter block opts)))
+    [conn block & {:as opts}]
+    (op-transact! :save-block f conn block opts)))
 
-(let [f (fn [repo conn blocks target-block opts]
-          (insert-blocks repo @conn blocks target-block opts))]
+(let [f (fn [conn blocks target-block opts]
+          (insert-blocks @conn blocks target-block opts))]
   (defn insert-blocks!
-    [repo conn blocks target-block opts]
-    (op-transact! f repo conn blocks target-block (assoc opts :outliner-op :insert-blocks))))
+    [conn blocks target-block opts]
+    (op-transact! :insert-blocks f conn blocks target-block
+                  (if (:outliner-op opts)
+                    opts
+                    (assoc opts :outliner-op :insert-blocks)))))
 
-(let [f (fn [_repo conn blocks opts]
-          (let [{:keys [tx-data]} (delete-blocks @conn blocks)]
-            {:tx-data tx-data
-             :tx-meta (select-keys opts [:outliner-op])}))]
+(let [f (fn [conn blocks _opts]
+          (delete-blocks @conn blocks))]
   (defn delete-blocks!
-    [repo conn _date-formatter blocks opts]
-    (op-transact! f repo conn blocks opts)))
+    [conn blocks opts]
+    (op-transact! :delete-blocks f conn blocks opts)))
 
 (defn move-blocks!
-  [repo conn blocks target-block opts]
-  (op-transact! move-blocks repo conn blocks target-block
-                (assoc opts :outliner-op :move-blocks)))
+  [conn blocks target-block opts]
+  (op-transact! :move-blocks move-blocks conn blocks target-block
+                (if (:outliner-op opts)
+                  opts
+                  (assoc opts :outliner-op :move-blocks))))
 
 (defn move-blocks-up-down!
-  [repo conn blocks up?]
-  (op-transact! move-blocks-up-down repo conn blocks up?))
+  [conn blocks up?]
+  (op-transact! :move-blocks-up-down move-blocks-up-down conn blocks up?))
 
 (defn indent-outdent-blocks!
-  [repo conn blocks indent? & {:as opts}]
-  (op-transact! indent-outdent-blocks repo conn blocks indent? opts))
+  [conn blocks indent? & {:as opts}]
+  (op-transact! :indent-outdent-blocks indent-outdent-blocks conn blocks indent? opts))

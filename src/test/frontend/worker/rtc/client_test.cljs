@@ -8,7 +8,7 @@
 
 (def empty-db (d/empty-db db-schema/schema))
 
-(deftest local-block-ops->remote-ops-test
+(deftest ^:large-vars/cleanup-todo local-block-ops->remote-ops-test
   (testing "user.class/yyy creation"
     (let [block-uuid (random-uuid)
           db (d/db-with empty-db [{:block/uuid block-uuid,
@@ -104,4 +104,30 @@
                            [:block/title (ldb/write-transit-str "xxx") 1 true]
                            [:block/type (ldb/write-transit-str "property") 1 true]
                            [:db/cardinality (ldb/write-transit-str :db.cardinality/one) 1 true]
-                           [:db/index (ldb/write-transit-str true) 1 true]]}]})))))))
+                           [:db/index (ldb/write-transit-str true) 1 true]]}]}))))))
+
+  (testing "user.class/zzz creation (add op)"
+    (let [block-uuid (random-uuid)
+          db (d/db-with empty-db [{:block/uuid block-uuid,
+                                   :block/updated-at 1720017595873,
+                                   :block/created-at 1720017595872,
+                                   :db/ident :user.class/zzz,
+                                   :block/type "class",
+                                   :block/name "zzz",
+                                   :block/title "zzz"}])]
+      (is (= {:add
+              {:block-uuid block-uuid
+               :db/ident :user.class/zzz
+               :pos [nil nil]
+               :av-coll
+               [[:block/name "[\"~#'\",\"zzz\"]" 1 true]
+                [:block/title "[\"~#'\",\"zzz\"]" 1 true]
+                [:block/type "[\"~#'\",\"class\"]" 1 true]]}}
+             (:remote-ops
+              (#'subject/local-block-ops->remote-ops
+               db
+               {:add [:add 1 {:block-uuid block-uuid
+                              :av-coll
+                              [[:block/name (ldb/write-transit-str "zzz") 1 true]
+                               [:block/title (ldb/write-transit-str "zzz") 1 true]
+                               [:block/type (ldb/write-transit-str "class") 1 true]]}]})))))))

@@ -2,13 +2,10 @@
   @apply fixed bottom-[100px] h-[70px] p-1.5 rounded-md overflow-y-hidden overflow-x-auto
   bg-[var(--ls-secondary-background-color)] z-[99999];
 
-  box-shadow:
-      /* bottom = shadow-lg */
-      0 10px 15px -3px rgba(0,0,0,0.1),
-      0 4px 6px -4px rgba(0,0,0,0.1),
-      /* top = lighter (closer to shadow-md) */
-      0 -6px 10px -4px rgba(0,0,0,0.08),
-      0 -2px 4px -4px rgba(0,0,0,0.08);
+  box-shadow: /* bottom = shadow-lg */ 0 10px 15px -3px rgba(0, 0, 0, 0.1),
+  0 4px 6px -4px rgba(0, 0, 0, 0.1),
+    /* top = lighter (closer to shadow-md) */ 0 -6px 10px -4px rgba(0, 0, 0, 0.08),
+  0 -2px 4px -4px rgba(0, 0, 0, 0.08);
 
   .action-bar-commands {
     @apply relative flex w-full;
@@ -25,36 +22,6 @@
     button {
       @apply flex-1 flex flex-col items-center justify-center py-3 px-1
       opacity-80 active:opacity-100;
-    }
-  }
-}
-
-#mobile-editor-toolbar {
-  @apply absolute bottom-0 left-0 w-full z-[99999] flex justify-between bg-background px-2;
-
-  will-change: transform;
-  transform: translateY(calc(-1 * var(--ls-native-kb-height, 0)));
-  opacity: var(--ls-native-toolbar-opacity, 0);
-  transition: transform 250ms ease-out, opacity 50ms ease-out;
-
-  button {
-    @apply flex items-center py-2 px-2;
-  }
-
-  .submenu {
-    @apply fixed left-0 bottom-0 w-full flex-row justify-evenly items-center z-10 bg-base-2
-    hidden overflow-x-auto overflow-y-hidden h-5 border;
-
-    &.show-submenu {
-      @apply flex;
-    }
-  }
-
-  .toolbar-commands {
-    @apply flex justify-between items-center overflow-y-hidden overflow-x-auto;
-
-    &::-webkit-scrollbar {
-      @apply h-1;
     }
   }
 }
@@ -143,4 +110,26 @@ html.is-zoomed-native-ios {
       @apply opacity-100;
     }
   }
+}
+
+.ui__dialog-content {
+    margin-top: 45px;
+}
+
+html.has-mobile-keyboard {
+  .ui__dialog-overlay {
+    &:has(.app-login-modal) {
+      @apply overflow-y-auto;
+    }
+  }
+
+  .ui__dialog-content {
+    &.app-login-modal {
+      margin-bottom: 460px;
+    }
+  }
+}
+
+.ui__dialog-content[label=user-login] {
+  @apply rounded-lg pb-3;
 }

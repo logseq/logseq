@@ -59,22 +59,14 @@
      (.onBeforeSendHeaders (.. session -defaultSession -webRequest)
                            (clj->js {:urls (array "*://*.youtube.com/*")})
                            (fn [^js details callback]
-                             (let [url            (.-url details)
-                                   urlObj         (js/URL. url)
-                                   origin         (.-origin urlObj)
-                                   requestHeaders (.-requestHeaders details)
-                                   no-cookie-headers (-> (bean/->clj requestHeaders)
-                                                         (dissoc :Cookie :cookie)
-                                                         bean/->js)]
-                               (if (and
-                                    (.hasOwnProperty requestHeaders "referer")
-                                    (not-empty (.-referer requestHeaders)))
-                                 (callback #js {:cancel         false
-                                                :requestHeaders no-cookie-headers})
-                                 (do
-                                   (set! (.-referer requestHeaders) origin)
-                                   (callback #js {:cancel         false
-                                                  :requestHeaders no-cookie-headers}))))))
+                             (let [requestHeaders (.-requestHeaders details)
+                                   headers (-> (bean/->clj requestHeaders)
+                                               (dissoc :Cookie :cookie)
+                                               (assoc :Referrer-Policy "strict-origin-when-cross-origin"
+                                                      :referer "https://logseq.com"))]
+                               (callback (bean/->js
+                                          {:cancel         false
+                                           :requestHeaders headers})))))
      (.loadURL win url)
      ;;(when dev? (.. win -webContents (openDevTools)))
      win)))
@@ -88,10 +80,8 @@
   (.destroy win))
 
 (defn close-handler
-  [^js win close-watcher-f e]
+  [^js win e]
   (.preventDefault e)
-  (when-let [dir (state/get-window-graph-path win)]
-    (close-watcher-f win dir))
   (state/close-window! win)
   (let [web-contents (. win -webContents)]
     (.send web-contents "persist-zoom-level" (.getZoomLevel web-contents)))
@@ -99,8 +89,8 @@
 
 (defn on-close-actions!
   ;; TODO merge with the on close in core
-  [^js win close-watcher-f] ;; injected watcher related func
-  (.on win "close" (fn [e] (close-handler win close-watcher-f e))))
+  [^js win]
+  (.on win "close" (fn [e] (close-handler win e))))
 
 (defn switch-to-window!
   [^js win]

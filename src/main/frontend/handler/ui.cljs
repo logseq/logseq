@@ -6,7 +6,6 @@
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.db.react :as react]
-            [frontend.fs :as fs]
             [frontend.handler.assets :as assets-handler]
             [frontend.loader :refer [load]]
             [frontend.state :as state]
@@ -14,7 +13,6 @@
             [frontend.util :as util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [logseq.common.path :as path]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -112,11 +110,8 @@
   []
   (when-let [style (or (state/get-custom-css-link)
                        (db-model/get-custom-css))]
-    (if (config/db-based-graph? (state/get-current-repo))
-      (p/let [style (assets-handler/<expand-assets-links-for-db-graph style)]
-        (util/add-style! style))
-      (some-> (config/expand-relative-assets-path style)
-              (util/add-style!)))))
+    (p/let [style (assets-handler/<expand-assets-links-for-db-graph style)]
+      (util/add-style! style))))
 
 (defn reset-custom-css!
   []
@@ -158,18 +153,9 @@
                     (ask-allow))
             (load href #(do (js/console.log "[custom js]" href) (execed))))
 
-          (config/db-based-graph? (state/get-current-repo))
-          (when-let [script (db/get-file href)]
-            (exec-fn script))
-
           :else
-          (let [repo-dir (config/get-repo-dir (state/get-current-repo))
-                rpath (path/relative-path repo-dir href)]
-            (p/let [exists? (fs/file-exists? repo-dir rpath)]
-              (when exists?
-                (util/p-handle
-                 (fs/read-file repo-dir rpath)
-                 exec-fn)))))))))
+          (when-let [script (db/get-file href)]
+            (exec-fn script)))))))
 
 (defn toggle-wide-mode!
   []

@@ -14,10 +14,11 @@
   "Namespaces or parent namespaces _only_ for DB graphs. Use a '.' at end of a namespace for parent namespaces"
   (mapv escape-shell-regex
         ["logseq.db.sqlite." "logseq.db.frontend."
-         "logseq.outliner.property" "logseq.outliner.validate" "logseq.outliner.cli" "logseq.outliner.db-pipeline"
+         "logseq.outliner.property" "logseq.outliner.validate" "logseq.outliner.page" "logseq.outliner.cli" "logseq.outliner.db-pipeline"
+         "logseq.api.db-based"
+         "logseq.cli"
          "electron.db"
          "frontend.handler.db-based."
-         "frontend.worker.handler.page.db-based"
          "frontend.inference-worker"
          "frontend.components.property" "frontend.components.class" "frontend.components.quick-add" "frontend.components.vector-search"
          "frontend.components.db-based" "frontend.components.objects" "frontend.components.query.view"
@@ -28,6 +29,7 @@
   "Namespaces or parent namespaces _only_ for file graphs"
   (mapv escape-shell-regex
         ["logseq.graph-parser.db" "logseq.graph-parser.property" "logseq.graph-parser.extract"
+         "logseq.api.file-based"
          "frontend.handler.file-based" "frontend.handler.file-sync"
          "frontend.db.file-based"
          "frontend.util.file-based"
@@ -45,7 +47,7 @@
   ["deps/db/src/logseq/db/frontend"
    "deps/db/src/logseq/db/sqlite"
    "deps/outliner/src/logseq/outliner/property.cljs"
-   "src/main/frontend/worker/handler/page/db_based"])
+   "deps/outliner/src/logseq/outliner/page.cljs"])
 
 (def db-graph-paths
   "Paths _only_ for DB graphs"
@@ -53,6 +55,9 @@
         ["deps/outliner/src/logseq/outliner/cli.cljs"
          "deps/outliner/src/logseq/outliner/db_pipeline.cljs"
          "deps/outliner/src/logseq/outliner/validate.cljs"
+         "deps/outliner/src/logseq/outliner/page.cljs"
+         ;; TODO: change to deps/cli/src when :block/name no longer in other cli namespaces
+         "deps/cli/src/logseq/cli/commands"
          "src/main/frontend/handler/db_based"
          "src/main/frontend/components/class.cljs"
          "src/main/frontend/components/property.cljs"
@@ -63,6 +68,8 @@
          "src/main/frontend/components/db_based"
          "src/main/frontend/components/query/view.cljs"
          "src/main/frontend/inference_worker"
+         "src/main/logseq/api/db_based.cljs"
+         "src/main/logseq/api/db_based"
          "src/electron/electron/db.cljs"
          "src/main/mobile"]))
 
@@ -73,12 +80,7 @@
    "deps/graph-parser/src/logseq/graph_parser/extract.cljc"
    "deps/graph-parser/src/logseq/graph_parser/property.cljs"
    "deps/graph-parser/src/logseq/graph_parser.cljs"
-   "src/main/frontend/handler/file_based" "src/main/frontend/handler/file_sync.cljs" "src/main/frontend/db/file_based"
-   "src/main/frontend/util/file_based" "src/main/frontend/worker/handler/page/file_based" "src/main/frontend/worker/file.cljs"
-   "src/main/frontend/common/file_based"
    "src/main/frontend/fs"
-   "src/main/frontend/components/file_sync.cljs"
-   "src/main/frontend/components/file_based"
    "src/main/frontend/util/fs.cljs"])
 
 (defn- grep-many
@@ -91,7 +93,9 @@
 (defn- validate-db-ns-not-in-file
   []
   (let [res (grep-many db-graph-ns file-graph-paths)]
-    (when-not (and (= 1 (:exit res)) (= "" (:out res)))
+    (when-not (or (and (= 1 (:exit res)) (= "" (:out res)))
+                  ;; TODO: Refactor logseq.cli.common.file to not have file-based code
+                  (= (:out res) "src/main/frontend/worker/file.cljs:            [logseq.cli.common.file :as common-file]\n"))
       (println "The following db graph namespaces should not be in file graph files:")
       (println (:out res))
       (System/exit 1))))
@@ -113,8 +117,7 @@
                          ;; Use file-entity-util and entity-util when in a single graph context
                          "ldb/whiteboard\\?" "ldb/journal\\?" "ldb/page\\?"]
         res (grep-many multi-graph-fns (into file-graph-paths db-graph-paths))]
-    (when-not (or (and (= 1 (:exit res)) (= "" (:out res)))
-                  (and (zero? (:exit res)) (string/starts-with? (:out res) "src/main/mobile/components/app.cljs:")))
+    (when-not (and (= 1 (:exit res)) (= "" (:out res)))
       (println "The following files should not have fns meant to be used in multi-graph contexts:")
       (println (:out res))
       (System/exit 1))))

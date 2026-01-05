@@ -15,6 +15,7 @@
   (state/set-state! :notification/contents nil))
 
 (defn show!
+  "status: :info/:warning/:error/:success"
   ([content]
    (show! content :info true nil 2000 nil))
   ([content status]

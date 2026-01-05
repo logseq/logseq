@@ -62,7 +62,8 @@
 
 (defn remove-q!
   [k]
-  (swap! *query-state dissoc k))
+  (when-not (and (= (second k) :custom) (nth k 3))                   ; today query
+    (swap! *query-state dissoc k)))
 
 (defn add-query-component!
   [k component]
@@ -99,7 +100,8 @@
         q (if util/node-test?
             (fn [query inputs] (apply d/q query db inputs))
             (fn [query inputs]
-              (let [q-f #(apply db-async-util/<q repo {:transact-db? false} (cons query inputs))]
+              (let [q-f #(apply db-async-util/<q repo {:transact-db? false
+                                                       :advanced-query? true} (cons query inputs))]
                 (if built-in-query?
                   ;; delay built-in-queries to not block journal rendering
                   (p/let [_ (p/delay 100)]

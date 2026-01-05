@@ -4,6 +4,7 @@
             [electron.ipc :as ipc]
             [frontend.components.block :as block]
             [frontend.components.cmdk.list-item :as list-item]
+            [frontend.components.icon :as icon-component]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -17,7 +18,6 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.utils :as shortcut-utils]
@@ -62,7 +62,7 @@
     (->>
      [(when current-page
         {:filter {:group :current-page} :text "Search only current page" :info "Add filter to search" :icon-theme :gray :icon "file"})
-      {:filter {:group :nodes} :text "Search only nodes" :info "Add filter to search" :icon-theme :gray :icon "letter-n"}
+      {:filter {:group :nodes} :text "Search only nodes" :info "Add filter to search" :icon-theme :gray :icon "point-filled"}
       {:filter {:group :commands} :text "Search only commands" :info "Add filter to search" :icon-theme :gray :icon "command"}
       {:filter {:group :files} :text "Search only files" :info "Add filter to search" :icon-theme :gray :icon "file"}
       {:filter {:group :themes} :text "Search only themes" :info "Add filter to search" :icon-theme :gray :icon "palette"}]
@@ -89,21 +89,24 @@
              (not config/publishing?))
     (let [class? (string/starts-with? q "#")
           class-name (get-class-from-input q)
-          class (ldb/class? (db/get-case-page class-name))]
+          class (let [class (db/get-case-page class-name)]
+                  (when (ldb/class? class)
+                    class))]
       (->> [{:text (cond
                      class "Configure tag"
                      class? "Create tag"
                      :else "Create page")
-             :icon "new-page"
+             :icon (if class "settings" "new-page")
              :icon-theme :gray
-             :info (if class?
-                     (let [class-name (get-class-from-input q)
-                           class (db/get-case-page class-name)]
-                       (if class
-                         (str "Configure #" class-name)
-                         (str "Create tag called '" class-name "'")))
+             :info (cond
+                     class
+                     (str "Configure #" class-name)
+                     class?
+                     (str "Create tag called '" class-name "'")
+                     :else
                      (str "Create page called '" q "'"))
-             :source-create :page}]
+             :source-create :page
+             :class class}]
            (remove nil?)))))
 
 ;; Take the results, decide how many items to show, and order the results appropriately
@@ -129,9 +132,8 @@
                        (when-not (string/blank? input)
                          (some (fn [block]
                                  (and
-                                  (:block/tags block)
-                                  (not (:block/parent block))
-                                  (= input (util/page-name-sanity-lc (:block/title block))))) blocks-result)))
+                                  (:page? block)
+                                  (= input (util/page-name-sanity-lc (:block.temp/original-title block))))) blocks-result)))
         include-slash? (or (string/includes? input "/")
                            (string/starts-with? input "/"))
         start-with-slash? (string/starts-with? input "/")
@@ -204,24 +206,12 @@
 ;; Each result group has it's own load-results function
 (defmulti load-results (fn [group _state] group))
 
-(defn get-page-icon
-  [entity]
-  (cond
-    (ldb/class? entity)
-    "hash"
-    (ldb/property? entity)
-    "letter-p"
-    (ldb/whiteboard? entity)
-    "writing"
-    :else
-    "file"))
-
 (defmethod load-results :initial [_ state]
   (when-let [db (db/get-db)]
     (let [!results (::results state)
           recent-pages (map (fn [block]
                               (let [text (block-handler/block-unique-title block)
-                                    icon (get-page-icon block)]
+                                    icon (icon-component/get-node-icon-cp block {:ignore-current-icon? true})]
                                 {:icon icon
                                  :icon-theme :gray
                                  :text text
@@ -259,7 +249,7 @@
       (->> search-results
            (map (fn [block]
                   (let [text (block-handler/block-unique-title block)
-                        icon (get-page-icon block)]
+                        icon (icon-component/get-node-icon-cp block {:ignore-current-icon? true})]
                     {:icon icon
                      :icon-theme :gray
                      :text text
@@ -271,31 +261,40 @@
   "Return hiccup of highlighted content FTS result"
   [content q]
   (when-not (or (string/blank? content) (string/blank? q))
-    [:div (loop [content content ;; why recur? because there might be multiple matches
-                 result  []]
-            (let [[b-cut hl-cut e-cut] (text-util/cut-by content "$pfts_2lqh>$" "$<pfts_2lqh$")
-                  hiccups-add [[:span b-cut]
-                               [:mark.p-0.rounded-none hl-cut]]
-                  hiccups-add (remove nil? hiccups-add)
-                  new-result (concat result hiccups-add)]
-              (if-not (string/blank? e-cut)
-                (recur e-cut new-result)
-                new-result)))]))
+    [:span (loop [content content ;; why recur? because there might be multiple matches
+                  result  []]
+             (let [[b-cut hl-cut e-cut] (text-util/cut-by content "$pfts_2lqh>$" "$<pfts_2lqh$")
+                   hiccups-add [[:span b-cut]
+                                [:mark.p-0.rounded-none hl-cut]]
+                   hiccups-add (remove nil? hiccups-add)
+                   new-result (concat result hiccups-add)]
+               (if-not (string/blank? e-cut)
+                 (recur e-cut new-result)
+                 new-result)))]))
 
 (defn page-item
-  [repo page]
-  (let [entity (db/entity [:block/uuid (:block/uuid page)])
+  [repo page input]
+  (let [entity (-> (or (db/entity [:block/uuid (:block/uuid page)]) page)
+                   (update :block/tags (fn [tags]
+                                         (map (fn [tag]
+                                                (if (integer? tag)
+                                                  (db/entity tag)
+                                                  tag)) tags))))
         source-page (or (model/get-alias-source-page repo (:db/id entity))
                         (:alias page))
-        icon (get-page-icon entity)
-        title (block-handler/block-unique-title (or entity page))
-        title' (if source-page (str title " -> alias: " (:block/title source-page)) title)]
+        icon (icon-component/get-node-icon-cp entity {:ignore-current-icon? true})
+        title (block-handler/block-unique-title entity
+                                                {:alias (:block/title source-page)})]
     (hash-map :icon icon
               :icon-theme :gray
-              :text title'
+              :text (if (string/includes? title "$pfts_2lqh>$") ; sqlite matched
+                      [:span {"data-testid" title}
+                       (highlight-content-query title input)]
+                      title)
               :header (when (:block/parent entity)
                         (block/breadcrumb {:disable-preview? true
-                                           :search? true} repo (:block/uuid page) {}))
+                                           :search? true} repo (:block/uuid page)
+                                          {:disabled? true}))
               :alias (:alias page)
               :source-block (or source-page page))))
 
@@ -303,12 +302,13 @@
   [repo block current-page input]
   (let [id (:block/uuid block)
         text (block-handler/block-unique-title block)
-        icon "letter-n"]
+        icon (icon-component/get-node-icon-cp block {:ignore-current-icon? true})]
     {:icon icon
      :icon-theme :gray
      :text (highlight-content-query text input)
      :header (block/breadcrumb {:disable-preview? true
-                                :search? true} repo id {})
+                                :search? true} repo id
+                               {:disabled? true})
      :current-page? (when-let [page-id (:block/page block)]
                       (= page-id (:block/uuid current-page)))
      :source-block block}))
@@ -329,7 +329,7 @@
             blocks (remove nil? blocks)
             items (keep (fn [block]
                           (if (:page? block)
-                            (page-item repo block)
+                            (page-item repo block @!input)
                             (block-item repo block current-page @!input))) blocks)]
       (if (= group :current-page)
         (let [items-on-current-page (filter :current-page? items)]
@@ -413,7 +413,7 @@
                              {:icon "node"
                               :icon-theme :gray
                               :text (highlight-content-query (:block/title block) @!input)
-                              :header (block/breadcrumb {:search? true} repo id {})
+                              :header (block/breadcrumb {:search? true} repo id {:disabled? true})
                               :current-page? true
                               :source-block block})) blocks)]
         (swap! !results update :current-page merge {:status :success :items items})))
@@ -476,8 +476,6 @@
         (when block
           (when-let [page (some-> block-id get-block-page)]
             (cond
-              (db/whiteboard-page? page)
-              (route-handler/redirect-to-page! (:block/uuid page) {:block-id block-id})
               (model/parents-collapsed? (state/get-current-repo) block-id)
               (route-handler/redirect-to-page! block-id)
               :else
@@ -562,18 +560,18 @@
   (let [item (state->highlighted-item state)
         !input (::input state)
         create-class? (string/starts-with? @!input "#")
-        create-whiteboard? (= :whiteboard (:source-create item))
         create-page? (= :page (:source-create item))
         class (when create-class? (get-class-from-input @!input))]
-    (p/let [result (cond
-                     create-class?
-                     (db-page-handler/<create-class! class
-                                                     {:redirect? false})
-                     create-whiteboard? (whiteboard-handler/<create-new-whiteboard-and-redirect! @!input)
-                     create-page? (page-handler/<create! @!input {:redirect? true}))]
-      (shui/dialog-close! :ls-dialog-cmdk)
-      (when (and create-class? result)
-        (state/pub-event! [:dialog/show-block result {:tag-dialog? true}])))))
+    (if (and (= (:text item) "Configure tag") (:class item))
+      (state/pub-event! [:dialog/show-block (:class item) {:tag-dialog? true}])
+      (p/let [result (cond
+                       create-class?
+                       (db-page-handler/<create-class! class
+                                                       {:redirect? false})
+                       create-page? (page-handler/<create! @!input {:redirect? true}))]
+        (shui/dialog-close! :ls-dialog-cmdk)
+        (when (and create-class? result)
+          (state/pub-event! [:dialog/show-block result {:tag-dialog? true}]))))))
 
 (defn- get-filter-user-input
   [input]
@@ -755,12 +753,10 @@
       (p/let [page (some-> (get-highlighted-page-uuid-or-name state) db/get-page)
               _ (db-async/<get-block repo (:block/uuid page) :children? false)
               page' (db/entity repo [:block/uuid (:block/uuid page)])
-              link (if (config/db-based-graph? repo)
-                     (some (fn [[k v]]
-                             (when (= :url (:logseq.property/type (db/entity repo k)))
-                               (:block/title v)))
-                           (:block/properties page'))
-                     (some #(re-find editor-handler/url-regex (val %)) (:block/properties page')))]
+              link (some (fn [[k v]]
+                           (when (= :url (:logseq.property/type (db/entity repo k)))
+                             (:block/title v)))
+                         (:block/properties page'))]
         (if link
           (js/window.open link)
           (notification/show! "No link found in this page's properties." :warning)))
@@ -885,7 +881,7 @@
       {:class "text-xl bg-transparent border-none w-full outline-none px-3 py-3"
        :auto-focus true
        :autoComplete "off"
-       :autoCapitalize false
+       :autoCapitalize "off"
        :placeholder (input-placeholder false)
        :ref #(when-not @input-ref (reset! input-ref %))
        :on-change debounced-on-change

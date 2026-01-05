@@ -14,7 +14,7 @@
 
 (def internal-built-in-property-types
   "Valid property types only for use by internal built-in-properties"
-  #{:keyword :map :coll :any :entity :class :page :property :string :raw-number})
+  #{:keyword :map :coll :any :entity :class :page :property :string :json :raw-number})
 
 (def user-built-in-property-types
   "Valid property types for users in order they appear in the UI"
@@ -99,12 +99,14 @@
 
 (defn- url-entity?
   "Empty string, url or macro url"
-  [db val {:keys [new-closed-value?]}]
+  [db val {:keys [new-closed-value? skip-strict-url-validate?]}]
   (if new-closed-value?
     (or (url? val) (macro-url? val))
     (when-let [ent (d/entity db val)]
       (let [title (:block/title ent)]
-        (or (string/blank? title) (url? title) (macro-url? title))))))
+        (if skip-strict-url-validate?
+          (string? title)
+          (or (string/blank? title) (url? title) (macro-url? title)))))))
 
 (defn- entity?
   [db id]
@@ -134,7 +136,8 @@
   (if new-closed-value?
     (string? s)
     (when-let [ent (d/entity db s)]
-      (string? (:block/title ent)))))
+      (and (string? (:block/title ent))
+           (some? (:block/page ent))))))
 
 (defn- node-entity?
   [db val]
@@ -147,33 +150,17 @@
     (and (some? (:block/title ent))
          (entity-util/journal? ent))))
 
-(def built-in-validation-schemas
-  "Map of types to malli validation schemas that validate a property value for that type"
-  {:default  [:fn
-              {:error/message "should be a text block"}
-              text-entity?]
-   :number   [:fn
-              {:error/message "should be a number"}
-              number-entity?]
-   :date     [:fn
-              {:error/message "should be a journal date"}
-              date?]
-   :datetime [:fn
-              {:error/message "should be a datetime"}
-              number?]
-   :checkbox boolean?
-   :url      [:fn
-              {:error/message "should be a URL"}
-              url-entity?]
-   :node   [:fn
-            {:error/message "should be a page/block with tags"}
-            node-entity?]
-
-   ;; Internal usage
-   ;; ==============
-
-   :string   string?
-   :raw-number number?
+;; Internal usage
+(def internal-validation-schemas
+  {:string   [:fn
+              {:error/message "should be a string"}
+              string?]
+   :json     [:fn
+              {:error/message "should be JSON string"}
+              string?]
+   :raw-number [:fn
+                {:error/message "should be a raw number"}
+                number?]
    :entity   [:fn
               {:error/message "should be an Entity"}
               entity?]
@@ -186,11 +173,43 @@
    :page     [:fn
               {:error/message "should be a Page"}
               page-entity?]
-   :keyword  keyword?
-   :map      map?
+   :keyword  [:fn
+              {:error/message "should be a Clojure keyword"}
+              keyword?]
+   :map      [:fn
+              {:error/message "should be a Clojure map"}
+              map?]
    ;; coll elements are ordered as it's saved as a vec
-   :coll     coll?
+   :coll     [:fn
+              {:error/message "should be a collection"}
+              coll?]
    :any      some?})
+
+(def built-in-validation-schemas
+  "Map of types to malli validation schemas that validate a property value for that type"
+  (into
+   {:default  [:fn
+               {:error/message "should be a text block"}
+               text-entity?]
+    :number   [:fn
+               {:error/message "should be a number"}
+               number-entity?]
+    :date     [:fn
+               {:error/message "should be a journal date"}
+               date?]
+    :datetime [:fn
+               {:error/message "should be a datetime"}
+               number?]
+    :checkbox [:fn
+               {:error/message "should be a boolean"}
+               boolean?]
+    :url      [:fn
+               {:error/message "should be a URL"}
+               url-entity?]
+    :node   [:fn
+             {:error/message "should be a node with a title"}
+             node-entity?]}
+   internal-validation-schemas))
 
 (assert (= (set (keys built-in-validation-schemas))
            (into internal-built-in-property-types

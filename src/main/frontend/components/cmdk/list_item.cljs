@@ -2,6 +2,8 @@
   (:require
    ["remove-accents" :as remove-accents]
    [clojure.string :as string]
+   [frontend.components.icon :as icon-component]
+   [frontend.handler.block :as block-handler]
    [goog.string :as gstring]
    [logseq.shui.hooks :as hooks]
    [logseq.shui.ui :as shui]
@@ -48,9 +50,9 @@
                              segs))
           [:span normal-text])))))
 
-(rum/defc root [{:keys [group icon icon-theme query text info shortcut value-label value
-                        title highlighted on-highlight on-highlight-dep header on-click hls-page?
-                        hoverable compact rounded on-mouse-enter component-opts source-page] :as _props
+(rum/defc root [{:keys [icon icon-theme query text info shortcut value-label value
+                        title highlighted on-highlight on-highlight-dep header on-click
+                        hoverable compact rounded on-mouse-enter component-opts source-block] :as _props
                  :or {hoverable true rounded true}}
                 {:keys [app-config]}]
   (let [ref (hooks/create-ref)
@@ -92,18 +94,16 @@
                                         (if highlighted "bg-accent-07-alpha" "bg-gray-05")
                                         " dark:text-white")
                  (= icon-theme :gray) (str " bg-gray-05 dark:text-white"))}
-       (shui/tabler-icon icon {:size "14" :class ""})]
+       (if (string? icon)
+         (shui/tabler-icon icon {:size "14" :class ""})
+         icon)]
       [:div.flex.flex-1.flex-col
        (when title
          [:div.text-sm.pb-2.font-bold.text-gray-11 (highlight-query title)])
        [:div {:class "text-sm font-medium text-gray-12"}
-        (if (and (= group :pages) (not= text source-page))  ;; alias
-          [:div.flex.flex-row.items-center.gap-2
-           (highlight-query text)
-           (if-not hls-page?
-             [:<> [:div.opacity-50.font-normal "alias of"] source-page]
-             [:div.opacity-50.font-normal.text-xs " — Highlights page"])]
-          (highlight-query text))
+        (block-handler/block-title-with-icon source-block
+                                             (highlight-query text)
+                                             icon-component/icon)
         (when info
           [:span.text-xs.text-gray-11 " — " (highlight-query info)])]]
       (when (or value-label value)

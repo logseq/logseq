@@ -3,16 +3,16 @@
   (:require ["@capacitor/app" :refer [^js App]]
             ["@capacitor/keyboard" :refer [^js Keyboard]]
             ["@capacitor/network" :refer [^js Network]]
+            [clojure.string :as string]
             [frontend.handler.editor :as editor-handler]
-            [frontend.mobile.deeplink :as deeplink]
             [frontend.mobile.flows :as mobile-flows]
             [frontend.mobile.intent :as intent]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
-            [logseq.shui.dialog.core :as shui-dialog]
-            [mobile.components.ui :as cc-ui]
+            [mobile.bottom-tabs :as bottom-tabs]
+            [mobile.deeplink :as deeplink]
             [mobile.state :as mobile-state]
             [promesa.core :as p]))
 
@@ -22,80 +22,66 @@
 (def *last-shared-url (atom nil))
 (def *last-shared-seconds (atom 0))
 
-(defn- ios-init
+(defn- handle-incoming-url!
+  [url]
+  (p/then
+   state/app-ready-promise
+   (fn []
+     (when (and url
+                (or
+                 (string/starts-with? url "https://logseq.com/mobile/")
+                 (string/starts-with? url "logseq://mobile/")
+                 (not (and (= @*last-shared-url url)
+                           (<= (- (.getSeconds (js/Date.)) @*last-shared-seconds) 1)))))
+       (reset! *last-shared-url url)
+       (reset! *last-shared-seconds (.getSeconds (js/Date.)))
+       (deeplink/deeplink url)))))
+
+(defn- ios-init!
   "Initialize iOS-specified event listeners"
   []
-  (mobile-util/check-ios-zoomed-display))
-
-(defn- android-init
-  "Initialize Android-specified event listeners"
-  []
-  (.addListener App "backButton"
-                (fn []
-                  (when (false?
-                         (cond
-                           ;; lightbox
-                           (js/document.querySelector ".pswp")
-                           (some-> js/window.photoLightbox (.destroy))
-
-                           (shui-dialog/has-modal?)
-                           (shui-dialog/close!)
-
-                           (not-empty @mobile-state/*popup-data)
-                           (mobile-state/set-popup! nil)
-
-                           (not-empty (state/get-selection-blocks))
-                           (editor-handler/clear-selection!)
-
-                           (seq @mobile-state/*modal-blocks)
-                           (mobile-state/close-block-modal!)
-
-                           ;; TODO: move ui-related code to mobile events
-                           (not-empty (cc-ui/get-modal))
-                           (cc-ui/close-modal!)
-
-                           (state/editing?)
-                           (editor-handler/escape-editing)
-
-                           :else false))
-                    (prn "TODO: handle back button in Android")))))
+  (mobile-util/check-ios-zoomed-display)
+  (mobile-util/sync-ios-content-size!))
 
 (defn- app-state-change-handler
   "NOTE: don't add more logic in this listener, use mobile-flows instead"
   [^js state]
-  (println :debug :app-state-change-handler state (js/Date.))
+  (log/info :app-state-change-handler state
+            :app-active? (.-isActive state)
+            :worker-client-id @state/*db-worker-client-id)
   (when (state/get-current-repo)
     (let [is-active? (.-isActive state)]
       (if (not is-active?)
         (editor-handler/save-current-block!)
         ;; check whether db-worker is available
-        (when @state/*db-worker-client-id
-          (->
-           (p/timeout
-            (p/let [{:keys [available?]} (state/<invoke-db-worker :thread-api/check-worker-status (state/get-current-repo))]
-              (when-not available?
-                (js/window.location.reload)))
-            500)
-           (p/catch (fn [error]
-                      (js/console.error error)
-                      (js/window.location.reload))))))))
+        (when-let [client-id @state/*db-worker-client-id]
+          (when @state/*db-worker
+            (js/navigator.locks.request client-id #js {:mode "exclusive"
+                                                       :ifAvailable true}
+                                        (fn [lock]
+                                          (when lock
+                                            ;; lock acquired, meaning the worker has terminated
+                                            (js/window.location.reload)))))))))
   (reset! mobile-flows/*mobile-app-state (.-isActive state)))
 
-(defn- general-init
+(defn- general-init!
   "Initialize event listeners used by both iOS and Android"
   []
   (.addListener App "appUrlOpen"
                 (fn [^js data]
                   (log/info ::app-url-open data)
-                  (p/then
-                   state/app-ready-promise
-                   (fn []
-                     (when-let [url (.-url data)]
-                       (when-not (and (= @*last-shared-url url)
-                                      (<= (- (.getSeconds (js/Date.)) @*last-shared-seconds) 1))
-                         (reset! *last-shared-url url)
-                         (reset! *last-shared-seconds (.getSeconds (js/Date.)))
-                         (deeplink/deeplink url)))))))
+                  (when-let [url (.-url data)]
+                    (handle-incoming-url! url))))
+
+  (-> (.getLaunchUrl App)
+      (p/then (fn [^js data]
+                (when-let [url (.-url data)]
+                  (log/info ::launch-url data)
+                  (reset! mobile-state/*app-launch-url url)
+                  (when (= url "logseq://mobile/go/quick-add")
+                    (mobile-state/set-tab! "capture")
+                    (js/setTimeout #(bottom-tabs/select! "capture") 2000))
+                  (handle-incoming-url! url)))))
 
   (.addListener Keyboard "keyboardWillShow"
                 (fn [^js info]
@@ -120,14 +106,11 @@
 
   (reset! mobile-flows/*network Network)
 
-  (when (mobile-util/native-android?)
-    (android-init))
-
   (when (mobile-util/native-ios?)
-    (ios-init))
+    (ios-init!))
 
   (when (mobile-util/native-platform?)
-    (general-init)))
+    (general-init!)))
 
 (defn keyboard-hide
   []
@@ -135,5 +118,6 @@
 
 (comment
   (defn keyboard-show
+    "Notice, iOS is not supported"
     []
     (.show Keyboard)))

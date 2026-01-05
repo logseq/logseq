@@ -1,0 +1,54 @@
+name: Build and Sync Plugin Docs
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+
+jobs:
+  build-and-sync-docs:
+    runs-on: ubuntu-latest
+    # Only run on manual trigger or when the commit message starts with "chore(libs): bump version"
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.head_commit.message, 'chore(libs):bump version')
+
+    steps:
+      - name: Checkout logseq repository
+        uses: actions/checkout@v4
+        with:
+          path: logseq
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'yarn'
+          cache-dependency-path: logseq/yarn.lock
+
+      - name: Install dependencies
+        working-directory: logseq/libs
+        run: yarn install --frozen-lockfile
+
+      - name: Build documentation
+        working-directory: logseq/libs
+        run: yarn build:docs
+
+      - name: Checkout plugins repository
+        uses: actions/checkout@v4
+        with:
+          repository: logseq/plugins
+          token: ${{ secrets.PLUGIN_DOCS_SYNC_TOKEN }}
+          path: plugins
+
+      - name: Sync docs to plugins repository
+        run: |
+          cp -r logseq/libs/docs/* plugins/
+
+      - name: Commit and push changes
+        working-directory: plugins
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git diff --staged --quiet || git commit -m "chore: sync plugin docs from logseq/logseq@${{ github.sha }}"
+          git push

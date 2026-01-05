@@ -1,7 +1,7 @@
 (ns ^:node-only logseq.graph-parser.exporter-test
   (:require ["fs" :as fs]
             ["path" :as node-path]
-            [cljs.test :refer [testing is are deftest]]
+            [cljs.test :refer [are deftest is testing]]
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
@@ -94,16 +94,23 @@
    ;; TODO: Add actual default
    :default-config {}})
 
-;; Copied from db-import
-(defn- <read-asset-file [file assets]
+;; tweaked from db-import
+(defn- <read-and-copy-asset [file assets buffer-handler *asset-ids]
   (p/let [buffer (fs/readFileSync (:path file))
-          checksum (db-asset/<get-file-array-buffer-checksum buffer)]
-    (swap! assets assoc
-           (gp-exporter/asset-path->name (:path file))
-           {:size (.-length buffer)
-            :checksum checksum
-            :type (db-asset/asset-path->type (:path file))
-            :path (:path file)})
+          checksum (db-asset/<get-file-array-buffer-checksum buffer)
+          asset-id (d/squuid)
+          asset-name (gp-exporter/asset-path->name (:path file))
+          asset-type (db-asset/asset-path->type (:path file))
+          {:keys [with-edn-content pdf-annotation?]} (buffer-handler buffer)]
+    (when-not pdf-annotation?
+      (swap! *asset-ids conj asset-id))
+    (swap! assets assoc asset-name
+           (with-edn-content
+             {:size (.-length buffer)
+              :type asset-type
+              :path (:path file)
+              :checksum checksum
+              :asset-id asset-id}))
     buffer))
 
 ;; Copied from db-import script and tweaked for an in-memory import
@@ -118,13 +125,8 @@
         options' (merge default-export-options
                         {:user-options (merge {:convert-all-tags? false} (dissoc options :assets :verbose))
                         ;; asset file options
-                         :<read-asset <read-asset-file
-                         :<copy-asset (fn copy-asset [m]
-                                        (if (:block/uuid m)
-                                          (swap! assets conj m)
-                                          (when-not (:pdf-annotation? m)
-                                            (println "[INFO]" "Asset" (pr-str (node-path/basename (:path m)))
-                                                     "does not have a :block/uuid"))))}
+                         :<read-and-copy-asset (fn [file *assets buffer-handler]
+                                                 (<read-and-copy-asset file *assets buffer-handler assets))}
                         (select-keys options [:verbose]))]
     (gp-exporter/export-file-graph conn conn config-file *files options')))
 
@@ -180,7 +182,7 @@
       (is (< (-> end-time (- start-time) (/ 1000)) max-time)
           (str "Importing large graph takes less than " max-time "s")))
 
-    (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Created graph has no validation errors")
     (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")
     (is (= 0 (count @(:ignored-assets import-state))) "No ignored assets")
@@ -203,18 +205,18 @@
 
     (testing "whole graph"
 
-      (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+      (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
           "Created graph has no validation errors")
 
       ;; Counts
       ;; Includes journals as property values e.g. :logseq.property/deadline
-      (is (= 29 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
+      (is (= 31 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
 
       (is (= 5 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Asset]] @conn))))
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
       (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Card]] @conn))))
-      (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Quote-block]] @conn))))
+      (is (= 5 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Quote-block]] @conn))))
       (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Pdf-annotation]] @conn))))
 
       ;; Properties and tags aren't included in this count as they aren't a Page
@@ -229,7 +231,7 @@
                   #_(map #(select-keys % [:block/title :block/tags]))
                   count))
           "Correct number of pages with block content")
-      (is (= 13 (->> @conn
+      (is (= 14 (->> @conn
                      (d/q '[:find [?ident ...]
                             :where [?b :block/tags :logseq.class/Tag] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
                      count))
@@ -491,6 +493,10 @@
              (mapv :db/ident (:block/tags (db-test/find-block-by-content @conn #"with namespace tag"))))
           "Block tagged with namespace tag is only associated with leaf child tag")
 
+      (is (= #{:user.class/ai :user.class/block-tag :user.class/p1}
+             (set (map :db/ident (:block/tags (db-test/find-block-by-content @conn #"Block tags")))))
+          "Block with tags through tags property")
+
       (is (= []
              (->> (d/q '[:find (pull ?b [:block/title {:block/tags [:db/ident]}])
                          :where [?b :block/tags :logseq.class/Tag]]
@@ -615,7 +621,7 @@
           {:keys [import-state]}
           (import-file-graph-to-db file-graph-dir conn {:convert-all-tags? false})]
 
-    (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Created graph has no validation errors")
     (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")
     (is (= 0 (->> @conn
@@ -670,7 +676,7 @@
           files (mapv #(node-path/join file-graph-dir %) ["journals/2024_02_07.md" "pages/Interstellar.md"])
           conn (db-test/create-conn)
           _ (import-files-to-db files conn {:tag-classes ["movie"]})]
-    (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Created graph has no validation errors")
 
     (let [block (db-test/find-block-by-content @conn #"Inception")
@@ -701,7 +707,7 @@
           _ (import-files-to-db files conn {:property-classes ["type"]})
           _ (@#'gp-exporter/export-class-properties conn conn)]
 
-    (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Created graph has no validation errors")
 
     (is (= #{:user.class/Property :user.class/Movie :user.class/Class :user.class/Tool}
@@ -744,7 +750,7 @@
           conn (db-test/create-conn)
           _ (import-files-to-db files conn {:remove-inline-tags? false :convert-all-tags? true})]
 
-    (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Created graph has no validation errors")
     (is (string/starts-with? (:block/title (db-test/find-block-by-content @conn #"Inception"))
                              "Inception #Movie")
@@ -770,7 +776,7 @@
                                             ;; Also add this option to trigger some edge cases with namespace pages
                                             :property-classes ["type"]})]
 
-    (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Created graph has no validation errors")
 
     (is (= #{:user.class/Movie :user.class/CreativeWork :user.class/Thing :user.class/Feature
@@ -794,7 +800,7 @@
           _ (import-files-to-db files conn {:user-config {:property-pages/enabled? false
                                                           :property-pages/excludelist #{:prop-string}}})]
 
-    (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Created graph has no validation errors")))
 
 (deftest-async export-config-file-sets-title-format

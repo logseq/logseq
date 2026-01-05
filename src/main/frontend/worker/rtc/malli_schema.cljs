@@ -24,53 +24,56 @@
    ])
 
 (def to-ws-op-schema
-  [:multi {:dispatch first :decode/string #(update % 0 keyword)}
-   [:update-kv-value
-    [:cat :keyword
-     [:map
-      [:db-ident :keyword]
-      [:value :string]]]]
-   [:rename-db-ident
-    [:cat :keyword
-     [:map
-      [:db-ident-or-block-uuid [:or :keyword :uuid]]
-      [:new-db-ident :keyword]]]]
-   [:move
-    [:cat :keyword
-     [:map
-      [:block-uuid :uuid]
-      [:pos block-pos-schema]]]]
-   [:remove
-    [:cat :keyword
-     [:map
-      [:block-uuids [:sequential :uuid]]]]]
-   [:update-page
-    [:cat :keyword
-     [:map
-      [:block-uuid :uuid]
-      [:db/ident {:optional true} :keyword]
-      [:page-name :string]
-      [:block/title :string]]]]
-   [:remove-page
-    [:cat :keyword
-     [:map
-      [:block-uuid :uuid]]]]
-   [:update
-    [:cat :keyword
-     [:map
-      [:block-uuid :uuid]
-      [:db/ident {:optional true} :keyword]
-      [:pos block-pos-schema]
-      [:av-coll [:sequential av-schema]]
-      [:card-one-attrs {:optional true} [:sequential :keyword]]]]]
-   [:update-schema
-    [:cat :keyword
-     [:map
-      [:block-uuid :uuid]
-      [:db/ident :keyword]
-      [:db/valueType :keyword]
-      [:db/cardinality {:optional true} :keyword]
-      [:db/index {:optional true} :boolean]]]]])
+  [:schema {:registry {::block-map
+                       [:map
+                        [:block-uuid :uuid]
+                        [:db/ident {:optional true} :keyword]
+                        [:pos block-pos-schema]
+                        [:av-coll [:sequential av-schema]]
+                        [:card-one-attrs {:optional true} [:sequential :keyword]]]}}
+   [:multi {:dispatch first :decode/string #(update % 0 keyword)}
+    [:update-kv-value
+     [:cat :keyword
+      [:map
+       [:db-ident :keyword]
+       [:value :string]]]]
+    [:rename-db-ident
+     [:cat :keyword
+      [:map
+       [:db-ident-or-block-uuid [:or :keyword :uuid]]
+       [:new-db-ident :keyword]]]]
+    [:add ;; new added block
+     [:cat :keyword ::block-map]]
+    [:move
+     [:cat :keyword
+      [:map
+       [:block-uuid :uuid]
+       [:pos block-pos-schema]]]]
+    [:remove
+     [:cat :keyword
+      [:map
+       [:block-uuids [:sequential :uuid]]]]]
+    [:update-page
+     [:cat :keyword
+      [:map
+       [:block-uuid :uuid]
+       [:db/ident {:optional true} :keyword]
+       [:page-name :string]
+       [:block/title :string]]]]
+    [:remove-page
+     [:cat :keyword
+      [:map
+       [:block-uuid :uuid]]]]
+    [:update
+     [:cat :keyword ::block-map]]
+    [:update-schema
+     [:cat :keyword
+      [:map
+       [:block-uuid :uuid]
+       [:db/ident :keyword]
+       [:db/valueType :keyword]
+       [:db/cardinality {:optional true} :keyword]
+       [:db/index {:optional true} :boolean]]]]]])
 
 (comment
   (def to-ws-ops-validator (m/validator [:sequential to-ws-op-schema])))
@@ -132,6 +135,7 @@
   [:map
    [:t :int]
    [:t-before :int]
+   [:t-query-end {:optional true} :int] ;TODO: remove 'optional' later, be compatible with old-clients for now
    [:affected-blocks
     [:map-of :uuid
      [:multi {:dispatch :op :decode/string #(update % :op keyword)}
@@ -186,7 +190,9 @@
        [:block/order {:optional true} db-malli-schema/block-order]
        [:block/parent {:optional true} :uuid]
        [::m/default extra-attr-map-schema]]]]]
-   [:failed-ops {:optional true}
+   [:failed-ops {:optional true}        ;DEPRECATED
+    [:maybe [:sequential to-ws-op-schema]]]
+   [:not-found-target-ops {:optional true}
     [:maybe [:sequential to-ws-op-schema]]]])
 
 (def data-from-ws-schema
@@ -243,6 +249,27 @@
                       [:graph<->user/user-type :keyword]
                       [:user/online? :boolean]]]]]]
      ["inject-users-info" [:map]]
+
+     ;; keys manage
+     ["fetch-user-rsa-key-pair"
+      [:map
+       [:public-key [:maybe :string]]
+       [:encrypted-private-key [:maybe :string]]]]
+     ["fetch-graph-encrypted-aes-key"
+      [:map
+       [:encrypted-aes-key [:maybe :string]]]]
+     ["fetch-user-rsa-public-key"
+      [:map
+       [:public-key [:maybe :string]]]]
+     ["upload-user-rsa-key-pair"
+      [:map
+       [:public-key :string]
+       [:encrypted-private-key :string]]]
+     ["reset-user-rsa-key-pair"
+      [:map
+       [:public-key :string]
+       [:encrypted-private-key :string]]]
+
      [nil data-from-ws-schema-fallback]]))
 
 (def data-from-ws-coercer (m/coercer data-from-ws-schema mt/string-transformer nil
@@ -261,6 +288,7 @@
       ["init-request"
        [:map
         [:graph-uuid :uuid]
+        [:api-version :string]
         [:schema-version db-schema/major-schema-version-string-schema]
         [:t-before :int]
         [:get-graph-skeleton :boolean]]]
@@ -273,6 +301,7 @@
         [:map
          [:req-id :string]
          [:action :string]
+         [:api-version :string]
          [:profile {:optional true} :boolean]
          [:graph-uuid :uuid]
          [:schema-version db-schema/major-schema-version-string-schema]
@@ -280,7 +309,6 @@
          [:t-before :int]]
         [:map
          [:req-id :string]
-         [:schema-version db-schema/major-schema-version-string-schema]
          [:action :string]
          [:profile {:optional true} :boolean]
          [:s3-key :string]]]]
@@ -290,7 +318,8 @@
        [:map
         [:s3-key :string]
         [:graph-name :string]
-        [:schema-version db-schema/major-schema-version-string-schema]]]
+        [:schema-version db-schema/major-schema-version-string-schema]
+        [:encrypted-aes-key {:optional true} :string]]]
       ["branch-graph"
        [:map
         [:s3-key :string]
@@ -307,8 +336,11 @@
       ["grant-access"
        [:map
         [:graph-uuid :uuid]
-        [:target-user-uuids {:optional true} [:sequential :uuid]]
-        [:target-user-emails {:optional true} [:sequential :string]]]]
+        [:target-user-email+encrypted-aes-key-coll
+         [:sequential
+          [:map
+           [:user/email :string]
+           [:encrypted-aes-key [:maybe :string]]]]]]]
       ["get-users-info"
        [:map
         [:graph-uuid :uuid]]]
@@ -350,31 +382,27 @@
         [:graph-uuid :uuid]
         [:schema-version db-schema/major-schema-version-string-schema]
         [:asset-uuids [:sequential :uuid]]]]
-      ["get-user-devices"
-       [:map]]
-      ["add-user-device"
+      ;; ================================================================
+      ["upload-user-rsa-key-pair"
        [:map
-        [:device-name :string]]]
-      ["remove-user-device"
+        [:user-uuid :uuid]
+        [:public-key {:optional true} :string]
+        [:encrypted-private-key :string]
+        [:reset-private-key {:optional true} :boolean]]]
+      ["reset-user-rsa-key-pair"
        [:map
-        [:device-uuid :uuid]]]
-      ["update-user-device-name"
+        [:user-uuid :uuid]
+        [:public-key :string]
+        [:encrypted-private-key :string]]]
+      ["fetch-user-rsa-key-pair"
        [:map
-        [:device-uuid :uuid]
-        [:device-name :string]]]
-      ["add-device-public-key"
+        [:user-uuid :uuid]]]
+      ["fetch-graph-encrypted-aes-key"
        [:map
-        [:device-uuid :uuid]
-        [:key-name :string]
-        [:public-key :string]]]
-      ["remove-device-public-key"
+        [:graph-uuid :uuid]]]
+      ["fetch-user-rsa-public-key"
        [:map
-        [:device-uuid :uuid]
-        [:key-name :string]]]
-      ["sync-encrypted-aes-key"
-       [:map
-        [:device-uuid->encrypted-aes-key [:map-of :uuid :string]]
-        [:graph-uuid :uuid]]]])))
+        [:user/email :string]]]])))
 
 (def data-to-ws-encoder (m/encoder data-to-ws-schema (mt/transformer
                                                       mt/string-transformer

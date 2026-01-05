@@ -669,7 +669,11 @@
 
                      {:title (t :plugin/title "A - Z")
                       :options {:on-click #(reset! *sort-by :letters)}
-                      :icon (ui/icon (aim-icon :letters))}]]
+                      :icon (ui/icon (aim-icon :letters))}
+
+                     {:title   (t :plugin/date-added)
+                      :options {:on-click #(reset! *sort-by :addedAt)}
+                      :icon    (ui/icon (aim-icon :addedAt))}]]
 
           (ui/button
            (ui/icon "arrows-sort")
@@ -814,7 +818,7 @@
   (rum/local false ::fetching)
   (rum/local "" ::search-key)
   (rum/local :plugins ::category)
-  (rum/local :default ::sort-by)        ;; default (weighted) / downloads / stars / letters / updates
+  (rum/local :default ::sort-by)        ;; default (weighted) / downloads / stars / letters / updates / date-added
   (rum/local :default ::filter-by)
   (rum/local nil ::error)
   (rum/local nil ::cached-query-flag)
@@ -1598,15 +1602,16 @@
   (cond-> routes
     config/lsp-enabled?
     (concat (some->> (plugin-handler/get-route-renderers)
-                     (mapv #(when-let [{:keys [name path render]} %]
-                              (when (not (string/blank? path))
-                                [path {:name name :view (fn [r] (render r %))}])))
+                     (mapv (fn [custom-route]
+                             (when-let [{:keys [name path render]} custom-route]
+                               (when (not (string/blank? path))
+                                 [path {:name name :view (fn [r] (render r custom-route))}]))))
                      (remove nil?)))))
 
 (defn hook-daemon-renderers
   []
   (when-let [rs (seq (plugin-handler/get-daemon-renderers))]
-    [:div.lsp-daemon-container.fixed.z-10
+    [:div.lsp-daemon-container
      (for [{:keys [key _pid render]} rs]
        (when (fn? render)
          [:div.lsp-daemon-container-card {:data-key key} (render)]))]))

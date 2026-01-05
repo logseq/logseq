@@ -155,7 +155,7 @@ jobs:
       - name: Upload Sentry Sourcemaps (beta only)
         # if: ${{ github.repository == 'logseq/logseq' && github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
         run: |
-          curl -sL https://sentry.io/get-cli/ | bash
+          curl -sL https://sentry.io/get-cli/ | SENTRY_CLI_VERSION=2.58.4 bash
           release_name="logseq@${{ steps.ref.outputs.version }}"
           sentry-cli releases new "${release_name}"
           sentry-cli releases files "${release_name}" upload-sourcemaps --ext map --ext js ./static/js --url-prefix '~/static/js'
@@ -242,14 +242,6 @@ jobs:
           npm_config_arch: arm64
         run: |
           yarn install --target_arch=arm64 --target_platform=linux
-          rsapi_version=`node -e 'console.log(require("@logseq/rsapi/package.json").optionalDependencies["@logseq/rsapi-linux-arm64-gnu"])'`
-          temp_dir=`mktemp -d`
-          cd "$temp_dir"
-          echo '{"dependencies": {"@logseq/rsapi-linux-arm64-gnu": "'"$rsapi_version"'"}}' > package.json
-          yarn install --ignore-platform
-          cd -
-          mv "$temp_dir/node_modules/@logseq/rsapi-linux-arm64-gnu" node_modules/@logseq/rsapi-linux-arm64-gnu
-          rm -rf "$temp_dir" "node_modules/@logseq/rsapi-linux-x64-gnu"
         working-directory: ./static
 
       - name: Build/Release Electron App
@@ -270,7 +262,7 @@ jobs:
           name: logseq-linux-arm64-builds
           path: builds
 
-  build-windows:
+  build-windows-x64:
     runs-on: windows-latest
     needs: [ compile-cljs ]
     steps:
@@ -300,37 +292,34 @@ jobs:
         run: yarn install
         working-directory: ./static
 
-      - name: Fix Deps Electron app
-        run: yarn run postinstall
-        working-directory: ./static/node_modules/dugite/
-
       - name: Build/Release Electron app
         run: yarn electron:make
         working-directory: ./static
         env:
           DEBUG: electron-packager
-        #env:
-        #  CODE_SIGN_CERTIFICATE_FILE: ../codesign.pfx
-        #  CODE_SIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODE_SIGN_CERTIFICATE_PASSWORD }}
-
-      - name: Save Artifact for Code Signing
-        run: |
-          mkdir builds
-          mv static\out\make\squirrel.windows\x64\*.exe    builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.exe
-
-      - name: Upload Artifact for Code Signing
-        uses: actions/upload-artifact@v4
-        with:
-          name: logseq-win64-unsigned-builds
-          path: builds
 
       - name: Save Artifact
         run: |
-          rm builds\*.exe
+          mkdir builds
           mv static\out\make\squirrel.windows\x64\*.nupkg  builds\Logseq-win-x64-${{ steps.ref.outputs.version }}-full.nupkg
-          mv static\out\make\zip\win32\x64\*.zip           builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.zip
+          mv static\out\make\zip\win32\x64\*.exe           builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.exe
           mv static\out\make\wix\x64\Logseq.msi            builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.msi
           mv static\out\make\squirrel.windows\x64\RELEASES builds\RELEASES
+
+      - name: Sign
+        uses: azure/trusted-signing-action@v0.5.9
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: https://eus.codesigning.azure.net/
+          trusted-signing-account-name: logseqwin
+          certificate-profile-name: Logseq
+          files-folder: builds
+          files-folder-filter: exe,msi
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -338,9 +327,74 @@ jobs:
           name: logseq-win64-builds
           path: builds
 
+  build-windows-arm64:
+    runs-on: windows-latest
+    needs: [ compile-cljs ]
+    steps:
+      - name: Download The Static Asset
+        uses: actions/download-artifact@v4
+        with:
+          name: static
+          path: static
+
+      - name: Retrieve tag version
+        id: ref
+        run: echo "version=$(cat ./static/VERSION)" >> $env:GITHUB_OUTPUT
+
+      - name: Install Node.js, NPM and Yarn
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # - name: Cache Node Modules
+      #   uses: actions/cache@v4
+      #   with:
+      #    path: |
+      #      **/node_modules
+      #    key: ${{ runner.os }}-node-modules
+
+      - name: Deps Electron app
+        run: yarn install
+        working-directory: ./static
+
+      - name: Build/Release Electron app
+        run: yarn electron:make-win-arm64
+        working-directory: ./static
+        env:
+          DEBUG: electron-packager
+
+      - name: Save Artifact
+        run: |
+          mkdir builds
+          mv static\out\make\squirrel.windows\arm64\*.nupkg  builds\Logseq-win-arm64-${{ steps.ref.outputs.version }}-full.nupkg
+          mv static\out\make\zip\win32\arm64\*.exe           builds\Logseq-win-arm64-${{ steps.ref.outputs.version }}.exe
+          mv static\out\make\wix\arm64\Logseq.msi            builds\Logseq-win-arm64-${{ steps.ref.outputs.version }}.msi
+          mv static\out\make\squirrel.windows\arm64\RELEASES builds\RELEASES
+
+      - name: Sign
+        uses: azure/trusted-signing-action@v0.5.9
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: https://eus.codesigning.azure.net/
+          trusted-signing-account-name: logseqwin
+          certificate-profile-name: Logseq
+          files-folder: builds
+          files-folder-filter: exe,msi
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: logseq-win-arm64-builds
+          path: builds
+
   build-macos-x64:
     needs: [ compile-cljs ]
-    runs-on: macos-13
+    runs-on: macos-15-intel
 
     steps:
       - name: Download The Static Asset
@@ -467,8 +521,8 @@ jobs:
       #       **/node_modules
       #     key: ${{ runner.os }}-node-modules
 
-      - name: Fetch deps and fix dugit arch for arm64
-        run: yarn install --ignore-platform && yarn rebuild:all && cd node_modules/dugite && npm_config_arch=arm64 node script/download-git.js
+      - name: Fetch deps
+        run: yarn install --ignore-platform && yarn rebuild:all
         working-directory: ./static
 
       - name: Build/Release Electron App for arm64
@@ -504,36 +558,9 @@ jobs:
       ANDROID_KEYSTORE_PASSWORD: "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
       SENTRY_AUTH_TOKEN: "${{ secrets.SENTRY_AUTH_TOKEN }}"
 
-  codesign-windows:
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.build-target == 'nightly' || github.event.inputs.build-target == 'beta' }}
-    needs: [ build-windows ]
-    runs-on: [self-hosted, macos, token]
-    steps:
-      - name: Remove old builds
-        run: rm -rf ./builds && mkdir ./builds
-
-      - name: Download Windows Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: logseq-win64-unsigned-builds
-          path: ./builds
-
-      - name: Sign Windows Executable
-        run: |
-          ls -lah ./builds
-          jsign --storetype ETOKEN --storepass "${PASS}" -t http://timestamp.sectigo.com ./builds/*.exe
-        env:
-          PASS: ${{ secrets.CODE_SIGN_CERTIFICATE_PASSWORD }}
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: logseq-win64-signed-builds
-          path: builds
-
   nightly-release:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.build-target == 'nightly' }}
-    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, codesign-windows]
+    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, build-windows-x64, build-windows-arm64 ]
     runs-on: ubuntu-22.04
     steps:
       - name: Download MacOS x64 Artifacts
@@ -560,16 +587,16 @@ jobs:
           name: logseq-linux-arm64-builds
           path: ./
 
-      - name: Download The Windows Artifact (Signed)
-        uses: actions/download-artifact@v4
-        with:
-          name: logseq-win64-signed-builds
-          path: ./
-
-      - name: Download The Windows Artifact
+      - name: Download The Windows Artifact x64
         uses: actions/download-artifact@v4
         with:
           name: logseq-win64-builds
+          path: ./
+
+      - name: Download The Windows Artifact arm64
+        uses: actions/download-artifact@v4
+        with:
+          name: logseq-win-arm64-builds
           path: ./
 
       - name: Download Android Artifacts
@@ -613,7 +640,7 @@ jobs:
   release:
     # NOTE: For now, we only have beta channel to be released on Github
     if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
-    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, codesign-windows]
+    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, build-windows-x64, build-windows-arm64]
     runs-on: ubuntu-22.04
     steps:
       - name: Download MacOS x64 Artifacts
@@ -640,16 +667,16 @@ jobs:
           name: logseq-linux-arm64-builds
           path: ./
 
-      - name: Download The Windows Artifact (Signed)
+      - name: Download The Windows Artifact
         uses: actions/download-artifact@v4
         with:
-          name: logseq-win64-signed-builds
+          name: logseq-win-x64-builds
           path: ./
 
       - name: Download The Windows Artifact
         uses: actions/download-artifact@v4
         with:
-          name: logseq-win64-builds
+          name: logseq-win-arm64-builds
           path: ./
 
       - name: Download Android Artifacts

@@ -1,6 +1,7 @@
 (ns frontend.worker.rtc.exception
   "Exception list"
-  (:require [logseq.common.defkeywords :refer [defkeywords]]))
+  (:require [logseq.common.defkeywords :refer [defkeywords]])
+  (:import [missionary Cancelled]))
 
 (defkeywords
   :rtc.exception/ws-already-disconnected {:doc "Remote exception. current websocket conn is already disconnected and deleted by remote."}
@@ -19,21 +20,25 @@ Trying to start rtc loop but there's already one running, need to cancel that on
 graph doesn't have :logseq.kv/remote-schema-version value"}
   :rtc.exception/major-schema-version-mismatched {:doc "Local exception.
 local-schema-version, remote-schema-version, app-schema-version are not equal, cannot start rtc"}
+  :rtc.exception/local-graph-too-old {:doc "Local exception.
+Local graph's tx is too old, need to pull earlier remote-data first"}
+
   :rtc.exception/get-s3-object-failed {:doc "Failed to fetch response from s3.
 When response from remote is too huge(> 32KB),
 the server will put it to s3 and return its presigned-url to clients."}
   :rtc.exception/bad-request-body {:doc "bad request body, rejected by server-schema"}
   :rtc.exception/not-allowed {:doc "this api-call is not allowed"}
-  :rtc.exception/ws-timeout {:doc "websocket timeout"})
+  :rtc.exception/ws-timeout {:doc "websocket timeout"}
 
-(def ex-ws-already-disconnected
-  (ex-info "websocket conn is already disconnected" {:type :rtc.exception/ws-already-disconnected}))
+  :rtc.exception/fetch-user-rsa-key-pair-error {:doc "Failed to fetch user RSA key pair from server"}
+  :rtc.exception/fetch-user-rsa-public-key-error {:doc "Failed to fetch user RSA public-key from server"}
+  :rtc.exception/fetch-graph-aes-key-error {:doc "Failed to fetch graph AES key from server"}
+  :rtc.exception/not-found-user-rsa-key-pair {:doc "user rsa-key-pair not found"}
+  :rtc.exception/not-found-graph-aes-key {:doc "graph aes-key not found"}
 
-(def ex-remote-graph-not-exist
-  (ex-info "remote graph not exist" {:type :rtc.exception/remote-graph-not-exist}))
-
-(def ex-remote-graph-not-ready
-  (ex-info "remote graph still creating" {:type :rtc.exception/remote-graph-not-ready}))
+  :rtc.exception/read-asset-failed {:doc "read asset from fs failed, maybe not exists"}
+  :rtc.exception/upload-asset-failed {:doc "upload asset failed"}
+  :rtc.exception/download-asset-failed {:doc "download asset failed"})
 
 (def ex-remote-graph-lock-missing
   (ex-info "remote graph lock missing(server internal error)"
@@ -42,17 +47,18 @@ the server will put it to s3 and return its presigned-url to clients."}
 (def ex-local-not-rtc-graph
   (ex-info "RTC is not supported for this local-graph" {:type :rtc.exception/not-rtc-graph}))
 
-(def ex-bad-request-body
-  (ex-info "bad request body" {:type :rtc.exception/bad-request-body}))
-
-(def ex-not-allowed
-  (ex-info "not allowed" {:type :rtc.exception/not-allowed}))
-
 (def ex-unknown-server-error
   (ex-info "Unknown server error" {:type :rtc.exception/unknown-server-error}))
 
-(defn ->map
+(defn e->ex-info
   [e]
-  (when-let [data (ex-data e)]
-    {:ex-data data
-     :ex-message (ex-message e)}))
+  (cond
+    (instance? Cancelled e) (ex-info "missionary.Cancelled" {:message (.-message e)})
+    (instance? js/CloseEvent e) (ex-info "js/CloseEvent" {:type (.-type e)})
+
+    ;; m/race-failure
+    (and (instance? ExceptionInfo e)
+         (contains? (ex-data e) :missionary.core/errors))
+    (ex-info (ex-message e) (update (ex-data e) :missionary.core/errors (fn [errors] (map e->ex-info errors))))
+
+    :else e))

@@ -126,7 +126,7 @@
 
    ;; from 3 files
    "(t (if" [:asset/show-in-folder :asset/open-in-browser
-             :search-item/whiteboard :search-item/page
+             :search-item/page
              :page/make-private :page/make-public]
    "(t (name" [] ;; shortcuts related
    "(t (dh/decorate-namespace" [] ;; shortcuts related
@@ -135,14 +135,6 @@
    "(t title" []
    "(t (or title-key" [:views.table/live-query-title :views.table/default-title :all-pages/table-title]
    "(t subtitle" [:asset/physical-delete]})
-
-(defn- whiteboard-dicts
-  []
-  (->> (shell {:out :string}
-              "grep -E -oh" "\\bt\\('[^ ']+" "-r" "packages/tldraw/apps/tldraw-logseq/src/components")
-       :out
-       string/split-lines
-       (map #(keyword (subs % 3)))))
 
 (defn- delete-not-used-key-from-dict-file
   [invalid-keys]
@@ -169,7 +161,6 @@
                           string/split-lines
                           (map #(keyword (subs % 4)))
                           (concat (mapcat val manual-ui-dicts))
-                          (concat (whiteboard-dicts))
                           ;; Temporarily unused as they will be brought back soon
                           (concat [:download])
                           set)
@@ -197,7 +188,7 @@
   {:fr #{:port :type :help/docs :search-item/page :shortcut.category/navigating :text/image
          :settings-of-plugins :code :shortcut.category/plugins :whiteboard/rectangle :whiteboard/triangle}
    :de #{:graph :host :plugins :port :right-side-bar/whiteboards
-         :settings-of-plugins :search-item/whiteboard :shortcut.category/navigating
+         :settings-of-plugins :shortcut.category/navigating
          :settings-page/enable-tooltip :settings-page/enable-whiteboards :settings-page/plugin-system}
    :ca #{:port :settings-page/tab-editor :settings-page/tab-general
          :whiteboard/color :whiteboard/connector :whiteboard/text :whiteboard/triangle}
@@ -208,13 +199,13 @@
    :pl #{:port :home :host :plugin/marketplace :whiteboard/link}
    :pt-BR #{:plugins :right-side-bar/flashcards :settings-page/enable-flashcards :page/backlinks
             :host :settings-page/tab-editor :shortcut.category/plugins :whiteboard/link :settings-of-plugins :whiteboard
-            :whiteboards :on-boarding/quick-tour-journal-page-desc-2 :plugin/downloads
-            :right-side-bar/whiteboards :search-item/whiteboard :settings-page/enable-whiteboards :settings-page/plugin-system
+            :whiteboards :on-boarding/quick-tour-journal-page-desc-2 :plugin/downloads :plugin/popular
+            :right-side-bar/whiteboards :settings-page/enable-whiteboards :settings-page/plugin-system
             :shortcut.category/whiteboard :command.whiteboard/zoom-in :command.whiteboard/zoom-out}
    :pt-PT #{:plugins :settings-of-plugins :plugin/downloads :right-side-bar/flashcards
             :settings-page/enable-flashcards :settings-page/plugin-system}
    :nb-NO #{:port :type :whiteboard :right-side-bar/flashcards :right-side-bar/whiteboards
-            :search-item/whiteboard :settings-page/enable-flashcards :settings-page/enable-whiteboards
+            :settings-page/enable-flashcards :settings-page/enable-whiteboards
             :settings-page/tab-editor :shortcut.category/whiteboard :whiteboard/medium
             :whiteboard/twitter-url :whiteboard/youtube-url :linked-references/filter-heading}
    :tr #{:help/awesome-logseq}

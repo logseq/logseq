@@ -6,3 +6,6 @@ logseq.cli.commands.query/query
 logseq.cli.commands.search/search
 logseq.cli.commands.export/export
 logseq.cli.commands.append/append
+logseq.cli.commands.mcp-server/start
+logseq.cli.commands.import-edn/import-edn
+logseq.cli.commands.validate/validate

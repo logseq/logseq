@@ -26,19 +26,27 @@
         (load-yt-script)))
     c))
 
+(defn- use-youtube-wrapper? []
+  (mobile-util/native-platform?))
+
 (defn register-player [state]
   (try
     (let [id   (first (:rum/args state))
           node (rum/dom-node state)]
       (when node
-        (let [player (js/window.YT.Player.
+        (let [*player (atom nil)
+              player (js/window.YT.Player.
                       node
                       (clj->js
                        {:events
-                        {"onReady" (fn [_e] (js/console.log id " ready"))}}))]
-          (state/update-state! [:youtube/players]
-                               (fn [players]
-                                 (assoc players id player))))))
+                        {"onReady"
+                         (fn [_e]
+                           (state/update-state! [:youtube/players]
+                                                (fn [players]
+                                                  (assoc players id @*player)))
+                           (js/console.log id " ready"))}}))]
+          (reset! *player player)
+          player)))
     (catch :default _e
       nil)))
 
@@ -47,22 +55,37 @@
   (rum/local nil ::player)
   {:did-mount
    (fn [state]
-     (go
-       (<! (load-youtube-api))
-       (register-player state))
+     (when-not (use-youtube-wrapper?)
+       (go
+         (<! (load-youtube-api))
+         (register-player state)))
      state)}
   [state id {:keys [width height start] :as _opts}]
   (let [width  (or width (min (- (util/get-width) 96)
                               560))
         height (or height (int (* width (/ 315 560))))
-        url (str "https://www.youtube.com/embed/" id "?enablejsapi=1")
-        url (if start
-              (str url "&start=" start)
-              url)]
+        origin (.. js/window -location -origin)
+        origin-valid? (and (string? origin)
+                           (re-matches #"^https?://.+" origin))
+        base-url (str "https://www.youtube.com/embed/"
+                      (js/encodeURIComponent id)
+                      "?enablejsapi=1"
+                      (when origin-valid?
+                        (str "&origin=" (js/encodeURIComponent origin))))
+        direct-url (if start
+                     (str base-url "&start=" start)
+                     base-url)
+        wrapper-url (str "https://logseq.com/youtube.html?v=" id "&enablejsapi=1")
+        wrapper-url (if start
+                      (str wrapper-url "&start=" start)
+                      wrapper-url)
+        url (if (use-youtube-wrapper?) wrapper-url direct-url)]
     [:iframe.aspect-video
      {:id                (str "youtube-player-" id)
       :allow-full-screen "allowfullscreen"
-      :allow             "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
+      :allow             "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+      :referrer-policy   "strict-origin-when-cross-origin"
+      :referer           "https://logseq.com"
       :frame-border      "0"
       :src               url
       :height            height
@@ -88,37 +111,70 @@
          js/Node.DOCUMENT_POSITION_FOLLOWING))))
 
 (defn get-player [target]
-  (when-let [iframe (->> (js/document.getElementsByTagName "iframe")
-                         (filter
-                          (fn [node]
-                            (let [src (gobj/get node "src" "")]
-                              (string/includes? src "youtube.com"))))
-                         (filter #(dom-after-video-node? % target))
-                         last)]
-    (let [id (gobj/get iframe "id" "")
-          id (string/replace-first id #"youtube-player-" "")]
-      (get (get @state/state :youtube/players) id))))
+  (when-not (use-youtube-wrapper?)
+    (when-let [iframe (->> (js/document.getElementsByTagName "iframe")
+                           (filter
+                            (fn [node]
+                              (let [src (gobj/get node "src" "")]
+                                (or
+                                 (string/includes? src "youtube-nocookie.com/embed")
+                                 (string/includes? src "youtube.com/embed")
+                                 (string/includes? src "youtube.com")))))
+                           (filter #(dom-after-video-node? % target))
+                           last)]
+      (let [id (gobj/get iframe "id" "")
+            id (string/replace-first id #"youtube-player-" "")]
+        (get (get @state/state :youtube/players) id)))))
+
+(defn- notify-timestamp-unavailable! []
+  (notification/show!
+   "YouTube timestamps aren't available on mobile yet."
+   :warning
+   false))
+
+(defn- player-method [player method]
+  (let [f (gobj/get player method)]
+    (when (fn? f) f)))
 
 (rum/defc timestamp
   [seconds]
   [:a.svg-small.youtube-timestamp
    {:on-click (fn [e]
                 (util/stop e)
-                (when-let [player (get-player (.-target e))]
-                  (.seekTo ^js player seconds true)))}
+                (if (use-youtube-wrapper?)
+                  (notify-timestamp-unavailable!)
+                  (when-let [player (get-player (.-target e))]
+                    (if-let [seek-to (player-method player "seekTo")]
+                      (.call seek-to player seconds true)
+                      (notification/show!
+                       "YouTube player isn't ready yet."
+                       :warning
+                       false)))))}
    svg/clock
    (seconds->display seconds)])
 
 (defn gen-youtube-ts-macro []
-  (if-let [player (get-player (state/get-input))]
-    (util/format "{{youtube-timestamp %s}}" (Math/floor (.getCurrentTime ^js player)))
-    (when (mobile-util/native-platform?)
-      (notification/show!
-       "Please embed a YouTube video at first, then use this icon.
+  (if (use-youtube-wrapper?)
+    (do
+      (notify-timestamp-unavailable!)
+      nil)
+    (if-let [player (get-player (state/get-input))]
+      (if-let [get-current-time (player-method player "getCurrentTime")]
+        (util/format "{{youtube-timestamp %s}}"
+                     (Math/floor (.call get-current-time player)))
+        (do
+          (notification/show!
+           "YouTube player isn't ready yet."
+           :warning
+           false)
+          nil))
+      (when (mobile-util/native-platform?)
+        (notification/show!
+         "Please embed a YouTube video at first, then use this icon.
 Remember: You can paste a raw YouTube url as embedded video on mobile."
-       :warning
-       false)
-      nil)))
+         :warning
+         false)
+        nil))))
 
 (defn parse-timestamp [timestamp']
   (let [reg #"^(?:(\d+):)?([0-5]?\d):([0-5]?\d)$"
