@@ -186,6 +186,10 @@
                                           :schema {:type :string
                                                    :public? true
                                                    :view-context :class}}
+     :logseq.property.class/enable-bidirectional? {:title "Enable bi-directional properties"
+                                                   :schema {:type :checkbox
+                                                            :public? true
+                                                            :view-context :class}}
      :logseq.property/hide-empty-value {:title "Hide empty value"
                                         :schema {:type :checkbox
                                                  :public? true
