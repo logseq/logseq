@@ -58,6 +58,13 @@
      [:value [:map
               [:block-uuid :uuid]
               [:av-coll [:sequential rtc-schema/av-schema]]]]]]
+   [:add
+    [:catn
+     [:op :keyword]
+     [:t :int]
+     [:value [:map
+              [:block-uuid :uuid]
+              [:av-coll [:sequential rtc-schema/av-schema]]]]]]
 
    [:update-asset
     [:catn
@@ -77,7 +84,7 @@
                              #(do (log/error ::bad-ops (:value %))
                                   (ma/-fail! ::ops-schema (select-keys % [:value])))))
 
-(def ^:private block-op-types #{:move :remove :update-page :remove-page :update})
+(def ^:private block-op-types #{:move :remove :update-page :remove-page :update :add})
 (def ^:private asset-op-types #{:update-asset :remove-asset})
 (def ^:private update-kv-value-op-types #{:update-kv-value})
 (def ^:private db-ident-rename-op-types #{:rename-db-ident})
@@ -128,18 +135,21 @@
       r)))
 
 (defn- merge-update-ops
-  [update-op1 update-op2]
-  {:pre [(= :update (first update-op1))
-         (= :update (first update-op2))
-         (= (:block-uuid (last update-op1))
-            (:block-uuid (last update-op2)))]}
-  (let [t1 (second update-op1)
-        t2 (second update-op2)]
+  [op1 op2]
+  {:pre [(contains? #{:add :update} (first op1))
+         (= :update (first op2))
+         (= (:block-uuid (last op1))
+            (:block-uuid (last op2)))]}
+  (let [t1 (second op1)
+        t2 (second op2)
+        op-type1 (first op1)
+        op-type2 (first op2)]
     (if (> t1 t2)
-      (merge-update-ops update-op2 update-op1)
-      (let [{av-coll1 :av-coll block-uuid :block-uuid} (last update-op1)
-            {av-coll2 :av-coll} (last update-op2)]
-        [:update t2
+      (merge-update-ops op2 op1)
+      (let [{av-coll1 :av-coll block-uuid :block-uuid} (last op1)
+            {av-coll2 :av-coll} (last op2)
+            result-op-type (if (or (= :add op-type1) (= :add op-type2)) :add :update)]
+        [result-op-type t2
          {:block-uuid block-uuid
           :av-coll (concat av-coll1 av-coll2)}]))))
 
@@ -152,22 +162,34 @@
          [_ move-op-t _move-op-value :as move-op] :move
          [_ update-op-t _update-op-value :as update-op] :update
          [_ update-page-op-t _update-page-op-value :as update-page-op] :update-page
-         [_ remove-page-op-t _remove-page-op-value :as remove-page-op] :remove-page}
+         [_ remove-page-op-t _remove-page-op-value :as remove-page-op] :remove-page
+         [_ add-op-t _add-op-value :as add-op] :add}
         (into {} (filter (fn [[_op-type op]] (some-> op (not= :retract))) current-block-op-map))]
     (case op-type
-      :move
+      :add
       (if (>= remove-op-t op-t) current-block-op-map
           (cond-> (assoc current-block-op-map :remove :retract)
-            (or (nil? move-op) (> op-t move-op-t)) (assoc :move op-to-add)))
+            (or (nil? add-op) (> op-t add-op-t)) (assoc :add op-to-add)))
+      :move
+      (if (>= remove-op-t op-t) current-block-op-map
+          (if add-op
+            (let [[_ add-t add-val] add-op
+                  new-t (max add-t op-t)]
+              (assoc current-block-op-map :add [:add new-t add-val]))
+            (cond-> (assoc current-block-op-map :remove :retract)
+              (or (nil? move-op) (> op-t move-op-t)) (assoc :move op-to-add))))
       :update
       (if (>= remove-op-t op-t) current-block-op-map
-          (assoc current-block-op-map
-                 :remove :retract
-                 :update (if update-op (merge-update-ops update-op op-to-add) op-to-add)))
+          (if add-op
+            (assoc current-block-op-map :add (merge-update-ops add-op op-to-add))
+            (assoc current-block-op-map
+                   :remove :retract
+                   :update (if update-op (merge-update-ops update-op op-to-add) op-to-add))))
       :remove
-      (if (or (>= move-op-t op-t) (>= update-op-t op-t)) current-block-op-map
-          (cond-> (assoc current-block-op-map :move :retract :update :retract)
-            (or (nil? remove-op) (> op-t remove-op-t)) (assoc :remove op-to-add)))
+      (if (or (>= move-op-t op-t) (>= update-op-t op-t) (and add-op (>= add-op-t op-t)))
+        current-block-op-map
+        (cond-> (assoc current-block-op-map :move :retract :update :retract :add :retract)
+          (or (nil? remove-op) (> op-t remove-op-t)) (assoc :remove op-to-add)))
       :update-page
       (if (>= remove-page-op-t op-t) current-block-op-map
           (cond-> (assoc current-block-op-map :remove-page :retract)
@@ -182,7 +204,7 @@
   (let [sorted-ops (sort-by second ops)
         block-uuids (map (fn [[_op-type _t value]] (:block-uuid value)) sorted-ops)
         ents (d/pull-many client-ops-db '[*] (map (fn [block-uuid] [:block/uuid block-uuid]) block-uuids))
-        op-types [:move :update :remove :update-page :remove-page]
+        op-types [:add :move :update :remove :update-page :remove-page]
         init-block-uuid->op-type->op
         (into {}
               (map (fn [ent]
