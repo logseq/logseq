@@ -186,3 +186,64 @@
               (is (some? (:move result-op)))
               (is (= 3 (second (:move result-op))))
               (is (nil? (:remove result-op))))))))))
+
+(deftest add-op-merge-test
+  (testing "Merge :add and :move"
+    (let [conn (d/create-conn client-op/schema-in-db)
+          block-uuid (random-uuid)
+          add-op [:add 1 {:block-uuid block-uuid :av-coll []}]
+          move-op [:move 2 {:block-uuid block-uuid}]]
+      (with-redefs [worker-state/get-client-ops-conn (constantly conn)]
+        (client-op/add-ops! "repo" [add-op])
+        (client-op/add-ops! "repo" [move-op])
+        (let [ops (client-op/get&remove-all-block-ops "repo")
+              result-op (first ops)]
+          (is (= 1 (count ops)))
+          (is (some? (:add result-op)))
+          (is (= 2 (second (:add result-op))))
+          (is (nil? (:move result-op)))))))
+
+  (testing "Merge :add and :update"
+    (let [conn (d/create-conn client-op/schema-in-db)
+          block-uuid (random-uuid)
+          add-op [:add 1 {:block-uuid block-uuid :av-coll [[:block/title "A" 1 true]]}]
+          update-op [:update 2 {:block-uuid block-uuid :av-coll [[:block/title "B" 2 true]]}]]
+      (with-redefs [worker-state/get-client-ops-conn (constantly conn)]
+        (client-op/add-ops! "repo" [add-op])
+        (client-op/add-ops! "repo" [update-op])
+        (let [ops (client-op/get&remove-all-block-ops "repo")
+              result-op (first ops)]
+          (is (= 1 (count ops)))
+          (is (some? (:add result-op)))
+          (is (= 2 (second (:add result-op))))
+          (let [av-coll (:av-coll (last (:add result-op)))]
+            (is (= [[:block/title "A" 1 true] [:block/title "B" 2 true]] av-coll)))
+          (is (nil? (:update result-op)))))))
+
+  (testing "Merge :add and :remove (Newer Remove)"
+    (let [conn (d/create-conn client-op/schema-in-db)
+          block-uuid (random-uuid)
+          add-op [:add 1 {:block-uuid block-uuid :av-coll []}]
+          remove-op [:remove 2 {:block-uuid block-uuid}]]
+      (with-redefs [worker-state/get-client-ops-conn (constantly conn)]
+        (client-op/add-ops! "repo" [add-op])
+        (client-op/add-ops! "repo" [remove-op])
+        (let [ops (client-op/get&remove-all-block-ops "repo")
+              result-op (first ops)]
+          (is (= 1 (count ops)))
+          (is (some? (:remove result-op)))
+          (is (nil? (:add result-op)))))))
+
+  (testing "Merge :remove and :add (Newer Add)"
+    (let [conn (d/create-conn client-op/schema-in-db)
+          block-uuid (random-uuid)
+          remove-op [:remove 1 {:block-uuid block-uuid}]
+          add-op [:add 2 {:block-uuid block-uuid :av-coll []}]]
+      (with-redefs [worker-state/get-client-ops-conn (constantly conn)]
+        (client-op/add-ops! "repo" [remove-op])
+        (client-op/add-ops! "repo" [add-op])
+        (let [ops (client-op/get&remove-all-block-ops "repo")
+              result-op (first ops)]
+          (is (= 1 (count ops)))
+          (is (some? (:add result-op)))
+          (is (nil? (:remove result-op))))))))
