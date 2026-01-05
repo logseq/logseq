@@ -8,7 +8,7 @@
 
 (def empty-db (d/empty-db db-schema/schema))
 
-(deftest local-block-ops->remote-ops-test
+(deftest ^:large-vars/cleanup-todo local-block-ops->remote-ops-test
   (testing "user.class/yyy creation"
     (let [block-uuid (random-uuid)
           db (d/db-with empty-db [{:block/uuid block-uuid,
