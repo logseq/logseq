@@ -572,8 +572,8 @@
 
                                         end?
                                         (if last-block
-                                          [block' false]
-                                          [last-block true])
+                                          [last-block true]
+                                          [block' false])
 
                                         last-block
                                         [last-block true]

@@ -6,6 +6,7 @@
             [logseq.e2e.config :as config]
             [logseq.e2e.editor-basic-test]
             [logseq.e2e.fixtures :as fixtures]
+            [logseq.e2e.flashcards-basic-test]
             [logseq.e2e.graph :as graph]
             [logseq.e2e.keyboard :as k]
             [logseq.e2e.locator :as loc]
@@ -45,6 +46,11 @@
   []
   (->> (future (run-tests 'logseq.e2e.property-basic-test))
        (swap! *futures assoc :property-test)))
+
+(defn run-flashcards-basic-test
+  []
+  (->> (future (run-tests 'logseq.e2e.flashcards-basic-test))
+       (swap! *futures assoc :flashcards-test)))
 
 (defn run-property-scoped-choices-test
   []
@@ -111,7 +117,8 @@
              'logseq.e2e.plugins-basic-test
              'logseq.e2e.reference-basic-test
              'logseq.e2e.property-basic-test
-             'logseq.e2e.tag-basic-test)
+             'logseq.e2e.tag-basic-test
+             'logseq.e2e.flashcards-basic-test)
   (System/exit 0))
 
 (defn start
