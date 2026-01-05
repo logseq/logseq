@@ -134,6 +134,7 @@
          add?->block-order->t  :block/order}
         a->add?->v->t
         [retract-block-uuid t1]  (some-> add?->block-uuid->t (get false) first)
+        [add-block-uuid t-uuid]  (some-> add?->block-uuid->t (get true) first)
         [retract-block-name _]   (some-> add?->block-name->t (get false) first)
         [add-block-name t2]      (some-> add?->block-name->t latest-add?->v->t (get-first-vt true))
         [add-block-title t3]     (some-> add?->block-title->t latest-add?->v->t (get-first-vt true))
@@ -151,6 +152,14 @@
 
       retract-block-uuid
       [[:remove t1 {:block-uuid retract-block-uuid}]]
+
+      add-block-uuid
+      (let [av-coll (update-op-av-coll db-before db-after a->add?->v->t*)
+            add-op  [:add (or t-uuid t4 t5) {:block-uuid block-uuid :av-coll av-coll}]]
+        (if (or add-block-name
+                (and (ldb/page? entity) add-block-title))
+          [[:update-page (or t2 t3) {:block-uuid block-uuid}] add-op]
+          [add-op]))
 
       :else
       (let [ops (cond-> []

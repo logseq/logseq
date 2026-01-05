@@ -233,6 +233,30 @@
               (string/ends-with? ns ".property"))
           (= :db.cardinality/one (:db/cardinality (db-schema a)))))) a-coll)))
 
+(defmethod local-block-ops->remote-ops-aux :add-op
+  [_ & {:keys [db block add-op parent-uuid block-order *remote-ops *depend-on-block-uuid-set]}]
+  (let [block-uuid (:block/uuid block)
+        pos (->pos parent-uuid block-order)
+        av-coll (->> (:av-coll (last add-op))
+                     (remove-redundant-av db)
+                     (remove-non-exist-ref-av db))
+        [schema-av-coll other-av-coll] (group-by-schema-attrs av-coll)
+        update-schema-op (schema-av-coll->update-schema-op db block-uuid (:db/ident block) schema-av-coll)
+        depend-on-block-uuids (keep (fn [[_a v]] (when (uuid? v) v)) other-av-coll)
+        card-one-attrs (seq (av-coll->card-one-attrs (d/schema db) other-av-coll))]
+    (when (seq other-av-coll)
+      (swap! *remote-ops conj
+             [:add (cond-> {:block-uuid block-uuid
+                            :pos pos
+                            :av-coll other-av-coll}
+                     (:db/ident block) (assoc :db/ident (:db/ident block))
+                     card-one-attrs (assoc :card-one-attrs card-one-attrs))]))
+    (when update-schema-op
+      (swap! *remote-ops conj update-schema-op))
+    (swap! *depend-on-block-uuid-set (partial apply conj) depend-on-block-uuids)
+    (when parent-uuid
+      (swap! *depend-on-block-uuid-set conj parent-uuid))))
+
 (defmethod local-block-ops->remote-ops-aux :update-op
   [_ & {:keys [db block update-op block-order parent-uuid *remote-ops *depend-on-block-uuid-set]}]
   (let [block-uuid (:block/uuid block)
@@ -281,9 +305,9 @@
   [db block-ops]
   (let [*depend-on-block-uuid-set (atom #{})
         *remote-ops (atom [])
-        {move-op :move remove-op :remove update-op :update update-page-op :update-page remove-page-op :remove-page}
+        {move-op :move remove-op :remove update-op :update add-op :add update-page-op :update-page remove-page-op :remove-page}
         block-ops]
-    (when-let [block-uuid (some (comp :block-uuid last) [move-op update-op update-page-op])]
+    (when-let [block-uuid (some (comp :block-uuid last) [move-op update-op add-op update-page-op])]
       (when-let [block (d/entity db [:block/uuid block-uuid])]
         (let [parent-uuid (some-> block :block/parent :block/uuid)]
           ;; remote-move-op
@@ -292,6 +316,16 @@
                                              :parent-uuid parent-uuid
                                              :block-order (:block/order block)
                                              :block-uuid block-uuid
+                                             :*remote-ops *remote-ops
+                                             :*depend-on-block-uuid-set *depend-on-block-uuid-set))
+          ;; remote-add-op
+          (when add-op
+            (local-block-ops->remote-ops-aux :add-op
+                                             :db db
+                                             :block block
+                                             :add-op add-op
+                                             :parent-uuid parent-uuid
+                                             :block-order (:block/order block)
                                              :*remote-ops *remote-ops
                                              :*depend-on-block-uuid-set *depend-on-block-uuid-set))
           ;; remote-update-op
@@ -394,6 +428,10 @@
                            (some->> (get-in block-uuid->remote-ops [block-uuid :move])
                                     (vector :move)))
                          sorted-uuids)
+        add-ops (keep
+                 (fn [[_ remote-ops]]
+                   (some->> (:add remote-ops) (vector :add)))
+                 block-uuid->remote-ops)
         update-schema-ops (keep
                            (fn [[_ remote-ops]]
                              (some->> (:update-schema remote-ops) (vector :update-schema)))
@@ -415,7 +453,7 @@
                          (fn [[_ remote-ops]]
                            (some->> (:remove-page remote-ops) (vector :remove-page)))
                          block-uuid->remote-ops)]
-    (concat update-schema-ops update-page-ops remove-ops sorted-move-ops update-ops remove-page-ops)))
+    (concat add-ops update-schema-ops update-page-ops remove-ops sorted-move-ops update-ops remove-page-ops)))
 
 (defn- rollback
   [repo block-ops-map-coll update-kv-value-ops-map-coll rename-db-ident-ops-map-coll]
@@ -464,6 +502,13 @@
                      (conj result
                            [op-type (c.m/<? (crypt/<encrypt-map aes-key encrypt-attr-set op-value))]))
               :update
+              (let [av-coll* (c.m/<?
+                              (crypt/<encrypt-av-coll
+                               aes-key rtc-const/encrypt-attr-set (:av-coll op-value)))]
+                (recur rest-remote-ops
+                       (conj result [op-type (assoc op-value :av-coll av-coll*)])))
+
+              :add
               (let [av-coll* (c.m/<?
                               (crypt/<encrypt-av-coll
                                aes-key rtc-const/encrypt-attr-set (:av-coll op-value)))]
