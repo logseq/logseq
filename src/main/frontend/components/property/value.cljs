@@ -1101,11 +1101,6 @@
                                    (set-editing! false)))))]
     (hooks/use-effect!
      (fn []
-       #(set-property-value! @*value))
-     [])
-
-    (hooks/use-effect!
-     (fn []
        (set-value! string-value)
        #())
      [string-value])
