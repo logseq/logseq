@@ -239,7 +239,8 @@
       [?prop-e :block/tags :logseq.class/Property]
       (ref-property-value-with-default ?b ?prop-e ?val)]
 
-    ;; `property` is slow, don't use it for user-facing queries
+    ;; `property` is slow so don't use it for user-facing queries.
+    ;; However this is still useful as it is the only self-contained way to query properties
     :property
     '[(property ?b ?prop ?val)
       [?prop-e :db/ident ?prop]
