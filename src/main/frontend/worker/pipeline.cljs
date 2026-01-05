@@ -14,6 +14,7 @@
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.graph-parser.exporter :as gp-exporter]
@@ -275,6 +276,39 @@
               (assoc :logseq.property.code/lang (:kv/value (d/entity db :logseq.kv/latest-code-lang))))])))
      datoms)))
 
+(defn- ensure-query-property-on-tag-additions
+  [tx-report]
+  (let [{:keys [db-after tx-data tx-meta]} tx-report
+        query-class (entity-plus/entity-memoized db-after :logseq.class/Query)
+        query-property (d/entity db-after :logseq.property/query)]
+    (when (and query-class
+               query-property
+               (not (rtc-tx-or-download-graph? tx-meta))
+               (not (:undo? tx-meta))
+               (not (:redo? tx-meta)))
+      (let [tagged-block-ids (->> tx-data
+                                  (filter (fn [d] (and (= :block/tags (:a d)) (:added d))))
+                                  (map :e)
+                                  (distinct))]
+        (mapcat
+         (fn [eid]
+           (when-let [block (d/entity db-after eid)]
+             (when (ldb/class-instance? query-class block)
+               (let [query-entity (:logseq.property/query block)]
+                 (when-not (and query-entity (:block/uuid query-entity))
+                   (let [query-text (if (string? query-entity) query-entity "")
+                         value-block (db-property-build/build-property-value-block
+                                      block
+                                      query-property
+                                      query-text
+                                      {:block-uuid (common-uuid/gen-uuid)})
+                         value-uuid (:block/uuid value-block)]
+                     [value-block
+                      (outliner-core/block-with-updated-at
+                       {:db/id (:db/id block)
+                        :logseq.property/query [:block/uuid value-uuid]})]))))))
+         tagged-block-ids)))))
+
 (defn- invoke-hooks-for-imported-graph [conn {:keys [tx-meta] :as tx-report}]
   (let [refs-tx-report (outliner-pipeline/transact-new-db-graph-refs conn tx-report)
         full-tx-data (concat (:tx-data tx-report) (:tx-data refs-tx-report))
@@ -402,6 +436,7 @@
         toggle-page-and-block-tx-data (when (empty? fix-inline-page-tx-data)
                                         (toggle-page-and-block db tx-report))
         display-blocks-tx-data (add-missing-properties-to-typed-display-blocks db-after tx-data tx-meta)
+        ensure-query-tx-data (ensure-query-property-on-tag-additions tx-report)
         commands-tx (when-not (or (:undo? tx-meta) (:redo? tx-meta) (rtc-tx-or-download-graph? tx-meta))
                       (commands/run-commands tx-report))
         insert-templates-tx (when-not (rtc-tx-or-download-graph? tx-meta)
@@ -410,6 +445,7 @@
     (concat revert-tx-data
             toggle-page-and-block-tx-data
             display-blocks-tx-data
+            ensure-query-tx-data
             commands-tx
             insert-templates-tx
             created-by-tx

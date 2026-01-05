@@ -6,13 +6,16 @@
             [frontend.components.block :as component-block]
             [frontend.components.macro :as component-macro]
             [frontend.context.i18n :refer [t]]
+            [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.handler.block :as block-handler]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.property :as property-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -81,8 +84,12 @@
 (defn- <get-due-card-block-ids
   [repo cards-id]
   (let [now-inst-ms (inst-ms (js/Date.))
-        cards (when (and cards-id (not= (keyword cards-id) :global)) (db/entity cards-id))
-        query (:block/title cards)
+        cards (when (and cards-id (not (contains? #{:global "global"} cards-id)))
+                (db/entity cards-id))
+        query (when cards
+                (when-let [query (:logseq.property/query cards)]
+                  (when-not (string/blank? (:block/title query))
+                    (:block/title query))))
         result (query-dsl/parse query {:db-graph? true})
         card-tag-id (:db/id (db/entity :logseq.class/Card))
         card-tag-children-ids (db-model/get-structured-children repo card-tag-id)
@@ -104,6 +111,15 @@
                 (if (coll? (first query*)) query* [query*])))
              q)]
     (db-async/<q repo {:transact-db? false} q' card-ids now-inst-ms (:rules result))))
+
+(defn- <create-cards-block!
+  []
+  (let [cards-tag-id (:db/id (db/entity :logseq.class/Cards))]
+    (editor-handler/api-insert-new-block! ""
+                                          {:page (date/today)
+                                           :properties {:block/tags #{cards-tag-id}}
+                                           :sibling? false
+                                           :end? true})))
 
 (defn- btn-with-shortcut [{:keys [shortcut id btn-text due on-click class]}]
   (let [bg-class (case id
@@ -230,21 +246,41 @@
             [:div.flex.justify-center (rating-btns repo block-entity *card-index *phase)])]]))))
 
 (declare update-due-cards-count)
-(rum/defcs cards-view < rum/reactive
+(rum/defcs ^:large-vars/cleanup-todo cards-view < rum/reactive
   (rum/local 0 ::card-index)
   (shortcut/mixin :shortcut.handler/cards false)
   {:init (fn [state]
            (let [*block-ids (atom nil)
                  *loading? (atom nil)
-                 cards-id (last (:rum/args state))]
+                 cards-id (last (:rum/args state))
+                 *cards-list (atom [{:db/id :global
+                                     :block/title "All cards"}])
+                 repo (state/get-current-repo)
+                 cards-class-id (:db/id (entity-plus/entity-memoized (db/get-db) :logseq.class/Cards))]
              (reset! *loading? true)
              (p/let [result (<get-due-card-block-ids (state/get-current-repo) cards-id)]
                (reset! *block-ids result)
                (reset! *loading? false))
+             (when cards-class-id
+               (p/let [cards (db-async/<get-tag-objects repo cards-class-id)
+                       cards (p/all (map (fn [block]
+                                           (if-not (string/blank? (:block/title block))
+                                             block
+                                             (when-let [query-block-id (:db/id (:logseq.property/query block))]
+                                               (p/let [query-block (db-async/<get-block (state/get-current-repo) query-block-id)]
+                                                 (assoc block :block/title (:block/title query-block))))))
+                                         cards))]
+                 (reset! *cards-list (concat [{:db/id :global
+                                               :block/title "All cards"}]
+                                             (remove
+                                              (fn [card]
+                                                (string/blank? (:block/title card)))
+                                              cards)))))
              (assoc state
                     ::block-ids *block-ids
                     ::cards-id (atom (or cards-id :global))
-                    ::loading? *loading?)))
+                    ::loading? *loading?
+                    ::cards-list *cards-list)))
    :will-unmount (fn [state]
                    (update-due-cards-count)
                    state)}
@@ -252,12 +288,10 @@
   (let [repo (state/get-current-repo)
         *cards-id (::cards-id state)
         cards-id (rum/react *cards-id)
-        all-cards (concat
-                   [{:db/id :global
-                     :block/title "All cards"}]
-                   (db-model/get-class-objects repo (:db/id (entity-plus/entity-memoized (db/get-db) :logseq.class/Cards)))
-                   ;; TODO: list all children tags of #Card
-                   )
+        *cards-list (::cards-list state)
+        all-cards (or (rum/react *cards-list)
+                      [{:db/id :global
+                        :block/title "All cards"}])
         *block-ids (::block-ids state)
         block-ids (rum/react *block-ids)
         loading? (rum/react (::loading? state))
@@ -269,20 +303,32 @@
         (shui/select
          {:on-value-change (fn [v]
                              (reset! *cards-id v)
-                             (p/let [result (<get-due-card-block-ids repo (if (= :global v) nil v))]
-                               (reset! *card-index 0)
-                               (reset! *block-ids result)))
+                             (let [cards-id' (when-not (contains? #{:global "global"} v) v)]
+                               (p/let [result (<get-due-card-block-ids repo cards-id')]
+                                 (reset! *card-index 0)
+                                 (reset! *block-ids result))))
           :default-value cards-id}
          (shui/select-trigger
           {:class "!px-2 !py-0 !h-8 w-64"}
           (shui/select-value
-           {:placeholder "Select cards"})
-          (shui/select-content
-           (shui/select-group
-            (for [card-entity all-cards]
-              (shui/select-item {:value (:db/id card-entity)}
-                                (:block/title card-entity)))))))
-
+           {:placeholder "Select cards"}))
+         (shui/select-content
+          (shui/select-group
+           (for [card-entity all-cards]
+             (shui/select-item {:value (:db/id card-entity)}
+                               (:block/title card-entity))))))
+        (shui/button
+         {:variant :ghost
+          :size :sm
+          :title "Add new query"
+          :class "!px-1 text-muted-foreground"
+          :on-click (fn []
+                      (p/let [saved-block (<create-cards-block!)]
+                        (shui/dialog-close!)
+                        (when saved-block
+                          (route-handler/redirect-to-page! (:block/uuid saved-block)
+                                                           {}))))}
+         (ui/icon "plus"))
         [:span.text-sm.opacity-50 (str (min (inc @*card-index) (count @*block-ids)) "/" (count @*block-ids))]]
        (let [block-id (nth block-ids @*card-index nil)]
          (cond
