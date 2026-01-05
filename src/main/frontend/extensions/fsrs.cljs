@@ -319,6 +319,7 @@
                                (:block/title card-entity))))))
         (shui/button
          {:variant :ghost
+          :id "ls-cards-add"
           :size :sm
           :title "Add new query"
           :class "!px-1 text-muted-foreground"
