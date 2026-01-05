@@ -355,7 +355,9 @@
         container-id (::container-id state)
         config {:id (str "bidirectional-" container-id)
                 :container-id container-id
-                :editor-box (state/get-component :editor/box)}]
+                :editor-box (state/get-component :editor/box)
+                :default-collapsed? true
+                :ref? true}]
     (if (and blocks-container (seq entities))
       [:div.property-block-container.content.w-full
        (blocks-container config entities)]
@@ -653,7 +655,11 @@
                                             (and show?
                                                  (or (= mode :global)
                                                      (and (set? ids) (contains? ids (:block/uuid block))))))
-        properties (:block/properties block)
+        properties (cond-> (:block/properties block)
+                     (and (ldb/class? block)
+                          (not (ldb/built-in? block)))
+                     (assoc :logseq.property.class/enable-bidirectional?
+                            (:logseq.property.class/enable-bidirectional? block)))
         remove-built-in-or-other-position-properties
         (fn [properties show-in-hidden-properties?]
           (remove (fn [property]
