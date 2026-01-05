@@ -147,10 +147,10 @@
 
 (defn pluralize
   "Pluralize or singularize based on count. If inclusive, prefix with count."
-  ([word count] (pluralize word count false))
-  ([word count inclusive]
-   (let [pluralized (if (= count 1) (singular word) (plural word))]
-     (str (when inclusive (str count " "))
+  ([word item-count] (pluralize word item-count false))
+  ([word item-count inclusive]
+   (let [pluralized (if (= item-count 1) (singular word) (plural word))]
+     (str (when inclusive (str item-count " "))
           pluralized))))
 
 (defn add-plural-rule!

@@ -1077,13 +1077,11 @@
   [block property value table-view?]
   (let [[editing? set-editing!] (hooks/use-state false)
         *ref (hooks/use-ref nil)
-        *input-ref (hooks/use-ref nil)
         string-value (cond
                        (string? value) value
                        (some? value) (str (db-property/property-value-content value))
                        :else "")
         [value set-value!] (hooks/use-state string-value)
-        [*value _] (hooks/use-state (atom value))
         set-property-value! (fn [value & {:keys [exit-editing?]
                                           :or {exit-editing? true}}]
                               (let [next-value (or value "")
@@ -1112,14 +1110,12 @@
                    (set-editing! true))}
      (if editing?
        (shui/input
-        {:ref *input-ref
-         :auto-focus true
+        {:auto-focus true
          :class (str "ls-string-input h-6 px-0 py-0 border-none bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-base"
                      (when table-view? " text-sm"))
          :value value
          :on-change (fn [e]
-                      (set-value! (util/evalue e))
-                      (reset! *value (util/evalue e)))
+                      (set-value! (util/evalue e)))
          :on-blur (fn [_e]
                     (p/do!
                      (set-property-value! value)))
