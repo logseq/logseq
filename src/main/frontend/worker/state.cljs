@@ -121,15 +121,6 @@
   []
   (:auth/id-token @*state))
 
-(defn get-user-groups
-  []
-  (set (get-in @*state [:user/info :UserGroups])))
-
-(defn rtc-debug-enabled?
-  []
-  (and (get-id-token)
-       (contains? (get-user-groups) "team")))
-
 (comment
   (defn mobile?
     []
