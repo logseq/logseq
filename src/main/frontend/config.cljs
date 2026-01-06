@@ -336,6 +336,10 @@
                   "graphs"
                   (string/replace repo db-version-prefix "")))
 
+(defn get-electron-backup-dir
+  [repo]
+  (path/path-join (get-local-dir repo) "backups"))
+
 (defn get-repo-dir
   [repo-url]
   (when repo-url
