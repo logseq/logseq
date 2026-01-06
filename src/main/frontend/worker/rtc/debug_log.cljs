@@ -1,8 +1,7 @@
 (ns frontend.worker.rtc.debug-log
   "RTC debug logging stored in per-graph sqlite db."
   (:require [frontend.worker.state :as worker-state]
-            [lambdaisland.glogi :as log]
-            [logseq.db :as ldb]))
+            [lambdaisland.glogi :as log]))
 
 (defn create-tables!
   [^js db]
@@ -27,13 +26,6 @@
           (log/error :rtc-debug-log-gc-failed {:table table :error e}))))
     (.exec db "VACUUM")))
 
-(defn- enabled?
-  [repo]
-  (some-> (worker-state/get-datascript-conn repo)
-          deref
-          ldb/get-graph-rtc-uuid
-          some?))
-
 (defn- safe-str
   [value]
   (try
@@ -51,7 +43,7 @@
 
 (defn log-tx!
   [repo tx-data tx-meta]
-  (when (and repo (enabled? repo))
+  (when repo
     (when-let [db (worker-state/get-sqlite-conn repo :debug-log)]
       (insert! db
                "INSERT INTO tx_log (tx_data, tx_meta) VALUES (?1, ?2)"
