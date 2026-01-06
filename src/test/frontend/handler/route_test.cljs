@@ -4,23 +4,30 @@
             [frontend.db.utils :as db-utils]
             [clojure.test :refer [deftest is use-fixtures testing]]))
 
-(use-fixtures :each {:before test-helper/start-test-db!
+(use-fixtures :each {:before #(test-helper/start-test-db! {:db-graph? true})
                      :after test-helper/destroy-test-db!})
 
 (deftest default-page-route
-  (load-test-files [{:file/path "foo.md"
-                     :file/content "foo:: bar
-- b1
-- ## B1
-- b2
-- ### Header 2
-foo:: bar
-- ## Header 3 [[Dec 19th, 2022]]"}])
+  (let [journal-uuid (random-uuid)]
+    (load-test-files
+     [{:page {:block/title "foo"}
+       :blocks
+       [{:block/title "b1"}
+        {:block/title "B1"
+         :build/properties {:logseq.property/heading 2}}
+        {:block/title "b2"}
+        {:block/title "Header 2"
+         :build/properties {:logseq.property/heading 3}}
+        {:block/title (str "Header 3 [[" journal-uuid "]]")
+         :build/properties {:logseq.property/heading 2}}]}
+      {:page {:build/journal 20221219
+              :build/keep-uuid? true
+              :block/uuid journal-uuid}}]))
 
   (testing ":page-block route"
     (let [block (ffirst
                  (db-utils/q '[:find (pull ?b [:block/uuid])
-                               :where [?b :block/title "## B1"]]))]
+                               :where [?b :block/title "B1"]]))]
       (is (= {:to :page-block
               :path-params {:name "foo" :block-route-name "b1"}}
              (#'route-handler/default-page-route (:block/uuid block)))
@@ -28,15 +35,13 @@ foo:: bar
 
   (let [block (ffirst
                (db-utils/q '[:find (pull ?b [:block/uuid])
-                             :where [?b :block/title "### Header 2\nfoo:: bar"]]))]
+                             :where [?b :block/title "Header 2"]]))]
     (is (= {:to :page-block
             :path-params {:name "foo" :block-route-name "header 2"}}
            (#'route-handler/default-page-route (:block/uuid block)))
         "Generates a page-block link for route-name with whitespace and properties is found")
 
-    (let [block (ffirst
-                 (db-utils/q '[:find (pull ?b [:block/uuid])
-                               :where [?b :block/title "## Header 3 [[Dec 19th, 2022]]"]]))]
+    (let [block (test-helper/find-block-by-content #"Header 3")]
       (is (= {:to :page-block
               :path-params {:name "foo" :block-route-name "header 3 [[dec 19th, 2022]]"}}
              (#'route-handler/default-page-route (:block/uuid block)))
