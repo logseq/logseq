@@ -8,6 +8,7 @@
             [logseq.common.uuid :as common-uuid]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.db-ident :as db-ident]
+            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property.type :as db-property-type]))
 
 (def ^:private property-ignore-rtc
@@ -841,3 +842,31 @@
   [db-ident]
   (contains? db-property-type/value-ref-property-types
              (get-in built-in-properties [db-ident :schema :type])))
+
+(defn- normalize-choice-ids
+  [values]
+  (set (keep :db/id values)))
+
+(defn scoped-closed-values
+  "Get scoped closed values for a given block"
+  [property block & {:keys [values]}]
+  (let [values (or values (:property/closed-values property))
+        classes (:block/tags block)
+        class-ids* (set (keep :db/id classes))
+        class-ids (if (entity-util/class? block)
+                    (conj class-ids* (:db/id block))
+                    class-ids*)
+        excluded-ids (normalize-choice-ids
+                      (mapcat :logseq.property/choice-exclusions classes))]
+    (filter (fn [value]
+              (let [scope-ids (set (keep :db/id (:logseq.property/choice-classes value)))]
+                (cond
+                  (empty? scope-ids)
+                  (not (contains? excluded-ids (:db/id value)))
+
+                  (seq class-ids)
+                  (seq (set/intersection scope-ids class-ids))
+
+                  :else
+                  false)))
+            values)))

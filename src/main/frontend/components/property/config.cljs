@@ -417,21 +417,18 @@
         values (:property/closed-values property)
         choices (->> values
                      (keep (fn [value]
-                             (db/sub-block (:db/id value))))
-                     (filter (fn [block]
-                               (let [classes (set (map :db/id (:logseq.property/choice-classes block)))]
-                                 (if (and (seq classes) (ldb/class? owner-block))
-                                   (contains? classes (:db/id owner-block))
-                                   true)))))
+                             (db/sub-block (:db/id value)))))
+        scoped-choices (db-property/scoped-closed-values property owner-block {:values choices})
+
         excluded-ids (set (keep :db/id (:logseq.property/choice-exclusions owner-block)))
         hidden-choices (filter (fn [block]
                                  (and (empty? (:logseq.property/choice-classes block))
                                       (contains? excluded-ids (:db/id block))))
-                               choices)
+                               scoped-choices)
         visible-choices (remove (fn [block]
                                   (and (empty? (:logseq.property/choice-classes block))
                                        (contains? excluded-ids (:db/id block))))
-                                choices)
+                                scoped-choices)
         list-choices (if @*show-hidden?
                        (concat visible-choices hidden-choices)
                        visible-choices)
@@ -445,7 +442,7 @@
                       list-choices)]
 
     [:div.ls-property-dropdown.ls-property-choices-sub-pane
-     (when (seq choices)
+     (when (seq scoped-choices)
        [:<>
         (when (and (seq hidden-choices) (ldb/class? owner-block))
           (shui/button
