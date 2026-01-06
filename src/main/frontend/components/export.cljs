@@ -2,6 +2,7 @@
   (:require ["/frontend/utils" :as utils]
             [cljs-time.core :as t]
             [cljs.pprint :as pprint]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.handler.block :as block-handler]
@@ -118,11 +119,19 @@
         "Export debug transit file"]
        [:p.text-sm.opacity-70.mb-0 "Exports to a .transit file to send to us for debugging. Any sensitive data will be removed in the exported file."]]
 
-      (when (and util/web-platform?
-                 (not (util/mobile?)))
+      (if (util/electron?)
         [:div
          [:hr]
-         (auto-backup)])]]))
+         [:div "Hourly backups are enabled for this graph, "
+          [:a.ml-1 {:on-click (fn []
+                                (let [path (config/get-electron-backup-dir (state/get-current-repo))]
+                                  (js/window.apis.openPath path)))}
+           "open backups folder for this graph"]]]
+        (when (and util/web-platform?
+                   (not (util/mobile?)))
+          [:div
+           [:hr]
+           (auto-backup)]))]]))
 
 (def *export-block-type (atom :text))
 
