@@ -924,6 +924,7 @@ export interface IDBProxy {
    * @param content
    */
   setFileContent: (path: string, content: string) => Promise<void>
+  getFileContent: (path: string) => Promise<string | null>
 }
 
 /**

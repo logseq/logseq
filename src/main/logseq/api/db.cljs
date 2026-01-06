@@ -3,6 +3,7 @@
   (:require [cljs-bean.core :as bean]
             [cljs.reader]
             [frontend.db :as db]
+            [frontend.db.model :as db-model]
             [frontend.db.async :as db-async]
             [frontend.db.query-custom :as query-custom]
             [frontend.db.query-dsl :as query-dsl]
@@ -67,3 +68,7 @@
        (db/transact! [{:file/path path
                        :file/content content}])
        true))))
+
+(defn get_file_content
+  [path]
+  (db-model/get-file path))
