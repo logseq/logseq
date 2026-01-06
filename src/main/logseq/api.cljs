@@ -89,6 +89,7 @@
 (def ^:export datascript_query api-db/datascript_query)
 (def ^:export custom_query api-db/custom_query)
 (def ^:export set_file_content api-db/set_file_content)
+(def ^:export get_file_content api-db/get_file_content)
 
 ;; editor
 (def ^:export prepend_block_in_page api-editor/prepend_block_in_page)
