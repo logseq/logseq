@@ -214,16 +214,17 @@
 
 (defn- gc-sqlite-dbs!
   "Gc main db weekly and rtc ops db each time when opening it"
-  [sqlite-db client-ops-db datascript-conn {:keys [full-gc?]}]
+  [sqlite-db client-ops-db debug-log-db datascript-conn {:keys [full-gc?]}]
   (let [last-gc-at (:kv/value (d/entity @datascript-conn :logseq.kv/graph-last-gc-at))]
     (when (or full-gc?
               (nil? last-gc-at)
               (not (number? last-gc-at))
               (> (- (common-util/time-ms) last-gc-at) (* 3 24 3600 1000))) ; 3 days ago
-      (println :debug "gc current graph")
+      (log/info :gc-sqlite-dbs "gc current graph")
       (doseq [db (if @*publishing? [sqlite-db] [sqlite-db client-ops-db])]
         (sqlite-gc/gc-kvs-table! db {:full-gc? full-gc?})
         (.exec db "VACUUM"))
+      (rtc-debug-log/gc! debug-log-db)
       (ldb/transact! datascript-conn [{:db/ident :logseq.kv/graph-last-gc-at
                                        :kv/value (common-util/time-ms)}]))))
 
@@ -282,7 +283,7 @@
                               config (select-keys opts [:import-type :graph-git-sha]))]
             (ldb/transact! conn initial-data {:initial-db? true})))
 
-        (gc-sqlite-dbs! db client-ops-db conn {})
+        (gc-sqlite-dbs! db client-ops-db debug-log-db conn {})
 
         (let [migration-result (db-migrate/migrate conn)]
           (when (client-op/rtc-db-graph? repo)
@@ -584,6 +585,11 @@
       (p/catch (fn [error]
                  (throw error)))))
 
+(def-thread-api :thread-api/reset-debug-log-db
+  [repo]
+  (when-let [^js db (worker-state/get-sqlite-conn repo :debug-log)]
+    (rtc-debug-log/reset-tables! db)))
+
 (def-thread-api :thread-api/import-db
   [repo data]
   (when-not (string/blank? repo)
@@ -725,10 +731,10 @@
 
 (def-thread-api :thread-api/gc-graph
   [repo]
-  (let [{:keys [db client-ops]} (get @*sqlite-conns repo)
+  (let [{:keys [db client-ops debug-log]} (get @*sqlite-conns repo)
         conn (get @*datascript-conns repo)]
     (when (and db conn)
-      (gc-sqlite-dbs! db client-ops conn {:full-gc? true})
+      (gc-sqlite-dbs! db client-ops debug-log conn {:full-gc? true})
       nil)))
 
 (def-thread-api :thread-api/vec-search-embedding-model-info
