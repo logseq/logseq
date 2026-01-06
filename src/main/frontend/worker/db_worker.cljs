@@ -855,9 +855,9 @@
   (when-not (and (or (:undo? tx-meta) (:redo? tx-meta))
                  (not worker-util/dev?))
     (shared-service/broadcast-to-clients! :notification
-                                          [["Invalid DB!"] :error])
+                                          [["Invalid data writing to db!"] :error])
     (worker-util/post-message :capture-error
-                              {:error (ex-info "Invalid DB" {})
+                              {:error (ex-info "Invalid data writing to db" {})
                                :payload {}
                                :extra {:errors (str errors)}})))
 
