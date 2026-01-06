@@ -8,7 +8,6 @@
     [:meta/version :int]
     ;; Loose since it looks like capitalization and string are possible
     [:preferred-format [:or :keyword :string]]
-    [:preferred-workflow [:enum :now :todo]]
     [:hidden [:vector :string]]
     [:default-templates [:map
                          [:journals {:optional true} :string]]]
