@@ -1,13 +1,14 @@
 (ns frontend.worker.rtc.debug-log
   "RTC debug logging stored in per-graph sqlite db."
   (:require [frontend.worker.state :as worker-state]
-            [lambdaisland.glogi :as log]))
+            [lambdaisland.glogi :as log]
+            [logseq.db :as ldb]))
 
 (defn create-tables!
   [^js db]
   (when db
-    (.exec db "CREATE TABLE IF NOT EXISTS tx_log (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, repo TEXT, tx_data TEXT, tx_meta TEXT)")
-    (.exec db "CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, repo TEXT, direction TEXT NOT NULL, message TEXT NOT NULL)")))
+    (.exec db "CREATE TABLE IF NOT EXISTS tx_log (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, tx_data TEXT, tx_meta TEXT)")
+    (.exec db "CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, direction TEXT NOT NULL, message TEXT NOT NULL)")))
 
 (defn reset-tables!
   [^js db]
@@ -27,8 +28,8 @@
     (.exec db "VACUUM")))
 
 (defn- enabled?
-  []
-  (worker-state/rtc-debug-enabled?))
+  [repo]
+  (some? (ldb/get-graph-rtc-uuid @(worker-state/get-datascript-conn repo))))
 
 (defn- safe-str
   [value]
@@ -47,19 +48,19 @@
 
 (defn log-tx!
   [repo tx-data tx-meta]
-  (when (and (enabled?) repo)
+  (when (and repo (enabled? repo))
     (when-let [db (worker-state/get-sqlite-conn repo :debug-log)]
       (insert! db
-               "INSERT INTO tx_log (repo, tx_data, tx_meta) VALUES (?1, ?2, ?3)"
-               [repo (safe-str tx-data) (safe-str tx-meta)])
+               "INSERT INTO tx_log (tx_data, tx_meta) VALUES (?1, ?2)"
+               [(safe-str tx-data) (safe-str tx-meta)])
       (log/debug :log-tx tx-meta))))
 
 (defn log-ws-message!
   ([direction message]
    (log-ws-message! (worker-state/get-current-repo) direction message))
   ([repo direction message]
-   (when (and (enabled?) repo message)
+   (when (and repo message)
      (when-let [db (worker-state/get-sqlite-conn repo :debug-log)]
        (insert! db
-                "INSERT INTO messages (repo, direction, message) VALUES (?1, ?2, ?3)"
-                [repo (name direction) (str message)])))))
+                "INSERT INTO messages (direction, message) VALUES (?1, ?2)"
+                [(name direction) (str message)])))))
