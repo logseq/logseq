@@ -58,8 +58,6 @@
       {:preferred-language      (:preferred-language @state/state)
        :preferred-theme-mode    (:ui/theme @state/state)
        :preferred-format        (state/get-preferred-format)
-       :preferred-workflow      (state/get-preferred-workflow)
-       :preferred-todo          (state/get-preferred-todo)
        :preferred-date-format   (state/get-date-formatter)
        :preferred-start-of-week (state/get-start-of-week)
        :current-graph           (state/get-current-repo)

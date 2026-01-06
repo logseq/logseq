@@ -498,23 +498,6 @@ should be done through this fn in order to get global config and config defaults
   (when-let [repo (get-current-repo)]
     (:journal/file-name-format (get-config repo))))
 
-(defn get-preferred-workflow
-  []
-  (keyword
-   (or
-    (when-let [workflow (:preferred-workflow (get-config))]
-      (let [workflow (name workflow)]
-        (if (util/safe-re-find #"now|NOW" workflow)
-          :now
-          :todo)))
-    (get-in @state [:me :preferred_workflow] :now))))
-
-(defn get-preferred-todo
-  []
-  (if (= (get-preferred-workflow) :now)
-    "LATER"
-    "TODO"))
-
 (defn get-date-formatter
   []
   (or
