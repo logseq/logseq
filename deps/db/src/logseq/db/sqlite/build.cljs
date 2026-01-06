@@ -662,7 +662,7 @@
         classes' (merge new-classes classes)
         used-properties (get-used-properties-from-options options)
         new-properties (->> (set/difference (set (keys used-properties)) (set (keys properties)))
-                            (remove db-property/logseq-property?)
+                            (remove db-property/internal-property?)
                             (map (fn [prop]
                                    [prop (infer-property-schema (get used-properties prop))]))
                             (into {}))
