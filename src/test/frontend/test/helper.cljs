@@ -17,6 +17,7 @@
             [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.db.test.helper :as db-test]
             [logseq.graph-parser.text :as text]))
 
 (def bare-marker-pattern
@@ -164,16 +165,21 @@
                       (assoc options* :auto-create-ontology? true)
                       :else
                       (build-blocks-tx-options options*))
-        {:keys [init-tx block-props-tx]} (sqlite-build/build-blocks-tx options)]
-    (db/transact! test-db init-tx)
+        {:keys [init-tx block-props-tx] :as _txs} (sqlite-build/build-blocks-tx options)
+        ;; Allow pages to reference each other via uuid and for unordered init-tx
+        init-index (map #(select-keys % [:block/uuid]) init-tx)]
+    ;; (cljs.pprint/pprint _txs)
+    (db/transact! test-db-name-db-version (concat init-index init-tx))
     (when (seq block-props-tx)
-      (db/transact! test-db block-props-tx))))
+      (db/transact! test-db-name-db-version block-props-tx))))
 
 (defn load-test-files
   "Given a collection of file maps, loads them into the current test-db.
 This can be called in synchronous contexts as no async fns should be invoked"
   [files]
-  (if (and node? js/process.env.DB_GRAPH)
+  (if (and node? (or js/process.env.DB_GRAPH
+                     ;; TODO: Remove once tests are converted
+                     (-> files first :page)))
     (load-test-files-for-db-graph files)
     (file-repo-handler/parse-files-and-load-to-db!
      test-db
@@ -251,3 +257,9 @@ This can be called in synchronous contexts as no async fns should be invoked"
         conn (db/get-db repo false)
         [page-name _page-uuid] (worker-page/create! conn title opts)]
     page-name))
+
+(defn find-page-by-title [page-title]
+  (db-test/find-page-by-title (conn/get-db) page-title))
+
+(defn find-block-by-content [block-title]
+  (db-test/find-block-by-content (conn/get-db) block-title))
