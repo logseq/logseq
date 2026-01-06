@@ -8,6 +8,7 @@
             [frontend.db.utils :as db-utils]
             [frontend.handler.command-palette :as palette-handler]
             [frontend.handler.config :as config-handler]
+            [frontend.handler.export :as export-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.recent :as recent-handler]
             [frontend.handler.route :as route-handler]
@@ -172,3 +173,13 @@
       (if-let [page-name (and page? (:name params))]
         (route-handler/redirect-to-page! page-name {:anchor (:anchor query) :push false})
         (rfe/replace-state k params query)))))
+
+(def export_debug_log_db
+  (fn []
+    (when-let [repo (state/get-current-repo)]
+      (export-handler/export-repo-as-debug-log-sqlite! repo))))
+
+(def reset_debug_log_db
+  (fn []
+    (when-let [repo (state/get-current-repo)]
+      (state/<invoke-db-worker-direct-pass :thread-api/reset-debug-log-db repo))))
