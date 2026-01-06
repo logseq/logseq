@@ -5,6 +5,7 @@
   (:require [cljs-http-missionary.client :as http]
             [frontend.common.missionary :as c.m]
             [frontend.worker.flows :as worker-flows]
+            [frontend.worker.rtc.debug-log :as rtc-debug-log]
             [frontend.worker.rtc.exception :as r.ex]
             [frontend.worker.rtc.malli-schema :as rtc-schema]
             [missionary.core :as m]))
@@ -137,6 +138,7 @@
   (m/sp
     (let [decoded-message (rtc-schema/data-to-ws-coercer message)
           message-str (js/JSON.stringify (clj->js (rtc-schema/data-to-ws-encoder decoded-message)))]
+      (rtc-debug-log/log-ws-message! :send message-str)
       (m/? ((:send mws) message-str)))))
 
 (defn- recv-flow*
@@ -144,6 +146,9 @@
   [m-ws]
   (assert (some? (:recv-flow m-ws)) m-ws)
   (m/eduction
+   (map (fn [message]
+          (rtc-debug-log/log-ws-message! :recv message)
+          message))
    (map #(js->clj (js/JSON.parse %) :keywordize-keys true))
    (map (fn [m]
           (if (contains?
