@@ -29,7 +29,10 @@
 
 (defn- enabled?
   [repo]
-  (some? (ldb/get-graph-rtc-uuid @(worker-state/get-datascript-conn repo))))
+  (some-> (worker-state/get-datascript-conn repo)
+          deref
+          ldb/get-graph-rtc-uuid
+          some?))
 
 (defn- safe-str
   [value]
