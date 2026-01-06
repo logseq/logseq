@@ -48,3 +48,22 @@
                                                :disable-reactive? true
                                                :return-promise? true}))]
     (bean/->js (sdk-utils/normalize-keyword-for-json (flatten result)))))
+
+(defn set_file_content
+  [path content]
+  (let [built-in-paths #{"logseq/custom.js"
+                         "logseq/custom.css"
+                         "logseq/publish.js"
+                         "logseq/publish.css"}]
+    (cond
+      (not (string? content))
+      (throw (ex-info "content should be a string"
+                      {:content content}))
+      (not (contains? built-in-paths path))
+      (throw (ex-info "Invalid path"
+                      {:supported-paths built-in-paths}))
+      :else
+      (p/do!
+       (db/transact! [{:file/path path
+                       :file/content content}])
+       true))))
