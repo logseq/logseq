@@ -778,7 +778,7 @@ export interface IEditorProxy extends Record<string, any> {
     tagName: string,
     opts?: Partial<{
       uuid: string, // custom uuid
-      tagProperties: Array<{ name: string, schema?: Partial<PropertySchema>, properties?: {}  }>
+      tagProperties: Array<{ name: string, schema?: Partial<PropertySchema>, properties?: {} }>
     }>) => Promise<PageEntity | null>
   getTag: (nameOrIdent: string | EntityID) => Promise<PageEntity | null>
   getTagsByName: (tagName: string) => Promise<Array<PageEntity> | null>
@@ -871,13 +871,6 @@ export interface IEditorProxy extends Record<string, any> {
     end: number
     text: string
   }>
-
-  /**
-   * For built-in files path `logseq/custom.js`, `logseq/custom.css`, `logseq/publish.js`, `logseq/publish.css` etc.
-   * @param path
-   * @param content
-   */
-  setFileContent: (path: string, content: string) => Promise<void>
 }
 
 /**
@@ -885,19 +878,23 @@ export interface IEditorProxy extends Record<string, any> {
  */
 export interface IDBProxy {
   /**
-   * Run a DSL query
-   * @link https://docs.logseq.com/#/page/queries
-   * @param dsl
+   * Run a DSL query. https://docs.logseq.com/#/page/queries
    */
-  q: <T = any>(dsl: string) => Promise<Array<T> | null>
+  q: <T = any>(dsl: string) => Promise<T>
 
   /**
-   * Run a datascript query
+   * Executes a datalog query through query-react,
+   * given either a regular datalog query or a simple query.
+   */
+  customQuery: <T = any>(query: string) => Promise<T>
+
+  /**
+   * Run a datascript query with parameters.
    */
   datascriptQuery: <T = any>(query: string, ...inputs: Array<any>) => Promise<T>
 
   /**
-   * Hook all transaction data of DB
+   * Hook all transaction data of DB.
    *
    * @added 0.0.2
    */
@@ -920,6 +917,13 @@ export interface IDBProxy {
       txMeta?: { outlinerOp: string; [key: string]: any }
     ) => void
   ): IUserOffHook
+
+  /**
+   * For built-in files path `logseq/custom.js`, `logseq/custom.css`, `logseq/publish.js`, `logseq/publish.css` etc.
+   * @param path
+   * @param content
+   */
+  setFileContent: (path: string, content: string) => Promise<void>
 }
 
 /**
