@@ -871,6 +871,13 @@ export interface IEditorProxy extends Record<string, any> {
     end: number
     text: string
   }>
+
+  /**
+   * For built-in files path `logseq/custom.js`, `logseq/custom.css`, `logseq/publish.js`, `logseq/publish.css` etc.
+   * @param path
+   * @param content
+   */
+  setFileContent: (path: string, content: string) => Promise<void>
 }
 
 /**
