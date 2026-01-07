@@ -474,12 +474,20 @@
             (log/info :worker-sync/ws-closed true)))
     (js/Response. nil #js {:status 101 :webSocket client})))
 
+(defn- strip-sync-prefix [path]
+  (if (string/starts-with? path "/sync/")
+    (let [rest-path (subs path (count "/sync/"))
+          slash-idx (string/index-of rest-path "/")]
+      (if (neg? slash-idx)
+        "/"
+        (subs rest-path slash-idx)))
+    path))
+
 (defn- handle-http [^js self request]
   (let [url (js/URL. (.-url request))
-        path (.-pathname url)
+        raw-path (.-pathname url)
+        path (strip-sync-prefix raw-path)
         method (.-method request)]
-    (prn :debug :path path
-         :method method)
     (cond
       (= method "OPTIONS")
       (common/options-response)
