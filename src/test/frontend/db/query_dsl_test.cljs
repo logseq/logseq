@@ -463,8 +463,8 @@
      :blocks [{:build.test/title "DONE b1 [[page 1]] [[page 3]]"}
               {:build.test/title "DONE b2Z [[page 1]]"}]}
     {:page {:block/title "page2", :build/properties {:foo "bar"}}
-     :blocks [{:build.test/title "NOW b3 [[page 1]]"}
-              {:build.test/title "LATER b4Z [[page 2]]"}]}])
+     :blocks [{:build.test/title "DOING b3 [[page 1]]"}
+              {:build.test/title "TODO b4Z [[page 2]]"}]}])
 
   (let [task-filter "(task doing todo)"]
     (is (= []
@@ -635,7 +635,7 @@
   (load-test-files
    [{:page {:build/journal 20201226}
      :blocks [{:build.test/title "DONE 26-b1", :block/created-at 1608968448113}
-              {:build.test/title "LATER 26-b2-modified-later", :block/created-at 1608968448114}
+              {:build.test/title "TODO 26-b2-modified-later", :block/created-at 1608968448114}
               {:build.test/title "DONE 26-b3", :block/created-at 1608968448115}
               {:block/title "26-b4", :block/created-at 1608968448116}]}])
 
@@ -654,9 +654,9 @@
 (deftest custom-query-test
   (load-test-files
    [{:page {:block/title "page1", :build/properties {:foo "bar"}}
-     :blocks [{:build.test/title "NOW b1"}
+     :blocks [{:build.test/title "DOING b1"}
               {:build.test/title "TODO b2"}
-              {:build.test/title "LATER b3"}
+              {:build.test/title "TODO b3"}
               {:block/title "b3"}]}])
 
   (let [task-query '(task doing)]

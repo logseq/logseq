@@ -9,7 +9,6 @@
             [frontend.db.utils :as db-utils]
             [frontend.extensions.sci :as sci]
             [frontend.state :as state]
-            [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
@@ -83,11 +82,6 @@
                [page-ref sym] (if (page-ref? x) [x y] [y x])
                page-ref (string/lower-case page-ref)]
            (list 'contains? sym (page-ref/get-page-name page-ref)))
-
-         (and (vector? f)
-              (= (first f) 'page-property)
-              (keyword? (util/nth-safe f 2)))
-         (update f 2 (fn [k] (keyword (string/replace (name k) "_" "-"))))
 
          :else
          f)) query)))

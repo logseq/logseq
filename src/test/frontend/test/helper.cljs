@@ -20,7 +20,7 @@
             [logseq.db.test.helper :as db-test]))
 
 (def bare-marker-pattern
-  #"(NOW|LATER|TODO|DOING|DONE|WAITING|WAIT|CANCELED|CANCELLED|IN-PROGRESS){1}\s+")
+  #"(TODO|DOING|DONE|WAIT|CANCELED|CANCELLED){1}\s+")
 
 (def node? (exists? js/process))
 
@@ -51,13 +51,8 @@
 
 (def file-to-db-statuses
   {"TODO" :logseq.property/status.todo
-   "LATER" :logseq.property/status.todo
-   "IN-PROGRESS" :logseq.property/status.doing
-   "NOW" :logseq.property/status.doing
    "DOING" :logseq.property/status.doing
    "DONE" :logseq.property/status.done
-   "WAIT" :logseq.property/status.backlog
-   "WAITING" :logseq.property/status.backlog
    "CANCELED" :logseq.property/status.canceled
    "CANCELLED" :logseq.property/status.canceled})
 
