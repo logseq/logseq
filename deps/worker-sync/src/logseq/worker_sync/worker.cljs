@@ -15,14 +15,12 @@
 
 (glogi-console/install!)
 
+(declare handle-assets)
 (defn- handle-worker-fetch [request ^js env]
   (let [url (js/URL. (.-url request))
         path (.-pathname url)
         method (.-method request)]
     (cond
-      (= method "OPTIONS")
-      (common/options-response)
-
       (= path "/health")
       (common/json-response {:ok true})
 
@@ -32,6 +30,12 @@
             do-id (.idFromName namespace "index")
             stub (.get namespace do-id)]
         (.fetch stub request))
+
+      (string/starts-with? path "/assets/")
+      (handle-assets request env)
+
+      (= method "OPTIONS")
+      (common/options-response)
 
       (string/starts-with? path "/sync/")
       (let [prefix (count "/sync/")
@@ -82,6 +86,87 @@
     (let [n (js/parseInt value 10)]
       (when-not (js/isNaN n)
         n))))
+
+(def ^:private max-asset-size (* 100 1024 1024))
+
+(defn- asset-cors-headers []
+  #js {"Access-Control-Allow-Origin" "*"
+       "Access-Control-Allow-Headers" "content-type,x-amz-meta-checksum,x-amz-meta-type"
+       "Access-Control-Allow-Methods" "GET, PUT, DELETE, OPTIONS"})
+
+(defn- parse-asset-path [path]
+  (let [prefix "/assets/"]
+    (when (string/starts-with? path prefix)
+      (let [rest-path (subs path (count prefix))
+            slash-idx (string/index-of rest-path "/")
+            graph-id (when (and slash-idx (pos? slash-idx)) (subs rest-path 0 slash-idx))
+            file (when (and slash-idx (pos? slash-idx)) (subs rest-path (inc slash-idx)))
+            dot-idx (when file (string/last-index-of file "."))
+            asset-uuid (when (and dot-idx (pos? dot-idx)) (subs file 0 dot-idx))
+            asset-type (when (and dot-idx (pos? dot-idx)) (subs file (inc dot-idx)))]
+        (when (and (seq graph-id) (seq asset-uuid) (seq asset-type))
+          {:graph-id graph-id
+           :asset-uuid asset-uuid
+           :asset-type asset-type
+           :key (str graph-id "/" asset-uuid "." asset-type)})))))
+
+(defn- handle-assets [request ^js env]
+  (let [url (js/URL. (.-url request))
+        path (.-pathname url)
+        method (.-method request)]
+    (cond
+      (= method "OPTIONS")
+      (js/Response. nil #js {:status 204 :headers (asset-cors-headers)})
+
+      :else
+      (if-let [{:keys [key asset-type]} (parse-asset-path path)]
+        (let [^js bucket (.-LOGSEQ_SYNC_ASSETS env)]
+          (if-not bucket
+            (js/Response. (js/JSON.stringify #js {:error "missing assets bucket"})
+                          #js {:status 500 :headers (asset-cors-headers)})
+            (case method
+              "GET"
+              (.then (.get bucket key)
+                     (fn [^js obj]
+                       (if (nil? obj)
+                         (js/Response. (js/JSON.stringify #js {:error "not found"})
+                                       #js {:status 404 :headers (asset-cors-headers)})
+                         (let [content-type (or (.-contentType (.-httpMetadata obj))
+                                                "application/octet-stream")]
+                           (js/Response. (.-body obj)
+                                         #js {:status 200
+                                              :headers (js/Object.assign
+                                                        #js {"content-type" content-type
+                                                             "x-asset-type" asset-type}
+                                                        (asset-cors-headers))})))))
+
+              "PUT"
+              (.then (.arrayBuffer request)
+                     (fn [buf]
+                       (if (> (.-byteLength buf) max-asset-size)
+                         (js/Response. (js/JSON.stringify #js {:error "asset too large"})
+                                       #js {:status 413 :headers (asset-cors-headers)})
+                         (.then (.put bucket
+                                      key
+                                      buf
+                                      #js {:httpMetadata #js {:contentType (or (.get (.-headers request) "content-type")
+                                                                               "application/octet-stream")}
+                                           :customMetadata #js {:checksum (.get (.-headers request) "x-amz-meta-checksum")
+                                                                :type asset-type}})
+                                (fn [_]
+                                  (js/Response. (js/JSON.stringify #js {:ok true})
+                                                #js {:status 200 :headers (asset-cors-headers)}))))))
+
+              "DELETE"
+              (.then (.delete bucket key)
+                     (fn [_]
+                       (js/Response. (js/JSON.stringify #js {:ok true})
+                                     #js {:status 200 :headers (asset-cors-headers)})))
+
+              (js/Response. (js/JSON.stringify #js {:error "method not allowed"})
+                            #js {:status 405 :headers (asset-cors-headers)}))))
+        (js/Response. (js/JSON.stringify #js {:error "invalid asset path"})
+                      #js {:status 400 :headers (asset-cors-headers)})))))
 
 (defn- pull-response [^js self since]
   (let [sql (.-sql self)
