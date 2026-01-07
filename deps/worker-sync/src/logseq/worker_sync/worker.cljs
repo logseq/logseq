@@ -2,8 +2,14 @@
   (:require ["cloudflare:workers" :refer [DurableObject]]
             [clojure.string :as string]
             [datascript.core :as d]
+            [datascript.impl.entity :as de :refer [Entity]]
             [lambdaisland.glogi :as log]
-            [logseq.db :as ldb]
+            [logseq.common.config :as common-config]
+            [logseq.common.util :as common-util]
+            [logseq.common.util.date-time :as date-time]
+            [logseq.common.uuid :as common-uuid]
+            [logseq.db.common.order :as db-order]
+            [logseq.db.frontend.schema :as db-schema]
             [logseq.worker-sync.common :as common]
             [logseq.worker-sync.cycle :as cycle]
             [logseq.worker-sync.protocol :as protocol]
@@ -12,8 +18,12 @@
 
 (defn- handle-worker-fetch [request ^js env]
   (let [url (js/URL. (.-url request))
-        path (.-pathname url)]
+        path (.-pathname url)
+        method (.-method request)]
     (cond
+      (= method "OPTIONS")
+      (common/options-response)
+
       (= path "/health")
       (common/json-response {:ok true})
 
@@ -26,16 +36,12 @@
 
       (string/starts-with? path "/sync/")
       (let [prefix (count "/sync/")
-            rest-path (subs path prefix)
-            slash-idx (string/index-of rest-path "/")
-            graph-id (if (neg? slash-idx) rest-path (subs rest-path 0 slash-idx))
-            tail (if (neg? slash-idx) "/" (subs rest-path slash-idx))
-            new-url (str (.-origin url) tail (.-search url))]
+            graph-id (subs path prefix)]
         (if (seq graph-id)
           (let [^js namespace (.-LOGSEQ_SYNC_DO env)
                 do-id (.idFromName namespace graph-id)
                 stub (.get namespace do-id)
-                rewritten (js/Request. new-url request)]
+                rewritten (js/Request. url request)]
             (.fetch stub rewritten))
           (common/bad-request "missing graph id")))
 
@@ -80,28 +86,342 @@
    :attr (name attr)
    :server_values (common/write-transit (cycle/server-values-for db tx-data attr))})
 
-(defn- handle-tx! [^js self tx-data t-before]
+(defn- entity->lookup [db entity]
+  (cond
+    (vector? entity) entity
+    (uuid? entity) [:block/uuid entity]
+    (keyword? entity) [:db/ident entity]
+    (map? entity)
+    (or (when-let [uuid (:block/uuid entity)]
+          [:block/uuid uuid])
+        (when-let [ident (:db/ident entity)]
+          [:db/ident ident])
+        (when-let [eid (:db/id entity)]
+          (when (vector? eid)
+            eid)))
+    (instance? Entity entity)
+    (or (when-let [uuid (:block/uuid entity)]
+          [:block/uuid uuid])
+        (when-let [ident (:db/ident entity)]
+          [:db/ident ident]))
+    (number? entity) nil
+    :else
+    (when-let [ent (d/entity db entity)]
+      (or (when-let [uuid (:block/uuid ent)]
+            [:block/uuid uuid])
+          (when-let [ident (:db/ident ent)]
+            [:db/ident ident])))))
+
+(defn- normalize-ref [db ref]
+  (or (entity->lookup db ref) ref))
+
+(defn- normalize-ref-value [db value]
+  (cond
+    (set? value) (into #{} (map (partial normalize-ref db)) value)
+    (sequential? value) (mapv (partial normalize-ref db) value)
+    :else (normalize-ref db value)))
+
+(defn- ref-attr? [attr]
+  (contains? db-schema/ref-type-attributes attr))
+
+(defn- normalize-tx-data [db tx-data]
+  (mapv
+   (fn [item]
+     (cond
+       (and (vector? item) (#{:db/add :db/retract} (first item)))
+       (let [[op e a v] item]
+         (cond-> [op (normalize-ref db e) a v]
+           (ref-attr? a)
+           (update 3 (partial normalize-ref-value db))))
+
+       (and (vector? item) (#{:db.fn/retractEntity :db/retractEntity} (first item)))
+       (let [[op e] item]
+         [op (normalize-ref db e)])
+
+       (map? item)
+       (let [item' (cond-> item
+                     (contains? item :db/id)
+                     (update :db/id (partial normalize-ref db)))]
+         (reduce
+          (fn [acc k]
+            (if (contains? acc k)
+              (update acc k (partial normalize-ref-value db))
+              acc))
+          item'
+          db-schema/ref-type-attributes))
+
+       :else item))
+   tx-data))
+
+(defn- contains-unstable-entity-id? [tx-data]
+  (boolean
+   (some
+    (fn [item]
+      (cond
+        (and (vector? item) (#{:db/add :db/retract} (first item)))
+        (let [[_ e a v] item]
+          (or (number? e)
+              (and (ref-attr? a) (number? v))))
+
+        (and (vector? item) (#{:db.fn/retractEntity :db/retractEntity} (first item)))
+        (let [[_ e] item]
+          (number? e))
+
+        (map? item)
+        (let [unstable-ref? (fn [value]
+                              (cond
+                                (number? value) true
+                                (sequential? value) (some number? value)
+                                (set? value) (some number? value)
+                                :else false))]
+          (or (number? (:db/id item))
+              (some (fn [k]
+                      (when (contains? item k)
+                        (unstable-ref? (get item k))))
+                    db-schema/ref-type-attributes)))
+
+        :else false))
+    tx-data)))
+
+(defn- journal-page-info []
+  (let [now (common/now-ms)
+        day (date-time/ms->journal-day now)
+        formatter (common-config/get-date-formatter nil)
+        title (date-time/int->journal-title day formatter)
+        page-uuid (common-uuid/gen-uuid :journal-page-uuid day)]
+    {:day day
+     :title title
+     :name (common-util/page-name-sanity-lc title)
+     :uuid page-uuid}))
+
+(defn- build-journal-page-tx [db {:keys [day title name uuid]}]
+  (when (and uuid title name (nil? (d/entity db [:block/uuid uuid])))
+    [{:block/uuid uuid
+      :block/title title
+      :block/name name
+      :block/journal-day day
+      :block/tags #{:logseq.class/Journal}
+      :block/created-at (common/now-ms)
+      :block/updated-at (common/now-ms)}]))
+
+(defn- max-order-for-parent [db parent-eid]
+  (reduce
+   (fn [acc datom]
+     (let [order (:block/order (d/entity db (:e datom)))]
+       (if (and order (or (nil? acc) (pos? (compare order acc))))
+         order
+         acc)))
+   nil
+   (d/datoms db :avet :block/parent parent-eid)))
+
+(defn- attr-updates-from-tx [tx-data attr]
+  (reduce
+   (fn [acc tx]
+     (cond
+       (and (vector? tx)
+            (= :db/add (first tx))
+            (= attr (nth tx 2)))
+       (conj acc {:entity (nth tx 1)
+                  :value (nth tx 3)})
+
+       (and (map? tx) (contains? tx attr))
+       (let [entity (or (:db/id tx)
+                        (:block/uuid tx)
+                        (:db/ident tx))]
+         (if (some? entity)
+           (conj acc {:entity entity
+                      :value (get tx attr)})
+           acc))
+
+       :else acc))
+   []
+   tx-data))
+
+(defn- collect-ident-refs [tx-data]
+  (let [add-ident (fn [acc value]
+                    (cond
+                      (keyword? value) (conj acc value)
+                      (and (vector? value) (= :db/ident (first value)) (keyword? (second value)))
+                      (conj acc (second value))
+                      :else acc))
+        add-ident-coll (fn [acc value]
+                         (cond
+                           (set? value) (reduce add-ident acc value)
+                           (sequential? value) (reduce add-ident acc value)
+                           :else (add-ident acc value)))]
+    (reduce
+     (fn [acc item]
+       (cond
+         (and (vector? item) (#{:db/add :db/retract} (first item)))
+         (let [[_ e a v] item
+               acc (add-ident acc e)]
+           (if (ref-attr? a)
+             (add-ident-coll acc v)
+             acc))
+
+         (and (vector? item) (#{:db.fn/retractEntity :db/retractEntity} (first item)))
+         (let [[_ e] item]
+           (add-ident acc e))
+
+         (map? item)
+         (let [acc (if (contains? item :db/ident)
+                     (add-ident acc (:db/ident item))
+                     acc)]
+           (reduce
+            (fn [acc k]
+              (if (contains? item k)
+                (add-ident-coll acc (get item k))
+                acc))
+            acc
+            db-schema/ref-type-attributes))
+
+         :else acc))
+     #{}
+     tx-data)))
+
+(defn- ensure-ident-tx [db tx-data]
+  (let [idents (collect-ident-refs tx-data)]
+    (reduce
+     (fn [acc ident]
+       (if (d/entid db [:db/ident ident])
+         acc
+         (conj acc {:db/ident ident})))
+     []
+     idents)))
+
+(defn- ensure-idents [db tx-data]
+  (let [ident-tx (ensure-ident-tx db tx-data)]
+    (if (seq ident-tx)
+      {:db (d/db-with db ident-tx)
+       :tx-data (into ident-tx tx-data)}
+      {:db db
+       :tx-data tx-data})))
+
+(defn- fix-missing-parent [db tx-data]
+  (let [db' (d/db-with db tx-data)
+        updates (attr-updates-from-tx tx-data :block/parent)
+        journal (journal-page-info)
+        journal-ref [:block/uuid (:uuid journal)]
+        journal-tx (build-journal-page-tx db' journal)
+        db'' (if (seq journal-tx) (d/db-with db' journal-tx) db')
+        parent-eid (d/entid db'' journal-ref)
+        max-order (when parent-eid (max-order-for-parent db'' parent-eid))
+        max-atom (atom max-order)
+        fixes (reduce
+               (fn [acc {:keys [entity value]}]
+                 (let [entity-ref (normalize-ref db'' entity)
+                       parent-ref (normalize-ref db'' value)
+                       eid (d/entid db'' entity-ref)
+                       parent-eid' (when parent-ref (d/entid db'' parent-ref))]
+                   (if (and eid (some? value) (nil? parent-eid'))
+                     (let [order (db-order/gen-key @max-atom nil :max-key-atom max-atom)]
+                       (conj acc
+                             [:db/add entity-ref :block/parent journal-ref]
+                             [:db/add entity-ref :block/page journal-ref]
+                             [:db/add entity-ref :block/order order]))
+                     acc)))
+               []
+               updates)]
+    (cond-> tx-data
+      (seq journal-tx) (into journal-tx)
+      (seq fixes) (into fixes))))
+
+(defn- fix-duplicate-orders [db tx-data]
+  (let [db' (d/db-with db tx-data)
+        updates (attr-updates-from-tx tx-data :block/order)
+        max-order-atoms (atom {})
+        fixes (reduce
+               (fn [acc {:keys [entity value]}]
+                 (let [entity-ref (normalize-ref db' entity)
+                       eid (d/entid db' entity-ref)
+                       parent (when eid (:block/parent (d/entity db' eid)))
+                       parent-eid (when parent (d/entid db' (normalize-ref db' parent)))]
+                   (if (and eid parent-eid value)
+                     (let [siblings (d/datoms db' :avet :block/parent parent-eid)
+                           same-order? (some
+                                        (fn [datom]
+                                          (let [sib-eid (:e datom)]
+                                            (and (not= sib-eid eid)
+                                                 (= value (:block/order (d/entity db' sib-eid))))))
+                                        siblings)]
+                       (if same-order?
+                         (let [max-atom (or (get @max-order-atoms parent-eid)
+                                            (let [max-order (max-order-for-parent db' parent-eid)
+                                                  created (atom max-order)]
+                                              (swap! max-order-atoms assoc parent-eid created)
+                                              created))
+                               order (db-order/gen-key @max-atom nil :max-key-atom max-atom)]
+                           (conj acc [:db/add entity-ref :block/order order]))
+                         acc))
+                     acc)))
+               []
+               updates)]
+    (if (seq fixes)
+      (into tx-data fixes)
+      tx-data)))
+
+(defn ^:test normalize-tx-data* [db tx-data]
+  (normalize-tx-data db tx-data))
+
+(defn ^:test contains-unstable-entity-id?* [tx-data]
+  (contains-unstable-entity-id? tx-data))
+
+(defn ^:test fix-missing-parent* [db tx-data]
+  (fix-missing-parent db tx-data))
+
+(defn ^:test fix-duplicate-orders* [db tx-data]
+  (fix-duplicate-orders db tx-data))
+
+(defn- apply-tx! [^js self tx-data]
   (let [sql (.-sql self)
         conn (.-conn self)
-        current-t (t-now self)]
-    (cond
-      (and (number? t-before) (not= t-before current-t))
+        db @conn
+        normalized (normalize-tx-data db tx-data)]
+    (if (contains-unstable-entity-id? normalized)
       {:type "tx/reject"
-       :reason "stale"
-       :t current-t}
-
-      :else
-      (let [db @conn
-            cycle-info (cycle/detect-cycle db tx-data)]
+       :reason "unstable-id"}
+      (let [            ;; {:keys [db tx-data]} (ensure-idents db normalized)
+            parent-fixed (fix-missing-parent db tx-data)
+            order-fixed (fix-duplicate-orders db parent-fixed)
+            cycle-info (cycle/detect-cycle db order-fixed)]
         (if cycle-info
-          (cycle-reject-response db tx-data cycle-info)
-          (let [_ (ldb/transact! conn tx-data)
+          (cycle-reject-response db order-fixed cycle-info)
+          (let [_ (d/transact! conn order-fixed)
                 new-t (storage/next-t! sql)
                 created-at (common/now-ms)
-                tx-str (common/write-transit tx-data)]
+                tx-str (common/write-transit order-fixed)]
             (storage/append-tx! sql new-t tx-str created-at)
             {:type "tx/ok"
              :t new-t}))))))
+
+(defn- handle-tx! [^js self tx-data t-before]
+  (let [current-t (t-now self)]
+    (if (and (number? t-before) (not= t-before current-t))
+      {:type "tx/reject"
+       :reason "stale"
+       :t current-t}
+      (apply-tx! self tx-data))))
+
+(defn- handle-tx-batch! [^js self txs t-before]
+  (let [current-t (t-now self)]
+    (if (and (number? t-before) (not= t-before current-t))
+      {:type "tx/reject"
+       :reason "stale"
+       :t current-t}
+      (loop [idx 0]
+        (if (>= idx (count txs))
+          {:type "tx/batch/ok"
+           :t (t-now self)
+           :count (count txs)}
+          (let [tx-data (protocol/transit->tx (nth txs idx))]
+            (if (sequential? tx-data)
+              (let [result (apply-tx! self tx-data)]
+                (if (= "tx/ok" (:type result))
+                  (recur (inc idx))
+                  (assoc result :index idx)))
+              {:type "tx/reject"
+               :reason "invalid tx"
+               :index idx})))))))
 
 (defn- handle-ws-message! [^js self ^js ws raw]
   (let [message (protocol/parse-message raw)]
@@ -128,6 +448,13 @@
             (send! ws (handle-tx! self tx-data t-before))
             (send! ws {:type "tx/reject" :reason "invalid tx"})))
 
+        "tx/batch"
+        (let [txs (:txs message)
+              t-before (parse-int (:t_before message))]
+          (if (and (sequential? txs) (every? string? txs))
+            (send! ws (handle-tx-batch! self txs t-before))
+            (send! ws {:type "tx/reject" :reason "invalid tx"})))
+
         (send! ws {:type "error" :message "unknown type"})))))
 
 (defn- handle-ws [^js self request]
@@ -151,7 +478,12 @@
   (let [url (js/URL. (.-url request))
         path (.-pathname url)
         method (.-method request)]
+    (prn :debug :path path
+         :method method)
     (cond
+      (= method "OPTIONS")
+      (common/options-response)
+
       (and (= method "GET") (= path "/health"))
       (common/json-response {:ok true})
 
@@ -179,6 +511,17 @@
                        t-before (parse-int (aget result "t_before"))]
                    (if (sequential? tx-data)
                      (common/json-response (handle-tx! self tx-data t-before))
+                     (common/bad-request "invalid tx"))))))
+
+      (and (= method "POST") (= path "/tx/batch"))
+      (.then (common/read-json request)
+             (fn [result]
+               (if (nil? result)
+                 (common/bad-request "missing body")
+                 (let [txs (js->clj (aget result "txs"))
+                       t-before (parse-int (aget result "t_before"))]
+                   (if (and (sequential? txs) (every? string? txs))
+                     (common/json-response (handle-tx-batch! self txs t-before))
                      (common/bad-request "invalid tx"))))))
 
       :else
@@ -241,6 +584,9 @@
         method (.-method request)]
     (index-init! sql)
     (cond
+      (= method "OPTIONS")
+      (common/options-response)
+
       (and (= method "GET") (= path "/graphs"))
       (common/json-response {:graphs (index-list sql)})
 

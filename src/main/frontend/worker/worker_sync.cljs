@@ -33,9 +33,16 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (let [db @conn
           graph-uuid (ldb/get-graph-rtc-uuid db)
-          local-uuid (ldb/get-graph-local-uuid db)]
+          local-uuid (ldb/get-graph-local-uuid db)
+          new-local (when (and (nil? graph-uuid) (nil? local-uuid))
+                      (random-uuid))]
+      (when new-local
+        (try
+          (d/transact! conn [(sqlite-util/kv :logseq.kv/local-graph-uuid new-local)])
+          (catch :default e
+            (log/error :worker-sync/graph-uuid-write-failed {:error e}))))
       (or (some-> graph-uuid str)
-          (some-> local-uuid str)
+          (some-> (or local-uuid new-local) str)
           (when (string? repo) repo)))))
 
 (defn- ready-state [ws]
@@ -47,6 +54,46 @@
 (defn- send! [ws message]
   (when (ws-open? ws)
     (.send ws (js/JSON.stringify (clj->js message)))))
+
+(defn- entity->lookup [db eid]
+  (when-let [entity (and (number? eid) (d/entity db eid))]
+    (or (when-let [uuid (:block/uuid entity)]
+          [:block/uuid uuid])
+        (when-let [ident (:db/ident entity)]
+          [:db/ident ident]))))
+
+(defn- normalize-ref [db ref]
+  (cond
+    (number? ref) (or (entity->lookup db ref) ref)
+    (instance? Entity ref) (or (when-let [uuid (:block/uuid ref)]
+                                 [:block/uuid uuid])
+                               (when-let [ident (:db/ident ref)]
+                                 [:db/ident ident]))
+    :else ref))
+
+(defn- normalize-tx-data [db tx-data]
+  (mapv
+   (fn [item]
+     (cond
+       (and (vector? item) (#{:db/add :db/retract} (first item)))
+       (let [[op e a v] item]
+         [op (normalize-ref db e) a (normalize-ref db v)])
+
+       (map? item)
+       (let [item' (if (contains? item :db/id)
+                     (let [lookup (normalize-ref db (:db/id item))]
+                       (cond-> (dissoc item :db/id)
+                         lookup (assoc :block/uuid (second lookup))))
+                     item)]
+         (cond-> item'
+           (contains? item' :block/parent)
+           (update :block/parent (partial normalize-ref db))
+
+           (contains? item' :block/page)
+           (update :block/page (partial normalize-ref db))))
+
+       :else item))
+   tx-data))
 
 (defn- parse-message [raw]
   (try
@@ -99,18 +146,42 @@
       (when (seq tx-data)
         (d/transact! conn tx-data {:worker-sync/remote? true})))))
 
+(declare flush-pending!)
+(declare remove-pending-txs!)
 (defn- handle-message! [repo client raw]
   (when-let [message (parse-message raw)]
     (case (:type message)
-      "hello" (update-server-t! client (:t message))
-      "tx/ok" (update-server-t! client (:t message))
+      "hello" (do
+                (update-server-t! client (:t message))
+                (flush-pending! repo client))
+      "tx/ok" (do
+                (update-server-t! client (:t message))
+                (remove-pending-txs! repo @(:inflight client))
+                (reset! (:inflight client) [])
+                (flush-pending! repo client))
+      "tx/batch/ok" (do
+                      (update-server-t! client (:t message))
+                      (remove-pending-txs! repo @(:inflight client))
+                      (reset! (:inflight client) [])
+                      (flush-pending! repo client))
       "tx/reject" (do
                     (when (= "stale" (:reason message))
                       (update-server-t! client (:t message)))
+                    (if-let [index (:index message)]
+                      (let [inflight @(:inflight client)
+                            succeeded (subvec inflight 0 (min index (count inflight)))]
+                        (remove-pending-txs! repo succeeded)
+                        (when-not (= "stale" (:reason message))
+                          (let [failure (when (< index (count inflight)) [(nth inflight index)])]
+                            (remove-pending-txs! repo failure))))
+                      (when-not (= "stale" (:reason message))
+                        (remove-pending-txs! repo @(:inflight client))))
+                    (reset! (:inflight client) [])
                     (when (= "cycle" (:reason message))
                       (let [attr (keyword (:attr message))
                             server-values (sqlite-util/read-transit-str (:server_values message))]
-                        (reconcile-cycle! repo attr server-values))))
+                        (reconcile-cycle! repo attr server-values)))
+                    (flush-pending! repo client))
       "pull/ok" (do
                   (update-server-t! client (:t message))
                   (doseq [{:keys [tx]} (:txs message)]
@@ -123,9 +194,61 @@
   (or (get @worker-state/*worker-sync-clients repo)
       (let [client {:repo repo
                     :server-t (atom 0)
-                    :send-queue (atom (p/resolved nil))}]
+                    :send-queue (atom (p/resolved nil))
+                    :inflight (atom [])}]
         (swap! worker-state/*worker-sync-clients assoc repo client)
         client)))
+
+(defn- client-ops-conn [repo]
+  (worker-state/get-client-ops-conn repo))
+
+(defn- persist-local-tx! [repo tx-str]
+  (when-let [conn (client-ops-conn repo)]
+    (let [tx-id (random-uuid)
+          now (.now js/Date)]
+      (d/transact! conn [{:worker-sync/tx-id tx-id
+                          :worker-sync/tx tx-str
+                          :worker-sync/created-at now}])
+      tx-id)))
+
+(defn- pending-txs
+  [repo limit]
+  (when-let [conn (client-ops-conn repo)]
+    (let [db @conn
+          datoms (d/datoms db :avet :worker-sync/created-at)]
+      (->> datoms
+           (map (fn [datom]
+                  (d/entity db (:e datom))))
+           (keep (fn [ent]
+                   (when-let [tx-id (:worker-sync/tx-id ent)]
+                     {:tx-id tx-id
+                      :tx (:worker-sync/tx ent)})))
+           (take limit)
+           (vec)))))
+
+(defn- remove-pending-txs!
+  [repo tx-ids]
+  (when (seq tx-ids)
+    (when-let [conn (client-ops-conn repo)]
+      (d/transact! conn
+                   (mapv (fn [tx-id]
+                           [:db.fn/retractEntity [:worker-sync/tx-id tx-id]])
+                         tx-ids)))))
+
+(defn- flush-pending!
+  [repo client]
+  (let [inflight @(:inflight client)]
+    (when (empty? inflight)
+      (when-let [ws (:ws client)]
+        (when (ws-open? ws)
+          (let [batch (pending-txs repo 50)]
+            (when (seq batch)
+              (let [tx-ids (mapv :tx-id batch)
+                    txs (mapv :tx batch)]
+                (reset! (:inflight client) tx-ids)
+                (send! ws {:type "tx/batch"
+                           :t_before @(:server-t client)
+                           :txs txs})))))))))
 
 (defn- attach-ws-handlers! [repo client ws]
   (set! (.-onmessage ws)
@@ -189,26 +312,22 @@
    (p/resolved nil)))
 
 (defn enqueue-local-tx!
-  [repo tx-data]
+  [repo tx-data tx-meta]
   (when-let [client (get @worker-state/*worker-sync-clients repo)]
     (let [send-queue (:send-queue client)
-          normalized (mapv (fn [item]
-                             (if (and (map? item) (contains? item :e) (contains? item :a))
-                               (if (:added item)
-                                 [:db/add (:e item) (:a item) (:v item)]
-                                 [:db/retract (:e item) (:a item) (:v item)])
-                               item))
-                           tx-data)
-          tx-str (sqlite-util/write-transit-str normalized)]
-      (swap! send-queue
-             (fn [prev]
-               (p/then prev
-                       (fn [_]
-                         (when-let [ws (:ws (get @worker-state/*worker-sync-clients repo))]
-                           (when (ws-open? ws)
-                             (send! ws {:type "tx"
-                                        :t_before @(:server-t client)
-                                        :tx tx-str}))))))))))
+          conn (worker-state/get-datascript-conn repo)
+          db (some-> conn deref)]
+      (when db
+        (let [normalized (if (:initial-db? tx-meta) tx-data (normalize-tx-data db tx-data))
+              tx-str (sqlite-util/write-transit-str normalized)]
+          (persist-local-tx! repo tx-str)
+          (swap! send-queue
+                 (fn [prev]
+                   (p/then prev
+                           (fn [_]
+                             (when-let [ws (:ws (get @worker-state/*worker-sync-clients repo))]
+                               (when (ws-open? ws)
+                                 (flush-pending! repo client))))))))))))
 
 (defn handle-local-tx!
   [repo tx-data tx-meta]
@@ -217,4 +336,4 @@
              (not (:worker-sync/remote? tx-meta))
              (not (:rtc-download-graph? tx-meta))
              (not (:from-disk? tx-meta)))
-    (enqueue-local-tx! repo tx-data)))
+    (enqueue-local-tx! repo tx-data tx-meta)))

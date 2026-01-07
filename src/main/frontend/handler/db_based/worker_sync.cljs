@@ -7,6 +7,7 @@
             [frontend.state :as state]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
+            [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
 
 (defn- ws->http-base [ws-url]
@@ -29,8 +30,10 @@
 (defn- get-graph-id [repo]
   (let [db (db/get-db repo)]
     (or (ldb/get-graph-rtc-uuid db)
-        ;; FIXME: only for testing
-        (random-uuid))))
+        (ldb/get-graph-local-uuid db)
+        (let [new-id (random-uuid)]
+          (ldb/transact! repo [(sqlite-util/kv :logseq.kv/local-graph-uuid new-id)])
+          new-id))))
 
 (defn- fetch-json
   [url opts]
@@ -71,7 +74,8 @@
                                          #js {:graph_id (str graph-id)
                                               :graph_name repo
                                               :schema_version schema-version})})]
-        (ldb/transact! repo [{:logseq.kv/graph-uuid graph-id}])
+        (ldb/transact! repo [(sqlite-util/kv :logseq.kv/db-type "db")
+                             (sqlite-util/kv :logseq.kv/graph-uuid graph-id)])
         result)
       (p/rejected (ex-info "worker-sync missing graph info"
                            {:type :worker-sync/invalid-graph
