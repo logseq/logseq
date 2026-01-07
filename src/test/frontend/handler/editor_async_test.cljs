@@ -13,7 +13,7 @@
 (use-fixtures :each
   {:before (fn []
              (async done
-                    (test-helper/start-test-db! {:db-graph? true})
+                    (test-helper/start-test-db!)
                     (done)))
    :after test-helper/destroy-test-db!})
 
@@ -45,7 +45,7 @@
                                                  {:id block-dom-id
                                                   :block-uuid (:block/uuid block)}]))]
       (p/do!
-       (editor/delete-block! test-helper/test-db-name-db-version)
+       (editor/delete-block! test-helper/test-db)
        (when (fn? on-delete)
          (on-delete))))))
 
@@ -57,7 +57,7 @@
        [{:block/title "b1"}
         {:block/title "b2"}
         {:block/title ""}]}])
-    (p/let [conn (db/get-db test-helper/test-db-name-db-version false)
+    (p/let [conn (db/get-db test-helper/test-db false)
             block (->> (d/q '[:find (pull ?b [*])
                               :where [?b :block/title ""]
                               [?p :block/name "page1"]
@@ -78,7 +78,7 @@
   (testing "backspace deletes empty block in embedded context"
     ;; testing embed at this layer doesn't require an embed block since
     ;; delete-block handles all the embed setup
-    (p/let [conn (db/get-db test-helper/test-db-name-db-version false)
+    (p/let [conn (db/get-db test-helper/test-db false)
             block (->> (d/q '[:find (pull ?b [*])
                               :where [?b :block/title ""]
                               [?p :block/name "page1"]

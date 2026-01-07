@@ -7,7 +7,7 @@
             [frontend.test.helper :as test-helper]
             [frontend.util.cursor :as cursor]))
 
-(use-fixtures :each #(test-helper/start-and-destroy-db % {:db-graph? true}))
+(use-fixtures :each test-helper/start-and-destroy-db)
 
 (deftest extract-nearest-link-from-text-test
   (testing "Page, block and tag links"
@@ -199,7 +199,7 @@
     (test-helper/load-test-files [{:page {:block/title "foo"}
                                    :blocks [{:block/title "foo"
                                              :build/properties {:logseq.property/heading 1}}]}])
-    (let [repo test-helper/test-db-name-db-version
+    (let [repo test-helper/test-db
           page-uuid (:block/uuid (db/get-page "foo"))
           block-uuid (:block/uuid (model/get-block-by-page-name-and-block-route-name repo (str page-uuid) "foo"))]
       (editor/save-block! repo block-uuid "# bar")
