@@ -86,7 +86,6 @@
   (let [conn (.-conn self)
         db @conn
         datoms (protocol/datoms->wire (d/datoms db :eavt))]
-    (prn :debug :count (count db))
     {:type "snapshot/ok"
      :t (t-now self)
      :datoms (common/write-transit datoms)}))
@@ -315,14 +314,55 @@
 (defn ^:test fix-duplicate-orders* [db tx-data]
   (fix-duplicate-orders db tx-data))
 
+(defn- lookup-id?
+  [v]
+  (and (vector? v)
+       (= 2 (count v))
+       (= (first v) :block/uuid)
+       (uuid? (second v))))
+
+(defn- normalize-tx-data [db-after db-before tx-data]
+  (->> tx-data
+       (map
+        (fn [[e a v _t added]]
+          (let [e' (if-let [entity (d/entity db-before e)]
+                     (if-let [id (:block/uuid entity)]
+                       [:block/uuid id]
+                       (:db/ident entity))
+                     (- e))
+                v' (if (and (integer? v)
+                            (or (= :db.type/ref (:db/valueType (d/entity db-after a)))
+                                (= :db.type/ref (:db/valueType (d/entity db-before a)))))
+                     (if-let [entity (d/entity db-before v)]
+                       (if-let [id (:block/uuid entity)]
+                         [:block/uuid id]
+                         (:db/ident entity))
+                       (- v))
+                     v)]
+            (if added
+              [:db/add e' a v']
+              [:db/retract e' a v']))))))
+
 (defn- apply-tx! [^js self tx-data]
   (let [sql (.-sql self)
         conn (.-conn self)
-        db @conn]
-    (let [_ (d/transact! conn tx-data)
+        db @conn
+        tx-data' (keep
+                  (fn [[op e a v]]
+                    (let [e' (if (lookup-id? e)
+                               (:db/id (d/entity db e))
+                               e)
+                          v' (if (lookup-id? v)
+                               (:db/id (d/entity db v))
+                               v)]
+                      (when (and e' v')
+                        [op e' a v'])))
+                  tx-data)]
+    (let [{:keys [tx-data db-before db-after]} (d/transact! conn tx-data')
+          normalized-data (normalize-tx-data db-after db-before tx-data)
           new-t (storage/next-t! sql)
           created-at (common/now-ms)
-          tx-str (common/write-transit tx-data)]
+          tx-str (common/write-transit normalized-data)]
       (storage/append-tx! sql new-t tx-str created-at)
       {:type "tx/ok"
        :t new-t})
