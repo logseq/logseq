@@ -5,7 +5,7 @@
             [lambdaisland.glogi :as log]
             [lambdaisland.glogi.console :as glogi-console]
             [logseq.db :as ldb]
-            [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.common.normalize :as db-normalize]
             [logseq.worker-sync.common :as common]
             [logseq.worker-sync.cycle :as cycle]
             [logseq.worker-sync.protocol :as protocol]
@@ -106,68 +106,6 @@
           {:attr attr
            :server_values (cycle/server-values-for db tx-data attr)})})
 
-(defn- lookup-id?
-  [v]
-  (and (vector? v)
-       (= 2 (count v))
-       (= (first v) :block/uuid)
-       (uuid? (second v))))
-
-(defn- tempid->lookup-map [tx-data]
-  (reduce
-   (fn [acc [op e a v]]
-     (if (and (= :db/add op) (= :block/uuid a) (uuid? v))
-       (assoc acc e [:block/uuid v])
-       acc))
-   {}
-   tx-data))
-
-(defn- replace-tempids [tx-data]
-  (let [m (tempid->lookup-map tx-data)]
-    (mapv
-     (fn [[op e a v]]
-       (let [e' (get m e e)
-             v' (if (lookup-id? v) v (get m v v))]
-         [op e' a v']))
-     tx-data)))
-
-(defn- normalize-tx-data
-  [db-after db-before tx-data]
-  (->> tx-data
-       (map
-        (fn [[e a v _t added]]
-          (let [e' (if-let [entity (d/entity db-before e)]
-                     (if-let [id (:block/uuid entity)]
-                       [:block/uuid id]
-                       (:db/ident entity))
-                     (- e))
-                v' (if (and (integer? v)
-                            (or (= :db.type/ref (:db/valueType (d/entity db-after a)))
-                                (= :db.type/ref (:db/valueType (d/entity db-before a)))))
-                     (if-let [entity (d/entity db-before v)]
-                       (if-let [id (:block/uuid entity)]
-                         [:block/uuid id]
-                         (:db/ident entity))
-                       (- v))
-                     v)]
-            (if added
-              [:db/add e' a v']
-              [:db/retract e' a v']))))))
-
-(defn- de-normalize-tx-data
-  [db tx-data]
-  (keep
-   (fn [[op e a v]]
-     (let [e' (if (lookup-id? e)
-                (:db/id (d/entity db e))
-                e)
-           v' (if (lookup-id? v)
-                (:db/id (d/entity db v))
-                v)]
-       (when (and e' v')
-         [op e' a v'])))
-   tx-data))
-
 (defn- fix-tx-data
   [db tx-data]
   (if (some (fn [[op _e a v]]
@@ -182,7 +120,7 @@
   (let [sql (.-sql self)
         conn (.-conn self)
         db @conn
-        resolved (de-normalize-tx-data db tx-data)
+        resolved (db-normalize/de-normalize-tx-data db tx-data)
         tx-report (d/with db resolved)
         db' (:db-after tx-report)
         order-fixed (fix-tx-data db' resolved)
@@ -192,7 +130,7 @@
         (prn :debug "cycle detected: " cycle-info)
         (cycle-reject-response db order-fixed cycle-info))
       (let [{:keys [tx-data db-before db-after]} (ldb/transact! conn order-fixed)
-            normalized-data (normalize-tx-data db-after db-before tx-data)
+            normalized-data (db-normalize/normalize-tx-data db-after db-before tx-data)
             new-t (storage/next-t! sql)
             created-at (common/now-ms)
             tx-str (common/write-transit normalized-data)]
