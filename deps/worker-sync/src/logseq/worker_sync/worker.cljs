@@ -2,7 +2,6 @@
   (:require ["cloudflare:workers" :refer [DurableObject]]
             [clojure.string :as string]
             [datascript.core :as d]
-            [datascript.impl.entity :as de :refer [Entity]]
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
@@ -36,12 +35,16 @@
 
       (string/starts-with? path "/sync/")
       (let [prefix (count "/sync/")
-            graph-id (subs path prefix)]
+            rest-path (subs path prefix)
+            slash-idx (string/index-of rest-path "/")
+            graph-id (if (neg? slash-idx) rest-path (subs rest-path 0 slash-idx))
+            tail (if (neg? slash-idx) "/" (subs rest-path slash-idx))
+            new-url (str (.-origin url) tail (.-search url))]
         (if (seq graph-id)
           (let [^js namespace (.-LOGSEQ_SYNC_DO env)
                 do-id (.idFromName namespace graph-id)
                 stub (.get namespace do-id)
-                rewritten (js/Request. url request)]
+                rewritten (js/Request. new-url request)]
             (.fetch stub rewritten))
           (common/bad-request "missing graph id")))
 
