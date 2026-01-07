@@ -18,7 +18,9 @@
     (rtc-handler/<rtc-delete-graph! graph-uuid schema-version)))
 
 (defn <rtc-download-graph! [graph-name graph-uuid graph-schema-version timeout-ms]
-  (rtc-handler/<rtc-download-graph! graph-name graph-uuid graph-schema-version timeout-ms))
+  (if (worker-sync-enabled?)
+    (worker-sync-handler/<rtc-download-graph! graph-name graph-uuid graph-schema-version timeout-ms)
+    (rtc-handler/<rtc-download-graph! graph-name graph-uuid graph-schema-version timeout-ms)))
 
 (defn <rtc-stop! []
   (if (worker-sync-enabled?)
