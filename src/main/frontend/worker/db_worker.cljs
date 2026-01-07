@@ -246,9 +246,7 @@
       (when-not @*publishing? (common-sqlite/create-kvs-table! client-ops-db))
       (rtc-debug-log/create-tables! debug-log-db)
       (search/create-tables-and-triggers! search-db)
-      (ldb/register-transact-pipeline-fn!
-       (fn [tx-report]
-         (worker-pipeline/transact-pipeline repo tx-report)))
+      (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
       (let [schema (ldb/get-schema repo)
             conn (common-sqlite/get-storage-conn storage schema)
             _ (db-fix/check-and-fix-schema! repo conn)
