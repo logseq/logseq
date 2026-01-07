@@ -42,7 +42,7 @@
              (set (#'worker-pipeline/remove-conflict-datoms datoms)))))))
 
 (deftest test-built-in-page-updates-that-should-be-reverted
-  (let [graph test-helper/test-db-name-db-version
+  (let [graph test-helper/test-db
         conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
                 :blocks [{:block/title "b1"}
@@ -95,7 +95,7 @@
     (ldb/register-transact-pipeline-fn! identity)))
 
 (deftest ensure-query-property-on-tag-additions-test
-  (let [graph test-helper/test-db-name-db-version
+  (let [graph test-helper/test-db
         conn (db-test/create-conn-with-blocks
               {:pages-and-blocks [{:page {:block/title "page1"}
                                    :blocks [{:block/title "b1"}

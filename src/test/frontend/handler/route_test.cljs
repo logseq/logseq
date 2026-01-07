@@ -4,7 +4,7 @@
             [frontend.db.utils :as db-utils]
             [clojure.test :refer [deftest is use-fixtures testing]]))
 
-(use-fixtures :each {:before #(test-helper/start-test-db! {:db-graph? true})
+(use-fixtures :each {:before test-helper/start-test-db!
                      :after test-helper/destroy-test-db!})
 
 (deftest default-page-route

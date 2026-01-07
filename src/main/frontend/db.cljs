@@ -54,12 +54,3 @@
        (conn/transact! repo tx-data tx-meta))
      (ui-outliner-tx/transact! tx-meta
                                (outliner-op/transact! tx-data tx-meta)))))
-
-(defn set-file-content!
-  ([repo path content]
-   (set-file-content! repo path content {}))
-  ([repo path content opts]
-   (when (and repo path)
-     (let [tx-data {:file/path path
-                    :file/content content}]
-       (transact! repo [tx-data] opts)))))
