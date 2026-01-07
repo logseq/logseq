@@ -52,8 +52,8 @@
     (prn :tx-meta tx-meta)))
 
 (defmethod listen-db-changes :worker-sync
-  [_ {:keys [repo]} {:keys [tx-data tx-meta]}]
-  (worker-sync/handle-local-tx! repo tx-data tx-meta))
+  [_ {:keys [repo]} tx-report]
+  (worker-sync/handle-local-tx! repo tx-report))
 
 (defn- remove-old-embeddings-and-reset-new-updates!
   [conn tx-data tx-meta]

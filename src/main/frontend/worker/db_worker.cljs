@@ -282,8 +282,7 @@
                                   (let [config (or config "")
                                         initial-data (sqlite-create-graph/build-db-initial-data
                                                       config (select-keys opts [:import-type :graph-git-sha]))]
-                                    (ldb/transact! conn initial-data {:initial-db? true})))
-              initial-tx-data (:tx-data initial-tx-report)]
+                                    (ldb/transact! conn initial-data {:initial-db? true})))]
           (gc-sqlite-dbs! db client-ops-db debug-log-db conn {})
 
           (let [migration-result (db-migrate/migrate conn)]
@@ -291,8 +290,8 @@
               (let [client-ops (rtc-migrate/migration-results=>client-ops migration-result)]
                 (client-op/add-ops! repo client-ops))))
 
-          (when initial-tx-data
-            (worker-sync/handle-local-tx! repo initial-tx-data {:initial-db? true}))
+          (when initial-tx-report
+            (worker-sync/handle-local-tx! repo initial-tx-report))
 
           (db-listener/listen-db-changes! repo (get @*datascript-conns repo)))))))
 

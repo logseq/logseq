@@ -55,45 +55,35 @@
   (when (ws-open? ws)
     (.send ws (js/JSON.stringify (clj->js message)))))
 
-(defn- entity->lookup [db eid]
-  (when-let [entity (and (number? eid) (d/entity db eid))]
-    (or (when-let [uuid (:block/uuid entity)]
-          [:block/uuid uuid])
-        (when-let [ident (:db/ident entity)]
-          [:db/ident ident]))))
+(defn- normalize-ref [db a value]
+  (if (and (integer? value)
+           (= :db.type/ref (:db/valueType (d/entity db a))))
+    (if-let [id (:block/uuid (d/entity db value))]
+      [:block/uuid id]
+      (throw (ex-info (str "There's no :block/uuid for given refed value: " value)
+                      {:value value})))
+    value))
 
-(defn- normalize-ref [db ref]
-  (cond
-    (number? ref) (or (entity->lookup db ref) ref)
-    (instance? Entity ref) (or (when-let [uuid (:block/uuid ref)]
-                                 [:block/uuid uuid])
-                               (when-let [ident (:db/ident ref)]
-                                 [:db/ident ident]))
-    :else ref))
-
-(defn- normalize-tx-data [db tx-data]
-  (mapv
-   (fn [item]
-     (cond
-       (and (vector? item) (#{:db/add :db/retract} (first item)))
-       (let [[op e a v] item]
-         [op (normalize-ref db e) a (normalize-ref db v)])
-
-       (map? item)
-       (let [item' (if (contains? item :db/id)
-                     (let [lookup (normalize-ref db (:db/id item))]
-                       (cond-> (dissoc item :db/id)
-                         lookup (assoc :block/uuid (second lookup))))
-                     item)]
-         (cond-> item'
-           (contains? item' :block/parent)
-           (update :block/parent (partial normalize-ref db))
-
-           (contains? item' :block/page)
-           (update :block/page (partial normalize-ref db))))
-
-       :else item))
-   tx-data))
+(defn- normalize-tx-data [db-after db-before tx-data]
+  (->> tx-data
+       (remove (fn [[e a v t added]]
+                 (contains? #{:block/tx-id :logseq.property/created-by-ref
+                              :logseq.property.embedding/hnsw-label-updated-at} a)))
+       (map
+        (fn [[e a v t added]]
+          (let [v' (or (normalize-ref db-after a v) (normalize-ref db-before a v))]
+            (if added
+              [:db/add (- e) a v']
+              (let [e' (if-let [id (or (:block/uuid (d/entity db-after e))
+                                       (:block/uuid (d/entity db-before e)))]
+                         [:block/uuid id]
+                         (let [ident (or (:db/ident (d/entity db-after e))
+                                         (:db/ident (d/entity db-before e)))]
+                           (when-not ident
+                             (throw (ex-info "Entity has no :block/uuid or :db/ident"
+                                             {:data [e a v t added]})))
+                           ident))]
+                [:db/retract e' a v'])))))))
 
 (defn- parse-message [raw]
   (try
@@ -312,11 +302,12 @@
    (p/resolved nil)))
 
 (defn enqueue-local-tx!
-  [repo tx-data tx-meta]
+  [repo {:keys [tx-data db-after db-before]}]
   (let [conn (worker-state/get-datascript-conn repo)
         db (some-> conn deref)]
     (when db
-      (let [normalized (if (:initial-db? tx-meta) tx-data (normalize-tx-data db tx-data))
+      (let [normalized (normalize-tx-data db-after db-before tx-data)
+            _ (prn :debug :normalized normalized)
             tx-str (sqlite-util/write-transit-str normalized)]
         (persist-local-tx! repo tx-str)
         (when-let [client (get @worker-state/*worker-sync-clients repo)]
@@ -330,10 +321,10 @@
                                    (flush-pending! repo client)))))))))))))
 
 (defn handle-local-tx!
-  [repo tx-data tx-meta]
+  [repo {:keys [tx-data tx-meta] :as tx-report}]
   (when (and (enabled?)
              (seq tx-data)
              (not (:worker-sync/remote? tx-meta))
              (not (:rtc-download-graph? tx-meta))
              (not (:from-disk? tx-meta)))
-    (enqueue-local-tx! repo tx-data tx-meta)))
+    (enqueue-local-tx! repo tx-report)))
