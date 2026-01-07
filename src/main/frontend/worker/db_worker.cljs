@@ -278,20 +278,23 @@
         (swap! *client-ops-conns assoc repo client-ops-conn)
         (when (and (not @*publishing?) (not= client-op/schema-in-db (d/schema @client-ops-conn)))
           (d/reset-schema! client-ops-conn client-op/schema-in-db))
-        (when (and db-based? (not initial-data-exists?) (not datoms))
-          (let [config (or config "")
-                initial-data (sqlite-create-graph/build-db-initial-data
-                              config (select-keys opts [:import-type :graph-git-sha]))]
-            (ldb/transact! conn initial-data {:initial-db? true})))
+        (let [initial-tx-report (when (and db-based? (not initial-data-exists?) (not datoms))
+                                  (let [config (or config "")
+                                        initial-data (sqlite-create-graph/build-db-initial-data
+                                                      config (select-keys opts [:import-type :graph-git-sha]))]
+                                    (ldb/transact! conn initial-data {:initial-db? true})))
+              initial-tx-data (:tx-data initial-tx-report)]
+          (gc-sqlite-dbs! db client-ops-db debug-log-db conn {})
 
-        (gc-sqlite-dbs! db client-ops-db debug-log-db conn {})
+          (let [migration-result (db-migrate/migrate conn)]
+            (when (client-op/rtc-db-graph? repo)
+              (let [client-ops (rtc-migrate/migration-results=>client-ops migration-result)]
+                (client-op/add-ops! repo client-ops))))
 
-        (let [migration-result (db-migrate/migrate conn)]
-          (when (client-op/rtc-db-graph? repo)
-            (let [client-ops (rtc-migrate/migration-results=>client-ops migration-result)]
-              (client-op/add-ops! repo client-ops))))
+          (when initial-tx-data
+            (worker-sync/handle-local-tx! repo initial-tx-data {:initial-db? true}))
 
-        (db-listener/listen-db-changes! repo (get @*datascript-conns repo))))))
+          (db-listener/listen-db-changes! repo (get @*datascript-conns repo)))))))
 
 (defn- iter->vec [iter']
   (when iter'
