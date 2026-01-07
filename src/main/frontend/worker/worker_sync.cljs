@@ -130,37 +130,23 @@
       (catch :default e
         (log/error :worker-sync/apply-remote-tx-failed {:error e})))))
 
-(defn- reconcile-cycle! [repo attr server-values]
+(defn- reconcile-cycle! [repo attr server_values]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (let [db @conn
           tx-data (reduce
-                   (fn [acc [entity-str value]]
-                     (let [entity (reader/read-string entity-str)
-                           eid (d/entid db entity)
-                           current-raw (when eid (get (d/entity db eid) attr))
-                           current (cond
-                                     (and (= attr :block/parent) (instance? Entity current-raw))
-                                     (when-let [parent-uuid (:block/uuid current-raw)]
-                                       [:block/uuid parent-uuid])
-                                     (and (= attr :logseq.property.class/extends) (instance? Entity current-raw))
-                                     (:db/ident current-raw)
-                                     :else current-raw)]
+                   (fn [acc [eid value]]
+                     (let [entity (d/entity db eid)
+                           current (:db/id (get entity attr))]
                        (cond
-                         (nil? eid) acc
+                         (nil? entity) acc
                          (nil? value)
-                         (cond
-                           (and current (sequential? current))
+                         (if current
                            (conj acc [:db/retract eid attr current])
-
-                           (some? current)
-                           (conj acc [:db/retract eid attr current])
-
-                           :else acc)
-
+                           acc)
                          :else
                          (conj acc [:db/add eid attr value]))))
                    []
-                   server-values)]
+                   server_values)]
       (when (seq tx-data)
         (d/transact! conn tx-data {:worker-sync/remote? true})))))
 
@@ -200,9 +186,8 @@
                         (remove-pending-txs! repo @(:inflight client))))
                     (reset! (:inflight client) [])
                     (when (= "cycle" (:reason message))
-                      (let [attr (keyword (:attr message))
-                            server-values (sqlite-util/read-transit-str (:server_values message))]
-                        (reconcile-cycle! repo attr server-values)))
+                      (let [{:keys [attr server_values]} (sqlite-util/read-transit-str (:data message))]
+                        (reconcile-cycle! repo attr server_values)))
                     (flush-pending! repo client))
       "pull/ok" (do
                   (update-server-t! client (:t message))
