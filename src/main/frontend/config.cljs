@@ -54,6 +54,15 @@
 (if ENABLE-RTC-SYNC-PRODUCTION
   (def RTC-WS-URL "wss://ws.logseq.com/rtc-sync?token=%s")
   (def RTC-WS-URL "wss://ws-dev.logseq.com/rtc-sync?token=%s"))
+
+(goog-define ENABLE-WORKER-SYNC false)
+(defonce worker-sync-enabled? ENABLE-WORKER-SYNC)
+
+(goog-define WORKER-SYNC-WS-URL "wss://sync-dev.logseq.com/sync/%s")
+(defonce worker-sync-ws-url WORKER-SYNC-WS-URL)
+
+(goog-define WORKER-SYNC-HTTP-BASE "https://sync-dev.logseq.com")
+(defonce worker-sync-http-base WORKER-SYNC-HTTP-BASE)
 ;; Feature flags
 ;; =============
 

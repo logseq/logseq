@@ -10,6 +10,10 @@ enabled = true
 name = "LOGSEQ_SYNC_DO"
 class_name = "SyncDO"
 
+[[durable_objects.bindings]]
+name = "LOGSEQ_SYNC_INDEX_DO"
+class_name = "SyncIndexDO"
+
 [[migrations]]
 tag = "v1"
-new_sqlite_classes = ["SyncDO"]
+new_sqlite_classes = ["SyncDO", "SyncIndexDO"]

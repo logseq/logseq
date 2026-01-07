@@ -34,6 +34,7 @@
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.thread-atom]
+            [frontend.worker.worker-sync :as worker-sync]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [lambdaisland.glogi.console :as glogi-console]
@@ -376,6 +377,19 @@
   [rtc-ws-url]
   (reset! worker-state/*rtc-ws-url rtc-ws-url)
   (init-sqlite-module!))
+
+(def-thread-api :thread-api/set-worker-sync-config
+  [config]
+  (reset! worker-state/*worker-sync-config config)
+  nil)
+
+(def-thread-api :thread-api/worker-sync-start
+  [repo]
+  (worker-sync/start! repo))
+
+(def-thread-api :thread-api/worker-sync-stop
+  []
+  (worker-sync/stop!))
 
 (def-thread-api :thread-api/set-infer-worker-proxy
   [infer-worker-proxy]

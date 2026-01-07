@@ -13,7 +13,7 @@
             [frontend.db :as db]
             [frontend.dicts :as dicts]
             [frontend.handler.config :as config-handler]
-            [frontend.handler.db-based.rtc :as rtc-handler]
+            [frontend.handler.db-based.sync :as rtc-handler]
             [frontend.handler.db-based.vector-search-flows :as vector-search-flows]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.notification :as notification]
