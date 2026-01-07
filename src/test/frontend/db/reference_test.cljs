@@ -6,7 +6,7 @@
             [shadow.resource :as rc]))
 
 (def test-transit (rc/inline "fixtures/references.transit"))
-;; (use-fixtures :each test-helper/db-based-start-and-destroy-db)
+;; (use-fixtures :each test-helper/start-and-destroy-db)
 
 (defn- create-conn!
   []

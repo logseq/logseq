@@ -7,9 +7,9 @@
 (defn listen-test-db-fixture
   [handler-keys]
   (fn [f]
-    (let [test-db-conn (conn/get-db test-helper/test-db-name-db-version false)]
+    (let [test-db-conn (conn/get-db test-helper/test-db false)]
       (assert (some? test-db-conn))
-      (worker-db-listener/listen-db-changes! test-helper/test-db-name-db-version test-db-conn
+      (worker-db-listener/listen-db-changes! test-helper/test-db test-db-conn
                                              {:handler-keys handler-keys})
 
       (f)
@@ -20,7 +20,7 @@
   (defn listen-test-db-to-write-tx-log-json-file
     "Write {:tx-log <tx-data-coll> :init-db <init-db>} to file 'tx-log-<index>.json'"
     [f]
-    (let [test-db-conn (conn/get-db test-helper/test-db-name-db-version false)
+    (let [test-db-conn (conn/get-db test-helper/test-db false)
           init-db @test-db-conn
           *tx-log (atom [])]
       (d/listen! test-db-conn :collect-tx-data

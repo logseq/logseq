@@ -41,7 +41,7 @@
 (use-fixtures :once
   {:before (fn []
              (async done
-                    (test-helper/start-test-db! {:db-graph? true})
+                    (test-helper/start-test-db!)
                     (p/let [_ (test-helper/load-test-files test-files)]
                       (done))))
    :after test-helper/destroy-test-db!})

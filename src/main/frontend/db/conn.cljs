@@ -10,7 +10,6 @@
             [frontend.util.text :as text-util]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [logseq.db.file-based.schema :as file-schema]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.graph-parser.text :as text]))
 
@@ -81,9 +80,7 @@
    (start! repo {}))
   ([repo {:keys [listen-handler]}]
    (let [db-name (db-conn-state/get-repo-path repo)
-         db-conn (if (config/db-based-graph? repo)
-                   (d/create-conn db-schema/schema)
-                   (d/create-conn file-schema/schema))]
+         db-conn (d/create-conn db-schema/schema)]
      (destroy-all!)
      (swap! conns assoc db-name db-conn)
      (when listen-handler

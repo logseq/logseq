@@ -9,13 +9,13 @@
 
 (def listen-test-db-to-gen-rtc-ops-fixture
   {:before
-   #(let [test-db-conn (conn/get-db test-helper/test-db-name-db-version false)]
+   #(let [test-db-conn (conn/get-db test-helper/test-db false)]
       (assert (some? test-db-conn))
-      (worker-db-listener/listen-db-changes! test-helper/test-db-name-db-version test-db-conn
+      (worker-db-listener/listen-db-changes! test-helper/test-db test-db-conn
                                              {:handler-keys [:gen-rtc-ops]})
       (swap! worker-state/*client-ops-conns
-             assoc test-helper/test-db-name-db-version (d/create-conn client-op/schema-in-db)))
+             assoc test-helper/test-db (d/create-conn client-op/schema-in-db)))
    :after
-   #(when-let [test-db-conn (conn/get-db test-helper/test-db-name-db-version false)]
+   #(when-let [test-db-conn (conn/get-db test-helper/test-db false)]
       (d/unlisten! test-db-conn :frontend.worker.db-listener/listen-db-changes!)
-      (swap! worker-state/*client-ops-conns dissoc test-helper/test-db-name-db-version))})
+      (swap! worker-state/*client-ops-conns dissoc test-helper/test-db))})

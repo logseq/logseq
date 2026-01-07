@@ -66,14 +66,6 @@
     (walk/postwalk
      (fn [f]
        (cond
-         ;; backward compatible
-         ;; 1. replace :page/ => :block/
-         (and (keyword? f) (= "page" (namespace f)))
-         (keyword "block" (name f))
-
-         (and (keyword? f) (contains? #{:block/ref-pages :block/ref-blocks} f))
-         :block/refs
-
          (and (list? f)
               (= (first f) '=)
               (= 3 (count f))

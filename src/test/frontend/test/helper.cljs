@@ -6,10 +6,10 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
+            [frontend.db.react :as react]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
-            [frontend.test.repo :as file-repo-handler]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.pipeline :as worker-pipeline]
             [logseq.db :as ldb]
@@ -19,31 +19,30 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.test.helper :as db-test]))
 
+(defn react-components
+  [f]
+  (reset! react/*query-state {})
+  (let [r (f)]
+    (reset! react/*query-state {})
+    r))
+
 (def bare-marker-pattern
   #"(TODO|DOING|DONE|WAIT|CANCELED|CANCELLED){1}\s+")
 
-(def node? (exists? js/process))
-
-(def test-db-name "test-db")
-(def test-db-name-db-version "logseq_db_test-db")
-(def test-db
-  (if (and node? (some? js/process.env.DB_GRAPH)) test-db-name-db-version test-db-name))
+(def test-db "logseq_db_test-db")
 
 (defn start-test-db!
-  [& {:as opts}]
-  (let [db-graph? (or (:db-graph? opts) (and node? (some? js/process.env.DB_GRAPH)))
-        test-db' (if db-graph? test-db-name-db-version test-db-name)]
-    (state/set-current-repo! test-db')
-    (conn/start! test-db' opts)
-    (ldb/register-transact-pipeline-fn!
-     (fn [tx-report]
-       (worker-pipeline/transact-pipeline test-db' tx-report)))
-    (let [conn (conn/get-db test-db' false)]
-      (when db-graph?
-        (d/transact! conn (sqlite-create-graph/build-db-initial-data "")))
-      (d/listen! conn ::listen-db-changes!
-                 (fn [tx-report]
-                   (worker-pipeline/invoke-hooks conn tx-report {}))))))
+  [& {:keys [build-init-data?] :or {build-init-data? true} :as opts}]
+  (state/set-current-repo! test-db)
+  (conn/start! test-db opts)
+  (ldb/register-transact-pipeline-fn!
+   (fn [tx-report]
+     (worker-pipeline/transact-pipeline test-db tx-report)))
+  (let [conn (conn/get-db test-db false)]
+    (when build-init-data? (d/transact! conn (sqlite-create-graph/build-db-initial-data config/config-default-content)))
+    (d/listen! conn ::listen-db-changes!
+               (fn [tx-report]
+                 (worker-pipeline/invoke-hooks conn tx-report {})))))
 
 (defn destroy-test-db!
   []
@@ -68,8 +67,9 @@
         (update :build/properties merge {:logseq.property/status status}))
     block))
 
-(defn load-test-files-for-db-graph
-  "Wrapper around sqlite-build/build-blocks-tx with frontend defaults. Also supports
+(defn load-test-files
+  "Builds the given data into the current test-db.
+   Wrapper around sqlite-build/build-blocks-tx with frontend defaults. Also supports
    the following special keys:
    * :build.test/title - Only available to top-level blocks. Convenient for writing tasks quickly"
   [options*]
@@ -90,19 +90,7 @@
         ;; Allow pages to reference each other via uuid and for unordered init-tx
         init-index (map #(select-keys % [:block/uuid]) init-tx)]
     ;; (cljs.pprint/pprint _txs)
-    (db/transact! test-db-name-db-version (concat init-index init-tx block-props-tx))))
-
-(defn load-test-files
-  "Given a collection of file maps, loads them into the current test-db.
-This can be called in synchronous contexts as no async fns should be invoked"
-  [files]
-  (if (and node? (or js/process.env.DB_GRAPH
-                     ;; TODO: Remove once tests are converted
-                     (-> files first :page)))
-    (load-test-files-for-db-graph files)
-    (file-repo-handler/parse-files-and-load-to-db!
-     test-db
-     files)))
+    (db/transact! test-db (concat init-index init-tx block-props-tx))))
 
 (defn initial-test-page-and-blocks
   [& {:keys [page-uuid]}]
@@ -136,30 +124,19 @@ This can be called in synchronous contexts as no async fns should be invoked"
   also seeds the db with the same default data that the app does and destroys a db
   connection when done with it."
   [f & {:as start-opts}]
-  ;; Set current-repo explicitly since it's not the default
-  (let [db-graph? (or (:db-graph? start-opts) (and node? (some? js/process.env.DB_GRAPH)))
-        repo (if db-graph? test-db-name-db-version test-db-name)]
-    (state/set-current-repo! repo)
-    (start-test-db! start-opts)
-    (when db-graph?
-      (let [built-in-data (sqlite-create-graph/build-db-initial-data
-                           config/config-default-content)]
-        (db/transact! repo built-in-data)))
-    (when-let [init-f (:init-data start-opts)]
-      (assert (fn? f) "init-data should be a fn")
-      (init-f (db/get-db repo false)))
-    (f)
-    (state/set-current-repo! nil)
-    (destroy-test-db!)))
+  (state/set-current-repo! test-db)
+  (start-test-db! start-opts)
+  (when-let [init-f (:init-data start-opts)]
+    (assert (fn? f) "init-data should be a fn")
+    (init-f (db/get-db test-db false)))
+  (f)
+  (state/set-current-repo! nil)
+  (destroy-test-db!))
 
-(defn db-based-start-and-destroy-db
-  [f & {:as start-opts}]
-  (start-and-destroy-db f (assoc start-opts :db-graph? true)))
-
-(def db-based-start-and-destroy-db-map-fixture
+(def start-and-destroy-db-map-fixture
   "To avoid 'Fixtures may not be of mixed types' error
   when use together with other map-type fixtures"
-  {:before #(start-test-db! {:db-graph? true})
+  {:before start-test-db!
    :after #(destroy-test-db!)})
 
 (defn save-block!
