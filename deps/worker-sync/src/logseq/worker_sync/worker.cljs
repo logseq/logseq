@@ -36,16 +36,23 @@
       (string/starts-with? path "/sync/")
       (let [prefix (count "/sync/")
             rest-path (subs path prefix)
-            slash-idx (string/index-of rest-path "/")
+            rest-path (if (string/starts-with? rest-path "/")
+                        (subs rest-path 1)
+                        rest-path)
+            slash-idx (or (string/index-of rest-path "/") -1)
             graph-id (if (neg? slash-idx) rest-path (subs rest-path 0 slash-idx))
-            tail (if (neg? slash-idx) "/" (subs rest-path slash-idx))
+            tail (if (neg? slash-idx)
+                   "/"
+                   (subs rest-path slash-idx))
             new-url (str (.-origin url) tail (.-search url))]
         (if (seq graph-id)
           (let [^js namespace (.-LOGSEQ_SYNC_DO env)
                 do-id (.idFromName namespace graph-id)
-                stub (.get namespace do-id)
-                rewritten (js/Request. new-url request)]
-            (.fetch stub rewritten))
+                stub (.get namespace do-id)]
+            (if (common/upgrade-request? request)
+              (.fetch stub request)
+              (let [rewritten (js/Request. new-url request)]
+                (.fetch stub rewritten))))
           (common/bad-request "missing graph id")))
 
       :else
