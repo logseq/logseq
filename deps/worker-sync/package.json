@@ -1,0 +1,16 @@
+{
+  "name": "@logseq/worker-sync",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "cd ./worker && npx wrangler dev",
+    "watch": "clojure -M:cljs watch worker-sync",
+    "release": "clojure -M:cljs release worker-sync",
+    "test": "clojure -M:cljs compile worker-sync-test",
+    "clean": "rm -rf ./worker/dist/",
+    "deploy": "yarn clean && yarn release && cd ./worker && wrangler deploy"
+  },
+  "dependencies": {
+    "shadow-cljs": "^3.3.4"
+  }
+}

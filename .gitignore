@@ -70,6 +70,10 @@ deps/shui/.clj-kondo
 deps/publish/worker/.wrangler
 deps/publish/worker/dist
 deps/publish/worker/.env*
+deps/worker-sync/worker/.wrangler
+deps/worker-sync/worker/dist
+deps/worker-sync/worker/.env*
+
 
 tx-log*
 clj-e2e/.wally

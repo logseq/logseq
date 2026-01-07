@@ -173,6 +173,10 @@
   {:doc "Run e2e rtc extra part2 tests. HTTP server should be available at localhost:3001"
    :task (clojure {:dir "clj-e2e"} "-X:dev-run-rtc-extra-part2-test")}
 
+  dev:worker-sync-test
+  {:doc "Run worker-sync unit tests"
+   :task (clojure {:dir "deps/worker-sync"} "-M:cljs" "compile" "worker-sync-test")}
+
   dev:gen-malli-kondo-config
   logseq.tasks.dev/gen-malli-kondo-config
 

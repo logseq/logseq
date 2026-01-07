@@ -1,0 +1,16 @@
+;; shadow-cljs configuration
+{:deps true
+ :http {:port 9632}
+ :nrepl {:port 8703}
+ :builds
+ {:worker-sync {:target :esm
+                :output-dir "worker/dist/worker"
+                :modules {:main {:exports {default logseq.worker-sync.worker/worker
+                                           SyncDO logseq.worker-sync.worker/SyncDO}}}
+                :js-options {:js-provider :import}
+                :closure-defines {shadow.cljs.devtools.client.env/enabled false}
+                :devtools {:enabled false}}
+  :worker-sync-test {:target :node-test
+                     :output-to "worker/dist/worker-test.js"
+                     :devtools {:enabled false}
+                     :main logseq.worker-sync.test-runner/main}}}
