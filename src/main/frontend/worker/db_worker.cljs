@@ -50,6 +50,7 @@
             [logseq.db.common.view :as db-view]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.sqlite.gc :as sqlite-gc]
@@ -191,6 +192,16 @@
       (d/reset-conn! conn new-db' {:reset-conn! true})
       (d/reset-schema! conn (:schema new-db)))))
 
+(defn reset-db-from-datoms!
+  [repo datoms]
+  (p/do!
+   ((@thread-api/*thread-apis :thread-api/create-or-open-db) repo
+                                                             {:close-other-db? false
+                                                              :datoms datoms
+                                                              :worker-sync-download-graph? true})
+   ((@thread-api/*thread-apis :thread-api/export-db) repo)
+   (shared-service/broadcast-to-clients! :add-repo {:repo repo})))
+
 (defn- get-dbs
   [repo]
   (if @*publishing?
@@ -230,7 +241,7 @@
                                        :kv/value (common-util/time-ms)}]))))
 
 (defn- <create-or-open-db!
-  [repo {:keys [config datoms] :as opts}]
+  [repo {:keys [config datoms worker-sync-download-graph?] :as opts}]
   (when-not (worker-state/get-sqlite-conn repo)
     (p/let [[db search-db client-ops-db debug-log-db :as dbs] (get-dbs repo)
             storage (new-sqlite-storage db)
@@ -563,6 +574,11 @@
 (def-thread-api :thread-api/reset-db
   [repo db-transit]
   (reset-db! repo db-transit)
+  nil)
+
+(def-thread-api :thread-api/worker-sync-reset-from-datoms
+  [repo datoms]
+  (reset-db-from-datoms! repo datoms)
   nil)
 
 (def-thread-api :thread-api/unsafe-unlink-db

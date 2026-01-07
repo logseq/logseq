@@ -138,7 +138,9 @@
                                    (rtc-handler/<get-remote-graphs)))))))}
               "Use Logseq sync (Beta testing)"))
 
-           (when (and remote? manager?)
+           (when (and remote?
+                      ;; manager?
+                      )
              (shui/dropdown-menu-item
               {:key "delete-remotely"
                :class "delete-remote-graph-menu-item"

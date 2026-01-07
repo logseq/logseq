@@ -1,6 +1,7 @@
 (ns frontend.handler.db-based.worker-sync
   "Worker-sync handler based on Cloudflare Durable Objects."
   (:require [clojure.string :as string]
+            [datascript.core :as d]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.repo :as repo-handler]
@@ -72,7 +73,7 @@
                                   :headers {"content-type" "application/json"}
                                   :body (js/JSON.stringify
                                          #js {:graph_id (str graph-id)
-                                              :graph_name repo
+                                              :graph_name (string/replace repo config/db-version-prefix "")
                                               :schema_version schema-version})})]
         (ldb/transact! repo [(sqlite-util/kv :logseq.kv/db-type "db")
                              (sqlite-util/kv :logseq.kv/graph-uuid graph-id)])
@@ -92,6 +93,30 @@
                             :graph-uuid graph-uuid
                             :base base})))))
 
+(defn <rtc-download-graph!
+  [graph-name graph-uuid _graph-schema-version timeout-ms]
+  (state/set-state! :rtc/downloading-graph-uuid graph-uuid)
+  (let [base (http-base)]
+    (-> (if (and graph-uuid base)
+          (p/let [resp (fetch-json (str base "/sync/" graph-uuid "/snapshot")
+                                   {:method "GET"})
+                  datoms-str (aget resp "datoms")
+                  datoms (->> (ldb/read-transit-str datoms-str)
+                              (map (fn [{:keys [e a v t]}]
+                                     (d/datom e a v t true))))
+                  graph (str config/db-version-prefix graph-name)]
+            (state/<invoke-db-worker :thread-api/worker-sync-reset-from-datoms graph datoms))
+          (p/rejected (ex-info "worker-sync missing graph info"
+                               {:type :worker-sync/invalid-graph
+                                :graph-uuid graph-uuid
+                                :base base})))
+        (p/catch (fn [error]
+                   (throw error)))
+        (p/timeout timeout-ms)
+        (p/finally
+          (fn []
+            (state/set-state! :rtc/downloading-graph-uuid nil))))))
+
 (defn <get-remote-graphs
   []
   (let [base (http-base)]
@@ -102,8 +127,8 @@
                   graphs (js->clj (aget resp "graphs") :keywordize-keys true)
                   result (mapv (fn [graph]
                                  (merge
-                                  {:url (:graph_name graph)
-                                   :GraphName (string/replace (:graph_name graph) config/db-version-prefix "")
+                                  {:url (str config/db-version-prefix (:graph_name graph))
+                                   :GraphName (:graph_name graph)
                                    :GraphSchemaVersion (:schema_version graph)
                                    :GraphUUID (:graph_id graph)
                                    :rtc-graph? true}
