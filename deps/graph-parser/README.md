@@ -1,18 +1,16 @@
 ## Description
 
-This library parses a logseq graph directory and returns it as a datascript
-database connection. This library powers the Logseq app and also runs from the
-commandline, _independent_ of the app. This is powerful as this can run anywhere
-that a Node.js script has access to a Logseq graph e.g. on CI processes like
-Github Actions. This library is compatible with ClojureScript and with
+This library parses a file graph directory and returns it as a datascript
+database connection. This library mainly exists to convert file graphs to DB graphs.
+This library is compatible with ClojureScript and with
 [nbb-logseq](https://github.com/logseq/nbb-logseq) to respectively provide
 frontend and commandline functionality.
 
 ## API
 
 This library is under the parent namespace `logseq.graph-parser`. This library
-provides two main namespaces for parsing, `logseq.graph-parser`.
-`logseq.graph-parser/parse-file` is the main fn for the frontend.
+provides two main namespaces, `logseq.graph-parser.exporter` and
+`logseq.graph-parser.extract`.
 
 ## Usage
 

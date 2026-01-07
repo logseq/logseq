@@ -35,9 +35,7 @@
   [& {:keys [build-init-data?] :or {build-init-data? true} :as opts}]
   (state/set-current-repo! test-db)
   (conn/start! test-db opts)
-  (ldb/register-transact-pipeline-fn!
-   (fn [tx-report]
-     (worker-pipeline/transact-pipeline test-db tx-report)))
+  (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
   (let [conn (conn/get-db test-db false)]
     (when build-init-data? (d/transact! conn (sqlite-create-graph/build-db-initial-data config/config-default-content)))
     (d/listen! conn ::listen-db-changes!

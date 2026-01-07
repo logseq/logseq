@@ -1,7 +1,6 @@
 (ns frontend.worker.pipeline-test
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
-            [frontend.test.helper :as test-helper]
             [frontend.worker.pipeline :as worker-pipeline]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]))
@@ -42,8 +41,7 @@
              (set (#'worker-pipeline/remove-conflict-datoms datoms)))))))
 
 (deftest test-built-in-page-updates-that-should-be-reverted
-  (let [graph test-helper/test-db
-        conn (db-test/create-conn-with-blocks
+  (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
                 :blocks [{:block/title "b1"}
                          {:block/title "b2" :build/tags [:tag1]}]}])
@@ -51,7 +49,7 @@
 
     (ldb/register-transact-pipeline-fn!
      (fn [tx-report]
-       (worker-pipeline/transact-pipeline graph tx-report)))
+       (worker-pipeline/transact-pipeline tx-report)))
 
     (testing "Using built-in pages as tags"
       (let [page-1 (ldb/get-page @conn "page1")
@@ -95,8 +93,7 @@
     (ldb/register-transact-pipeline-fn! identity)))
 
 (deftest ensure-query-property-on-tag-additions-test
-  (let [graph test-helper/test-db
-        conn (db-test/create-conn-with-blocks
+  (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks [{:page {:block/title "page1"}
                                    :blocks [{:block/title "b1"}
                                             {:block/title "b2"}]}]
@@ -106,9 +103,7 @@
         b1 (some #(when (= "b1" (:block/title %)) %) blocks)
         b2 (some #(when (= "b2" (:block/title %)) %) blocks)
         query-child (ldb/get-page @conn "QueryChild")]
-    (ldb/register-transact-pipeline-fn!
-     (fn [tx-report]
-       (worker-pipeline/transact-pipeline graph tx-report)))
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
 
     (testing "tagging with #Query adds query property"
       (ldb/transact! conn [[:db/add (:db/id b1) :block/tags :logseq.class/Query]])

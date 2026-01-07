@@ -196,7 +196,6 @@
              logseq.db.sqlite.export sqlite-export
              logseq.db.sqlite.util sqlite-util
              logseq.db.test.helper db-test
-             logseq.graph-parser graph-parser
              logseq.graph-parser.block gp-block
              logseq.graph-parser.mldoc gp-mldoc
              logseq.graph-parser.property gp-property

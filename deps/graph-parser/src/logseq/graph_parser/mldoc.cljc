@@ -212,27 +212,9 @@
        (or (contains? #{"Nested_link"} (first result'))
            (contains? #{"Page_ref" "Block_ref" "Complex"} (first (:url (second result')))))))))
 
-(defn properties?
-  [ast]
-  (contains? #{"Properties" "Property_Drawer"} (ffirst ast)))
-
 (defn block-with-title?
   [type]
   (contains? #{"Paragraph"
                "Raw_Html"
                "Hiccup"
                "Heading"} type))
-
-(defn- has-title?
-  [repo content format]
-  (let [ast (->edn repo content format)]
-    (block-with-title? (ffirst (map first ast)))))
-
-(defn get-title&body
-  "parses content and returns [title body]
-   returns nil if no title"
-  [repo content format]
-  (let [lines (string/split-lines content)]
-    (if (has-title? repo content format)
-      [(first lines) (string/join "\n" (rest lines))]
-      [nil (string/join "\n" lines)])))
