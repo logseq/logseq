@@ -6,7 +6,7 @@
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.worker-sync.common :as common]
-            [logseq.worker-sync.worker :as worker]))
+            [logseq.worker-sync.worker-core :as worker-core]))
 
 (defn- new-conn []
   (d/create-conn db-schema/schema))
@@ -18,9 +18,9 @@
         fixed-ms 1700000000000
         journal-day (date-time/ms->journal-day fixed-ms)
         journal-uuid (common-uuid/gen-uuid :journal-page-uuid journal-day)
-        tx [{:block/uuid child :block/parent [:block/uuid missing]}]]
+        tx [[:db/add [:block/uuid child] :block/parent [:block/uuid missing]]]]
     (with-redefs [common/now-ms (constantly fixed-ms)]
-      (let [fixed (worker/fix-missing-parent* @conn tx)
+      (let [fixed (worker-core/fix-missing-parent @conn tx)
             db' (d/db-with @conn fixed)
             child-entity (d/entity db' [:block/uuid child])
             journal-entity (d/entity db' [:block/uuid journal-uuid])]
@@ -46,8 +46,8 @@
                        {:block/uuid block-b
                         :block/parent [:block/uuid parent]
                         :block/order order-b}])
-    (let [tx [{:block/uuid block-b :block/order order-a}]
-          fixed (worker/fix-duplicate-orders* @conn tx)
+    (let [tx [[:db/add [:block/uuid block-b] :block/order order-a]]
+          fixed (worker-core/fix-duplicate-orders @conn tx)
           db' (d/db-with @conn fixed)
           order-a' (:block/order (d/entity db' [:block/uuid block-a]))
           order-b' (:block/order (d/entity db' [:block/uuid block-b]))]
