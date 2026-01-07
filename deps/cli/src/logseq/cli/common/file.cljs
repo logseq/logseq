@@ -4,11 +4,8 @@
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [logseq.db :as ldb]
-            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.graph-parser.property :as gp-property]
             [logseq.outliner.tree :as otree]))
 
 (defn- indented-block-content
@@ -16,31 +13,11 @@
   (let [lines (string/split-lines content)]
     (string/join (str "\n" spaces-tabs) lines)))
 
-(defn- content-with-collapsed-state
-  "Only accept nake content (without any indentation)"
-  [repo format content collapsed?]
-  (cond
-    collapsed?
-    (gp-property/insert-property repo format content :collapsed true)
-
-    ;; Don't check properties. Collapsed is an internal state log as property in file, but not counted into properties
-    (false? collapsed?)
-    (gp-property/remove-property format :collapsed content)
-
-    :else
-    content))
-
 (defn- ^:large-vars/cleanup-todo transform-content
-  [repo db {:block/keys [collapsed? format pre-block? properties] :as b} level {:keys [heading-to-list?]} context {:keys [db-based?]}]
-  (let [title (or (:block/raw-title b) (:block/title b))
-        block-ref-not-saved? (and (not db-based?)
-                                  (first (:block/_refs (d/entity db (:db/id b))))
-                                  (not (string/includes? title (str (:block/uuid b)))))
-        heading (:heading properties)
-        title (if db-based?
+  [db {:block/keys [format pre-block? properties] :as b} level {:keys [heading-to-list?]} context]
+  (let [heading (:heading properties)
                 ;; replace [[uuid]] with block's content
-                (db-content/recur-replace-uuid-in-block-title (d/entity db (:db/id b)))
-                title)
+        title (db-content/recur-replace-uuid-in-block-title (d/entity db (:db/id b)))
         content (or title "")
         content (cond
                   pre-block?
@@ -69,25 +46,21 @@
                                   (-> (string/replace content #"^\s?#+\s+" "")
                                       (string/replace #"^\s?#+\s?$" ""))
                                   content)
-                        content (if db-based? content (content-with-collapsed-state repo format content collapsed?))
                         new-content (indented-block-content (string/trim content) spaces-tabs)
                         sep (if (string/blank? new-content)
                               ""
                               " ")]
                     (str prefix sep new-content)))]
-    (if block-ref-not-saved?
-      (gp-property/insert-property repo format content :id (str (:block/uuid b)))
-      content)))
+    content))
 
 (defn- tree->file-content-aux
   [repo db tree {:keys [init-level link] :as opts} context]
-  (let [db-based? (sqlite-util/db-based-graph? repo)
-        block-contents (transient [])]
+  (let [block-contents (transient [])]
     (loop [[f & r] tree level init-level]
       (if (nil? f)
         (->> block-contents persistent! flatten (remove nil?))
         (let [page? (nil? (:block/page f))
-              content (if (and page? (not link)) nil (transform-content repo db f level opts context {:db-based? db-based?}))
+              content (if (and page? (not link)) nil (transform-content db f level opts context))
               new-content
               (if-let [children (seq (:block/children f))]
                 (cons content (tree->file-content-aux repo db children {:init-level (inc level)} context))
@@ -104,9 +77,7 @@
 (defn- update-block-content
   [db item eid]
   ;; This may not be needed if this becomes a file-graph only context
-  (if (entity-plus/db-based-graph? db)
-    (db-content/update-block-content db item eid)
-    item))
+  (db-content/update-block-content db item eid))
 
 (defn block->content
   "Converts a block including its children (recursively) to plain-text."
@@ -126,11 +97,9 @@
 (defn get-all-page->content
   "Exports a graph's pages as tuples of page name and page content"
   [repo db options]
-  (let [filter-fn (if (ldb/db-based-graph? db)
-                    (fn [ent]
-                      (or (not (:logseq.property/built-in? ent))
-                          (contains? sqlite-create-graph/built-in-pages-names (:block/title ent))))
-                    (constantly true))]
+  (let [filter-fn (fn [ent]
+                    (or (not (:logseq.property/built-in? ent))
+                        (contains? sqlite-create-graph/built-in-pages-names (:block/title ent))))]
     (->> (d/datoms db :avet :block/name)
          (map #(d/entity db (:e %)))
          (filter filter-fn)
