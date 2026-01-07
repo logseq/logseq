@@ -1,13 +1,12 @@
 (ns frontend.worker.worker-sync
   "Simple worker-sync client based on promesa + WebSocket."
-  (:require [cljs.reader :as reader]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [datascript.core :as d]
-            [datascript.impl.entity :as de :refer [Entity]]
             [frontend.worker.state :as worker-state]
             [lambdaisland.glogi :as log]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.db.common.normalize :as db-normalize]
             [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
 
@@ -56,40 +55,13 @@
   (when (ws-open? ws)
     (.send ws (js/JSON.stringify (clj->js message)))))
 
-(defn- normalize-ref [db a value]
-  (if (and (integer? value)
-           (= :db.type/ref (:db/valueType (d/entity db a))))
-    (if-let [id (:block/uuid (d/entity db value))]
-      [:block/uuid id]
-      (throw (ex-info (str "There's no :block/uuid for given refed value: " value)
-                      {:value value})))
-    value))
-
 (defn- normalize-tx-data [db-after db-before tx-data]
   (->> tx-data
-       (remove (fn [[e a v t added]]
+       (remove (fn [[_e a _v _t _added]]
                  (contains? #{:block/tx-id :logseq.property/created-by-ref
                               :logseq.property.embedding/hnsw-label-updated-at} a)))
        (common-util/distinct-by-last-wins (fn [[e a v tx _added]] [e a v tx]))
-       (map
-        (fn [[e a v _t added]]
-          (let [e' (if-let [entity (d/entity db-before e)]
-                     (if-let [id (:block/uuid entity)]
-                       [:block/uuid id]
-                       (:db/ident entity))
-                     (- e))
-                v' (if (and (integer? v)
-                            (or (= :db.type/ref (:db/valueType (d/entity db-after a)))
-                                (= :db.type/ref (:db/valueType (d/entity db-before a)))))
-                     (if-let [entity (d/entity db-before v)]
-                       (if-let [id (:block/uuid entity)]
-                         [:block/uuid id]
-                         (:db/ident entity))
-                       (- v))
-                     v)]
-            (if added
-              [:db/add e' a v']
-              [:db/retract e' a v']))))))
+       (db-normalize/normalize-tx-data db-after db-before)))
 
 (defn- parse-message [raw]
   (try
@@ -101,31 +73,10 @@
   (when (number? t)
     (reset! (:server-t client) t)))
 
-(defn- lookup-id?
-  [v]
-  (and (vector? v)
-       (= 2 (count v))
-       (= (first v) :block/uuid)
-       (uuid? (second v))))
-
-(defn- de-normalized-data
-  [db tx-data]
-  (keep
-   (fn [[op e a v]]
-     (let [e' (if (lookup-id? e)
-                (:db/id (d/entity db e))
-                e)
-           v' (if (lookup-id? v)
-                (:db/id (d/entity db v))
-                v)]
-       (when (and e' v')
-         [op e' a v'])))
-   tx-data))
-
 (defn- apply-remote-tx! [repo tx-data]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (try
-      (let [tx-data' (de-normalized-data @conn tx-data)]
+      (let [tx-data' (db-normalize/de-normalize-tx-data @conn tx-data)]
         (d/transact! conn tx-data' {:worker-sync/remote? true}))
       (catch :default e
         (log/error :worker-sync/apply-remote-tx-failed {:error e})))))
