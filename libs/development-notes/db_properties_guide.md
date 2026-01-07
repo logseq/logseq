@@ -1,4 +1,4 @@
-# Logseq DB Properties (Developer Notes)
+# Logseq DB Properties (Developer Guide)
 
 This note explains how **properties** work in Logseq when using a **DB graph** (database mode), how that differs from a **file graph** (Markdown/Org), and how to use the **plugin SDK** APIs defined in `libs/src/LSPlugin.ts`.
 

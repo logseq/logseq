@@ -16,9 +16,12 @@ Load `logseq` plugin sdk as global namespace
 import "@logseq/libs"
 ```
 
-#### APIs & Samples
+#### APIs & Samples & References
 - https://logseq.github.io/plugins/
 - https://github.com/logseq/logseq-plugin-samples
+- [The New DB properties developer guide - A](./development-notes/db_properties_guide.md)
+- [The New DB properties developer guide - B](./development-notes/db_properties_skill.md)
+- [Logseq Plugin Development Agents Guide](./development-notes/AGENTS.md)
 
 #### Community templates
 
