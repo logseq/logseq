@@ -5,7 +5,6 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [datascript.impl.entity :as de :refer [Entity]]
-            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.common.uuid :as common-uuid]
@@ -14,8 +13,6 @@
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.graph-parser.block :as gp-block]
             [logseq.outliner.batch-tx :include-macros true :as batch-tx]
             [logseq.outliner.datascript :as ds]
             [logseq.outliner.pipeline :as outliner-pipeline]
@@ -130,43 +127,9 @@
 
 (declare move-blocks)
 
-(defn- file-rebuild-block-refs
-  [repo db date-formatter {:block/keys [properties] :as block}]
-  (let [property-key-refs (->> (keys properties)
-                               (keep (fn [property-id]
-                                       (:block/uuid (ldb/get-page db (name property-id))))))
-        property-value-refs (->> (vals properties)
-                                 (mapcat (fn [v]
-                                           (cond
-                                             (and (coll? v) (uuid? (first v)))
-                                             v
-
-                                             (uuid? v)
-                                             (when-let [_entity (d/entity db [:block/uuid v])]
-                                               [v])
-
-                                             (and (coll? v) (string? (first v)))
-                                             (mapcat #(gp-block/extract-refs-from-text repo db % date-formatter) v)
-
-                                             (string? v)
-                                             (gp-block/extract-refs-from-text repo db v date-formatter)
-
-                                             :else
-                                             nil))))
-        property-refs (->> (concat property-key-refs property-value-refs)
-                           (map (fn [id-or-map] (if (uuid? id-or-map) {:block/uuid id-or-map} id-or-map)))
-                           (remove (fn [b] (nil? (d/entity db [:block/uuid (:block/uuid b)])))))
-        content-refs (when-let [content (:block/title block)]
-                       (let [format (or (:block/format block) :markdown)
-                             content' (str (common-config/get-block-pattern format) " " content)]
-                         (gp-block/extract-refs-from-text repo db content' date-formatter)))]
-    (concat property-refs content-refs)))
-
 (defn ^:api rebuild-block-refs
-  [repo db date-formatter block]
-  (if (sqlite-util/db-based-graph? repo)
-    (outliner-pipeline/db-rebuild-block-refs db block)
-    (file-rebuild-block-refs repo db date-formatter block)))
+  [db block]
+  (outliner-pipeline/db-rebuild-block-refs db block))
 
 (defn- fix-tag-ids
   "Fix or remove tags related when entered via `Escape`"

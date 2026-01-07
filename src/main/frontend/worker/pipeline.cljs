@@ -35,14 +35,13 @@
           (:undo? tx-meta) (:redo? tx-meta)))))
 
 (defn- rebuild-block-refs
-  [repo {:keys [tx-meta db-after db-before]} blocks]
+  [{:keys [tx-meta db-after db-before]} blocks]
   (when (or (and (:outliner-op tx-meta) (refs-need-recalculated? tx-meta))
             (:rtc-tx? tx-meta)
             (:rtc-op? tx-meta))
     (mapcat (fn [block]
               (when (d/entity db-after (:db/id block))
-                (let [date-formatter (worker-state/get-date-formatter repo)
-                      refs (->> (outliner-core/rebuild-block-refs repo db-after date-formatter block) set)
+                (let [refs (->> (outliner-core/rebuild-block-refs db-after block) set)
                       old-refs (->> (:block/refs (d/entity db-before (:db/id block)))
                                     (map :db/id)
                                     set)
@@ -464,7 +463,7 @@
 (defn transact-pipeline
   "Compute extra tx-data and block/refs, should ensure it's a pure function and
   doesn't call `d/transact!` or `ldb/transact!`."
-  [repo {:keys [db-after tx-meta] :as tx-report}]
+  [{:keys [db-after tx-meta] :as tx-report}]
   (let [extra-tx-data (compute-extra-tx-data tx-report)
         tx-report* (if (seq extra-tx-data)
                      (let [result (d/with db-after extra-tx-data)]
@@ -477,7 +476,7 @@
         deleted-block-ids (set (map :db/id deleted-blocks))
         blocks' (remove (fn [b] (deleted-block-ids (:db/id b))) blocks)
         block-refs (when (seq blocks')
-                     (rebuild-block-refs repo tx-report* blocks'))
+                     (rebuild-block-refs tx-report* blocks'))
         tx-id-data (let [db-after (:db-after tx-report*)
                          updated-blocks (remove (fn [b] (contains? deleted-block-ids (:db/id b)))
                                                 (concat pages blocks))
