@@ -3,10 +3,12 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [lambdaisland.glogi :as log]
+            [lambdaisland.glogi.console :as glogi-console]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time]
             [logseq.common.uuid :as common-uuid]
+            [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.worker-sync.common :as common]
@@ -14,6 +16,8 @@
             [logseq.worker-sync.protocol :as protocol]
             [logseq.worker-sync.storage :as storage]
             [shadow.cljs.modern :refer (defclass)]))
+
+(glogi-console/install!)
 
 (defn- handle-worker-fetch [request ^js env]
   (let [url (js/URL. (.-url request))
@@ -105,9 +109,6 @@
    :attr (name attr)
    :server_values (common/write-transit (cycle/server-values-for db tx-data attr))})
 
-(defn- ref-attr? [attr]
-  (contains? db-schema/ref-type-attributes attr))
-
 (defn- journal-page-info []
   (let [now (common/now-ms)
         day (date-time/ms->journal-day now)
@@ -139,6 +140,13 @@
    nil
    (d/datoms db :avet :block/parent parent-eid)))
 
+(defn- safe-entid [db ref]
+  (try
+    (when-let [ent (d/entity db ref)]
+      (:db/id ent))
+    (catch :default _
+      nil)))
+
 (defn- attr-updates-from-tx [tx-data attr]
   (reduce
    (fn [acc tx]
@@ -163,12 +171,13 @@
    tx-data))
 
 (defn- fix-missing-parent [db tx-data]
-  (let [db' (d/db-with db tx-data)
+  (let [_ (prn :debug 1)
         updates (attr-updates-from-tx tx-data :block/parent)
+        _ (prn :debug 2)
         journal (journal-page-info)
         journal-ref [:block/uuid (:uuid journal)]
-        journal-tx (build-journal-page-tx db' journal)
-        db'' (if (seq journal-tx) (d/db-with db' journal-tx) db')
+        journal-tx (build-journal-page-tx db journal)
+        db'' (if (seq journal-tx) (d/db-with db journal-tx) db)
         parent-eid (d/entid db'' journal-ref)
         max-order (when parent-eid (max-order-for-parent db'' parent-eid))
         max-atom (atom max-order)
@@ -176,8 +185,8 @@
                (fn [acc {:keys [entity value]}]
                  (let [entity-ref entity
                        parent-ref value
-                       eid (d/entid db'' entity-ref)
-                       parent-eid' (when parent-ref (d/entid db'' parent-ref))]
+                       eid (safe-entid db'' entity-ref)
+                       parent-eid' (when parent-ref (safe-entid db'' parent-ref))]
                    (if (and eid (some? value) (nil? parent-eid'))
                      (let [order (db-order/gen-key @max-atom nil :max-key-atom max-atom)]
                        (conj acc
@@ -192,25 +201,25 @@
       (seq fixes) (into fixes))))
 
 (defn- fix-duplicate-orders [db tx-data]
-  (let [db' (d/db-with db tx-data)
-        updates (attr-updates-from-tx tx-data :block/order)
+  (let [updates (attr-updates-from-tx tx-data :block/order)
         max-order-atoms (atom {})
         fixes (reduce
                (fn [acc {:keys [entity value]}]
                  (let [entity-ref entity
-                       eid (d/entid db' entity-ref)
-                       parent-eid eid]
+                       eid (safe-entid db entity-ref)
+                       parent (when eid (:block/parent (d/entity db eid)))
+                       parent-eid (when parent (safe-entid db parent))]
                    (if (and eid parent-eid value)
-                     (let [siblings (d/datoms db' :avet :block/parent parent-eid)
+                     (let [siblings (d/datoms db :avet :block/parent parent-eid)
                            same-order? (some
                                         (fn [datom]
                                           (let [sib-eid (:e datom)]
                                             (and (not= sib-eid eid)
-                                                 (= value (:block/order (d/entity db' sib-eid))))))
+                                                 (= value (:block/order (d/entity db sib-eid))))))
                                         siblings)]
                        (if same-order?
                          (let [max-atom (or (get @max-order-atoms parent-eid)
-                                            (let [max-order (max-order-for-parent db' parent-eid)
+                                            (let [max-order (max-order-for-parent db parent-eid)
                                                   created (atom max-order)]
                                               (swap! max-order-atoms assoc parent-eid created)
                                               created))
@@ -236,6 +245,24 @@
        (= 2 (count v))
        (= (first v) :block/uuid)
        (uuid? (second v))))
+
+(defn- tempid->lookup-map [tx-data]
+  (reduce
+   (fn [acc [op e a v]]
+     (if (and (= :db/add op) (= :block/uuid a) (uuid? v))
+       (assoc acc e [:block/uuid v])
+       acc))
+   {}
+   tx-data))
+
+(defn- replace-tempids [tx-data]
+  (let [m (tempid->lookup-map tx-data)]
+    (mapv
+     (fn [[op e a v]]
+       (let [e' (get m e e)
+             v' (if (lookup-id? v) v (get m v v))]
+         [op e' a v']))
+     tx-data)))
 
 (defn- normalize-tx-data
   [db-after db-before tx-data]
@@ -278,29 +305,25 @@
   (let [sql (.-sql self)
         conn (.-conn self)
         db @conn
-        tx-data' (de-normalize-tx-data db tx-data)
-        {:keys [tx-data db-before db-after]} (d/transact! conn tx-data')
-        normalized-data (normalize-tx-data db-after db-before tx-data)
-        new-t (storage/next-t! sql)
-        created-at (common/now-ms)
-        tx-str (common/write-transit normalized-data)]
-    (storage/append-tx! sql new-t tx-str created-at)
-    {:type "tx/ok"
-     :t new-t})
-
-    ;; (let [parent-fixed (fix-missing-parent db tx-data)
-    ;;       order-fixed (fix-duplicate-orders db parent-fixed)
-    ;;       cycle-info (cycle/detect-cycle db order-fixed)]
-    ;;   (if cycle-info
-    ;;     (cycle-reject-response db order-fixed cycle-info)
-    ;;     (let [_ (d/transact! conn order-fixed)
-    ;;           new-t (storage/next-t! sql)
-    ;;           created-at (common/now-ms)
-    ;;           tx-str (common/write-transit order-fixed)]
-    ;;       (storage/append-tx! sql new-t tx-str created-at)
-    ;;       {:type "tx/ok"
-    ;;        :t new-t})))
-  )
+        resolved (de-normalize-tx-data db tx-data)
+        tx-report (d/with db resolved)
+        db' (:db-after tx-report)
+        parent-fixed (fix-missing-parent db' resolved)
+        order-fixed (fix-duplicate-orders db' parent-fixed)
+        cycle-info (cycle/detect-cycle db' order-fixed)]
+    (if cycle-info
+      (do
+        (prn :debug "cycle detected: " cycle-info)
+        (cycle-reject-response db order-fixed cycle-info))
+      (let [{:keys [tx-data db-before db-after]} (ldb/transact! conn order-fixed)
+            normalized-data (normalize-tx-data db-after db-before tx-data)
+            new-t (storage/next-t! sql)
+            created-at (common/now-ms)
+            tx-str (common/write-transit normalized-data)]
+        (storage/append-tx! sql new-t tx-str created-at)
+        (broadcast! self sender {:type "changed" :t new-t})
+        {:type "tx/ok"
+         :t new-t}))))
 
 (defn- handle-tx! [^js self sender tx-data t-before]
   (let [current-t (t-now self)]
@@ -454,7 +477,7 @@
                     (try
                       (handle-ws-message! this ws message)
                       (catch :default e
-                        (log/error :worker-sync/ws-error {:error e})
+                        (log/error :worker-sync/ws-error e)
                         (send! ws {:type "error" :message "server error"}))))
   (webSocketClose [_this _ws _code _reason]
                   (log/info :worker-sync/ws-closed true))
