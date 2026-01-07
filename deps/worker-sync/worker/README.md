@@ -6,11 +6,18 @@ Durable Object using SQLite storage and the Logseq datascript fork.
 ### Bindings
 
 - `LOGSEQ_SYNC_DO`: Durable Object namespace
+- `LOGSEQ_SYNC_INDEX_DO`: Durable Object namespace for graph registry
 
 ### Routes
 
 - `GET /health`
   - Returns a JSON health response
+- `GET /graphs`
+  - Returns the list of registered graphs
+- `POST /graphs`
+  - Registers or updates a graph
+- `DELETE /graphs/:graph-id`
+  - Deletes a graph and resets its DO state
 - `GET /sync/:graph-id`
   - Proxies to the Durable Object for the given graph
 
