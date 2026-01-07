@@ -78,11 +78,8 @@ jobs:
       - name: Build test asset
         run: clojure -M:test compile test
 
-      - name: Run some ClojureScript tests against DB version
-        run: DB_GRAPH=1 node static/tests.js -r frontend.db.query-dsl-test
-
-      - name: Run ClojureScript query tests against DB version with basic query type
-        run: DB_GRAPH=1 DB_QUERY_TYPE=basic node static/tests.js -r frontend.db.query-dsl-test
+      - name: Run ClojureScript query tests against basic query type
+        run: DB_QUERY_TYPE=basic node static/tests.js -r frontend.db.query-dsl-test
 
       - name: Run ClojureScript tests
         run: node static/tests.js -e fix-me
