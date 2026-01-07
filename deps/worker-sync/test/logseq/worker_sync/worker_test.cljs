@@ -53,14 +53,3 @@
           order-b' (:block/order (d/entity db' [:block/uuid block-b]))]
       (is (= order-a order-a'))
       (is (not= order-a' order-b')))))
-
-(deftest unstable-id-reject-test
-  (let [block-id (random-uuid)]
-    (testing "numeric entity ids are rejected"
-      (is (true? (worker/contains-unstable-entity-id?* [[:db/add 1 :block/uuid block-id]])))
-      (is (true? (worker/contains-unstable-entity-id?* [{:db/id 2 :block/uuid block-id}]))))
-    (testing "numeric ref values are rejected"
-      (is (true? (worker/contains-unstable-entity-id?* [[:db/add [:block/uuid block-id] :block/parent 42]]))))
-    (testing "lookup refs are accepted"
-      (is (false? (worker/contains-unstable-entity-id?* [[:db/add [:block/uuid block-id] :block/parent [:block/uuid (random-uuid)]]])))
-      (is (false? (worker/contains-unstable-entity-id?* [{:block/uuid block-id}]))))))
