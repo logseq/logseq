@@ -4,7 +4,7 @@
             [datascript.impl.entity :as de]
             [frontend.db :as db]
             [frontend.format.mldoc :as mldoc]
-            [frontend.handler.db-based.rtc :as rtc-handler]
+            [frontend.handler.db-based.sync :as rtc-handler]
             [frontend.handler.notification :as notification]
             [frontend.persist-db :as persist-db]
             [frontend.state :as state]

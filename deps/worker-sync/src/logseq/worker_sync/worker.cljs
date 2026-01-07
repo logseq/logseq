@@ -17,6 +17,13 @@
       (= path "/health")
       (common/json-response {:ok true})
 
+      (or (= path "/graphs")
+          (string/starts-with? path "/graphs/"))
+      (let [^js namespace (.-LOGSEQ_SYNC_INDEX_DO env)
+            do-id (.idFromName namespace "index")
+            stub (.get namespace do-id)]
+        (.fetch stub request))
+
       (string/starts-with? path "/sync/")
       (let [prefix (count "/sync/")
             rest-path (subs path prefix)
@@ -155,6 +162,14 @@
       (and (= method "GET") (= path "/snapshot"))
       (common/json-response (snapshot-response self))
 
+      (and (= method "DELETE") (= path "/admin/reset"))
+      (do
+        (common/sql-exec (.-sql self) "drop table if exists kvs")
+        (common/sql-exec (.-sql self) "drop table if exists tx_log")
+        (common/sql-exec (.-sql self) "drop table if exists sync_meta")
+        (storage/init-schema! (.-sql self))
+        (common/json-response {:ok true}))
+
       (and (= method "POST") (= path "/tx"))
       (.then (common/read-json request)
              (fn [result]
@@ -184,3 +199,88 @@
          (if (common/upgrade-request? request)
            (handle-ws this request)
            (handle-http this request))))
+
+(defn- index-init! [sql]
+  (common/sql-exec sql
+                   (str "create table if not exists graphs ("
+                        "graph_id TEXT primary key,"
+                        "graph_name TEXT,"
+                        "schema_version TEXT,"
+                        "created_at INTEGER,"
+                        "updated_at INTEGER"
+                        ");")))
+
+(defn- index-list [sql]
+  (common/get-sql-rows
+   (common/sql-exec sql
+                    (str "select graph_id, graph_name, schema_version, created_at, updated_at "
+                         "from graphs order by updated_at desc"))))
+
+(defn- index-upsert! [sql graph-id graph-name schema-version]
+  (let [now (common/now-ms)]
+    (common/sql-exec sql
+                     (str "insert into graphs (graph_id, graph_name, schema_version, created_at, updated_at) "
+                          "values (?, ?, ?, ?, ?) "
+                          "on conflict(graph_id) do update set "
+                          "graph_name = excluded.graph_name, "
+                          "schema_version = excluded.schema_version, "
+                          "updated_at = excluded.updated_at")
+                     graph-id
+                     graph-name
+                     schema-version
+                     now
+                     now)))
+
+(defn- index-delete! [sql graph-id]
+  (common/sql-exec sql "delete from graphs where graph_id = ?" graph-id))
+
+(defn- handle-index-fetch [^js self request]
+  (let [sql (.-sql self)
+        url (js/URL. (.-url request))
+        path (.-pathname url)
+        method (.-method request)]
+    (index-init! sql)
+    (cond
+      (and (= method "GET") (= path "/graphs"))
+      (common/json-response {:graphs (index-list sql)})
+
+      (and (= method "POST") (= path "/graphs"))
+      (.then (common/read-json request)
+             (fn [result]
+               (let [graph-id (aget result "graph_id")
+                     graph-name (aget result "graph_name")
+                     schema-version (aget result "schema_version")]
+                 (if (and (string? graph-id) (string? graph-name))
+                   (do
+                     (index-upsert! sql graph-id graph-name schema-version)
+                     (common/json-response {:graph_id graph-id}))
+                   (common/bad-request "missing graph_id or graph_name")))))
+
+      (and (= method "DELETE") (string/starts-with? path "/graphs/"))
+      (let [graph-id (subs path (count "/graphs/"))]
+        (if (seq graph-id)
+          (do
+            (index-delete! sql graph-id)
+            (let [^js namespace (.-LOGSEQ_SYNC_DO (.-env self))
+                  do-id (.idFromName namespace graph-id)
+                  stub (.get namespace do-id)
+                  reset-url (str (.-origin url) "/admin/reset")]
+              (.fetch stub (js/Request. reset-url #js {:method "DELETE"})))
+            (common/json-response {:graph_id graph-id :deleted true}))
+          (common/bad-request "missing graph id")))
+
+      :else
+      (common/not-found))))
+
+(defclass SyncIndexDO
+  (extends DurableObject)
+
+  (constructor [this ^js state env]
+               (super state env)
+               (set! (.-state this) state)
+               (set! (.-env this) env)
+               (set! (.-sql this) (.-sql ^js (.-storage state))))
+
+  Object
+  (fetch [this request]
+         (handle-index-fetch this request)))
