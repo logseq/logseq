@@ -908,13 +908,14 @@
   [config ast-blocks]
   (let [results (atom {:simple-queries []
                        :asset-links []
-                       :embeds []})]
+                       :embeds []
+                       :zotero-imported-files {}})]
     (walk/prewalk
      (fn [x]
        (cond
-         (and (vector? x)
-              (= "Link" (first x))
-              (let [path-or-map (second (:url (second x)))]
+        (and (vector? x)
+             (= "Link" (first x))
+             (let [path-or-map (second (:url (second x)))]
                 (cond
                   (string? path-or-map)
                   (or (common-config/local-relative-asset? path-or-map)
@@ -928,6 +929,12 @@
               (= "Macro" (first x))
               (= "embed" (:name (second x))))
          (swap! results update :embeds conj x)
+         (and (vector? x)
+              (= "Macro" (first x))
+              (= "zotero-imported-file" (:name (second x))))
+         (let [[item-key filename] (:arguments (second x))]
+           (when (and item-key filename)
+             (swap! results update :zotero-imported-files assoc item-key (common-util/safe-read-map-string filename))))
          (and (vector? x)
               (= "Macro" (first x))
               (= "query" (:name (second x))))
@@ -1210,18 +1217,23 @@
 
 (defn- <handle-assets-in-block
   "If a block contains assets, creates them as #Asset nodes in the Asset page and references them in the block."
-  [block {:keys [asset-links]} {:keys [assets ignored-assets pdf-annotation-pages]} {:keys [notify-user <get-file-stat user-config] :as opts}]
+  [block {:keys [asset-links zotero-imported-files]} {:keys [assets ignored-assets pdf-annotation-pages]} {:keys [notify-user <get-file-stat user-config] :as opts}]
   (if (seq asset-links)
     (p/let [asset-maps* (p/all (map
                                 (fn [asset-link]
-                                  (p/let [path* (-> asset-link second :url second)
-                                          zotero-asset? (when (map? path*)
-                                                          (= "zotero" (:protocol (second (:url (second asset-link))))))
-                                          {:keys [path link base]} (if (map? path*)
-                                                                     (get-zotero-local-pdf-path user-config (second asset-link))
-                                                                     {:path path*})
-                                          asset-name (some-> path asset-path->name)
-                                          asset-link-or-name (or link (some-> path asset-path->name))
+                                  (p/let [link-map (second asset-link)
+                                          path* (-> link-map :url second)
+                                          zotero-path-data (when (map? path*)
+                                                             (get-zotero-local-pdf-path user-config link-map))
+                                          zotero-asset? (some? zotero-path-data)
+                                          {:keys [path link base]} (or zotero-path-data {:path path*})
+                                          asset-name (if zotero-asset?
+                                                       (or (get zotero-imported-files (last (string/split link #"/"))) base)
+                                                       (some-> path asset-path->name))
+                                          path (if zotero-asset?
+                                                 (string/replace path #"[^/]+$" asset-name)
+                                                 path)
+                                          asset-link-or-name (or link asset-name)
                                           asset-data* (when asset-link-or-name (get @assets asset-link-or-name))
                                           _ (when (and asset-link-or-name
                                                        (not asset-data*)
@@ -1236,7 +1248,7 @@
                                                          :checksum "0000000000000000000000000000000000000000000000000000000000000000"
                                                          :size (.-size stat)
                                                          :external-url (or link path)
-                                                         :external-file-name base}))
+                                                         :external-file-name asset-name}))
                                                (p/catch (fn [error]
                                                           (js/console.error error)))))
                                           asset-data (when asset-link-or-name (get @assets asset-link-or-name))]
