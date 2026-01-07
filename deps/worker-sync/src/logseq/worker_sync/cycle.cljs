@@ -50,7 +50,7 @@
 (defn- next-parent-eid [db attr eid]
   (when-let [entity (d/entity db eid)]
     (let [value (get entity attr)]
-      (ref->eid db value))))
+      (:db/id value))))
 
 (defn- cycle-from-eid? [db attr eid]
   (loop [seen #{eid}
@@ -64,26 +64,27 @@
   "Returns a map with cycle details when applying tx-data would introduce a cycle.
   Otherwise returns nil."
   [db tx-data]
-  (let [db' (d/db-with db tx-data)]
-    (reduce
-     (fn [_ attr]
-       (let [updates (attr-updates-from-tx tx-data attr)]
-         (let [result
-               (reduce
-                (fn [_ {:keys [entity value]}]
-                  (if (nil? value)
-                    nil
-                    (let [entity-ref (normalize-entity-ref entity)
-                          eid (ref->eid db' entity-ref)]
-                      (when (and eid (cycle-from-eid? db' attr eid))
-                        {:attr attr
-                         :entity entity-ref}))))
+  (prn :debug :detect-cycle
+       tx-data)
+  (reduce
+   (fn [_ attr]
+     (let [updates (attr-updates-from-tx tx-data attr)
+           result
+           (reduce
+            (fn [_ {:keys [entity value]}]
+              (if (nil? value)
                 nil
-                updates)]
-           (when result
-             (reduced result)))))
-     nil
-     special-attrs)))
+                (let [entity-ref (normalize-entity-ref entity)
+                      eid (ref->eid db entity-ref)]
+                  (when (and eid (cycle-from-eid? db attr eid))
+                    {:attr attr
+                     :entity entity-ref}))))
+            nil
+            updates)]
+       (when result
+         (reduced result))))
+   nil
+   special-attrs))
 
 (defn server-values-for
   "Returns a map of entity refs to the server's current value for attr."
