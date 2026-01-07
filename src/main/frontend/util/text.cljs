@@ -7,8 +7,6 @@
             [goog.string :as gstring]
             [logseq.cli.text-util :as cli-text-util]))
 
-(defonce between-re #"\(between ([^\)]+)\)")
-
 (def bilibili-regex #"^((?:https?:)?//)?((?:www).)?((?:bilibili.com))(/(?:video/)?)([\w-]+)(\?p=(\d+))?(\S+)?$")
 (def loom-regex #"^((?:https?:)?//)?((?:www).)?((?:loom.com))(/(?:share/|embed/))([\w-]+)(\S+)?$")
 (def vimeo-regex #"^((?:https?:)?//)?((?:www).)?((?:player.vimeo.com|vimeo.com))(/(?:video/)?)([\w-]+)(\S+)?$")
@@ -31,24 +29,6 @@
 (defn media-link?
   [media-formats s]
   (some (fn [fmt] (util/safe-re-find (re-pattern (str "(?i)\\." fmt "(?:\\?([^#]*))?(?:#(.*))?$")) s)) media-formats))
-
-(defn add-timestamp
-  [content key value]
-  (let [new-line (str (string/upper-case key) ": " value)
-        lines (string/split-lines content)
-        new-lines (map (fn [line]
-                         (string/trim
-                          (if (string/starts-with? (string/lower-case line) key)
-                            new-line
-                            line)))
-                       lines)
-        new-lines (if (not= (map string/trim lines) new-lines)
-                    new-lines
-                    (cons (first new-lines) ;; title
-                          (cons
-                           new-line
-                           (rest new-lines))))]
-    (string/join "\n" new-lines)))
 
 (defn get-current-line-by-pos
   [s pos]

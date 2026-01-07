@@ -141,8 +141,7 @@
         allowed-exceptions #{":block/pre-block? :block/scheduled :block/deadline :block/type :block/name :block/marker"
                              "(dissoc :block/format))]"
                              "{:block/name page-title})"
-                             ;; TODO: Mv these 2 file-based ns out of db files
-                             "(:require [logseq.db.file-based.rules :as file-rules]))"
+                             ;; TODO: Mv this file-based ns out of db file
                              "[logseq.db.file-based.schema :as file-schema]))"
                              ;; :block/name ones from src/main/mobile
                              "(if-let [journal (db/get-page page-name)]"
