@@ -147,7 +147,8 @@
        (-> (p/let [_ (state/<invoke-db-worker :thread-api/init config/RTC-WS-URL)
                    _ (state/<invoke-db-worker :thread-api/set-worker-sync-config
                                               {:enabled? config/worker-sync-enabled?
-                                               :ws-url config/worker-sync-ws-url})
+                                               :ws-url config/worker-sync-ws-url
+                                               :http-base config/worker-sync-http-base})
                    _ (sync-app-state!)
                    _ (log/info "init worker spent" (str (- (util/time-ms) t1) "ms"))
                    _ (sync-ui-state!)

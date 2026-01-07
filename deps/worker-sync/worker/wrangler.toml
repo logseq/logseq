@@ -10,6 +10,10 @@ enabled = true
 name = "LOGSEQ_SYNC_DO"
 class_name = "SyncDO"
 
+[[r2_buckets]]
+binding = "LOGSEQ_SYNC_ASSETS"
+bucket_name = "logseq-sync-assets"
+
 [[durable_objects.bindings]]
 name = "LOGSEQ_SYNC_INDEX_DO"
 class_name = "SyncIndexDO"
