@@ -9,10 +9,8 @@
 (defn- ref->eid [db ref]
   (cond
     (nil? ref) nil
-    (number? ref) ref
+    (number? ref) (when (pos? ref) ref)
     (vector? ref) (d/entid db ref)
-    (instance? Entity ref) (.-eid ^Entity ref)
-    (uuid? ref) (d/entid db [:block/uuid ref])
     (keyword? ref) (d/entid db [:db/ident ref])
     :else nil))
 
@@ -64,8 +62,6 @@
   "Returns a map with cycle details when applying tx-data would introduce a cycle.
   Otherwise returns nil."
   [db tx-data]
-  (prn :debug :detect-cycle
-       tx-data)
   (reduce
    (fn [_ attr]
      (let [updates (attr-updates-from-tx tx-data attr)
@@ -109,6 +105,6 @@
                          (when parent-uuid
                            [:block/uuid parent-uuid]))
                        :else current-raw)]
-         (assoc acc (pr-str entity-ref) current)))
+         (assoc acc [:block/uuid (:block/uuid (d/entity db eid))] current)))
      {}
      updates)))
