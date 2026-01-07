@@ -106,8 +106,9 @@
 (defn- cycle-reject-response [db tx-data {:keys [attr]}]
   {:type "tx/reject"
    :reason "cycle"
-   :attr (name attr)
-   :server_values (common/write-transit (cycle/server-values-for db tx-data attr))})
+   :data (common/write-transit
+          {:attr attr
+           :server_values (cycle/server-values-for db tx-data attr)})})
 
 (defn- journal-page-info []
   (let [now (common/now-ms)
@@ -171,9 +172,7 @@
    tx-data))
 
 (defn- fix-missing-parent [db tx-data]
-  (let [_ (prn :debug 1)
-        updates (attr-updates-from-tx tx-data :block/parent)
-        _ (prn :debug 2)
+  (let [updates (attr-updates-from-tx tx-data :block/parent)
         journal (journal-page-info)
         journal-ref [:block/uuid (:uuid journal)]
         journal-tx (build-journal-page-tx db journal)
@@ -301,6 +300,16 @@
          [op e' a v'])))
    tx-data))
 
+(defn- fix-tx-data
+  [db tx-data]
+  (if (some (fn [[op _e a v]]
+              (= [op a v] [:db/add :db/ident :logseq.class/Root]))
+            tx-data) ; initial data
+    tx-data
+    (->> tx-data
+         (fix-missing-parent db)
+         (fix-duplicate-orders db))))
+
 (defn- apply-tx! [^js self sender tx-data]
   (let [sql (.-sql self)
         conn (.-conn self)
@@ -308,8 +317,7 @@
         resolved (de-normalize-tx-data db tx-data)
         tx-report (d/with db resolved)
         db' (:db-after tx-report)
-        parent-fixed (fix-missing-parent db' resolved)
-        order-fixed (fix-duplicate-orders db' parent-fixed)
+        order-fixed (fix-tx-data db' resolved)
         cycle-info (cycle/detect-cycle db' order-fixed)]
     (if cycle-info
       (do

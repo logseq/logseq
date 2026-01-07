@@ -42,3 +42,29 @@
     (let [tx [{:block/uuid b :block/parent [:block/uuid b]}]
           values (cycle/server-values-for @conn tx :block/parent)]
       (is (= {(pr-str [:block/uuid b]) [:block/uuid a]} values)))))
+
+(deftest numeric-entity-cycle-test
+  (let [conn (new-conn)
+        a (random-uuid)
+        b (random-uuid)]
+    (d/transact! conn [{:block/uuid a}
+                       {:block/uuid b :block/parent [:block/uuid a]}])
+    (let [a-eid (d/entid @conn [:block/uuid a])
+          tx [[:db/add a-eid :block/parent [:block/uuid b]]]
+          result (cycle/detect-cycle @conn tx)]
+      (is (= :block/parent (:attr result)))
+      (is (= [:block/uuid a] (:entity result))))))
+
+(deftest three-block-cycle-test
+  (let [conn (new-conn)
+        a (random-uuid)
+        b (random-uuid)
+        c (random-uuid)]
+    (d/transact! conn [{:block/uuid a}
+                       {:block/uuid b :block/parent [:block/uuid a]}
+                       {:block/uuid c :block/parent [:block/uuid b]}])
+    (let [a-eid (d/entid @conn [:block/uuid a])
+          tx [[:db/add a-eid :block/parent [:block/uuid c]]]
+          result (cycle/detect-cycle @conn tx)]
+      (is (= :block/parent (:attr result)))
+      (is (= [:block/uuid a] (:entity result))))))
