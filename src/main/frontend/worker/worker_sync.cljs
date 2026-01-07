@@ -307,7 +307,6 @@
         db (some-> conn deref)]
     (when db
       (let [normalized (normalize-tx-data db-after db-before tx-data)
-            _ (prn :debug :normalized normalized)
             tx-str (sqlite-util/write-transit-str normalized)]
         (persist-local-tx! repo tx-str)
         (when-let [client (get @worker-state/*worker-sync-clients repo)]
