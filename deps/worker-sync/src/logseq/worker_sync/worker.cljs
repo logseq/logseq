@@ -76,6 +76,7 @@
   (let [conn (.-conn self)
         db @conn
         datoms (protocol/datoms->wire (d/datoms db :eavt))]
+    (prn :debug :count (count db))
     {:type "snapshot/ok"
      :t (t-now self)
      :datoms (common/write-transit datoms)}))
@@ -86,72 +87,8 @@
    :attr (name attr)
    :server_values (common/write-transit (cycle/server-values-for db tx-data attr))})
 
-(defn- entity->lookup [db entity]
-  (cond
-    (vector? entity) entity
-    (uuid? entity) [:block/uuid entity]
-    (keyword? entity) [:db/ident entity]
-    (map? entity)
-    (or (when-let [uuid (:block/uuid entity)]
-          [:block/uuid uuid])
-        (when-let [ident (:db/ident entity)]
-          [:db/ident ident])
-        (when-let [eid (:db/id entity)]
-          (when (vector? eid)
-            eid)))
-    (instance? Entity entity)
-    (or (when-let [uuid (:block/uuid entity)]
-          [:block/uuid uuid])
-        (when-let [ident (:db/ident entity)]
-          [:db/ident ident]))
-    (number? entity) nil
-    :else
-    (when-let [ent (d/entity db entity)]
-      (or (when-let [uuid (:block/uuid ent)]
-            [:block/uuid uuid])
-          (when-let [ident (:db/ident ent)]
-            [:db/ident ident])))))
-
-(defn- normalize-ref [db ref]
-  (or (entity->lookup db ref) ref))
-
-(defn- normalize-ref-value [db value]
-  (cond
-    (set? value) (into #{} (map (partial normalize-ref db)) value)
-    (sequential? value) (mapv (partial normalize-ref db) value)
-    :else (normalize-ref db value)))
-
 (defn- ref-attr? [attr]
   (contains? db-schema/ref-type-attributes attr))
-
-(defn- normalize-tx-data [db tx-data]
-  (mapv
-   (fn [item]
-     (cond
-       (and (vector? item) (#{:db/add :db/retract} (first item)))
-       (let [[op e a v] item]
-         (cond-> [op (normalize-ref db e) a v]
-           (ref-attr? a)
-           (update 3 (partial normalize-ref-value db))))
-
-       (and (vector? item) (#{:db.fn/retractEntity :db/retractEntity} (first item)))
-       (let [[op e] item]
-         [op (normalize-ref db e)])
-
-       (map? item)
-       (let [item' (cond-> item
-                     (contains? item :db/id)
-                     (update :db/id (partial normalize-ref db)))]
-         (reduce
-          (fn [acc k]
-            (if (contains? acc k)
-              (update acc k (partial normalize-ref-value db))
-              acc))
-          item'
-          db-schema/ref-type-attributes))
-
-       :else item))
-   tx-data))
 
 (defn- contains-unstable-entity-id? [tx-data]
   (boolean
@@ -309,8 +246,8 @@
         max-atom (atom max-order)
         fixes (reduce
                (fn [acc {:keys [entity value]}]
-                 (let [entity-ref (normalize-ref db'' entity)
-                       parent-ref (normalize-ref db'' value)
+                 (let [entity-ref entity
+                       parent-ref value
                        eid (d/entid db'' entity-ref)
                        parent-eid' (when parent-ref (d/entid db'' parent-ref))]
                    (if (and eid (some? value) (nil? parent-eid'))
@@ -332,10 +269,9 @@
         max-order-atoms (atom {})
         fixes (reduce
                (fn [acc {:keys [entity value]}]
-                 (let [entity-ref (normalize-ref db' entity)
+                 (let [entity-ref entity
                        eid (d/entid db' entity-ref)
-                       parent (when eid (:block/parent (d/entity db' eid)))
-                       parent-eid (when parent (d/entid db' (normalize-ref db' parent)))]
+                       parent-eid eid]
                    (if (and eid parent-eid value)
                      (let [siblings (d/datoms db' :avet :block/parent parent-eid)
                            same-order? (some
@@ -360,9 +296,6 @@
       (into tx-data fixes)
       tx-data)))
 
-(defn ^:test normalize-tx-data* [db tx-data]
-  (normalize-tx-data db tx-data))
-
 (defn ^:test contains-unstable-entity-id?* [tx-data]
   (contains-unstable-entity-id? tx-data))
 
@@ -375,24 +308,27 @@
 (defn- apply-tx! [^js self tx-data]
   (let [sql (.-sql self)
         conn (.-conn self)
-        db @conn
-        normalized (normalize-tx-data db tx-data)]
-    (if (contains-unstable-entity-id? normalized)
-      {:type "tx/reject"
-       :reason "unstable-id"}
-      (let [            ;; {:keys [db tx-data]} (ensure-idents db normalized)
-            parent-fixed (fix-missing-parent db tx-data)
-            order-fixed (fix-duplicate-orders db parent-fixed)
-            cycle-info (cycle/detect-cycle db order-fixed)]
-        (if cycle-info
-          (cycle-reject-response db order-fixed cycle-info)
-          (let [_ (d/transact! conn order-fixed)
-                new-t (storage/next-t! sql)
-                created-at (common/now-ms)
-                tx-str (common/write-transit order-fixed)]
-            (storage/append-tx! sql new-t tx-str created-at)
-            {:type "tx/ok"
-             :t new-t}))))))
+        db @conn]
+    (let [_ (d/transact! conn tx-data)
+          new-t (storage/next-t! sql)
+          created-at (common/now-ms)
+          tx-str (common/write-transit tx-data)]
+      (storage/append-tx! sql new-t tx-str created-at)
+      {:type "tx/ok"
+       :t new-t})
+    ;; (let [parent-fixed (fix-missing-parent db tx-data)
+    ;;       order-fixed (fix-duplicate-orders db parent-fixed)
+    ;;       cycle-info (cycle/detect-cycle db order-fixed)]
+    ;;   (if cycle-info
+    ;;     (cycle-reject-response db order-fixed cycle-info)
+    ;;     (let [_ (d/transact! conn order-fixed)
+    ;;           new-t (storage/next-t! sql)
+    ;;           created-at (common/now-ms)
+    ;;           tx-str (common/write-transit order-fixed)]
+    ;;       (storage/append-tx! sql new-t tx-str created-at)
+    ;;       {:type "tx/ok"
+    ;;        :t new-t})))
+    ))
 
 (defn- handle-tx! [^js self tx-data t-before]
   (let [current-t (t-now self)]
