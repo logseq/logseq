@@ -6,10 +6,10 @@
             [frontend.db.model :as model]
             [frontend.test.helper :as test-helper :refer [load-test-files]]))
 
-(use-fixtures :each {:before #(test-helper/start-test-db! {:db-graph? true})
+(use-fixtures :each {:before test-helper/start-test-db!
                      :after test-helper/destroy-test-db!})
 
-(def test-db test-helper/test-db-name-db-version)
+(def test-db test-helper/test-db)
 
 (deftest test-page-alias-with-multiple-alias
   (let [ab-uuid (random-uuid)

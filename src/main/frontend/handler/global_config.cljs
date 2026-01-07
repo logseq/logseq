@@ -21,11 +21,6 @@
   []
   (path/path-join @root-dir "config"))
 
-(defn safe-global-config-dir
-  "Fetch config dir in a general context, not just for global config"
-  []
-  (when @root-dir (global-config-dir)))
-
 (defn global-config-path
   "Fetch config path in a global config context"
   []
