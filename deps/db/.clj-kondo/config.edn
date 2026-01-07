@@ -23,7 +23,6 @@
              logseq.db.frontend.property db-property
              logseq.db.frontend.property.build db-property-build
              logseq.db.frontend.property.type db-property-type
-             logseq.db.file-based.rules file-rules
              logseq.db.file-based.schema file-schema
              logseq.db.file-based.entity-util file-entity-util
              logseq.db.frontend.rules rules
