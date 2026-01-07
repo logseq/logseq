@@ -5,13 +5,23 @@
 
 (def text-decoder (js/TextDecoder.))
 
+(defn- cors-headers []
+  #js {"access-control-allow-origin" "*"
+       "access-control-allow-headers" "content-type"
+       "access-control-allow-methods" "GET,POST,DELETE,OPTIONS"})
+
 (defn json-response
   ([data] (json-response data 200))
   ([data status]
    (js/Response.
     (js/JSON.stringify (clj->js data))
     #js {:status status
-         :headers #js {"content-type" "application/json"}})))
+         :headers (js/Object.assign
+                   #js {"content-type" "application/json"}
+                   (cors-headers))})))
+
+(defn options-response []
+  (js/Response. nil #js {:status 204 :headers (cors-headers)}))
 
 (defn bad-request [message]
   (json-response {:error message} 400))
