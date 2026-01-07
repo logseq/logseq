@@ -171,6 +171,7 @@
     (case (:type message)
       "hello" (do
                 (update-server-t! client (:t message))
+                (send! (:ws client) {:type "pull" :since @(:server-t client)})
                 (flush-pending! repo client))
       "tx/ok" (do
                 (update-server-t! client (:t message))
@@ -182,6 +183,9 @@
                       (remove-pending-txs! repo @(:inflight client))
                       (reset! (:inflight client) [])
                       (flush-pending! repo client))
+      "changed" (let [t (:t message)]
+                  (when (and (number? t) (< @(:server-t client) t))
+                    (send! (:ws client) {:type "pull" :since @(:server-t client)})))
       "tx/reject" (do
                     (when (= "stale" (:reason message))
                       (update-server-t! client (:t message)))
@@ -263,10 +267,11 @@
             (when (seq batch)
               (let [tx-ids (mapv :tx-id batch)
                     txs (mapv :tx batch)]
-                (reset! (:inflight client) tx-ids)
-                (send! ws {:type "tx/batch"
-                           :t_before @(:server-t client)
-                           :txs txs})))))))))
+                (when (seq txs)
+                  (reset! (:inflight client) tx-ids)
+                  (send! ws {:type "tx/batch"
+                             :t_before @(:server-t client)
+                             :txs txs}))))))))))
 
 (defn- attach-ws-handlers! [repo client ws]
   (set! (.-onmessage ws)
@@ -277,16 +282,9 @@
           (log/info :worker-sync/ws-closed {:repo repo}))))
 
 (defn- start-pull-loop! [client ws]
-  (let [interval-id (js/setInterval
-                     (fn []
-                       (when (ws-open? ws)
-                         (send! ws {:type "pull" :since @(:server-t client)})))
-                     2000)]
-    (assoc client :pull-interval-id interval-id)))
+  client)
 
 (defn- stop-client! [client]
-  (when-let [interval-id (:pull-interval-id client)]
-    (js/clearInterval interval-id))
   (when-let [ws (:ws client)]
     (try
       (.close ws)
@@ -332,9 +330,11 @@
 (defn enqueue-local-tx!
   [repo {:keys [tx-data db-after db-before]}]
   (let [conn (worker-state/get-datascript-conn repo)
-        db (some-> conn deref)]
-    (when db
-      (let [normalized (normalize-tx-data db-after db-before tx-data)
+        db (some-> conn deref)
+        ;; FIXME: all ignored properties
+        tx-data' (remove (fn [d] (contains? #{:logseq.property.embedding/hnsw-label-updated-at :block/tx-id} (:a d))) tx-data)]
+    (when (and db (seq tx-data'))
+      (let [normalized (normalize-tx-data db-after db-before tx-data')
             tx-str (sqlite-util/write-transit-str normalized)]
         (persist-local-tx! repo tx-str)
         (when-let [client (get @worker-state/*worker-sync-clients repo)]
