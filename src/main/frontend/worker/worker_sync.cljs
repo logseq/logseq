@@ -313,21 +313,21 @@
 
 (defn enqueue-local-tx!
   [repo tx-data tx-meta]
-  (when-let [client (get @worker-state/*worker-sync-clients repo)]
-    (let [send-queue (:send-queue client)
-          conn (worker-state/get-datascript-conn repo)
-          db (some-> conn deref)]
-      (when db
-        (let [normalized (if (:initial-db? tx-meta) tx-data (normalize-tx-data db tx-data))
-              tx-str (sqlite-util/write-transit-str normalized)]
-          (persist-local-tx! repo tx-str)
-          (swap! send-queue
-                 (fn [prev]
-                   (p/then prev
-                           (fn [_]
-                             (when-let [ws (:ws (get @worker-state/*worker-sync-clients repo))]
-                               (when (ws-open? ws)
-                                 (flush-pending! repo client))))))))))))
+  (let [conn (worker-state/get-datascript-conn repo)
+        db (some-> conn deref)]
+    (when db
+      (let [normalized (if (:initial-db? tx-meta) tx-data (normalize-tx-data db tx-data))
+            tx-str (sqlite-util/write-transit-str normalized)]
+        (persist-local-tx! repo tx-str)
+        (when-let [client (get @worker-state/*worker-sync-clients repo)]
+          (let [send-queue (:send-queue client)]
+            (swap! send-queue
+                   (fn [prev]
+                     (p/then prev
+                             (fn [_]
+                               (when-let [ws (:ws (get @worker-state/*worker-sync-clients repo))]
+                                 (when (ws-open? ws)
+                                   (flush-pending! repo client)))))))))))))
 
 (defn handle-local-tx!
   [repo tx-data tx-meta]
