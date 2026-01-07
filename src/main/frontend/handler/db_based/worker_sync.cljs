@@ -102,8 +102,8 @@
                   graphs (js->clj (aget resp "graphs") :keywordize-keys true)
                   result (mapv (fn [graph]
                                  (merge
-                                  {:url (str config/db-version-prefix (:graph_name graph))
-                                   :GraphName (:graph_name graph)
+                                  {:url (:graph_name graph)
+                                   :GraphName (string/replace (:graph_name graph) config/db-version-prefix "")
                                    :GraphSchemaVersion (:schema_version graph)
                                    :GraphUUID (:graph_id graph)
                                    :rtc-graph? true}
