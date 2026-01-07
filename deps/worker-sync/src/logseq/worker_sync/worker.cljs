@@ -68,6 +68,15 @@
 (defn- send! [ws msg]
   (.send ws (protocol/encode-message msg)))
 
+(defn- ws-open? [ws]
+  (= 1 (.-readyState ws)))
+
+(defn- broadcast! [^js self sender msg]
+  (let [clients (.getWebSockets (.-state self))]
+    (doseq [ws clients]
+      (when (and (not= ws sender) (ws-open? ws))
+        (send! ws msg)))))
+
 (defn- parse-int [value]
   (when (some? value)
     (let [n (js/parseInt value 10)]
@@ -98,36 +107,6 @@
 
 (defn- ref-attr? [attr]
   (contains? db-schema/ref-type-attributes attr))
-
-(defn- contains-unstable-entity-id? [tx-data]
-  (boolean
-   (some
-    (fn [item]
-      (cond
-        (and (vector? item) (#{:db/add :db/retract} (first item)))
-        (let [[_ e a v] item]
-          (or (number? e)
-              (and (ref-attr? a) (number? v))))
-
-        (and (vector? item) (#{:db.fn/retractEntity :db/retractEntity} (first item)))
-        (let [[_ e] item]
-          (number? e))
-
-        (map? item)
-        (let [unstable-ref? (fn [value]
-                              (cond
-                                (number? value) true
-                                (sequential? value) (some number? value)
-                                (set? value) (some number? value)
-                                :else false))]
-          (or (number? (:db/id item))
-              (some (fn [k]
-                      (when (contains? item k)
-                        (unstable-ref? (get item k))))
-                    db-schema/ref-type-attributes)))
-
-        :else false))
-    tx-data)))
 
 (defn- journal-page-info []
   (let [now (common/now-ms)
@@ -182,66 +161,6 @@
        :else acc))
    []
    tx-data))
-
-(defn- collect-ident-refs [tx-data]
-  (let [add-ident (fn [acc value]
-                    (cond
-                      (keyword? value) (conj acc value)
-                      (and (vector? value) (= :db/ident (first value)) (keyword? (second value)))
-                      (conj acc (second value))
-                      :else acc))
-        add-ident-coll (fn [acc value]
-                         (cond
-                           (set? value) (reduce add-ident acc value)
-                           (sequential? value) (reduce add-ident acc value)
-                           :else (add-ident acc value)))]
-    (reduce
-     (fn [acc item]
-       (cond
-         (and (vector? item) (#{:db/add :db/retract} (first item)))
-         (let [[_ e a v] item
-               acc (add-ident acc e)]
-           (if (ref-attr? a)
-             (add-ident-coll acc v)
-             acc))
-
-         (and (vector? item) (#{:db.fn/retractEntity :db/retractEntity} (first item)))
-         (let [[_ e] item]
-           (add-ident acc e))
-
-         (map? item)
-         (let [acc (if (contains? item :db/ident)
-                     (add-ident acc (:db/ident item))
-                     acc)]
-           (reduce
-            (fn [acc k]
-              (if (contains? item k)
-                (add-ident-coll acc (get item k))
-                acc))
-            acc
-            db-schema/ref-type-attributes))
-
-         :else acc))
-     #{}
-     tx-data)))
-
-(defn- ensure-ident-tx [db tx-data]
-  (let [idents (collect-ident-refs tx-data)]
-    (reduce
-     (fn [acc ident]
-       (if (d/entid db [:db/ident ident])
-         acc
-         (conj acc {:db/ident ident})))
-     []
-     idents)))
-
-(defn- ensure-idents [db tx-data]
-  (let [ident-tx (ensure-ident-tx db tx-data)]
-    (if (seq ident-tx)
-      {:db (d/db-with db ident-tx)
-       :tx-data (into ident-tx tx-data)}
-      {:db db
-       :tx-data tx-data})))
 
 (defn- fix-missing-parent [db tx-data]
   (let [db' (d/db-with db tx-data)
@@ -305,9 +224,6 @@
       (into tx-data fixes)
       tx-data)))
 
-(defn ^:test contains-unstable-entity-id?* [tx-data]
-  (contains-unstable-entity-id? tx-data))
-
 (defn ^:test fix-missing-parent* [db tx-data]
   (fix-missing-parent db tx-data))
 
@@ -321,7 +237,8 @@
        (= (first v) :block/uuid)
        (uuid? (second v))))
 
-(defn- normalize-tx-data [db-after db-before tx-data]
+(defn- normalize-tx-data
+  [db-after db-before tx-data]
   (->> tx-data
        (map
         (fn [[e a v _t added]]
@@ -343,29 +260,34 @@
               [:db/add e' a v']
               [:db/retract e' a v']))))))
 
-(defn- apply-tx! [^js self tx-data]
+(defn- de-normalize-tx-data
+  [db tx-data]
+  (keep
+   (fn [[op e a v]]
+     (let [e' (if (lookup-id? e)
+                (:db/id (d/entity db e))
+                e)
+           v' (if (lookup-id? v)
+                (:db/id (d/entity db v))
+                v)]
+       (when (and e' v')
+         [op e' a v'])))
+   tx-data))
+
+(defn- apply-tx! [^js self sender tx-data]
   (let [sql (.-sql self)
         conn (.-conn self)
         db @conn
-        tx-data' (keep
-                  (fn [[op e a v]]
-                    (let [e' (if (lookup-id? e)
-                               (:db/id (d/entity db e))
-                               e)
-                          v' (if (lookup-id? v)
-                               (:db/id (d/entity db v))
-                               v)]
-                      (when (and e' v')
-                        [op e' a v'])))
-                  tx-data)]
-    (let [{:keys [tx-data db-before db-after]} (d/transact! conn tx-data')
-          normalized-data (normalize-tx-data db-after db-before tx-data)
-          new-t (storage/next-t! sql)
-          created-at (common/now-ms)
-          tx-str (common/write-transit normalized-data)]
-      (storage/append-tx! sql new-t tx-str created-at)
-      {:type "tx/ok"
-       :t new-t})
+        tx-data' (de-normalize-tx-data db tx-data)
+        {:keys [tx-data db-before db-after]} (d/transact! conn tx-data')
+        normalized-data (normalize-tx-data db-after db-before tx-data)
+        new-t (storage/next-t! sql)
+        created-at (common/now-ms)
+        tx-str (common/write-transit normalized-data)]
+    (storage/append-tx! sql new-t tx-str created-at)
+    {:type "tx/ok"
+     :t new-t})
+
     ;; (let [parent-fixed (fix-missing-parent db tx-data)
     ;;       order-fixed (fix-duplicate-orders db parent-fixed)
     ;;       cycle-info (cycle/detect-cycle db order-fixed)]
@@ -378,17 +300,17 @@
     ;;       (storage/append-tx! sql new-t tx-str created-at)
     ;;       {:type "tx/ok"
     ;;        :t new-t})))
-    ))
+  )
 
-(defn- handle-tx! [^js self tx-data t-before]
+(defn- handle-tx! [^js self sender tx-data t-before]
   (let [current-t (t-now self)]
     (if (and (number? t-before) (not= t-before current-t))
       {:type "tx/reject"
        :reason "stale"
        :t current-t}
-      (apply-tx! self tx-data))))
+      (apply-tx! self sender tx-data))))
 
-(defn- handle-tx-batch! [^js self txs t-before]
+(defn- handle-tx-batch! [^js self sender txs t-before]
   (let [current-t (t-now self)]
     (if (and (number? t-before) (not= t-before current-t))
       {:type "tx/reject"
@@ -396,12 +318,14 @@
        :t current-t}
       (loop [idx 0]
         (if (>= idx (count txs))
-          {:type "tx/batch/ok"
-           :t (t-now self)
-           :count (count txs)}
+          (let [current-t (t-now self)]
+            (broadcast! self sender {:type "changed" :t current-t})
+            {:type "tx/batch/ok"
+             :t current-t
+             :count (count txs)})
           (let [tx-data (protocol/transit->tx (nth txs idx))]
             (if (sequential? tx-data)
-              (let [result (apply-tx! self tx-data)]
+              (let [result (apply-tx! self sender tx-data)]
                 (if (= "tx/ok" (:type result))
                   (recur (inc idx))
                   (assoc result :index idx)))
@@ -431,14 +355,14 @@
         (let [tx-data (protocol/transit->tx (:tx message))
               t-before (parse-int (:t_before message))]
           (if (sequential? tx-data)
-            (send! ws (handle-tx! self tx-data t-before))
+            (send! ws (handle-tx! self ws tx-data t-before))
             (send! ws {:type "tx/reject" :reason "invalid tx"})))
 
         "tx/batch"
         (let [txs (:txs message)
               t-before (parse-int (:t_before message))]
           (if (and (sequential? txs) (every? string? txs))
-            (send! ws (handle-tx-batch! self txs t-before))
+            (send! ws (handle-tx-batch! self ws txs t-before))
             (send! ws {:type "tx/reject" :reason "invalid tx"})))
 
         (send! ws {:type "error" :message "unknown type"})))))
@@ -447,18 +371,7 @@
   (let [pair (js/WebSocketPair.)
         client (aget pair 0)
         server (aget pair 1)]
-    (.accept server)
-    (set! (.-onmessage server)
-          (fn [event]
-            (try
-              (handle-ws-message! self server (.-data event))
-              (catch :default e
-                (log/error :worker-sync/ws-error {:error e})
-                (js/console.error e)
-                (send! server {:type "error" :message "server error"})))))
-    (set! (.-onclose server)
-          (fn [_]
-            (log/info :worker-sync/ws-closed true)))
+    (.acceptWebSocket (.-state self) server)
     (js/Response. nil #js {:status 101 :webSocket client})))
 
 (defn- strip-sync-prefix [path]
@@ -505,7 +418,7 @@
                  (let [tx-data (protocol/transit->tx (aget result "tx"))
                        t-before (parse-int (aget result "t_before"))]
                    (if (sequential? tx-data)
-                     (common/json-response (handle-tx! self tx-data t-before))
+                     (common/json-response (handle-tx! self nil tx-data t-before))
                      (common/bad-request "invalid tx"))))))
 
       (and (= method "POST") (= path "/tx/batch"))
@@ -516,7 +429,7 @@
                  (let [txs (js->clj (aget result "txs"))
                        t-before (parse-int (aget result "t_before"))]
                    (if (and (sequential? txs) (every? string? txs))
-                     (common/json-response (handle-tx-batch! self txs t-before))
+                     (common/json-response (handle-tx-batch! self nil txs t-before))
                      (common/bad-request "invalid tx"))))))
 
       :else
@@ -536,7 +449,17 @@
   (fetch [this request]
          (if (common/upgrade-request? request)
            (handle-ws this request)
-           (handle-http this request))))
+           (handle-http this request)))
+  (webSocketMessage [this ws message]
+                    (try
+                      (handle-ws-message! this ws message)
+                      (catch :default e
+                        (log/error :worker-sync/ws-error {:error e})
+                        (send! ws {:type "error" :message "server error"}))))
+  (webSocketClose [_this _ws _code _reason]
+                  (log/info :worker-sync/ws-closed true))
+  (webSocketError [_this _ws error]
+                  (log/error :worker-sync/ws-error {:error error})))
 
 (defn- index-init! [sql]
   (common/sql-exec sql
