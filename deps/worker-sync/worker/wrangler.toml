@@ -1,0 +1,15 @@
+name = "logseq-sync"
+main = "dist/worker/main.js"
+compatibility_date = "2025-05-05"
+compatibility_flags = ["nodejs_compat"]
+
+[observability]
+enabled = true
+
+[[durable_objects.bindings]]
+name = "LOGSEQ_SYNC_DO"
+class_name = "SyncDO"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["SyncDO"]
