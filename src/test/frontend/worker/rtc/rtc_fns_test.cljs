@@ -12,7 +12,7 @@
             [logseq.outliner.transaction :as outliner-tx]))
 
 (use-fixtures :each
-  test-helper/db-based-start-and-destroy-db
+  test-helper/start-and-destroy-db
   (worker-fixtures/listen-test-db-fixture [:sync-db-to-main-thread]))
 
 (deftest ^:large-vars/cleanup-todo update-remote-data-by-local-unpushed-ops-test

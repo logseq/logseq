@@ -9,7 +9,6 @@
             [frontend.db.model :as db-model]
             [frontend.modules.outliner.tree :as tree]
             [frontend.state :as state]
-            [frontend.test.fixtures :as fixtures]
             [frontend.test.helper :as test-helper]
             [frontend.worker.db-listener :as worker-db-listener]
             [logseq.db :as ldb]
@@ -37,8 +36,8 @@
 
 (use-fixtures :each
   disable-browser-fns
-  fixtures/react-components
-  fixtures/reset-db
+  test-helper/react-components
+  #(test-helper/start-and-destroy-db % {:build-init-data? false})
   listen-db-fixture)
 
 (defn get-block
@@ -790,13 +789,3 @@
                :block/parent #:db{:id 2333},
                :block/page #:db{:id 2313},
                :block/level 3}]}]})))))
-
-(comment
-  (dotimes [i 5]
-    (do
-      (frontend.test.fixtures/reset-datascript test-db)
-      (cljs.test/run-tests)))
-
-  (do
-    (frontend.test.fixtures/reset-datascript test-db)
-    (cljs.test/test-vars [#'test-paste-first-empty-block])))

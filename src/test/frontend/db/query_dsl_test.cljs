@@ -4,7 +4,7 @@
             [frontend.db :as db]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.db.react :as react]
-            [frontend.test.helper :as test-helper :include-macros true :refer [load-test-files load-test-files-for-db-graph]]
+            [frontend.test.helper :as test-helper :include-macros true :refer [load-test-files]]
             [frontend.util :as util]))
 
 ;; TODO: quickcheck
@@ -12,7 +12,7 @@
 ;; 2. find illegal queries which can't be executed by datascript
 ;; 3. find filters combinations which might break the current query implementation
 
-(use-fixtures :each {:before #(test-helper/start-test-db! {:db-graph? true})
+(use-fixtures :each {:before test-helper/start-test-db!
                      :after test-helper/destroy-test-db!})
 
 ;; Test helpers
@@ -65,14 +65,14 @@
 (defn- dsl-query
   [s]
   (react/clear-query-state!)
-  (when-let [result (dsl-query* test-helper/test-db-name-db-version s)]
+  (when-let [result (dsl-query* test-helper/test-db s)]
     (map first (deref result))))
 
 (defn- custom-query
   [query]
   (react/clear-query-state!)
   (when-let [result (with-redefs [query-dsl/db-block-attrs db-block-attrs]
-                      (query-dsl/custom-query test-helper/test-db-name-db-version query {}))]
+                      (query-dsl/custom-query test-helper/test-db query {}))]
     (map first (deref result))))
 
 ;; Tests
@@ -177,7 +177,7 @@
       (block-property-queries-test))))
 
 (deftest db-only-block-property-queries
-  (load-test-files-for-db-graph
+  (load-test-files
    {:properties
     {:zzz {:logseq.property/type :default
            :block/title "zzz name!"}}
@@ -202,7 +202,7 @@
 
 (when (not js/process.env.DB_QUERY_TYPE)
   (deftest property-default-type-default-value-queries
-    (load-test-files-for-db-graph
+    (load-test-files
      {:properties
       {:default {:logseq.property/type :default
                  :build/properties
@@ -229,7 +229,7 @@
         "Blocks with :default property value and not tagged with a tag that has that default-value property value"))
 
   (deftest property-checkbox-type-default-value-queries
-    (load-test-files-for-db-graph
+    (load-test-files
      {:properties
       {:checkbox {:logseq.property/type :checkbox
                   :build/properties
@@ -255,7 +255,7 @@
         "Blocks with :checkbox property value and not tagged with a tag that has that default-value property value"))
 
   (deftest closed-property-default-value-queries
-    (load-test-files-for-db-graph
+    (load-test-files
      {:properties
       {:status {:logseq.property/type :default
                 :build/closed-values

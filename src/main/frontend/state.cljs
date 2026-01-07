@@ -1978,13 +1978,6 @@ Similar to re-frame subscriptions"
 (defn get-auth-refresh-token []
   (:auth/refresh-token @state))
 
-(defn set-parsing-state!
-  "Leave for tests"
-  [m]
-  (update-state! [:graph/parsing-state (get-current-repo)]
-                 (if (fn? m) m
-                     (fn [old-value] (merge old-value m)))))
-
 (defn http-proxy-enabled-or-val? []
   (when-let [{:keys [type protocol host port] :as agent-opts} (sub [:electron/user-cfgs :settings/agent])]
     (when (and  (not (contains? #{"system"} type))
