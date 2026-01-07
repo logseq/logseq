@@ -468,6 +468,7 @@
               (handle-ws-message! self server (.-data event))
               (catch :default e
                 (log/error :worker-sync/ws-error {:error e})
+                (js/console.error e)
                 (send! server {:type "error" :message "server error"})))))
     (set! (.-onclose server)
           (fn [_]
