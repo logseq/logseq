@@ -27,7 +27,7 @@
   (or config/worker-sync-http-base
       (ws->http-base config/worker-sync-ws-url)))
 
-(def ^:private snapshot-rows-limit 500)
+(def ^:private snapshot-rows-limit 2000)
 
 (defn- fetch-json
   [url opts]
