@@ -185,14 +185,14 @@
      :t (t-now self)
      :txs txs}))
 
-;; FIXME: memory limit
-(defn- snapshot-response [^js self]
-  (let [conn (.-conn self)
-        db @conn
-        datoms (protocol/datoms->wire (d/datoms db :eavt))]
-    {:type "snapshot/ok"
-     :t (t-now self)
-     :datoms (common/write-transit datoms)}))
+;; FIXME: memory limit, should re-download graph using sqlite table rows
+;; (defn- snapshot-response [^js self]
+;;   (let [conn (.-conn self)
+;;         db @conn
+;;         datoms (protocol/datoms->wire (d/datoms db :eavt))]
+;;     {:type "snapshot/ok"
+;;      :t (t-now self)
+;;      :datoms (common/write-transit datoms)}))
 
 (defn- import-snapshot! [^js self rows reset?]
   (let [sql (.-sql self)]
@@ -302,8 +302,8 @@
         (let [since (or (:since message) 0)]
           (send! ws (pull-response self since)))
 
-        "snapshot"
-        (send! ws (snapshot-response self))
+        ;; "snapshot"
+        ;; (send! ws (snapshot-response self))
 
         "tx"
         (let [tx-data (protocol/transit->tx (:tx message))
