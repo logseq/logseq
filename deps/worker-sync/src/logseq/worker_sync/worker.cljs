@@ -212,7 +212,10 @@
                                 " on conflict(addr) do update set content = excluded.content, addresses = excluded.addresses")
                            addr
                            content
-                           addresses))))))
+                           addresses))))
+    (set! (.-conn self) (storage/open-conn sql))
+    (let [conn (.-conn self)]
+      (prn :debug :import-datoms-count (count (d/datoms @conn :eavt))))))
 
 (defn- cycle-reject-response [db tx-data {:keys [attr]}]
   {:type "tx/reject"
@@ -244,7 +247,8 @@
       (do
         (prn :debug "cycle detected: " cycle-info)
         (cycle-reject-response db order-fixed cycle-info))
-      (let [{:keys [tx-data db-before db-after]} (ldb/transact! conn order-fixed)
+      ;; TODO: replace d/transact! with ldb/transact! to enable db validation
+      (let [{:keys [tx-data db-before db-after]} (d/transact! conn order-fixed)
             normalized-data (db-normalize/normalize-tx-data db-after db-before tx-data)
             new-t (storage/next-t! sql)
             created-at (common/now-ms)
