@@ -614,13 +614,12 @@
 
 (def-thread-api :thread-api/worker-sync-finalize-kvs-import
   [repo]
-  (when-let [^js db (get @*worker-sync-import-dbs repo)]
+  (p/let [^js db (get @*worker-sync-import-dbs repo)]
     (.close db)
-    (swap! *worker-sync-import-dbs dissoc repo))
-  (p/do!
-   ((@thread-api/*thread-apis :thread-api/create-or-open-db) repo {:close-other-db? false})
-   ((@thread-api/*thread-apis :thread-api/export-db) repo)
-   (shared-service/broadcast-to-clients! :add-repo {:repo repo})))
+    (swap! *worker-sync-import-dbs dissoc repo)
+    ((@thread-api/*thread-apis :thread-api/create-or-open-db) repo {:close-other-db? true})
+    ((@thread-api/*thread-apis :thread-api/export-db) repo)
+    (shared-service/broadcast-to-clients! :add-repo {:repo repo})))
 
 (def-thread-api :thread-api/unsafe-unlink-db
   [repo]
