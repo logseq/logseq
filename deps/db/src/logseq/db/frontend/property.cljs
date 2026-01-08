@@ -537,6 +537,11 @@
                                                          :hide? true
                                                          :public? false}
                                                 :queryable? false}
+     :logseq.property.asset/external-props {:title "External properties"
+                                            :schema {:type :map
+                                                     :hide? true
+                                                     :public? false}
+                                            :queryable? false}
      :logseq.property.asset/size {:title "File Size"
                                   :schema {:type :raw-number
                                            :hide? true
