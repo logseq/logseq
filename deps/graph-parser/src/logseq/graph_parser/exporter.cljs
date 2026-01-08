@@ -1297,15 +1297,17 @@
                                           {:asset-name-uuid [asset-link-or-name (:asset-id asset-data)]}
 
                                           :else
-                                        (let [new-asset (merge (build-new-asset asset-data)
-                                                               {:block/title (db-asset/asset-name->title (node-path/basename asset-name))
-                                                                :block/uuid (get-asset-block-id assets asset-link-or-name)}
-                                                               (when-let [metadata (not-empty (common-util/safe-read-map-string (:metadata (second asset-link))))]
-                                                                 {:logseq.property.asset/resize-metadata metadata}))
-                                              pdf-annotations-path (or asset-name asset-link-or-name)
-                                              pdf-annotations-tx (when (= "pdf" (path/file-ext pdf-annotations-path))
-                                                                   (build-pdf-annotations-tx pdf-annotations-path assets new-asset pdf-annotation-pages opts))
-                                              asset-tx (concat [new-asset] pdf-annotations-tx)]
+                                          (let [new-asset (merge (build-new-asset asset-data)
+                                                                 {:block/title (db-asset/asset-name->title (node-path/basename asset-name))
+                                                                  :block/uuid (get-asset-block-id assets asset-link-or-name)}
+                                                                 (when-let [metadata (not-empty (common-util/safe-read-map-string (:metadata (second asset-link))))]
+                                                                   {:logseq.property.asset/resize-metadata metadata}))
+                                                pdf-annotations-path (if (and zotero-asset? (string? asset-name))
+                                                                       (node-path/join common-config/local-assets-dir asset-name)
+                                                                       (or asset-name asset-link-or-name))
+                                                pdf-annotations-tx (when (= "pdf" (path/file-ext pdf-annotations-path))
+                                                                     (build-pdf-annotations-tx pdf-annotations-path assets new-asset pdf-annotation-pages opts))
+                                                asset-tx (concat [new-asset] pdf-annotations-tx)]
                                             ;; (prn :asset-added! (node-path/basename asset-name))
                                             ;; (cljs.pprint/pprint asset-link)
                                             ;; (prn :debug :asset-tx asset-tx)
