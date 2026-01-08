@@ -562,7 +562,7 @@
   [db last-addr limit]
   (.exec db #js {:sql "select addr, content, addresses from kvs where addr > ? order by addr asc limit ?"
                  :bind #js [last-addr limit]
-                 :rowMode "object"}))
+                 :rowMode "array"}))
 
 (defn upload-graph!
   [repo]
@@ -585,9 +585,7 @@
                                               #js {:done true})})]
                   (client-op/add-all-exists-asset-as-ops repo)
                   {:graph-id graph-id})
-                (let [max-addr (apply max (map (fn [row] (aget row "addr")) rows))]
-                  (prn :debug :max-addr max-addr
-                       :rows (map (fn [row] (aget row "addr")) rows))
+                (let [max-addr (apply max (map first rows))]
                   (p/let [_ (fetch-json (str base "/sync/" graph-id "/snapshot/import")
                                         {:method "POST"
                                          :headers {"content-type" "application/json"}
