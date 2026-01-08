@@ -28,12 +28,12 @@
   (testing "Valid cases"
     (is (= true
            (config-edn-common-handler/validate-config-edn
-            "config.edn" "{:preferred-workflow :todo}" global-config-schema/Config-edn))
+            "config.edn" "{:macros {}}" global-config-schema/Config-edn))
         "global config.edn")
 
     (is (= true
            (config-edn-common-handler/validate-config-edn
-            "config.edn" "{:preferred-workflow :todo}" repo-config-schema/Config-edn))
+            "config.edn" "{:macros {}}" repo-config-schema/Config-edn))
         "repo config.edn"))
 
   (doseq [[file-type schema] {"global config.edn" global-config-schema/Config-edn
@@ -45,7 +45,7 @@
           (str "Not a map for " file-type))
 
       (is (string/includes?
-           (validation-config-error-for "{:preferred-workflow :todo" schema)
+           (validation-config-error-for "{:macros" schema)
            "Failed to read")
           (str "Invalid edn for " file-type))
 

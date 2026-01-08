@@ -404,7 +404,7 @@ result:
   (deftest same-name-two-pages-merge-test
     (let [repo (state/get-current-repo)
           conn (conn/get-db repo false)
-          date-formatter (common-config/get-date-formatter (worker-state/get-config repo))
+          date-formatter (worker-state/get-date-formatter)
           opts {:persist-op? false
                 :transact-opts {:repo repo
                                 :conn conn}}
