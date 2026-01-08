@@ -12,9 +12,9 @@
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
-            [frontend.worker.rtc.malli-schema :as rtc-schema]
             [frontend.worker.state :as worker-state]
             [lambdaisland.glogi :as log]
+            [logseq-schema.rtc-api-schema :as rtc-api-schema]
             [logseq.clj-fractional-indexing :as index]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
@@ -598,7 +598,7 @@
   "If the check passes, return true"
   [repo remote-update-event add-log-fn]
   (let [remote-update-data (:value remote-update-event)]
-    (assert (rtc-schema/data-from-ws-validator remote-update-data) remote-update-data)
+    (assert (rtc-api-schema/data-from-ws-validator remote-update-data) remote-update-data)
     (let [{remote-latest-t :t
            remote-t-before :t-before
            remote-t :t-query-end} remote-update-data
