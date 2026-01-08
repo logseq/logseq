@@ -51,18 +51,9 @@
 (defn- get-graph-id [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (let [db @conn
-          graph-uuid (ldb/get-graph-rtc-uuid db)
-          local-uuid (ldb/get-graph-local-uuid db)
-          new-local (when (and (nil? graph-uuid) (nil? local-uuid))
-                      (random-uuid))]
-      (when new-local
-        (try
-          (d/transact! conn [(sqlite-util/kv :logseq.kv/local-graph-uuid new-local)])
-          (catch :default e
-            (log/error :worker-sync/graph-uuid-write-failed {:error e}))))
-      (or (some-> graph-uuid str)
-          (some-> (or local-uuid new-local) str)
-          (when (string? repo) repo)))))
+          graph-uuid (ldb/get-graph-rtc-uuid db)]
+      (when graph-uuid
+        (str graph-uuid)))))
 
 (defn- ensure-client-graph-uuid! [repo graph-id]
   (when (seq graph-id)
