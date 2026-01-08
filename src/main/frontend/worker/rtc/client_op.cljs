@@ -2,9 +2,9 @@
   "Store client-ops in a persisted datascript"
   (:require [datascript.core :as d]
             [frontend.common.missionary :as c.m]
-            [frontend.worker.rtc.malli-schema :as rtc-schema]
             [frontend.worker.state :as worker-state]
             [lambdaisland.glogi :as log]
+            [logseq-schema.rtc-api-schema :as rtc-api-schema]
             [logseq.db :as ldb]
             [malli.core :as ma]
             [malli.transform :as mt]
@@ -57,14 +57,14 @@
      [:t :int]
      [:value [:map
               [:block-uuid :uuid]
-              [:av-coll [:sequential rtc-schema/av-schema]]]]]]
+              [:av-coll [:sequential rtc-api-schema/av-schema]]]]]]
    [:add
     [:catn
      [:op :keyword]
      [:t :int]
      [:value [:map
               [:block-uuid :uuid]
-              [:av-coll [:sequential rtc-schema/av-schema]]]]]]
+              [:av-coll [:sequential rtc-api-schema/av-schema]]]]]]
 
    [:update-asset
     [:catn

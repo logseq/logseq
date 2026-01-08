@@ -11,13 +11,13 @@
             [frontend.worker.rtc.exception :as r.ex]
             [frontend.worker.rtc.gen-client-op :as gen-client-op]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
-            [frontend.worker.rtc.malli-schema :as rtc-schema]
             [frontend.worker.rtc.remote-update :as r.remote-update]
             [frontend.worker.rtc.skeleton :as r.skeleton]
             [frontend.worker.rtc.throttle :as r.throttle]
             [frontend.worker.rtc.ws :as ws]
             [frontend.worker.rtc.ws-util :as ws-util]
             [lambdaisland.glogi :as log]
+            [logseq-schema.rtc-api-schema :as rtc-api-schema]
             [logseq.db :as ldb]
             [logseq.db.frontend.schema :as db-schema]
             [missionary.core :as m]
@@ -532,7 +532,7 @@
                       rename-db-ident-remote-ops
                       (when block-uuid->remote-ops (sort-remote-ops block-uuid->remote-ops))
                       other-remote-ops)]
-      (when-let [ops-for-remote (rtc-schema/to-ws-ops-decoder remote-ops)]
+      (when-let [ops-for-remote (rtc-api-schema/to-ws-ops-decoder remote-ops)]
         (let [local-tx (client-op/get-local-tx repo)
               ops-for-remote* (if aes-key
                                 (m/? (task--encrypt-remote-ops aes-key ops-for-remote))
