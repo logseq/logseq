@@ -232,7 +232,7 @@
     (p/catch (fs/unlink! repo file-path {}) (constantly nil))))
 
 (defn new-task--rtc-upload-asset
-  [repo aes-key asset-block-uuid-str asset-type checksum put-url]
+  [repo aes-key asset-block-uuid-str asset-type checksum put-url & {:keys [extra-headers]}]
   (assert (and asset-type checksum))
   (m/sp
     (let [asset-file (try (c.m/<? (<read-asset repo asset-block-uuid-str asset-type))
@@ -244,8 +244,10 @@
                         (ldb/write-transit-str
                          (c.m/<? (crypt/<encrypt-uint8array aes-key asset-file))))
           *progress-flow (atom nil)
-          http-task (http/put put-url {:headers {"x-amz-meta-checksum" checksum
-                                                 "x-amz-meta-type" asset-type}
+          headers (merge extra-headers
+                         {"x-amz-meta-checksum" checksum
+                          "x-amz-meta-type" asset-type})
+          http-task (http/put put-url {:headers headers
                                        :body asset-file*
                                        :with-credentials? false
                                        :*progress-flow *progress-flow})]
@@ -262,11 +264,12 @@
                           {:type :rtc.exception/upload-asset-failed :data (dissoc r :body)})))))))
 
 (defn new-task--rtc-download-asset
-  [repo aes-key asset-block-uuid-str asset-type get-url]
+  [repo aes-key asset-block-uuid-str asset-type get-url & {:keys [extra-headers]}]
   (m/sp
     (let [*progress-flow (atom nil)
           http-task (http/get get-url {:with-credentials? false
                                        :response-type :array-buffer
+                                       :headers extra-headers
                                        :*progress-flow *progress-flow})
           progress-canceler
           (c.m/run-task :download-asset-progress
@@ -290,7 +293,7 @@
                       (catch js/SyntaxError _
                         body)
                       (catch :default e
-                        ;; if decrypt failed, write origin-body
+                         ;; if decrypt failed, write origin-body
                         (if (= "decrypt-uint8array" (ex-message e))
                           body
                           (throw e)))))]
@@ -313,16 +316,16 @@
   (<get-asset-file-metadata repo asset-block-id asset-type))
 
 (def-thread-api :thread-api/rtc-upload-asset
-  [repo exported-aes-key asset-block-uuid-str asset-type checksum put-url]
+  [repo exported-aes-key asset-block-uuid-str asset-type checksum put-url & {:as opts}]
   (m/sp
     (let [aes-key (when exported-aes-key (c.m/<? (crypt/<import-aes-key exported-aes-key)))]
-      (m/? (new-task--rtc-upload-asset repo aes-key asset-block-uuid-str asset-type checksum put-url)))))
+      (m/? (new-task--rtc-upload-asset repo aes-key asset-block-uuid-str asset-type checksum put-url opts)))))
 
 (def-thread-api :thread-api/rtc-download-asset
-  [repo exported-aes-key asset-block-uuid-str asset-type get-url]
+  [repo exported-aes-key asset-block-uuid-str asset-type get-url & {:as opts}]
   (m/sp
     (let [aes-key (when exported-aes-key (c.m/<? (crypt/<import-aes-key exported-aes-key)))]
-      (m/? (new-task--rtc-download-asset repo aes-key asset-block-uuid-str asset-type get-url)))))
+      (m/? (new-task--rtc-download-asset repo aes-key asset-block-uuid-str asset-type get-url opts)))))
 
 (comment
   ;; read asset
