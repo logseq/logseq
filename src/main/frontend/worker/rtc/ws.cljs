@@ -7,7 +7,7 @@
             [frontend.worker.flows :as worker-flows]
             [frontend.worker.rtc.debug-log :as rtc-debug-log]
             [frontend.worker.rtc.exception :as r.ex]
-            [frontend.worker.rtc.malli-schema :as rtc-schema]
+            [logseq-schema.rtc-api-schema :as rtc-api-schema]
             [missionary.core :as m]))
 
 (defn- get-state
@@ -136,8 +136,8 @@
   "Returns a task: send message"
   [mws message]
   (m/sp
-    (let [decoded-message (rtc-schema/data-to-ws-coercer message)
-          message-str (js/JSON.stringify (clj->js (rtc-schema/data-to-ws-encoder decoded-message)))]
+    (let [decoded-message (rtc-api-schema/data-to-ws-coercer message)
+          message-str (js/JSON.stringify (clj->js (rtc-api-schema/data-to-ws-encoder decoded-message)))]
       (rtc-debug-log/log-ws-message! :send message-str)
       (m/? ((:send mws) message-str)))))
 
@@ -157,7 +157,7 @@
                (:message m))
             (throw r.ex/ex-unknown-server-error)
             m)))
-   (map rtc-schema/data-from-ws-coercer)
+   (map rtc-api-schema/data-from-ws-coercer)
    (:recv-flow m-ws)))
 
 (defn recv-flow
@@ -170,7 +170,7 @@
         (if-let [s3-presign-url (:s3-presign-url resp)]
           (let [{:keys [status body]} (m/? (http/get s3-presign-url {:with-credentials? false}))]
             (if (http/unexceptional-status? status)
-              (rtc-schema/data-from-ws-coercer (js->clj (js/JSON.parse body) :keywordize-keys true))
+              (rtc-api-schema/data-from-ws-coercer (js->clj (js/JSON.parse body) :keywordize-keys true))
               {:req-id (:req-id resp)
                :ex-message "get s3 object failed"
                :ex-data {:type :rtc.exception/get-s3-object-failed :status status :body body}}))
@@ -206,7 +206,7 @@
                        (instance? ExceptionInfo r) r
 
                        (http/unexceptional-status? status)
-                       (rtc-schema/data-from-ws-coercer (js->clj (js/JSON.parse body) :keywordize-keys true))
+                       (rtc-api-schema/data-from-ws-coercer (js->clj (js/JSON.parse body) :keywordize-keys true))
 
                        :else
                        {:req-id (:req-id ws-message-result)
