@@ -498,34 +498,37 @@
             (enqueue-asset-initial-download! repo updated)))
     (start-pull-loop! updated ws)))
 
-(defn start!
-  [repo]
-  (if-not (enabled?)
-    (p/resolved nil)
-    (let [base (ws-base-url)
-          graph-id (get-graph-id repo)]
-      (if (and (string? base) (seq base) (seq graph-id))
-        (let [client (ensure-client-state! repo)
-              url (format-ws-url base graph-id)
-              _ (ensure-client-graph-uuid! repo graph-id)
-              connected (assoc client :graph-id graph-id)
-              connected (connect! repo connected url)]
-          (swap! worker-state/*worker-sync-clients assoc repo connected)
-          (p/resolved nil))
-        (do
-          (log/info :worker-sync/start-skipped {:repo repo :graph-id graph-id :base base})
-          (p/resolved nil))))))
-
 (defn stop!
-  ([] (doseq [[repo client] @worker-state/*worker-sync-clients]
-        (stop-client! client)
-        (swap! worker-state/*worker-sync-clients dissoc repo))
-      (p/resolved nil))
+  ([]
+   (doseq [[repo client] @worker-state/*worker-sync-clients]
+     (stop-client! client)
+     (swap! worker-state/*worker-sync-clients dissoc repo))
+   (p/resolved nil))
   ([repo]
    (when-let [client (get @worker-state/*worker-sync-clients repo)]
      (stop-client! client)
      (swap! worker-state/*worker-sync-clients dissoc repo))
    (p/resolved nil)))
+
+(defn start!
+  [repo]
+  (if-not (enabled?)
+    (p/resolved nil)
+    (p/do!
+     (stop!)
+     (let [base (ws-base-url)
+           graph-id (get-graph-id repo)]
+       (if (and (string? base) (seq base) (seq graph-id))
+         (let [client (ensure-client-state! repo)
+               url (format-ws-url base graph-id)
+               _ (ensure-client-graph-uuid! repo graph-id)
+               connected (assoc client :graph-id graph-id)
+               connected (connect! repo connected url)]
+           (swap! worker-state/*worker-sync-clients assoc repo connected)
+           (p/resolved nil))
+         (do
+           (log/info :worker-sync/start-skipped {:repo repo :graph-id graph-id :base base})
+           (p/resolved nil)))))))
 
 (defn enqueue-local-tx!
   [repo {:keys [tx-data db-after db-before]}]
