@@ -93,10 +93,11 @@
 
 (defn- fetch-kvs-rows
   [sql after limit]
-  (let [rows (.exec sql #js {:sql "select addr, content, addresses from kvs where addr > ? order by addr asc limit ?"
-                             :bind #js [after limit]
-                             :rowMode "object"})]
-    (common/get-sql-rows rows)))
+  (common/get-sql-rows
+   (common/sql-exec sql
+                    "select addr, content, addresses from kvs where addr > ? order by addr asc limit ?"
+                    after
+                    limit)))
 
 (defn- asset-cors-headers []
   #js {"Access-Control-Allow-Origin" "*"
