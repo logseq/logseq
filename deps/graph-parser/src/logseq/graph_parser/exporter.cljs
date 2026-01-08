@@ -1174,7 +1174,8 @@
           :logseq.property.asset/size (:size asset-data)}
          (when-let [external-url (:external-url asset-data)]
            {:logseq.property.asset/external-url external-url
-            :logseq.property.asset/external-file-name (:external-file-name asset-data)})))
+            :logseq.property.asset/external-file-name (:external-file-name asset-data)
+            :logseq.property.asset/external-props (:external-props asset-data)})))
 
 (defn- get-asset-block-id
   [assets path]
@@ -1263,6 +1264,10 @@
                                                    :else path)
                                             asset-link-or-name (or link asset-name)
                                             asset-data* (when asset-link-or-name (get @assets asset-link-or-name))
+                                            external-props (when zotero-asset?
+                                                             (if linked-path
+                                                               {:zotero-linked-file linked-relative}
+                                                               {:zotero-imported-file (string/join ns-util/namespace-char [(last (string/split link #"/")) asset-name])}))
                                             _ (when (and asset-link-or-name
                                                          (not asset-data*)
                                                          (string/ends-with? path ".pdf")
@@ -1276,7 +1281,8 @@
                                                            :checksum "0000000000000000000000000000000000000000000000000000000000000000"
                                                            :size (.-size stat)
                                                            :external-url (or link path)
-                                                           :external-file-name asset-name}))
+                                                           :external-file-name asset-name
+                                                           :external-props external-props}))
                                                  (p/catch (fn [error]
                                                             (js/console.error error)))))
                                             asset-data (when asset-link-or-name (get @assets asset-link-or-name))]
@@ -1291,14 +1297,15 @@
                                           {:asset-name-uuid [asset-link-or-name (:asset-id asset-data)]}
 
                                           :else
-                                          (let [new-asset (merge (build-new-asset asset-data)
-                                                                 {:block/title (db-asset/asset-name->title (node-path/basename asset-name))
-                                                                  :block/uuid (get-asset-block-id assets asset-link-or-name)}
-                                                                 (when-let [metadata (not-empty (common-util/safe-read-map-string (:metadata (second asset-link))))]
-                                                                   {:logseq.property.asset/resize-metadata metadata}))
-                                                pdf-annotations-tx (when (= "pdf" (path/file-ext asset-link-or-name))
-                                                                     (build-pdf-annotations-tx asset-link-or-name assets new-asset pdf-annotation-pages opts))
-                                                asset-tx (concat [new-asset] pdf-annotations-tx)]
+                                        (let [new-asset (merge (build-new-asset asset-data)
+                                                               {:block/title (db-asset/asset-name->title (node-path/basename asset-name))
+                                                                :block/uuid (get-asset-block-id assets asset-link-or-name)}
+                                                               (when-let [metadata (not-empty (common-util/safe-read-map-string (:metadata (second asset-link))))]
+                                                                 {:logseq.property.asset/resize-metadata metadata}))
+                                              pdf-annotations-path (or asset-name asset-link-or-name)
+                                              pdf-annotations-tx (when (= "pdf" (path/file-ext pdf-annotations-path))
+                                                                   (build-pdf-annotations-tx pdf-annotations-path assets new-asset pdf-annotation-pages opts))
+                                              asset-tx (concat [new-asset] pdf-annotations-tx)]
                                             ;; (prn :asset-added! (node-path/basename asset-name))
                                             ;; (cljs.pprint/pprint asset-link)
                                             ;; (prn :debug :asset-tx asset-tx)
