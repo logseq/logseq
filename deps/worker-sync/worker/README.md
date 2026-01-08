@@ -31,8 +31,9 @@ Client -> Server:
 - `{ "type": "hello", "client": "...", "since": 0 }`
 - `{ "type": "tx", "client": "...", "t_before": 0, "tx": "<transit>" }`
 - `{ "type": "pull", "since": 0 }`
-- `{ "type": "snapshot" }`
 - `{ "type": "ping" }`
+<!-- - `{ "type": "snapshot" }` -->
+
 
 Server -> Client:
 
