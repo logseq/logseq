@@ -117,8 +117,6 @@
   [journal-title]
   (journal-title-> journal-title #(tc/to-long %)))
 
-(def default-journal-filename-formatter common-date/default-journal-filename-formatter)
-
 (defn int->local-time-2
   [n]
   (tf/unparse

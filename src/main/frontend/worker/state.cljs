@@ -1,7 +1,6 @@
 (ns frontend.worker.state
   "State hub for worker"
-  (:require [logseq.common.config :as common-config]
-            [logseq.common.util :as common-util]))
+  (:require [logseq.common.util :as common-util]))
 
 (defonce *main-thread (atom nil))
 (defonce *infer-worker (atom nil))
@@ -96,10 +95,6 @@
          (fn [c]
            (merge c context))))
 
-(defn get-config
-  [repo]
-  (get-in @*state [:config repo]))
-
 (defn get-current-repo
   []
   (:git/current-repo @*state))
@@ -109,9 +104,10 @@
   (swap! *state (fn [old-state]
                   (merge old-state new-state))))
 
+;; TODO: Move or remove as this is no longer stateful
 (defn get-date-formatter
-  [repo]
-  (common-config/get-date-formatter (get-config repo)))
+  [_repo]
+  "MMM do, yyyy")
 
 (defn set-rtc-downloading-graph!
   [value]

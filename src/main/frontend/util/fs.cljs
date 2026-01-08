@@ -4,7 +4,7 @@
   "Misc util fns built on top of frontend.fs"
   (:require ["path" :as node-path]
             [clojure.string :as string]
-            [frontend.common.file.util :as wfu]))
+            [logseq.common.util :as common-util]))
 
 ;; NOTE: This is not the same ignored-path? as src/electron/electron/utils.cljs.
 ;;       The assets directory is ignored.
@@ -37,8 +37,13 @@
            (some #(string/ends-with? path %)
                  [".md" ".markdown" ".org" ".js" ".edn" ".css"]))))))))
 
-(def include-reserved-chars? wfu/include-reserved-chars?)
-(def windows-reserved-filebodies wfu/windows-reserved-filebodies)
-(defn file-name-sanity
-  [name _format]
-  (wfu/file-name-sanity name))
+;; Update repo/invalid-graph-name-warning if characters change
+(def multiplatform-reserved-chars ":\\*\\?\"<>|\\#\\\\")
+
+(def reserved-chars-pattern
+  (re-pattern (str "[" multiplatform-reserved-chars "]+")))
+
+(defn include-reserved-chars?
+  "Includes reserved characters that would broken FS"
+  [s]
+  (common-util/safe-re-find reserved-chars-pattern s))

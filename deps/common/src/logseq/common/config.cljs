@@ -67,18 +67,10 @@
     s))
 
 (defonce default-draw-directory "draws")
-;; TODO read configurable value?
-(defonce default-whiteboards-directory "whiteboards")
 
 (defn draw?
   [path]
   (string/starts-with? path default-draw-directory))
-
-(defn whiteboard?
-  [path]
-  (and path
-       (string/includes? path (str default-whiteboards-directory "/"))
-       (string/ends-with? path ".edn")))
 
 ;; TODO: rename
 (defonce mldoc-support-formats
@@ -97,21 +89,6 @@
   []
   #{:gif :svg :jpeg :ico :png :jpg :bmp :webp})
 
-(defn get-date-formatter
-  [config]
-  (or
-   (:journal/page-title-format config)
-   ;; for compatibility
-   (:date-formatter config)
-   "MMM do, yyyy"))
-
-(defn get-preferred-format
-  [config]
-  (or
-   (when-let [fmt (:preferred-format config)]
-     (keyword (string/lower-case (name fmt))))
-   :markdown))
-
 (defn get-block-pattern
   [format]
   (let [format' (keyword format)]
@@ -120,11 +97,6 @@
       "*"
 
       "-")))
-
-(defn create-config-for-db-graph
-  "Given a new config.edn file string, creates a config.edn for use with only DB graphs"
-  [config]
-  (string/replace config #"(?m)[\s]*;; == FILE GRAPH CONFIG ==(?:.|\n)*?;; == END OF FILE GRAPH CONFIG ==\n?" ""))
 
 (def file-only-config
   "File only config keys that are deprecated in DB graphs along with
