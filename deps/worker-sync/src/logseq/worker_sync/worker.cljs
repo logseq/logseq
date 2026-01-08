@@ -88,6 +88,15 @@
         n))))
 
 (def ^:private max-asset-size (* 100 1024 1024))
+(def ^:private snapshot-rows-default-limit 500)
+(def ^:private snapshot-rows-max-limit 1000)
+
+(defn- fetch-kvs-rows
+  [sql after limit]
+  (let [rows (.exec sql #js {:sql "select addr, content, addresses from kvs where addr > ? order by addr asc limit ?"
+                             :bind #js [after limit]
+                             :rowMode "object"})]
+    (common/get-sql-rows rows)))
 
 (defn- asset-cors-headers []
   #js {"Access-Control-Allow-Origin" "*"
@@ -353,6 +362,22 @@
 
             (and (= method "GET") (= path "/snapshot"))
             (common/json-response (snapshot-response self))
+
+            (and (= method "GET") (= path "/snapshot/rows"))
+            (let [after (or (parse-int (.get (.-searchParams url) "after")) 0)
+                  limit (or (parse-int (.get (.-searchParams url) "limit"))
+                            snapshot-rows-default-limit)
+                  limit (-> limit
+                            (max 1)
+                            (min snapshot-rows-max-limit))
+                  rows (fetch-kvs-rows (.-sql self) after limit)
+                  last-addr (if (seq rows)
+                              (apply max (map (fn [row] (aget row "addr")) rows))
+                              after)
+                  done? (< (count rows) limit)]
+              (common/json-response {:rows rows
+                                     :last_addr last-addr
+                                     :done done?}))
 
             (and (= method "DELETE") (= path "/admin/reset"))
             (do
