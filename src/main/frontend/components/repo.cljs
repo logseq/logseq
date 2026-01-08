@@ -122,8 +122,7 @@
                                  token (state/get-auth-id-token)
                                  remote-graph-name (config/db-graph-name (state/get-current-repo))]
                              (when (and token remote-graph-name)
-                               (state/<invoke-db-worker :thread-api/rtc-async-upload-graph
-                                                        repo token remote-graph-name)
+                               (rtc-handler/<rtc-upload-graph! repo token remote-graph-name)
                                (when (util/mobile?)
                                  (shui/popup-show! nil
                                                    (fn []
