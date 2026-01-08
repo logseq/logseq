@@ -1,7 +1,6 @@
 (ns logseq.worker-sync.storage
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [datascript.core :as d]
             [datascript.storage :refer [IStorage]]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.frontend.schema :as db-schema]
