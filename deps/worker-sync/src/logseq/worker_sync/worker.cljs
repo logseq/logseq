@@ -89,7 +89,7 @@
 
 (def ^:private max-asset-size (* 100 1024 1024))
 (def ^:private snapshot-rows-default-limit 500)
-(def ^:private snapshot-rows-max-limit 1000)
+(def ^:private snapshot-rows-max-limit 2000)
 
 (defn- fetch-kvs-rows
   [sql after limit]
