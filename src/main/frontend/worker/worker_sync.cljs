@@ -35,7 +35,7 @@
           (string/replace base #"/sync/%s$" "")))))
 
 (def ^:private max-asset-size (* 100 1024 1024))
-(def ^:private upload-batch-size 2000)
+(def ^:private upload-kvs-batch-size 500)
 
 (defn- format-ws-url [base graph-id]
   (cond
@@ -567,7 +567,14 @@
     (when-let [client (get @worker-state/*worker-sync-clients repo)]
       (enqueue-asset-sync! repo client))))
 
-(def ^:private upload-max-retries 3)
+(defn- fetch-kvs-rows
+  [db last-addr limit]
+  (let [rows (.exec db #js {:sql "select addr, content, addresses from kvs where addr > ? order by addr asc limit ?"
+                            :bind #js [last-addr limit]
+                            :rowMode "object"})]
+    (if (and rows (pos? (.-length rows)))
+      (mapv (fn [row] (js->clj row :keywordize-keys true)) rows)
+      [])))
 
 (defn upload-graph!
   [repo]
@@ -576,49 +583,27 @@
     (if-not (and (seq base) (seq graph-id))
       (p/rejected (ex-info "worker-sync missing upload info"
                            {:repo repo :base base :graph-id graph-id}))
-      (if-let [conn (worker-state/get-datascript-conn repo)]
-        (let [db @conn
-              datoms (seq (d/datoms db :eavt))]
+      (if-let [db (worker-state/get-sqlite-conn repo :db)]
+        (do
           (ensure-client-graph-uuid! repo graph-id)
-          (p/loop [remaining datoms
-                   t-before 0
-                   retries 0]
-            (if (empty? remaining)
-              (do
-                (client-op/add-all-exists-asset-as-ops repo)
-                {:graph-id graph-id})
-              (let [[chunk rest] (split-at upload-batch-size remaining)
-                    normalized (normalize-tx-data db db chunk)]
-                (if (empty? normalized)
-                  (p/recur (seq rest) t-before 0)
-                  (p/let [tx-str (sqlite-util/write-transit-str normalized)
-                          resp (fetch-json (str base "/sync/" graph-id "/tx/batch")
-                                           {:method "POST"
-                                            :headers {"content-type" "application/json"}
-                                            :body (js/JSON.stringify
-                                                   #js {:t_before t-before
-                                                        :txs #js [tx-str]})})]
-                    (cond
-                      (= "tx/batch/ok" (:type resp))
-                      (p/recur (seq rest) (:t resp) 0)
-
-                      (= "tx/reject" (:type resp))
-                      (if (= "stale" (:reason resp))
-                        (if (< retries upload-max-retries)
-                          (p/recur remaining (:t resp) (inc retries))
-                          (throw (ex-info "worker-sync upload stale limit"
-                                          {:repo repo
-                                           :graph-id graph-id
-                                           :response resp})))
-                        (throw (ex-info "worker-sync upload rejected"
-                                        {:repo repo
-                                         :graph-id graph-id
-                                         :response resp})))
-
-                      :else
-                      (throw (ex-info "worker-sync upload failed"
-                                      {:repo repo
-                                       :graph-id graph-id
-                                       :response resp})))))))))
-        (p/rejected (ex-info "worker-sync missing db"
+          (p/loop [last-addr 0
+                   first-batch? true]
+            (let [rows (fetch-kvs-rows db last-addr upload-kvs-batch-size)]
+              (if (empty? rows)
+                (p/let [_ (fetch-json (str base "/sync/" graph-id "/snapshot/import")
+                                      {:method "POST"
+                                       :headers {"content-type" "application/json"}
+                                       :body (js/JSON.stringify
+                                              #js {:done true})})]
+                  (client-op/add-all-exists-asset-as-ops repo)
+                  {:graph-id graph-id})
+                (let [max-addr (apply max (map :addr rows))]
+                  (p/let [_ (fetch-json (str base "/sync/" graph-id "/snapshot/import")
+                                        {:method "POST"
+                                         :headers {"content-type" "application/json"}
+                                         :body (js/JSON.stringify
+                                                #js {:reset first-batch?
+                                                     :rows (clj->js rows)})})]
+                    (p/recur max-addr false)))))))
+        (p/rejected (ex-info "worker-sync missing sqlite db"
                              {:repo repo :graph-id graph-id}))))))

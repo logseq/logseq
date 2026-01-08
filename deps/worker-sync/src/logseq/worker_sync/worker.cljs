@@ -184,6 +184,27 @@
      :t (t-now self)
      :datoms (common/write-transit datoms)}))
 
+(defn- import-snapshot! [^js self rows reset?]
+  (let [sql (.-sql self)]
+    (storage/init-schema! sql)
+    (when reset?
+      (common/sql-exec sql "delete from kvs")
+      (common/sql-exec sql "delete from tx_log")
+      (common/sql-exec sql "delete from sync_meta")
+      (storage/init-schema! sql)
+      (storage/set-t! sql 0))
+    (when (and rows (pos? (.-length rows)))
+      (doseq [row (array-seq rows)]
+        (let [addr (aget row "addr")
+              content (aget row "content")
+              addresses (aget row "addresses")]
+          (common/sql-exec sql
+                           (str "insert into kvs (addr, content, addresses) values (?, ?, ?)"
+                                " on conflict(addr) do update set content = excluded.content, addresses = excluded.addresses")
+                           addr
+                           content
+                           addresses))))))
+
 (defn- cycle-reject-response [db tx-data {:keys [attr]}]
   {:type "tx/reject"
    :reason "cycle"
@@ -362,6 +383,16 @@
                          (if (and (sequential? txs) (every? string? txs))
                            (common/json-response (handle-tx-batch! self nil txs t-before))
                            (common/bad-request "invalid tx"))))))
+
+            (and (= method "POST") (= path "/snapshot/import"))
+            (.then (common/read-json request)
+                   (fn [result]
+                     (if (nil? result)
+                       (common/bad-request "missing body")
+                       (let [rows (aget result "rows")
+                             reset? (true? (aget result "reset"))]
+                         (import-snapshot! self rows reset?)
+                         (common/json-response {:ok true :count (if rows (.-length rows) 0)})))))
 
             :else
             (common/not-found))))
