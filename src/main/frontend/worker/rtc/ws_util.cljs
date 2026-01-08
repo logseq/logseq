@@ -3,10 +3,10 @@
   (:require [cljs-http-missionary.client :as http]
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.rtc.db :as rtc-db]
-            [frontend.worker.rtc.malli-schema :as rtc-schema]
             [frontend.worker.rtc.ws :as ws]
             [frontend.worker.state :as worker-state]
             [goog.string :as gstring]
+            [logseq-schema.rtc-api-schema :as rtc-api-schema]
             [logseq.graph-parser.utf8 :as utf8]
             [missionary.core :as m]))
 
@@ -38,9 +38,9 @@
   [ws message]
   {:pre [(= "apply-ops" (:action message))]}
   (m/sp
-    (let [decoded-message (rtc-schema/data-to-ws-coercer (assoc message :req-id "temp-id"))
+    (let [decoded-message (rtc-api-schema/data-to-ws-coercer (assoc message :req-id "temp-id"))
           message-str (js/JSON.stringify
-                       (clj->js (select-keys (rtc-schema/data-to-ws-encoder decoded-message)
+                       (clj->js (select-keys (rtc-api-schema/data-to-ws-encoder decoded-message)
                                              ["graph-uuid" "ops" "t-before" "schema-version" "api-version"])))
           len (.-length (utf8/encode message-str))]
       (when (< 100000 len)
