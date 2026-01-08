@@ -62,6 +62,8 @@ jobs:
             --exclude mobile \
             ./static/ ./public/
 
+          rm ./public/js/*.map
+
         env:
           LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
 
