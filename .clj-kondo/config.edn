@@ -71,7 +71,6 @@
              electron.utils utils
              frontend.commands commands
              frontend.common.date common-date
-             frontend.common.file.util wfu
              frontend.common.missionary-util c.m
              frontend.common.schema-register sr
              frontend.common.search-fuzzy fuzzy

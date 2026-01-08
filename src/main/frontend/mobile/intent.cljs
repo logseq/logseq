@@ -16,11 +16,8 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.util.fs :as fs-util]
-            [frontend.util.ref :as ref]
             [goog.string :as gstring]
             [lambdaisland.glogi :as log]
-            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [promesa.core :as p]))
 
@@ -122,33 +119,6 @@
                   (state/get-current-repo) [file] {})]
     (first result)))
 
-(defn- embed-text-file
-  "Store external content with url into Logseq repo"
-  [url title]
-  (p/let [time (date/get-current-time)
-          date-ref-name (date/today)
-          title (some-> (or title (node-path/basename url))
-                        common-util/safe-decode-uri-component
-                        util/node-path.name
-                        ;; make the title more user friendly
-                        common-util/page-name-sanity)
-          path (node-path/join (config/get-repo-dir (state/get-current-repo))
-                               (config/get-pages-directory)
-                               (str (js/encodeURI (fs-util/file-name-sanity title :markdown)) (node-path/extname url)))
-          _ (p/catch
-             (.copy Filesystem (clj->js {:from (normalize-native-file-path url) :to path}))
-             (fn [error]
-               (log/error :copy-file-error {:error error})))
-          url (ref/->page-ref title)
-          template (get-in (state/get-config)
-                           [:quick-capture-templates :text]
-                           "**{time}** [[quick capture]]: {url}")]
-    (-> template
-        (string/replace "{time}" time)
-        (string/replace "{date}" date-ref-name)
-        (string/replace "{text}" "")
-        (string/replace "{url}" (or url "")))))
-
 (defn- handle-received-media [result]
   (p/let [{:keys [url]} result
           page (or (state/get-current-page) (string/lower-case (date/journal-name)))
@@ -159,14 +129,11 @@
                    (notification/show! "Failed to import the shared media. Please try again." :error false))))))
 
 (defn- handle-received-application [result]
-  (p/let [{:keys [title url type]} result
+  (p/let [{:keys [url type]} result
           page (or (state/get-current-page) (string/lower-case (date/journal-name)))
           format (db/get-page-format page)
           application-type (last (string/split type "/"))
           content (cond
-                    (common-config/mldoc-support? application-type)
-                    (embed-text-file url title)
-
                     (contains? (set/union config/doc-formats config/media-formats)
                                (keyword application-type))
                     (do
