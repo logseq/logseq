@@ -2,7 +2,8 @@
   "Dispatch RTC calls between legacy RTC and worker-sync implementations."
   (:require [frontend.config :as config]
             [frontend.handler.db-based.rtc :as rtc-handler]
-            [frontend.handler.db-based.worker-sync :as worker-sync-handler]))
+            [frontend.handler.db-based.worker-sync :as worker-sync-handler]
+            [frontend.state :as state]))
 
 (defn- worker-sync-enabled? []
   config/worker-sync-enabled?)
@@ -21,6 +22,12 @@
   (if (worker-sync-enabled?)
     (worker-sync-handler/<rtc-download-graph! graph-name graph-uuid graph-schema-version timeout-ms)
     (rtc-handler/<rtc-download-graph! graph-name graph-uuid graph-schema-version timeout-ms)))
+
+(defn <rtc-upload-graph! [repo token remote-graph-name]
+  (if (worker-sync-enabled?)
+    (state/<invoke-db-worker :thread-api/worker-sync-upload-graph repo)
+    (state/<invoke-db-worker :thread-api/rtc-async-upload-graph
+                             repo token remote-graph-name)))
 
 (defn <rtc-stop! []
   (if (worker-sync-enabled?)
