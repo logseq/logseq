@@ -69,6 +69,7 @@
 (defonce *client-ops-conns worker-state/*client-ops-conns)
 (defonce *opfs-pools worker-state/*opfs-pools)
 (defonce *publishing? (atom false))
+(defonce *worker-sync-import-dbs (atom {}))
 
 (defn- check-worker-scope!
   []
@@ -121,6 +122,27 @@
      (doseq [item data]
        (.exec tx #js {:sql "INSERT INTO kvs (addr, content, addresses) values ($addr, $content, $addresses) on conflict(addr) do update set content = $content, addresses = $addresses"
                       :bind item})))))
+
+(defn- rows->sqlite-binds
+  [rows]
+  (mapv (fn [{:keys [addr content addresses]}]
+          #js {:$addr addr
+               :$content content
+               :$addresses addresses})
+        rows))
+
+(defn- ensure-worker-sync-import-db!
+  [repo reset?]
+  (p/let [^js pool (<get-opfs-pool repo)
+          ^js db (or (get @*worker-sync-import-dbs repo)
+                     (let [^js db (new (.-OpfsSAHPoolDb pool) repo-path)]
+                       (swap! *worker-sync-import-dbs assoc repo db)
+                       db))]
+    (enable-sqlite-wal-mode! db)
+    (common-sqlite/create-kvs-table! db)
+    (when reset?
+      (.exec db "delete from kvs"))
+    db))
 
 (defn restore-data-from-addr
   "Update sqlite-cli/restore-data-from-addr when making changes"
@@ -580,6 +602,25 @@
   [repo datoms]
   (reset-db-from-datoms! repo datoms)
   nil)
+
+(def-thread-api :thread-api/worker-sync-import-kvs-rows
+  [repo rows reset?]
+  (p/let [_ (when reset?
+              (close-db! repo))
+          db (ensure-worker-sync-import-db! repo reset?)]
+    (when (seq rows)
+      (upsert-addr-content! db (rows->sqlite-binds rows)))
+    nil))
+
+(def-thread-api :thread-api/worker-sync-finalize-kvs-import
+  [repo]
+  (when-let [^js db (get @*worker-sync-import-dbs repo)]
+    (.close db)
+    (swap! *worker-sync-import-dbs dissoc repo))
+  (p/do!
+   ((@thread-api/*thread-apis :thread-api/create-or-open-db) repo {:close-other-db? false})
+   ((@thread-api/*thread-apis :thread-api/export-db) repo)
+   (shared-service/broadcast-to-clients! :add-repo {:repo repo})))
 
 (def-thread-api :thread-api/unsafe-unlink-db
   [repo]

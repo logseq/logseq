@@ -1,7 +1,6 @@
 (ns frontend.handler.db-based.worker-sync
   "Worker-sync handler based on Cloudflare Durable Objects."
   (:require [clojure.string :as string]
-            [datascript.core :as d]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.repo :as repo-handler]
@@ -27,6 +26,8 @@
 (defn- http-base []
   (or config/worker-sync-http-base
       (ws->http-base config/worker-sync-ws-url)))
+
+(def ^:private snapshot-rows-limit 500)
 
 (defn- fetch-json
   [url opts]
@@ -93,14 +94,20 @@
   (state/set-state! :rtc/downloading-graph-uuid graph-uuid)
   (let [base (http-base)]
     (-> (if (and graph-uuid base)
-          (p/let [resp (fetch-json (str base "/sync/" graph-uuid "/snapshot")
-                                   {:method "GET"})
-                  datoms-str (aget resp "datoms")
-                  datoms (->> (ldb/read-transit-str datoms-str)
-                              (map (fn [{:keys [e a v t]}]
-                                     (d/datom e a v t true))))
-                  graph (str config/db-version-prefix graph-name)]
-            (state/<invoke-db-worker :thread-api/worker-sync-reset-from-datoms graph datoms))
+          (p/let [graph (str config/db-version-prefix graph-name)]
+            (p/loop [after 0
+                     first-batch? true]
+              (p/let [resp (fetch-json (str base "/sync/" graph-uuid "/snapshot/rows"
+                                            "?after=" after "&limit=" snapshot-rows-limit)
+                                       {:method "GET"})
+                      rows (js->clj (aget resp "rows") :keywordize-keys true)
+                      done? (true? (aget resp "done"))
+                      last-addr (or (aget resp "last_addr") after)]
+                (state/<invoke-db-worker :thread-api/worker-sync-import-kvs-rows
+                                         graph rows first-batch?)
+                (if done?
+                  (state/<invoke-db-worker :thread-api/worker-sync-finalize-kvs-import graph)
+                  (p/recur last-addr false)))))
           (p/rejected (ex-info "worker-sync missing graph info"
                                {:type :worker-sync/invalid-graph
                                 :graph-uuid graph-uuid
