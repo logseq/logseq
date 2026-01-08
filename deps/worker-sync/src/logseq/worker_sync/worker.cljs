@@ -204,16 +204,13 @@
       (storage/init-schema! sql)
       (storage/set-t! sql 0))
     (when (and rows (pos? (.-length rows)))
-      (doseq [row (array-seq rows)]
-        (let [addr (aget row "addr")
-              content (aget row "content")
-              addresses (aget row "addresses")]
-          (common/sql-exec sql
-                           (str "insert into kvs (addr, content, addresses) values (?, ?, ?)"
-                                " on conflict(addr) do update set content = excluded.content, addresses = excluded.addresses")
-                           addr
-                           content
-                           addresses))))
+      (doseq [[addr content addresses] (array-seq rows)]
+        (common/sql-exec sql
+                         (str "insert into kvs (addr, content, addresses) values (?, ?, ?)"
+                              " on conflict(addr) do update set content = excluded.content, addresses = excluded.addresses")
+                         addr
+                         content
+                         addresses)))
     (set! (.-conn self) (storage/open-conn sql))
     (let [conn (.-conn self)]
       (prn :debug :import-datoms-count (count (d/datoms @conn :eavt))))))
@@ -369,7 +366,7 @@
             (common/json-response (snapshot-response self))
 
             (and (= method "GET") (= path "/snapshot/rows"))
-            (let [after (or (parse-int (.get (.-searchParams url) "after")) 0)
+            (let [after (or (parse-int (.get (.-searchParams url) "after")) -1)
                   limit (or (parse-int (.get (.-searchParams url) "limit"))
                             snapshot-rows-default-limit)
                   limit (-> limit

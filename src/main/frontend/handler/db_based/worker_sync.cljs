@@ -90,12 +90,12 @@
                             :base base})))))
 
 (defn <rtc-download-graph!
-  [graph-name graph-uuid _graph-schema-version timeout-ms]
+  [graph-name graph-uuid _graph-schema-version]
   (state/set-state! :rtc/downloading-graph-uuid graph-uuid)
   (let [base (http-base)]
     (-> (if (and graph-uuid base)
           (p/let [graph (str config/db-version-prefix graph-name)]
-            (p/loop [after 0
+            (p/loop [after -1           ; root addr is 0
                      first-batch? true]
               (p/let [resp (fetch-json (str base "/sync/" graph-uuid "/snapshot/rows"
                                             "?after=" after "&limit=" snapshot-rows-limit)
@@ -103,18 +103,18 @@
                       rows (js->clj (aget resp "rows") :keywordize-keys true)
                       done? (true? (aget resp "done"))
                       last-addr (or (aget resp "last_addr") after)]
-                (state/<invoke-db-worker :thread-api/worker-sync-import-kvs-rows
-                                         graph rows first-batch?)
-                (if done?
-                  (state/<invoke-db-worker :thread-api/worker-sync-finalize-kvs-import graph)
-                  (p/recur last-addr false)))))
+                (p/do!
+                 (state/<invoke-db-worker :thread-api/worker-sync-import-kvs-rows
+                                          graph rows first-batch?)
+                 (if done?
+                   (state/<invoke-db-worker :thread-api/worker-sync-finalize-kvs-import graph)
+                   (p/recur last-addr false))))))
           (p/rejected (ex-info "worker-sync missing graph info"
                                {:type :worker-sync/invalid-graph
                                 :graph-uuid graph-uuid
                                 :base base})))
         (p/catch (fn [error]
                    (throw error)))
-        (p/timeout timeout-ms)
         (p/finally
           (fn []
             (state/set-state! :rtc/downloading-graph-uuid nil))))))
