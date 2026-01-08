@@ -1,7 +1,7 @@
 name = "logseq-sync"
 main = "dist/worker/main.js"
 compatibility_date = "2025-05-05"
-compatibility_flags = ["nodejs_compat"]
+compatibility_flags = [ "nodejs_compat" ]
 
 [observability]
 enabled = true
@@ -10,14 +10,43 @@ enabled = true
 name = "LOGSEQ_SYNC_DO"
 class_name = "SyncDO"
 
-[[r2_buckets]]
-binding = "LOGSEQ_SYNC_ASSETS"
-bucket_name = "logseq-sync-assets"
-
 [[durable_objects.bindings]]
 name = "LOGSEQ_SYNC_INDEX_DO"
 class_name = "SyncIndexDO"
 
+[[r2_buckets]]
+binding = "LOGSEQ_SYNC_ASSETS"
+bucket_name = "logseq-sync-assets-dev"
+
 [[migrations]]
 tag = "v1"
-new_sqlite_classes = ["SyncDO", "SyncIndexDO"]
+new_sqlite_classes = [ "SyncDO", "SyncIndexDO" ]
+
+[vars]
+COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
+COGNITO_ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
+COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"
+
+[env.staging]
+name = "logseq-sync"
+
+[env.staging.vars]
+COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
+COGNITO_ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
+COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"
+
+[[env.staging.durable_objects.bindings]]
+name = "LOGSEQ_SYNC_DO"
+class_name = "SyncDO"
+
+[[env.staging.durable_objects.bindings]]
+name = "LOGSEQ_SYNC_INDEX_DO"
+class_name = "SyncIndexDO"
+
+[[env.staging.migrations]]
+tag = "v1"
+new_sqlite_classes = [ "SyncDO", "SyncIndexDO" ]
+
+[[env.staging.r2_buckets]]
+binding = "LOGSEQ_SYNC_ASSETS"
+bucket_name = "logseq-sync-assets-dev"
