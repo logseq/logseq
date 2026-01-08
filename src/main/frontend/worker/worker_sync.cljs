@@ -35,7 +35,7 @@
           (string/replace base #"/sync/%s$" "")))))
 
 (def ^:private max-asset-size (* 100 1024 1024))
-(def ^:private upload-kvs-batch-size 500)
+(def ^:private upload-kvs-batch-size 2000)
 
 (defn- format-ws-url [base graph-id]
   (cond
