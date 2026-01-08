@@ -560,12 +560,9 @@
 
 (defn- fetch-kvs-rows
   [db last-addr limit]
-  (let [rows (.exec db #js {:sql "select addr, content, addresses from kvs where addr > ? order by addr asc limit ?"
-                            :bind #js [last-addr limit]
-                            :rowMode "object"})]
-    (if (and rows (pos? (.-length rows)))
-      (mapv (fn [row] (js->clj row :keywordize-keys true)) rows)
-      [])))
+  (.exec db #js {:sql "select addr, content, addresses from kvs where addr > ? order by addr asc limit ?"
+                 :bind #js [last-addr limit]
+                 :rowMode "object"}))
 
 (defn upload-graph!
   [repo]
@@ -577,7 +574,7 @@
       (if-let [db (worker-state/get-sqlite-conn repo :db)]
         (do
           (ensure-client-graph-uuid! repo graph-id)
-          (p/loop [last-addr 0
+          (p/loop [last-addr -1
                    first-batch? true]
             (let [rows (fetch-kvs-rows db last-addr upload-kvs-batch-size)]
               (if (empty? rows)
@@ -588,13 +585,15 @@
                                               #js {:done true})})]
                   (client-op/add-all-exists-asset-as-ops repo)
                   {:graph-id graph-id})
-                (let [max-addr (apply max (map :addr rows))]
+                (let [max-addr (apply max (map (fn [row] (aget row "addr")) rows))]
+                  (prn :debug :max-addr max-addr
+                       :rows (map (fn [row] (aget row "addr")) rows))
                   (p/let [_ (fetch-json (str base "/sync/" graph-id "/snapshot/import")
                                         {:method "POST"
                                          :headers {"content-type" "application/json"}
                                          :body (js/JSON.stringify
                                                 #js {:reset first-batch?
-                                                     :rows (clj->js rows)})})]
+                                                     :rows rows})})]
                     (p/recur max-addr false)))))))
         (p/rejected (ex-info "worker-sync missing sqlite db"
                              {:repo repo :graph-id graph-id}))))))
