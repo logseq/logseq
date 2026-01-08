@@ -186,7 +186,8 @@
    ["65.17" {:properties [:logseq.property.publish/published-url]}]
    ["65.18" {:fix deprecated-ensure-graph-uuid}]
    ["65.19" {:properties [:logseq.property/choice-classes :logseq.property/choice-exclusions]}]
-   ["65.20" {:properties [:logseq.property.class/bidirectional-property-title :logseq.property.class/enable-bidirectional?]}]])
+   ["65.20" {:properties [:logseq.property.class/bidirectional-property-title :logseq.property.class/enable-bidirectional?]}]
+   ["65.21" {:properties [:logseq.property.asset/external-props]}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]
