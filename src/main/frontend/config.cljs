@@ -59,11 +59,13 @@
 (goog-define ENABLE-WORKER-SYNC true)
 (defonce worker-sync-enabled? ENABLE-WORKER-SYNC)
 
-(goog-define WORKER-SYNC-WS-URL "ws://127.0.0.1:8787/sync/%s")
-(defonce worker-sync-ws-url WORKER-SYNC-WS-URL)
+;; (defonce worker-sync-ws-base "127.0.0.1:8787")
+(defonce worker-sync-ws-base "logseq-sync.logseq.workers.dev")
+(defonce worker-sync-ws-url (str "ws://" worker-sync-ws-base "/sync/%s"))
 
-(goog-define WORKER-SYNC-HTTP-BASE "http://127.0.0.1:8787")
-(defonce worker-sync-http-base WORKER-SYNC-HTTP-BASE)
+;; (defonce worker-sync-http-base "http://127.0.0.1:8787")
+(defonce worker-sync-http-base "https://logseq-sync.logseq.workers.dev")
+
 ;; Feature flags
 ;; =============
 
