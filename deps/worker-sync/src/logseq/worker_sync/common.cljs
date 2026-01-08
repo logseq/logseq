@@ -1,14 +1,14 @@
 (ns logseq.worker-sync.common
   (:require [clojure.string :as string]
             [logseq.db.sqlite.util :as sqlite-util])
-  (:require-macros [logseq.worker-sync.async :refer [js-await]]))
+  (:require-macros [logseq.common.async :refer [js-await]]))
 
 (def text-decoder (js/TextDecoder.))
 
 (defn- cors-headers []
-  #js {"access-control-allow-origin" "*"
-       "access-control-allow-headers" "content-type,x-amz-meta-checksum,x-amz-meta-type"
-       "access-control-allow-methods" "GET,POST,PUT,DELETE,OPTIONS"})
+  #js {"Access-Control-Allow-Origin" "*"
+       "Access-Control-Allow-Headers" "content-type,authorization,x-amz-meta-checksum,x-amz-meta-type"
+       "Access-Control-Allow-Methods" "GET,POST,PUT,DELETE,OPTIONS"})
 
 (defn json-response
   ([data] (json-response data 200))
@@ -25,6 +25,12 @@
 
 (defn bad-request [message]
   (json-response {:error message} 400))
+
+(defn unauthorized []
+  (json-response {:error "unauthorized"} 401))
+
+(defn forbidden []
+  (json-response {:error "forbidden"} 403))
 
 (defn not-found []
   (json-response {:error "not found"} 404))

@@ -4,18 +4,67 @@
             [datascript.core :as d]
             [lambdaisland.glogi :as log]
             [lambdaisland.glogi.console :as glogi-console]
+            [logseq.common.authorization :as authorization]
             [logseq.db :as ldb]
             [logseq.db.common.normalize :as db-normalize]
-            [logseq.worker-sync.common :as common]
+            [logseq.worker-sync.common :as common :refer [cors-headers]]
             [logseq.worker-sync.cycle :as cycle]
             [logseq.worker-sync.protocol :as protocol]
             [logseq.worker-sync.storage :as storage]
             [logseq.worker-sync.worker-core :as worker-core]
-            [shadow.cljs.modern :refer (defclass)]))
+            [shadow.cljs.modern :refer (defclass)])
+  (:require-macros [logseq.common.async :refer [js-await]]))
 
 (glogi-console/install!)
 
 (declare handle-assets)
+(defn- bearer-token [auth-header]
+  (when (and (string? auth-header) (string/starts-with? auth-header "Bearer "))
+    (subs auth-header 7)))
+
+(defn- token-from-request [request]
+  (js/console.dir request)
+  (or (bearer-token (.get (.-headers request) "authorization"))
+      (let [url (js/URL. (.-url request))]
+        (.get (.-searchParams url) "token"))))
+
+(defn- auth-claims [request env]
+  (let [token (token-from-request request)]
+    (if (string? token)
+      (.catch (authorization/verify-jwt token env) (fn [_] nil))
+      (js/Promise.resolve nil))))
+
+(defn- index-stub [^js env]
+  (let [^js namespace (.-LOGSEQ_SYNC_INDEX_DO env)
+        do-id (.idFromName namespace "index")]
+    (.get namespace do-id)))
+
+(defn- graph-access-response [request env graph-id]
+  (let [token (token-from-request request)
+        url (js/URL. (.-url request))
+        access-url (str (.-origin url) "/graphs/" graph-id "/access")
+        headers (js/Headers. (.-headers request))]
+    (when (string? token)
+      (.set headers "authorization" (str "Bearer " token)))
+    (.fetch (index-stub env)
+            (js/Request. access-url #js {:method "GET" :headers headers}))))
+
+(defn- parse-asset-path [path]
+  (let [prefix "/assets/"]
+    (when (string/starts-with? path prefix)
+      (let [rest-path (subs path (count prefix))
+            slash-idx (string/index-of rest-path "/")
+            graph-id (when (and slash-idx (pos? slash-idx)) (subs rest-path 0 slash-idx))
+            file (when (and slash-idx (pos? slash-idx)) (subs rest-path (inc slash-idx)))
+            dot-idx (when file (string/last-index-of file "."))
+            asset-uuid (when (and dot-idx (pos? dot-idx)) (subs file 0 dot-idx))
+            asset-type (when (and dot-idx (pos? dot-idx)) (subs file (inc dot-idx)))]
+        (when (and (seq graph-id) (seq asset-uuid) (seq asset-type))
+          {:graph-id graph-id
+           :asset-uuid asset-uuid
+           :asset-type asset-type
+           :key (str graph-id "/" asset-uuid "." asset-type)})))))
+
 (defn- handle-worker-fetch [request ^js env]
   (let [url (js/URL. (.-url request))
         path (.-pathname url)
@@ -26,13 +75,17 @@
 
       (or (= path "/graphs")
           (string/starts-with? path "/graphs/"))
-      (let [^js namespace (.-LOGSEQ_SYNC_INDEX_DO env)
-            do-id (.idFromName namespace "index")
-            stub (.get namespace do-id)]
-        (.fetch stub request))
+      (.fetch (index-stub env) request)
 
       (string/starts-with? path "/assets/")
-      (handle-assets request env)
+      (if (= method "OPTIONS")
+        (handle-assets request env)
+        (if-let [{:keys [graph-id]} (parse-asset-path path)]
+          (js-await [access-resp (graph-access-response request env graph-id)]
+                    (if (.-ok access-resp)
+                      (handle-assets request env)
+                      access-resp))
+          (common/bad-request "invalid asset path")))
 
       (= method "OPTIONS")
       (common/options-response)
@@ -50,13 +103,18 @@
                    (subs rest-path slash-idx))
             new-url (str (.-origin url) tail (.-search url))]
         (if (seq graph-id)
-          (let [^js namespace (.-LOGSEQ_SYNC_DO env)
-                do-id (.idFromName namespace graph-id)
-                stub (.get namespace do-id)]
-            (if (common/upgrade-request? request)
-              (.fetch stub request)
-              (let [rewritten (js/Request. new-url request)]
-                (.fetch stub rewritten))))
+          (if (= method "OPTIONS")
+            (common/options-response)
+            (js-await [access-resp (graph-access-response request env graph-id)]
+                      (if (.-ok access-resp)
+                        (let [^js namespace (.-LOGSEQ_SYNC_DO env)
+                              do-id (.idFromName namespace graph-id)
+                              stub (.get namespace do-id)]
+                          (if (common/upgrade-request? request)
+                            (.fetch stub request)
+                            (let [rewritten (js/Request. new-url request)]
+                              (.fetch stub rewritten))))
+                        access-resp)))
           (common/bad-request "missing graph id")))
 
       :else
@@ -99,48 +157,27 @@
                     after
                     limit)))
 
-(defn- asset-cors-headers []
-  #js {"Access-Control-Allow-Origin" "*"
-       "Access-Control-Allow-Headers" "content-type,x-amz-meta-checksum,x-amz-meta-type"
-       "Access-Control-Allow-Methods" "GET, PUT, DELETE, OPTIONS"})
-
-(defn- parse-asset-path [path]
-  (let [prefix "/assets/"]
-    (when (string/starts-with? path prefix)
-      (let [rest-path (subs path (count prefix))
-            slash-idx (string/index-of rest-path "/")
-            graph-id (when (and slash-idx (pos? slash-idx)) (subs rest-path 0 slash-idx))
-            file (when (and slash-idx (pos? slash-idx)) (subs rest-path (inc slash-idx)))
-            dot-idx (when file (string/last-index-of file "."))
-            asset-uuid (when (and dot-idx (pos? dot-idx)) (subs file 0 dot-idx))
-            asset-type (when (and dot-idx (pos? dot-idx)) (subs file (inc dot-idx)))]
-        (when (and (seq graph-id) (seq asset-uuid) (seq asset-type))
-          {:graph-id graph-id
-           :asset-uuid asset-uuid
-           :asset-type asset-type
-           :key (str graph-id "/" asset-uuid "." asset-type)})))))
-
 (defn- handle-assets [request ^js env]
   (let [url (js/URL. (.-url request))
         path (.-pathname url)
         method (.-method request)]
     (cond
       (= method "OPTIONS")
-      (js/Response. nil #js {:status 204 :headers (asset-cors-headers)})
+      (js/Response. nil #js {:status 204 :headers (cors-headers)})
 
       :else
       (if-let [{:keys [key asset-type]} (parse-asset-path path)]
         (let [^js bucket (.-LOGSEQ_SYNC_ASSETS env)]
           (if-not bucket
             (js/Response. (js/JSON.stringify #js {:error "missing assets bucket"})
-                          #js {:status 500 :headers (asset-cors-headers)})
+                          #js {:status 500 :headers (cors-headers)})
             (case method
               "GET"
               (.then (.get bucket key)
                      (fn [^js obj]
                        (if (nil? obj)
                          (js/Response. (js/JSON.stringify #js {:error "not found"})
-                                       #js {:status 404 :headers (asset-cors-headers)})
+                                       #js {:status 404 :headers (cors-headers)})
                          (let [content-type (or (.-contentType (.-httpMetadata obj))
                                                 "application/octet-stream")]
                            (js/Response. (.-body obj)
@@ -148,14 +185,14 @@
                                               :headers (js/Object.assign
                                                         #js {"content-type" content-type
                                                              "x-asset-type" asset-type}
-                                                        (asset-cors-headers))})))))
+                                                        (cors-headers))})))))
 
               "PUT"
               (.then (.arrayBuffer request)
                      (fn [buf]
                        (if (> (.-byteLength buf) max-asset-size)
                          (js/Response. (js/JSON.stringify #js {:error "asset too large"})
-                                       #js {:status 413 :headers (asset-cors-headers)})
+                                       #js {:status 413 :headers (cors-headers)})
                          (.then (.put bucket
                                       key
                                       buf
@@ -165,18 +202,18 @@
                                                                 :type asset-type}})
                                 (fn [_]
                                   (js/Response. (js/JSON.stringify #js {:ok true})
-                                                #js {:status 200 :headers (asset-cors-headers)}))))))
+                                                #js {:status 200 :headers (cors-headers)}))))))
 
               "DELETE"
               (.then (.delete bucket key)
                      (fn [_]
                        (js/Response. (js/JSON.stringify #js {:ok true})
-                                     #js {:status 200 :headers (asset-cors-headers)})))
+                                     #js {:status 200 :headers (cors-headers)})))
 
               (js/Response. (js/JSON.stringify #js {:error "method not allowed"})
-                            #js {:status 405 :headers (asset-cors-headers)}))))
+                            #js {:status 405 :headers (cors-headers)}))))
         (js/Response. (js/JSON.stringify #js {:error "invalid asset path"})
-                      #js {:status 400 :headers (asset-cors-headers)})))))
+                      #js {:status 400 :headers (cors-headers)})))))
 
 (defn- pull-response [^js self since]
   (let [sql (.-sql self)
@@ -360,8 +397,8 @@
             (let [since (or (parse-int (.get (.-searchParams url) "since")) 0)]
               (common/json-response (pull-response self since)))
 
-            (and (= method "GET") (= path "/snapshot"))
-            (common/json-response (snapshot-response self))
+            ;; (and (= method "GET") (= path "/snapshot"))
+            ;; (common/json-response (snapshot-response self))
 
             (and (= method "GET") (= path "/snapshot/rows"))
             (let [after (or (parse-int (.get (.-searchParams url) "after")) -1)
@@ -456,28 +493,37 @@
                    (str "create table if not exists graphs ("
                         "graph_id TEXT primary key,"
                         "graph_name TEXT,"
+                        "owner_sub TEXT,"
                         "schema_version TEXT,"
                         "created_at INTEGER,"
                         "updated_at INTEGER"
-                        ");")))
+                        ");"))
+  (try
+    (common/sql-exec sql "alter table graphs add column owner_sub TEXT")
+    (catch :default _ nil)))
 
-(defn- index-list [sql]
-  (common/get-sql-rows
-   (common/sql-exec sql
-                    (str "select graph_id, graph_name, schema_version, created_at, updated_at "
-                         "from graphs order by updated_at desc"))))
+(defn- index-list [sql owner-sub]
+  (if (string? owner-sub)
+    (common/get-sql-rows
+     (common/sql-exec sql
+                      (str "select graph_id, graph_name, schema_version, created_at, updated_at "
+                           "from graphs where owner_sub = ? order by updated_at desc")
+                      owner-sub))
+    []))
 
-(defn- index-upsert! [sql graph-id graph-name schema-version]
+(defn- index-upsert! [sql graph-id graph-name owner-sub schema-version]
   (let [now (common/now-ms)]
     (common/sql-exec sql
-                     (str "insert into graphs (graph_id, graph_name, schema_version, created_at, updated_at) "
-                          "values (?, ?, ?, ?, ?) "
+                     (str "insert into graphs (graph_id, graph_name, owner_sub, schema_version, created_at, updated_at) "
+                          "values (?, ?, ?, ?, ?, ?) "
                           "on conflict(graph_id) do update set "
                           "graph_name = excluded.graph_name, "
+                          "owner_sub = excluded.owner_sub, "
                           "schema_version = excluded.schema_version, "
                           "updated_at = excluded.updated_at")
                      graph-id
                      graph-name
+                     owner-sub
                      schema-version
                      now
                      now)))
@@ -485,46 +531,109 @@
 (defn- index-delete! [sql graph-id]
   (common/sql-exec sql "delete from graphs where graph_id = ?" graph-id))
 
+(defn- index-owns-graph? [sql graph-id owner-sub]
+  (when (and (string? graph-id) (string? owner-sub))
+    (let [rows (common/get-sql-rows
+                (common/sql-exec sql
+                                 (str "select graph_id from graphs "
+                                      "where graph_id = ? and owner_sub = ?")
+                                 graph-id
+                                 owner-sub))]
+      (seq rows))))
+
+(defn- graph-path-parts [path]
+  (->> (string/split path #"/")
+       (remove string/blank?)
+       (vec)))
+
 (defn- handle-index-fetch [^js self request]
   (let [sql (.-sql self)
+        env (.-env self)
         url (js/URL. (.-url request))
         path (.-pathname url)
-        method (.-method request)]
-    (index-init! sql)
-    (cond
-      (= method "OPTIONS")
-      (common/options-response)
+        method (.-method request)
+        parts (graph-path-parts path)]
+    (try
+      (if (= method "OPTIONS")
+        (common/options-response)
+        (do
+          (index-init! sql)
+          (js-await [claims (auth-claims request env)]
+                    (cond
+                      (nil? claims)
+                      (common/unauthorized)
 
-      (and (= method "GET") (= path "/graphs"))
-      (common/json-response {:graphs (index-list sql)})
+                      (and (= method "GET") (= ["graphs"] parts))
+                      (let [owner-sub (aget claims "sub")]
+                        (if (string? owner-sub)
+                          (common/json-response {:graphs (index-list sql owner-sub)})
+                          (common/unauthorized)))
 
-      (and (= method "POST") (= path "/graphs"))
-      (.then (common/read-json request)
-             (fn [result]
-               (let [graph-id (str (random-uuid))
-                     graph-name (aget result "graph_name")
-                     schema-version (aget result "schema_version")]
-                 (if (string? graph-name)
-                   (do
-                     (index-upsert! sql graph-id graph-name schema-version)
-                     (common/json-response {:graph_id graph-id}))
-                   (common/bad-request "missing graph_name")))))
+                      (and (= method "POST") (= ["graphs"] parts))
+                      (.then (common/read-json request)
+                             (fn [result]
+                               (let [graph-id (str (random-uuid))
+                                     graph-name (aget result "graph_name")
+                                     owner-sub (aget claims "sub")
+                                     schema-version (aget result "schema_version")]
+                                 (cond
+                                   (not (string? owner-sub))
+                                   (common/unauthorized)
 
-      (and (= method "DELETE") (string/starts-with? path "/graphs/"))
-      (let [graph-id (subs path (count "/graphs/"))]
-        (if (seq graph-id)
-          (do
-            (index-delete! sql graph-id)
-            (let [^js namespace (.-LOGSEQ_SYNC_DO (.-env self))
-                  do-id (.idFromName namespace graph-id)
-                  stub (.get namespace do-id)
-                  reset-url (str (.-origin url) "/admin/reset")]
-              (.fetch stub (js/Request. reset-url #js {:method "DELETE"})))
-            (common/json-response {:graph_id graph-id :deleted true}))
-          (common/bad-request "missing graph id")))
+                                   (not (string? graph-name))
+                                   (common/bad-request "missing graph_name")
 
-      :else
-      (common/not-found))))
+                                   :else
+                                   (do
+                                     (index-upsert! sql graph-id graph-name owner-sub schema-version)
+                                     (common/json-response {:graph_id graph-id}))))))
+
+                      (and (= method "GET")
+                           (= 3 (count parts))
+                           (= "graphs" (first parts))
+                           (= "access" (nth parts 2)))
+                      (let [graph-id (nth parts 1)
+                            owner-sub (aget claims "sub")]
+                        (cond
+                          (not (string? owner-sub))
+                          (common/unauthorized)
+
+                          (index-owns-graph? sql graph-id owner-sub)
+                          (common/json-response {:ok true})
+
+                          :else
+                          (common/forbidden)))
+
+                      (and (= method "DELETE")
+                           (= 2 (count parts))
+                           (= "graphs" (first parts)))
+                      (let [graph-id (nth parts 1)
+                            owner-sub (aget claims "sub")]
+                        (cond
+                          (not (seq graph-id))
+                          (common/bad-request "missing graph id")
+
+                          (not (string? owner-sub))
+                          (common/unauthorized)
+
+                          (not (index-owns-graph? sql graph-id owner-sub))
+                          (common/forbidden)
+
+                          :else
+                          (do
+                            (index-delete! sql graph-id)
+                            (let [^js namespace (.-LOGSEQ_SYNC_DO (.-env self))
+                                  do-id (.idFromName namespace graph-id)
+                                  stub (.get namespace do-id)
+                                  reset-url (str (.-origin url) "/admin/reset")]
+                              (.fetch stub (js/Request. reset-url #js {:method "DELETE"})))
+                            (common/json-response {:graph_id graph-id :deleted true}))))
+
+                      :else
+                      (common/not-found)))))
+      (catch :default error
+        (log/error :worker-sync/index-error error)
+        (common/json-response {:error "server error"} 500)))))
 
 (defclass SyncIndexDO
   (extends DurableObject)

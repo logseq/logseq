@@ -34,6 +34,18 @@
                      :else ws-url)]
           (string/replace base #"/sync/%s$" "")))))
 
+(defn- auth-token []
+  (worker-state/get-id-token))
+
+(defn- auth-headers []
+  (when-let [token (auth-token)]
+    {"authorization" (str "Bearer " token)}))
+
+(defn- with-auth-headers [opts]
+  (if-let [auth (auth-headers)]
+    (assoc opts :headers (merge (or (:headers opts) {}) auth))
+    opts))
+
 (def ^:private max-asset-size (* 100 1024 1024))
 (def ^:private upload-kvs-batch-size 2000)
 
@@ -47,6 +59,12 @@
 
     :else
     (str base "/" graph-id)))
+
+(defn- append-token [url token]
+  (if (string? token)
+    (let [separator (if (string/includes? url "?") "&" "?")]
+      (str url separator "token=" (js/encodeURIComponent token)))
+    url))
 
 (defn- get-graph-id [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
@@ -85,7 +103,7 @@
 
 (defn- fetch-json
   [url opts]
-  (p/let [resp (js/fetch url (clj->js opts))
+  (p/let [resp (js/fetch url (clj->js (with-auth-headers opts)))
           text (.text resp)
           data (when (seq text) (js/JSON.parse text))]
     (if (.-ok resp)
@@ -233,7 +251,8 @@
   (let [base (http-base-url)]
     (if (and (seq base) (seq graph-id) (seq asset-type))
       (p/let [url (asset-url base graph-id (str asset-uuid) asset-type)
-              resp (js/fetch url #js {:method "DELETE"})]
+              opts (with-auth-headers {:method "DELETE"})
+              resp (js/fetch url (clj->js opts))]
         (when-not (.-ok resp)
           (log/error :worker-sync/asset-delete-failed {:repo repo
                                                        :asset-uuid asset-uuid
@@ -248,7 +267,8 @@
     (if (and (seq base) (seq graph-id) (seq asset-type) (seq checksum))
       (worker-state/<invoke-main-thread :thread-api/rtc-upload-asset
                                         repo nil (str asset-uuid) asset-type checksum
-                                        (asset-url base graph-id (str asset-uuid) asset-type))
+                                        (asset-url base graph-id (str asset-uuid) asset-type)
+                                        {:extra-headers (auth-headers)})
       (p/rejected (ex-info "missing asset upload info"
                            {:repo repo
                             :asset-uuid asset-uuid
@@ -263,7 +283,8 @@
     (if (and (seq base) (seq graph-id) (seq asset-type))
       (worker-state/<invoke-main-thread :thread-api/rtc-download-asset
                                         repo nil (str asset-uuid) asset-type
-                                        (asset-url base graph-id (str asset-uuid) asset-type))
+                                        (asset-url base graph-id (str asset-uuid) asset-type)
+                                        {:extra-headers (auth-headers)})
       (p/rejected (ex-info "missing asset download info"
                            {:repo repo
                             :asset-uuid asset-uuid
@@ -488,7 +509,7 @@
         nil))))
 
 (defn- connect! [repo client url]
-  (let [ws (js/WebSocket. url)
+  (let [ws (js/WebSocket. (append-token url (auth-token)))
         updated (assoc client :ws ws)]
     (attach-ws-handlers! repo updated ws)
     (set! (.-onopen ws)

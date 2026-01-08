@@ -1,4 +1,4 @@
-(ns logseq.worker-sync.async
+(ns logseq.common.async
   (:require [shadow.cljs.modern]))
 
 (defmacro js-await
