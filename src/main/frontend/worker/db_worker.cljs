@@ -131,6 +131,11 @@
                :$addresses addresses})
         rows))
 
+(defn- enable-sqlite-wal-mode!
+  [^Object db]
+  (.exec db "PRAGMA locking_mode=exclusive")
+  (.exec db "PRAGMA journal_mode=WAL"))
+
 (defn- ensure-worker-sync-import-db!
   [repo reset?]
   (p/let [^js pool (<get-opfs-pool repo)
@@ -241,11 +246,6 @@
             debug-log-db (new (.-OpfsSAHPoolDb pool) (str "debug-log" repo-path))]
       [db search-db client-ops-db debug-log-db])))
 
-(defn- enable-sqlite-wal-mode!
-  [^Object db]
-  (.exec db "PRAGMA locking_mode=exclusive")
-  (.exec db "PRAGMA journal_mode=WAL"))
-
 (defn- gc-sqlite-dbs!
   "Gc main db weekly and rtc ops db each time when opening it"
   [sqlite-db client-ops-db debug-log-db datascript-conn {:keys [full-gc?]}]
@@ -263,7 +263,7 @@
                                        :kv/value (common-util/time-ms)}]))))
 
 (defn- <create-or-open-db!
-  [repo {:keys [config datoms worker-sync-download-graph?] :as opts}]
+  [repo {:keys [config datoms] :as opts}]
   (when-not (worker-state/get-sqlite-conn repo)
     (p/let [[db search-db client-ops-db debug-log-db :as dbs] (get-dbs repo)
             storage (new-sqlite-storage db)
