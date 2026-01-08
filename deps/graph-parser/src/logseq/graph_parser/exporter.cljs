@@ -1241,7 +1241,7 @@
                                             linked-relative (when (and linked-files zotero-asset? (seq @linked-files))
                                                               (let [value (first @linked-files)]
                                                                 (swap! linked-files rest)
-                                                                value))
+                                                                (string/replace-first value "attachments:" "")))
                                             linked-base (when (string? linked-relative)
                                                           (node-path/basename linked-relative))
                                             linked-path (when (and (string? linked-relative)
