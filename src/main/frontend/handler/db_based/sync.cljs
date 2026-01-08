@@ -50,13 +50,9 @@
 
 (defn <rtc-upload-graph! [repo token remote-graph-name]
   (if (worker-sync-enabled?)
-    (p/let [graph-uuid (some-> (db/get-db repo) ldb/get-graph-rtc-uuid)
-            graph-id (or (when-not graph-uuid
-                           (worker-sync-handler/<rtc-create-graph! repo))
-                         (str graph-uuid))]
+    (p/let [graph-id (worker-sync-handler/<rtc-create-graph! repo)]
       (when (nil? graph-id)
-        (throw (ex-info "graph id doesn't exist when uploading to server" {:graph-uuid graph-uuid
-                                                                           :repo repo})))
+        (throw (ex-info "graph id doesn't exist when uploading to server" {:repo repo})))
       (p/do!
        (state/<invoke-db-worker :thread-api/worker-sync-upload-graph repo)
        (<rtc-start! repo)))
