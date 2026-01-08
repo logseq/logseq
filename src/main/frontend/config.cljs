@@ -281,17 +281,6 @@
      (+ 3 (count label))]
     ["" 0]))
 
-(defonce default-journals-directory "journals")
-(defonce default-pages-directory "pages")
-
-(defn get-pages-directory
-  []
-  (or (state/get-pages-directory) default-pages-directory))
-
-(defn get-journals-directory
-  []
-  (or (state/get-journals-directory) default-journals-directory))
-
 (defonce demo-repo "Demo")
 
 (defn demo-graph?
