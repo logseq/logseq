@@ -1,9 +1,12 @@
 (ns frontend.handler.db-based.sync
   "Dispatch RTC calls between legacy RTC and worker-sync implementations."
   (:require [frontend.config :as config]
+            [frontend.db :as db]
             [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.handler.db-based.worker-sync :as worker-sync-handler]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [logseq.db :as ldb]
+            [promesa.core :as p]))
 
 (defn- worker-sync-enabled? []
   config/worker-sync-enabled?)
@@ -22,12 +25,6 @@
   (if (worker-sync-enabled?)
     (worker-sync-handler/<rtc-download-graph! graph-name graph-uuid graph-schema-version timeout-ms)
     (rtc-handler/<rtc-download-graph! graph-name graph-uuid graph-schema-version timeout-ms)))
-
-(defn <rtc-upload-graph! [repo token remote-graph-name]
-  (if (worker-sync-enabled?)
-    (state/<invoke-db-worker :thread-api/worker-sync-upload-graph repo)
-    (state/<invoke-db-worker :thread-api/rtc-async-upload-graph
-                             repo token remote-graph-name)))
 
 (defn <rtc-stop! []
   (if (worker-sync-enabled?)
@@ -50,6 +47,21 @@
   (if (worker-sync-enabled?)
     (worker-sync-handler/<rtc-start! repo :stop-before-start? stop-before-start?)
     (rtc-handler/<rtc-start! repo :stop-before-start? stop-before-start?)))
+
+(defn <rtc-upload-graph! [repo token remote-graph-name]
+  (if (worker-sync-enabled?)
+    (p/let [graph-uuid (some-> (db/get-db repo) ldb/get-graph-rtc-uuid)
+            graph-id (or (when-not graph-uuid
+                           (worker-sync-handler/<rtc-create-graph! repo))
+                         (str graph-uuid))]
+      (when (nil? graph-id)
+        (throw (ex-info "graph id doesn't exist when uploading to server" {:graph-uuid graph-uuid
+                                                                           :repo repo})))
+      (p/do!
+       (state/<invoke-db-worker :thread-api/worker-sync-upload-graph repo)
+       (<rtc-start! repo)))
+    (state/<invoke-db-worker :thread-api/rtc-async-upload-graph
+                             repo token remote-graph-name)))
 
 (defn <get-remote-graphs []
   (if (worker-sync-enabled?)

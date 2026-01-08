@@ -476,14 +476,14 @@
       (and (= method "POST") (= path "/graphs"))
       (.then (common/read-json request)
              (fn [result]
-               (let [graph-id (aget result "graph_id")
+               (let [graph-id (str (random-uuid))
                      graph-name (aget result "graph_name")
                      schema-version (aget result "schema_version")]
-                 (if (and (string? graph-id) (string? graph-name))
+                 (if (string? graph-name)
                    (do
                      (index-upsert! sql graph-id graph-name schema-version)
                      (common/json-response {:graph_id graph-id}))
-                   (common/bad-request "missing graph_id or graph_name")))))
+                   (common/bad-request "missing graph_name")))))
 
       (and (= method "DELETE") (string/starts-with? path "/graphs/"))
       (let [graph-id (subs path (count "/graphs/"))]

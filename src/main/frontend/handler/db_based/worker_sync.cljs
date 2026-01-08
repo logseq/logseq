@@ -28,14 +28,6 @@
   (or config/worker-sync-http-base
       (ws->http-base config/worker-sync-ws-url)))
 
-(defn- get-graph-id [repo]
-  (let [db (db/get-db repo)]
-    (or (ldb/get-graph-rtc-uuid db)
-        (ldb/get-graph-local-uuid db)
-        (let [new-id (random-uuid)]
-          (ldb/transact! repo [(sqlite-util/kv :logseq.kv/local-graph-uuid new-id)])
-          new-id))))
-
 (defn- fetch-json
   [url opts]
   (p/let [resp (js/fetch url (clj->js opts))
@@ -64,23 +56,26 @@
 
 (defn <rtc-create-graph!
   [repo]
-  (let [graph-id (get-graph-id repo)
-        schema-version (some-> (ldb/get-graph-schema-version (db/get-db)) :major str)
+  (let [schema-version (some-> (ldb/get-graph-schema-version (db/get-db)) :major str)
         base (http-base)]
-    (if (and graph-id base)
+    (if base
       (p/let [result (fetch-json (str base "/graphs")
                                  {:method "POST"
                                   :headers {"content-type" "application/json"}
                                   :body (js/JSON.stringify
-                                         #js {:graph_id (str graph-id)
-                                              :graph_name (string/replace repo config/db-version-prefix "")
-                                              :schema_version schema-version})})]
-        (ldb/transact! repo [(sqlite-util/kv :logseq.kv/db-type "db")
-                             (sqlite-util/kv :logseq.kv/graph-uuid graph-id)])
-        result)
+                                         #js {:graph_name (string/replace repo config/db-version-prefix "")
+                                              :schema_version schema-version})})
+              graph-id (aget result "graph_id")]
+        (if graph-id
+          (p/do!
+           (ldb/transact! repo [(sqlite-util/kv :logseq.kv/db-type "db")
+                                (sqlite-util/kv :logseq.kv/graph-uuid (uuid graph-id))])
+           graph-id)
+          (p/rejected (ex-info "worker-sync missing graph id in create response"
+                               {:type :worker-sync/invalid-graph
+                                :response result}))))
       (p/rejected (ex-info "worker-sync missing graph info"
                            {:type :worker-sync/invalid-graph
-                            :graph-id graph-id
                             :base base})))))
 
 (defn <rtc-delete-graph!
