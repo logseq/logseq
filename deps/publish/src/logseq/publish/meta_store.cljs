@@ -1,7 +1,7 @@
 (ns logseq.publish.meta-store
   (:require [clojure.string :as string]
             [logseq.publish.common :as publish-common])
-  (:require-macros [logseq.publish.async :refer [js-await]]))
+  (:require-macros [logseq.common.async :refer [js-await]]))
 
 (defn init-schema! [sql]
   (let [cols (publish-common/get-sql-rows (publish-common/sql-exec sql "PRAGMA table_info(pages);"))
