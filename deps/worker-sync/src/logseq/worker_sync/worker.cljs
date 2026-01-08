@@ -306,56 +306,68 @@
     path))
 
 (defn- handle-http [^js self request]
-  (let [url (js/URL. (.-url request))
-        raw-path (.-pathname url)
-        path (strip-sync-prefix raw-path)
-        method (.-method request)]
-    (cond
-      (= method "OPTIONS")
-      (common/options-response)
+  (letfn [(with-cors-error [resp]
+            (if (instance? js/Promise resp)
+              (.catch resp
+                      (fn [e]
+                        (log/error :worker-sync/http-error {:error e})
+                        (common/json-response {:error "server error"} 500)))
+              resp))]
+    (try
+      (let [url (js/URL. (.-url request))
+            raw-path (.-pathname url)
+            path (strip-sync-prefix raw-path)
+            method (.-method request)]
+        (with-cors-error
+          (cond
+            (= method "OPTIONS")
+            (common/options-response)
 
-      (and (= method "GET") (= path "/health"))
-      (common/json-response {:ok true})
+            (and (= method "GET") (= path "/health"))
+            (common/json-response {:ok true})
 
-      (and (= method "GET") (= path "/pull"))
-      (let [since (or (parse-int (.get (.-searchParams url) "since")) 0)]
-        (common/json-response (pull-response self since)))
+            (and (= method "GET") (= path "/pull"))
+            (let [since (or (parse-int (.get (.-searchParams url) "since")) 0)]
+              (common/json-response (pull-response self since)))
 
-      (and (= method "GET") (= path "/snapshot"))
-      (common/json-response (snapshot-response self))
+            (and (= method "GET") (= path "/snapshot"))
+            (common/json-response (snapshot-response self))
 
-      (and (= method "DELETE") (= path "/admin/reset"))
-      (do
-        (common/sql-exec (.-sql self) "drop table if exists kvs")
-        (common/sql-exec (.-sql self) "drop table if exists tx_log")
-        (common/sql-exec (.-sql self) "drop table if exists sync_meta")
-        (storage/init-schema! (.-sql self))
-        (common/json-response {:ok true}))
+            (and (= method "DELETE") (= path "/admin/reset"))
+            (do
+              (common/sql-exec (.-sql self) "drop table if exists kvs")
+              (common/sql-exec (.-sql self) "drop table if exists tx_log")
+              (common/sql-exec (.-sql self) "drop table if exists sync_meta")
+              (storage/init-schema! (.-sql self))
+              (common/json-response {:ok true}))
 
-      (and (= method "POST") (= path "/tx"))
-      (.then (common/read-json request)
-             (fn [result]
-               (if (nil? result)
-                 (common/bad-request "missing body")
-                 (let [tx-data (protocol/transit->tx (aget result "tx"))
-                       t-before (parse-int (aget result "t_before"))]
-                   (if (sequential? tx-data)
-                     (common/json-response (handle-tx! self nil tx-data t-before))
-                     (common/bad-request "invalid tx"))))))
+            (and (= method "POST") (= path "/tx"))
+            (.then (common/read-json request)
+                   (fn [result]
+                     (if (nil? result)
+                       (common/bad-request "missing body")
+                       (let [tx-data (protocol/transit->tx (aget result "tx"))
+                             t-before (parse-int (aget result "t_before"))]
+                         (if (sequential? tx-data)
+                           (common/json-response (handle-tx! self nil tx-data t-before))
+                           (common/bad-request "invalid tx"))))))
 
-      (and (= method "POST") (= path "/tx/batch"))
-      (.then (common/read-json request)
-             (fn [result]
-               (if (nil? result)
-                 (common/bad-request "missing body")
-                 (let [txs (js->clj (aget result "txs"))
-                       t-before (parse-int (aget result "t_before"))]
-                   (if (and (sequential? txs) (every? string? txs))
-                     (common/json-response (handle-tx-batch! self nil txs t-before))
-                     (common/bad-request "invalid tx"))))))
+            (and (= method "POST") (= path "/tx/batch"))
+            (.then (common/read-json request)
+                   (fn [result]
+                     (if (nil? result)
+                       (common/bad-request "missing body")
+                       (let [txs (js->clj (aget result "txs"))
+                             t-before (parse-int (aget result "t_before"))]
+                         (if (and (sequential? txs) (every? string? txs))
+                           (common/json-response (handle-tx-batch! self nil txs t-before))
+                           (common/bad-request "invalid tx"))))))
 
-      :else
-      (common/not-found))))
+            :else
+            (common/not-found))))
+      (catch :default e
+        (log/error :worker-sync/http-error {:error e})
+        (common/json-response {:error "server error"} 500)))))
 
 (defclass SyncDO
   (extends DurableObject)

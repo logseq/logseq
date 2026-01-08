@@ -35,6 +35,7 @@
           (string/replace base #"/sync/%s$" "")))))
 
 (def ^:private max-asset-size (* 100 1024 1024))
+(def ^:private upload-batch-size 2000)
 
 (defn- format-ws-url [base graph-id]
   (cond
@@ -90,6 +91,18 @@
     (js->clj (js/JSON.parse raw) :keywordize-keys true)
     (catch :default _
       nil)))
+
+(defn- fetch-json
+  [url opts]
+  (p/let [resp (js/fetch url (clj->js opts))
+          text (.text resp)
+          data (when (seq text) (js/JSON.parse text))]
+    (if (.-ok resp)
+      (js->clj data :keywordize-keys true)
+      (throw (ex-info "worker-sync request failed"
+                      {:status (.-status resp)
+                       :url url
+                       :body data})))))
 
 (defn- update-server-t! [client t]
   (when (number? t)
@@ -553,3 +566,59 @@
     (enqueue-local-tx! repo tx-report)
     (when-let [client (get @worker-state/*worker-sync-clients repo)]
       (enqueue-asset-sync! repo client))))
+
+(def ^:private upload-max-retries 3)
+
+(defn upload-graph!
+  [repo]
+  (let [base (http-base-url)
+        graph-id (get-graph-id repo)]
+    (if-not (and (seq base) (seq graph-id))
+      (p/rejected (ex-info "worker-sync missing upload info"
+                           {:repo repo :base base :graph-id graph-id}))
+      (if-let [conn (worker-state/get-datascript-conn repo)]
+        (let [db @conn
+              datoms (seq (d/datoms db :eavt))]
+          (ensure-client-graph-uuid! repo graph-id)
+          (p/loop [remaining datoms
+                   t-before 0
+                   retries 0]
+            (if (empty? remaining)
+              (do
+                (client-op/add-all-exists-asset-as-ops repo)
+                {:graph-id graph-id})
+              (let [[chunk rest] (split-at upload-batch-size remaining)
+                    normalized (normalize-tx-data db db chunk)]
+                (if (empty? normalized)
+                  (p/recur (seq rest) t-before 0)
+                  (p/let [tx-str (sqlite-util/write-transit-str normalized)
+                          resp (fetch-json (str base "/sync/" graph-id "/tx/batch")
+                                           {:method "POST"
+                                            :headers {"content-type" "application/json"}
+                                            :body (js/JSON.stringify
+                                                   #js {:t_before t-before
+                                                        :txs #js [tx-str]})})]
+                    (cond
+                      (= "tx/batch/ok" (:type resp))
+                      (p/recur (seq rest) (:t resp) 0)
+
+                      (= "tx/reject" (:type resp))
+                      (if (= "stale" (:reason resp))
+                        (if (< retries upload-max-retries)
+                          (p/recur remaining (:t resp) (inc retries))
+                          (throw (ex-info "worker-sync upload stale limit"
+                                          {:repo repo
+                                           :graph-id graph-id
+                                           :response resp})))
+                        (throw (ex-info "worker-sync upload rejected"
+                                        {:repo repo
+                                         :graph-id graph-id
+                                         :response resp})))
+
+                      :else
+                      (throw (ex-info "worker-sync upload failed"
+                                      {:repo repo
+                                       :graph-id graph-id
+                                       :response resp})))))))))
+        (p/rejected (ex-info "worker-sync missing db"
+                             {:repo repo :graph-id graph-id}))))))

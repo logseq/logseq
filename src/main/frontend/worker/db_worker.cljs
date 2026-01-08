@@ -404,6 +404,10 @@
   []
   (worker-sync/stop!))
 
+(def-thread-api :thread-api/worker-sync-upload-graph
+  [repo]
+  (worker-sync/upload-graph! repo))
+
 (def-thread-api :thread-api/set-infer-worker-proxy
   [infer-worker-proxy]
   (reset! worker-state/*infer-worker infer-worker-proxy)
