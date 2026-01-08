@@ -211,9 +211,7 @@
                          addr
                          content
                          addresses)))
-    (set! (.-conn self) (storage/open-conn sql))
-    (let [conn (.-conn self)]
-      (prn :debug :import-datoms-count (count (d/datoms @conn :eavt))))))
+    (set! (.-conn self) (storage/open-conn sql))))
 
 (defn- cycle-reject-response [db tx-data {:keys [attr]}]
   {:type "tx/reject"
