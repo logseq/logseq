@@ -1,7 +1,6 @@
 (ns frontend.components.cmdk.core
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [electron.ipc :as ipc]
             [frontend.components.block :as block]
             [frontend.components.cmdk.list-item :as list-item]
             [frontend.components.icon :as icon-component]
@@ -30,7 +29,6 @@
             [goog.functions :as gfun]
             [goog.object :as gobj]
             [goog.userAgent]
-            [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
             [logseq.db :as ldb]
@@ -498,15 +496,8 @@
 
 (defn- open-file
   [file-path]
-  (if (or (string/ends-with? file-path ".edn")
-          (string/ends-with? file-path ".js")
-          (string/ends-with? file-path ".css"))
-    (route-handler/redirect! {:to :file
-                              :path-params {:path file-path}})
-    ;; open this file in directory
-    (when (util/electron?)
-      (let [file-fpath (path/path-join (config/get-repo-dir (state/get-current-repo)) file-path)]
-        (ipc/ipc "openFileInFolder" file-fpath)))))
+  (route-handler/redirect! {:to :file
+                            :path-params {:path file-path}}))
 
 (defn- page-item?
   [item]

@@ -73,8 +73,6 @@
  :page/logseq-is-having-a-problem "لاگ‌سیک دچار مشکلی شده است. برای بازگرداندن آن به حالت قابل استفاده لطفا گام‌های زیر را به ترتیب انجام دهید:"
  :page/step "گام {1}"
  :page/try "امتحان کنید"
- :page/open-in-finder "باز کردن در پوشه"
- :page/open-with-default-app "باز کردن با برنامه پیش‌فرض"
  :page/make-public "عمومی ساختن برای انتشار"
  :page/make-private "تبدیل به خصوصی"
  :page/delete "حذف برگه"

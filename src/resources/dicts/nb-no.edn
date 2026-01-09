@@ -36,8 +36,6 @@
  :left-side-bar/journals "Dagbøker"
  :left-side-bar/nav-favorites "Favoritter"
  :left-side-bar/nav-recent-pages "Nylig"
- :page/open-in-finder "Åpne i mappe"
- :page/open-with-default-app "Åpne med forhåndsvalgt app"
  :page/make-public "Gjør den offentlig for publisering"
  :page/make-private "Gjør den privat"
  :page/delete "Slett side"

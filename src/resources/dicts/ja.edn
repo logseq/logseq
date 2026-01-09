@@ -99,8 +99,6 @@
  :page/logseq-is-having-a-problem "Logseqになにか問題があります。きちんと動く状態に戻すため、以下の項目を上から順番に実行してください："
  :page/step "ステップ{1}"
  :page/try "試す"
- :page/open-in-finder "ディレクトリで開く"
- :page/open-with-default-app "既定のアプリで開く"
  :page/make-public "パブリッシュのため公開する"
  :page/make-private "非公開にする"
  :page/delete "ページを削除"

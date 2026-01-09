@@ -208,8 +208,6 @@
  :page/logseq-is-having-a-problem "Logseq hat ein Problem festgestellt. Versuche zurückzukehren ..."
  :page/make-private "Privat machen"
  :page/make-public "Beim Export in HTML veröffentlichen"
- :page/open-in-finder "Im Verzeichnis öffnen"
- :page/open-with-default-app "Mit Standard-Anwendung öffnen"
  :page/something-went-wrong "Es ist etwas schief gelaufen."
  :page/step "Schritt {1}"
  :page/try "Versuch"

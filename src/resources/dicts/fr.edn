@@ -111,8 +111,6 @@
     :page/backlinks "Rétro-lien"
     :page/copy-page-url "Copier l'URL de la page"
     :page/created-at "Créée le"
-    :page/open-in-finder "Ouvrir dans l'explorateur de fichiers"
-    :page/open-with-default-app "Ouvrir avec l'application par défaut"
     :page/unfavorite "Retirer la page des favoris"
     :page/updated-at "Mise à jour le"
     :pdf/copy-ref "Copier la référence"
