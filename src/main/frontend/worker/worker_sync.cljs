@@ -179,11 +179,6 @@
                 (enqueue-asset-sync! repo client)
                 (enqueue-asset-initial-download! repo client)
                 (flush-pending! repo client))
-      "tx/ok" (do
-                (update-server-t! client (:t message))
-                (remove-pending-txs! repo @(:inflight client))
-                (reset! (:inflight client) [])
-                (flush-pending! repo client))
       "tx/batch/ok" (do
                       (update-server-t! client (:t message))
                       (remove-pending-txs! repo @(:inflight client))
