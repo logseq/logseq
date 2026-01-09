@@ -10,7 +10,7 @@
  :on-boarding/importing-main-title "Importar notas existentes"
  :on-boarding/importing-main-desc "Você também pode fazer isso posteriormente no aplicativo."
  :on-boarding/importing-title "Você já tem notas que deseja importar?"
- :on-boarding/importing-desc "Se elas estiverem em formato JSON, EDN ou Markdown, o Logseq pode trabalhar com elas."
+ :on-boarding/importing-desc "Se elas estiverem em formato EDN ou Markdown, o Logseq pode trabalhar com elas."
  :on-boarding/importing-sqlite-desc "Importar uma exportação de DB SQLite do seu grafo Logseq para um novo grafo DB"
  :on-boarding/main-title (fn [] ["Bem-vindo ao " [:strong "Logseq!"]])
  :on-boarding/main-desc "Primeiro, você precisa escolher uma pasta onde o Logseq armazenará seus pensamentos, ideias, notas."
