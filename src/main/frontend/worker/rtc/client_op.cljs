@@ -95,6 +95,7 @@
   {:block/uuid {:db/unique :db.unique/identity}
    :db-ident {:db/unique :db.unique/identity}
    :db-ident-or-block-uuid {:db/unique :db.unique/identity}
+   ;; local-tx is the latest remote-tx that local db persists
    :local-tx {:db/index true}
    :graph-uuid {:db/index true}
    :worker-sync/tx-id {:db/unique :db.unique/identity}
@@ -133,7 +134,7 @@
   (let [conn (worker-state/get-client-ops-conn repo)]
     (assert (some? conn) repo)
     (let [r (:v (first (d/datoms @conn :avet :local-tx)))]
-      (assert (some? r))
+      ;; (assert (some? r))
       r)))
 
 (defn- merge-update-ops
