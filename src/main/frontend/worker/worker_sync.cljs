@@ -131,7 +131,7 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (try
       (let [tx-data' (db-normalize/de-normalize-tx-data @conn tx-data)
-            tx-report (ldb/transact! conn tx-data' {:worker-sync/remote? true})
+            tx-report (ldb/transact! conn tx-data' {:rtc-tx? true})
             db-after (:db-after tx-report)
             asset-uuids (asset-uuids-from-tx db-after (:tx-data tx-report))]
         (when (seq asset-uuids)
@@ -158,7 +158,7 @@
                    []
                    server_values)]
       (when (seq tx-data)
-        (ldb/transact! conn tx-data {:worker-sync/remote? true})))))
+        (ldb/transact! conn tx-data {:rtc-tx? true})))))
 
 (declare flush-pending!)
 (declare remove-pending-txs!)
@@ -556,11 +556,7 @@
 
 (defn handle-local-tx!
   [repo {:keys [tx-data tx-meta] :as tx-report}]
-  (when (and (enabled?)
-             (seq tx-data)
-             (not (:worker-sync/remote? tx-meta))
-             (not (:rtc-download-graph? tx-meta))
-             (not (:from-disk? tx-meta)))
+  (when (and (enabled?) (seq tx-data) (not (:rtc-tx? tx-meta)))
     (enqueue-local-tx! repo tx-report)
     (when-let [client (get @worker-state/*worker-sync-clients repo)]
       (enqueue-asset-sync! repo client))))
