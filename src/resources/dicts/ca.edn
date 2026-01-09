@@ -291,7 +291,7 @@
  :linked-references/filter-includes                 "Incloure: "
  :linked-references/filter-search                   "Cercar a les pàgines vinculades"
  :notification/clear-all                            "Netejar tot"
- :on-boarding/importing-desc                        "Si estan en format JSON, EDN o Markdown Logseq pot treballar amb ells."
+ :on-boarding/importing-desc                        "Si estan en format EDN o Markdown Logseq pot treballar amb ells."
  :on-boarding/importing-main-desc                   "També pot fer això després a la aplicació."
  :on-boarding/importing-main-title                  "Importar notes existents"
  :on-boarding/importing-title                       "Tens notes que vulguis importar?"

@@ -394,7 +394,7 @@
  :linked-references/filter-heading                "Filtruj"
  :linked-references/filter-includes               "Uwzględnia: "
  :notification/clear-all                          "Wyczyść wszystkie"
- :on-boarding/importing-desc                      "Logseq może z nimi pracować jeśli są w formacie JSON, EDN lub Markdown."
+ :on-boarding/importing-desc                      "Logseq może z nimi pracować jeśli są w formacie EDN lub Markdown."
  :on-boarding/importing-main-desc                 "Możesz to zrobić później w aplikacji"
  :on-boarding/importing-main-title                "Zaimportuj notatki"
  :on-boarding/importing-title                     "Masz notatki, które chcesz zaimportować?"
