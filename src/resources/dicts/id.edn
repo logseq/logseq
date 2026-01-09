@@ -2,7 +2,7 @@
  :on-boarding/importing-main-title "Mengimpor catatan yang ada"
  :on-boarding/importing-main-desc "Anda juga dapat melakukan ini nanti di aplikasi."
  :on-boarding/importing-title "Apakah Anda sudah memiliki catatan yang ingin Anda impor?"
- :on-boarding/importing-desc "Jika ia dalam format JSON, EDN atau Markdown, Logseq dapat bekerja dengannya."
+ :on-boarding/importing-desc "Jika ia dalam format EDN atau Markdown, Logseq dapat bekerja dengannya."
  :on-boarding/main-title (fn [] ["Selamat datang di " [:strong "Logseq!"]])
  :on-boarding/main-desc "Pertama, Anda harus memilih folder di mana Logseq akan menyimpan pemikiran, ide, catatan Anda."
  :bug-report/main-title "Laporan bug"

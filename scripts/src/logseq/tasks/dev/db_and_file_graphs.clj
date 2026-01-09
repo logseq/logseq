@@ -39,8 +39,7 @@
          "frontend.worker.file"
          "frontend.fs"
          "frontend.components.file-sync"
-         "frontend.components.file-based"
-         "frontend.util.fs"]))
+         "frontend.components.file-based"]))
 
 (def block-name-db-graph-paths
   "DB graph paths with :block/name"
@@ -78,8 +77,7 @@
   ["deps/db/src/logseq/db/file_based"
    "deps/graph-parser/src/logseq/graph_parser/extract.cljc"
    "deps/graph-parser/src/logseq/graph_parser/property.cljs"
-   "src/main/frontend/fs"
-   "src/main/frontend/util/fs.cljs"])
+   "src/main/frontend/fs"])
 
 (defn- grep-many
   "Git greps a coll of patterns for given paths. Returns result from process/shell"

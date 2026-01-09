@@ -4,7 +4,7 @@
             [logseq.db.file-based.schema :as file-schema]
             [logseq.graph-parser.extract :as extract]))
 
-;; This is a copy of frontend.util.fs/multiplatform-reserved-chars for reserved chars testing
+;; This is a copy of frontend.components.repo/multiplatform-reserved-chars for reserved chars testing
 (def multiplatform-reserved-chars ":\\*\\?\"<>|\\#\\\\")
 
 ;; Stuffs should be parsable (don't crash) when users dump some random files
