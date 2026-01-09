@@ -8,7 +8,7 @@
 (defn- cors-headers []
   #js {"Access-Control-Allow-Origin" "*"
        "Access-Control-Allow-Headers" "content-type,authorization,x-amz-meta-checksum,x-amz-meta-type"
-       "Access-Control-Allow-Methods" "GET,POST,PUT,DELETE,OPTIONS"})
+       "Access-Control-Allow-Methods" "GET,POST,PUT,DELETE,OPTIONS,HEAD"})
 
 (defn json-response
   ([data] (json-response data 200))
