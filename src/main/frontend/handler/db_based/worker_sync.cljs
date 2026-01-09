@@ -6,6 +6,7 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
+            [frontend.worker.rtc.client-op :as client-op]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -110,7 +111,14 @@
                   graph (str config/db-version-prefix graph-name)]
             (p/loop [after -1           ; root addr is 0
                      first-batch? true]
-              (p/let [resp (fetch-json (str base "/sync/" graph-uuid "/snapshot/rows"
+              (p/let [pull-resp (fetch-json (str base "/sync/" graph-uuid "/pull")
+                                            {:method "GET"})
+                      remote-tx (aget pull-resp "t")
+                      _ (when-not (integer? remote-tx)
+                          (throw (ex-info "non-integer remote-tx when downloading graph"
+                                          {:graph graph-name
+                                           :remote-tx remote-tx})))
+                      resp (fetch-json (str base "/sync/" graph-uuid "/snapshot/rows"
                                             "?after=" after "&limit=" snapshot-rows-limit)
                                        {:method "GET"})
                       rows (js->clj (aget resp "rows") :keywordize-keys true)
@@ -120,7 +128,7 @@
                  (state/<invoke-db-worker :thread-api/worker-sync-import-kvs-rows
                                           graph rows first-batch?)
                  (if done?
-                   (state/<invoke-db-worker :thread-api/worker-sync-finalize-kvs-import graph)
+                   (state/<invoke-db-worker :thread-api/worker-sync-finalize-kvs-import graph remote-tx)
                    (p/recur last-addr false))))))
           (p/rejected (ex-info "worker-sync missing graph info"
                                {:type :worker-sync/invalid-graph

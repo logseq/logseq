@@ -613,12 +613,13 @@
     nil))
 
 (def-thread-api :thread-api/worker-sync-finalize-kvs-import
-  [repo]
+  [repo remote-tx]
   (p/let [^js db (get @*worker-sync-import-dbs repo)]
     (.close db)
     (swap! *worker-sync-import-dbs dissoc repo)
     ((@thread-api/*thread-apis :thread-api/create-or-open-db) repo {:close-other-db? true})
     ((@thread-api/*thread-apis :thread-api/export-db) repo)
+    (client-op/update-local-tx repo remote-tx)
     (shared-service/broadcast-to-clients! :add-repo {:repo repo})))
 
 (def-thread-api :thread-api/unsafe-unlink-db
