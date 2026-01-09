@@ -2,9 +2,22 @@
   "Normalize && denormalize eid for sync"
   (:require [datascript.core :as d]))
 
+(defn- replace-attr-retract-with-retract-entity
+  [tx-data]
+  (let [e-datoms (group-by first tx-data)]
+    (mapcat
+     (fn [[_e datoms]]
+       (if-let [d (some (fn [d]
+                          (when (and (= :block/uuid (:a d)) (false? (:added d)))
+                            d)) datoms)]  ; retract entity
+         [[:db.fn/retractEntity [:block/uuid (:v d)]]]
+         datoms))
+     e-datoms)))
+
 (defn normalize-tx-data
   [db-after db-before tx-data]
   (->> tx-data
+       replace-attr-retract-with-retract-entity
        (map
         (fn [d]
           (if (= 5 (count d))
