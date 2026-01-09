@@ -288,8 +288,7 @@
             tx-str (common/write-transit normalized-data)]
         (storage/append-tx! sql new-t tx-str created-at)
         (broadcast! self sender {:type "changed" :t new-t})
-        {:type "tx/ok"
-         :t new-t}))))
+        new-t))))
 
 (defn- handle-tx-batch! [^js self sender txs t-before]
   (let [current-t (t-now self)]
@@ -297,22 +296,13 @@
       {:type "tx/reject"
        :reason "stale"
        :t current-t}
-      (loop [idx 0]
-        (if (>= idx (count txs))
-          (let [current-t (t-now self)]
-            (broadcast! self sender {:type "changed" :t current-t})
+      (let [tx-data (mapcat protocol/transit->tx txs)]
+        (if (seq tx-data)
+          (let [new-t (apply-tx! self sender tx-data)]
             {:type "tx/batch/ok"
-             :t current-t
-             :count (count txs)})
-          (let [tx-data (protocol/transit->tx (nth txs idx))]
-            (if (sequential? tx-data)
-              (let [result (apply-tx! self sender tx-data)]
-                (if (= "tx/ok" (:type result))
-                  (recur (inc idx))
-                  (assoc result :index idx)))
-              {:type "tx/reject"
-               :reason "invalid tx"
-               :index idx})))))))
+             :t new-t})
+          {:type "tx/reject"
+           :reason "empty tx data"})))))
 
 (defn- handle-ws-message! [^js self ^js ws raw]
   (let [message (protocol/parse-message raw)]
