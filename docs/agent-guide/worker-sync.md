@@ -1,7 +1,7 @@
 # Worker-Sync Feature Agent Guide
 
 ## Purpose
-This guide helps AI agents implement and review worker-sync features consistently across the client and the Cloudflare Worker. Keep changes scoped, follow the existing flow, and document any protocol or storage changes.
+This guide helps AI agents implement and review worker-sync features consistently across the client and the Cloudflare Worker. Keep changes scoped, follow the existing flow, and document any protocol or storage changes. Keep this document accurate (file names, paths, commands, and parameters).
 
 ## Key Code Locations
 - Client config: `src/main/frontend/config.cljs`
