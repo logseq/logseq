@@ -1,6 +1,5 @@
 (ns frontend.components.page-menu
-  (:require [electron.ipc :as ipc]
-            [frontend.commands :as commands]
+  (:require [frontend.commands :as commands]
             [frontend.components.export :as export]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -13,8 +12,6 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.util.page :as page-util]
-            [logseq.common.path :as path]
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
@@ -83,8 +80,7 @@
 (defn ^:large-vars/cleanup-todo page-menu
   [page]
   (when-let [page-name (and page (db/page? page) (:block/name page))]
-    (let [repo (state/sub :git/current-repo)
-          page-title (str (:block/uuid page))
+    (let [page-title (str (:block/uuid page))
           whiteboard? (ldb/whiteboard? page)
           block? (and page (util/uuid-string? page-name) (not whiteboard?))
           contents? (= page-name "contents")
@@ -92,7 +88,6 @@
           _favorites-updated? (state/sub :favorites/updated?)
           favorited? (page-handler/favorited? page-title)
           developer-mode? (state/sub [:ui/developer-mode?])
-          file-rpath (when (util/electron?) (page-util/get-page-file-rpath page-name))
           _ (state/sub :auth/id-token)]
       (when (not block?)
         (->>
@@ -116,18 +111,6 @@
                         (:logseq.property/built-in? page))
             {:title   (t :page/delete)
              :options {:on-click #(delete-page-confirm! page)}})
-
-          ;; TODO: In the future, we'd like to extract file-related actions
-          ;; (such as open-in-finder & open-with-default-app) into a sub-menu of
-          ;; this one. However this component doesn't yet exist. PRs are welcome!
-          ;; Details: https://github.com/logseq/logseq/pull/3003#issuecomment-952820676
-          (when file-rpath
-            (let [repo-dir (config/get-repo-dir repo)
-                  file-fpath (path/path-join repo-dir file-rpath)]
-              [{:title   (t :page/open-in-finder)
-                :options {:on-click #(ipc/ipc "openFileInFolder" file-fpath)}}
-               {:title   (t :page/open-with-default-app)
-                :options {:on-click #(js/window.apis.openPath file-fpath)}}]))
 
           (when page
             {:title   (t :export-page)

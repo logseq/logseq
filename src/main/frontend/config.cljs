@@ -337,10 +337,6 @@
       (str "memory:///"
            (string/replace-first repo-url db-version-prefix "")))))
 
-(defn get-repo-fpath
-  [repo-url path]
-  (path/path-join (get-repo-dir repo-url) path))
-
 (defn get-repo-config-path
   []
   (path/path-join app-name config-file))

@@ -22,7 +22,6 @@
                        output-path
                        (merge opts {:repo (str sqlite-util/db-version-prefix db-name)
                                     :repo-config repo-config
-                                    :db-graph? true
                                     :ui/theme "dark"
                                     :ui/radix-color :cyan}))))
 

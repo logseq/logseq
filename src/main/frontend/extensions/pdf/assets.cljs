@@ -4,9 +4,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.db.conn :as conn]
             [frontend.db.model :as db-model]
-            [frontend.db.utils :as db-utils]
             [frontend.extensions.lightbox :as lightbox]
             [frontend.extensions.pdf.windows :as pdf-windows]
             [frontend.fs :as fs]
@@ -22,7 +20,6 @@
             [frontend.util.ref :as ref]
             [logseq.common.config :as common-config]
             [logseq.graph-parser.exporter :as gp-exporter]
-            [logseq.publishing.db :as publish-db]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
@@ -260,10 +257,7 @@
   (rum/local nil ::src)
   [state block]
   (let [*src (::src state)]
-    (when-let [asset-path' (and block (publish-db/get-area-block-asset-url
-                                       (conn/get-db (state/get-current-repo))
-                                       block
-                                       (db-utils/pull (:db/id (:block/page block)))))]
+    (when-let [asset-path' (and block (assets-handler/get-area-block-asset-url block))]
       (when (nil? @*src)
         (p/let [asset-path (assets-handler/<make-asset-url asset-path')]
           (reset! *src asset-path)))

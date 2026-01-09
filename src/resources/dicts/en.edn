@@ -105,8 +105,6 @@
  :page/try "Try"
  :page/delete-confirmation "Are you sure you want to delete this page?"
  :page/db-delete-confirmation "Are you sure you want to delete this page?"
- :page/open-in-finder "Open in directory"
- :page/open-with-default-app "Open with default app"
  :page/make-public "Make it public for publishing"
  :page/make-private "Make it private"
  :page/delete "Delete page"

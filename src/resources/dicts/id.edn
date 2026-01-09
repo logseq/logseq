@@ -90,8 +90,6 @@
  :page/logseq-is-having-a-problem "Logseq mengalami masalah. Untuk mencoba mengembalikannya ke keadaan yang berfungsi, silakan coba langkah-langkah aman berikut ini secara berurutan:"
  :page/step "Langkah {1}"
  :page/try "Coba"
- :page/open-in-finder "Buka dalam direktori"
- :page/open-with-default-app "Buka dengan aplikasi default"
  :page/make-public "Buat publik untuk dipublikasikan"
  :page/make-private "Buat pribadi"
  :page/delete "Hapus halaman"
