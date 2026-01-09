@@ -23,6 +23,7 @@ This guide helps AI agents implement and review worker-sync features consistentl
 - When adding persisted fields, ensure any migration or index logic is updated on both client and worker.
 
 ## Testing & Verification
+- Local dev(client+server): `bb dev:worker-sync-start` runs the worker-sync watcher, `wrangler dev`, and `yarn watch` with `ENABLE_WORKER_SYNC_LOCAL=true`
 - Unit tests: `bb dev:lint-and-test`
 - Worker-sync tests: `bb dev:worker-sync-test`
 - Single test example: `bb dev:test -v logseq.worker-sync.storage-test/foo`
