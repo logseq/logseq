@@ -104,8 +104,6 @@
  :page/try "Tentar"
  :page/delete-confirmation "Você tem certeza que quer deletar essa página?"
  :page/db-delete-confirmation "Você tem certeza que quer deletar essa página?"
- :page/open-in-finder "Abrir no diretório"
- :page/open-with-default-app "Abrir com o aplicativo padrão"
  :page/make-public "Torná-la pública para publicação"
  :page/make-private "Tornar privado"
  :page/delete "Excluir página"

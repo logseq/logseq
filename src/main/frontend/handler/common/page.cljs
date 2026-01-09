@@ -6,10 +6,8 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [dommy.core :as dom]
-            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
-            [frontend.fs :as fs]
             [frontend.handler.config :as config-handler]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.notification :as notification]
@@ -156,24 +154,18 @@
 ;; =========
 
 (defn after-page-deleted!
-  [repo page-name file-path tx-meta]
-  (let [repo-dir (config/get-repo-dir repo)]
+  [page-name tx-meta]
     ;; TODO: move favorite && unfavorite to worker too
-    (when-let [page-block-uuid (:block/uuid (db/get-page page-name))]
-      (<db-unfavorite-page! page-block-uuid))
+  (when-let [page-block-uuid (:block/uuid (db/get-page page-name))]
+    (<db-unfavorite-page! page-block-uuid))
 
-    (when (and (not= :rename-page (:real-outliner-op tx-meta))
-               (= (some-> (state/get-current-page) common-util/page-name-sanity-lc)
-                  (common-util/page-name-sanity-lc page-name)))
-      (route-handler/redirect-to-home!))
+  (when (and (not= :rename-page (:real-outliner-op tx-meta))
+             (= (some-> (state/get-current-page) common-util/page-name-sanity-lc)
+                (common-util/page-name-sanity-lc page-name)))
+    (route-handler/redirect-to-home!))
 
     ;; TODO: why need this?
-    (ui-handler/re-render-root!)
-
-    (when file-path
-      (-> (p/let [exists? (fs/file-exists? repo-dir file-path)]
-            (when exists? (fs/unlink! repo (config/get-repo-fpath repo file-path) nil)))
-          (p/catch (fn [error] (js/console.error error)))))))
+  (ui-handler/re-render-root!))
 
 (defn after-page-renamed!
   [repo {:keys [page-id old-name new-name]}]
