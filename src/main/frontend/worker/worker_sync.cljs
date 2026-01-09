@@ -137,7 +137,7 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (try
       (let [tx-data' (db-normalize/de-normalize-tx-data @conn tx-data)
-            tx-report (d/transact! conn tx-data' {:worker-sync/remote? true})
+            tx-report (ldb/transact! conn tx-data' {:worker-sync/remote? true})
             db-after (:db-after tx-report)
             asset-uuids (asset-uuids-from-tx db-after (:tx-data tx-report))]
         (when (seq asset-uuids)
@@ -163,7 +163,7 @@
                    []
                    server_values)]
       (when (seq tx-data)
-        (d/transact! conn tx-data {:worker-sync/remote? true})))))
+        (ldb/transact! conn tx-data {:worker-sync/remote? true})))))
 
 (declare flush-pending!)
 (declare remove-pending-txs!)
@@ -445,9 +445,9 @@
   (when-let [conn (client-ops-conn repo)]
     (let [tx-id (random-uuid)
           now (.now js/Date)]
-      (d/transact! conn [{:worker-sync/tx-id tx-id
-                          :worker-sync/tx tx-str
-                          :worker-sync/created-at now}])
+      (ldb/transact! conn [{:worker-sync/tx-id tx-id
+                            :worker-sync/tx tx-str
+                            :worker-sync/created-at now}])
       tx-id)))
 
 (defn- pending-txs
@@ -469,10 +469,10 @@
   [repo tx-ids]
   (when (seq tx-ids)
     (when-let [conn (client-ops-conn repo)]
-      (d/transact! conn
-                   (mapv (fn [tx-id]
-                           [:db.fn/retractEntity [:worker-sync/tx-id tx-id]])
-                         tx-ids)))))
+      (ldb/transact! conn
+                     (mapv (fn [tx-id]
+                             [:db.fn/retractEntity [:worker-sync/tx-id tx-id]])
+                           tx-ids)))))
 
 (defn- flush-pending!
   [repo client]
