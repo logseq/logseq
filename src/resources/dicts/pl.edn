@@ -35,8 +35,6 @@
  :left-side-bar/journals "Dzienniki"
  :left-side-bar/nav-favorites "Ulubione"
  :left-side-bar/nav-recent-pages "Ostatnio odwiedzane"
- :page/open-in-finder "Otwórz w przeglądarce plików"
- :page/open-with-default-app "Otwórz w domyślnej aplikacji"
  :page/make-public "Oznacz jako publiczną"
  :page/make-private "Oznacz jako prywatną"
  :page/delete "Usuń stronę"

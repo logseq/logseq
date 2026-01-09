@@ -1232,7 +1232,7 @@
     (when (and (:db/id entity) (not (ldb/built-in? entity)))
       (let [value (string/trim value)]
         ;; FIXME: somehow frontend.components.editor's will-unmount event will loop forever
-        ;; maybe we shouldn't save the block/file in "will-unmount" event?
+        ;; maybe we shouldn't save in "will-unmount" event?
         (save-block-if-changed! block value opts)))))
 
 (defn save-block!
