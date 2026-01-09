@@ -6,7 +6,6 @@
             [frontend.worker.state :as worker-state]
             [lambdaisland.glogi :as log]
             [logseq.common.path :as path]
-            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.common.normalize :as db-normalize]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -92,7 +91,6 @@
        (remove (fn [[_e a _v _t _added]]
                  (contains? #{:block/tx-id :logseq.property/created-by-ref
                               :logseq.property.embedding/hnsw-label-updated-at} a)))
-       (common-util/distinct-by-last-wins (fn [[e a v tx _added]] [e a v tx]))
        (db-normalize/normalize-tx-data db-after db-before)))
 
 (defn- parse-message [raw]
@@ -112,10 +110,6 @@
                       {:status (.-status resp)
                        :url url
                        :body data})))))
-
-(defn- update-server-t! [client t]
-  (when (number? t)
-    (reset! (:server-t client) t)))
 
 (def ^:private asset-update-attrs
   #{:logseq.property.asset/remote-metadata
@@ -151,6 +145,7 @@
           tx-data (reduce
                    (fn [acc [eid value]]
                      (let [entity (d/entity db eid)
+                           ;; FIXME: extends cardinality/many
                            current (:db/id (get entity attr))]
                        (cond
                          (nil? entity) acc
@@ -172,50 +167,43 @@
 (declare enqueue-asset-initial-download!)
 (defn- handle-message! [repo client raw]
   (when-let [message (parse-message raw)]
-    (case (:type message)
-      "hello" (do
-                (update-server-t! client (:t message))
-                (send! (:ws client) {:type "pull" :since @(:server-t client)})
-                (enqueue-asset-sync! repo client)
-                (enqueue-asset-initial-download! repo client)
-                (flush-pending! repo client))
-      "tx/batch/ok" (do
-                      (update-server-t! client (:t message))
-                      (remove-pending-txs! repo @(:inflight client))
-                      (reset! (:inflight client) [])
-                      (flush-pending! repo client))
-      "changed" (let [t (:t message)]
-                  (when (and (number? t) (< @(:server-t client) t))
-                    (send! (:ws client) {:type "pull" :since @(:server-t client)})))
-      "tx/reject" (do
-                    (when (= "stale" (:reason message))
-                      (update-server-t! client (:t message)))
-                    (if-let [index (:index message)]
-                      (let [inflight @(:inflight client)
-                            succeeded (subvec inflight 0 (min index (count inflight)))]
-                        (remove-pending-txs! repo succeeded)
-                        (when-not (= "stale" (:reason message))
-                          (let [failure (when (< index (count inflight)) [(nth inflight index)])]
-                            (remove-pending-txs! repo failure))))
-                      (when-not (= "stale" (:reason message))
-                        (remove-pending-txs! repo @(:inflight client))))
-                    (reset! (:inflight client) [])
-                    (when (= "cycle" (:reason message))
-                      (let [{:keys [attr server_values]} (sqlite-util/read-transit-str (:data message))]
-                        (reconcile-cycle! repo attr server_values)))
-                    (flush-pending! repo client))
-      "pull/ok" (do
-                  (update-server-t! client (:t message))
-                  (doseq [{:keys [tx]} (:txs message)]
+    (let [local-tx (or (client-op/get-local-tx repo) 0)
+          remote-tx (:t message)]
+      (case (:type message)
+        "hello" (do
+                  (when (> remote-tx local-tx)
+                    (send! (:ws client) {:type "pull" :since local-tx}))
+                  (enqueue-asset-sync! repo client)
+                  (enqueue-asset-initial-download! repo client)
+                  (flush-pending! repo client))
+        ;; Upload response
+        "tx/batch/ok" (do
+                        (client-op/update-local-tx repo remote-tx)
+                        (remove-pending-txs! repo @(:inflight client))
+                        (reset! (:inflight client) [])
+                        (flush-pending! repo client))
+        ;; Download response
+        ;; Merge batch txs to one tx, does it really work? We'll see
+        "pull/ok" (let [tx (mapcat (fn [data] (sqlite-util/read-transit-str (:tx data))) (:txs message))]
                     (when tx
-                      (apply-remote-tx! repo client (sqlite-util/read-transit-str tx)))))
-      "snapshot/ok" (update-server-t! client (:t message))
-      nil)))
+                      (apply-remote-tx! repo client tx)
+                      (client-op/update-local-tx repo remote-tx)
+                      (flush-pending! repo client)))
+        "changed" (when (and (number? remote-tx) (< local-tx remote-tx))
+                    (send! (:ws client) {:type "pull" :since local-tx}))
+        "tx/reject" (case (:reason message)
+                      "stale"
+                      (send! (:ws client) {:type "pull" :since local-tx})
+                      "cycle"
+                      (let [{:keys [attr server_values]} (sqlite-util/read-transit-str (:data message))]
+                        ;; FIXME: fix cycle shouldn't re-trigger uploading
+                        (reconcile-cycle! repo attr server_values))
+                      nil)
+        nil))))
 
 (defn- ensure-client-state! [repo]
   (or (get @worker-state/*worker-sync-clients repo)
       (let [client {:repo repo
-                    :server-t (atom 0)
                     :send-queue (atom (p/resolved nil))
                     :asset-queue (atom (p/resolved nil))
                     :inflight (atom [])}]
@@ -482,7 +470,7 @@
                 (when (seq txs)
                   (reset! (:inflight client) tx-ids)
                   (send! ws {:type "tx/batch"
-                             :t_before @(:server-t client)
+                             :t_before (or (client-op/get-local-tx repo) 0)
                              :txs txs}))))))))))
 
 (defn- attach-ws-handlers! [repo client ws]
