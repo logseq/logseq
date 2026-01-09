@@ -105,24 +105,11 @@
   (when (ws-open? ws)
     (.send ws (js/JSON.stringify (clj->js message)))))
 
-(defn- replace-attr-retract-with-retract-entity
-  [tx-data]
-  (let [e-datoms (group-by first tx-data)]
-    (mapcat
-     (fn [[_e datoms]]
-       (if-let [d (some (fn [d]
-                          (when (and (= :block/uuid (:a d)) (false? (:added d)))
-                            d)) datoms)]  ; retract entity
-         [[:db.fn/retractEntity [:block/uuid (:v d)]]]
-         datoms))
-     e-datoms)))
-
 (defn- normalize-tx-data [db-after db-before tx-data]
   (->> tx-data
        (remove (fn [[_e a _v _t _added]]
                  (contains? #{:block/tx-id :logseq.property/created-by-ref
                               :logseq.property.embedding/hnsw-label-updated-at} a)))
-       replace-attr-retract-with-retract-entity
        (db-normalize/normalize-tx-data db-after db-before)))
 
 (defn- parse-message [raw]
