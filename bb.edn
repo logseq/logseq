@@ -177,6 +177,10 @@
   {:doc "Run worker-sync unit tests"
    :task (clojure {:dir "deps/worker-sync"} "-M:cljs" "compile" "worker-sync-test")}
 
+  dev:worker-sync-start
+  {:doc "Start worker-sync local server + client watch processes in foreground"
+   :task logseq.tasks.dev.worker-sync/start}
+
   dev:gen-malli-kondo-config
   logseq.tasks.dev/gen-malli-kondo-config
 
