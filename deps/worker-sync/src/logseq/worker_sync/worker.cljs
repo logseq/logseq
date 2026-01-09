@@ -291,14 +291,6 @@
         {:type "tx/ok"
          :t new-t}))))
 
-(defn- handle-tx! [^js self sender tx-data t-before]
-  (let [current-t (t-now self)]
-    (if (and (number? t-before) (not= t-before current-t))
-      {:type "tx/reject"
-       :reason "stale"
-       :t current-t}
-      (apply-tx! self sender tx-data))))
-
 (defn- handle-tx-batch! [^js self sender txs t-before]
   (let [current-t (t-now self)]
     (if (and (number? t-before) (not= t-before current-t))
@@ -339,13 +331,6 @@
 
         ;; "snapshot"
         ;; (send! ws (snapshot-response self))
-
-        "tx"
-        (let [tx-data (protocol/transit->tx (:tx message))
-              t-before (parse-int (:t_before message))]
-          (if (sequential? tx-data)
-            (send! ws (handle-tx! self ws tx-data t-before))
-            (send! ws {:type "tx/reject" :reason "invalid tx"})))
 
         "tx/batch"
         (let [txs (:txs message)
@@ -423,17 +408,6 @@
               (common/sql-exec (.-sql self) "drop table if exists sync_meta")
               (storage/init-schema! (.-sql self))
               (common/json-response {:ok true}))
-
-            (and (= method "POST") (= path "/tx"))
-            (.then (common/read-json request)
-                   (fn [result]
-                     (if (nil? result)
-                       (common/bad-request "missing body")
-                       (let [tx-data (protocol/transit->tx (aget result "tx"))
-                             t-before (parse-int (aget result "t_before"))]
-                         (if (sequential? tx-data)
-                           (common/json-response (handle-tx! self nil tx-data t-before))
-                           (common/bad-request "invalid tx"))))))
 
             (and (= method "POST") (= path "/tx/batch"))
             (.then (common/read-json request)

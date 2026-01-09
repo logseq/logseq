@@ -38,7 +38,7 @@ Client -> Server:
 Server -> Client:
 
 - `{ "type": "hello", "t": 1 }`
-- `{ "type": "tx/ok", "t": 2 }`
+- `{ "type": "tx/batch/ok", "t": 2 }`
 - `{ "type": "tx/reject", "reason": "cycle", "server_values": "<transit>" }`
 - `{ "type": "pull/ok", "t": 2, "txs": [{"t": 1, "tx": "<transit>"}] }`
 - `{ "type": "snapshot/ok", "t": 2, "datoms": "<transit>" }`
