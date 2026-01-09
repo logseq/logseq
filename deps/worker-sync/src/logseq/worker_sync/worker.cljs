@@ -554,7 +554,7 @@
         method (.-method request)
         parts (graph-path-parts path)]
     (try
-      (if (= method "OPTIONS")
+      (if (contains? #{"OPTIONS" "HEAD"} method)
         (common/options-response)
         (do
           (index-init! sql)

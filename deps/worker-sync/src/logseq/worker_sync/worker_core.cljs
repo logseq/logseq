@@ -24,7 +24,7 @@
       :block/title title
       :block/name name
       :block/journal-day day
-      :block/tags #{:logseq.class/Page :logseq.class/Journal}
+      :block/tags #{:logseq.class/Journal}
       :block/created-at (common/now-ms)
       :block/updated-at (common/now-ms)}]))
 
