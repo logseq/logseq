@@ -376,7 +376,7 @@
  :left-side-bar/switch "Passa a:"
  :linked-references/filter-search "Cerca nelle pagine collegate"
  :notification/clear-all "Pulisci tutte"
- :on-boarding/importing-desc "Se sono in formato JSON, EDN o Markdown Logseq può lavorarci."
+ :on-boarding/importing-desc "Se sono in formato EDN o Markdown Logseq può lavorarci."
  :on-boarding/importing-main-desc "Puoi farlo anche dopo nell'app."
  :on-boarding/importing-main-title "Importa note esistenti"
  :on-boarding/importing-title "Hai già note che vuoi importare?"

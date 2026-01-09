@@ -389,7 +389,7 @@
     :help/title-terms "Termes"
     :help/title-usage "Utilisation"
     :left-side-bar/switch "Basculer à :"
-    :on-boarding/importing-desc "S'ils sont dans le format JSON, EDN ou Markdown, les Logs…"
+    :on-boarding/importing-desc "S'ils sont dans le format EDN ou Markdown, les Logs…"
     :on-boarding/importing-main-desc "Vous pouvez aussi faire ça plus tard dans l'appli."
     :on-boarding/importing-main-title "Importer les notes existantes"
     :on-boarding/importing-title "Avez-vous déjà des notes que vous désirez importer ?…"

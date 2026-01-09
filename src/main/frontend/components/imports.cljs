@@ -1,6 +1,7 @@
 (ns frontend.components.imports
   "Import data into Logseq."
-  (:require [cljs-time.core :as t]
+  (:require ["path" :as node-path]
+            [cljs-time.core :as t]
             [cljs.pprint :as pprint]
             [clojure.string :as string]
             [datascript.core :as d]
@@ -15,7 +16,6 @@
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.db-based.import :as db-import-handler]
-            [frontend.handler.import :as import-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
@@ -24,9 +24,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [frontend.util.fs :as fs-util]
             [goog.functions :refer [debounce]]
-            [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
@@ -40,8 +38,32 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
-;; Can't name this component as `frontend.components.import` since shadow-cljs
-;; will complain about it.
+(defn- ignored-path?
+  "Ignore path for ls-dir-files-with-handler! and reload-dir!"
+  [dir path]
+  (let [ignores ["." ".recycle" "node_modules" "logseq/bak"
+                 "logseq/version-files" "logseq/graphs-txid.edn"]]
+    (when (string? path)
+      (or
+       (some #(string/starts-with? path
+                                   (if (= dir "")
+                                     %
+                                     (str dir "/" %))) ignores)
+       (some #(string/includes? path (if (= dir "")
+                                       (str "/" % "/")
+                                       (str % "/"))) ignores)
+       (some #(string/ends-with? path %)
+             [".DS_Store" "logseq/graphs-txid.edn"])
+      ;; hidden directory or file
+       (let [relpath (node-path/relative dir path)]
+         (or (re-find #"/\.[^.]+" relpath)
+             (re-find #"^\.[^.]+" relpath)))
+       (let [path (string/lower-case path)]
+         (and
+          (not (string/blank? (node-path/extname path)))
+          (not
+           (some #(string/ends-with? path %)
+                 [".md" ".markdown" ".org" ".js" ".edn" ".css"]))))))))
 
 (defn- finished-cb
   []
@@ -54,11 +76,7 @@
 
 (defn- lsq-import-handler
   [e & {:keys [sqlite? debug-transit? graph-name db-edn?]}]
-  (let [file      (first (array-seq (.-files (.-target e))))
-        file-name (some-> (gobj/get file "name")
-                          (string/lower-case))
-        edn? (string/ends-with? file-name ".edn")
-        json? (string/ends-with? file-name ".json")]
+  (let [file      (first (array-seq (.-files (.-target e))))]
     (cond
       sqlite?
       (let [graph-name (string/trim graph-name)]
@@ -110,23 +128,6 @@
                             ;; graph input not closing
                             (shui/dialog-close-all!))))))
               (.readAsText reader file)))))
-
-      (or edn? json?)
-      (do
-        (state/set-state! :graph/importing :logseq)
-        (let [reader (js/FileReader.)
-              import-f (if edn?
-                         import-handler/import-from-edn!
-                         import-handler/import-from-json!)]
-          (set! (.-onload reader)
-                (fn [e]
-                  (let [text (.. e -target -result)]
-                    (import-f
-                     text
-                     #(do
-                        (state/set-state! :graph/importing nil)
-                        (finished-cb))))))
-          (.readAsText reader file)))
 
       :else
       (notification/show! "Please choose an EDN or a JSON file."
@@ -396,7 +397,7 @@
                                                                :path (path/trim-dir-prefix original-graph-name (.-webkitRelativePath %))))
                                                (remove #(and (not (string/starts-with? (:path %) "assets/"))
                                                          ;; TODO: Update this when supporting more formats as this aggressively excludes most formats
-                                                             (fs-util/ignored-path? original-graph-name (.-webkitRelativePath (:file-object %))))))]
+                                                             (ignored-path? original-graph-name (.-webkitRelativePath (:file-object %))))))]
                                 (if-let [config-file (first (filter #(= (:path %) "logseq/config.edn") files))]
                                   (import-file-graph files user-inputs config-file)
                                   (notification/show! "Import failed as the file 'logseq/config.edn' was not found for a Logseq graph."
@@ -444,6 +445,8 @@
    [importing?])
   [:<>])
 
+;; Can't name this component as `frontend.components.import` since shadow-cljs
+;; will complain about it.
 (rum/defc ^:large-vars/cleanup-todo importer < rum/reactive
   [{:keys [query-params]}]
   (let [importing? (state/sub :graph/importing)]

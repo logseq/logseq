@@ -10,7 +10,7 @@
  :on-boarding/importing-main-title                 "Import stávajících poznámek"
  :on-boarding/importing-main-desc                  "Tento postup můžete provést i později v aplikaci."
  :on-boarding/importing-title                      "Máte již poznámky, které chcete importovat?"
- :on-boarding/importing-desc                       "Pokud jsou ve formátu JSON, EDN nebo Markdown, Logseq s nimi dokáže pracovat."
+ :on-boarding/importing-desc                       "Pokud jsou ve formátu EDN nebo Markdown, Logseq s nimi dokáže pracovat."
  :on-boarding/main-title                           (fn [] ["Vítejte v " [:strong "Logseq!"]])
  :on-boarding/main-desc                            "Nejprve si musíte vybrat složku, do které bude Logseq ukládat vaše myšlenky, nápady a poznámky."
  :bug-report/main-title                            "Nahlášení chyby"

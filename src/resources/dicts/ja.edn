@@ -10,7 +10,7 @@
  :on-boarding/importing-main-title "既に存在するノートを読み込む"
  :on-boarding/importing-main-desc "これは後にアプリ内で行うこともできます。"
  :on-boarding/importing-title "既に持っている読み込みたいノートはありますか？"
- :on-boarding/importing-desc "JSON、EDN、Markdown形式のいずれかであればLogseqはうまく処理できます。"
+ :on-boarding/importing-desc "EDN、Markdown形式のいずれかであればLogseqはうまく処理できます。"
  :on-boarding/main-title (fn [] [[:strong "Logseq"] "へようこそ！"])
  :on-boarding/main-desc "はじめに、あなたの考えやアイデア、ノートを保存しておくためのフォルダを選択する必要があります。"
  :bug-report/main-title "バグ報告"

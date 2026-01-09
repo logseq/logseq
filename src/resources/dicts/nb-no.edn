@@ -400,7 +400,7 @@
  :graph/local-graphs "Lokale grafer:"
  :graph/remote-graphs "Fjerngrafer:"
  :left-side-bar/switch "Bytt til:"
- :on-boarding/importing-desc "Om de er i JSON, EDN eller Markdown format kan Logseq fungere med dem."
+ :on-boarding/importing-desc "Om de er i EDN eller Markdown format kan Logseq fungere med dem."
  :on-boarding/importing-main-desc "Du kan også gjøre dette senere i appen."
  :on-boarding/importing-main-title "Importer eksisterende notater"
  :on-boarding/importing-title "Har du notater fra før som du ønsker å importere?"
