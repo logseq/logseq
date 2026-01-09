@@ -305,8 +305,6 @@
  :page/logseq-is-having-a-problem                   "Logseq està tenint un problema. Per intentar tornar a un estat de treball, intenti el següent procediment en ordre:"
  :page/make-private                                 "Fer privada"
  :page/make-public                                  "Fer pública al publicar"
- :page/open-in-finder                               "Obrir ubicació del arxiu"
- :page/open-with-default-app                        "Obrir amb la aplicació preestablerta"
  :page/something-went-wrong                         "Alguna cosa ha sortit malament"
  :page/step                                         "Pas {1}"
  :page/try                                          "Intentar"

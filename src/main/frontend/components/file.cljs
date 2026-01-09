@@ -3,18 +3,15 @@
             [cljs-time.core :as t]
             [clojure.string :as string]
             [frontend.components.lazy-editor :as lazy-editor]
-            [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.db.model :as db-model]
             [frontend.fs :as fs]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [goog.object :as gobj]
             [goog.string :as gstring]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
@@ -101,33 +98,14 @@
   (let [repo-dir (config/get-repo-dir (state/get-current-repo))
         rel-path (when (string/starts-with? path repo-dir)
                    (path/trim-dir-prefix repo-dir path))
-        title (db-model/get-file-page (or path rel-path))
         file-path path
         random-id (str (common-uuid/gen-uuid))
         content (rum/react (::file-content state))]
     [:div.file {:id (str "file-edit-wrapper-" random-id)
                 :key path}
      [:h1.title
-      [:bdi (or title rel-path path)]]
-     (when title
-       [:div.text-sm.mb-4.ml-1 "Page: "
-        [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}
-                                :href (rfe/href :page {:name title})
-                                :on-click (fn [e]
-                                            (when (gobj/get e "shiftKey")
-                                              (when-let [page (db/get-page title)]
-                                                (state/sidebar-add-block!
-                                                 (state/get-current-repo)
-                                                 (:db/id page)
-                                                 :page))
-                                              (util/stop e)))}
-         title]])
+      [:bdi (or rel-path path)]]
 
-     (when (and title (not (string/starts-with? title "logseq/")))
-       [:p.text-sm.ml-1.mb-4
-        (svg/warning {:style {:width "1em"
-                              :display "inline-block"}})
-        [:span.ml-1 "Please don't remove the page's title property (you can still modify it)."]])
 
      (cond
        ;; image type

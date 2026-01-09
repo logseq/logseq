@@ -57,6 +57,13 @@
     (medley/find-first #(= name (:name (second %1)))
                        (medley/indexed alias-dirs))))
 
+(defn get-area-block-asset-url
+  "Returns asset url for an area block used by pdf assets. This lives in this ns
+  because it is used by this dep and needs to be independent from the frontend app"
+  [block]
+  (when-let [image (:logseq.property.pdf/hl-image block)]
+    (str "./assets/" (:block/uuid image) ".png")))
+
 (defn resolve-asset-real-path-url
   [repo rpath]
   (when-let [rpath (and (string? rpath)
