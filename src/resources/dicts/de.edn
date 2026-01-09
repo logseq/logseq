@@ -189,7 +189,7 @@
 
  :notification/clear-all "Alles löschen"
 
- :on-boarding/importing-desc "Logseq importiert JSON, EDN und Markdown."
+ :on-boarding/importing-desc "Logseq importiert EDN und Markdown."
  :on-boarding/importing-main-desc "Sie können dies auch später in der App tun."
  :on-boarding/importing-main-title "Vorhandene Notizen importieren"
  :on-boarding/importing-sqlite-desc "SQLite-DB-Export deines Logseq-Graphs in einen neuen DB-Graph importieren"

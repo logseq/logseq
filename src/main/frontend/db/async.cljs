@@ -154,16 +154,6 @@
   (assert (integer? eid))
   (state/<invoke-db-worker :thread-api/get-block-refs-count graph eid))
 
-(defn <get-all-referenced-blocks-uuid
-  "Get all uuids of blocks with any back link exists."
-  [graph]
-  (<q graph {:transact-db? false}
-      '[:find [?refed-uuid ...]
-        :where
-           ;; ?referee-b is block with ref towards ?refed-b
-        [?refed-b   :block/uuid ?refed-uuid]
-        [?referee-b :block/refs ?refed-b]]))
-
 (defn <get-date-scheduled-or-deadlines
   [journal-title]
   (when-let [date (date/journal-title->int journal-title)]

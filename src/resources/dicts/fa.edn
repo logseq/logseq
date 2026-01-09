@@ -10,7 +10,7 @@
  :on-boarding/importing-main-title "درون‌ریزی یادداشت‌های موجود"
  :on-boarding/importing-main-desc "این کار را می‌توانید بعدا هم انجام دهید."
  :on-boarding/importing-title "آیا یادداشت‌هایی از پیش دارید که بخواهد وارد برنامه کنید؟"
- :on-boarding/importing-desc "اگر در قالب‌های JSON، EDN یا مارک‌داون هستند، لاگ‌سیک می‌تواند با آن‌ها کار کند."
+ :on-boarding/importing-desc "اگر در قالب‌های EDN یا مارک‌داون هستند، لاگ‌سیک می‌تواند با آن‌ها کار کند."
  :on-boarding/main-title (fn [] ["به " [:strong "لاگ‌سیک"] "خوش‌آمدید!"])
  :on-boarding/main-desc "در ابتدا نیاز به انتخاب پوشه‌ای دارید که لاگ‌سیک، افکار، ایده‌ها و یادداشت‌های شما را در آن‌جا ذخیره کند."
  :help/title-usage            "استفاده"
