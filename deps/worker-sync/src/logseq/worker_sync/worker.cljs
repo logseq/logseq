@@ -446,6 +446,7 @@
                       (handle-ws-message! this ws message)
                       (catch :default e
                         (log/error :worker-sync/ws-error e)
+                        (js/console.error e)
                         (send! ws {:type "error" :message "server error"}))))
   (webSocketClose [_this _ws _code _reason]
                   (log/info :worker-sync/ws-closed true))
