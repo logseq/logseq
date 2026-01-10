@@ -22,6 +22,25 @@ This guide helps AI agents implement and review worker-sync features consistentl
 - Use existing `:worker-sync/*` keywords; add new keywords via `logseq.common.defkeywords/defkeyword`.
 - When adding persisted fields, ensure any migration or index logic is updated on both client and worker.
 
+## Client-Server Message Protocol (WebSocket)
+- Transport: WebSocket `ws(s)` to `/sync/:graph-id` (client builds URL from config and appends `?token=...` when available).
+- Encoding: JSON objects; `tx` payloads are Transit strings.
+- Client -> Server:
+  - `{"type":"hello","client":"<repo-id>"}`: initial hello; server responds with `t`.
+  - `{"type":"pull","since":<t>}`: request txs after `since` (defaults to 0).
+  - `{"type":"tx/batch","t_before":<t>,"txs":["<tx-transit>", ...]}`: upload batch.
+  - `{"type":"ping"}`: optional keepalive; server replies `pong`.
+- Server -> Client:
+  - `{"type":"hello","t":<t>}`: server hello with current t.
+  - `{"type":"pull/ok","t":<t>,"txs":[{"t":<t>,"tx":"<tx-transit>"}...]}`: pull response.
+  - `{"type":"tx/batch/ok","t":<t>}`: batch accepted.
+  - `{"type":"changed","t":<t>}`: broadcast that server state advanced; client should `pull`.
+  - `{"type":"tx/reject","reason":"stale","t":<t>}`: client tx based on stale t.
+  - `{"type":"tx/reject","reason":"cycle","data":"<transit {:attr <kw> :server_values ...}>"}`: cycle detected with server values.
+  - `{"type":"tx/reject","reason":"empty tx data"|"invalid tx"}`: invalid batch.
+  - `{"type":"pong"}`: keepalive response.
+  - `{"type":"error","message":"..."}`: invalid/unknown message.
+
 ## Testing & Verification
 - Local dev(client+server): `bb dev:worker-sync-start` runs the worker-sync watcher, `wrangler dev`, and `yarn watch` with `ENABLE_WORKER_SYNC_LOCAL=true`
 - Unit tests: `bb dev:lint-and-test`
