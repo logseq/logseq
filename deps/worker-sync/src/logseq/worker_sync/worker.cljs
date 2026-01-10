@@ -279,8 +279,7 @@
       (do
         (prn :debug "cycle detected: " cycle-info)
         (cycle-reject-response db order-fixed cycle-info))
-      ;; TODO: replace d/transact! with ldb/transact! to enable db validation
-      (let [{:keys [tx-data db-before db-after]} (d/transact! conn order-fixed)
+      (let [{:keys [tx-data db-before db-after]} (ldb/transact! conn order-fixed)
             normalized-data (db-normalize/normalize-tx-data db-after db-before tx-data)
             new-t (storage/next-t! sql)
             created-at (common/now-ms)
