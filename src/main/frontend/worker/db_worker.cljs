@@ -34,7 +34,7 @@
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.thread-atom]
-            [frontend.worker.worker-sync :as worker-sync]
+            [frontend.worker.db-sync :as db-sync]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [lambdaisland.glogi.console :as glogi-console]
@@ -68,7 +68,7 @@
 (defonce *client-ops-conns worker-state/*client-ops-conns)
 (defonce *opfs-pools worker-state/*opfs-pools)
 (defonce *publishing? (atom false))
-(defonce *worker-sync-import-dbs (atom {}))
+(defonce *db-sync-import-dbs (atom {}))
 
 (defn- check-worker-scope!
   []
@@ -135,12 +135,12 @@
   (.exec db "PRAGMA locking_mode=exclusive")
   (.exec db "PRAGMA journal_mode=WAL"))
 
-(defn- ensure-worker-sync-import-db!
+(defn- ensure-db-sync-import-db!
   [repo reset?]
   (p/let [^js pool (<get-opfs-pool repo)
-          ^js db (or (get @*worker-sync-import-dbs repo)
+          ^js db (or (get @*db-sync-import-dbs repo)
                      (let [^js db (new (.-OpfsSAHPoolDb pool) repo-path)]
-                       (swap! *worker-sync-import-dbs assoc repo db)
+                       (swap! *db-sync-import-dbs assoc repo db)
                        db))]
     (enable-sqlite-wal-mode! db)
     (common-sqlite/create-kvs-table! db)
@@ -224,7 +224,7 @@
    ((@thread-api/*thread-apis :thread-api/create-or-open-db) repo
                                                              {:close-other-db? false
                                                               :datoms datoms
-                                                              :worker-sync-download-graph? true})
+                                                              :db-sync-download-graph? true})
    ((@thread-api/*thread-apis :thread-api/export-db) repo)
    (shared-service/broadcast-to-clients! :add-repo {:repo repo})))
 
@@ -323,7 +323,7 @@
                 (client-op/add-ops! repo client-ops))))
 
           (when initial-tx-report
-            (worker-sync/handle-local-tx! repo initial-tx-report))
+            (db-sync/handle-local-tx! repo initial-tx-report))
 
           (db-listener/listen-db-changes! repo (get @*datascript-conns repo)))))))
 
@@ -412,22 +412,22 @@
   (reset! worker-state/*rtc-ws-url rtc-ws-url)
   (init-sqlite-module!))
 
-(def-thread-api :thread-api/set-worker-sync-config
+(def-thread-api :thread-api/set-db-sync-config
   [config]
-  (reset! worker-state/*worker-sync-config config)
+  (reset! worker-state/*db-sync-config config)
   nil)
 
-(def-thread-api :thread-api/worker-sync-start
+(def-thread-api :thread-api/db-sync-start
   [repo]
-  (worker-sync/start! repo))
+  (db-sync/start! repo))
 
-(def-thread-api :thread-api/worker-sync-stop
+(def-thread-api :thread-api/db-sync-stop
   []
-  (worker-sync/stop!))
+  (db-sync/stop!))
 
-(def-thread-api :thread-api/worker-sync-upload-graph
+(def-thread-api :thread-api/db-sync-upload-graph
   [repo]
-  (worker-sync/upload-graph! repo))
+  (db-sync/upload-graph! repo))
 
 (def-thread-api :thread-api/set-infer-worker-proxy
   [infer-worker-proxy]
@@ -597,25 +597,25 @@
   (reset-db! repo db-transit)
   nil)
 
-(def-thread-api :thread-api/worker-sync-reset-from-datoms
+(def-thread-api :thread-api/db-sync-reset-from-datoms
   [repo datoms]
   (reset-db-from-datoms! repo datoms)
   nil)
 
-(def-thread-api :thread-api/worker-sync-import-kvs-rows
+(def-thread-api :thread-api/db-sync-import-kvs-rows
   [repo rows reset?]
   (p/let [_ (when reset?
               (close-db! repo))
-          db (ensure-worker-sync-import-db! repo reset?)]
+          db (ensure-db-sync-import-db! repo reset?)]
     (when (seq rows)
       (upsert-addr-content! db (rows->sqlite-binds rows)))
     nil))
 
-(def-thread-api :thread-api/worker-sync-finalize-kvs-import
+(def-thread-api :thread-api/db-sync-finalize-kvs-import
   [repo remote-tx]
-  (p/let [^js db (get @*worker-sync-import-dbs repo)]
+  (p/let [^js db (get @*db-sync-import-dbs repo)]
     (.close db)
-    (swap! *worker-sync-import-dbs dissoc repo)
+    (swap! *db-sync-import-dbs dissoc repo)
     ((@thread-api/*thread-apis :thread-api/create-or-open-db) repo {:close-other-db? true})
     ((@thread-api/*thread-apis :thread-api/export-db) repo)
     (client-op/update-local-tx repo remote-tx)

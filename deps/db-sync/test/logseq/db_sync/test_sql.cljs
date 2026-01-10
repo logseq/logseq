@@ -1,4 +1,4 @@
-(ns logseq.worker-sync.test-sql
+(ns logseq.db-sync.test-sql
   (:require [clojure.string :as string]))
 
 (defn- js-row [m]
