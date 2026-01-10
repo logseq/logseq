@@ -6,9 +6,9 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
-            [frontend.worker.rtc.client-op :as client-op]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
+            [logseq.db-sync.malli-schema :as db-sync-schema]
             [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
 
@@ -40,17 +40,56 @@
     (assoc opts :headers (merge (or (:headers opts) {}) auth))
     opts))
 
+(declare coerce-http-response)
+
 (defn- fetch-json
-  [url opts]
+  [url opts {:keys [response-schema error-schema] :or {error-schema :error}}]
   (p/let [resp (js/fetch url (clj->js (with-auth-headers opts)))
           text (.text resp)
           data (when (seq text) (js/JSON.parse text))]
     (if (.-ok resp)
-      data
-      (throw (ex-info "db-sync request failed"
-                      {:status (.-status resp)
-                       :url url
-                       :body data})))))
+      (let [body (js->clj data :keywordize-keys true)
+            body (if response-schema
+                   (coerce-http-response response-schema body)
+                   body)]
+        (if (or (nil? response-schema) body)
+          body
+          (throw (ex-info "db-sync invalid response"
+                          {:status (.-status resp)
+                           :url url
+                           :body body}))))
+      (let [body (when data (js->clj data :keywordize-keys true))
+            body (if error-schema
+                   (coerce-http-response error-schema body)
+                   body)]
+        (throw (ex-info "db-sync request failed"
+                        {:status (.-status resp)
+                         :url url
+                         :body body}))))))
+
+(def ^:private invalid-coerce ::invalid-coerce)
+
+(defn- coerce
+  [coercer value context]
+  (try
+    (coercer value)
+    (catch :default e
+      (log/error :db-sync/malli-coerce-failed (merge context {:error e :value value}))
+      invalid-coerce)))
+
+(defn- coerce-http-request [schema-key body]
+  (if-let [coercer (get db-sync-schema/http-request-coercers schema-key)]
+    (let [coerced (coerce coercer body {:schema schema-key :dir :request})]
+      (when-not (= coerced invalid-coerce)
+        coerced))
+    body))
+
+(defn- coerce-http-response [schema-key body]
+  (if-let [coercer (get db-sync-schema/http-response-coercers schema-key)]
+    (let [coerced (coerce coercer body {:schema schema-key :dir :response})]
+      (when-not (= coerced invalid-coerce)
+        coerced))
+    body))
 
 (defn <rtc-start!
   [repo & {:keys [_stop-before-start?] :as _opts}]
@@ -72,13 +111,18 @@
         base (http-base)]
     (if base
       (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
-              result (fetch-json (str base "/graphs")
-                                 {:method "POST"
-                                  :headers {"content-type" "application/json"}
-                                  :body (js/JSON.stringify
-                                         #js {:graph_name (string/replace repo config/db-version-prefix "")
-                                              :schema_version schema-version})})
-              graph-id (aget result "graph_id")]
+              body (coerce-http-request :graphs/create
+                                        {:graph_name (string/replace repo config/db-version-prefix "")
+                                         :schema_version schema-version})
+              result (if (nil? body)
+                       (p/rejected (ex-info "db-sync invalid create-graph body"
+                                            {:repo repo}))
+                       (fetch-json (str base "/graphs")
+                                   {:method "POST"
+                                    :headers {"content-type" "application/json"}
+                                    :body (js/JSON.stringify (clj->js body))}
+                                   {:response-schema :graphs/create}))
+              graph-id (:graph_id result)]
         (if graph-id
           (p/do!
            (ldb/transact! repo [(sqlite-util/kv :logseq.kv/db-type "db")
@@ -96,7 +140,9 @@
   (let [base (http-base)]
     (if (and graph-uuid base)
       (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)]
-        (fetch-json (str base "/graphs/" graph-uuid) {:method "DELETE"}))
+        (fetch-json (str base "/graphs/" graph-uuid)
+                    {:method "DELETE"}
+                    {:response-schema :graphs/delete}))
       (p/rejected (ex-info "db-sync missing graph id"
                            {:type :db-sync/invalid-graph
                             :graph-uuid graph-uuid
@@ -109,21 +155,23 @@
     (-> (if (and graph-uuid base)
           (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
                   graph (str config/db-version-prefix graph-name)]
-            (p/loop [after -1           ; root addr is 0
+              (p/loop [after -1           ; root addr is 0
                      first-batch? true]
               (p/let [pull-resp (fetch-json (str base "/sync/" graph-uuid "/pull")
-                                            {:method "GET"})
-                      remote-tx (aget pull-resp "t")
+                                            {:method "GET"}
+                                            {:response-schema :sync/pull})
+                      remote-tx (:t pull-resp)
                       _ (when-not (integer? remote-tx)
                           (throw (ex-info "non-integer remote-tx when downloading graph"
                                           {:graph graph-name
                                            :remote-tx remote-tx})))
                       resp (fetch-json (str base "/sync/" graph-uuid "/snapshot/rows"
                                             "?after=" after "&limit=" snapshot-rows-limit)
-                                       {:method "GET"})
-                      rows (js->clj (aget resp "rows") :keywordize-keys true)
-                      done? (true? (aget resp "done"))
-                      last-addr (or (aget resp "last_addr") after)]
+                                       {:method "GET"}
+                                       {:response-schema :sync/snapshot-rows})
+                      rows (:rows resp)
+                      done? (true? (:done resp))
+                      last-addr (or (:last_addr resp) after)]
                 (p/do!
                  (state/<invoke-db-worker :thread-api/db-sync-import-kvs-rows
                                           graph rows first-batch?)
@@ -147,8 +195,10 @@
       (p/resolved [])
       (-> (p/let [_ (state/set-state! :rtc/loading-graphs? true)
                   _ (js/Promise. user-handler/task--ensure-id&access-token)
-                  resp (fetch-json (str base "/graphs") {:method "GET"})
-                  graphs (js->clj (aget resp "graphs") :keywordize-keys true)
+                  resp (fetch-json (str base "/graphs")
+                                   {:method "GET"}
+                                   {:response-schema :graphs/list})
+                  graphs (:graphs resp)
                   result (mapv (fn [graph]
                                  (merge
                                   {:url (str config/db-version-prefix (:graph_name graph))
