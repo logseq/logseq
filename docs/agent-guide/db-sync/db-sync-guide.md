@@ -9,7 +9,6 @@ This guide helps AI agents implement and review db-sync features consistently ac
 - Worker thread API: `src/main/frontend/worker/db_worker.cljs`
 - Handler entry points: `src/main/frontend/handler/db_based/db_sync.cljs`
 - Server worker code: `deps/db-sync/src/logseq/db_sync/`
-- Worker build/test notes: `deps/db-sync/worker/README.md`
 
 ## Implementation Workflow
 1) **Define behavior**: state the new capability, expected inputs/outputs, and compatibility requirements.
@@ -22,27 +21,11 @@ This guide helps AI agents implement and review db-sync features consistently ac
 - Use existing `:db-sync/*` keywords; add new keywords via `logseq.common.defkeywords/defkeyword`.
 - When adding persisted fields, ensure any migration or index logic is updated on both client and worker.
 
-## Client-Server Message Protocol (WebSocket)
-- Transport: WebSocket `ws(s)` to `/sync/:graph-id` (client builds URL from config and appends `?token=...` when available).
-- Encoding: JSON objects; `tx` payloads are Transit strings.
-- Client -> Server:
-  - `{"type":"hello","client":"<repo-id>"}`: initial hello; server responds with `t`.
-  - `{"type":"pull","since":<t>}`: request txs after `since` (defaults to 0).
-  - `{"type":"tx/batch","t_before":<t>,"txs":["<tx-transit>", ...]}`: upload batch.
-  - `{"type":"ping"}`: optional keepalive; server replies `pong`.
-- Server -> Client:
-  - `{"type":"hello","t":<t>}`: server hello with current t.
-  - `{"type":"pull/ok","t":<t>,"txs":[{"t":<t>,"tx":"<tx-transit>"}...]}`: pull response.
-  - `{"type":"tx/batch/ok","t":<t>}`: batch accepted.
-  - `{"type":"changed","t":<t>}`: broadcast that server state advanced; client should `pull`.
-  - `{"type":"tx/reject","reason":"stale","t":<t>}`: client tx based on stale t.
-  - `{"type":"tx/reject","reason":"cycle","data":"<transit {:attr <kw> :server_values ...}>"}`: cycle detected with server values.
-  - `{"type":"tx/reject","reason":"empty tx data"|"invalid tx"}`: invalid batch.
-  - `{"type":"pong"}`: keepalive response.
-  - `{"type":"error","message":"..."}`: invalid/unknown message.
-
 ## HTTP API (Bootstrap + Assets)
 - HTTP endpoints backfill initial graph data, snapshots, and assets.
+- See `docs/agent-guide/db-sync/protocol.md` for request/response shapes.
+
+## Client-Server Message Protocol (WebSocket)
 - See `docs/agent-guide/db-sync/protocol.md` for request/response shapes.
 
 ## Testing & Verification
