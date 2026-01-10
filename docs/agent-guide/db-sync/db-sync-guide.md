@@ -41,6 +41,10 @@ This guide helps AI agents implement and review db-sync features consistently ac
   - `{"type":"pong"}`: keepalive response.
   - `{"type":"error","message":"..."}`: invalid/unknown message.
 
+## HTTP API (Bootstrap + Assets)
+- HTTP endpoints backfill initial graph data, snapshots, and assets.
+- See `docs/agent-guide/db-sync/protocol.md` for request/response shapes.
+
 ## Testing & Verification
 - Local dev(client+server): `bb dev:db-sync-start` runs the db-sync watcher, `wrangler dev`, and `yarn watch` with `ENABLE_DB_SYNC_LOCAL=true`
 - Unit tests: `bb dev:lint-and-test`
