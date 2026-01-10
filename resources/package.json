@@ -24,7 +24,6 @@
   "dependencies": {
     "@fastify/cors": "11.0.1",
     "@modelcontextprotocol/sdk": "^1.17.5",
-    "@sentry/electron": "2.5.1",
     "abort-controller": "3.0.0",
     "command-exists": "1.2.9",
     "diff-match-patch": "1.0.5",
@@ -39,7 +38,6 @@
     "https-proxy-agent": "7.0.2",
     "node-fetch": "2.6.7",
     "open": "7.3.1",
-    "posthog-js": "1.10.2",
     "semver": "7.5.2",
     "socks-proxy-agent": "8.0.2",
     "update-electron-app": "2.0.1",

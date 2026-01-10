@@ -131,9 +131,6 @@ jobs:
 
       - name: Compile CLJS
         run: yarn install && gulp build && yarn cljs:release-electron && yarn webpack-app-build
-        env:
-          LOGSEQ_SENTRY_DSN: ${{ secrets.LOGSEQ_SENTRY_DSN }}
-          LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
 
       - name: Update APP Version
         run: |
@@ -151,19 +148,6 @@ jobs:
       - name: List Files
         run: ls -al
         working-directory: ./static
-
-      - name: Upload Sentry Sourcemaps (beta only)
-        # if: ${{ github.repository == 'logseq/logseq' && github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
-        run: |
-          curl -sL https://sentry.io/get-cli/ | SENTRY_CLI_VERSION=2.58.4 bash
-          release_name="logseq@${{ steps.ref.outputs.version }}"
-          sentry-cli releases new "${release_name}"
-          sentry-cli releases files "${release_name}" upload-sourcemaps --ext map --ext js ./static/js --url-prefix '~/static/js'
-          sentry-cli releases finalize "${release_name}"
-        env:
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          SENTRY_ORG: logseq
-          SENTRY_PROJECT: logseq
 
       - name: Cache Static File
         uses: actions/upload-artifact@v4

@@ -64,9 +64,6 @@ jobs:
 
           rm ./public/js/*.map
 
-        env:
-          LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
-
       - name: Publish to Cloudflare Pages
         uses: cloudflare/pages-action@1
         with:

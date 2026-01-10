@@ -39,23 +39,16 @@
    :loaded (fn [_] (register))})
 
 (defn init []
-  (when (and (not config/dev?) (not-empty POSTHOG-TOKEN))
-    (posthog/init POSTHOG-TOKEN (clj->js config))))
+  ;; Analytics disabled - PostHog initialization is a no-op
+  nil)
 
 (defn opt-out [opt-out?]
-  (if opt-out?
-    (posthog/opt_out_capturing)
-    (do
-      (init)
-      (posthog/opt_in_capturing))))
+  ;; Analytics disabled - PostHog opt-out is a no-op
+  nil)
 
 (defn capture [id data]
-  (try
-    (posthog/capture (str id) (bean/->js data))
-    (catch :default e
-      (js/console.error e)
-      ;; opt out or network issues
-      nil)))
+  ;; Analytics disabled - PostHog capture is a no-op
+  nil)
 
 (comment
   (posthog/debug))

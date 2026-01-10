@@ -60,9 +60,6 @@ jobs:
           rsync -avz --exclude node_modules --exclude android --exclude ios --exclude mobile ./static/ ./public/
           ls -lR ./public && mkdir r2 && mv ./public/js/main.js.map ./r2/db-test.main.js.map
           sed -i 's/=main.js.map/=https:\/\/assets.logseq.io\/db-test.main.js.map/g' ./public/js/main.js
-        env:
-          LOGSEQ_SENTRY_DSN: ${{ secrets.LOGSEQ_SENTRY_DSN }}
-          LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
 
       - name: Upload to R2
         uses: ryand56/r2-upload-action@latest

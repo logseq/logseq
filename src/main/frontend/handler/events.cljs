@@ -143,20 +143,12 @@
   (repo-handler/graph-ready! repo))
 
 (defmethod handle :instrument [[_ {:keys [type payload] :as opts}]]
-  (when-not (empty? (dissoc opts :type :payload))
-    (js/console.error "instrument data-map should only contains [:type :payload]"))
-  (posthog/capture type payload))
+  ;; Analytics disabled - instrumentation event is a no-op
+  nil)
 
 (defmethod handle :capture-error [[_ {:keys [error payload extra]}]]
-  (let [payload (merge
-                 {:schema-version (str db-schema/version)
-                  :db-schema-version (when-let [db (db/get-db)]
-                                       (str (:kv/value (db/entity db :logseq.kv/schema-version))))
-                  :db-based true}
-                 payload)]
-    (Sentry/captureException error
-                             (bean/->js {:tags payload
-                                         :extra extra}))))
+  ;; Analytics disabled - error capture is a no-op
+  nil)
 
 (defmethod handle :exec-plugin-cmd [[_ {:keys [pid cmd action]}]]
   (commands/exec-plugin-simple-command! pid cmd action))

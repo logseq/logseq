@@ -486,13 +486,7 @@
             (let [value (not enable-all-pages-public?)]
               (config-handler/set-config! :publishing/all-pages-public? value)))))
 
-(defn usage-diagnostics-row [t instrument-disabled?]
-  (toggle "usage-diagnostics"
-          (t :settings-page/disable-sentry)
-          (not instrument-disabled?)
-          (fn [] (instrument/disable-instrument
-                  (not instrument-disabled?)))
-          [:span.text-sm.opacity-50 (t :settings-page/disable-sentry-desc)]))
+; Analytics disabled - usage-diagnostics-row removed
 
 ;; (defn clear-cache-row [t]
 ;;   (row-with-button-action {:left-label   (t :settings-page/clear-cache)
@@ -666,7 +660,6 @@
         https-agent-opts (state/sub [:electron/user-cfgs :settings/agent])]
     [:div.panel-wrap.is-advanced
      (when (and (or util/mac? util/win32?) (util/electron?)) (app-auto-update-row t))
-     (usage-diagnostics-row t instrument-disabled?)
      (when-not (mobile-util/native-platform?) (developer-mode-row t developer-mode?))
      (when (util/electron?) (https-user-agent-row https-agent-opts))
      (when (util/electron?) (auto-chmod-row t))

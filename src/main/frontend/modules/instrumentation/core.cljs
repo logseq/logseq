@@ -6,13 +6,9 @@
 
 (defn init
   []
-  (when-not (:instrument/disabled? @state/state)
-    (posthog/init)
-    (sentry/init)))
+  ;; Analytics disabled - instrumentation initialization is a no-op
+  nil)
 
 (defn disable-instrument [disable?]
-  (state/set-state! :instrument/disabled? disable?)
-  (storage/set "instrument-disabled" disable?)
-  (posthog/opt-out disable?)
-  (when-not disable?
-    (sentry/init)))
+  ;; Analytics disabled - instrumentation disable is a no-op
+  nil)
