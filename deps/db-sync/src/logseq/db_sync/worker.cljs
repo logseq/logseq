@@ -1,4 +1,4 @@
-(ns logseq.worker-sync.worker
+(ns logseq.db-sync.worker
   (:require ["cloudflare:workers" :refer [DurableObject]]
             [clojure.string :as string]
             [datascript.core :as d]
@@ -7,11 +7,11 @@
             [logseq.common.authorization :as authorization]
             [logseq.db :as ldb]
             [logseq.db.common.normalize :as db-normalize]
-            [logseq.worker-sync.common :as common :refer [cors-headers]]
-            [logseq.worker-sync.cycle :as cycle]
-            [logseq.worker-sync.protocol :as protocol]
-            [logseq.worker-sync.storage :as storage]
-            [logseq.worker-sync.worker-core :as worker-core]
+            [logseq.db-sync.common :as common :refer [cors-headers]]
+            [logseq.db-sync.cycle :as cycle]
+            [logseq.db-sync.protocol :as protocol]
+            [logseq.db-sync.storage :as storage]
+            [logseq.db-sync.worker-core :as worker-core]
             [promesa.core :as p]
             [shadow.cljs.modern :refer (defclass)]))
 
@@ -350,7 +350,7 @@
             (if (instance? js/Promise resp)
               (.catch resp
                       (fn [e]
-                        (log/error :worker-sync/http-error {:error e})
+                        (log/error :db-sync/http-error {:error e})
                         (common/json-response {:error "server error"} 500)))
               resp))]
     (try
@@ -421,7 +421,7 @@
             :else
             (common/not-found))))
       (catch :default e
-        (log/error :worker-sync/http-error {:error e})
+        (log/error :db-sync/http-error {:error e})
         (common/json-response {:error "server error"} 500)))))
 
 (defclass SyncDO
@@ -443,13 +443,13 @@
                     (try
                       (handle-ws-message! this ws message)
                       (catch :default e
-                        (log/error :worker-sync/ws-error e)
+                        (log/error :db-sync/ws-error e)
                         (js/console.error e)
                         (send! ws {:type "error" :message "server error"}))))
   (webSocketClose [_this _ws _code _reason]
-                  (log/info :worker-sync/ws-closed true))
+                  (log/info :db-sync/ws-closed true))
   (webSocketError [_this _ws error]
-                  (log/error :worker-sync/ws-error {:error error})))
+                  (log/error :db-sync/ws-error {:error error})))
 
 (defn- index-init! [sql]
   (common/sql-exec sql
@@ -595,7 +595,7 @@
               :else
               (common/not-found)))))
       (catch :default error
-        (log/error :worker-sync/index-error error)
+        (log/error :db-sync/index-error error)
         (common/json-response {:error "server error"} 500)))))
 
 (defclass SyncIndexDO

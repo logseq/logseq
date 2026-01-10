@@ -1,4 +1,4 @@
-(ns logseq.worker-sync.test-runner
+(ns logseq.db-sync.test-runner
   (:require [cljs.test :as ct]
             [shadow.test :as st]
             [shadow.test.env :as env]))

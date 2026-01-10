@@ -45,7 +45,7 @@
                           frontend.config/ENABLE-FILE-SYNC-PRODUCTION #shadow/env ["ENABLE_FILE_SYNC_PRODUCTION" :as :bool :default true]
                           frontend.config/ENABLE-RTC-SYNC-PRODUCTION #shadow/env ["ENABLE_RTC_SYNC_PRODUCTION" :as :bool :default true]
 
-                          frontend.config/ENABLE-WORKER-SYNC-LOCAL #shadow/env ["ENABLE_WORKER_SYNC_LOCAL" :as :bool :default false]
+                          frontend.config/ENABLE-DB-SYNC-LOCAL #shadow/env ["ENABLE_DB_SYNC_LOCAL" :as :bool :default false]
                           frontend.config/REVISION #shadow/env ["LOGSEQ_REVISION" :default "dev"]} ;; set by git-revision-hook
 
         :devtools {:before-load frontend.core/stop          ;; before live-reloading any code call this function
@@ -149,7 +149,7 @@
             frontend.config/ENABLE-FILE-SYNC-PRODUCTION #shadow/env ["ENABLE_FILE_SYNC_PRODUCTION" :as :bool :default true]
             frontend.config/ENABLE-RTC-SYNC-PRODUCTION #shadow/env ["ENABLE_RTC_SYNC_PRODUCTION" :as :bool :default true]
 
-            frontend.config/ENABLE-WORKER-SYNC-LOCAL #shadow/env ["ENABLE_WORKER_SYNC_LOCAL" :as :bool :default false]
+            frontend.config/ENABLE-DB-SYNC-LOCAL #shadow/env ["ENABLE_DB_SYNC_LOCAL" :as :bool :default false]
             frontend.config/REVISION #shadow/env ["LOGSEQ_REVISION" :default "dev"]}
 
            :devtools {:before-load mobile.core/stop!          ;; before live-reloading any code call this function
