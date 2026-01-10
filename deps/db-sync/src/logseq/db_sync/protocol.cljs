@@ -1,5 +1,5 @@
-(ns logseq.worker-sync.protocol
-  (:require [logseq.worker-sync.common :as common]))
+(ns logseq.db-sync.protocol
+  (:require [logseq.db-sync.common :as common]))
 
 (defn parse-message [raw]
   (try

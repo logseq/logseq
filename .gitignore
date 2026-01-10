@@ -70,9 +70,9 @@ deps/shui/.clj-kondo
 deps/publish/worker/.wrangler
 deps/publish/worker/dist
 deps/publish/worker/.env*
-deps/worker-sync/worker/.wrangler
-deps/worker-sync/worker/dist
-deps/worker-sync/worker/.env*
+deps/db-sync/worker/.wrangler
+deps/db-sync/worker/dist
+deps/db-sync/worker/.env*
 
 
 tx-log*

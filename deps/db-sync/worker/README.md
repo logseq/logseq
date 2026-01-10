@@ -47,9 +47,9 @@ Server -> Client:
 ### Notes
 
 - The sync protocol is intentionally minimal for testing.
-- For local testing, run `wrangler dev` and use `deps/worker-sync/worker/scripts/dev_test.sh`.
-- For WebSocket testing, run `node deps/worker-sync/worker/scripts/ws_test.js`.
+- For local testing, run `wrangler dev` and use `deps/db-sync/worker/scripts/dev_test.sh`.
+- For WebSocket testing, run `node deps/db-sync/worker/scripts/ws_test.js`.
 - If you switch schema versions, clear local DO state.
-- Build the worker bundle with `clojure -M:cljs release worker-sync`.
-- For dev, run `clojure -M:cljs watch worker-sync` in one terminal and
+- Build the worker bundle with `clojure -M:cljs release db-sync`.
+- For dev, run `clojure -M:cljs watch db-sync` in one terminal and
   `wrangler dev` in another.

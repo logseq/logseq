@@ -1,11 +1,11 @@
-(ns logseq.worker-sync.worker-core
+(ns logseq.db-sync.worker-core
   (:require [datascript.core :as d]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time]
             [logseq.common.uuid :as common-uuid]
             [logseq.db.common.order :as db-order]
-            [logseq.worker-sync.common :as common]))
+            [logseq.db-sync.common :as common]))
 
 (defn- journal-page-info []
   (let [now (common/now-ms)

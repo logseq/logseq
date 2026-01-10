@@ -1,12 +1,12 @@
 {
-  "name": "@logseq/worker-sync",
+  "name": "@logseq/db-sync",
   "version": "1.0.0",
   "private": true,
   "scripts": {
     "dev": "cd ./worker && npx wrangler dev",
-    "watch": "clojure -M:cljs watch worker-sync",
-    "release": "clojure -M:cljs release worker-sync",
-    "test": "clojure -M:cljs compile worker-sync-test",
+    "watch": "clojure -M:cljs watch db-sync",
+    "release": "clojure -M:cljs release db-sync",
+    "test": "clojure -M:cljs compile db-sync-test",
     "clean": "rm -rf ./worker/dist/",
     "deploy": "yarn clean && yarn release && cd ./worker && wrangler deploy",
     "deploy-staging": "yarn clean && yarn release && cd ./worker && wrangler deploy --env staging"

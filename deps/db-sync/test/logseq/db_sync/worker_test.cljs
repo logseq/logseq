@@ -1,12 +1,12 @@
-(ns logseq.worker-sync.worker-test
+(ns logseq.db-sync.worker-test
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [logseq.common.util.date-time :as date-time]
             [logseq.common.uuid :as common-uuid]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.schema :as db-schema]
-            [logseq.worker-sync.common :as common]
-            [logseq.worker-sync.worker-core :as worker-core]))
+            [logseq.db-sync.common :as common]
+            [logseq.db-sync.worker-core :as worker-core]))
 
 (defn- new-conn []
   (d/create-conn db-schema/schema))

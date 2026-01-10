@@ -1,10 +1,10 @@
-(ns logseq.worker-sync.storage
+(ns logseq.db-sync.storage
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [datascript.storage :refer [IStorage]]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.frontend.schema :as db-schema]
-            [logseq.worker-sync.common :as common]))
+            [logseq.db-sync.common :as common]))
 
 (defn init-schema! [sql]
   (common/sql-exec sql "create table if not exists kvs (addr INTEGER primary key, content TEXT, addresses JSON)")

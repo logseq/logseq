@@ -1,7 +1,7 @@
-(ns logseq.worker-sync.storage-test
+(ns logseq.db-sync.storage-test
   (:require [cljs.test :refer [deftest is]]
-            [logseq.worker-sync.storage :as storage]
-            [logseq.worker-sync.test-sql :as test-sql]))
+            [logseq.db-sync.storage :as storage]
+            [logseq.db-sync.test-sql :as test-sql]))
 
 (deftest t-counter-test
   (let [sql (test-sql/make-sql)]

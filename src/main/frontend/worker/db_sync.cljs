@@ -1,5 +1,5 @@
-(ns frontend.worker.worker-sync
-  "Simple worker-sync client based on promesa + WebSocket."
+(ns frontend.worker.db-sync
+  "Simple db-sync client based on promesa + WebSocket."
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [frontend.worker.rtc.client-op :as client-op]
@@ -13,15 +13,15 @@
 
 (defn- enabled?
   []
-  (true? (:enabled? @worker-state/*worker-sync-config)))
+  (true? (:enabled? @worker-state/*db-sync-config)))
 
 (defn- ws-base-url
   []
-  (:ws-url @worker-state/*worker-sync-config))
+  (:ws-url @worker-state/*db-sync-config))
 
 (defn- http-base-url
   []
-  (or (:http-base @worker-state/*worker-sync-config)
+  (or (:http-base @worker-state/*db-sync-config)
       (when-let [ws-url (ws-base-url)]
         (let [base (cond
                      (string/starts-with? ws-url "wss://")
@@ -125,7 +125,7 @@
           data (when (seq text) (js/JSON.parse text))]
     (if (.-ok resp)
       (js->clj data :keywordize-keys true)
-      (throw (ex-info "worker-sync request failed"
+      (throw (ex-info "db-sync request failed"
                       {:status (.-status resp)
                        :url url
                        :body data})))))
@@ -155,7 +155,7 @@
         (when (seq asset-uuids)
           (enqueue-asset-downloads! repo client asset-uuids)))
       (catch :default e
-        (log/error :worker-sync/apply-remote-tx-failed {:error e})))))
+        (log/error :db-sync/apply-remote-tx-failed {:error e})))))
 
 (defn- reconcile-cycle! [repo attr server_values]
   (when-let [conn (worker-state/get-datascript-conn repo)]
@@ -220,13 +220,13 @@
         nil))))
 
 (defn- ensure-client-state! [repo]
-  (or (get @worker-state/*worker-sync-clients repo)
+  (or (get @worker-state/*db-sync-clients repo)
       (let [client {:repo repo
                     :send-queue (atom (p/resolved nil))
                     :asset-queue (atom (p/resolved nil))
                     :inflight (atom [])
                     :reconnect (atom {:attempt 0 :timer nil})}]
-        (swap! worker-state/*worker-sync-clients assoc repo client)
+        (swap! worker-state/*db-sync-clients assoc repo client)
         client)))
 
 (defn- asset-url [base graph-id asset-uuid asset-type]
@@ -256,10 +256,10 @@
               opts (with-auth-headers {:method "DELETE"})
               resp (js/fetch url (clj->js opts))]
         (when-not (.-ok resp)
-          (log/error :worker-sync/asset-delete-failed {:repo repo
+          (log/error :db-sync/asset-delete-failed {:repo repo
                                                        :asset-uuid asset-uuid
                                                        :status (.-status resp)})))
-      (log/info :worker-sync/asset-delete-skipped {:repo repo
+      (log/info :db-sync/asset-delete-skipped {:repo repo
                                                    :asset-uuid asset-uuid
                                                    :reason :missing-base-or-type}))))
 
@@ -312,7 +312,7 @@
 
             (> size max-asset-size)
             (do
-              (log/info :worker-sync/asset-too-large {:repo repo
+              (log/info :db-sync/asset-too-large {:repo repo
                                                       :asset-uuid asset-uuid
                                                       :size size})
               (client-op/remove-asset-op repo asset-uuid)
@@ -336,7 +336,7 @@
                              :rtc.exception/upload-asset-failed
                              nil
 
-                             (log/error :worker-sync/asset-upload-failed
+                             (log/error :db-sync/asset-upload-failed
                                         {:repo repo
                                          :asset-uuid asset-uuid
                                          :error e})))))))
@@ -353,7 +353,7 @@
                (delete-remote-asset! repo graph-id asset-uuid asset-type))
              (client-op/remove-asset-op repo asset-uuid)))
           (p/catch (fn [e]
-                     (log/error :worker-sync/asset-delete-failed
+                     (log/error :db-sync/asset-delete-failed
                                 {:repo repo
                                  :asset-uuid asset-uuid
                                  :error e}))))
@@ -435,7 +435,7 @@
                                               (download-remote-asset! repo graph-id asset-uuid asset-type)
                                               (p/recur (rest entries))))))))
                                    (p/catch (fn [e]
-                                              (log/error :worker-sync/asset-initial-download-failed
+                                              (log/error :db-sync/asset-initial-download-failed
                                                          {:repo repo :error e}))))
                                (p/resolved nil)))
                            (p/resolved nil)))))
@@ -447,23 +447,23 @@
   (when-let [conn (client-ops-conn repo)]
     (let [tx-id (random-uuid)
           now (.now js/Date)]
-      (ldb/transact! conn [{:worker-sync/tx-id tx-id
-                            :worker-sync/tx tx-str
-                            :worker-sync/created-at now}])
+      (ldb/transact! conn [{:db-sync/tx-id tx-id
+                            :db-sync/tx tx-str
+                            :db-sync/created-at now}])
       tx-id)))
 
 (defn- pending-txs
   [repo limit]
   (when-let [conn (client-ops-conn repo)]
     (let [db @conn
-          datoms (d/datoms db :avet :worker-sync/created-at)]
+          datoms (d/datoms db :avet :db-sync/created-at)]
       (->> datoms
            (map (fn [datom]
                   (d/entity db (:e datom))))
            (keep (fn [ent]
-                   (when-let [tx-id (:worker-sync/tx-id ent)]
+                   (when-let [tx-id (:db-sync/tx-id ent)]
                      {:tx-id tx-id
-                      :tx (:worker-sync/tx ent)})))
+                      :tx (:db-sync/tx ent)})))
            (take limit)
            (vec)))))
 
@@ -473,7 +473,7 @@
     (when-let [conn (client-ops-conn repo)]
       (ldb/transact! conn
                      (mapv (fn [tx-id]
-                             [:db.fn/retractEntity [:worker-sync/tx-id tx-id]])
+                             [:db.fn/retractEntity [:db-sync/tx-id tx-id]])
                            tx-ids)))))
 
 (defn- flush-pending!
@@ -504,13 +504,13 @@
                             (fn []
                               (swap! reconnect assoc :timer nil)
                               (when (enabled?)
-                                (when-let [current (get @worker-state/*worker-sync-clients repo)]
+                                (when-let [current (get @worker-state/*db-sync-clients repo)]
                                   (when (= (:graph-id current) (:graph-id client))
                                     (let [updated (connect! repo current url)]
-                                      (swap! worker-state/*worker-sync-clients assoc repo updated))))))
+                                      (swap! worker-state/*db-sync-clients assoc repo updated))))))
                             delay)]
             (swap! reconnect assoc :timer timeout-id :attempt (inc attempt))
-            (log/info :worker-sync/ws-reconnect-scheduled
+            (log/info :db-sync/ws-reconnect-scheduled
                       {:repo repo :delay delay :attempt attempt :reason reason})))))))
 
 (defn- attach-ws-handlers! [repo client ws url]
@@ -519,10 +519,10 @@
           (handle-message! repo client (.-data event))))
   (set! (.-onerror ws)
         (fn [event]
-          (log/error :worker-sync/ws-error {:repo repo :error event})))
+          (log/error :db-sync/ws-error {:repo repo :error event})))
   (set! (.-onclose ws)
         (fn [_]
-          (log/info :worker-sync/ws-closed {:repo repo})
+          (log/info :db-sync/ws-closed {:repo repo})
           (schedule-reconnect! repo client url :close))))
 
 (defn- start-pull-loop! [client _ws]
@@ -551,14 +551,14 @@
 
 (defn stop!
   ([]
-   (doseq [[repo client] @worker-state/*worker-sync-clients]
+   (doseq [[repo client] @worker-state/*db-sync-clients]
      (stop-client! client)
-     (swap! worker-state/*worker-sync-clients dissoc repo))
+     (swap! worker-state/*db-sync-clients dissoc repo))
    (p/resolved nil))
   ([repo]
-   (when-let [client (get @worker-state/*worker-sync-clients repo)]
+   (when-let [client (get @worker-state/*db-sync-clients repo)]
      (stop-client! client)
-     (swap! worker-state/*worker-sync-clients dissoc repo))
+     (swap! worker-state/*db-sync-clients dissoc repo))
    (p/resolved nil)))
 
 (defn start!
@@ -575,10 +575,10 @@
                _ (ensure-client-graph-uuid! repo graph-id)
                connected (assoc client :graph-id graph-id)
                connected (connect! repo connected url)]
-           (swap! worker-state/*worker-sync-clients assoc repo connected)
+           (swap! worker-state/*db-sync-clients assoc repo connected)
            (p/resolved nil))
          (do
-           (log/info :worker-sync/start-skipped {:repo repo :graph-id graph-id :base base})
+           (log/info :db-sync/start-skipped {:repo repo :graph-id graph-id :base base})
            (p/resolved nil)))))))
 
 (defn enqueue-local-tx!
@@ -591,13 +591,13 @@
       (let [normalized (normalize-tx-data db-after db-before tx-data')
             tx-str (sqlite-util/write-transit-str normalized)]
         (persist-local-tx! repo tx-str)
-        (when-let [client (get @worker-state/*worker-sync-clients repo)]
+        (when-let [client (get @worker-state/*db-sync-clients repo)]
           (let [send-queue (:send-queue client)]
             (swap! send-queue
                    (fn [prev]
                      (p/then prev
                              (fn [_]
-                               (when-let [ws (:ws (get @worker-state/*worker-sync-clients repo))]
+                               (when-let [ws (:ws (get @worker-state/*db-sync-clients repo))]
                                  (when (ws-open? ws)
                                    (flush-pending! repo client)))))))))))))
 
@@ -605,7 +605,7 @@
   [repo {:keys [tx-data tx-meta] :as tx-report}]
   (when (and (enabled?) (seq tx-data) (not (:rtc-tx? tx-meta)))
     (enqueue-local-tx! repo tx-report)
-    (let [client (get @worker-state/*worker-sync-clients repo)]
+    (let [client (get @worker-state/*db-sync-clients repo)]
       (enqueue-asset-sync! repo client))))
 
 (defn- fetch-kvs-rows
@@ -619,7 +619,7 @@
   (let [base (http-base-url)
         graph-id (get-graph-id repo)]
     (if-not (and (seq base) (seq graph-id))
-      (p/rejected (ex-info "worker-sync missing upload info"
+      (p/rejected (ex-info "db-sync missing upload info"
                            {:repo repo :base base :graph-id graph-id}))
       (if-let [db (worker-state/get-sqlite-conn repo :db)]
         (do
@@ -643,5 +643,5 @@
                                                 #js {:reset first-batch?
                                                      :rows rows})})]
                     (p/recur max-addr false)))))))
-        (p/rejected (ex-info "worker-sync missing sqlite db"
+        (p/rejected (ex-info "db-sync missing sqlite db"
                              {:repo repo :graph-id graph-id}))))))

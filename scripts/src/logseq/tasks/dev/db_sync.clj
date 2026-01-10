@@ -1,21 +1,21 @@
-(ns logseq.tasks.dev.worker-sync
-  "Tasks for worker-sync dev processes"
+(ns logseq.tasks.dev.db-sync
+  "Tasks for db-sync dev processes"
   (:require [babashka.process :refer [process]]))
 
 (def processes
-  [{:name "worker-sync-watch"
-    :dir "deps/worker-sync"
-    :cmd "clojure -M:cljs watch worker-sync"}
+  [{:name "db-sync-watch"
+    :dir "deps/db-sync"
+    :cmd "clojure -M:cljs watch db-sync"}
    {:name "wrangler-dev"
-    :dir "deps/worker-sync/worker"
+    :dir "deps/db-sync/worker"
     :cmd "wrangler dev"}
    {:name "yarn-watch"
     :dir "."
-    :cmd "ENABLE_WORKER_SYNC_LOCAL=true yarn watch"}])
+    :cmd "ENABLE_DB_SYNC_LOCAL=true yarn watch"}])
 
 (defn start
   []
-  (println "Starting worker-sync processes in foreground.")
+  (println "Starting db-sync processes in foreground.")
   (println "Use Ctrl-C to stop.")
   (let [procs (mapv (fn [{:keys [name dir cmd]}]
                       (println "Running:" name "-" cmd)

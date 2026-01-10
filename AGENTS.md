@@ -32,5 +32,5 @@
 
 ## Agent-Specific Notes
 - Review notes live in `@prompts/review.md`; check them when preparing changes.
-- Worker-sync feature guide for AI agents: `docs/agent-guide/worker-sync/worker-sync-guide.md`.
-- Worker-sync protocol reference: `docs/agent-guide/worker-sync/protocol.md`.
+- DB-sync feature guide for AI agents: `docs/agent-guide/db-sync/db-sync-guide.md`.
+- DB-sync protocol reference: `docs/agent-guide/db-sync/protocol.md`.

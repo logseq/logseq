@@ -1,5 +1,5 @@
-(ns frontend.handler.db-based.worker-sync
-  "Worker-sync handler based on Cloudflare Durable Objects."
+(ns frontend.handler.db-based.db-sync
+  "DB-sync handler based on Cloudflare Durable Objects."
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]
@@ -26,8 +26,8 @@
       base)))
 
 (defn- http-base []
-  (or config/worker-sync-http-base
-      (ws->http-base config/worker-sync-ws-url)))
+  (or config/db-sync-http-base
+      (ws->http-base config/db-sync-ws-url)))
 
 (def ^:private snapshot-rows-limit 2000)
 
@@ -47,20 +47,20 @@
           data (when (seq text) (js/JSON.parse text))]
     (if (.-ok resp)
       data
-      (throw (ex-info "worker-sync request failed"
+      (throw (ex-info "db-sync request failed"
                       {:status (.-status resp)
                        :url url
                        :body data})))))
 
 (defn <rtc-start!
   [repo & {:keys [_stop-before-start?] :as _opts}]
-  (log/info :worker-sync/start {:repo repo})
-  (state/<invoke-db-worker :thread-api/worker-sync-start repo))
+  (log/info :db-sync/start {:repo repo})
+  (state/<invoke-db-worker :thread-api/db-sync-start repo))
 
 (defn <rtc-stop!
   []
-  (log/info :worker-sync/stop true)
-  (state/<invoke-db-worker :thread-api/worker-sync-stop))
+  (log/info :db-sync/stop true)
+  (state/<invoke-db-worker :thread-api/db-sync-stop))
 
 (defn <rtc-get-users-info
   []
@@ -84,11 +84,11 @@
            (ldb/transact! repo [(sqlite-util/kv :logseq.kv/db-type "db")
                                 (sqlite-util/kv :logseq.kv/graph-uuid (uuid graph-id))])
            graph-id)
-          (p/rejected (ex-info "worker-sync missing graph id in create response"
-                               {:type :worker-sync/invalid-graph
+          (p/rejected (ex-info "db-sync missing graph id in create response"
+                               {:type :db-sync/invalid-graph
                                 :response result}))))
-      (p/rejected (ex-info "worker-sync missing graph info"
-                           {:type :worker-sync/invalid-graph
+      (p/rejected (ex-info "db-sync missing graph info"
+                           {:type :db-sync/invalid-graph
                             :base base})))))
 
 (defn <rtc-delete-graph!
@@ -97,8 +97,8 @@
     (if (and graph-uuid base)
       (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)]
         (fetch-json (str base "/graphs/" graph-uuid) {:method "DELETE"}))
-      (p/rejected (ex-info "worker-sync missing graph id"
-                           {:type :worker-sync/invalid-graph
+      (p/rejected (ex-info "db-sync missing graph id"
+                           {:type :db-sync/invalid-graph
                             :graph-uuid graph-uuid
                             :base base})))))
 
@@ -125,13 +125,13 @@
                       done? (true? (aget resp "done"))
                       last-addr (or (aget resp "last_addr") after)]
                 (p/do!
-                 (state/<invoke-db-worker :thread-api/worker-sync-import-kvs-rows
+                 (state/<invoke-db-worker :thread-api/db-sync-import-kvs-rows
                                           graph rows first-batch?)
                  (if done?
-                   (state/<invoke-db-worker :thread-api/worker-sync-finalize-kvs-import graph remote-tx)
+                   (state/<invoke-db-worker :thread-api/db-sync-finalize-kvs-import graph remote-tx)
                    (p/recur last-addr false))))))
-          (p/rejected (ex-info "worker-sync missing graph info"
-                               {:type :worker-sync/invalid-graph
+          (p/rejected (ex-info "db-sync missing graph info"
+                               {:type :db-sync/invalid-graph
                                 :graph-uuid graph-uuid
                                 :base base})))
         (p/catch (fn [error]

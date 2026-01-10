@@ -1,4 +1,4 @@
-(ns logseq.worker-sync.cycle
+(ns logseq.db-sync.cycle
   (:require [datascript.core :as d]
             [datascript.impl.entity :as de :refer [Entity]]))
 

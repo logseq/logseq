@@ -1,8 +1,8 @@
-(ns logseq.worker-sync.cycle-test
+(ns logseq.db-sync.cycle-test
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [logseq.db.frontend.schema :as db-schema]
-            [logseq.worker-sync.cycle :as cycle]))
+            [logseq.db-sync.cycle :as cycle]))
 
 (defn- new-conn []
   (d/create-conn db-schema/schema))
