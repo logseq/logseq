@@ -175,7 +175,7 @@
 
   dev:db-sync-test
   {:doc "Run db-sync unit tests"
-   :task (clojure {:dir "deps/db-sync"} "-M:cljs" "compile" "db-sync-test")}
+   :task (shell {:dir "deps/db-sync"} "clojure -M:cljs compile db-sync-test && node worker/dist/worker-test.js")}
 
   dev:db-sync-start
   {:doc "Start db-sync local server + client watch processes in foreground"
