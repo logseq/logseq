@@ -8,6 +8,7 @@
             [logseq.common.path :as path]
             [logseq.db :as ldb]
             [logseq.db.common.normalize :as db-normalize]
+            [logseq.db-sync.malli-schema :as db-sync-schema]
             [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
 
@@ -85,6 +86,42 @@
 (defn- ws-open? [ws]
   (= 1 (ready-state ws)))
 
+(def ^:private invalid-coerce ::invalid-coerce)
+
+(defn- coerce
+  [coercer value context]
+  (try
+    (coercer value)
+    (catch :default e
+      (log/error :db-sync/malli-coerce-failed (merge context {:error e :value value}))
+      invalid-coerce)))
+
+(defn- coerce-ws-client-message [message]
+  (when message
+    (let [coerced (coerce db-sync-schema/ws-client-message-coercer message {:schema :ws/client})]
+      (when-not (= coerced invalid-coerce)
+        coerced))))
+
+(defn- coerce-ws-server-message [message]
+  (when message
+    (let [coerced (coerce db-sync-schema/ws-server-message-coercer message {:schema :ws/server})]
+      (when-not (= coerced invalid-coerce)
+        coerced))))
+
+(defn- coerce-http-request [schema-key body]
+  (if-let [coercer (get db-sync-schema/http-request-coercers schema-key)]
+    (let [coerced (coerce coercer body {:schema schema-key :dir :request})]
+      (when-not (= coerced invalid-coerce)
+        coerced))
+    body))
+
+(defn- coerce-http-response [schema-key body]
+  (if-let [coercer (get db-sync-schema/http-response-coercers schema-key)]
+    (let [coerced (coerce coercer body {:schema schema-key :dir :response})]
+      (when-not (= coerced invalid-coerce)
+        coerced))
+    body))
+
 (defn- reconnect-delay-ms [attempt]
   (let [exp (js/Math.pow 2 attempt)
         delay (min reconnect-max-delay-ms (* reconnect-base-delay-ms exp))
@@ -103,7 +140,9 @@
 
 (defn- send! [ws message]
   (when (ws-open? ws)
-    (.send ws (js/JSON.stringify (clj->js message)))))
+    (if-let [coerced (coerce-ws-client-message message)]
+      (.send ws (js/JSON.stringify (clj->js coerced)))
+      (log/error :db-sync/ws-request-invalid {:message message}))))
 
 (defn- normalize-tx-data [db-after db-before tx-data]
   (->> tx-data
@@ -119,16 +158,29 @@
       nil)))
 
 (defn- fetch-json
-  [url opts]
+  [url opts {:keys [response-schema error-schema] :or {error-schema :error}}]
   (p/let [resp (js/fetch url (clj->js (with-auth-headers opts)))
           text (.text resp)
           data (when (seq text) (js/JSON.parse text))]
     (if (.-ok resp)
-      (js->clj data :keywordize-keys true)
-      (throw (ex-info "db-sync request failed"
-                      {:status (.-status resp)
-                       :url url
-                       :body data})))))
+      (let [body (js->clj data :keywordize-keys true)
+            body (if response-schema
+                   (coerce-http-response response-schema body)
+                   body)]
+        (if (or (nil? response-schema) body)
+          body
+          (throw (ex-info "db-sync invalid response"
+                          {:status (.-status resp)
+                           :url url
+                           :body body}))))
+      (let [body (when data (js->clj data :keywordize-keys true))
+            body (if error-schema
+                   (coerce-http-response error-schema body)
+                   body)]
+        (throw (ex-info "db-sync request failed"
+                        {:status (.-status resp)
+                         :url url
+                         :body body}))))))
 
 (def ^:private asset-update-attrs
   #{:logseq.property.asset/remote-metadata
@@ -184,7 +236,7 @@
 (declare enqueue-asset-sync!)
 (declare enqueue-asset-initial-download!)
 (defn- handle-message! [repo client raw]
-  (when-let [message (parse-message raw)]
+  (when-let [message (-> raw parse-message coerce-ws-server-message)]
     (let [local-tx (or (client-op/get-local-tx repo) 0)
           remote-tx (:t message)]
       (case (:type message)
@@ -614,6 +666,9 @@
                  :bind #js [last-addr limit]
                  :rowMode "array"}))
 
+(defn- normalize-snapshot-rows [rows]
+  (mapv (fn [row] (vec row)) (array-seq rows)))
+
 (defn upload-graph!
   [repo]
   (let [base (http-base-url)
@@ -628,20 +683,29 @@
                    first-batch? true]
             (let [rows (fetch-kvs-rows db last-addr upload-kvs-batch-size)]
               (if (empty? rows)
-                (p/let [_ (fetch-json (str base "/sync/" graph-id "/snapshot/import")
-                                      {:method "POST"
-                                       :headers {"content-type" "application/json"}
-                                       :body (js/JSON.stringify
-                                              #js {:done true})})]
-                  (client-op/add-all-exists-asset-as-ops repo)
-                  {:graph-id graph-id})
-                (let [max-addr (apply max (map first rows))]
-                  (p/let [_ (fetch-json (str base "/sync/" graph-id "/snapshot/import")
-                                        {:method "POST"
-                                         :headers {"content-type" "application/json"}
-                                         :body (js/JSON.stringify
-                                                #js {:reset first-batch?
-                                                     :rows rows})})]
-                    (p/recur max-addr false)))))))
+                (let [body (coerce-http-request :sync/snapshot-import {:reset false :rows []})]
+                  (if (nil? body)
+                    (p/rejected (ex-info "db-sync invalid snapshot body"
+                                         {:repo repo :graph-id graph-id}))
+                    (p/let [_ (fetch-json (str base "/sync/" graph-id "/snapshot/import")
+                                          {:method "POST"
+                                           :headers {"content-type" "application/json"}
+                                           :body (js/JSON.stringify (clj->js body))}
+                                          {:response-schema :sync/snapshot-import})]
+                      (client-op/add-all-exists-asset-as-ops repo)
+                      {:graph-id graph-id})))
+                (let [max-addr (apply max (map first rows))
+                      rows (normalize-snapshot-rows rows)
+                      body (coerce-http-request :sync/snapshot-import {:reset first-batch?
+                                                                       :rows rows})]
+                  (if (nil? body)
+                    (p/rejected (ex-info "db-sync invalid snapshot body"
+                                         {:repo repo :graph-id graph-id}))
+                    (p/let [_ (fetch-json (str base "/sync/" graph-id "/snapshot/import")
+                                          {:method "POST"
+                                           :headers {"content-type" "application/json"}
+                                           :body (js/JSON.stringify (clj->js body))}
+                                          {:response-schema :sync/snapshot-import})]
+                      (p/recur max-addr false))))))))
         (p/rejected (ex-info "db-sync missing sqlite db"
                              {:repo repo :graph-id graph-id}))))))

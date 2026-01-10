@@ -9,6 +9,7 @@
             [logseq.db.common.normalize :as db-normalize]
             [logseq.db-sync.common :as common :refer [cors-headers]]
             [logseq.db-sync.cycle :as cycle]
+            [logseq.db-sync.malli-schema :as db-sync-schema]
             [logseq.db-sync.protocol :as protocol]
             [logseq.db-sync.storage :as storage]
             [logseq.db-sync.worker-core :as worker-core]
@@ -71,7 +72,7 @@
         method (.-method request)]
     (cond
       (= path "/health")
-      (common/json-response {:ok true})
+      (json-response :worker/health {:ok true})
 
       (or (= path "/graphs")
           (string/starts-with? path "/graphs/"))
@@ -85,7 +86,7 @@
             (if (.-ok access-resp)
               (handle-assets request env)
               access-resp))
-          (common/bad-request "invalid asset path")))
+          (bad-request "invalid asset path")))
 
       (= method "OPTIONS")
       (common/options-response)
@@ -115,10 +116,10 @@
                     (let [rewritten (js/Request. new-url request)]
                       (.fetch stub rewritten))))
                 access-resp)))
-          (common/bad-request "missing graph id")))
+          (bad-request "missing graph id")))
 
       :else
-      (common/not-found))))
+      (not-found))))
 
 (def worker
   #js {:fetch (fn [request env _ctx]
@@ -128,10 +129,69 @@
   (storage/get-t (.-sql self)))
 
 (defn- send! [ws msg]
-  (.send ws (protocol/encode-message msg)))
+  (when (ws-open? ws)
+    (if-let [coerced (coerce-ws-server-message msg)]
+      (.send ws (protocol/encode-message coerced))
+      (do
+        (log/error :db-sync/ws-response-invalid {:message msg})
+        (.send ws (protocol/encode-message {:type "error" :message "server error"}))))))
 
 (defn- ws-open? [ws]
   (= 1 (.-readyState ws)))
+
+(def ^:private invalid-coerce ::invalid-coerce)
+
+(defn- coerce
+  [coercer value context]
+  (try
+    (coercer value)
+    (catch :default e
+      (log/error :db-sync/malli-coerce-failed (merge context {:error e :value value}))
+      invalid-coerce)))
+
+(defn- coerce-ws-client-message [message]
+  (when message
+    (let [coerced (coerce db-sync-schema/ws-client-message-coercer message {:schema :ws/client})]
+      (when-not (= coerced invalid-coerce)
+        coerced))))
+
+(defn- coerce-ws-server-message [message]
+  (when message
+    (let [coerced (coerce db-sync-schema/ws-server-message-coercer message {:schema :ws/server})]
+      (when-not (= coerced invalid-coerce)
+        coerced))))
+
+(defn- coerce-http-request [schema-key body]
+  (if-let [coercer (get db-sync-schema/http-request-coercers schema-key)]
+    (let [coerced (coerce coercer body {:schema schema-key :dir :request})]
+      (when-not (= coerced invalid-coerce)
+        coerced))
+    body))
+
+(defn- json-response
+  ([schema-key data] (json-response schema-key data 200))
+  ([schema-key data status]
+   (if-let [coercer (get db-sync-schema/http-response-coercers schema-key)]
+     (let [coerced (coerce coercer data {:schema schema-key :dir :response})]
+       (if (= coerced invalid-coerce)
+         (common/json-response {:error "server error"} 500)
+         (common/json-response coerced status)))
+     (common/json-response data status))))
+
+(defn- error-response [message status]
+  (json-response :error {:error message} status))
+
+(defn- bad-request [message]
+  (error-response message 400))
+
+(defn- unauthorized []
+  (error-response "unauthorized" 401))
+
+(defn- forbidden []
+  (error-response "forbidden" 403))
+
+(defn- not-found []
+  (error-response "not found" 404))
 
 (defn- broadcast! [^js self sender msg]
   (let [clients (.getWebSockets (.-state self))]
@@ -157,6 +217,15 @@
                     after
                     limit)))
 
+(defn- snapshot-row->map [row]
+  (if (array? row)
+    {:addr (aget row 0)
+     :content (aget row 1)
+     :addresses (aget row 2)}
+    {:addr (aget row "addr")
+     :content (aget row "content")
+     :addresses (aget row "addresses")}))
+
 (defn- handle-assets [request ^js env]
   (let [url (js/URL. (.-url request))
         path (.-pathname url)
@@ -169,15 +238,13 @@
       (if-let [{:keys [key asset-type]} (parse-asset-path path)]
         (let [^js bucket (.-LOGSEQ_SYNC_ASSETS env)]
           (if-not bucket
-            (js/Response. (js/JSON.stringify #js {:error "missing assets bucket"})
-                          #js {:status 500 :headers (cors-headers)})
+            (error-response "missing assets bucket" 500)
             (case method
               "GET"
               (.then (.get bucket key)
                      (fn [^js obj]
                        (if (nil? obj)
-                         (js/Response. (js/JSON.stringify #js {:error "not found"})
-                                       #js {:status 404 :headers (cors-headers)})
+                         (error-response "not found" 404)
                          (let [content-type (or (.-contentType (.-httpMetadata obj))
                                                 "application/octet-stream")]
                            (js/Response. (.-body obj)
@@ -191,8 +258,7 @@
               (.then (.arrayBuffer request)
                      (fn [buf]
                        (if (> (.-byteLength buf) max-asset-size)
-                         (js/Response. (js/JSON.stringify #js {:error "asset too large"})
-                                       #js {:status 413 :headers (cors-headers)})
+                         (error-response "asset too large" 413)
                          (.then (.put bucket
                                       key
                                       buf
@@ -201,19 +267,15 @@
                                            :customMetadata #js {:checksum (.get (.-headers request) "x-amz-meta-checksum")
                                                                 :type asset-type}})
                                 (fn [_]
-                                  (js/Response. (js/JSON.stringify #js {:ok true})
-                                                #js {:status 200 :headers (cors-headers)}))))))
+                                  (json-response :assets/put {:ok true} 200))))))
 
               "DELETE"
               (.then (.delete bucket key)
                      (fn [_]
-                       (js/Response. (js/JSON.stringify #js {:ok true})
-                                     #js {:status 200 :headers (cors-headers)})))
+                       (json-response :assets/delete {:ok true} 200)))
 
-              (js/Response. (js/JSON.stringify #js {:error "method not allowed"})
-                            #js {:status 405 :headers (cors-headers)}))))
-        (js/Response. (js/JSON.stringify #js {:error "invalid asset path"})
-                      #js {:status 400 :headers (cors-headers)})))))
+              (error-response "method not allowed" 405))))
+        (error-response "invalid asset path" 400)))))
 
 (defn- pull-response [^js self since]
   (let [sql (.-sql self)
@@ -240,8 +302,8 @@
       (common/sql-exec sql "delete from sync_meta")
       (storage/init-schema! sql)
       (storage/set-t! sql 0))
-    (when (and rows (pos? (.-length rows)))
-      (doseq [[addr content addresses] (array-seq rows)]
+    (when (seq rows)
+      (doseq [[addr content addresses] rows]
         (common/sql-exec sql
                          (str "insert into kvs (addr, content, addresses) values (?, ?, ?)"
                               " on conflict(addr) do update set content = excluded.content, addresses = excluded.addresses")
@@ -310,7 +372,7 @@
            :reason "empty tx data"})))))
 
 (defn- handle-ws-message! [^js self ^js ws raw]
-  (let [message (protocol/parse-message raw)]
+  (let [message (-> raw protocol/parse-message coerce-ws-client-message)]
     (if-not (map? message)
       (send! ws {:type "error" :message "invalid message"})
       (case (:type message)
@@ -358,7 +420,7 @@
               (.catch resp
                       (fn [e]
                         (log/error :db-sync/http-error {:error e})
-                        (common/json-response {:error "server error"} 500)))
+                        (error-response "server error" 500)))
               resp))]
     (try
       (let [url (js/URL. (.-url request))
@@ -371,11 +433,11 @@
             (common/options-response)
 
             (and (= method "GET") (= path "/health"))
-            (common/json-response {:ok true})
+            (json-response :sync/health {:ok true})
 
             (and (= method "GET") (= path "/pull"))
             (let [since (or (parse-int (.get (.-searchParams url) "since")) 0)]
-              (common/json-response (pull-response self since)))
+              (json-response :sync/pull (pull-response self since)))
 
             ;; (and (= method "GET") (= path "/snapshot"))
             ;; (common/json-response (snapshot-response self))
@@ -388,13 +450,14 @@
                             (max 1)
                             (min snapshot-rows-max-limit))
                   rows (fetch-kvs-rows (.-sql self) after limit)
+                  rows (mapv snapshot-row->map rows)
                   last-addr (if (seq rows)
-                              (apply max (map (fn [row] (aget row "addr")) rows))
+                              (apply max (map :addr rows))
                               after)
                   done? (< (count rows) limit)]
-              (common/json-response {:rows rows
-                                     :last_addr last-addr
-                                     :done done?}))
+              (json-response :sync/snapshot-rows {:rows rows
+                                                  :last_addr last-addr
+                                                  :done done?}))
 
             (and (= method "DELETE") (= path "/admin/reset"))
             (do
@@ -402,34 +465,42 @@
               (common/sql-exec (.-sql self) "drop table if exists tx_log")
               (common/sql-exec (.-sql self) "drop table if exists sync_meta")
               (storage/init-schema! (.-sql self))
-              (common/json-response {:ok true}))
+              (json-response :sync/admin-reset {:ok true}))
 
             (and (= method "POST") (= path "/tx/batch"))
             (.then (common/read-json request)
                    (fn [result]
                      (if (nil? result)
-                       (common/bad-request "missing body")
-                       (let [txs (js->clj (aget result "txs"))
-                             t-before (parse-int (aget result "t_before"))]
-                         (if (and (sequential? txs) (every? string? txs))
-                           (common/json-response (handle-tx-batch! self nil txs t-before))
-                           (common/bad-request "invalid tx"))))))
+                       (bad-request "missing body")
+                       (let [body (js->clj result :keywordize-keys true)
+                             body (coerce-http-request :sync/tx-batch body)]
+                         (if (nil? body)
+                           (bad-request "invalid tx")
+                           (let [{:keys [txs t_before]} body
+                                 t-before (parse-int t_before)]
+                             (if (and (sequential? txs) (every? string? txs))
+                               (json-response :sync/tx-batch (handle-tx-batch! self nil txs t-before))
+                               (bad-request "invalid tx"))))))))
 
             (and (= method "POST") (= path "/snapshot/import"))
             (.then (common/read-json request)
                    (fn [result]
                      (if (nil? result)
-                       (common/bad-request "missing body")
-                       (let [rows (aget result "rows")
-                             reset? (true? (aget result "reset"))]
-                         (import-snapshot! self rows reset?)
-                         (common/json-response {:ok true :count (if rows (.-length rows) 0)})))))
+                       (bad-request "missing body")
+                       (let [body (js->clj result :keywordize-keys true)
+                             body (coerce-http-request :sync/snapshot-import body)]
+                         (if (nil? body)
+                           (bad-request "invalid body")
+                           (let [{:keys [rows reset]} body]
+                             (import-snapshot! self rows reset)
+                             (json-response :sync/snapshot-import {:ok true
+                                                                   :count (count rows)})))))))
 
             :else
-            (common/not-found))))
+            (not-found))))
       (catch :default e
         (log/error :db-sync/http-error {:error e})
-        (common/json-response {:error "server error"} 500)))))
+        (error-response "server error" 500)))))
 
 (defclass SyncDO
   (extends DurableObject)
@@ -474,11 +545,18 @@
 
 (defn- index-list [sql owner-sub]
   (if (string? owner-sub)
-    (common/get-sql-rows
-     (common/sql-exec sql
-                      (str "select graph_id, graph_name, schema_version, created_at, updated_at "
-                           "from graphs where owner_sub = ? order by updated_at desc")
-                      owner-sub))
+    (let [rows (common/get-sql-rows
+                (common/sql-exec sql
+                                 (str "select graph_id, graph_name, schema_version, created_at, updated_at "
+                                      "from graphs where owner_sub = ? order by updated_at desc")
+                                 owner-sub))]
+      (mapv (fn [row]
+              {:graph_id (aget row "graph_id")
+               :graph_name (aget row "graph_name")
+               :schema_version (aget row "schema_version")
+               :created_at (aget row "created_at")
+               :updated_at (aget row "updated_at")})
+            rows))
     []))
 
 (defn- index-upsert! [sql graph-id graph-name owner-sub schema-version]
@@ -531,32 +609,34 @@
           (p/let [claims (auth-claims request env)]
             (cond
               (nil? claims)
-              (common/unauthorized)
+              (unauthorized)
 
               (and (= method "GET") (= ["graphs"] parts))
               (let [owner-sub (aget claims "sub")]
                 (if (string? owner-sub)
-                  (common/json-response {:graphs (index-list sql owner-sub)})
-                  (common/unauthorized)))
+                  (json-response :graphs/list {:graphs (index-list sql owner-sub)})
+                  (unauthorized)))
 
               (and (= method "POST") (= ["graphs"] parts))
               (.then (common/read-json request)
                      (fn [result]
-                       (let [graph-id (str (random-uuid))
-                             graph-name (aget result "graph_name")
-                             owner-sub (aget claims "sub")
-                             schema-version (aget result "schema_version")]
-                         (cond
-                           (not (string? owner-sub))
-                           (common/unauthorized)
+                       (if (nil? result)
+                         (bad-request "missing body")
+                         (let [body (js->clj result :keywordize-keys true)
+                               body (coerce-http-request :graphs/create body)
+                               graph-id (str (random-uuid))
+                               owner-sub (aget claims "sub")]
+                           (cond
+                             (not (string? owner-sub))
+                             (unauthorized)
 
-                           (not (string? graph-name))
-                           (common/bad-request "missing graph_name")
+                             (nil? body)
+                             (bad-request "invalid body")
 
-                           :else
-                           (do
-                             (index-upsert! sql graph-id graph-name owner-sub schema-version)
-                             (common/json-response {:graph_id graph-id}))))))
+                             :else
+                             (let [{:keys [graph_name schema_version]} body]
+                               (index-upsert! sql graph-id graph_name owner-sub schema_version)
+                               (json-response :graphs/create {:graph_id graph-id})))))))
 
               (and (= method "GET")
                    (= 3 (count parts))
@@ -566,13 +646,13 @@
                     owner-sub (aget claims "sub")]
                 (cond
                   (not (string? owner-sub))
-                  (common/unauthorized)
+                  (unauthorized)
 
                   (index-owns-graph? sql graph-id owner-sub)
-                  (common/json-response {:ok true})
+                  (json-response :graphs/access {:ok true})
 
                   :else
-                  (common/forbidden)))
+                  (forbidden)))
 
               (and (= method "DELETE")
                    (= 2 (count parts))
@@ -581,13 +661,13 @@
                     owner-sub (aget claims "sub")]
                 (cond
                   (not (seq graph-id))
-                  (common/bad-request "missing graph id")
+                  (bad-request "missing graph id")
 
                   (not (string? owner-sub))
-                  (common/unauthorized)
+                  (unauthorized)
 
                   (not (index-owns-graph? sql graph-id owner-sub))
-                  (common/forbidden)
+                  (forbidden)
 
                   :else
                   (do
@@ -597,13 +677,13 @@
                           stub (.get namespace do-id)
                           reset-url (str (.-origin url) "/admin/reset")]
                       (.fetch stub (js/Request. reset-url #js {:method "DELETE"})))
-                    (common/json-response {:graph_id graph-id :deleted true}))))
+                    (json-response :graphs/delete {:graph_id graph-id :deleted true}))))
 
               :else
-              (common/not-found)))))
+              (not-found)))))
       (catch :default error
         (log/error :db-sync/index-error error)
-        (common/json-response {:error "server error"} 500)))))
+        (error-response "server error" 500)))))
 
 (defclass SyncIndexDO
   (extends DurableObject)
