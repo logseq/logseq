@@ -149,8 +149,7 @@
 (defn- apply-remote-tx! [repo client tx-data]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (try
-      (let [tx-data' (db-normalize/de-normalize-tx-data @conn tx-data)
-            tx-report (ldb/transact! conn tx-data' {:rtc-tx? true})
+      (let [tx-report (ldb/transact! conn tx-data {:rtc-tx? true})
             db-after (:db-after tx-report)
             asset-uuids (asset-uuids-from-tx db-after (:tx-data tx-report))]
         (when (seq asset-uuids)
@@ -606,7 +605,7 @@
   [repo {:keys [tx-data tx-meta] :as tx-report}]
   (when (and (enabled?) (seq tx-data) (not (:rtc-tx? tx-meta)))
     (enqueue-local-tx! repo tx-report)
-    (when-let [client (get @worker-state/*worker-sync-clients repo)]
+    (let [client (get @worker-state/*worker-sync-clients repo)]
       (enqueue-asset-sync! repo client))))
 
 (defn- fetch-kvs-rows
