@@ -1,11 +1,11 @@
 (ns logseq.worker-sync.common
   (:require [clojure.string :as string]
-            [logseq.db.sqlite.util :as sqlite-util])
-  (:require-macros [logseq.common.async :refer [js-await]]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [promesa.core :as p]))
 
 (def text-decoder (js/TextDecoder.))
 
-(defn- cors-headers []
+(defn cors-headers []
   #js {"Access-Control-Allow-Origin" "*"
        "Access-Control-Allow-Headers" "content-type,authorization,x-amz-meta-checksum,x-amz-meta-type"
        "Access-Control-Allow-Methods" "GET,POST,PUT,DELETE,OPTIONS,HEAD"})
@@ -57,9 +57,9 @@
   (.apply (.-exec sql) sql (to-array (cons sql-str args))))
 
 (defn read-json [request]
-  (js-await [body (.text request)]
-            (when (seq body)
-              (js/JSON.parse body))))
+  (p/let [body (.text request)]
+    (when (seq body)
+      (js/JSON.parse body))))
 
 (defn read-transit [value]
   (when (string? value)
