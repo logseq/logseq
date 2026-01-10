@@ -31,6 +31,6 @@
 - PRs should describe the behavior change, link relevant issues, and note any test coverage added or skipped.
 
 ## Agent-Specific Notes
-- Review notes live in `@prompts/review.md`; check them when preparing changes.
+- Review notes live in `prompts/review.md`; check them when preparing changes.
 - DB-sync feature guide for AI agents: `docs/agent-guide/db-sync/db-sync-guide.md`.
 - DB-sync protocol reference: `docs/agent-guide/db-sync/protocol.md`.
