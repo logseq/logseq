@@ -271,10 +271,9 @@
   (let [sql (.-sql self)
         conn (.-conn self)
         db @conn
-        resolved (db-normalize/de-normalize-tx-data db tx-data)
-        tx-report (d/with db resolved)
+        tx-report (d/with db tx-data)
         db' (:db-after tx-report)
-        order-fixed (fix-tx-data db' resolved)
+        order-fixed (fix-tx-data db' tx-data)
         cycle-info (cycle/detect-cycle db' order-fixed)]
     (if cycle-info
       (do
