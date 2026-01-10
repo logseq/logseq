@@ -20,7 +20,6 @@
             [frontend.undo-redo :as undo-redo]
             [frontend.util :as util]
             [frontend.util.text :as text-util]
-            [logseq.common.config :as common-config]
             [logseq.db.frontend.schema :as db-schema]
             [promesa.core :as p]))
 
@@ -135,7 +134,7 @@
 
 (defn- create-db [full-graph-name {:keys [file-graph-import?]}]
   (->
-   (p/let [config (common-config/create-config-for-db-graph config/config-default-content)
+   (p/let [config config/config-default-content
            _ (persist-db/<new full-graph-name
                               (cond-> {:config config
                                        :graph-git-sha config/revision}

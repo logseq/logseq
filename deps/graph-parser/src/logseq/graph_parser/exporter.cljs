@@ -314,11 +314,25 @@
           (dissoc :block/priority)))
     block))
 
+(defn- get-date-formatter
+  [config]
+  (or
+   (:journal/page-title-format config)
+   ;; for compatibility
+   (:date-formatter config)
+   "MMM do, yyyy"))
+
+(defn- config-whiteboard?
+  [path]
+  (and path
+       (string/includes? path (str "whiteboards" "/"))
+       (string/ends-with? path ".edn")))
+
 (defn- find-or-create-deadline-scheduled-value
   "Given a :block/scheduled or :block/deadline value, creates the datetime property value
    and any optional journal tx associated with that value"
   [date-int page-names-to-uuids user-config]
-  (let [title (date-time-util/int->journal-title date-int (common-config/get-date-formatter user-config))
+  (let [title (date-time-util/int->journal-title date-int (get-date-formatter user-config))
         existing-journal-page (some->> title
                                        common-util/page-name-sanity-lc
                                        (get @page-names-to-uuids)
@@ -1745,7 +1759,7 @@
                                    (map #(dissoc % :block.temp/original-page-name) pages)))
                   (update :blocks fix-extracted-block-tags-and-refs))
 
-              (common-config/whiteboard? file)
+              (config-whiteboard? file)
               (-> (extract/extract-whiteboard-edn file content extract-options')
                   (update :pages (fn [pages]
                                    (->> pages
@@ -2102,7 +2116,7 @@
 (defn build-doc-options
   "Builds options for use with export-doc-files and assets"
   [config options]
-  (-> {:extract-options {:date-formatter (common-config/get-date-formatter config)
+  (-> {:extract-options {:date-formatter (get-date-formatter config)
                          ;; Remove config keys that break importing
                          :user-config (dissoc config :property-pages/excludelist :property-pages/enabled?)
                          :filename-format (or (:file/name-format config) :legacy)

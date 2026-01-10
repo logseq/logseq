@@ -280,17 +280,6 @@
      (+ 3 (count label))]
     ["" 0]))
 
-(defonce default-journals-directory "journals")
-(defonce default-pages-directory "pages")
-
-(defn get-pages-directory
-  []
-  (or (state/get-pages-directory) default-pages-directory))
-
-(defn get-journals-directory
-  []
-  (or (state/get-journals-directory) default-journals-directory))
-
 (defonce demo-repo "Demo")
 
 (defn demo-graph?
@@ -347,10 +336,6 @@
       (get-local-dir repo-url)
       (str "memory:///"
            (string/replace-first repo-url db-version-prefix "")))))
-
-(defn get-repo-fpath
-  [repo-url path]
-  (path/path-join (get-repo-dir repo-url) path))
 
 (defn get-repo-config-path
   []

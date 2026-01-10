@@ -39,8 +39,7 @@
          "frontend.worker.file"
          "frontend.fs"
          "frontend.components.file-sync"
-         "frontend.components.file-based"
-         "frontend.util.fs"]))
+         "frontend.components.file-based"]))
 
 (def block-name-db-graph-paths
   "DB graph paths with :block/name"
@@ -76,12 +75,9 @@
 (def file-graph-paths
   "Paths _only_ for file graphs"
   ["deps/db/src/logseq/db/file_based"
-   "deps/graph-parser/src/logseq/graph_parser/db.cljs"
    "deps/graph-parser/src/logseq/graph_parser/extract.cljc"
    "deps/graph-parser/src/logseq/graph_parser/property.cljs"
-   "deps/graph-parser/src/logseq/graph_parser.cljs"
-   "src/main/frontend/fs"
-   "src/main/frontend/util/fs.cljs"])
+   "src/main/frontend/fs"])
 
 (defn- grep-many
   "Git greps a coll of patterns for given paths. Returns result from process/shell"
@@ -142,8 +138,7 @@
         allowed-exceptions #{":block/pre-block? :block/scheduled :block/deadline :block/type :block/name :block/marker"
                              "(dissoc :block/format))]"
                              "{:block/name page-title})"
-                             ;; TODO: Mv these 2 file-based ns out of db files
-                             "(:require [logseq.db.file-based.rules :as file-rules]))"
+                             ;; TODO: Mv this file-based ns out of db file
                              "[logseq.db.file-based.schema :as file-schema]))"
                              ;; :block/name ones from src/main/mobile
                              "(if-let [journal (db/get-page page-name)]"

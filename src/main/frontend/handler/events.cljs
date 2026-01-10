@@ -107,9 +107,9 @@
     (page-handler/create-today-journal!)
     (page-handler/<create! page-name opts)))
 
-(defmethod handle :page/deleted [[_ repo page-name file-path tx-meta]]
+(defmethod handle :page/deleted [[_ page-name tx-meta]]
   (when-not (util/mobile?)
-    (page-common-handler/after-page-deleted! repo page-name file-path tx-meta)))
+    (page-common-handler/after-page-deleted! page-name tx-meta)))
 
 (defmethod handle :page/renamed [[_ repo data]]
   (when-not (util/mobile?)
@@ -126,12 +126,8 @@
                  :validate-db-options (:dev/validate-db-options (state/get-config))
                  :importing? (:graph/importing @state/state)
                  :date-formatter (state/get-date-formatter)
-                 :journal-file-name-format (or (state/get-journal-file-name-format)
-                                               date/default-journal-filename-formatter)
                  :export-bullet-indentation (state/get-export-bullet-indentation)
-                 :preferred-format (state/get-preferred-format)
-                 :journals-directory (config/get-journals-directory)
-                 :pages-directory (config/get-pages-directory)}]
+                 :preferred-format (state/get-preferred-format)}]
     (state/<invoke-db-worker :thread-api/set-context context)))
 
 ;; Hook on a graph is ready to be shown to the user.

@@ -1,10 +1,8 @@
 (ns frontend.db.query-react-test
   (:require [cljs-time.core :as t]
             [cljs.test :refer [deftest is use-fixtures]]
-            [clojure.string :as string]
             [frontend.db.query-custom :as query-custom]
             [frontend.test.helper :as test-helper :refer [load-test-files]]
-            [goog.string :as gstring]
             [logseq.db.frontend.inputs :as db-inputs]))
 
 (use-fixtures :each {:before test-helper/start-test-db!
@@ -19,7 +17,7 @@ adds rules that users often use"
 
 (defn- blocks-created-between-inputs [a b]
   (sort
-   (map #(-> % :block/title string/split-lines first)
+   (map :block/title
         (custom-query {:inputs [a b]
                        :query '[:find (pull ?b [*])
                                 :in $ ?start ?end
@@ -28,6 +26,7 @@ adds rules that users often use"
                                 [?b :block/parent ?p]
                                 [?b :block/title]
                                 [?b :block/created-at ?timestamp]
+                                [(missing? $ ?b :logseq.property/built-in?)]
                                 [(>= ?timestamp ?start)]
                                 [(<= ?timestamp ?end)]]}))))
 
@@ -38,46 +37,34 @@ adds rules that users often use"
                                             :in $ ?current-page ?tag-name
                                             :where [?b :block/page ?bp]
                                             [?bp :block/name ?current-page]
-                                            [?b :block/ref-pages ?t]
+                                            [?b :block/refs ?t]
                                             [?t :block/name ?tag-name]]}
                                   {:current-page-fn (constantly current-page)})))
 
-;; These tests rely on seeding timestamps with properties. If this ability goes
-;; away we could still test page-level timestamps
 ;; TODO: Move this test to inputs-test
 (deftest resolve-input-for-timestamp-inputs
-  (load-test-files [{:file/path "pages/page1.md"
-                     :file/content (gstring/format "foo::bar
-- -1y
-created-at:: %s
-- -1m
-created-at:: %s
-- -1w
-created-at:: %s
-- -1d
-created-at:: %s
-- today
-created-at:: %s
-- tonight
-created-at:: %s
-- +1d
-created-at:: %s
-- +1w
-created-at:: %s
-- +1m
-created-at:: %s
-- +1y
-created-at:: %s"
-                                                   (db-inputs/date-at-local-ms (t/minus (t/today) (t/years 1)) 0 0 0 0)
-                                                   (db-inputs/date-at-local-ms (t/minus (t/today) (t/months 1)) 0 0 0 0)
-                                                   (db-inputs/date-at-local-ms (t/minus (t/today) (t/weeks 1)) 0 0 0 0)
-                                                   (db-inputs/date-at-local-ms (t/minus (t/today) (t/days 1)) 0 0 0 0)
-                                                   (db-inputs/date-at-local-ms (t/today) 12 0 0 0)
-                                                   (db-inputs/date-at-local-ms (t/today) 18 0 0 0)
-                                                   (db-inputs/date-at-local-ms (t/plus (t/today) (t/days 1)) 0 0 0 0)
-                                                   (db-inputs/date-at-local-ms (t/plus (t/today) (t/weeks 1)) 0 0 0 0)
-                                                   (db-inputs/date-at-local-ms (t/plus (t/today) (t/months 1)) 0 0 0 0)
-                                                   (db-inputs/date-at-local-ms (t/plus (t/today) (t/years 1)) 0 0 0 0))}])
+  (load-test-files
+   [{:page {:block/title "page1"}
+     :blocks [{:block/title "-1y"
+               :block/created-at (db-inputs/date-at-local-ms (t/minus (t/today) (t/years 1)) 0 0 0 0)}
+              {:block/title "-1m"
+               :block/created-at (db-inputs/date-at-local-ms (t/minus (t/today) (t/months 1)) 0 0 0 0)}
+              {:block/title "-1w"
+               :block/created-at (db-inputs/date-at-local-ms (t/minus (t/today) (t/weeks 1)) 0 0 0 0)}
+              {:block/title "-1d"
+               :block/created-at (db-inputs/date-at-local-ms (t/minus (t/today) (t/days 1)) 0 0 0 0)}
+              {:block/title "today"
+               :block/created-at (db-inputs/date-at-local-ms (t/today) 12 0 0 0)}
+              {:block/title "tonight"
+               :block/created-at (db-inputs/date-at-local-ms (t/today) 18 0 0 0)}
+              {:block/title "+1d"
+               :block/created-at (db-inputs/date-at-local-ms (t/plus (t/today) (t/days 1)) 0 0 0 0)}
+              {:block/title "+1w"
+               :block/created-at (db-inputs/date-at-local-ms (t/plus (t/today) (t/weeks 1)) 0 0 0 0)}
+              {:block/title "+1m"
+               :block/created-at (db-inputs/date-at-local-ms (t/plus (t/today) (t/months 1)) 0 0 0 0)}
+              {:block/title "+1y"
+               :block/created-at (db-inputs/date-at-local-ms (t/plus (t/today) (t/years 1)) 0 0 0 0)}]}])
 
   (is (= ["today" "tonight"] (blocks-created-between-inputs :-0d-ms :+0d-ms))
       ":+0d-ms and :-0d-ms resolve to correct datetime range")
@@ -134,9 +121,12 @@ created-at:: %s"
       ":-XT-HHMM and :+XT-HHMM will not reoslve with invalid time formats but will fail gracefully"))
 
 (deftest cache-input-for-page-inputs
-  (load-test-files [{:file/path "pages/a.md" :file/content "- a #shared-tag"}
-                    {:file/path "pages/b.md" :file/content "- b #shared-tag"}])
-
+  (load-test-files [{:page {:block/title "a"}
+                     :blocks [{:block/title "a [[shared-tag]]"
+                               :build/tags [:shared-tag]}]}
+                    {:page {:block/title "b"}
+                     :blocks [{:block/title "b [[shared-tag]]"
+                               :build/tags [:shared-tag]}]}])
   (is (not= (blocks-with-tag-on-specified-current-page :current-page "a" :tag "shared-tag")
             (blocks-with-tag-on-specified-current-page :current-page "b" :tag "shared-tag")
             [])

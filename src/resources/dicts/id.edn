@@ -2,7 +2,7 @@
  :on-boarding/importing-main-title "Mengimpor catatan yang ada"
  :on-boarding/importing-main-desc "Anda juga dapat melakukan ini nanti di aplikasi."
  :on-boarding/importing-title "Apakah Anda sudah memiliki catatan yang ingin Anda impor?"
- :on-boarding/importing-desc "Jika ia dalam format JSON, EDN atau Markdown, Logseq dapat bekerja dengannya."
+ :on-boarding/importing-desc "Jika ia dalam format EDN atau Markdown, Logseq dapat bekerja dengannya."
  :on-boarding/main-title (fn [] ["Selamat datang di " [:strong "Logseq!"]])
  :on-boarding/main-desc "Pertama, Anda harus memilih folder di mana Logseq akan menyimpan pemikiran, ide, catatan Anda."
  :bug-report/main-title "Laporan bug"
@@ -90,8 +90,6 @@
  :page/logseq-is-having-a-problem "Logseq mengalami masalah. Untuk mencoba mengembalikannya ke keadaan yang berfungsi, silakan coba langkah-langkah aman berikut ini secara berurutan:"
  :page/step "Langkah {1}"
  :page/try "Coba"
- :page/open-in-finder "Buka dalam direktori"
- :page/open-with-default-app "Buka dengan aplikasi default"
  :page/make-public "Buat publik untuk dipublikasikan"
  :page/make-private "Buat pribadi"
  :page/delete "Hapus halaman"

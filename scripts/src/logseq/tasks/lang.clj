@@ -61,9 +61,7 @@
                                 (map (fn [[k v]]
                                        {:translation-key k
                                         :string-to-translate v
-                                        :file (if (= "tutorial" (namespace k))
-                                                (str "Under tutorials/")
-                                                (str "dicts/" (-> lang name string/lower-case) ".edn"))}))
+                                        :file (str "dicts/" (-> lang name string/lower-case) ".edn")}))
                                 (sort-by (juxt :file :translation-key)))]
         (if (:copy options)
           (doseq [[file missing-for-file] (group-by :file sorted-missing)]

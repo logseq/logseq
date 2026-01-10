@@ -4,9 +4,7 @@
             [frontend.components.svg :as svg]
             [frontend.context.i18n :refer [t]]
             [frontend.db.async :as db-async]
-            [frontend.db.conn :as conn]
             [frontend.db.model :as db-model]
-            [frontend.db.utils :as db-utils]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.extensions.pdf.windows :refer [resolve-own-container] :as pdf-windows]
@@ -17,7 +15,6 @@
             [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [logseq.publishing.db :as publish-db]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -384,10 +381,7 @@
      (fn []
        (p/let [_ (db-async/<get-block repo id {:children? false})
                block (db-model/get-block-by-uuid id)]
-         (when-let [asset-path' (and block (publish-db/get-area-block-asset-url
-                                            (conn/get-db (state/get-current-repo))
-                                            block
-                                            (db-utils/pull (:db/id (:block/page block)))))]
+         (when-let [asset-path' (and block (assets-handler/get-area-block-asset-url block))]
            (-> asset-path' (assets-handler/<make-asset-url)
                (p/then #(set-src! %))))))
      [])

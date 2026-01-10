@@ -1,28 +1,12 @@
 (ns publishing
   "Basic script for publishing from CLI"
-  (:require ["fs" :as fs]
-            ["path" :as node-path]
+  (:require ["path" :as node-path]
             [clojure.edn :as edn]
             [datascript.core :as d]
             [logseq.db.common.sqlite-cli :as sqlite-cli]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.graph-parser.cli :as gp-cli]
             [logseq.publishing :as publishing]
             [nbb.core :as nbb]))
-
-(defn- get-db [graph-dir]
-  (let [{:keys [conn]} (gp-cli/parse-graph graph-dir {:verbose false})] @conn))
-
-(defn- publish-file-graph [static-dir graph-dir output-path options]
-  (let [repo-config (-> (node-path/join graph-dir "logseq" "config.edn") fs/readFileSync str edn/read-string)]
-    (publishing/export (get-db graph-dir)
-                       static-dir
-                       graph-dir
-                       output-path
-                       (merge options {:repo (node-path/basename graph-dir)
-                                       :repo-config repo-config
-                                       :ui/theme "dark"
-                                       :ui/radix-color :purple}))))
 
 (defn- publish-db-graph [static-dir graph-dir output-path opts]
   (let [db-name (node-path/basename graph-dir)
@@ -38,7 +22,6 @@
                        output-path
                        (merge opts {:repo (str sqlite-util/db-version-prefix db-name)
                                     :repo-config repo-config
-                                    :db-graph? true
                                     :ui/theme "dark"
                                     :ui/radix-color :cyan}))))
 
@@ -56,9 +39,7 @@
     (js/process.exit 1))
   (let [[static-dir graph-dir output-path] (map resolve-path args)
         options {:dev? (contains? (set args) "--dev")}]
-    (if (sqlite-cli/db-graph-directory? graph-dir)
-      (publish-db-graph static-dir graph-dir output-path options)
-      (publish-file-graph static-dir graph-dir output-path options))))
+    (publish-db-graph static-dir graph-dir output-path options)))
 
 (when (= nbb/*file* (nbb/invoked-file))
   (-main *command-line-args*))
