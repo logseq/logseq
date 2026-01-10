@@ -290,10 +290,17 @@
 
 (defn- handle-tx-batch! [^js self sender txs t-before]
   (let [current-t (t-now self)]
-    (if (and (number? t-before) (not= t-before current-t))
+    (cond
+      (not (number? t-before))
+      {:type "tx/reject"
+       :reason "invalid t_before"}
+
+      (not= t-before current-t)
       {:type "tx/reject"
        :reason "stale"
        :t current-t}
+
+      :else
       (let [tx-data (mapcat protocol/transit->tx txs)]
         (if (seq tx-data)
           (let [new-t (apply-tx! self sender tx-data)]
