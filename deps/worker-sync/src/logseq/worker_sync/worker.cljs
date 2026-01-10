@@ -12,8 +12,8 @@
             [logseq.worker-sync.protocol :as protocol]
             [logseq.worker-sync.storage :as storage]
             [logseq.worker-sync.worker-core :as worker-core]
-            [shadow.cljs.modern :refer (defclass)])
-  (:require-macros [logseq.common.async :refer [js-await]]))
+            [promesa.core :as p]
+            [shadow.cljs.modern :refer (defclass)]))
 
 (glogi-console/install!)
 
@@ -81,10 +81,10 @@
       (if (= method "OPTIONS")
         (handle-assets request env)
         (if-let [{:keys [graph-id]} (parse-asset-path path)]
-          (js-await [access-resp (graph-access-response request env graph-id)]
-                    (if (.-ok access-resp)
-                      (handle-assets request env)
-                      access-resp))
+          (p/let [access-resp (graph-access-response request env graph-id)]
+            (if (.-ok access-resp)
+              (handle-assets request env)
+              access-resp))
           (common/bad-request "invalid asset path")))
 
       (= method "OPTIONS")
@@ -105,16 +105,16 @@
         (if (seq graph-id)
           (if (= method "OPTIONS")
             (common/options-response)
-            (js-await [access-resp (graph-access-response request env graph-id)]
-                      (if (.-ok access-resp)
-                        (let [^js namespace (.-LOGSEQ_SYNC_DO env)
-                              do-id (.idFromName namespace graph-id)
-                              stub (.get namespace do-id)]
-                          (if (common/upgrade-request? request)
-                            (.fetch stub request)
-                            (let [rewritten (js/Request. new-url request)]
-                              (.fetch stub rewritten))))
-                        access-resp)))
+            (p/let [access-resp (graph-access-response request env graph-id)]
+              (if (.-ok access-resp)
+                (let [^js namespace (.-LOGSEQ_SYNC_DO env)
+                      do-id (.idFromName namespace graph-id)
+                      stub (.get namespace do-id)]
+                  (if (common/upgrade-request? request)
+                    (.fetch stub request)
+                    (let [rewritten (js/Request. new-url request)]
+                      (.fetch stub rewritten))))
+                access-resp)))
           (common/bad-request "missing graph id")))
 
       :else
@@ -521,79 +521,79 @@
         (common/options-response)
         (do
           (index-init! sql)
-          (js-await [claims (auth-claims request env)]
-                    (cond
-                      (nil? claims)
-                      (common/unauthorized)
+          (p/let [claims (auth-claims request env)]
+            (cond
+              (nil? claims)
+              (common/unauthorized)
 
-                      (and (= method "GET") (= ["graphs"] parts))
-                      (let [owner-sub (aget claims "sub")]
-                        (if (string? owner-sub)
-                          (common/json-response {:graphs (index-list sql owner-sub)})
-                          (common/unauthorized)))
+              (and (= method "GET") (= ["graphs"] parts))
+              (let [owner-sub (aget claims "sub")]
+                (if (string? owner-sub)
+                  (common/json-response {:graphs (index-list sql owner-sub)})
+                  (common/unauthorized)))
 
-                      (and (= method "POST") (= ["graphs"] parts))
-                      (.then (common/read-json request)
-                             (fn [result]
-                               (let [graph-id (str (random-uuid))
-                                     graph-name (aget result "graph_name")
-                                     owner-sub (aget claims "sub")
-                                     schema-version (aget result "schema_version")]
-                                 (cond
-                                   (not (string? owner-sub))
-                                   (common/unauthorized)
+              (and (= method "POST") (= ["graphs"] parts))
+              (.then (common/read-json request)
+                     (fn [result]
+                       (let [graph-id (str (random-uuid))
+                             graph-name (aget result "graph_name")
+                             owner-sub (aget claims "sub")
+                             schema-version (aget result "schema_version")]
+                         (cond
+                           (not (string? owner-sub))
+                           (common/unauthorized)
 
-                                   (not (string? graph-name))
-                                   (common/bad-request "missing graph_name")
+                           (not (string? graph-name))
+                           (common/bad-request "missing graph_name")
 
-                                   :else
-                                   (do
-                                     (index-upsert! sql graph-id graph-name owner-sub schema-version)
-                                     (common/json-response {:graph_id graph-id}))))))
+                           :else
+                           (do
+                             (index-upsert! sql graph-id graph-name owner-sub schema-version)
+                             (common/json-response {:graph_id graph-id}))))))
 
-                      (and (= method "GET")
-                           (= 3 (count parts))
-                           (= "graphs" (first parts))
-                           (= "access" (nth parts 2)))
-                      (let [graph-id (nth parts 1)
-                            owner-sub (aget claims "sub")]
-                        (cond
-                          (not (string? owner-sub))
-                          (common/unauthorized)
+              (and (= method "GET")
+                   (= 3 (count parts))
+                   (= "graphs" (first parts))
+                   (= "access" (nth parts 2)))
+              (let [graph-id (nth parts 1)
+                    owner-sub (aget claims "sub")]
+                (cond
+                  (not (string? owner-sub))
+                  (common/unauthorized)
 
-                          (index-owns-graph? sql graph-id owner-sub)
-                          (common/json-response {:ok true})
+                  (index-owns-graph? sql graph-id owner-sub)
+                  (common/json-response {:ok true})
 
-                          :else
-                          (common/forbidden)))
+                  :else
+                  (common/forbidden)))
 
-                      (and (= method "DELETE")
-                           (= 2 (count parts))
-                           (= "graphs" (first parts)))
-                      (let [graph-id (nth parts 1)
-                            owner-sub (aget claims "sub")]
-                        (cond
-                          (not (seq graph-id))
-                          (common/bad-request "missing graph id")
+              (and (= method "DELETE")
+                   (= 2 (count parts))
+                   (= "graphs" (first parts)))
+              (let [graph-id (nth parts 1)
+                    owner-sub (aget claims "sub")]
+                (cond
+                  (not (seq graph-id))
+                  (common/bad-request "missing graph id")
 
-                          (not (string? owner-sub))
-                          (common/unauthorized)
+                  (not (string? owner-sub))
+                  (common/unauthorized)
 
-                          (not (index-owns-graph? sql graph-id owner-sub))
-                          (common/forbidden)
+                  (not (index-owns-graph? sql graph-id owner-sub))
+                  (common/forbidden)
 
-                          :else
-                          (do
-                            (index-delete! sql graph-id)
-                            (let [^js namespace (.-LOGSEQ_SYNC_DO (.-env self))
-                                  do-id (.idFromName namespace graph-id)
-                                  stub (.get namespace do-id)
-                                  reset-url (str (.-origin url) "/admin/reset")]
-                              (.fetch stub (js/Request. reset-url #js {:method "DELETE"})))
-                            (common/json-response {:graph_id graph-id :deleted true}))))
+                  :else
+                  (do
+                    (index-delete! sql graph-id)
+                    (let [^js namespace (.-LOGSEQ_SYNC_DO (.-env self))
+                          do-id (.idFromName namespace graph-id)
+                          stub (.get namespace do-id)
+                          reset-url (str (.-origin url) "/admin/reset")]
+                      (.fetch stub (js/Request. reset-url #js {:method "DELETE"})))
+                    (common/json-response {:graph_id graph-id :deleted true}))))
 
-                      :else
-                      (common/not-found)))))
+              :else
+              (common/not-found)))))
       (catch :default error
         (log/error :worker-sync/index-error error)
         (common/json-response {:error "server error"} 500)))))
