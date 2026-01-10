@@ -1,4 +1,4 @@
-# Worker-Sync Client-Server Protocol
+# DB-Sync Client-Server Protocol
 
 ## Transport
 - WebSocket `ws(s)` to `/sync/:graph-id`.

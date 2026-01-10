@@ -145,10 +145,10 @@
        (worker-handler/handle-message! worker wrapped-worker)
        (reset! state/*db-worker wrapped-worker)
        (-> (p/let [_ (state/<invoke-db-worker :thread-api/init config/RTC-WS-URL)
-                   _ (state/<invoke-db-worker :thread-api/set-worker-sync-config
-                                              {:enabled? config/worker-sync-enabled?
-                                               :ws-url config/worker-sync-ws-url
-                                               :http-base config/worker-sync-http-base})
+                   _ (state/<invoke-db-worker :thread-api/set-db-sync-config
+                                              {:enabled? config/db-sync-enabled?
+                                               :ws-url config/db-sync-ws-url
+                                               :http-base config/db-sync-http-base})
                    _ (sync-app-state!)
                    _ (log/info "init worker spent" (str (- (util/time-ms) t1) "ms"))
                    _ (sync-ui-state!)

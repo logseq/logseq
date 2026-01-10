@@ -1,4 +1,4 @@
-(ns logseq.worker-sync.common
+(ns logseq.db-sync.common
   (:require [clojure.string :as string]
             [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
