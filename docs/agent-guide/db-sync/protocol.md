@@ -58,11 +58,13 @@
 - `POST /sync/:graph-id/tx/batch`
   - Same as WS tx/batch. Body: `{"t_before":<t>,"txs":["<tx-transit>", ...]}`.
   - Response: `{"type":"tx/batch/ok","t":<t>}` or `{"type":"tx/reject","reason":...}`.
+  - Error response (400): `{"error":"missing body"|"invalid tx"}`.
 - `GET /sync/:graph-id/snapshot/rows?after=<addr>&limit=<n>`
-  - Pull sqlite kvs rows. Response: `{"rows":[[addr,content,addresses]...],"last_addr":<addr>,"done":true|false}`.
+  - Pull sqlite kvs rows. Response: `{"rows":[{"addr":<addr>,"content":"<transit>","addresses":<json|null>}...],"last_addr":<addr>,"done":true|false}`.
 - `POST /sync/:graph-id/snapshot/import`
   - Import sqlite kvs rows. Body: `{"reset":true|false,"rows":[[addr,content,addresses]...]}`.
   - Response: `{"ok":true,"count":<n>}`.
+  - Error response (400): `{"error":"missing body"|"invalid body"}`.
 - `DELETE /sync/:graph-id/admin/reset`
   - Drop/recreate per-graph tables. Response: `{"ok":true}`.
 
