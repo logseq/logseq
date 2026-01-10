@@ -195,11 +195,19 @@
                        {:role "editMenu"}
                        {:role "viewMenu"}
                        {:role "windowMenu"
-                        :submenu (when-not mac? [{:role "minimize"}
-                                                 {:role "zoom"}
-                                                 ;; Disable Control+W shortcut
-                                                 {:role "close"
-                                                  :accelerator false}])})
+                        :submenu
+                        (concat
+                          (when-not mac?
+                            [{:role "minimize"}
+                             {:role "zoom"}
+                             ;; Disable Control+W shortcut
+                             {:role "close"
+                              :accelerator false}])
+                          [{:label "Always on Top"
+                            :type "checkbox"
+                            :click (fn [menuItem browserWindow]
+                                     ;; switch alwaysOnTop state
+                                     (.setAlwaysOnTop browserWindow (.-checked menuItem)))}])})
         ;; Windows has no about role
         template (conj template
                        (if mac?
