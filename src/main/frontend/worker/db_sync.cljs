@@ -808,6 +808,9 @@
     (reset! (:inflight client) [])
     (set-stale-inflight! client false)
     (complete-tx-batch! client)
+    (when (and (= (client-state client) state-pull-wait)
+               (pull-active? client))
+      (send-pull! repo client (:ws client) (or (client-op/get-local-tx repo) 0)))
     (flush-pending! repo client)))
 
 (defn- handle-message! [repo client raw]
@@ -865,6 +868,11 @@
         :tx-batch-wait
         (case msg-type
           "tx/batch/ok" (handle-tx-batch-ok! repo client message)
+          "changed" (do
+                      (require-non-negative remote-tx {:repo repo :type "changed"})
+                      (when (< local-tx remote-tx)
+                        (set-pull-active! client true)
+                        (set-tx-return-state! client state-pull-wait)))
           "tx/reject" (let [reason (:reason message)]
                         (when (nil? reason)
                           (fail-fast-state! client :db-sync/missing-field
