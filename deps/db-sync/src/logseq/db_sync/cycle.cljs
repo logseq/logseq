@@ -45,18 +45,29 @@
     (keyword? entity) [:db/ident entity]
     :else entity))
 
-(defn- next-parent-eid [db attr eid]
-  (when-let [entity (d/entity db eid)]
-    (let [value (get entity attr)]
-      (:db/id value))))
+(defn- next-parent-eid [db attr eid updates-by-eid]
+  (if (contains? updates-by-eid eid)
+    (get updates-by-eid eid)
+    (when-let [entity (d/entity db eid)]
+      (let [value (get entity attr)]
+        (cond
+          (instance? Entity value) (:db/id value)
+          :else (ref->eid db (normalize-entity-ref value)))))))
 
-(defn- cycle-from-eid? [db attr eid]
-  (loop [seen #{eid}
-         current (next-parent-eid db attr eid)]
+(defn- cycle-from-eid? [db attr start-eid target-eid updates-by-eid]
+  (loop [seen #{target-eid}
+         current start-eid]
     (cond
       (nil? current) false
       (contains? seen current) true
-      :else (recur (conj seen current) (next-parent-eid db attr current)))))
+      :else (recur (conj seen current)
+                   (next-parent-eid db attr current updates-by-eid)))))
+
+(defn- normalize-entity-ref-for-result [db entity-ref]
+  (if (number? entity-ref)
+    (when-let [ent (d/entity db entity-ref)]
+      [:block/uuid (:block/uuid ent)])
+    entity-ref))
 
 (defn detect-cycle
   "Returns a map with cycle details when applying tx-data would introduce a cycle.
@@ -65,16 +76,31 @@
   (reduce
    (fn [_ attr]
      (let [updates (attr-updates-from-tx tx-data attr)
+           updates-by-eid
+           (reduce
+            (fn [acc {:keys [entity value]}]
+              (let [entity-ref (normalize-entity-ref entity)
+                    eid (ref->eid db entity-ref)
+                    value-ref (normalize-entity-ref value)
+                    value-eid (ref->eid db value-ref)]
+                (if eid
+                  (assoc acc eid value-eid)
+                  acc)))
+            {}
+            updates)
            result
            (reduce
             (fn [_ {:keys [entity value]}]
               (if (nil? value)
                 nil
                 (let [entity-ref (normalize-entity-ref entity)
-                      eid (ref->eid db entity-ref)]
-                  (when (and eid (cycle-from-eid? db attr eid))
+                      eid (ref->eid db entity-ref)
+                      value-ref (normalize-entity-ref value)
+                      value-eid (ref->eid db value-ref)]
+                  (when (and eid value-eid
+                             (cycle-from-eid? db attr value-eid eid updates-by-eid))
                     {:attr attr
-                     :entity entity-ref}))))
+                     :entity (normalize-entity-ref-for-result db entity-ref)}))))
             nil
             updates)]
        (when result

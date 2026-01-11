@@ -46,10 +46,7 @@ This guide helps AI agents implement and review db-sync features consistently ac
 
 ## Testing & Verification
 - Local dev(client+server): `bb dev:db-sync-start` runs the db-sync watcher, `wrangler dev`, and `yarn watch` with `ENABLE_DB_SYNC_LOCAL=true`
-- Unit tests: `bb dev:lint-and-test`
-- DB-sync tests: `bb dev:db-sync-test`
-- Single test example: `bb dev:test -v logseq.db-sync.storage-test/foo`
-- Worker local build: `clojure -M:cljs release db-sync`
+- DB-sync server side unit-tests: `bb dev:db-sync-test`
 
 ## Review Checklist
 - Protocol versioning and error handling are consistent across client/server.
