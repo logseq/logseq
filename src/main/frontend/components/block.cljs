@@ -1287,12 +1287,7 @@
                (= (string/lower-case (:protocol path)) "id")
                (string? (:link path))
                (util/uuid-string? (:link path)))       ; org mode id
-          (let [id (uuid (:link path))
-                block (db/entity [:block/uuid id])]
-            (if (:block/pre-block? block)
-              (let [page (:block/page block)]
-                (page-reference config (:block/name page) label))
-              (block-reference config (:link path) label)))
+          (block-reference config (:link path) label)
 
           (= protocol "file")
           (if (show-link? config metadata href full_text)
@@ -1887,8 +1882,7 @@
   [config block]
   (let [format :markdown
         block (if-not (:block.temp/ast-title block)
-                (merge block (block/parse-title-and-body uuid format false
-                                                         (:block/title block)))
+                (merge block (block/parse-title-and-body uuid format (:block/title block)))
                 block)
         block-ast-title (:block.temp/ast-title block)
         config (assoc config :block block)
@@ -2168,14 +2162,13 @@
                    (state/set-selection-start-block! block-dom-element)))))))))))
 
 (rum/defc dnd-separator-wrapper < rum/reactive
-  [block block-id top?]
+  [_block block-id top?]
   (let [dragging? (rum/react *dragging?)
         drag-to-block (rum/react *drag-to-block)
         move-to (rum/react *move-to)]
     (when (and
            dragging?
            (= block-id drag-to-block)
-           (not (:block/pre-block? block))
            move-to)
       (when-not (or (and top? (not= move-to :top))
                     (and (not top?) (= move-to :top)))
@@ -2402,7 +2395,7 @@
         content (:block/raw-title block)
         content (if (string? content) (string/trim content) "")
         block-ref? (:block-ref? config)
-        block (merge block (block/parse-title-and-body uuid format false content))
+        block (merge block (block/parse-title-and-body uuid format content))
         ast-body (:block.temp/ast-body block)
         ast-title (:block.temp/ast-title block)
         block (assoc block :block/title content)
@@ -2704,7 +2697,6 @@
                                (let [result (block/parse-title-and-body
                                              uuid
                                              (get block :block/format :markdown)
-                                             (:block/pre-block? block)
                                              title)
                                      ast-body (:block.temp/ast-body result)
                                      ast-title (:block.temp/ast-title result)
@@ -2976,7 +2968,7 @@
         custom-query? (boolean (:custom-query? config*))
         ref-or-custom-query? (or ref? custom-query?)
         *navigating-block (get container-state ::navigating-block)
-        {:block/keys [uuid pre-block? title]} block
+        {:block/keys [uuid title]} block
         config (build-config config* block {:navigated? navigated? :navigating-block navigating-block})
         level (:level config)
         *control-show? (get container-state ::control-show?)
@@ -3045,7 +3037,6 @@
        :ref #(when (nil? @*ref) (reset! *ref %))
        :data-collapsed (and collapsed? has-child?)
        :class (str (when selected? "selected")
-                   (when pre-block? " pre-block")
                    (when order-list? " is-order-list")
                    (when (string/blank? title) " is-blank")
                    (when original-block " embed-block"))
@@ -3148,7 +3139,7 @@
 
           ;; Not embed self
           [:div.flex.flex-col.w-full
-           (let [block (merge block (block/parse-title-and-body uuid (get block :block/format :markdown) pre-block? title))
+           (let [block (merge block (block/parse-title-and-body uuid (get block :block/format :markdown) title))
                  hide-block-refs-count? (or (and (:embed? config)
                                                  (= (:block/uuid block) (:embed-id config)))
                                             table?)]
@@ -3460,33 +3451,6 @@
        tb-col-groups
        (cons head groups)))]))
 
-(defn logbook-cp
-  [log]
-  (let [clocks (filter #(string/starts-with? % "CLOCK:") log)
-        clocks (reverse (sort-by str clocks))]
-    ;; TODO: display states change log
-    ; states (filter #(not (string/starts-with? % "CLOCK:")) log)
-
-    (when (seq clocks)
-      (let [tr (fn [elm cols] (->elem :tr
-                                      (mapv (fn [col] (->elem elm col)) cols)))
-            head [:thead.overflow-x-scroll (tr :th.py-0 ["Type" "Start" "End" "Span"])]
-            clock-tbody (->elem
-                         :tbody.overflow-scroll.sm:overflow-auto
-                         (mapv (fn [clock]
-                                 (let [cols (->> (string/split clock #": |--|=>")
-                                                 (map string/trim))]
-                                   (mapv #(tr :td.py-0 %) [cols])))
-                               clocks))]
-        [:div.overflow-x-scroll.sm:overflow-auto
-         (->elem
-          :table.m-0
-          {:class "logbook-table"
-           :border 0
-           :style {:width "max-content"}
-           :cell-spacing 15}
-          (cons head [clock-tbody]))]))))
-
 (defn map-inline
   [config col]
   (map #(inline config %) col))
@@ -3588,15 +3552,7 @@
   (try
     (match item
       ["Drawer" name lines]
-      (when (or (not= name "logbook")
-                (and
-                 (= name "logbook")
-                 (state/enable-timetracking?)
-                 (or (get-in (state/get-config) [:logbook/settings :enabled-in-all-blocks])
-                     (when (get-in (state/get-config)
-                                   [:logbook/settings :enabled-in-timestamped-blocks] true)
-                       (or (:block/scheduled (:block config))
-                           (:block/deadline (:block config)))))))
+      (when (not= name "logbook")
         [:div
          [:div.text-sm
           [:div.drawer {:data-drawer-name name}
@@ -3604,9 +3560,7 @@
             [:div.opacity-50.font-medium.logbook
              (util/format ":%s:" (string/upper-case name))]
             [:div.opacity-50.font-medium
-             (if (= name "logbook")
-               (logbook-cp lines)
-               (apply str lines))
+             (apply str lines)
              [:div ":END:"]]
             {:default-collapsed? true
              :title-trigger? true})]]])

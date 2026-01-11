@@ -700,15 +700,4 @@
       :where
       [?b :block/name]]
     (frontend.db/get-db test-helper/test-db)))
-
- ;; (or (priority a) (not (priority a)))
- ;; FIXME: Error: Insufficient bindings: #{?priority} not bound in [(contains? #{"A"} ?priority)]
-  (pprint/pprint
-   (d/q
-    '[:find (pull ?b [*])
-      :where
-      [?b :block/uuid]
-      (or (and [?b :block/priority ?priority] [(contains? #{"A"} ?priority)])
-          (not [?b :block/priority #{"A"}]
-               [(contains? #{"A"} ?priority)]))]
-    (frontend.db/get-db test-helper/test-db))))
+  )
