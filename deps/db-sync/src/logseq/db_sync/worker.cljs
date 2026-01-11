@@ -361,8 +361,10 @@
       (let [tx-data (mapcat protocol/transit->tx txs)]
         (if (seq tx-data)
           (let [new-t (apply-tx! self sender tx-data)]
-            {:type "tx/batch/ok"
-             :t new-t})
+            (if (and (map? new-t) (= "tx/reject" (:type new-t)))
+              new-t
+              {:type "tx/batch/ok"
+               :t new-t}))
           {:type "tx/reject"
            :reason "empty tx data"})))))
 
