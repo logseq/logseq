@@ -429,6 +429,10 @@
   [repo]
   (db-sync/upload-graph! repo))
 
+(def-thread-api :thread-api/db-sync-state
+  [repo]
+  (db-sync/get-client-state repo))
+
 (def-thread-api :thread-api/set-infer-worker-proxy
   [infer-worker-proxy]
   (reset! worker-state/*infer-worker infer-worker-proxy)
