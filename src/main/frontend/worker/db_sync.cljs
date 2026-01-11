@@ -649,10 +649,10 @@
                              :rtc.exception/upload-asset-failed
                              nil
 
-                           (log/error :db-sync/asset-upload-failed
-                                      {:repo repo
-                                       :asset-uuid asset-uuid
-                                       :error e})))))))
+                             (log/error :db-sync/asset-upload-failed
+                                        {:repo repo
+                                         :asset-uuid asset-uuid
+                                         :error e})))))))
         (fail-fast :db-sync/missing-db {:repo repo :op :process-asset-op}))
 
       (contains? asset-op :remove-asset)
