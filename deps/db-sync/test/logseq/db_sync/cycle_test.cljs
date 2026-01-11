@@ -41,7 +41,7 @@
                        {:block/uuid b :block/parent [:block/uuid a]}])
     (let [tx [{:block/uuid b :block/parent [:block/uuid b]}]
           values (cycle/server-values-for @conn tx :block/parent)]
-      (is (= {(pr-str [:block/uuid b]) [:block/uuid a]} values)))))
+      (is (= {[:block/uuid b] [:block/uuid a]} values)))))
 
 (deftest numeric-entity-cycle-test
   (let [conn (new-conn)
