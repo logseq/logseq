@@ -321,13 +321,8 @@
 
 (defn- fix-tx-data
   [db tx-data]
-  (if (some (fn [[op _e a v]]
-              (= [op a v] [:db/add :db/ident :logseq.class/Root]))
-            tx-data) ; initial data
-    tx-data
-    (->> tx-data
-         (worker-core/fix-missing-parent db)
-         (worker-core/fix-duplicate-orders db))))
+  (->> tx-data
+       (worker-core/fix-duplicate-orders db)))
 
 (defn- apply-tx! [^js self sender tx-data]
   (let [sql (.-sql self)

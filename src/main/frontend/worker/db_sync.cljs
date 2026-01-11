@@ -5,11 +5,15 @@
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.state :as worker-state]
             [lambdaisland.glogi :as log]
+            [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.db :as ldb]
-            [logseq.db.common.normalize :as db-normalize]
             [logseq.db-sync.malli-schema :as db-sync-schema]
+            [logseq.db.common.normalize :as db-normalize]
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.outliner.core :as outliner-core]
+            [logseq.outliner.transaction :as outliner-tx]
             [promesa.core :as p]))
 
 (defn- enabled?
@@ -198,12 +202,42 @@
 
 (declare enqueue-asset-downloads!)
 
+(defn- ensure-recycle-page!
+  [conn]
+  (let [db @conn]
+    (or (ldb/get-built-in-page db common-config/recycle-page-name)
+        (let [page (-> (sqlite-util/build-new-page common-config/recycle-page-name)
+                       sqlite-create-graph/mark-block-as-built-in)
+              {:keys [db-after]} (ldb/transact! conn [page] {:db-sync/recycle-page? true})]
+          (d/entity db-after [:block/uuid (:block/uuid page)])))))
+
+(defn- missing-parents
+  [{:keys [db-before db-after tx-data]}]
+  (->> tx-data
+       ;; parent gone
+       (keep (fn [d]
+               (when (and (= :block/parent (:a d)) (:added d)
+                          (nil? (d/entity db-after (:v d))))
+                 (d/entity db-before (:v d)))))))
+
+(defn- move-missing-parents
+  [conn tx-report]
+  (when-let [parents (seq (missing-parents tx-report))]
+    (let [recycle-page (ensure-recycle-page! conn)
+          recycle-id (:db/id recycle-page)]
+      (outliner-tx/transact!
+       {:persist-op? true
+        :gen-undo-ops? false
+        :outliner-op :fix-missing-parent}
+       (outliner-core/move-blocks! conn parents recycle-id {:sibling? false})))))
+
 (defn- apply-remote-tx! [repo client tx-data]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (try
       (let [tx-report (ldb/transact! conn tx-data {:rtc-tx? true})
             db-after (:db-after tx-report)
             asset-uuids (asset-uuids-from-tx db-after (:tx-data tx-report))]
+        (move-missing-parents conn tx-report)
         (when (seq asset-uuids)
           (enqueue-asset-downloads! repo client asset-uuids)))
       (catch :default e
@@ -309,11 +343,11 @@
               resp (js/fetch url (clj->js opts))]
         (when-not (.-ok resp)
           (log/error :db-sync/asset-delete-failed {:repo repo
-                                                       :asset-uuid asset-uuid
-                                                       :status (.-status resp)})))
-      (log/info :db-sync/asset-delete-skipped {:repo repo
                                                    :asset-uuid asset-uuid
-                                                   :reason :missing-base-or-type}))))
+                                                   :status (.-status resp)})))
+      (log/info :db-sync/asset-delete-skipped {:repo repo
+                                               :asset-uuid asset-uuid
+                                               :reason :missing-base-or-type}))))
 
 (defn- upload-remote-asset!
   [repo graph-id asset-uuid asset-type checksum]
@@ -365,8 +399,8 @@
             (> size max-asset-size)
             (do
               (log/info :db-sync/asset-too-large {:repo repo
-                                                      :asset-uuid asset-uuid
-                                                      :size size})
+                                                  :asset-uuid asset-uuid
+                                                  :size size})
               (client-op/remove-asset-op repo asset-uuid)
               (p/resolved nil))
 
