@@ -6,13 +6,13 @@
             [lambdaisland.glogi.console :as glogi-console]
             [logseq.common.authorization :as authorization]
             [logseq.db :as ldb]
-            [logseq.db.common.normalize :as db-normalize]
             [logseq.db-sync.common :as common :refer [cors-headers]]
             [logseq.db-sync.cycle :as cycle]
             [logseq.db-sync.malli-schema :as db-sync-schema]
             [logseq.db-sync.protocol :as protocol]
             [logseq.db-sync.storage :as storage]
             [logseq.db-sync.worker-core :as worker-core]
+            [logseq.db.common.normalize :as db-normalize]
             [promesa.core :as p]
             [shadow.cljs.modern :refer (defclass)]))
 
@@ -65,6 +65,80 @@
            :asset-uuid asset-uuid
            :asset-type asset-type
            :key (str graph-id "/" asset-uuid "." asset-type)})))))
+
+(defn- t-now [^js self]
+  (storage/get-t (.-sql self)))
+
+(defn- ws-open? [ws]
+  (= 1 (.-readyState ws)))
+
+(def ^:private invalid-coerce ::invalid-coerce)
+
+(defn- coerce
+  [coercer value context]
+  (try
+    (coercer value)
+    (catch :default e
+      (log/error :db-sync/malli-coerce-failed (merge context {:error e :value value}))
+      invalid-coerce)))
+
+(defn- coerce-ws-client-message [message]
+  (when message
+    (let [coerced (coerce db-sync-schema/ws-client-message-coercer message {:schema :ws/client})]
+      (when-not (= coerced invalid-coerce)
+        coerced))))
+
+(defn- coerce-ws-server-message [message]
+  (when message
+    (let [coerced (coerce db-sync-schema/ws-server-message-coercer message {:schema :ws/server})]
+      (when-not (= coerced invalid-coerce)
+        coerced))))
+
+(defn- coerce-http-request [schema-key body]
+  (if-let [coercer (get db-sync-schema/http-request-coercers schema-key)]
+    (let [coerced (coerce coercer body {:schema schema-key :dir :request})]
+      (when-not (= coerced invalid-coerce)
+        coerced))
+    body))
+
+(defn- send! [ws msg]
+  (when (ws-open? ws)
+    (if-let [coerced (coerce-ws-server-message msg)]
+      (.send ws (protocol/encode-message coerced))
+      (do
+        (log/error :db-sync/ws-response-invalid {:message msg})
+        (.send ws (protocol/encode-message {:type "error" :message "server error"}))))))
+
+(defn- json-response
+  ([schema-key data] (json-response schema-key data 200))
+  ([schema-key data status]
+   (if-let [coercer (get db-sync-schema/http-response-coercers schema-key)]
+     (let [coerced (coerce coercer data {:schema schema-key :dir :response})]
+       (if (= coerced invalid-coerce)
+         (common/json-response {:error "server error"} 500)
+         (common/json-response coerced status)))
+     (common/json-response data status))))
+
+(defn- error-response [message status]
+  (json-response :error {:error message} status))
+
+(defn- bad-request [message]
+  (error-response message 400))
+
+(defn- unauthorized []
+  (error-response "unauthorized" 401))
+
+(defn- forbidden []
+  (error-response "forbidden" 403))
+
+(defn- not-found []
+  (error-response "not found" 404))
+
+(defn- broadcast! [^js self sender msg]
+  (let [clients (.getWebSockets (.-state self))]
+    (doseq [ws clients]
+      (when (and (not= ws sender) (ws-open? ws))
+        (send! ws msg)))))
 
 (defn- handle-worker-fetch [request ^js env]
   (let [url (js/URL. (.-url request))
@@ -124,80 +198,6 @@
 (def worker
   #js {:fetch (fn [request env _ctx]
                 (handle-worker-fetch request env))})
-
-(defn- t-now [^js self]
-  (storage/get-t (.-sql self)))
-
-(defn- send! [ws msg]
-  (when (ws-open? ws)
-    (if-let [coerced (coerce-ws-server-message msg)]
-      (.send ws (protocol/encode-message coerced))
-      (do
-        (log/error :db-sync/ws-response-invalid {:message msg})
-        (.send ws (protocol/encode-message {:type "error" :message "server error"}))))))
-
-(defn- ws-open? [ws]
-  (= 1 (.-readyState ws)))
-
-(def ^:private invalid-coerce ::invalid-coerce)
-
-(defn- coerce
-  [coercer value context]
-  (try
-    (coercer value)
-    (catch :default e
-      (log/error :db-sync/malli-coerce-failed (merge context {:error e :value value}))
-      invalid-coerce)))
-
-(defn- coerce-ws-client-message [message]
-  (when message
-    (let [coerced (coerce db-sync-schema/ws-client-message-coercer message {:schema :ws/client})]
-      (when-not (= coerced invalid-coerce)
-        coerced))))
-
-(defn- coerce-ws-server-message [message]
-  (when message
-    (let [coerced (coerce db-sync-schema/ws-server-message-coercer message {:schema :ws/server})]
-      (when-not (= coerced invalid-coerce)
-        coerced))))
-
-(defn- coerce-http-request [schema-key body]
-  (if-let [coercer (get db-sync-schema/http-request-coercers schema-key)]
-    (let [coerced (coerce coercer body {:schema schema-key :dir :request})]
-      (when-not (= coerced invalid-coerce)
-        coerced))
-    body))
-
-(defn- json-response
-  ([schema-key data] (json-response schema-key data 200))
-  ([schema-key data status]
-   (if-let [coercer (get db-sync-schema/http-response-coercers schema-key)]
-     (let [coerced (coerce coercer data {:schema schema-key :dir :response})]
-       (if (= coerced invalid-coerce)
-         (common/json-response {:error "server error"} 500)
-         (common/json-response coerced status)))
-     (common/json-response data status))))
-
-(defn- error-response [message status]
-  (json-response :error {:error message} status))
-
-(defn- bad-request [message]
-  (error-response message 400))
-
-(defn- unauthorized []
-  (error-response "unauthorized" 401))
-
-(defn- forbidden []
-  (error-response "forbidden" 403))
-
-(defn- not-found []
-  (error-response "not found" 404))
-
-(defn- broadcast! [^js self sender msg]
-  (let [clients (.getWebSockets (.-state self))]
-    (doseq [ws clients]
-      (when (and (not= ws sender) (ws-open? ws))
-        (send! ws msg)))))
 
 (defn- parse-int [value]
   (when (some? value)
