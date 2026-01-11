@@ -41,14 +41,15 @@
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
-            [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.common.initial-data :as common-initial-data]
             [logseq.db.common.order :as db-order]
             [logseq.db.common.reference :as db-reference]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.common.view :as db-view]
             [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.sqlite.gc :as sqlite-gc]
@@ -247,9 +248,8 @@
       (rtc-debug-log/create-tables! debug-log-db)
       (search/create-tables-and-triggers! search-db)
       (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
-      (let [schema (ldb/get-schema repo)
-            conn (common-sqlite/get-storage-conn storage schema)
-            _ (db-fix/check-and-fix-schema! repo conn)
+      (let [conn (common-sqlite/get-storage-conn storage db-schema/schema)
+            _ (db-fix/check-and-fix-schema! conn)
             _ (when datoms
                 (let [eid->datoms (group-by :e datoms)
                       {properties true non-properties false} (group-by
@@ -695,7 +695,7 @@
   [repo class-id]
   (let [db @(worker-state/get-datascript-conn repo)]
     (->> (db-class/get-class-objects db class-id)
-         (map common-entity-util/entity->map))))
+         (map entity-util/entity->map))))
 
 (def-thread-api :thread-api/get-property-values
   [repo {:keys [property-ident] :as option}]

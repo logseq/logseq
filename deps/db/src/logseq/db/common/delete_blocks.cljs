@@ -5,8 +5,6 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.page-ref :as page-ref]
-            [logseq.db.common.entity-plus :as entity-plus]
-            [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.frontend.entity-util :as entity-util]))
 
 (defn- replace-ref-with-deleted-block-title
@@ -56,19 +54,11 @@
                                                     (contains? #{:db.fn/retractEntity :db/retractEntity} (first tx)))
                                            (second tx))) txs)
                                  (filter (fn [id]
-                                           (not (common-entity-util/page? (d/entity db id))))))]
+                                           (not (entity-util/page? (d/entity db id))))))]
     (when (seq retracted-block-ids)
       (let [retracted-blocks (map #(d/entity db %) retracted-block-ids)
             retracted-tx (build-retracted-tx retracted-blocks)
             retract-history-tx (mapcat (fn [e]
                                          (map (fn [history] [:db/retractEntity (:db/id history)])
-                                              (:logseq.property.history/_block e))) retracted-blocks)
-            macros-tx (when-not (entity-plus/db-based-graph? db)
-                        (mapcat (fn [b]
-                                  ;; Only delete if last reference
-                                  (keep #(when (<= (count (:block/_macros (d/entity db (:db/id %))))
-                                                   1)
-                                           (when (:db/id %) (vector :db.fn/retractEntity (:db/id %))))
-                                        (:block/macros b)))
-                                retracted-blocks))]
-        (concat txs retracted-tx retract-history-tx macros-tx)))))
+                                              (:logseq.property.history/_block e))) retracted-blocks)]
+        (concat txs retracted-tx retract-history-tx)))))
