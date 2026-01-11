@@ -377,7 +377,7 @@
 (defn- handle-tx-batch! [^js self sender txs t-before]
   (let [current-t (t-now self)]
     (cond
-      (not (number? t-before))
+      (or (not (number? t-before)) (neg? t-before))
       {:type "tx/reject"
        :reason "invalid t_before"}
 
@@ -400,7 +400,7 @@
 (defn- handle-ws-message! [^js self ^js ws raw]
   (let [message (-> raw protocol/parse-message coerce-ws-client-message)]
     (if-not (map? message)
-      (fail-fast :db-sync/request-parse-failed {:raw raw})
+      (send! ws {:type "error" :message "invalid request"})
       (case (:type message)
         "hello"
         (send! ws {:type "hello" :t (t-now self)})
@@ -409,8 +409,11 @@
         (send! ws {:type "pong"})
 
         "pull"
-        (let [since (or (:since message) 0)]
-          (send! ws (pull-response self since)))
+        (let [raw-since (:since message)
+              since (if (some? raw-since) (parse-int raw-since) 0)]
+          (if (or (and (some? raw-since) (not (number? since))) (neg? since))
+            (send! ws {:type "error" :message "invalid since"})
+            (send! ws (pull-response self since))))
 
         ;; "snapshot"
         ;; (send! ws (snapshot-response self))
@@ -462,8 +465,11 @@
             (json-response :sync/health {:ok true})
 
             (and (= method "GET") (= path "/pull"))
-            (let [since (or (parse-int (.get (.-searchParams url) "since")) 0)]
-              (json-response :sync/pull (pull-response self since)))
+            (let [raw-since (.get (.-searchParams url) "since")
+                  since (if (some? raw-since) (parse-int raw-since) 0)]
+              (if (or (and (some? raw-since) (not (number? since))) (neg? since))
+                (bad-request "invalid since")
+                (json-response :sync/pull (pull-response self since))))
 
             ;; (and (= method "GET") (= path "/snapshot"))
             ;; (common/json-response (snapshot-response self))

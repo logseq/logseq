@@ -16,6 +16,7 @@ This guide helps AI agents implement and review db-sync features consistently ac
 3) **Server changes**: update `worker.cljs`, `worker_core.cljs`, `storage.cljs`, or `cycle.cljs`.
 4) **Client changes**: update `db_sync.cljs` and thread APIs in `db_worker.cljs`.
 5) **Handler glue**: add or adjust the entry points in `handler/db_based/db_sync.cljs`.
+6) **Function ordering**: keep related ClojureScript fns together and ordered to minimize `declare` usage.
 
 ## Data, Keywords, and Schema
 - Use existing `:db-sync/*` keywords; add new keywords via `logseq.common.defkeywords/defkeyword`.
@@ -23,17 +24,18 @@ This guide helps AI agents implement and review db-sync features consistently ac
 
 ## Fail-Fast Error Policy
 - db-sync core code must fail fast on bugs: log an error (`log/error`) and throw immediately.
-- Treat these as bugs:
+- Treat these as bugs (internal invariants or bad server responses on the client):
   - db connection missing when required (client or worker).
   - WS/HTTP response fields missing (e.g., `:t`, `:txs`, `:reason`, `:data`).
   - Response parse/coercion failures (e.g., transit decode, malli coercion).
-  - Unexpected WS/HTTP message type or reason value.
+  - Unexpected WS/HTTP message type or reason value on the client.
+  - Asset operations missing required fields when processing client-side metadata.
+  - Invariant violations in tx apply (e.g., tx-data empty after normalization).
+- Server-side validation of client input should not throw. Respond with `tx/reject` or `400` errors for:
   - tx payload type mismatch (e.g., `:txs` not a sequence of strings).
   - Invalid graph identity (missing/empty graph id or uuid in sync path).
   - Invalid or negative `t`/`t_before` values.
-  - Asset operations missing required fields (checksum/type/uuid).
-  - Invariant violations in tx apply (e.g., tx-data empty after normalization).
-- Do not silently recover or drop messages for these cases; surface them via exceptions.
+- Do not silently recover or drop messages for bug cases; surface them via exceptions.
 
 ## HTTP API (Bootstrap + Assets)
 - HTTP endpoints backfill initial graph data, snapshots, and assets.

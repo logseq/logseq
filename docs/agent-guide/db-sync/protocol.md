@@ -34,27 +34,33 @@
 - `{"type":"pong"}`
   - Keepalive response.
 - `{"type":"error","message":"..."}`
-  - Invalid/unknown message.
+  - Invalid/unknown message. Current messages: `"unknown type"`, `"invalid request"`, `"server error"`, `"invalid since"`.
 
 ## HTTP API
 - Auth: Bearer token via `Authorization: Bearer <token>` or `?token=...`.
 - JSON body/response unless noted.
+- Auth required for `/graphs`, `/sync/:graph-id/*`, and `/assets/*`. Expect `401` (unauthorized) or `403` (forbidden) on access failure.
+
+### Worker Health
+- `GET /health`
+  - Worker health check. Response: `{"ok":true}`.
 
 ### Graphs (index DO)
 - `GET /graphs`
-  - List graphs the user owns. Response: `{"graphs":[{graph_id, graph_name, schema_version, created_at, updated_at}...]}`.
+  - List graphs the user owns. Response: `{"graphs":[{graph_id, graph_name, schema_version?, created_at, updated_at}...]}`.
 - `POST /graphs`
-  - Create graph. Body: `{"graph_name":"...","schema_version":"<major>"}`. Response: `{"graph_id":"..."}`.
+  - Create graph. Body: `{"graph_name":"...","schema_version":"<major>"}` (schema_version optional). Response: `{"graph_id":"..."}`.
 - `GET /graphs/:graph-id/access`
-  - Access check. Response: `{"ok":true}` or `403`.
+  - Access check. Response: `{"ok":true}`, `401` (unauthorized), `403` (forbidden), or `404` (not found).
 - `DELETE /graphs/:graph-id`
-  - Delete graph and reset data. Response: `{"graph_id":"...","deleted":true}`.
+  - Delete graph and reset data. Response: `{"graph_id":"...","deleted":true}` or `400` (missing graph id).
 
 ### Sync (per-graph DO, via `/sync/:graph-id/...`)
 - `GET /sync/:graph-id/health`
   - Health check. Response: `{"ok":true}`.
 - `GET /sync/:graph-id/pull?since=<t>`
   - Same as WS pull. Response: `{"type":"pull/ok","t":<t>,"txs":[{"t":<t>,"tx":"<tx-transit>"}...]}`.
+  - Error response (400): `{"error":"invalid since"}`.
 - `POST /sync/:graph-id/tx/batch`
   - Same as WS tx/batch. Body: `{"t_before":<t>,"txs":["<tx-transit>", ...]}`.
   - Response: `{"type":"tx/batch/ok","t":<t>}` or `{"type":"tx/reject","reason":...}`.
@@ -70,8 +76,9 @@
 
 ### Assets
 - `GET /assets/:graph-id/:asset-uuid.:ext`
-  - Download asset (binary response, `content-type` set).
+  - Download asset (binary response, `content-type` set, `x-asset-type` header included).
 - `PUT /assets/:graph-id/:asset-uuid.:ext`
   - Upload asset (binary body). Size limit ~100MB. Response: `{"ok":true}`.
 - `DELETE /assets/:graph-id/:asset-uuid.:ext`
   - Delete asset. Response: `{"ok":true}`.
+- Asset error responses: `{"error":"invalid asset path"}` (400), `{"error":"not found"}` (404), `{"error":"asset too large"}` (413), `{"error":"method not allowed"}` (405), `{"error":"missing assets bucket"}` (500).
