@@ -261,14 +261,119 @@
                          (conj acc [:db/add eid attr value]))))
                    []
                    server_values)]
+      (log/info :db-sync/reconcile-cycle
+                {:repo repo
+                 :attr attr
+                 :server-values (count server_values)
+                 :tx-count (count tx-data)
+                 :entity-titles (->> (keys server_values)
+                                     (keep (fn [ref]
+                                             (when-let [ent (d/entity db ref)]
+                                               {:uuid (some-> (:block/uuid ent) str)
+                                                :title (or (:block/title ent)
+                                                           (:block/name ent))})))
+                                     (take 10))})
       (when (seq tx-data)
         (ldb/transact! conn tx-data {:rtc-tx? true})))))
 
+(defn- normalize-entity-ref
+  [db entity]
+  (cond
+    (vector? entity) entity
+    (number? entity) (when-let [ent (d/entity db entity)]
+                       (cond
+                         (:block/uuid ent) [:block/uuid (:block/uuid ent)]
+                         (:db/ident ent) [:db/ident (:db/ident ent)]
+                         :else nil))
+    (uuid? entity) [:block/uuid entity]
+    (keyword? entity) [:db/ident entity]
+    :else nil))
+
+(defn- strip-cycle-attrs
+  [db tx-data {:keys [attr entity-refs]}]
+  (let [entity-refs (set entity-refs)]
+    (->> tx-data
+         (mapcat
+          (fn [tx]
+            (cond
+              (and (vector? tx) (= attr (nth tx 2 nil)))
+              (let [entity (nth tx 1 nil)
+                    entity-ref (normalize-entity-ref db entity)]
+                (if (and entity-ref (contains? entity-refs entity-ref))
+                  []
+                  [tx]))
+
+              (and (map? tx) (contains? tx attr))
+              (let [entity (or (:db/id tx) (:block/uuid tx) (:db/ident tx))
+                    entity-ref (normalize-entity-ref db entity)]
+                (if (and entity-ref (contains? entity-refs entity-ref))
+                  (let [tx' (dissoc tx attr)
+                        meaningful (seq (dissoc tx' :db/id :block/uuid :db/ident))]
+                    (if meaningful [tx'] []))
+                  [tx]))
+
+              :else
+              [tx]))))))
+
 (declare flush-pending!)
 (declare remove-pending-txs!)
+(declare persist-local-tx!)
+(declare client-ops-conn)
 
 (declare enqueue-asset-sync!)
 (declare enqueue-asset-initial-download!)
+(defn- pending-txs-by-ids
+  [repo tx-ids]
+  (when-let [conn (client-ops-conn repo)]
+    (let [db @conn]
+      (keep (fn [tx-id]
+              (when-let [ent (d/entity db [:db-sync/tx-id tx-id])]
+                (when-let [tx (:db-sync/tx ent)]
+                  {:tx-id tx-id
+                   :tx tx})))
+            tx-ids))))
+
+(defn- requeue-non-parent-txs!
+  [repo attr server_values entries]
+  (let [db (some-> (worker-state/get-datascript-conn repo) deref)
+        entity-refs (when (seq server_values) (set (keys server_values)))
+        scoped? (and db attr (seq entity-refs))
+        requeued (volatile! 0)
+        stripped (volatile! 0)]
+    (if-not scoped?
+      (throw (ex-info "db-sync requeue requires scoped cycle info"
+                      {:repo repo
+                       :has-db? (boolean db)
+                       :attr attr
+                       :server-values (count server_values)
+                       :entries (count entries)}))
+      (do
+        (doseq [{:keys [tx]} entries]
+          (when (string? tx)
+            (vswap! stripped inc)
+            (let [tx-data (sqlite-util/read-transit-str tx)
+                  filtered (strip-cycle-attrs db tx-data {:attr attr :entity-refs entity-refs})]
+              (when (seq filtered)
+                (vswap! requeued inc)
+                (persist-local-tx! repo (sqlite-util/write-transit-str filtered))))))
+        (log/info :db-sync/requeue-non-parent-txs
+                  {:repo repo
+                   :entries (count entries)
+                   :stripped @stripped
+                   :requeued @requeued})))))
+
+(defn- cycle-entity-titles
+  [repo server_values]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (let [db @conn]
+      (->> (keys server_values)
+           (keep (fn [ref]
+                   (when-let [ent (d/entity db ref)]
+                     {:uuid (some-> (:block/uuid ent) str)
+                      :title (or (:block/title ent)
+                                 (:block/name ent))})))
+           (take 10)))))
+
 (defn- handle-message! [repo client raw]
   (when-let [message (-> raw parse-message coerce-ws-server-message)]
     (let [local-tx (or (client-op/get-local-tx repo) 0)
@@ -301,7 +406,21 @@
                       "cycle"
                       (let [{:keys [attr server_values]} (sqlite-util/read-transit-str (:data message))]
                         ;; FIXME: fix cycle shouldn't re-trigger uploading
-                        (reconcile-cycle! repo attr server_values))
+                        (let [inflight-ids @(:inflight client)
+                              inflight-entries (pending-txs-by-ids repo inflight-ids)]
+                          (log/info :db-sync/tx-reject-cycle
+                                    {:repo repo
+                                     :attr attr
+                                     :server-values (count server_values)
+                                     :entity-titles (cycle-entity-titles repo server_values)
+                                     :inflight-ids (count inflight-ids)
+                                     :local-tx local-tx
+                                     :remote-tx remote-tx})
+                          (reconcile-cycle! repo attr server_values)
+                          (remove-pending-txs! repo inflight-ids)
+                          (reset! (:inflight client) [])
+                          (requeue-non-parent-txs! repo attr server_values inflight-entries))
+                        (flush-pending! repo client))
                       nil)
         nil))))
 
