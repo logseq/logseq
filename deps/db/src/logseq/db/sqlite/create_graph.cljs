@@ -130,6 +130,7 @@
 (def built-in-pages-names
   #{common-config/library-page-name
     common-config/quick-add-page-name
+    common-config/recycle-page-name
     "Contents"})
 
 (defn- validate-tx-for-duplicate-idents [tx]

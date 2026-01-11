@@ -18,7 +18,7 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.extensions.fsrs :as fsrs]
-            [frontend.handler.db-based.rtc :as rtc-handler]
+            [frontend.handler.db-based.sync :as rtc-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.events :as events]
             [frontend.handler.notification :as notification]

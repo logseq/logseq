@@ -3,6 +3,7 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
+            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
@@ -18,7 +19,7 @@
   (set/union
    (set built-in-markers)
    (set built-in-priorities)
-   #{"Favorites" "Contents" "card"}))
+   #{"Favorites" "Contents" "card" common-config/recycle-page-name}))
 
 (defn- page-title->block
   [title]

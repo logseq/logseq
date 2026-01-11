@@ -1,13 +1,14 @@
 (ns logseq.publish.routes
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
+            [logseq.common.authorization :as authorization]
             [logseq.publish.assets :as publish-assets]
             [logseq.publish.common :as publish-common]
             [logseq.publish.index :as publish-index]
             [logseq.publish.model :as publish-model]
             [logseq.publish.render :as publish-render]
             [shadow.resource :as resource])
-  (:require-macros [logseq.publish.async :refer [js-await]]))
+  (:require-macros [logseq.common.async :refer [js-await]]))
 
 (def publish-css (resource/inline "logseq/publish/publish.css"))
 (def publish-js (resource/inline "logseq/publish/publish.js"))
@@ -50,7 +51,7 @@
                      (subs auth-header 7))
              claims (cond
                       (nil? token) nil
-                      :else (publish-common/verify-jwt token env))]
+                      :else (authorization/verify-jwt token env))]
             {:claims claims}))
 
 (defn handle-post-pages [request env]
@@ -59,7 +60,7 @@
                      (subs auth-header 7))
              claims (cond
                       (nil? token) nil
-                      :else (publish-common/verify-jwt token env))]
+                      :else (authorization/verify-jwt token env))]
             (if (nil? claims)
               (publish-common/unauthorized)
               (js-await [body (.arrayBuffer request)]

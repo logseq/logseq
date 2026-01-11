@@ -8,6 +8,7 @@
             [frontend.worker.search :as search]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
+            [frontend.worker.db-sync :as db-sync]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.outliner.batch-tx :as batch-tx]
@@ -49,6 +50,10 @@
     (prn :debug-listen-db-changes)
     (prn :tx-data tx-data)
     (prn :tx-meta tx-meta)))
+
+(defmethod listen-db-changes :db-sync
+  [_ {:keys [repo]} tx-report]
+  (db-sync/handle-local-tx! repo tx-report))
 
 (defn- remove-old-embeddings-and-reset-new-updates!
   [conn tx-data tx-meta]

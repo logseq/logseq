@@ -1,7 +1,8 @@
 (ns logseq.publish.assets
   (:require [clojure.string :as string]
+            [logseq.common.authorization :as authorization]
             [logseq.publish.common :as publish-common])
-  (:require-macros [logseq.publish.async :refer [js-await]]))
+  (:require-macros [logseq.common.async :refer [js-await]]))
 
 (defn asset-content-type [ext]
   (case (string/lower-case (or ext ""))
@@ -35,7 +36,7 @@
                      (subs auth-header 7))
              claims (cond
                       (nil? token) nil
-                      :else (publish-common/verify-jwt token env))]
+                      :else (authorization/verify-jwt token env))]
             (if (nil? claims)
               (publish-common/unauthorized)
               (let [meta (parse-asset-meta-header request)
