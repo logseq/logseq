@@ -205,6 +205,18 @@
       (when-not (js/isNaN n)
         n))))
 
+(defn- entity-title
+  [db entity-ref]
+  (let [ent (cond
+              (vector? entity-ref) (d/entity db entity-ref)
+              (number? entity-ref) (d/entity db entity-ref)
+              (keyword? entity-ref) (d/entity db [:db/ident entity-ref])
+              :else nil)]
+    (when ent
+      {:uuid (some-> (:block/uuid ent) str)
+       :title (or (:block/title ent)
+                  (:block/name ent))})))
+
 (def ^:private max-asset-size (* 100 1024 1024))
 (def ^:private snapshot-rows-default-limit 500)
 (def ^:private snapshot-rows-max-limit 2000)
@@ -312,12 +324,19 @@
                          addresses)))
     (set! (.-conn self) (storage/open-conn sql))))
 
-(defn- cycle-reject-response [db tx-data {:keys [attr]}]
-  {:type "tx/reject"
-   :reason "cycle"
-   :data (common/write-transit
-          {:attr attr
-           :server_values (cycle/server-values-for db tx-data attr)})})
+(defn- cycle-reject-response [db tx-data {:keys [attr entity]}]
+  (let [server-values (cycle/server-values-for db tx-data attr)]
+    (log/info :db-sync/cycle-reject
+              {:attr attr
+               :entity entity
+               :entity-title (entity-title db entity)
+               :server-values (count server-values)
+               :tx-count (count tx-data)})
+    {:type "tx/reject"
+     :reason "cycle"
+     :data (common/write-transit
+            {:attr attr
+             :server_values server-values})}))
 
 (defn- fix-tx-data
   [db tx-data]
@@ -334,7 +353,11 @@
         cycle-info (cycle/detect-cycle db' order-fixed)]
     (if cycle-info
       (do
-        (prn :debug "cycle detected: " cycle-info)
+        (log/info :db-sync/cycle-detected
+                  {:attr (:attr cycle-info)
+                   :entity (:entity cycle-info)
+                   :entity-title (entity-title db (:entity cycle-info))
+                   :tx-count (count order-fixed)})
         (cycle-reject-response db order-fixed cycle-info))
       (let [{:keys [tx-data db-before db-after]} (ldb/transact! conn order-fixed)
             normalized-data (db-normalize/normalize-tx-data db-after db-before tx-data)
