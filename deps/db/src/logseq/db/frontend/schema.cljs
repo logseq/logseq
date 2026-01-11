@@ -1,8 +1,7 @@
 (ns logseq.db.frontend.schema
   "Schema related fns for DB and file graphs"
   (:require [clojure.set :as set]
-            [clojure.string :as string]
-            [logseq.db.file-based.schema :as file-schema]))
+            [clojure.string :as string]))
 
 (def schema-version? (every-pred map? :major))
 
@@ -60,14 +59,59 @@
       (str (:major schema-version)))
     :else (throw (ex-info "Not a schema-version" {:data schema-version}))))
 
-(def schema
-  "Schema for DB graphs. :block/tags are classes in this schema"
-  (merge
-   (apply dissoc file-schema/schema file-schema/file-only-attributes)
-   {:block/name {:db/index true}        ; remove db/unique for :block/name
-    ;; closed value
-    :block/closed-value-property {:db/valueType :db.type/ref
-                                  :db/cardinality :db.cardinality/many}}))
+(def ^:large-vars/data-var schema
+  "Schema for file graphs"
+  {:db/ident        {:db/unique :db.unique/identity}
+   :kv/value       {}
+
+   :block/uuid {:db/unique :db.unique/identity}
+   :block/parent {:db/valueType :db.type/ref
+                  :db/index true}
+   :block/order {:db/index true}
+   :block/collapsed? {}
+
+   ;; belongs to which page
+   :block/page {:db/valueType :db.type/ref
+                :db/index true}
+   ;; reference blocks
+   :block/refs {:db/valueType :db.type/ref
+                :db/cardinality :db.cardinality/many}
+   :block/tags {:db/valueType :db.type/ref
+                :db/cardinality :db.cardinality/many}
+
+   ;; which block this block links to, used for tag, embeds
+   :block/link {:db/valueType :db.type/ref
+                :db/index true}
+
+   ;; for pages
+   :block/alias {:db/valueType :db.type/ref
+                 :db/cardinality :db.cardinality/many
+                 :db/index true}
+
+   :block/created-at {:db/index true}
+   :block/updated-at {:db/index true}
+
+   ;; page additional attributes
+   ;; page's name, lowercase
+   :block/name {:db/index true} ; remove db/unique for :block/name
+
+   ;; page's original name
+   :block/title {:db/index true}
+
+   ;; page's journal day
+   :block/journal-day {:db/index true}
+
+   ;; latest tx that affected the block
+   :block/tx-id {}
+   :block/closed-value-property {:db/valueType :db.type/ref
+                                 :db/cardinality :db.cardinality/many}
+
+   ;; file
+   :file/path {:db/unique :db.unique/identity}
+   :file/content {}
+   :file/created-at {}
+   :file/last-modified-at {}
+   :file/size {}})
 
 ;; If only block/title changes
 (def retract-attributes
