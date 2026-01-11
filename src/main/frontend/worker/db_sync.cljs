@@ -1037,6 +1037,12 @@
            (log/info :db-sync/start-skipped {:repo repo :graph-id graph-id :base base})
            (p/resolved nil)))))))
 
+(defn get-client-state
+  [repo]
+  (if-let [client (get @worker-state/*db-sync-clients repo)]
+    (client-state client)
+    :not-started))
+
 (defn enqueue-local-tx!
   [repo {:keys [tx-data db-after db-before]}]
   (let [conn (worker-state/get-datascript-conn repo)
