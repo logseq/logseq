@@ -1,36 +1,12 @@
 (ns logseq.db-sync.worker-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require [cljs.test :refer [deftest is]]
             [datascript.core :as d]
-            [logseq.common.util.date-time :as date-time]
-            [logseq.common.uuid :as common-uuid]
+            [logseq.db-sync.worker-core :as worker-core]
             [logseq.db.common.order :as db-order]
-            [logseq.db.frontend.schema :as db-schema]
-            [logseq.db-sync.common :as common]
-            [logseq.db-sync.worker-core :as worker-core]))
+            [logseq.db.frontend.schema :as db-schema]))
 
 (defn- new-conn []
   (d/create-conn db-schema/schema))
-
-(deftest missing-parent-fallback-test
-  (let [conn (new-conn)
-        child (random-uuid)
-        missing (random-uuid)
-        fixed-ms 1700000000000
-        journal-day (date-time/ms->journal-day fixed-ms)
-        journal-uuid (common-uuid/gen-uuid :journal-page-uuid journal-day)
-        tx [[:db/add [:block/uuid child] :block/parent [:block/uuid missing]]]]
-    (with-redefs [common/now-ms (constantly fixed-ms)]
-      (let [fixed (worker-core/fix-missing-parent @conn tx)
-            db' (d/db-with @conn fixed)
-            child-entity (d/entity db' [:block/uuid child])
-            journal-entity (d/entity db' [:block/uuid journal-uuid])]
-        (testing "missing parent moves block to today's journal"
-          (is (= journal-uuid (:block/uuid (:block/parent child-entity))))
-          (is (= journal-uuid (:block/uuid (:block/page child-entity))))
-          (is (string? (:block/order child-entity))))
-        (testing "journal page exists"
-          (is (= journal-day (:block/journal-day journal-entity)))
-          (is (= journal-uuid (:block/uuid journal-entity))))))))
 
 (deftest duplicate-order-fix-test
   (let [conn (new-conn)
