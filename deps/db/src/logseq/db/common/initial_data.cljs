@@ -7,7 +7,6 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db.common.entity-plus :as entity-plus]
-            [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.db :as db-db]
@@ -29,7 +28,7 @@
   (->> (d/datoms db :avet :block/title page-name)
        (filter (fn [d]
                  (let [e (d/entity db (:e d))]
-                   (common-entity-util/page? e))))
+                   (entity-util/page? e))))
        (map :e)
        sort
        first))
@@ -98,7 +97,7 @@
                           (let [e (d/entity db eid)]
                             (when (or include-collapsed-children?
                                       (not (:block/collapsed? e))
-                                      (common-entity-util/page? e))
+                                      (entity-util/page? e))
                               (:block/_parent e)))) eids-to-expand)
                 ids-to-add (keep :db/id children)]
             (vswap! seen (partial apply conj) ids-to-add)
@@ -263,7 +262,7 @@
          (keep (fn [d]
                  (when (<= (:v d) today)
                    (let [e (d/entity db (:e d))]
-                     (when (and (common-entity-util/journal? e) (:db/id e))
+                     (when (and (entity-util/journal? e) (:db/id e))
                        e))))))))
 
 (defn- get-structured-datoms
@@ -311,7 +310,7 @@
                                (string/blank? title)))
                  (let [e (d/entity db (:e datom))]
                    (when (and
-                          (common-entity-util/page? e)
+                          (entity-util/page? e)
                           (not (entity-util/hidden? e)))
                      e))))))
      (take 15))))

@@ -15,6 +15,7 @@
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.text :as text]
@@ -365,6 +366,12 @@
   [s]
   (string/replace s "#" "HashTag-"))
 
+(defn- page-entity?
+  "Support DB or file graphs because of exporter"
+  [entity]
+  (or (entity-util/page? entity)
+      (contains? #{"page" "journal" "whiteboard"} (:block/type entity))))
+
 ;; TODO: refactor
 (defn page-name->map
   "Create a page's map structure given a original page name (string).
@@ -376,7 +383,7 @@
   [original-page-name db with-timestamp? date-formatter
    & {:keys [page-uuid class?] :as options}]
   (when-not (and db (common-util/uuid-string? original-page-name)
-                 (not (ldb/page? (d/entity db [:block/uuid (uuid original-page-name)]))))
+                 (not (page-entity? (d/entity db [:block/uuid (uuid original-page-name)]))))
     (let [db-based? (ldb/db-based-graph? db)
           original-page-name (cond-> (string/trim original-page-name)
                                db-based?

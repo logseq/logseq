@@ -187,7 +187,7 @@
   (when (or (seq remote-parents) remote-block-order) ;at least one of parent|order exists
     (let [first-remote-parent (first remote-parents)
           local-parent (when first-remote-parent (d/entity @conn [:block/uuid first-remote-parent]))
-          whiteboard-page-block? (ldb/whiteboard? local-parent)
+          whiteboard-page-block? (boolean (ldb/whiteboard? local-parent))
           b (d/entity @conn [:block/uuid block-uuid])]
       (case [whiteboard-page-block? (some? local-parent) (some? remote-block-order)]
         [false true true]

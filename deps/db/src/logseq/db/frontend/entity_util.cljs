@@ -92,3 +92,9 @@
 (defn get-pages-by-name
   [db page-name]
   (d/datoms db :avet :block/name (common-util/page-name-sanity-lc page-name)))
+
+(defn entity->map
+  "Convert a db Entity to a map"
+  [e]
+  (assert (de/entity? e))
+  (assoc (into {} e) :db/id (:db/id e)))

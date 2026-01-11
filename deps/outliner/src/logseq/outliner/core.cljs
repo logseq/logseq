@@ -83,28 +83,13 @@
           (swap! txs-state (fn [state] (vec (concat state tx)))))))))
 
 (defn- update-page-when-save-block
-  [txs-state block-entity m]
+  [txs-state block-entity]
   (when-let [e (:block/page block-entity)]
     (let [m' (cond-> {:db/id (:db/id e)
                       :block/updated-at (common-util/time-ms)}
                (not (:block/created-at e))
                (assoc :block/created-at (common-util/time-ms)))
-          txs (if (or (:block/pre-block? block-entity)
-                      (:block/pre-block? m))
-                (let [properties (:block/properties m)
-                      alias (set (:alias properties))
-                      tags (set (:tags properties))
-                      alias (map (fn [p] {:block/name (common-util/page-name-sanity-lc p)}) alias)
-                      tags (map (fn [p] {:block/name (common-util/page-name-sanity-lc p)}) tags)
-                      deleteable-page-attributes {:block/alias alias
-                                                  :block/tags tags
-                                                  :block/properties properties
-                                                  :block/properties-text-values (:block/properties-text-values m)}
-                            ;; Retract page attributes to allow for deletion of page attributes
-                      page-retractions
-                      (mapv #(vector :db/retract (:db/id e) %) (keys deleteable-page-attributes))]
-                  (conj page-retractions (merge m' deleteable-page-attributes)))
-                [m'])]
+          txs [m']]
       (swap! txs-state into txs))))
 
 (defn- remove-orphaned-refs-when-save
@@ -295,7 +280,7 @@
               (outliner-validate/validate-block-title db (:block/title m*) block-entity))
           m (cond-> m*
               true
-              (dissoc :block/format :block/pre-block? :block/priority :block/marker :block/properties-order))]
+              (dissoc :block/format))]
       ;; Ensure block UUID never changes
       (let [e (d/entity db db-id)]
         (when (and e block-uuid)
@@ -320,7 +305,7 @@
 
         ;; Update block's page attributes
         (when-not collapse-or-expand?
-          (update-page-when-save-block *txs-state block-entity m))
+          (update-page-when-save-block *txs-state block-entity))
         ;; Remove orphaned refs from block
         (when (and (:block/title m) (not= (:block/title m) (:block/title block-entity)))
           (remove-orphaned-refs-when-save db *txs-state block-entity m)))
@@ -355,16 +340,8 @@
                                   [:db/retract (:db/id block) :block/order]
                                   [:db/retract (:db/id block) :block/page]])
         (let [ids (cons (:db/id this) (ldb/get-block-full-children-ids db (:db/id block)))
-              txs (map (fn [id] [:db.fn/retractEntity id]) ids)
-              page-tx (let [block (d/entity db [:block/uuid block-id])]
-                        (when (:block/pre-block? block)
-                          (when-let [id (:db/id (:block/page block))]
-                            [[:db/retract id :block/properties]
-                             [:db/retract id :block/properties-order]
-                             [:db/retract id :block/properties-text-values]
-                             [:db/retract id :block/alias]
-                             [:db/retract id :block/tags]])))]
-          (swap! *txs-state concat txs page-tx)
+              txs (map (fn [id] [:db.fn/retractEntity id]) ids)]
+          (swap! *txs-state concat txs)
           block-id)))))
 
 (defn- assoc-level-aux

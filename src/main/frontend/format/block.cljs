@@ -120,12 +120,10 @@ and handles unexpected failure."
      (merge block
             (parse-title-and-body (:block/uuid block)
                                   (get block :block/format :markdown)
-                                  (:block/pre-block? block)
                                   (:block/title block)))))
-  ([_block-uuid format pre-block? content]
+  ([_block-uuid format content]
    (when-not (string/blank? content)
-     (let [content (if pre-block? content
-                       (str (config/get-block-pattern format) " " (string/triml content)))]
+     (let [content (str (config/get-block-pattern format) " " (string/triml content))]
        (cached-parse-title-and-body-helper format content)))))
 
 (defn break-line-paragraph?

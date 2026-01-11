@@ -1,7 +1,6 @@
 (ns logseq.graph-parser.extract-test
   (:require [cljs.test :refer [deftest is are]]
             [datascript.core :as d]
-            [logseq.db.file-based.schema :as file-schema]
             [logseq.graph-parser.extract :as extract]))
 
 ;; This is a copy of frontend.components.repo/multiplatform-reserved-chars for reserved chars testing
@@ -42,10 +41,15 @@
   (is (= "asldk lakls" (#'extract/path->file-body "file://data/app/asldk lakls.as")))
   (is (= "中文asldk lakls" (#'extract/path->file-body "file://中文data/app/中文asldk lakls.as"))))
 
+;; Bare minimum schema to test extract
+(def file-schema
+  {:block/uuid {:db/unique :db.unique/identity}
+   :block/name {:db/unique :db.unique/identity}})
+
 (defn- extract [file content & [options]]
   (extract/extract file
                    content
-                   (merge {:block-pattern "-" :db (d/empty-db file-schema/schema)
+                   (merge {:block-pattern "-" :db (d/empty-db file-schema)
                            :verbose false}
                           options)))
 

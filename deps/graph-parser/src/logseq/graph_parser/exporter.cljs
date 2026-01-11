@@ -27,6 +27,7 @@
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.db-ident :as db-ident]
+            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.build :as db-property-build]
@@ -328,6 +329,21 @@
        (string/includes? path (str "whiteboards" "/"))
        (string/ends-with? path ".edn")))
 
+(defn- whiteboard-entity?
+  [entity]
+  (or (entity-util/whiteboard? entity)
+      (identical? "whiteboard" (:block/type entity))))
+
+(defn- journal-entity?
+  [entity]
+  (or (entity-util/journal? entity)
+      (identical? "journal" (:block/type entity))))
+
+(defn- page-entity?
+  [entity]
+  (or (entity-util/page? entity)
+      (contains? #{"page" "journal" "whiteboard"} (:block/type entity))))
+
 (defn- find-or-create-deadline-scheduled-value
   "Given a :block/scheduled or :block/deadline value, creates the datetime property value
    and any optional journal tx associated with that value"
@@ -413,7 +429,7 @@
   (let [prop-type (cond (and (coll? prop-val)
                              (seq prop-val)
                              (set/subset? prop-val
-                                          (set (keep #(when (ldb/journal? %)
+                                          (set (keep #(when (journal-entity? %)
                                                         (:block/title %)) refs))))
                         :date
                         (and (coll? prop-val) (seq prop-val) (text-with-refs? prop-val prop-val-text))
@@ -1863,7 +1879,7 @@
           {:keys [pages-tx page-properties-tx per-file-state existing-pages]} (build-pages-tx conn pages blocks tx-options)
           whiteboard-pages (->> pages-tx
                                 ;; support old and new whiteboards
-                                (filter ldb/whiteboard?)
+                                (filter whiteboard-entity?)
                                 (map (fn [page-block]
                                        (-> page-block
                                            (assoc :logseq.property/ls-type :whiteboard-page)))))
@@ -2136,7 +2152,7 @@
                               (keep (fn [d]
                                       (let [child (d/entity db (:e d))
                                             parent (d/entity db (:v d))]
-                                        (when (and (nil? (:block/parent parent)) (ldb/page? child) (ldb/page? parent))
+                                        (when (and (nil? (:block/parent parent)) (page-entity? child) (page-entity? parent))
                                           parent))))
                               (common-util/distinct-by :block/uuid))
         tx-data (map

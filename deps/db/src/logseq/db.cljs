@@ -13,14 +13,11 @@
             [logseq.common.uuid :as common-uuid]
             [logseq.db.common.delete-blocks :as delete-blocks] ;; Load entity extensions
             [logseq.db.common.entity-plus :as entity-plus]
-            [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.common.initial-data :as common-initial-data]
-            [logseq.db.file-based.schema :as file-schema]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.db :as db-db]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.schema :as db-schema]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.util :as sqlite-util])
   (:refer-clojure :exclude [object?]))
@@ -206,13 +203,13 @@
         ;; transact tx-data to `conn` and validate db
         (transact! conn tx-data tx-meta)))))
 
-(def page? common-entity-util/page?)
+(def page? entity-util/page?)
 (def internal-page? entity-util/internal-page?)
 (def class? entity-util/class?)
 (def property? entity-util/property?)
 (def closed-value? entity-util/closed-value?)
-(def whiteboard? common-entity-util/whiteboard?)
-(def journal? common-entity-util/journal?)
+(def whiteboard? entity-util/whiteboard?)
+(def journal? entity-util/journal?)
 (def hidden? entity-util/hidden?)
 (def object? entity-util/object?)
 (def asset? entity-util/asset?)
@@ -654,13 +651,6 @@
          :where
          [?page :block/tags ?tag]]
        db))
-
-(defn get-schema
-  "Returns schema for given repo"
-  [repo]
-  (if (sqlite-util/db-based-graph? repo)
-    db-schema/schema
-    file-schema/schema))
 
 (defn page-in-library?
   "Check whether a `page` exists on the Library page"

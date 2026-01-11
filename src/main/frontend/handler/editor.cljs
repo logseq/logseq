@@ -52,7 +52,6 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
-            [logseq.db.file-based.schema :as file-schema]
             [logseq.db.frontend.asset :as db-asset]
             [logseq.db.frontend.db :as db-db]
             [logseq.db.frontend.property :as db-property]
@@ -356,6 +355,10 @@
                                                                            :keep-uuid? true})]
       [result sibling? prev-block])))
 
+;; This used to be a list of file attributes. Unclear if remaining ones should be removed
+(def retract-attributes
+  #{:block/tags :block/alias :block/properties :block/warning})
+
 (defn insert-new-block-aux!
   [config
    {:block/keys [uuid]
@@ -367,7 +370,7 @@
         selection-end (util/get-selection-end input)
         [fst-block-text snd-block-text] (compute-fst-snd-block-text value selection-start selection-end)
         current-block (assoc block :block/title fst-block-text)
-        current-block (apply dissoc current-block file-schema/retract-attributes)
+        current-block (apply dissoc current-block retract-attributes)
         new-m {:block/uuid (db/new-block-id)
                :block/title snd-block-text}
         next-block (-> (merge (select-keys block [:block/parent :block/format :block/page])
@@ -1813,7 +1816,7 @@
         (if content-update-fn
           (content-update-fn (:block/title block))
           (:block/title block))]
-    (merge (apply dissoc block (conj (if-not keep-uuid? [:block/_refs] []) :block/pre-block? :block/meta))
+    (merge (apply dissoc block (conj (if-not keep-uuid? [:block/_refs] [])))
            {:block/page {:db/id (:db/id page)}
             :block/title new-content})))
 
