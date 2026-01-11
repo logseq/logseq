@@ -112,6 +112,24 @@
       (when-not (= coerced invalid-coerce)
         coerced))))
 
+(defn- fail-fast [tag data]
+  (log/error tag data)
+  (throw (ex-info (name tag) data)))
+
+(defn- require-number [value context]
+  (when-not (number? value)
+    (fail-fast :db-sync/invalid-field (assoc context :value value))))
+
+(defn- require-seq [value context]
+  (when-not (sequential? value)
+    (fail-fast :db-sync/invalid-field (assoc context :value value))))
+
+(defn- parse-transit [value context]
+  (try
+    (sqlite-util/read-transit-str value)
+    (catch :default e
+      (fail-fast :db-sync/response-parse-failed (assoc context :error e)))))
+
 (defn- coerce-http-request [schema-key body]
   (if-let [coercer (get db-sync-schema/http-request-coercers schema-key)]
     (let [coerced (coerce coercer body {:schema schema-key :dir :request})]
@@ -232,7 +250,7 @@
        (outliner-core/move-blocks! conn parents recycle-id {:sibling? false})))))
 
 (defn- apply-remote-tx! [repo client tx-data]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
+  (if-let [conn (worker-state/get-datascript-conn repo)]
     (try
       (let [tx-report (ldb/transact! conn tx-data {:rtc-tx? true})
             db-after (:db-after tx-report)
@@ -241,10 +259,11 @@
         (when (seq asset-uuids)
           (enqueue-asset-downloads! repo client asset-uuids)))
       (catch :default e
-        (log/error :db-sync/apply-remote-tx-failed {:error e})))))
+        (log/error :db-sync/apply-remote-tx-failed {:error e})))
+    (fail-fast :db-sync/missing-db {:repo repo :op :apply-remote-tx})))
 
 (defn- reconcile-cycle! [repo attr server_values]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
+  (if-let [conn (worker-state/get-datascript-conn repo)]
     (let [db @conn
           tx-data (reduce
                    (fn [acc [eid value]]
@@ -274,7 +293,8 @@
                                                            (:block/name ent))})))
                                      (take 10))})
       (when (seq tx-data)
-        (ldb/transact! conn tx-data {:rtc-tx? true})))))
+        (ldb/transact! conn tx-data {:rtc-tx? true})))
+    (fail-fast :db-sync/missing-db {:repo repo :op :reconcile-cycle})))
 
 (defn- normalize-entity-ref
   [db entity]
@@ -324,14 +344,15 @@
 (declare enqueue-asset-initial-download!)
 (defn- pending-txs-by-ids
   [repo tx-ids]
-  (when-let [conn (client-ops-conn repo)]
+  (if-let [conn (client-ops-conn repo)]
     (let [db @conn]
       (keep (fn [tx-id]
               (when-let [ent (d/entity db [:db-sync/tx-id tx-id])]
                 (when-let [tx (:db-sync/tx ent)]
                   {:tx-id tx-id
                    :tx tx})))
-            tx-ids))))
+            tx-ids))
+    (fail-fast :db-sync/missing-db {:repo repo :op :pending-txs-by-ids})))
 
 (defn- requeue-non-parent-txs!
   [repo attr server_values entries]
@@ -341,17 +362,17 @@
         requeued (volatile! 0)
         stripped (volatile! 0)]
     (if-not scoped?
-      (throw (ex-info "db-sync requeue requires scoped cycle info"
-                      {:repo repo
-                       :has-db? (boolean db)
-                       :attr attr
-                       :server-values (count server_values)
-                       :entries (count entries)}))
+      (fail-fast :db-sync/missing-field
+                 {:repo repo
+                  :has-db? (boolean db)
+                  :attr attr
+                  :server-values (count server_values)
+                  :entries (count entries)})
       (do
         (doseq [{:keys [tx]} entries]
           (when (string? tx)
             (vswap! stripped inc)
-            (let [tx-data (sqlite-util/read-transit-str tx)
+            (let [tx-data (parse-transit tx {:repo repo :op :requeue-non-parent-txs})
                   filtered (strip-cycle-attrs db tx-data {:attr attr :entity-refs entity-refs})]
               (when (seq filtered)
                 (vswap! requeued inc)
@@ -364,7 +385,7 @@
 
 (defn- cycle-entity-titles
   [repo server_values]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
+  (if-let [conn (worker-state/get-datascript-conn repo)]
     (let [db @conn]
       (->> (keys server_values)
            (keep (fn [ref]
@@ -372,14 +393,18 @@
                      {:uuid (some-> (:block/uuid ent) str)
                       :title (or (:block/title ent)
                                  (:block/name ent))})))
-           (take 10)))))
+           (take 10)))
+    (fail-fast :db-sync/missing-db {:repo repo :op :cycle-entity-titles})))
 
 (defn- handle-message! [repo client raw]
-  (when-let [message (-> raw parse-message coerce-ws-server-message)]
+  (let [message (-> raw parse-message coerce-ws-server-message)]
+    (when-not (map? message)
+      (fail-fast :db-sync/response-parse-failed {:repo repo :raw raw}))
     (let [local-tx (or (client-op/get-local-tx repo) 0)
           remote-tx (:t message)]
       (case (:type message)
         "hello" (do
+                  (require-number remote-tx {:repo repo :type "hello"})
                   (when (> remote-tx local-tx)
                     (send! (:ws client) {:type "pull" :since local-tx}))
                   (enqueue-asset-sync! repo client)
@@ -387,42 +412,67 @@
                   (flush-pending! repo client))
         ;; Upload response
         "tx/batch/ok" (do
+                        (require-number remote-tx {:repo repo :type "tx/batch/ok"})
                         (client-op/update-local-tx repo remote-tx)
                         (remove-pending-txs! repo @(:inflight client))
                         (reset! (:inflight client) [])
                         (flush-pending! repo client))
         ;; Download response
         ;; Merge batch txs to one tx, does it really work? We'll see
-        "pull/ok" (let [tx (mapcat (fn [data] (sqlite-util/read-transit-str (:tx data))) (:txs message))]
+        "pull/ok" (let [txs (:txs message)
+                        _ (require-number remote-tx {:repo repo :type "pull/ok"})
+                        _ (require-seq txs {:repo repo :type "pull/ok" :field :txs})
+                        tx (mapcat (fn [data]
+                                     (parse-transit (:tx data) {:repo repo :type "pull/ok"}))
+                                   txs)]
                     (when tx
                       (apply-remote-tx! repo client tx)
                       (client-op/update-local-tx repo remote-tx)
                       (flush-pending! repo client)))
-        "changed" (when (and (number? remote-tx) (< local-tx remote-tx))
-                    (send! (:ws client) {:type "pull" :since local-tx}))
-        "tx/reject" (case (:reason message)
-                      "stale"
-                      (send! (:ws client) {:type "pull" :since local-tx})
-                      "cycle"
-                      (let [{:keys [attr server_values]} (sqlite-util/read-transit-str (:data message))]
-                        ;; FIXME: fix cycle shouldn't re-trigger uploading
-                        (let [inflight-ids @(:inflight client)
-                              inflight-entries (pending-txs-by-ids repo inflight-ids)]
-                          (log/info :db-sync/tx-reject-cycle
-                                    {:repo repo
-                                     :attr attr
-                                     :server-values (count server_values)
-                                     :entity-titles (cycle-entity-titles repo server_values)
-                                     :inflight-ids (count inflight-ids)
-                                     :local-tx local-tx
-                                     :remote-tx remote-tx})
-                          (reconcile-cycle! repo attr server_values)
-                          (remove-pending-txs! repo inflight-ids)
-                          (reset! (:inflight client) [])
-                          (requeue-non-parent-txs! repo attr server_values inflight-entries))
-                        (flush-pending! repo client))
-                      nil)
-        nil))))
+        "changed" (do
+                    (require-number remote-tx {:repo repo :type "changed"})
+                    (when (< local-tx remote-tx)
+                      (send! (:ws client) {:type "pull" :since local-tx})))
+        "tx/reject" (let [reason (:reason message)]
+                      (when (nil? reason)
+                        (fail-fast :db-sync/missing-field
+                                   {:repo repo :type "tx/reject" :field :reason}))
+                      (case reason
+                        "stale"
+                        (send! (:ws client) {:type "pull" :since local-tx})
+                        "cycle"
+                        (do
+                          (when (nil? (:data message))
+                            (fail-fast :db-sync/missing-field
+                                       {:repo repo :type "tx/reject" :field :data}))
+                          (let [{:keys [attr server_values]}
+                                (parse-transit (:data message) {:repo repo :type "tx/reject"})]
+                            (when (nil? attr)
+                              (fail-fast :db-sync/missing-field
+                                         {:repo repo :type "tx/reject" :field :attr}))
+                            (when (nil? server_values)
+                              (fail-fast :db-sync/missing-field
+                                         {:repo repo :type "tx/reject" :field :server_values}))
+                            ;; FIXME: fix cycle shouldn't re-trigger uploading
+                            (let [inflight-ids @(:inflight client)
+                                  inflight-entries (pending-txs-by-ids repo inflight-ids)]
+                              (log/info :db-sync/tx-reject-cycle
+                                        {:repo repo
+                                         :attr attr
+                                         :server-values (count server_values)
+                                         :entity-titles (cycle-entity-titles repo server_values)
+                                         :inflight-ids (count inflight-ids)
+                                         :local-tx local-tx
+                                         :remote-tx remote-tx})
+                              (reconcile-cycle! repo attr server_values)
+                              (remove-pending-txs! repo inflight-ids)
+                              (reset! (:inflight client) [])
+                              (requeue-non-parent-txs! repo attr server_values inflight-entries))
+                            (flush-pending! repo client)))
+                        (fail-fast :db-sync/invalid-field
+                                   {:repo repo :type "tx/reject" :reason reason})))
+        (fail-fast :db-sync/invalid-field
+                   {:repo repo :type (:type message)})))))
 
 (defn- ensure-client-state! [repo]
   (or (get @worker-state/*db-sync-clients repo)

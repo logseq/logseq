@@ -21,6 +21,20 @@ This guide helps AI agents implement and review db-sync features consistently ac
 - Use existing `:db-sync/*` keywords; add new keywords via `logseq.common.defkeywords/defkeyword`.
 - When adding persisted fields, ensure any migration or index logic is updated on both client and worker.
 
+## Fail-Fast Error Policy
+- db-sync core code must fail fast on bugs: log an error (`log/error`) and throw immediately.
+- Treat these as bugs:
+  - db connection missing when required (client or worker).
+  - WS/HTTP response fields missing (e.g., `:t`, `:txs`, `:reason`, `:data`).
+  - Response parse/coercion failures (e.g., transit decode, malli coercion).
+  - Unexpected WS/HTTP message type or reason value.
+  - tx payload type mismatch (e.g., `:txs` not a sequence of strings).
+  - Invalid graph identity (missing/empty graph id or uuid in sync path).
+  - Invalid or negative `t`/`t_before` values.
+  - Asset operations missing required fields (checksum/type/uuid).
+  - Invariant violations in tx apply (e.g., tx-data empty after normalization).
+- Do not silently recover or drop messages for these cases; surface them via exceptions.
+
 ## HTTP API (Bootstrap + Assets)
 - HTTP endpoints backfill initial graph data, snapshots, and assets.
 - See `docs/agent-guide/db-sync/protocol.md` for request/response shapes.
