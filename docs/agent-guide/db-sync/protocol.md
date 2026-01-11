@@ -25,6 +25,7 @@
 | pull-wait       | recv 'pong'               | pull-wait       | Ignore (client does not send ping currently)                             |
 | pull-wait       | recv other                | END             | Unknown message type                                                     |
 | tx/batch-wait   | recv 'tx/batch/ok'        | hello-done      | Update local t, clear inflight, continue flush; stay pull-wait if active |
+| tx/batch-wait   | recv 'changed'            | tx/batch-wait   | Mark pull pending; pull after tx/batch completes                         |
 | tx/batch-wait   | recv 'tx/reject' (stale)  | tx/reject/stale | Handle stale branch                                                      |
 | tx/batch-wait   | recv 'tx/reject' (cycle)  | tx/reject/cycle | Handle cycle branch                                                      |
 | tx/batch-wait   | recv 'error'              | END             | Fail fast                                                                |
