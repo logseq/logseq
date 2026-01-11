@@ -16,6 +16,9 @@ This document describes the handling of cycles formed between multiple blocks in
 - It calls `reconcile-cycle!` which builds `:db/add` / `:db/retract` ops to restore `attr` to the server values, then transacts them locally with `:rtc-tx? true`.
 - The intent is to correct local cycles and prevent re-uploading conflicting changes.
 - The client also strips cycle-related attrs (`:block/parent`, `:logseq.property.class/extends`) from the rejected inflight txs, requeues the remaining changes, and flushes pending txs so other attribute updates still sync.
+- TODO: During `pull/ok`, after applying remote txs, the client checks cycle-related attrs touched by the tx. If a cycle is detected:
+  - For `:block/parent`, reparent the affected block to its page root (top-level) and persist the op so it is uploaded to the server.
+  - For other cycle attrs (e.g. `:logseq.property.class/extends`), retract the attr locally.
 
 ## Known pitfalls and fixes
 - :logseq.property.class/extends not well handled yet, let it be for now, FIX it later
