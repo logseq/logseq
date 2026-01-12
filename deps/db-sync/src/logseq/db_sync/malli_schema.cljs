@@ -21,7 +21,7 @@
     [:map
      [:type [:= "tx/batch"]]
      [:t_before :int]
-     [:txs [:sequential :string]]]]
+     [:txs :string]]]
    ["ping"
     [:map
      [:type [:= "ping"]]]]])
@@ -107,7 +107,7 @@
 (def tx-batch-request-schema
   [:map
    [:t_before :int]
-   [:txs [:sequential :string]]])
+   [:txs :string]])
 
 (def snapshot-row-schema
   [:or
