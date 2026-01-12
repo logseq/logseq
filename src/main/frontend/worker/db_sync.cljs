@@ -312,28 +312,39 @@
     (or (ldb/get-built-in-page db common-config/recycle-page-name)
         (let [page (-> (sqlite-util/build-new-page common-config/recycle-page-name)
                        sqlite-create-graph/mark-block-as-built-in)
-              {:keys [db-after]} (ldb/transact! conn [page] {:db-sync/recycle-page? true})]
+              {:keys [db-after]} (ldb/transact! conn [page] {:db-sync/recycle-page? true
+                                                             :outliner-op :create-page})]
           (d/entity db-after [:block/uuid (:block/uuid page)])))))
 
-(defn- missing-parents
-  [{:keys [db-before db-after tx-data]}]
+(defn- get-missing-parent-datoms
+  [{:keys [db-after tx-data]}]
   (->> tx-data
-       ;; parent gone
-       (keep (fn [d]
-               (when (and (= :block/parent (:a d)) (:added d)
-                          (nil? (d/entity db-after (:v d))))
-                 (d/entity db-before (:v d)))))))
+       ;; block still exists while its parent has been gone
+       (filter (fn [d]
+                 (and (= :block/parent (:a d))
+                      (nil? (d/entity db-after (:v d)))
+                      (some? (d/entity db-after (:e d))))))))
 
 (defn- move-missing-parents
   [conn tx-report]
-  (when-let [parents (seq (missing-parents tx-report))]
-    (let [recycle-page (ensure-recycle-page! conn)
-          recycle-id (:db/id recycle-page)]
-      (outliner-tx/transact!
-       {:persist-op? true
-        :gen-undo-ops? false
-        :outliner-op :fix-missing-parent}
-       (outliner-core/move-blocks! conn parents recycle-id {:sibling? false})))))
+  (let [tx-data (:tx-data tx-report)]
+    (if-let [missing-parent-datoms (seq (get-missing-parent-datoms tx-report))]
+      (let [blocks (map (fn [d]
+                          (d/entity (:db-after tx-report) (:e d)))
+                        missing-parent-datoms)
+            block-ids (set (map :db/id blocks))
+            recycle-page (ensure-recycle-page! conn)
+            _ (outliner-tx/transact!
+               {:persist-op? true
+                :gen-undo-ops? false
+                :outliner-op :fix-missing-parent
+                :transact-opts {:conn conn}}
+               (outliner-core/move-blocks! conn blocks recycle-page {:sibling? false}))]
+        (remove
+         (fn [d]
+           (and (contains? block-ids (:e d)) (= (:a d) :block/parent) (false? (:added d))))
+         tx-data))
+      tx-data)))
 
 (defn- reconcile-cycle! [repo attr server_values]
   (if-let [conn (worker-state/get-datascript-conn repo)]
@@ -756,10 +767,11 @@
 (defn- apply-remote-tx! [repo client tx-data]
   (if-let [conn (worker-state/get-datascript-conn repo)]
     (try
-      (let [tx-report (ldb/transact! conn tx-data {:rtc-tx? true})
+      (let [report' (d/with @conn tx-data)
+            fix-tx-data (move-missing-parents conn report')
+            tx-report (ldb/transact! conn fix-tx-data {:rtc-tx? true})
             db-after (:db-after tx-report)
             asset-uuids (asset-uuids-from-tx db-after (:tx-data tx-report))]
-        (move-missing-parents conn tx-report)
         (when (seq asset-uuids)
           (enqueue-asset-downloads! repo client asset-uuids)))
       (catch :default e
