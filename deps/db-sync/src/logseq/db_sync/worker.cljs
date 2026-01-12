@@ -5,6 +5,7 @@
             [lambdaisland.glogi :as log]
             [lambdaisland.glogi.console :as glogi-console]
             [logseq.common.authorization :as authorization]
+            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db-sync.common :as common :refer [cors-headers]]
             [logseq.db-sync.malli-schema :as db-sync-schema]
@@ -12,6 +13,7 @@
             [logseq.db-sync.protocol :as protocol]
             [logseq.db-sync.storage :as storage]
             [logseq.db-sync.worker-core :as worker-core]
+            [logseq.db.common.normalize :as db-normalize]
             [promesa.core :as p]
             [shadow.cljs.modern :refer (defclass)]))
 
@@ -336,10 +338,17 @@
        conn
        {:apply-tx? true}
        (fn [temp-conn *batch-tx-data]
-         (let [tx-report (d/transact! temp-conn tx-data {:op :apply-client-tx})]
+         (let [recycle-page-id (:db/id (db-sync-parent-missing/ensure-recycle-page! conn))
+               tx-data' (->> tx-data
+                             (db-sync-parent-missing/fix-parent-missing-for-tx-data! conn recycle-page-id)
+                             db-normalize/replace-attr-retract-with-retract-entity-v2)
+               tx-report (ldb/transact! temp-conn tx-data' {:op :apply-client-tx})]
+           (prn :debug :fix-parent-missing)
            ;; TODO: fix cycle
            (db-sync-parent-missing/fix-parent-missing! temp-conn tx-report)
+           (prn :debug :fix-duplicate-orders)
            (worker-core/fix-duplicate-orders! temp-conn @*batch-tx-data))))
+      (prn :debug :finished-db-transact)
       (let [new-t (storage/get-t sql)]
         ;; FIXME: no need to broadcast if client tx is less than remote tx
         (broadcast! self sender {:type "changed" :t new-t})

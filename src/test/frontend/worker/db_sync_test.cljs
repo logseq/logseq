@@ -38,7 +38,7 @@
       (ldb/transact! conn [[:db/retractEntity (:db/id recycle-page)]])
       (with-datascript-conn conn
         (fn []
-          (#'db-sync/apply-remote-tx!
+          (#'db-sync/rebase-apply-remote-tx!
            test-repo
            nil
            [[:db/retractEntity (:db/id parent)]])
@@ -51,7 +51,7 @@
     (let [{:keys [conn parent child]} (setup-parent-child)]
       (with-datascript-conn conn
         (fn []
-          (#'db-sync/apply-remote-tx!
+          (#'db-sync/rebase-apply-remote-tx!
            test-repo
            nil
            [[:db/add (:db/id parent) :block/parent (:db/id child)]])

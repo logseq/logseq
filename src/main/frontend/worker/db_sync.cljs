@@ -173,8 +173,10 @@
 (defn- normalize-tx-data [db-after db-before tx-data]
   (->> tx-data
        (remove (fn [[_e a _v _t _added]]
-                 (contains? #{:block/tx-id :logseq.property/created-by-ref
-                              :logseq.property.embedding/hnsw-label-updated-at} a)))
+                 (contains? #{:block/tx-id
+                              :logseq.property.embedding/hnsw-label-updated-at
+                              ;; FIXME: created-by-ref maybe not exist yet on server or client
+                              :logseq.property/created-by-ref} a)))
        (db-normalize/normalize-tx-data db-after db-before)))
 
 (defn- parse-message [raw]
@@ -231,27 +233,30 @@
 (defn- client-ops-conn [repo]
   (worker-state/get-client-ops-conn repo))
 
-(defn- persist-local-tx! [repo tx-str _tx-meta]
+(defn- persist-local-tx! [repo normalized-tx-data reversed-datoms _tx-meta]
   (when-let [conn (client-ops-conn repo)]
     (let [tx-id (random-uuid)
           now (.now js/Date)]
       (ldb/transact! conn [{:db-sync/tx-id tx-id
-                            :db-sync/tx tx-str
+                            :db-sync/normalized-tx-data normalized-tx-data
+                            :db-sync/reversed-tx-data reversed-datoms
                             :db-sync/created-at now}])
       tx-id)))
 
 (defn- pending-txs
-  [repo limit]
+  [repo & {:keys [limit]}]
   (when-let [conn (client-ops-conn repo)]
     (let [db @conn
-          datoms (take limit (d/datoms db :avet :db-sync/created-at))]
-      (->> datoms
+          datoms (d/datoms db :avet :db-sync/created-at)
+          datoms' (if limit (take limit datoms) datoms)]
+      (->> datoms'
            (map (fn [datom]
                   (d/entity db (:e datom))))
            (keep (fn [ent]
                    (let [tx-id (:db-sync/tx-id ent)]
                      {:tx-id tx-id
-                      :tx (:db-sync/tx ent)})))
+                      :tx (:db-sync/normalized-tx-data ent)
+                      :reversed-tx (:db-sync/reversed-tx-data ent)})))
            (vec)))))
 
 (defn- remove-pending-txs!
@@ -277,22 +282,23 @@
   [repo client]
   (let [inflight @(:inflight client)
         local-tx (or (client-op/get-local-tx repo) 0)
-        remote-tx 0]
+        remote-tx (get @*repo->latest-remote-tx repo)]
+    (prn :debug :remote-tx remote-tx
+         :local-tx local-tx)
     (when (= local-tx remote-tx)        ; rebase
       (when (empty? inflight)
         (when-let [ws (:ws client)]
           (when (ws-open? ws)
-            (let [batch (pending-txs repo 50)]
+            (let [batch (pending-txs repo {:limit 50})]
               (when (seq batch)
                 (let [tx-ids (mapv :tx-id batch)
-                      txs (mapv :tx batch)
+                      txs (mapcat :tx batch)
                       tx-data (->> txs
-                                   (mapcat sqlite-util/read-transit-str)
                                    keep-last-parent-update)]
                   (when (seq txs)
                     (reset! (:inflight client) tx-ids)
                     (send! ws {:type "tx/batch"
-                               :t_before (or (client-op/get-local-tx repo) 0)
+                               :t_before local-tx
                                :txs (sqlite-util/write-transit-str tx-data)})))))))))))
 
 (defn- ensure-client-state! [repo]
@@ -519,16 +525,41 @@
                                (p/resolved nil)))
                            (p/resolved nil)))))
 
-(defn- apply-remote-tx! [repo client tx-data]
+(defn- rebase-apply-remote-tx! [repo client tx-data]
   (if-let [conn (worker-state/get-datascript-conn repo)]
     (try
-      (let [tx-report (ldb/transact! conn tx-data {:rtc-tx? true})
+      (let [;; 1. revert local changes
+            local-txs (pending-txs repo)
+            reversed-tx-data (->> local-txs
+                                  (mapcat :reversed-tx)
+                                  reverse
+                                  db-normalize/replace-attr-retract-with-retract-entity-v2)
+            *tx-report (atom nil)
+            _ (ldb/transact-with-temp-conn!
+               conn
+               {:rtc-tx? true}
+               (fn [conn]
+                 (prn :debug :reversed-tx-data reversed-tx-data)
+                 (when (seq reversed-tx-data)
+                   (ldb/transact! conn reversed-tx-data))
+                 (let [;; 2. apply remote tx
+                       tx-data' (db-normalize/replace-attr-retract-with-retract-entity tx-data)
+                       _ (prn :debug :apply-remote-tx-data tx-data')
+                       _ (prn :debug :original-tx-data tx-data')
+                       tx-report (ldb/transact! conn tx-data')]
+                   (reset! *tx-report tx-report)
+                   ;; TODO: 3. compute and compare checksum
+                   ;; Notice: no need to restore local changes, we'll send pending-txs to server
+                   ;; and let the server to fix the tx-data if there's invalidation
+                   )))
+            tx-report @*tx-report
             db-after (:db-after tx-report)
             asset-uuids (asset-uuids-from-tx db-after (:tx-data tx-report))]
         (when (seq asset-uuids)
           (enqueue-asset-downloads! repo client asset-uuids)))
       (catch :default e
-        (log/error :db-sync/apply-remote-tx-failed {:error e})))
+        (log/error :db-sync/apply-remote-tx-failed {:error e})
+        (throw e)))
     (fail-fast :db-sync/missing-db {:repo repo :op :apply-remote-tx})))
 
 (defn- handle-message! [repo client raw]
@@ -563,7 +594,7 @@
                                      (parse-transit (:tx data) {:repo repo :type "pull/ok"}))
                                    txs)]
                     (when tx
-                      (apply-remote-tx! repo client tx)
+                      (rebase-apply-remote-tx! repo client tx)
                       (client-op/update-local-tx repo remote-tx)
                       (flush-pending! repo client)))
         "changed" (do
@@ -687,8 +718,9 @@
         tx-data' (remove (fn [d] (contains? #{:logseq.property.embedding/hnsw-label-updated-at :block/tx-id} (:a d))) tx-data)]
     (when (and db (seq tx-data'))
       (let [normalized (normalize-tx-data db-after db-before tx-data')
-            tx-str (sqlite-util/write-transit-str normalized)]
-        (persist-local-tx! repo tx-str tx-meta)
+            reversed-datoms (map (fn [[e a v _t added]]
+                                   [(if added :db/retract :db/add) e a v]) tx-data')]
+        (persist-local-tx! repo normalized reversed-datoms tx-meta)
         (when-let [client @worker-state/*db-sync-client]
           (when (= repo (:repo client))
             (let [send-queue (:send-queue client)]

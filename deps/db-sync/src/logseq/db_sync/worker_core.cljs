@@ -2,41 +2,10 @@
   (:require [datascript.core :as d]
             [logseq.db.common.order :as db-order]))
 
-(defn- normalize-eid [db entity]
-  (cond
-    (number? entity) (when (pos? entity) entity)
-    (vector? entity) (d/entid db entity)
-    (uuid? entity) (d/entid db [:block/uuid entity])
-    (keyword? entity) (d/entid db [:db/ident entity])
-    :else nil))
-
-(defn- attr-updates-from-tx [db tx-data attr]
-  (keep (fn [tx]
-          (cond
-            (and (vector? tx)
-                 (= :db/add (first tx))
-                 (= attr (nth tx 2 nil)))
-            (let [eid (normalize-eid db (nth tx 1 nil))]
-              (when eid
-                {:e eid
-                 :a attr
-                 :v (nth tx 3 nil)}))
-
-            (and (map? tx) (contains? tx attr))
-            (let [entity (or (:db/id tx) (:block/uuid tx) (:db/ident tx))
-                  eid (normalize-eid db entity)]
-              (when eid
-                {:e eid
-                 :a attr
-                 :v (get tx attr)}))
-
-            :else nil))
-        tx-data))
-
 (defn fix-duplicate-orders! [conn tx-data]
   (let [db @conn
-        updates (->> (attr-updates-from-tx db tx-data :block/order)
-                     (filter (fn [{:keys [e v]}] (and e v))))
+        updates (->> tx-data
+                     (filter (fn [[e a v _tx added]] (and (= a :block/order) added e v))))
         groups (group-by (fn [{:keys [e v]}]
                            (let [parent (:block/parent (d/entity db e))]
                              [(:db/id parent) v]))
