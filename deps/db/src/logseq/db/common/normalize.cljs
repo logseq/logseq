@@ -2,7 +2,19 @@
   "Normalize && denormalize eid for sync"
   (:require [datascript.core :as d]))
 
-(defn- replace-attr-retract-with-retract-entity
+(defn replace-attr-retract-with-retract-entity-v2
+  [normalized-tx-data]
+  (map (fn [[op eid a v]]
+         (cond
+           (and (= op :db/retract) (= a :block/uuid))
+           [:db.fn/retractEntity eid]
+           (and a (some? v))
+           [op eid a v]
+           :else
+           [op eid]))
+       normalized-tx-data))
+
+(defn replace-attr-retract-with-retract-entity
   [tx-data]
   (let [e-datoms (->> (group-by first tx-data)
                       (sort-by first))]
@@ -26,8 +38,8 @@
   "Properties first"
   [datoms]
   (sort-by
-   (fn [d]
-     (case (:a d)
+   (fn [item]
+     (case (nth item 1)
        :db/ident
        0
        :db/valueType
@@ -40,11 +52,10 @@
 (defn normalize-tx-data
   [db-after db-before tx-data]
   (->> tx-data
-       replace-attr-retract-with-retract-entity
        sort-datoms
        (keep
         (fn [d]
-          (if (= 5 (count d))
+          (if (= (count d) 5)
             (let [[e a v _t added] d
                   retract? (not added)
                   e' (if retract?
