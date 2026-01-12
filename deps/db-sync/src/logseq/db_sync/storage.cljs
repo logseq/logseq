@@ -1,10 +1,12 @@
 (ns logseq.db-sync.storage
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
+            [datascrip.core :as d]
             [datascript.storage :refer [IStorage]]
+            [logseq.db-sync.common :as common]
+            [logseq.db.common.normalize :as db-normalize]
             [logseq.db.common.sqlite :as common-sqlite]
-            [logseq.db.frontend.schema :as db-schema]
-            [logseq.db-sync.common :as common]))
+            [logseq.db.frontend.schema :as db-schema]))
 
 (defn init-schema! [sql]
   (common/sql-exec sql "create table if not exists kvs (addr INTEGER primary key, content TEXT, addresses JSON)")
@@ -109,8 +111,24 @@
     (-restore [_ addr]
       (restore-data-from-addr sql addr))))
 
+(defn- append-tx-for-tx-report
+  [sql {:keys [db-after db-before tx-data]}]
+  (let [new-t (next-t! sql)
+        created-at (common/now-ms)
+        normalized-data (db-normalize/normalize-tx-data db-after db-before tx-data)
+        tx-str (common/write-transit normalized-data)]
+    (append-tx! sql new-t tx-str created-at)))
+
+(defn- listen-db-updates!
+  [sql conn]
+  (d/listen conn ::listen-db-updates
+            (fn [tx-report]
+              (append-tx-for-tx-report sql tx-report))))
+
 (defn open-conn [sql]
   (init-schema! sql)
   (let [storage (new-sqlite-storage sql)
-        schema db-schema/schema]
-    (common-sqlite/get-storage-conn storage schema)))
+        schema db-schema/schema
+        conn (common-sqlite/get-storage-conn storage schema)]
+    (listen-db-updates! sql conn)
+    conn))
