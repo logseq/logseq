@@ -61,14 +61,14 @@
 
 ;;; internal utils
 (defn ^:api get-blocks-contents
-  [repo root-block-uuid & {:keys [init-level]
+  [root-block-uuid & {:keys [init-level]
                            :or {init-level 1}}]
   (let [block (d/entity *current-db* [:block/uuid root-block-uuid])
         link (:block/link block)
         block' (or link block)
         root-id (:block/uuid block')
         blocks (ldb/get-block-and-children *current-db* root-id)
-        tree (otree/blocks->vec-tree repo *current-db* blocks root-id {:link link})]
+        tree (otree/blocks->vec-tree *current-db* blocks root-id {:link link})]
     (common-file/tree->file-content *current-repo* *current-db* tree
                                     {:init-level init-level :link link}
                                     *content-config*)))
@@ -87,7 +87,7 @@
 
 (defn- block-uuid->ast-with-children
   [block-uuid]
-  (let [content (get-blocks-contents *current-repo* block-uuid)
+  (let [content (get-blocks-contents block-uuid)
         format :markdown]
     (when content
       (removev Properties-block-ast?

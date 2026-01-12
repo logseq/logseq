@@ -2,6 +2,7 @@
   "Provides db fns and associated util fns for publishing"
   (:require [clojure.set :as set]
             [datascript.core :as d]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.rules :as rules]))
 
@@ -25,7 +26,7 @@
                           (when (seq tag-pages*)
                             (some-> (d/entity db :block/tags) :db/id vector)))
         property-pages (mapcat (fn [ent]
-                                 (->> (keys (:block/properties ent))
+                                 (->> (keys (entity-plus/lookup-kv-then-entity ent :block/properties))
                                       (map #(:db/id (d/entity db %)))))
                                page-ents)]
     (concat pages tag-pages property-pages)))

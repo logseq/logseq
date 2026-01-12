@@ -1,5 +1,7 @@
 (ns frontend.format.block
-  "Block code needed by app but not graph-parser"
+  "Block code needed by app but not graph-parser. This should be the only frontend
+   namespace that has references to legacy file attributes like :block/pre-block?
+   as they are being removed from graph-parser output"
   (:require [cljs-time.format :as tf]
             [cljs.cache :as cache]
             [clojure.string :as string]

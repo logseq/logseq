@@ -89,7 +89,7 @@
                          1))
         blocks (->> (d/pull-many db '[*] (keep :db/id (ldb/get-block-and-children db root-block-uuid)))
                     (map #(update-block-content db % (:db/id %))))
-        tree (otree/blocks->vec-tree repo db blocks (str root-block-uuid))]
+        tree (otree/blocks->vec-tree db blocks (str root-block-uuid))]
     (tree->file-content repo db tree
                         (assoc tree->file-opts :init-level init-level)
                         context)))

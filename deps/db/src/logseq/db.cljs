@@ -421,7 +421,6 @@
                                     (contains? #{"" "-" "*"} (string/trim (:block/title first-child))))))
                                 (not (contains? built-in-pages name'))
                                 (not (whiteboard? page))
-                                (not (:block/_namespace page))
                                 (not (property? page))
                                  ;; a/b/c might be deleted but a/b/c/d still exists (for backward compatibility)
                                 (not (and (string/includes? name' "/")
@@ -620,30 +619,18 @@
 
 (defn get-pages-relation
   [db with-journal?]
-  (if (entity-plus/db-based-graph? db)
-    (let [q (if with-journal?
-              '[:find ?p ?ref-page
-                :where
-                [?block :block/page ?p]
-                [?block :block/refs ?ref-page]]
-              '[:find ?p ?ref-page
-                :where
-                [?block :block/page ?p]
-                [?p :block/tags]
-                (not [?p :block/tags :logseq.class/Journal])
-                [?block :block/refs ?ref-page]])]
-      (d/q q db))
-    (let [q (if with-journal?
-              '[:find ?p ?ref-page
-                :where
-                [?block :block/page ?p]
-                [?block :block/refs ?ref-page]]
-              '[:find ?p ?ref-page
-                :where
-                [?block :block/page ?p]
-                (not [?p :block/type "journal"])
-                [?block :block/refs ?ref-page]])]
-      (d/q q db))))
+  (let [q (if with-journal?
+            '[:find ?p ?ref-page
+              :where
+              [?block :block/page ?p]
+              [?block :block/refs ?ref-page]]
+            '[:find ?p ?ref-page
+              :where
+              [?block :block/page ?p]
+              [?p :block/tags]
+              (not [?p :block/tags :logseq.class/Journal])
+              [?block :block/refs ?ref-page]])]
+    (d/q q db)))
 
 (defn get-all-tagged-pages
   [db]
