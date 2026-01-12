@@ -74,8 +74,7 @@
         block-eids (mapv :e datoms)
         block-ents (map #(d/entity db %) block-eids)
         blocks (map #(assoc % :block/title (db-content/recur-replace-uuid-in-block-title %)) block-ents)]
-      ;; Use repo stub since this is a DB only tool
-    (->> (otree/blocks->vec-tree "logseq_db_repo_stub" db blocks page-id)
+    (->> (otree/blocks->vec-tree db blocks page-id)
          (map #(update % :block/uuid str)))))
 
 (defn ^:api remove-hidden-properties

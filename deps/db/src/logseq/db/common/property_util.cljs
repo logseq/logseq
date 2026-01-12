@@ -25,20 +25,18 @@
     (get-file-pid db-ident)))
 
 (defn lookup
-  "Get the property value by a built-in property's db-ident from coll. For file and db graphs"
-  [repo block db-ident]
-  (if (sqlite-util/db-based-graph? repo)
-    (let [val (get block db-ident)]
-      (if (db-property/built-in-has-ref-value? db-ident) (db-property/property-value-content val) val))
-    (get (:block/properties block) (get-pid repo db-ident))))
+  "Get the property value by a built-in property's db-ident from coll"
+  [block db-ident]
+  (let [val (get block db-ident)]
+    (if (db-property/built-in-has-ref-value? db-ident) (db-property/property-value-content val) val)))
 
 (defn get-block-property-value
   "Get the value of built-in block's property by its db-ident"
-  [repo db block db-ident]
+  [db block db-ident]
   (when db
     (let [block (or (d/entity db (:db/id block)) block)]
-      (lookup repo block db-ident))))
+      (lookup block db-ident))))
 
 (defn shape-block?
-  [repo db block]
-  (= :whiteboard-shape (get-block-property-value repo db block :logseq.property/ls-type)))
+  [db block]
+  (= :whiteboard-shape (get-block-property-value db block :logseq.property/ls-type)))

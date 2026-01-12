@@ -111,8 +111,7 @@
     :logseq.class/Asset})
 
 (def private-tags
-  "Built-in classes that are private and should not be used by a user directly.
-  These used to be in block/type"
+  "Built-in classes that are private and should not be used by a user directly."
   (set/union (disj internal-tags :logseq.class/Root)
              #{:logseq.class/Journal :logseq.class/Whiteboard
                :logseq.class/Pdf-annotation}))

@@ -15,7 +15,6 @@ This library is under the parent namespace `logseq.db`. It provides the followin
 * `logseq.db` - main entry point serving both file and DB graphs
 * `logseq.db.frontend.*` - frontend namespaces for DB graphs
 * `logseq.db.sqlite.*` - backend/sqlite namespaces for DB graphs
-* `logseq.db.file-based.*` - namespaces for file graphs, mostly old namespaces
 * `logseq.db.common.*` - namespaces for both file and DB graphs
 
 ## Usage
