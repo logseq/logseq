@@ -45,3 +45,19 @@
           (let [recycle-page' (ldb/get-built-in-page @conn common-config/recycle-page-name)]
             (is (= common-config/recycle-page-name (:block/title recycle-page')))
             (is (= "Recycle" (:block/title (:block/parent (d/entity @conn (:db/id child))))))))))))
+
+(deftest reparent-block-when-cycle-detected-test
+  (testing "cycle from remote sync reparent block to page root"
+    (let [{:keys [conn parent child]} (setup-parent-child)]
+      (with-datascript-conn conn
+        (fn []
+          (#'db-sync/apply-remote-tx!
+           test-repo
+           nil
+           [[:db/add (:db/id parent) :block/parent (:db/id child)]])
+          (let [parent' (d/entity @conn (:db/id parent))
+                child' (d/entity @conn (:db/id child))
+                page' (:block/page parent')]
+            (is (some? page'))
+            (is (= (:db/id page') (:db/id (:block/parent parent'))))
+            (is (= (:db/id parent') (:db/id (:block/parent child'))))))))))
