@@ -8,6 +8,7 @@
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.db :as ldb]
+            [logseq.db-sync.cycle :as db-sync-cycle]
             [logseq.db-sync.malli-schema :as db-sync-schema]
             [logseq.db.common.normalize :as db-normalize]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
@@ -345,6 +346,37 @@
            (and (contains? block-ids (:e d)) (= (:a d) :block/parent) (false? (:added d))))
          tx-data))
       tx-data)))
+
+(defn- entity-from-ref
+  [db entity-ref]
+  (cond
+    (nil? entity-ref) nil
+    (vector? entity-ref) (d/entity db entity-ref)
+    (uuid? entity-ref) (d/entity db [:block/uuid entity-ref])
+    (keyword? entity-ref) (d/entity db [:db/ident entity-ref])
+    (number? entity-ref) (d/entity db entity-ref)
+    :else nil))
+
+(defn- reparent-cycle-block!
+  [conn block]
+  (when-let [page (:block/page block)]
+    (outliner-tx/transact!
+     {:transact-opts {:conn conn}
+      :persist-op? true
+      :gen-undo-ops? false
+      :outliner-op :fix-cycle-parent}
+     (outliner-core/move-blocks! conn [block] page {:sibling? false}))))
+
+(defn- fix-cycle-after-remote-tx!
+  [conn db tx-data]
+  (when-let [{:keys [attr entity]} (and (seq tx-data)
+                                        (db-sync-cycle/detect-cycle db tx-data))]
+    (log/info :db-sync/remote-cycle-detected
+              {:attr attr
+               :entity entity})
+    (when (= attr :block/parent)
+      (when-let [block (entity-from-ref db entity)]
+        (reparent-cycle-block! conn block)))))
 
 (defn- reconcile-cycle! [repo attr server_values]
   (if-let [conn (worker-state/get-datascript-conn repo)]
@@ -772,6 +804,7 @@
             tx-report (ldb/transact! conn fix-tx-data {:rtc-tx? true})
             db-after (:db-after tx-report)
             asset-uuids (asset-uuids-from-tx db-after (:tx-data tx-report))]
+        (fix-cycle-after-remote-tx! conn db-after tx-data)
         (when (seq asset-uuids)
           (enqueue-asset-downloads! repo client asset-uuids)))
       (catch :default e
