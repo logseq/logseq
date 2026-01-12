@@ -15,7 +15,6 @@
                                    :block/updated-at 1720017595873,
                                    :block/created-at 1720017595872,
                                    :db/ident :user.class/yyy,
-                                   :block/type "class",
                                    :block/name "yyy",
                                    :block/title "yyy"}])]
       (is (= {:move
@@ -27,8 +26,7 @@
                :pos [nil nil],
                :av-coll
                [[:block/name "[\"~#'\",\"yyy\"]" 1 true]
-                [:block/title "[\"~#'\",\"yyy\"]" 1 true]
-                [:block/type "[\"~#'\",\"class\"]" 1 true]]}}
+                [:block/title "[\"~#'\",\"yyy\"]" 1 true]]}}
              (:remote-ops
               (#'subject/local-block-ops->remote-ops
                db
@@ -37,8 +35,7 @@
                 [:update 1 {:block-uuid block-uuid
                             :av-coll
                             [[:block/name (ldb/write-transit-str "yyy") 1 true]
-                             [:block/title (ldb/write-transit-str "yyy") 1 true]
-                             [:block/type (ldb/write-transit-str "class") 1 true]]}]}))))))
+                             [:block/title (ldb/write-transit-str "yyy") 1 true]]}]}))))))
 
   (testing "user.property/xxx creation"
     (let [block-uuid (random-uuid)
@@ -70,7 +67,6 @@
                                    :db/cardinality :db.cardinality/one
                                    :db/ident :user.property/xxx,
                                    :block/tags [3]
-                                   :block/type "property",
                                    :block/order block-order,
                                    :block/name "xxx",
                                    :block/title "xxx"}])]
@@ -84,8 +80,7 @@
              :pos [nil block-order],
              :av-coll
              [[:block/name "[\"~#'\",\"xxx\"]" 1 true]
-              [:block/title "[\"~#'\",\"xxx\"]" 1 true]
-              [:block/type "[\"~#'\",\"property\"]" 1 true]]}
+              [:block/title "[\"~#'\",\"xxx\"]" 1 true]]}
             :update-schema
             {:block-uuid block-uuid
              :db/ident :user.property/xxx,
@@ -102,7 +97,6 @@
                           [[:db/valueType (ldb/write-transit-str :db.type/ref) 1 true]
                            [:block/name (ldb/write-transit-str "xxx") 1 true]
                            [:block/title (ldb/write-transit-str "xxx") 1 true]
-                           [:block/type (ldb/write-transit-str "property") 1 true]
                            [:db/cardinality (ldb/write-transit-str :db.cardinality/one) 1 true]
                            [:db/index (ldb/write-transit-str true) 1 true]]}]}))))))
 
@@ -112,7 +106,6 @@
                                    :block/updated-at 1720017595873,
                                    :block/created-at 1720017595872,
                                    :db/ident :user.class/zzz,
-                                   :block/type "class",
                                    :block/name "zzz",
                                    :block/title "zzz"}])]
       (is (= {:add
@@ -121,13 +114,11 @@
                :pos [nil nil]
                :av-coll
                [[:block/name "[\"~#'\",\"zzz\"]" 1 true]
-                [:block/title "[\"~#'\",\"zzz\"]" 1 true]
-                [:block/type "[\"~#'\",\"class\"]" 1 true]]}}
+                [:block/title "[\"~#'\",\"zzz\"]" 1 true]]}}
              (:remote-ops
               (#'subject/local-block-ops->remote-ops
                db
                {:add [:add 1 {:block-uuid block-uuid
                               :av-coll
                               [[:block/name (ldb/write-transit-str "zzz") 1 true]
-                               [:block/title (ldb/write-transit-str "zzz") 1 true]
-                               [:block/type (ldb/write-transit-str "class") 1 true]]}]})))))))
+                               [:block/title (ldb/write-transit-str "zzz") 1 true]]}]})))))))

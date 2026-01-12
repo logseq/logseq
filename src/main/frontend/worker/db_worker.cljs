@@ -656,11 +656,6 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (worker-export/get-debug-datoms conn)))
 
-(def-thread-api :thread-api/export-get-all-pages
-  [repo]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (worker-export/get-all-pages repo @conn)))
-
 (def-thread-api :thread-api/export-get-all-page->content
   [repo options]
   (when-let [conn (worker-state/get-datascript-conn repo)]

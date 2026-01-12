@@ -4,7 +4,6 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [frontend.common.graph-view :as graph-view]
-            [frontend.config :as config]
             [frontend.db.conn :as conn]
             [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
@@ -80,44 +79,26 @@ independent of format as format specific heading characters are stripped"
   name must match the content of a page's block header"
   [repo page-uuid-str route-name]
   (let [db (conn/get-db repo)]
-    (if (config/db-based-graph? repo)
-      (->> (d/q '[:find (pull ?b [:block/uuid])
-                  :in $ ?page-uuid ?route-name ?content-matches %
-                  :where
-                  [?page :block/uuid ?page-uuid]
-                  [?b :block/page ?page]
-                  (has-property ?b :logseq.property/heading)
-                  [?b :block/title ?content]
-                  [(?content-matches ?content ?route-name ?b)]]
-                db
-                (uuid page-uuid-str)
-                route-name
-                (fn content-matches? [block-content external-content block-id]
-                  (let [block (db-utils/entity repo block-id)
-                        ref-tags (distinct (concat (:block/tags block) (:block/refs block)))]
-                    (= (-> (db-content/id-ref->title-ref block-content ref-tags)
-                           (db-content/content-id-ref->page ref-tags)
-                           heading-content->route-name)
-                       (string/lower-case external-content))))
-                (rules/extract-rules rules/db-query-dsl-rules [:has-property]))
-           ffirst)
-
-      (->> (d/q '[:find (pull ?b [:block/uuid])
-                  :in $ ?page-uuid ?route-name ?content-matches
-                  :where
-                  [?page :block/uuid ?page-uuid]
-                  [?b :block/page ?page]
-                  [?b :block/properties ?prop]
-                  [(get ?prop :heading) _]
-                  [?b :block/title ?content]
-                  [(?content-matches ?content ?route-name)]]
-                db
-                (uuid page-uuid-str)
-                route-name
-                (fn content-matches? [block-content external-content]
-                  (= (heading-content->route-name block-content)
+    (->> (d/q '[:find (pull ?b [:block/uuid])
+                :in $ ?page-uuid ?route-name ?content-matches %
+                :where
+                [?page :block/uuid ?page-uuid]
+                [?b :block/page ?page]
+                (has-property ?b :logseq.property/heading)
+                [?b :block/title ?content]
+                [(?content-matches ?content ?route-name ?b)]]
+              db
+              (uuid page-uuid-str)
+              route-name
+              (fn content-matches? [block-content external-content block-id]
+                (let [block (db-utils/entity repo block-id)
+                      ref-tags (distinct (concat (:block/tags block) (:block/refs block)))]
+                  (= (-> (db-content/id-ref->title-ref block-content ref-tags)
+                         (db-content/content-id-ref->page ref-tags)
+                         heading-content->route-name)
                      (string/lower-case external-content))))
-           ffirst))))
+              (rules/extract-rules rules/db-query-dsl-rules [:has-property]))
+         ffirst)))
 
 (defn get-page-format
   [_page-name]
