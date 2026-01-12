@@ -839,6 +839,12 @@
           (log/info :db-sync/ws-closed {:repo repo})
           (schedule-reconnect! repo client url :close))))
 
+(defn- detach-ws-handlers! [ws]
+  (set! (.-onopen ws) nil)
+  (set! (.-onmessage ws) nil)
+  (set! (.-onerror ws) nil)
+  (set! (.-onclose ws) nil))
+
 (defn- start-pull-loop! [client _ws]
   client)
 
@@ -846,12 +852,15 @@
   (when-let [reconnect (:reconnect client)]
     (clear-reconnect-timer! reconnect))
   (when-let [ws (:ws client)]
+    (detach-ws-handlers! ws)
     (try
       (.close ws)
       (catch :default _
         nil))))
 
 (defn- connect! [repo client url]
+  (when-let [current (:ws client)]
+    (stop-client! client))
   (let [ws (js/WebSocket. (append-token url (auth-token)))
         updated (assoc client :ws ws)]
     (attach-ws-handlers! repo updated ws url)
