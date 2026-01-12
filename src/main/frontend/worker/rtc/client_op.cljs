@@ -99,7 +99,8 @@
    :local-tx {:db/index true}
    :graph-uuid {:db/index true}
    :db-sync/tx-id {:db/unique :db.unique/identity}
-   :db-sync/created-at {:db/index true}})
+   :db-sync/created-at {:db/index true}
+   :db-sync/fix? {:db/index true}})
 
 (defn update-graph-uuid
   [repo graph-uuid]
