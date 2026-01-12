@@ -7,6 +7,7 @@
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
+            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db-sync.cycle :as db-sync-cycle]
             [logseq.db-sync.malli-schema :as db-sync-schema]
@@ -402,6 +403,16 @@
                              [:db.fn/retractEntity [:db-sync/tx-id tx-id]])
                            tx-ids)))))
 
+(defn- keep-last-parent-update
+  [tx-data]
+  (->> tx-data
+       (common-util/distinct-by-last-wins
+        (fn [item]
+          ;; Keep the last :block/parent change to avoid value refers to deleted parent
+          (if (and (vector? item) (= 4 (count item)) (= :block/parent (nth item 2)))
+            [(second item) (nth item 2)]
+            item)))))
+
 (defn- flush-pending!
   [repo client]
   (let [inflight @(:inflight client)]
@@ -411,12 +422,15 @@
           (let [batch (pending-txs repo 50)]
             (when (seq batch)
               (let [tx-ids (mapv :tx-id batch)
-                    txs (mapv :tx batch)]
+                    txs (mapv :tx batch)
+                    tx-data (->> txs
+                                 (mapcat sqlite-util/read-transit-str)
+                                 keep-last-parent-update)]
                 (when (seq txs)
                   (reset! (:inflight client) tx-ids)
                   (send! ws {:type "tx/batch"
                              :t_before (or (client-op/get-local-tx repo) 0)
-                             :txs txs}))))))))))
+                             :txs (sqlite-util/write-transit-str tx-data)}))))))))))
 
 (defn- pending-txs-by-ids
   [repo tx-ids]
