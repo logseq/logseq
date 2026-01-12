@@ -19,7 +19,7 @@
             cli-export-common/*current-db* (conn/get-db repo)
             cli-export-common/*content-config* (get-content-config)]
     (let [contents (mapv (fn [id]
-                           (cli-export-common/get-blocks-contents repo id)) root-block-uuids)]
+                           (cli-export-common/get-blocks-contents id)) root-block-uuids)]
       (string/join "\n" (mapv string/trim-newline contents)))))
 
 (defn get-page-content
@@ -29,12 +29,6 @@
             cli-export-common/*current-db* (conn/get-db (state/get-current-repo))
             cli-export-common/*content-config* (get-content-config)]
     (cli-export-common/get-page-content page-uuid)))
-
-;; Utils
-(comment
-  (defn <get-all-pages
-    [repo]
-    (state/<invoke-db-worker :thread-api/export-get-all-pages repo)))
 
 (defn <get-debug-datoms
   [repo]

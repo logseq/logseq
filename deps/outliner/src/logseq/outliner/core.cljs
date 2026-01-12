@@ -243,8 +243,7 @@
     (let [data (if (de/entity? this)
                  (assoc (.-kv ^js this) :db/id (:db/id this))
                  this)
-          data' (->> (dissoc data :block/properties)
-                     (remove-disallowed-inline-classes db))
+          data' (remove-disallowed-inline-classes db data)
           collapse-or-expand? (= outliner-op :collapse-expand-blocks)
           m* (cond->
               (-> data'
@@ -268,19 +267,16 @@
                                    (not= block-title (:block/title block-entity)))
           _ (when (and page? block-title)
               (outliner-validate/validate-page-title-characters block-title {:node m*}))
-          m* (if page-title-changed?
-               (let [_ (outliner-validate/validate-page-title (:block/title m*) {:node m*})
-                     page-name (common-util/page-name-sanity-lc (:block/title m*))]
-                 (assoc m* :block/name page-name))
-               m*)
+          m (if page-title-changed?
+              (let [_ (outliner-validate/validate-page-title (:block/title m*) {:node m*})
+                    page-name (common-util/page-name-sanity-lc (:block/title m*))]
+                (assoc m* :block/name page-name))
+              m*)
           _ (when (and ;; page or object changed?
                    (or (ldb/page? block-entity) (ldb/object? block-entity))
-                   (:block/title m*)
-                   (not= (:block/title m*) (:block/title block-entity)))
-              (outliner-validate/validate-block-title db (:block/title m*) block-entity))
-          m (cond-> m*
-              true
-              (dissoc :block/format))]
+                   (:block/title m)
+                   (not= (:block/title m) (:block/title block-entity)))
+              (outliner-validate/validate-block-title db (:block/title m) block-entity))]
       ;; Ensure block UUID never changes
       (let [e (d/entity db db-id)]
         (when (and e block-uuid)
@@ -747,9 +743,7 @@
                         update-timestamps?
                         (mapv #(dissoc % :block/created-at :block/updated-at))
                         true
-                        (mapv block-with-timestamps)
-                        true
-                        (mapv #(-> % (dissoc :block/properties)))))
+                        (mapv block-with-timestamps)))
             insert-opts {:sibling? sibling?
                          :replace-empty-target? replace-empty-target?
                          :keep-uuid? keep-uuid?
