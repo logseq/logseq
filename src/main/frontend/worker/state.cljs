@@ -47,7 +47,7 @@
 
 (defonce *rtc-ws-url (atom nil))
 (defonce *db-sync-config (atom {:enabled? false :ws-url nil}))
-(defonce *db-sync-clients (atom {}))
+(defonce *db-sync-client (atom nil))
 
 (defonce *sqlite (atom nil))
 ;; repo -> {:db conn :search conn :client-ops conn :debug-log conn}
