@@ -1,7 +1,7 @@
 (ns logseq.db-sync.storage
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [datascrip.core :as d]
+            [datascript.core :as d]
             [datascript.storage :refer [IStorage]]
             [logseq.db-sync.common :as common]
             [logseq.db.common.normalize :as db-normalize]
@@ -121,9 +121,9 @@
 
 (defn- listen-db-updates!
   [sql conn]
-  (d/listen conn ::listen-db-updates
-            (fn [tx-report]
-              (append-tx-for-tx-report sql tx-report))))
+  (d/listen! conn ::listen-db-updates
+             (fn [tx-report]
+               (append-tx-for-tx-report sql tx-report))))
 
 (defn open-conn [sql]
   (init-schema! sql)
