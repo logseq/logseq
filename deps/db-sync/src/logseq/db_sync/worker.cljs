@@ -7,13 +7,11 @@
             [logseq.common.authorization :as authorization]
             [logseq.db :as ldb]
             [logseq.db-sync.common :as common :refer [cors-headers]]
-            [logseq.db-sync.cycle :as cycle]
             [logseq.db-sync.malli-schema :as db-sync-schema]
             [logseq.db-sync.parent-missing :as db-sync-parent-missing]
             [logseq.db-sync.protocol :as protocol]
             [logseq.db-sync.storage :as storage]
             [logseq.db-sync.worker-core :as worker-core]
-            [logseq.db.common.normalize :as db-normalize]
             [promesa.core :as p]
             [shadow.cljs.modern :refer (defclass)]))
 
@@ -328,52 +326,24 @@
                          addresses)))
     (set! (.-conn self) (storage/open-conn sql))))
 
-(defn- cycle-reject-response [db tx-data {:keys [attr entity]}]
-  (let [server-values (cycle/server-values-for db tx-data attr)]
-    (log/info :db-sync/cycle-reject
-              {:attr attr
-               :entity entity
-               :entity-title (entity-title db entity)
-               :server-values (count server-values)
-               :tx-count (count tx-data)})
-    {:type "tx/reject"
-     :reason "cycle"
-     :data (common/write-transit
-            {:attr attr
-             :server_values server-values})}))
-
-(defn- missing-parent-reject-response [db datoms]
-  (log/info :db-sync/missing-parent-reject
-            {:datoms datoms})
-  {:type "tx/reject"
-   :reason "missing-parent"
-   :data (common/write-transit
-          {:eids (map (fn [d] (let [block (d/entity db (:e d))]
-                                [:block/uuid (:block/uuid block)])) datoms)})})
-
 (defn- apply-tx! [^js self sender txs]
   (let [sql (.-sql self)
         conn (.-conn self)]
     (when-not conn
       (fail-fast :db-sync/missing-db {:op :apply-tx}))
-    (let [tx-data (protocol/transit->tx txs)
-          db @conn
-          tx-report (d/with db tx-data)
-          db' (:db-after tx-report)
-          missing-parent-datoms (db-sync-parent-missing/get-missing-parent-datoms tx-report)]
-      (if (seq missing-parent-datoms)
-        (missing-parent-reject-response db' missing-parent-datoms)
-        ;; TODO: move fix order to client to keep worker thin
-        (let [order-fixed (worker-core/fix-duplicate-orders db' tx-data)
-              cycle-info (cycle/detect-cycle db' order-fixed)]
-          (if cycle-info
-            (cycle-reject-response db order-fixed cycle-info)
-            (do
-              (ldb/transact! conn order-fixed)
-              (let [new-t (storage/get-t sql)]
-              ;; FIXME: no need to broadcast if client tx is less than remote tx
-                (broadcast! self sender {:type "changed" :t new-t})
-                new-t))))))))
+    (let [tx-data (protocol/transit->tx txs)]
+      (ldb/transact-with-temp-conn!
+       conn
+       {:apply-tx? true}
+       (fn [temp-conn *batch-tx-data]
+         (let [tx-report (d/transact! temp-conn tx-data {:op :apply-client-tx})]
+           ;; TODO: fix cycle
+           (db-sync-parent-missing/fix-parent-missing! temp-conn tx-report)
+           (worker-core/fix-duplicate-orders! temp-conn @*batch-tx-data))))
+      (let [new-t (storage/get-t sql)]
+        ;; FIXME: no need to broadcast if client tx is less than remote tx
+        (broadcast! self sender {:type "changed" :t new-t})
+        new-t))))
 
 (defn- handle-tx-batch! [^js self sender txs t-before]
   (let [current-t (t-now self)]

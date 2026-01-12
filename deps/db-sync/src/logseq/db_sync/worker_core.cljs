@@ -33,8 +33,9 @@
             :else nil))
         tx-data))
 
-(defn fix-duplicate-orders [db tx-data]
-  (let [updates (->> (attr-updates-from-tx db tx-data :block/order)
+(defn fix-duplicate-orders! [conn tx-data]
+  (let [db @conn
+        updates (->> (attr-updates-from-tx db tx-data :block/order)
                      (filter (fn [{:keys [e v]}] (and e v))))
         groups (group-by (fn [{:keys [e v]}]
                            (let [parent (:block/parent (d/entity db e))]
@@ -73,6 +74,5 @@
                    acc))
                []
                groups)]
-    (if (seq fixes)
-      (into tx-data fixes)
-      tx-data)))
+    (when (seq fixes)
+      (d/transact! conn fixes {:op :fix-duplicate-order}))))
