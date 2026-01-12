@@ -18,14 +18,15 @@
   "Run tests. Pass args through to cmd 'yarn cljs:run-test'"
   [& args]
   (shell "yarn cljs:test")
-  (apply shell "yarn cljs:run-test" args))
+  (let [args* (or (seq args) ["-e" "long" "-e" "fix-me"])]
+    (apply shell "yarn cljs:run-test" args*)))
 
 (defn lint-and-test
   "Run all lint tasks, then run tests(exclude testcases tagged by :long).
   pass args through to cmd 'yarn cljs:run-test'"
   []
   (dev-lint/dev)
-  (test "-e" "long" "-e" "fix-me"))
+  (test))
 
 (defn e2e-basic-test
   "Run e2e basic tests. HTTP server should be available at localhost:3001"
