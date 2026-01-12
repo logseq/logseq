@@ -197,7 +197,7 @@
     (d/listen! temp-conn ::temp-conn-batch-tx
                (fn [{:keys [tx-data]}]
                  (vswap! *batch-tx-data into tx-data)))
-    (batch-tx-fn temp-conn)
+    (batch-tx-fn temp-conn *batch-tx-data)
     (let [tx-data @*batch-tx-data]
       (d/unlisten! temp-conn ::temp-conn-batch-tx)
       (reset! temp-conn nil)
