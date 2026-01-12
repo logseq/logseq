@@ -23,7 +23,7 @@
                         :block/parent [:block/uuid parent]
                         :block/order order-b}])
     (let [tx [[:db/add [:block/uuid block-b] :block/order order-a]]
-          fixed (worker-core/fix-duplicate-orders @conn tx)
+          fixed (worker-core/fix-duplicate-orders! @conn tx)
           db' (d/db-with @conn fixed)
           order-a' (:block/order (d/entity db' [:block/uuid block-a]))
           order-b' (:block/order (d/entity db' [:block/uuid block-b]))]

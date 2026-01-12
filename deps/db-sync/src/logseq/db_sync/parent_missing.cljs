@@ -14,8 +14,7 @@
         (let [page (-> (sqlite-util/build-new-page common-config/recycle-page-name)
                        sqlite-create-graph/mark-block-as-built-in)
               {:keys [db-after]} (ldb/transact! conn [page] {:db-sync/recycle-page? true
-                                                             :outliner-op :create-page
-                                                             :rtc/fix? true})]
+                                                             :op :create-recycle-page})]
           (d/entity db-after [:block/uuid (:block/uuid page)])))))
 
 (defn get-missing-parent-datoms
@@ -35,8 +34,7 @@
     (outliner-tx/transact!
      {:persist-op? true
       :gen-undo-ops? false
-      :outliner-op :fix-missing-parent
-      :rtc/fix? true
+      :op :fix-missing-parent
       :transact-opts {:conn conn}}
      (outliner-core/move-blocks! conn blocks recycle-page {:sibling? false}))))
 

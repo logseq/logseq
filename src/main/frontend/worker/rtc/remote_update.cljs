@@ -663,7 +663,7 @@
         (js/console.groupCollapsed "rtc/apply-remote-ops-log")
         (ldb/transact-with-temp-conn!
          conn tx-meta
-         (fn [temp-conn]
+         (fn [temp-conn _*batch-tx-data]
            (worker-util/profile :ensure-refed-blocks-exist (ensure-refed-blocks-exist repo temp-conn refed-blocks))
            (worker-util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo temp-conn update-page-ops))
            (worker-util/profile :apply-remote-move-ops (apply-remote-move-ops temp-conn sorted-move-ops))
