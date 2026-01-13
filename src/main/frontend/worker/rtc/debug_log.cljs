@@ -36,8 +36,9 @@
 (defn- insert!
   [^js db sql params]
   (try
-    (.exec db #js {:sql sql
-                   :bind (clj->js params)})
+    (when db
+      (.exec db #js {:sql sql
+                     :bind (clj->js params)}))
     (catch :default e
       (log/error :rtc-debug-log-insert-failed e))))
 
