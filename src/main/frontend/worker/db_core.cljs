@@ -609,19 +609,19 @@
 
 (def-thread-api :thread-api/search-upsert-blocks
   [repo blocks]
-  (p/let [db (get-search-db repo)]
+  (when-let [db (get-search-db repo)]
     (search/upsert-blocks! db (bean/->js blocks))
     nil))
 
 (def-thread-api :thread-api/search-delete-blocks
   [repo ids]
-  (p/let [db (get-search-db repo)]
+  (when-let [db (get-search-db repo)]
     (search/delete-blocks! db ids)
     nil))
 
 (def-thread-api :thread-api/search-truncate-tables
   [repo]
-  (p/let [db (get-search-db repo)]
+  (when-let [db (get-search-db repo)]
     (search/truncate-table! db)
     nil))
 
