@@ -1138,7 +1138,7 @@
   (shui/dialog-open! installed-themes
                      {:align :top}))
 
-(rum/defc hook-ui-slot
+(rum/defc hook-ui-slot < rum/static
   ([type payload] (hook-ui-slot type payload nil #(plugin-handler/hook-plugin-app type % nil)))
   ([type payload opts callback]
    (let [rs      (util/rand-str 8)
