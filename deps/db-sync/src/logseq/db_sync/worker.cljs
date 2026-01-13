@@ -9,10 +9,10 @@
             [logseq.db :as ldb]
             [logseq.db-sync.common :as common :refer [cors-headers]]
             [logseq.db-sync.malli-schema :as db-sync-schema]
+            [logseq.db-sync.order :as sync-order]
             [logseq.db-sync.parent-missing :as db-sync-parent-missing]
             [logseq.db-sync.protocol :as protocol]
             [logseq.db-sync.storage :as storage]
-            [logseq.db-sync.worker-core :as worker-core]
             [logseq.db.common.normalize :as db-normalize]
             [promesa.core :as p]
             [shadow.cljs.modern :refer (defclass)]))
@@ -347,7 +347,7 @@
            ;; TODO: fix cycle
            (db-sync-parent-missing/fix-parent-missing! temp-conn tx-report)
            (prn :debug :fix-duplicate-orders)
-           (worker-core/fix-duplicate-orders! temp-conn @*batch-tx-data))))
+           (sync-order/fix-duplicate-orders! temp-conn @*batch-tx-data))))
       (prn :debug :finished-db-transact)
       (let [new-t (storage/get-t sql)]
         ;; FIXME: no need to broadcast if client tx is less than remote tx
