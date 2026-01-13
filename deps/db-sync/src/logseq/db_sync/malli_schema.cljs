@@ -40,12 +40,14 @@
   [:map
    [:type [:= "pull/ok"]]
    [:t :int]
-   [:txs [:sequential tx-log-entry-schema]]])
+   [:txs [:sequential tx-log-entry-schema]]
+   [:checksum {:optional true} :string]])
 
 (def tx-batch-ok-schema
   [:map
    [:type [:= "tx/batch/ok"]]
-   [:t :int]])
+   [:t :int]
+   [:checksum {:optional true} :string]])
 
 (def ws-server-message-schema
   [:multi {:dispatch :type}

@@ -9,6 +9,7 @@
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.db-sync.checksum :as db-sync-checksum]
             [logseq.db-sync.cycle :as db-sync-cycle]
             [logseq.db-sync.malli-schema :as db-sync-schema]
             [logseq.db-sync.order :as sync-order]
@@ -639,66 +640,78 @@
                                (p/resolved nil)))
                            (p/resolved nil)))))
 
-(defn- apply-remote-tx! [repo client tx-data]
+(defn- apply-remote-tx!
+  [repo client tx-data & {:keys [expected-checksum]}]
   (if-let [conn (worker-state/get-datascript-conn repo)]
     (let [local-txs (pending-txs repo)
           pending-tx-ids (mapv :tx-id local-txs)
           rebased-pending (atom nil)
+          *computed-checksum (atom nil)
           reversed-tx-data (->> local-txs
                                 (mapcat :reversed-tx)
                                 reverse
                                 db-normalize/replace-attr-retract-with-retract-entity-v2)
-          tx-report (ldb/transact-with-temp-conn!
-                     conn
-                     {:rtc-tx? true}
-                     (fn [temp-conn _*batch-tx-data]
-                       (let [db @temp-conn
-                             ;; 1. reverse local pending txs
-                             reversed-db (:db-after (d/with db reversed-tx-data))
-                             tx-report (d/with reversed-db tx-data)]
-                           ;; TODO: 2. ensure checksum matches between client & server
+          tx-report
+          (ldb/transact-with-temp-conn!
+           conn
+           {:rtc-tx? true}
+           (fn [temp-conn _*batch-tx-data]
+             (let [db @temp-conn
+                   ;; 1. reverse local pending txs
+                   reversed-db (:db-after (d/with db reversed-tx-data))
+                   tx-report (d/with reversed-db tx-data)
+                   computed-checksum (when expected-checksum
+                                       (db-sync-checksum/next-checksum
+                                        (client-op/get-local-checksum repo)
+                                        (db-sync-checksum/filter-tx-data tx-report)))]
+               (reset! *computed-checksum computed-checksum)
+               (when (and expected-checksum (not= expected-checksum computed-checksum))
+                 (fail-fast :db-sync/checksum-mismatch
+                            {:repo repo
+                             :expected-checksum expected-checksum
+                             :actual-checksum computed-checksum}))
 
-                         ;; 3. fix data
-                         (let [deleted-blocks (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report))
-                               tx-meta {:persist-op? false
-                                        :gen-undo-ops? false}]
-                           (when (seq deleted-blocks)
-                             (let [nodes (map #(d/entity @temp-conn (:db/id %)) deleted-blocks)
-                                   pages (filter ldb/page? nodes)
-                                   blocks (remove ldb/page? nodes)]
-                               ;; deleting pages first
-                               (doseq [page pages]
-                                 (worker-page/delete! temp-conn (:block/uuid page) tx-meta))
-                               (when (seq blocks)
-                                 (outliner-tx/transact!
-                                  (assoc tx-meta
-                                         :outliner-op :delete-blocks
-                                         :transact-opts {:conn temp-conn})
-                                  (outliner-core/delete-blocks! temp-conn blocks {})))))
+               ;; 3. fix data
+               (let [deleted-blocks (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report))
+                     tx-meta {:persist-op? false
+                              :gen-undo-ops? false}]
+                 (when (seq deleted-blocks)
+                   (let [nodes (map #(d/entity @temp-conn (:db/id %)) deleted-blocks)
+                         pages (filter ldb/page? nodes)
+                         blocks (remove ldb/page? nodes)]
+                     ;; deleting pages first
+                     (doseq [page pages]
+                       (worker-page/delete! temp-conn (:block/uuid page) tx-meta))
+                     (when (seq blocks)
+                       (outliner-tx/transact!
+                        (assoc tx-meta
+                               :outliner-op :delete-blocks
+                               :transact-opts {:conn temp-conn})
+                        (outliner-core/delete-blocks! temp-conn blocks {})))))
 
-                           ;; 4. apply remote tx-data
-                           (let [rtc-tx-data (sanitize-remote-tx-data @temp-conn tx-data)
-                                 tx-report (ldb/transact! temp-conn rtc-tx-data)]
-                             (sync-order/fix-duplicate-orders! temp-conn (:tx-data tx-report)))
+                 ;; 4. apply remote tx-data
+                 (let [rtc-tx-data (sanitize-remote-tx-data @temp-conn tx-data)
+                       tx-report (ldb/transact! temp-conn rtc-tx-data)]
+                   (sync-order/fix-duplicate-orders! temp-conn (:tx-data tx-report)))
 
-                           ;; 5. rebase pending local txs for the new remote base
-                           (when (seq local-txs)
-                             (let [pending-tx-data (->> local-txs
-                                                        (mapcat :tx)
-                                                        keep-last-parent-update)
-                                   db @temp-conn
-                                   pending-tx-data (sanitize-remote-tx-data db pending-tx-data)]
-                               (when (seq pending-tx-data)
-                                 (let [rebased-report (d/with (:db-after tx-report) pending-tx-data)
-                                       normalized (normalize-tx-data
-                                                   (:db-after rebased-report)
-                                                   (:db-after tx-report)
-                                                   (:tx-data rebased-report))
-                                       reversed-datoms (map (fn [[e a v _t added]]
-                                                              [(if added :db/retract :db/add) e a v])
-                                                            (:tx-data rebased-report))]
-                                   (reset! rebased-pending {:normalized normalized
-                                                            :reversed reversed-datoms})))))))))]
+                 ;; 5. rebase pending local txs for the new remote base
+                 (when (seq local-txs)
+                   (let [pending-tx-data (->> local-txs
+                                              (mapcat :tx)
+                                              keep-last-parent-update)
+                         db @temp-conn
+                         pending-tx-data (sanitize-remote-tx-data db pending-tx-data)]
+                     (when (seq pending-tx-data)
+                       (let [rebased-report (d/with (:db-after tx-report) pending-tx-data)
+                             normalized (normalize-tx-data
+                                         (:db-after rebased-report)
+                                         (:db-after tx-report)
+                                         (:tx-data rebased-report))
+                             reversed-datoms (map (fn [[e a v _t added]]
+                                                    [(if added :db/retract :db/add) e a v])
+                                                  (:tx-data rebased-report))]
+                         (reset! rebased-pending {:normalized normalized
+                                                  :reversed reversed-datoms})))))))))]
 
       (when (seq local-txs)
         (if-let [{:keys [normalized reversed]} @rebased-pending]
@@ -708,6 +721,8 @@
           (log/info :db-sync/pending-txs-retained {:repo repo :reason :rebased-empty})))
 
       (when tx-report
+        (when-let [computed-checksum @*computed-checksum]
+          (client-op/update-local-checksum repo computed-checksum))
         (let [db-after (:db-after tx-report)
               asset-uuids (asset-uuids-from-tx db-after (:tx-data tx-report))]
           (when (seq asset-uuids)
@@ -733,6 +748,10 @@
         ;; Upload response
         "tx/batch/ok" (do
                         (require-non-negative remote-tx {:repo repo :type "tx/batch/ok"})
+                        ;; TODO: should be able to calculate the batch tx's checksum with
+                        ;; `(d/with current-db reversed-tx)`
+                        (when-let [checksum (:checksum message)]
+                          (client-op/update-local-checksum repo checksum))
                         (client-op/update-local-tx repo remote-tx)
                         (remove-pending-txs! repo @(:inflight client))
                         (reset! (:inflight client) [])
@@ -742,11 +761,14 @@
         "pull/ok" (let [txs (:txs message)
                         _ (require-non-negative remote-tx {:repo repo :type "pull/ok"})
                         _ (require-seq txs {:repo repo :type "pull/ok" :field :txs})
-                        tx (mapcat (fn [data]
-                                     (parse-transit (:tx data) {:repo repo :type "pull/ok"}))
-                                   txs)]
+                        expected-checksum (:checksum message)
+                        txs-data (mapv (fn [data]
+                                         (parse-transit (:tx data) {:repo repo :type "pull/ok"}))
+                                       txs)
+                        tx (mapcat identity txs-data)]
                     (when (seq tx)
-                      (apply-remote-tx! repo client tx)
+                      (apply-remote-tx! repo client tx
+                                        :expected-checksum expected-checksum)
                       (client-op/update-local-tx repo remote-tx)
                       (flush-pending! repo client)))
         "changed" (do

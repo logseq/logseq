@@ -27,7 +27,7 @@
          datoms))
      e-datoms)))
 
-(defn- eid->lookup
+(defn eid->lookup
   [db e]
   (when-let [entity (d/entity db e)]
     (if-let [id (:block/uuid entity)]
