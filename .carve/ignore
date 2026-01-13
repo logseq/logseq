@@ -60,6 +60,8 @@ frontend.ui/_emoji-init-data
 frontend.worker.rtc.op-mem-layer/_sync-loop-canceler
 ;; Used by shadow.cljs
 frontend.worker.db-worker/init
+;; Used by shadow.cljs (node entrypoint)
+frontend.worker.db-worker-node/main
 ;; Future use?
 frontend.worker.rtc.hash/hash-blocks
 ;; Repl fn
