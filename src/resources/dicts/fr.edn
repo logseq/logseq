@@ -1,5 +1,6 @@
 {
-    :all-pages/failed-to-delete-pages "Ces pages ont leur contenu supprimé mais n'ont pu être suppimées : {1}. Regardes la console JavaScript pour plus de détails."
+    :all-pages "Pages"
+    :all-pages/failed-to-delete-pages "Ces pages ont leur contenu supprimé mais n'ont pu être supprimées : {1}. Regardes la console JavaScript pour plus de détails."
     :all-pages/table-title (fn [total] (str total (if (= total 1) " page" " pages")))
     :appearance "Apparence"
     :asset/ref-block "Bloc de référence de ressource"
