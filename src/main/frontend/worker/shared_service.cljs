@@ -1,6 +1,7 @@
 (ns frontend.worker.shared-service
   "This allows multiple workers to share some resources (e.g. db access)"
   (:require [cljs-bean.core :as bean]
+            [frontend.worker.platform :as platform]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.common.util :as common-util]
@@ -34,6 +35,12 @@
 ;;; The unique identity of the context where `js/navigator.locks.request` is called
 (defonce *client-id (atom nil))
 (defonce *master-client-lock (atom nil))
+
+(defn- node-runtime?
+  []
+  (try
+    (= :node (platform/env-flag (platform/current) :runtime))
+    (catch :default _ false)))
 
 (defn- next-request-id
   []
@@ -307,60 +314,83 @@
                           forward the data broadcast from the master client directly to the UI thread."
   [service-name target on-become-master-handler broadcast-data-types {:keys [import?]}]
   (clear-old-service!)
-  (when import? (reset! *master-client? true))
-  (p/let [broadcast-data-types (set broadcast-data-types)
-          status {:ready (p/deferred)}
-          common-channel (ensure-common-channel service-name)
-          client-id (<ensure-client-id)
-          <check-master-slave-fn!
-          (fn []
-            (<check-master-or-slave-client!
-             service-name
-             #(<on-become-master
-               client-id service-name common-channel target
-               on-become-master-handler (:ready status))
-             #(<on-become-slave
-               client-id service-name common-channel broadcast-data-types (:ready status))))]
-    (<check-master-slave-fn!)
+  (log/info :shared-service/create-start {:service service-name
+                                          :node-runtime? (node-runtime?)
+                                          :import? import?})
+  (if (node-runtime?)
+    (p/do!
+     (reset! *master-client? true)
+     (reset! *client-id "node")
+     (log/info :shared-service/node-single-client {:service service-name
+                                                   :client-id @*client-id})
+     (p/let [status {:ready (p/deferred)}]
+       (p/do!
+        (on-become-master-handler service-name)
+        (p/resolve! (:ready status)))
+       {:proxy target
+        :status status
+        :client-id @*client-id}))
+    (do
+      (when import? (reset! *master-client? true))
+      (p/let [broadcast-data-types (set broadcast-data-types)
+              status {:ready (p/deferred)}
+              common-channel (ensure-common-channel service-name)
+              client-id (<ensure-client-id)
+              <check-master-slave-fn!
+              (fn []
+                (<check-master-or-slave-client!
+                 service-name
+                 #(<on-become-master
+                   client-id service-name common-channel target
+                   on-become-master-handler (:ready status))
+                 #(<on-become-slave
+                   client-id service-name common-channel broadcast-data-types (:ready status))))]
+        (<check-master-slave-fn!)
+        (log/info :shared-service/create-client {:service service-name
+                                                 :client-id client-id
+                                                 :import? import?})
 
-    (add-watch *master-re-check-trigger :check-master
-               (fn [_ _ _ new-value]
-                 (when (= new-value :re-check)
-                   (p/do!
-                    (p/delay 100)      ; why need delay here?
-                    (<check-master-slave-fn!)))))
+        (add-watch *master-re-check-trigger :check-master
+                   (fn [_ _ _ new-value]
+                     (when (= new-value :re-check)
+                       (p/do!
+                        (p/delay 100)      ; why need delay here?
+                        (<check-master-slave-fn!)))))
 
-    {:proxy (js/Proxy. target
-                       #js {:get (fn [target method]
-                                   (if (= "remoteInvoke" method)
-                                     (fn [args]
-                                       (cond
-                                         @*master-client?
-                                         (<apply-target-f! target method args)
+        {:proxy (js/Proxy. target
+                           #js {:get (fn [target method]
+                                       (if (= "remoteInvoke" method)
+                                         (fn [args]
+                                           (cond
+                                             @*master-client?
+                                             (<apply-target-f! target method args)
 
-                                         :else
-                                         (let [request-id (next-request-id)
-                                               client-channel (ensure-client-channel client-id service-name)]
-                                           (p/create
-                                            (fn [resolve-fn reject-fn]
-                                              (vswap! *requests-in-flight assoc request-id {:method method
-                                                                                            :args args
-                                                                                            :resolve-fn resolve-fn
-                                                                                            :reject-fn reject-fn})
-                                              (.postMessage client-channel (bean/->js
-                                                                            {:id request-id
-                                                                             :type "request"
-                                                                             :method method
-                                                                             :args args})))))))
-                                     (log/error :invalid-invoke-method method)))})
-     :status status
-     :client-id client-id}))
+                                             :else
+                                             (let [request-id (next-request-id)
+                                                   client-channel (ensure-client-channel client-id service-name)]
+                                               (p/create
+                                                (fn [resolve-fn reject-fn]
+                                                  (vswap! *requests-in-flight assoc request-id {:method method
+                                                                                                :args args
+                                                                                                :resolve-fn resolve-fn
+                                                                                                :reject-fn reject-fn})
+                                                  (.postMessage client-channel (bean/->js
+                                                                                {:id request-id
+                                                                                 :type "request"
+                                                                                 :method method
+                                                                                 :args args})))))))
+                                         (log/error :invalid-invoke-method method)))})
+         :status status
+         :client-id client-id}))))
 
 (defn broadcast-to-clients!
   [type' data]
   (let [transit-payload (ldb/write-transit-str [type' data])]
-    (when (exists? js/self) (.postMessage js/self transit-payload))
-    (when-let [common-channel @*common-channel]
-      (let [str-type' (common-util/keyword->string type')]
-        (.postMessage common-channel #js {:type str-type'
-                                          :data transit-payload})))))
+    (if (node-runtime?)
+      (platform/post-message! (platform/current) type' transit-payload)
+      (do
+        (when (exists? js/self) (.postMessage js/self transit-payload))
+        (when-let [common-channel @*common-channel]
+          (let [str-type' (common-util/keyword->string type')]
+            (.postMessage common-channel #js {:type str-type'
+                                              :data transit-payload})))))))
