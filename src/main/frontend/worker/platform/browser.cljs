@@ -1,6 +1,7 @@
 (ns frontend.worker.platform.browser
   "Browser platform adapter for db-worker."
   (:require ["/frontend/idbkv" :as idb-keyval]
+            ["@sqlite.org/sqlite-wasm" :default sqlite3InitModule]
             ["comlink" :as Comlink]
             [clojure.string :as string]
             [frontend.common.file.opfs :as opfs]
@@ -89,6 +90,18 @@
   [url]
   (js/WebSocket. url))
 
+(defn- init-sqlite!
+  []
+  (sqlite3InitModule (clj->js {:print #(log/info :init-sqlite-module! %)
+                               :printErr #(log/error :init-sqlite-module! %)})))
+
+(defn- open-sqlite-db
+  [{:keys [sqlite pool path mode]}]
+  (if pool
+    (new (.-OpfsSAHPoolDb pool) path)
+    (let [^js DB (.-DB ^js (.-oo1 ^js sqlite))]
+      (new DB path (or mode "c")))))
+
 (defn browser-platform
   []
   {:env {:publishing? (string/includes? (.. js/location -href) "publishing=true")
@@ -96,6 +109,7 @@
    :storage {:install-opfs-pool install-opfs-pool
              :list-graphs list-graphs
              :db-exists? db-exists?
+             :resolve-db-path (fn [_repo _pool path] path)
              :export-file export-file
              :import-db import-db
              :remove-vfs! remove-vfs!
@@ -107,5 +121,10 @@
         :set! kv-set!}
    :broadcast {:post-message! worker-util/post-message}
    :websocket {:connect websocket-connect}
+   :sqlite {:init! init-sqlite!
+            :open-db open-sqlite-db
+            :close-db (fn [db] (.close db))
+            :exec (fn [db sql-or-opts] (.exec db sql-or-opts))
+            :transaction (fn [db f] (.transaction db f))}
    :crypto {}
    :timers {:set-interval! (fn [f ms] (js/setInterval f ms))}})
