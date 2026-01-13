@@ -4,6 +4,7 @@
             [frontend.worker.db-sync :as db-sync]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.state :as worker-state]
+            [logseq.db-sync.checksum :as db-sync-checksum]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]))
 
@@ -226,3 +227,61 @@
              nil
              [[:db/add (:db/id child1) :block/title "same"]])
             (is (= 1 (count (#'db-sync/pending-txs test-repo))))))))))
+
+(deftest tx-chain-checksum-ignores-rtc-attrs-test
+  (testing "rtc-ignored attrs do not affect tx-chain checksum"
+    (let [block-uuid (random-uuid)
+          tx-1 [[:db/add [:block/uuid block-uuid]
+                 :logseq.property.embedding/hnsw-label-updated-at 1]]
+          tx-2 [[:db/add [:block/uuid block-uuid]
+                 :logseq.property.embedding/hnsw-label-updated-at 2]]
+          checksum-1 (db-sync-checksum/next-checksum nil tx-1)
+          checksum-2 (db-sync-checksum/next-checksum nil tx-2)]
+      (is (= checksum-1 checksum-2)))))
+
+(comment
+  (deftest tx-chain-checksum-ignores-local-attrs-test
+    (testing "local-only attrs do not affect tx-chain checksum"
+      (let [block-uuid (random-uuid)
+            tx-1 [[:db/add [:block/uuid block-uuid] :block/tx-id 1]]
+            tx-2 [[:db/add [:block/uuid block-uuid] :block/tx-id 2]]
+            checksum-1 (db-sync-checksum/next-checksum nil tx-1)
+            checksum-2 (db-sync-checksum/next-checksum nil tx-2)]
+        (is (= checksum-1 checksum-2))))))
+
+(deftest tx-chain-checksum-detects-change-test
+  (testing "non-ignored attrs change tx-chain checksum"
+    (let [block-uuid (random-uuid)
+          tx-1 [[:db/add [:block/uuid block-uuid] :block/title "block"]]
+          tx-2 [[:db/add [:block/uuid block-uuid] :block/title "block updated"]]
+          checksum-1 (db-sync-checksum/next-checksum nil tx-1)
+          checksum-2 (db-sync-checksum/next-checksum nil tx-2)]
+      (is (not= checksum-1 checksum-2)))))
+
+(deftest apply-remote-tx-checksum-validation-test
+  (testing "apply-remote-tx honors checksum"
+    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+          tx-1 [[:db/add (:db/id child1) :block/title "child 1 remote"]]
+          expected (db-sync-checksum/next-checksum nil tx-1)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (#'db-sync/apply-remote-tx!
+           test-repo
+           nil
+           tx-1
+           :expected-checksum expected
+           :txs [tx-1])
+          (is (= "child 1 remote" (:block/title (d/entity @conn (:db/id child1)))))
+          (is (= expected (client-op/get-local-checksum test-repo)))))))
+  (testing "apply-remote-tx rejects checksum mismatch"
+    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+          tx-1 [[:db/add (:db/id child1) :block/title "child 1 remote"]]]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (is (thrown? js/Error
+                       (#'db-sync/apply-remote-tx!
+                        test-repo
+                        nil
+                        tx-1
+                        :expected-checksum "bad-checksum"
+                        :txs [tx-1]))))))))
