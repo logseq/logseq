@@ -2,12 +2,10 @@
   "Block code needed by app but not graph-parser. This should be the only frontend
    namespace that has references to legacy file attributes like :block/pre-block?
    as they are being removed from graph-parser output"
-  (:require [cljs-time.format :as tf]
-            [cljs.cache :as cache]
+  (:require [cljs.cache :as cache]
             [clojure.string :as string]
             [frontend.common.cache :as common.cache]
             [frontend.config :as config]
-            [frontend.date :as date]
             [frontend.db :as db]
             [frontend.format :as format]
             [frontend.format.mldoc :as mldoc]
@@ -44,33 +42,6 @@ and handles unexpected failure."
                                            :payload {:type "Extract-blocks"}}])
         (notification/show! "An unexpected error occurred during block extraction." :error)
         []))))
-
-(defn- normalize-as-percentage
-  [block]
-  (some->> block
-           str
-           (re-matches #"(-?\d+\.?\d*)%")
-           second
-           (#(/ % 100))))
-
-(defn- normalize-as-date
-  [block]
-  (some->> block
-           str
-           date/normalize-date
-           (tf/unparse date/custom-formatter)))
-
-(defn normalize-block
-  "Normalizes supported formats such as dates and percentages.
-   Be careful, this function may harm query sort performance!
-   - nlp-date? - Enable NLP parsing on date items.
-       Requires heavy computation (see `normalize-as-date` for details)"
-  [block nlp-date?]
-  (->> [normalize-as-percentage (when nlp-date? normalize-as-date) identity]
-       (remove nil?)
-       (map #(% (if (set? block) (first block) block)))
-       (remove nil?)
-       (first)))
 
 (defn parse-block
   [{:block/keys [uuid title format] :as block}]

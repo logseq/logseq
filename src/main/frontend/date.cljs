@@ -87,14 +87,6 @@
                  :minute "2-digit"
                  :hourCycle "h23"}))))
 
-(defn normalize-date
-  [s]
-  (common-date/normalize-date s (state/get-date-formatter)))
-
-(defn normalize-journal-title
-  [title]
-  (common-date/normalize-journal-title title (state/get-date-formatter)))
-
 (defn valid-journal-title?
   [title]
   (common-date/valid-journal-title? title (state/get-date-formatter)))
