@@ -19,7 +19,7 @@
   (set/union
    (set built-in-markers)
    (set built-in-priorities)
-   #{"Favorites" "Contents" "card" common-config/recycle-page-name}))
+   #{"Favorites" "Contents" "card"}))
 
 (defn- page-title->block
   [title]
