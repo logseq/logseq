@@ -37,14 +37,9 @@ validate [options]   Validate DB graph
 help                 Print a command's help
 
 $ logseq list
-DB Graphs:
 db-test
 docs
 woot
-...
-
-File Graphs:
-docs
 ...
 
 $ logseq show db-test

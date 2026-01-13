@@ -15,8 +15,7 @@
 (defn root-block-uuids->content
   "Converts given block uuids to content for given repo"
   [repo root-block-uuids]
-  (binding [cli-export-common/*current-repo* repo
-            cli-export-common/*current-db* (conn/get-db repo)
+  (binding [cli-export-common/*current-db* (conn/get-db repo)
             cli-export-common/*content-config* (get-content-config)]
     (let [contents (mapv (fn [id]
                            (cli-export-common/get-blocks-contents id)) root-block-uuids)]
@@ -25,8 +24,7 @@
 (defn get-page-content
   "Gets page content for current repo, db and state"
   [page-uuid]
-  (binding [cli-export-common/*current-repo* (state/get-current-repo)
-            cli-export-common/*current-db* (conn/get-db (state/get-current-repo))
+  (binding [cli-export-common/*current-db* (conn/get-db (state/get-current-repo))
             cli-export-common/*content-config* (get-content-config)]
     (cli-export-common/get-page-content page-uuid)))
 
@@ -49,7 +47,7 @@
                          :format :markdown})
                       page->content)))
 
-;; Aliased fns requiring cli-export-common dynamic bindings e.g. cli-export-common/*current-repo*
+;; Aliased fns requiring cli-export-common dynamic bindings e.g. cli-export-common/*current-db*
 (def replace-block&page-reference&embed cli-export-common/replace-block&page-reference&embed)
 (def replace-Heading-with-Paragraph cli-export-common/replace-Heading-with-Paragraph)
 

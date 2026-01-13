@@ -3,7 +3,7 @@
   (:require [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.db :as ldb]
-            [logseq.db.common.property-util :as db-property-util]))
+            [logseq.db.frontend.property :as db-property]))
 
 (defprotocol INode
   (-save [this *txs-state conn opts])
@@ -12,7 +12,7 @@
 (defn- blocks->vec-tree-aux
   [db blocks root]
   (let [root-id (:db/id root)
-        blocks (remove #(db-property-util/shape-block? db %) blocks)
+        blocks (remove #(db-property/shape-block? db %) blocks)
         parent-blocks (group-by #(get-in % [:block/parent :db/id]) blocks) ;; exclude whiteboard shapes
         sort-fn (fn [parent]
                   (when-let [children (get parent-blocks parent)]

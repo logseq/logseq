@@ -33,7 +33,6 @@
     (cli-util/error "Command missing required option 'graph'"))
   (if (fs/existsSync (cli-util/get-graph-path graph))
     (let [conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))
-          _ (cli-util/ensure-db-graph-for-command @conn)
           export-map (sqlite-export/build-export @conn (build-export-options options))]
       (when validate
         (validate-export export-map options))
