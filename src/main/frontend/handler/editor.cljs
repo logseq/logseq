@@ -85,12 +85,12 @@
 (defn set-block-own-order-list-type!
   [block type]
   (when-let [uuid (:block/uuid block)]
-    (property-handler/set-block-property! uuid (pu/get-pid :logseq.property/order-list-type) (name type))))
+    (property-handler/set-block-property! uuid :logseq.property/order-list-type (name type))))
 
 (defn remove-block-own-order-list-type!
   [block]
   (when-let [uuid (:block/uuid block)]
-    (property-handler/remove-block-property! uuid (pu/get-pid :logseq.property/order-list-type))))
+    (property-handler/remove-block-property! uuid :logseq.property/order-list-type)))
 
 (defn own-order-number-list?
   [block]
@@ -106,7 +106,7 @@
   (when (seq blocks)
     (let [has-ordered?    (some own-order-number-list? blocks)
           blocks-uuids    (some->> blocks (map :block/uuid) (remove nil?))
-          order-list-prop (pu/get-pid :logseq.property/order-list-type)]
+          order-list-prop :logseq.property/order-list-type]
       (if has-ordered?
         (property-handler/batch-remove-block-property! blocks-uuids order-list-prop)
         (property-handler/batch-set-block-property! blocks-uuids order-list-prop "number")))))

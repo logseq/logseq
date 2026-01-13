@@ -1,20 +1,26 @@
 (ns frontend.db.persist
   "Handles operations to persisting db to disk or indexedDB"
   (:require [cljs-bean.core :as bean]
+            [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.config :as config]
             [frontend.db.conn :as db-conn]
             [frontend.persist-db :as persist-db]
             [frontend.util :as util]
-            [logseq.db.common.sqlite :as common-sqlite]
+            [logseq.common.config :as common-config]
             [promesa.core :as p]))
+
+(defn local-file-based-graph?
+  [s]
+  (and (string? s)
+       (string/starts-with? s common-config/file-version-prefix)))
 
 (defn get-all-graphs
   []
   (p/let [repos (persist-db/<list-db)
           repos' (->> repos
                       (remove (fn [{:keys [name]}]
-                                (common-sqlite/local-file-based-graph? name)))
+                                (local-file-based-graph? name)))
                       (map
                        (fn [{:keys [name] :as repo}]
                          (assoc repo :name

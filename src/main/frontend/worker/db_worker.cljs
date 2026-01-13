@@ -659,7 +659,7 @@
 (def-thread-api :thread-api/export-get-all-page->content
   [repo options]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (worker-export/get-all-page->content repo @conn options)))
+    (worker-export/get-all-page->content @conn options)))
 
 (def-thread-api :thread-api/validate-db
   [repo]

@@ -22,7 +22,6 @@
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
-            [logseq.db.common.property-util :as db-property-util]
             [logseq.db.frontend.asset :as db-asset]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.content :as db-content]
@@ -452,11 +451,22 @@
     (when (and prev-type (not= prev-type prop-type))
       {:type {:from prev-type :to prop-type}})))
 
+(defn- get-file-pid
+  "Gets file graph property id given the db graph ident"
+  [db-ident]
+  ;; Map of unique cases where the db graph keyword name is different than the file graph id
+  (let [unique-file-ids {:logseq.property/order-list-type :logseq.order-list-type
+                         :logseq.property.tldraw/page :logseq.tldraw.page
+                         :logseq.property.tldraw/shape :logseq.tldraw.shape
+                         :logseq.property/publishing-public? :public}]
+    (or (get unique-file-ids db-ident)
+        (keyword (name db-ident)))))
+
 (def built-in-property-file-to-db-idents
   "Map of built-in property file ids to their db graph idents"
   (->> (keys db-property/built-in-properties)
        (map (fn [k]
-              [(db-property-util/get-file-pid k) k]))
+              [(get-file-pid k) k]))
        (into {})))
 
 (def all-built-in-property-file-ids

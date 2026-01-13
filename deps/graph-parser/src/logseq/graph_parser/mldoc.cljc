@@ -169,6 +169,11 @@
   ([repo content format]
    (->edn content (get-default-config repo format))))
 
+(defn ->db-edn
+  "Wrapper around ->edn for DB graphs"
+  [content format]
+  (->edn "logseq_db_repo_stub" content format))
+
 (defn inline->edn
   [text config]
   (try

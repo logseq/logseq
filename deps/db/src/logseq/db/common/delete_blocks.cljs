@@ -1,5 +1,5 @@
 (ns logseq.db.common.delete-blocks
-  "For file and DB graphs, provides fn to handle any deletion to occur per ldb/transact!"
+  "Provides fn to handle any deletion to occur per ldb/transact!"
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [logseq.common.util :as common-util]
@@ -46,8 +46,7 @@
      refs)))
 
 (defn update-refs-history-and-macros
-  "When a block is deleted, refs are updated, property history are deleted. For file graphs, macros associated
-  with the block are also deleted"
+  "When a block is deleted, refs are updated, property history are deleted"
   [db txs _opts]
   (let [retracted-block-ids (->> (keep (fn [tx]
                                          (when (and (vector? tx)

@@ -4,26 +4,20 @@
   compatible with file graphs"
   (:require [frontend.db.conn :as conn]
             [frontend.state :as state]
-            [logseq.db.common.property-util :as db-property-util]))
+            [logseq.db.frontend.property :as db-property]))
 
 (def lookup
   "Get the property value by a built-in property's db-ident from block."
-  db-property-util/lookup)
+  db-property/lookup)
 
 (defn get-block-property-value
   "Get the value of a built-in block's property by its db-ident"
   [block db-ident]
   (let [db (conn/get-db (state/get-current-repo))]
-    (db-property-util/get-block-property-value db block db-ident)))
-
-(defn get-pid
-  "Get a built-in property's id (db-ident or name) given its db-ident. For file and db graphs"
-  [db-ident]
-  (let [repo (state/get-current-repo)]
-    (db-property-util/get-pid repo db-ident)))
+    (db-property/get-block-property-value db block db-ident)))
 
 (defn shape-block?
   [block]
   (let [repo (state/get-current-repo)
         db (conn/get-db repo)]
-    (db-property-util/shape-block? db block)))
+    (db-property/shape-block? db block)))

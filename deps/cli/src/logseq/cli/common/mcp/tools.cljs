@@ -16,15 +16,9 @@
             [malli.core :as m]
             [malli.error :as me]))
 
-(defn- ensure-db-graph
-  [db]
-  (when-not (ldb/db-based-graph? db)
-    (throw (ex-info "This tool must be called on a DB graph" {}))))
-
 (defn list-properties
   "Main fn for ListProperties tool"
   [db {:keys [expand]}]
-  (ensure-db-graph db)
   (->> (d/datoms db :avet :block/tags :logseq.class/Property)
        (map #(d/entity db (:e %)))
        #_((fn [x] (prn :prop-keys (distinct (mapcat keys x))) x))
@@ -46,7 +40,6 @@
 (defn list-tags
   "Main fn for ListTags tool"
   [db {:keys [expand]}]
-  (ensure-db-graph db)
   (->> (d/datoms db :avet :block/tags :logseq.class/Tag)
        (map #(d/entity db (:e %)))
        (map (fn [e]
@@ -88,7 +81,6 @@
 (defn get-page-data
   "Get page data for GetPage tool including the page's entity and its blocks"
   [db page-name-or-uuid]
-  (ensure-db-graph db)
   (when-let [page (ldb/get-page db page-name-or-uuid)]
     {:entity (-> (remove-hidden-properties page)
                  (dissoc :block/tags :block/refs)
@@ -102,7 +94,6 @@
 (defn list-pages
   "Main fn for ListPages tool"
   [db {:keys [expand]}]
-  (ensure-db-graph db)
   (->> (d/datoms db :avet :block/name)
        (map #(d/entity db (:e %)))
        (remove entity-util/hidden?)
@@ -368,7 +359,6 @@
   "Given llm generated operations, builds the import EDN, validates it and returns it. It fails
    fast on anything invalid"
   [db operations*]
-  (ensure-db-graph db)
   ;; Only support these operations with appropriate outliner validations
   (when (seq (filter #(and (#{"page" "tag" "property"} (:entityType %)) (= "edit" (:operation %))) operations*))
     (throw (ex-info "Editing a page, tag or property isn't supported yet" {})))

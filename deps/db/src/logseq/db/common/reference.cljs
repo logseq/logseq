@@ -1,12 +1,9 @@
 (ns logseq.db.common.reference
   "References"
-  (:require [cljs.reader :as reader]
-            [clojure.set :as set]
+  (:require [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
-            [logseq.common.log :as log]
             [logseq.db :as ldb]
-            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.initial-data :as common-initial-data]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-util :as entity-util]))
@@ -240,34 +237,17 @@
 ;; -----------------------------------------------------------------------------
 
 (defn get-filters
-  [db page]
-  (let [db-based? (entity-plus/db-based-graph? db)]
-    (if db-based?
-      (let [included-pages (:logseq.property.linked-references/includes page)
-            excluded-pages (:logseq.property.linked-references/excludes page)]
-        (when (or (seq included-pages) (seq excluded-pages))
-          {:included included-pages
-           :excluded excluded-pages}))
-      (let [k :filters
-            properties (:block/properties page)
-            properties-str (or (get properties k) "{}")]
-        (try (let [result (reader/read-string properties-str)]
-               (when (seq result)
-                 (let [excluded-pages (->> (filter #(false? (second %)) result)
-                                           (keep first)
-                                           (keep #(ldb/get-page db %)))
-                       included-pages (->> (filter #(true? (second %)) result)
-                                           (keep first)
-                                           (keep #(ldb/get-page db %)))]
-                   {:included included-pages
-                    :excluded excluded-pages})))
-             (catch :default e
-               (log/error :syntax/filters e)))))))
+  [page]
+  (let [included-pages (:logseq.property.linked-references/includes page)
+        excluded-pages (:logseq.property.linked-references/excludes page)]
+    (when (or (seq included-pages) (seq excluded-pages))
+      {:included included-pages
+       :excluded excluded-pages})))
 
 (defn get-linked-references [db id]
   (let [entity       (d/entity db id)
         ids          (set (cons id (ldb/get-block-alias db id)))
-        page-filters (get-filters db entity)
+        page-filters (get-filters entity)
         excludes     (map :db/id (:excluded page-filters))
         includes     (map :db/id (:included page-filters))
         has-filters? (or (seq excludes) (seq includes))

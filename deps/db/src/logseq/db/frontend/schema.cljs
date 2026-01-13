@@ -1,15 +1,9 @@
 (ns logseq.db.frontend.schema
-  "Schema related fns for DB and file graphs"
+  "Schema related fns"
   (:require [clojure.set :as set]
             [clojure.string :as string]))
 
 (def schema-version? (every-pred map? :major))
-
-(def major-schema-version-string-schema
-  [:and :string
-   [:fn
-    {:error/message "should be a major schema-version"}
-    (fn [s] (some? (parse-long s)))]])
 
 (defn parse-schema-version
   "Return schema-version({:major <num> :minor <num>}).
@@ -60,7 +54,7 @@
     :else (throw (ex-info "Not a schema-version" {:data schema-version}))))
 
 (def ^:large-vars/data-var schema
-  "Schema for file graphs"
+  "Schema for DB graphs"
   {:db/ident        {:db/unique :db.unique/identity}
    :kv/value       {}
 

@@ -12,7 +12,6 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
-            [frontend.handler.property.util :as pu]
             [frontend.handler.route :as route-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -168,7 +167,7 @@
   [highlight]
   (when-let [block (db-model/get-block-by-uuid (:id highlight))]
     (when-let [color (get-in highlight [:properties :color])]
-      (let [k (pu/get-pid :logseq.property.pdf/hl-color)
+      (let [k :logseq.property.pdf/hl-color
             color' (let [colors (:property/closed-values (db/entity :logseq.property.pdf/hl-color))]
                      (some (fn [color-block] (when (= (:block/title color-block) color)
                                                (:db/id color-block))) colors))]

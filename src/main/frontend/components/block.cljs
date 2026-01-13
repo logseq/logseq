@@ -651,7 +651,7 @@
        on-context-menu
        (assoc :on-context-menu on-context-menu))
      (when (and show-icon? (not tag?))
-       (let [own-icon (get page-entity (pu/get-pid :logseq.property/icon))
+       (let [own-icon (get page-entity :logseq.property/icon)
              emoji? (and (map? own-icon) (= (:type own-icon) :emoji))]
          (when-let [icon (icon-component/get-node-icon-cp page-entity {:color? true
                                                                        :not-text-or-page? true})]
@@ -2996,7 +2996,7 @@
         order-list? (boolean own-number-list?)
         children (ldb/get-children block)
         page-icon (when (:page-title? config)
-                    (let [icon' (get block (pu/get-pid :logseq.property/icon))]
+                    (let [icon' (get block :logseq.property/icon)]
                       (when-let [icon (and (ldb/page? block)
                                            (or icon'
                                                (some :logseq.property/icon (:block/tags block))
@@ -3012,12 +3012,12 @@
                                                                    (if icon
                                                                      (db-property-handler/set-block-property!
                                                                       (:db/id block)
-                                                                      (pu/get-pid :logseq.property/icon)
+                                                                      :logseq.property/icon
                                                                       (select-keys icon [:id :type :color]))
                                                                      ;; del
                                                                      (db-property-handler/remove-block-property!
                                                                       (:db/id block)
-                                                                      (pu/get-pid :logseq.property/icon))))
+                                                                      :logseq.property/icon)))
                                                       :del-btn? (boolean icon')
                                                       :icon-props {:style {:width "1lh"
                                                                            :height "1lh"

@@ -1,7 +1,6 @@
 (ns ^:node-only logseq.db.common.sqlite-cli
-  "Primary ns to interact with DB files for DB and file graphs with node.js based CLIs"
+  "Primary ns to interact with DB files with node.js based CLIs"
   (:require ["better-sqlite3" :as sqlite3]
-            ["fs" :as fs]
             ["os" :as os]
             ["path" :as node-path]
             [cljs-bean.core :as bean]
@@ -10,13 +9,6 @@
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util]))
-
-;; Should this check directory name instead if file graphs also
-;; have this file?
-(defn db-graph-directory?
-  "Returns boolean indicating if the given directory is a DB graph"
-  [graph-dir]
-  (fs/existsSync (node-path/join graph-dir "db.sqlite")))
 
 ;; Reference same sqlite default class in cljs + nbb without needing .cljc
 (def sqlite (if (find-ns 'nbb.core) (aget sqlite3 "default") sqlite3))
