@@ -1,7 +1,6 @@
 (ns frontend.worker.db-core
   "Core db-worker logic without host-specific bootstrap."
-  (:require ["@sqlite.org/sqlite-wasm" :default sqlite3InitModule]
-            [cljs-bean.core :as bean]
+  (:require [cljs-bean.core :as bean]
             [cljs.cache :as cache]
             [clojure.edn :as edn]
             [clojure.set]
@@ -34,6 +33,7 @@
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.thread-atom]
+            [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.cli.common.mcp.tools :as cli-common-mcp-tools]
             [logseq.common.util :as common-util]
@@ -63,28 +63,59 @@
 (defonce *client-ops-conns worker-state/*client-ops-conns)
 (defonce *opfs-pools worker-state/*opfs-pools)
 (defonce *publishing? (atom false))
+(defonce ^:private *node-pools (atom {}))
+
+(defn- node-runtime?
+  []
+  (= :node (platform/env-flag (platform/current) :runtime)))
+
+(defn- get-storage-pool
+  [graph]
+  (if (node-runtime?)
+    (get @*node-pools graph)
+    (worker-state/get-opfs-pool graph)))
+
+(defn- remember-storage-pool!
+  [graph pool]
+  (if (node-runtime?)
+    (swap! *node-pools assoc graph pool)
+    (swap! *opfs-pools assoc graph pool)))
+
+(defn- forget-storage-pool!
+  [graph]
+  (if (node-runtime?)
+    (swap! *node-pools dissoc graph)
+    (swap! *opfs-pools dissoc graph)))
 
 (defn- <get-opfs-pool
   [graph]
   (when-not @*publishing?
-    (or (worker-state/get-opfs-pool graph)
+    (or (get-storage-pool graph)
         (p/let [storage (platform/storage (platform/current))
+                _ (log/info :db-worker/get-opfs-pool {:graph graph})
                 ^js pool ((:install-opfs-pool storage) @*sqlite (worker-util/get-pool-name graph))]
-          (swap! *opfs-pools assoc graph pool)
+          (remember-storage-pool! graph pool)
+          (log/info :db-worker/get-opfs-pool-done {:graph graph})
           pool))))
 
 (defn- init-sqlite-module!
   []
   (when-not @*sqlite
     (p/let [publishing? (platform/env-flag (platform/current) :publishing?)
-            sqlite (sqlite3InitModule (clj->js {:print #(log/info :init-sqlite-module! %)
-                                                :printErr #(log/error :init-sqlite-module! %)}))]
+            sqlite (platform/sqlite-init! (platform/current))]
       (reset! *publishing? publishing?)
-      (reset! *sqlite sqlite)
+      (reset! *sqlite (or sqlite ::sqlite-initialized))
       nil)))
 
 (def repo-path "/db.sqlite")
 (def debug-log-path "/debug-log/db.sqlite")
+
+(defn- resolve-db-path
+  [repo pool path]
+  (let [storage (platform/storage (platform/current))]
+    (if-let [f (:resolve-db-path storage)]
+      (f repo pool path)
+      path)))
 
 (defn- <export-db-file
   ([repo]
@@ -156,9 +187,10 @@
   (when search (.close search))
   (when client-ops (.close client-ops))
   (when debug-log (.close debug-log))
-  (when-let [^js pool (worker-state/get-opfs-pool repo)]
-    (.pauseVfs pool))
-  (swap! *opfs-pools dissoc repo))
+  (when-let [^js pool (get-storage-pool repo)]
+    (when (exists? (.-pauseVfs pool))
+      (.pauseVfs pool)))
+  (forget-storage-pool! repo))
 
 (defn- close-other-dbs!
   [repo]
@@ -184,18 +216,47 @@
 (defn- get-dbs
   [repo]
   (if @*publishing?
-    (p/let [^object DB (.-DB ^object (.-oo1 ^object @*sqlite))
-            db (new DB "/db.sqlite" "c")
-            search-db (new DB "/search-db.sqlite" "c")]
+    (p/let [db (platform/sqlite-open (platform/current)
+                                     {:sqlite @*sqlite
+                                      :path "/db.sqlite"
+                                      :mode "c"})
+            search-db (platform/sqlite-open (platform/current)
+                                            {:sqlite @*sqlite
+                                             :path "/search-db.sqlite"
+                                             :mode "c"})]
       [db search-db])
     (p/let [^js pool (<get-opfs-pool repo)
-            capacity (.getCapacity pool)
-            _ (when (zero? capacity)   ; file handle already releases since pool will be initialized only once
+            capacity (when (exists? (.-getCapacity pool))
+                       (.getCapacity pool))
+            _ (when (and (some? capacity) (zero? capacity))
                 (.unpauseVfs pool))
-            db (new (.-OpfsSAHPoolDb pool) repo-path)
-            search-db (new (.-OpfsSAHPoolDb pool) (str "search" repo-path))
-            client-ops-db (new (.-OpfsSAHPoolDb pool) (str "client-ops-" repo-path))
-            debug-log-db (new (.-OpfsSAHPoolDb pool) (str "debug-log" repo-path))]
+            _ (log/info :db-worker/get-dbs-paths {:repo repo
+                                                  :repo-dir (.-repoDir pool)
+                                                  :capacity capacity})
+            db-path (resolve-db-path repo pool repo-path)
+            search-path (resolve-db-path repo pool (str "search" repo-path))
+            client-ops-path (resolve-db-path repo pool (str "client-ops-" repo-path))
+            debug-log-db-path (resolve-db-path repo pool (str "debug-log" repo-path))
+            _ (log/info :db-worker/get-dbs-open {:repo repo :db-path db-path})
+            db (platform/sqlite-open (platform/current)
+                                     {:sqlite @*sqlite
+                                      :pool pool
+                                      :path db-path})
+            _ (log/info :db-worker/get-dbs-open {:repo repo :search-path search-path})
+            search-db (platform/sqlite-open (platform/current)
+                                            {:sqlite @*sqlite
+                                             :pool pool
+                                             :path search-path})
+            _ (log/info :db-worker/get-dbs-open {:repo repo :client-ops-path client-ops-path})
+            client-ops-db (platform/sqlite-open (platform/current)
+                                                {:sqlite @*sqlite
+                                                 :pool pool
+                                                 :path client-ops-path})
+            _ (log/info :db-worker/get-dbs-open {:repo repo :debug-log-db-path debug-log-db-path})
+            debug-log-db (platform/sqlite-open (platform/current)
+                                               {:sqlite @*sqlite
+                                                :pool pool
+                                                :path debug-log-db-path})]
       [db search-db client-ops-db debug-log-db])))
 
 (defn- enable-sqlite-wal-mode!
@@ -222,6 +283,9 @@
 (defn- <create-or-open-db!
   [repo {:keys [config datoms] :as opts}]
   (when-not (worker-state/get-sqlite-conn repo)
+    (log/info :db-worker/create-or-open-start {:repo repo
+                                               :has-datoms? (boolean datoms)
+                                               :import-type (:import-type opts)})
     (p/let [[db search-db client-ops-db debug-log-db :as dbs] (get-dbs repo)
             storage (new-sqlite-storage db)
             client-ops-storage (when-not @*publishing?
@@ -281,7 +345,8 @@
             (let [client-ops (rtc-migrate/migration-results=>client-ops migration-result)]
               (client-op/add-ops! repo client-ops))))
 
-        (db-listener/listen-db-changes! repo (get @*datascript-conns repo))))))
+        (db-listener/listen-db-changes! repo (get @*datascript-conns repo))
+        (log/info :db-worker/create-or-open-done {:repo repo})))))
 
 (defn- <list-all-dbs
   []
@@ -296,6 +361,7 @@
 
 (def-thread-api :thread-api/list-db
   []
+  (log/info :thread-api/list-db nil)
   (<list-all-dbs))
 
 (defn- <db-exists?
@@ -341,12 +407,17 @@
   (p/do!
    (when close-other-db?
      (close-other-dbs! repo))
+   (log/info :db-worker/start-db {:repo repo
+                                  :close-other-db? close-other-db?
+                                  :master? @shared-service/*master-client?})
    (when @shared-service/*master-client?
      (<create-or-open-db! repo (dissoc opts :close-other-db?)))
    nil))
 
 (def-thread-api :thread-api/create-or-open-db
   [repo opts]
+  (log/info :thread-api/create-or-open-db {:repo repo
+                                           :opts (dissoc opts :config)})
   (when-not (= repo (worker-state/get-current-repo)) ; graph switched
     (reset! worker-state/*deleted-block-uuid->db-id {}))
   (start-db! repo opts))
@@ -505,8 +576,9 @@
 
 (def-thread-api :thread-api/release-access-handles
   [repo]
-  (when-let [^js pool (worker-state/get-opfs-pool repo)]
-    (.pauseVfs pool)
+  (when-let [^js pool (get-storage-pool repo)]
+    (when (exists? (.-pauseVfs pool))
+      (.pauseVfs pool))
     nil))
 
 (def-thread-api :thread-api/db-exists
@@ -789,6 +861,8 @@
   [repo start-opts]
   (js/Promise.
    (m/sp
+     (log/info :db-worker/on-become-master-start {:repo repo
+                                                  :import-type (:import-type start-opts)})
      (c.m/<? (init-sqlite-module!))
      (when-not (:import-type start-opts)
        (c.m/<? (start-db! repo start-opts))
@@ -796,7 +870,8 @@
      ;; Don't wait for rtc started because the app will be slow to be ready
      ;; for users.
      (when @worker-state/*rtc-ws-url
-       (rtc.core/new-task--rtc-start true)))))
+       (rtc.core/new-task--rtc-start true))
+     (log/info :db-worker/on-become-master-done {:repo repo}))))
 
 (def broadcast-data-types
   (set (map
@@ -815,14 +890,18 @@
     (when graph
       (if (= graph prev-graph)
         service
-        (p/let [service (shared-service/<create-service graph
-                                                        (bean/->js fns)
-                                                        #(on-become-master graph start-opts)
-                                                        broadcast-data-types
-                                                        {:import? (:import-type? start-opts)})]
+        (do
+          (log/info :db-worker/init-service {:graph graph
+                                             :prev-graph prev-graph
+                                             :import-type (:import-type start-opts)})
+          (p/let [service (shared-service/<create-service graph
+                                                          (bean/->js fns)
+                                                          #(on-become-master graph start-opts)
+                                                          broadcast-data-types
+                                                          {:import? (:import-type? start-opts)})]
           (assert (p/promise? (get-in service [:status :ready])))
           (reset! *service [graph service])
-          service)))))
+          service))))))
 
 (defn- notify-invalid-data
   [{:keys [tx-meta]} errors]
@@ -851,7 +930,12 @@
              (= :thread-api/create-or-open-db method-k)
              ;; because shared-service operates at the graph level,
              ;; creating a new database or switching to another one requires re-initializing the service.
-             (let [[graph opts] (ldb/read-transit-str (last args))]
+             (let [payload (last args)
+                   payload' (cond
+                              (string? payload) (ldb/read-transit-str payload)
+                              (array? payload) (js->clj payload :keywordize-keys true)
+                              :else payload)
+                   [graph opts] payload']
                (p/let [service (<init-service! graph opts)
                        client-id (:client-id service)]
                 (when client-id
@@ -860,6 +944,7 @@
                                            {:client-id client-id}))
                  (get-in service [:status :ready])
                  ;; wait for service ready
+                 (log/info :DEBUG [k args])
                  (js-invoke (:proxy service) k args)))
 
              (or
@@ -871,6 +956,7 @@
              :else
              ;; ensure service is ready
              (p/let [_ready-value (get-in service [:status :ready])]
+               (log/info :DEBUG [k args])
                (js-invoke (:proxy service) k args)))))]))
    (into {})
    bean/->js))

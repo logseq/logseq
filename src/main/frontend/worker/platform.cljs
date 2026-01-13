@@ -2,7 +2,7 @@
   "Platform adapter contract for db-worker runtimes.")
 
 (def ^:private required-sections
-  [:env :storage :kv :broadcast :websocket :crypto :timers])
+  [:env :storage :kv :broadcast :websocket :crypto :timers :sqlite])
 
 (defonce ^:private *platform (atom nil))
 
@@ -61,6 +61,17 @@
   (if-let [f (get-in platform [:websocket :connect])]
     (f url)
     (throw (ex-info "platform websocket/connect missing" {:url url}))))
+
+(defn sqlite-init!
+  [platform]
+  (when-let [f (get-in platform [:sqlite :init!])]
+    (f)))
+
+(defn sqlite-open
+  [platform opts]
+  (if-let [f (get-in platform [:sqlite :open-db])]
+    (f opts)
+    (throw (ex-info "platform sqlite/open-db missing" {:opts opts}))))
 
 (defn post-message!
   [platform type payload]
