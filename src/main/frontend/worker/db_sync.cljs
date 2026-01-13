@@ -639,7 +639,7 @@
                                (p/resolved nil)))
                            (p/resolved nil)))))
 
-(defn- rebase-apply-remote-tx! [repo client tx-data]
+(defn- apply-remote-tx! [repo client tx-data]
   (if-let [conn (worker-state/get-datascript-conn repo)]
     (let [local-txs (pending-txs repo)
           pending-tx-ids (mapv :tx-id local-txs)
@@ -686,7 +686,7 @@
                              (let [pending-tx-data (->> local-txs
                                                         (mapcat :tx)
                                                         keep-last-parent-update)
-                                   db (:db-after @temp-conn)
+                                   db @temp-conn
                                    pending-tx-data (sanitize-remote-tx-data db pending-tx-data)]
                                (when (seq pending-tx-data)
                                  (let [rebased-report (d/with (:db-after tx-report) pending-tx-data)
@@ -746,7 +746,7 @@
                                      (parse-transit (:tx data) {:repo repo :type "pull/ok"}))
                                    txs)]
                     (when (seq tx)
-                      (rebase-apply-remote-tx! repo client tx)
+                      (apply-remote-tx! repo client tx)
                       (client-op/update-local-tx repo remote-tx)
                       (flush-pending! repo client)))
         "changed" (do

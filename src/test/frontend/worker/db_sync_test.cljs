@@ -51,7 +51,7 @@
     (let [{:keys [conn parent child1]} (setup-parent-child)]
       (with-datascript-conns conn nil
         (fn []
-          (#'db-sync/rebase-apply-remote-tx!
+          (#'db-sync/apply-remote-tx!
            test-repo
            nil
            [[:db/add (:db/id parent) :block/parent (:db/id child1)]])
@@ -68,7 +68,7 @@
       (with-datascript-conns conn client-ops-conn
         (fn []
           (d/transact! conn [[:db/add (:db/id child1) :block/parent (:db/id child2)]])
-          (#'db-sync/rebase-apply-remote-tx!
+          (#'db-sync/apply-remote-tx!
            test-repo
            nil
            [[:db/add (:db/id child2) :block/parent (:db/id child1)]])
@@ -84,7 +84,7 @@
         (fn []
           (d/transact! conn [[:db/add (:db/id child2) :block/parent (:db/id child1)]
                              [:db/add (:db/id child3) :block/parent (:db/id child2)]])
-          (#'db-sync/rebase-apply-remote-tx!
+          (#'db-sync/apply-remote-tx!
            test-repo
            nil
            [[:db/add (:db/id child2) :block/parent (:db/id child3)]
@@ -103,7 +103,7 @@
       (with-datascript-conns conn client-ops-conn
         (fn []
           (outliner-core/insert-blocks! conn [{:block/title "child 4"}] parent {:sibling? false})
-          (#'db-sync/rebase-apply-remote-tx!
+          (#'db-sync/apply-remote-tx!
            test-repo
            nil
            [[:db/retractEntity [:block/uuid (:block/uuid parent)]]])
@@ -117,7 +117,7 @@
       (with-datascript-conns conn client-ops-conn
         (fn []
           (d/transact! conn [[:db/add (:db/id child1) :block/title "child 1 local"]])
-          (#'db-sync/rebase-apply-remote-tx!
+          (#'db-sync/apply-remote-tx!
            test-repo
            nil
            [[:db/add (:db/id child1) :block/order order]
@@ -135,7 +135,7 @@
       (with-datascript-conns conn client-ops-conn
         (fn []
           (d/transact! conn [[:db/add (:db/id child1) :block/title "child 1 local"]])
-          (#'db-sync/rebase-apply-remote-tx!
+          (#'db-sync/apply-remote-tx!
            test-repo
            nil
            [[:db/add (:db/id child1) :block/order child2-order]])
@@ -161,7 +161,7 @@
                                         {:sibling? true})
           (let [local1 (db-test/find-block-by-content @conn "local 1")
                 local2 (db-test/find-block-by-content @conn "local 2")]
-            (#'db-sync/rebase-apply-remote-tx!
+            (#'db-sync/apply-remote-tx!
              test-repo
              nil
              [[:db/add -1 :block/uuid remote-uuid-1]
@@ -183,3 +183,46 @@
                 orders (map :block/order children)]
             (is (every? some? orders))
             (is (= (count orders) (count (distinct orders))))))))))
+
+(deftest rebase-replaces-pending-txs-test
+  (testing "pending txs are rebased into a single tx after remote rebase"
+    (let [{:keys [conn client-ops-conn parent child1 child2]} (setup-parent-child)
+          child1-uuid (:block/uuid child1)
+          child2-uuid (:block/uuid child2)]
+      (with-redefs [db-sync/enqueue-local-tx!
+                    (let [orig db-sync/enqueue-local-tx!]
+                      (fn [repo tx-report]
+                        (when-not (:rtc-tx? (:tx-meta tx-report))
+                          (orig repo tx-report))))]
+        (with-datascript-conns conn client-ops-conn
+          (fn []
+            (d/transact! conn [[:db/add (:db/id child1) :block/title "child 1 local"]])
+            (d/transact! conn [[:db/add (:db/id child2) :block/title "child 2 local"]])
+            (is (= 2 (count (#'db-sync/pending-txs test-repo))))
+            (#'db-sync/apply-remote-tx!
+             test-repo
+             nil
+             [[:db/add (:db/id parent) :block/title "parent remote"]])
+            (let [pending (#'db-sync/pending-txs test-repo)
+                  txs (mapcat :tx pending)]
+              (is (= 1 (count pending)))
+              (is (some #(= % [:db/add [:block/uuid child1-uuid] :block/title "child 1 local"]) txs))
+              (is (some #(= % [:db/add [:block/uuid child2-uuid] :block/title "child 2 local"]) txs)))))))))
+
+(deftest rebase-keeps-pending-when-rebased-empty-test
+  (testing "pending txs stay when rebased txs are empty"
+    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)]
+      (with-redefs [db-sync/enqueue-local-tx!
+                    (let [orig db-sync/enqueue-local-tx!]
+                      (fn [repo tx-report]
+                        (when-not (:rtc-tx? (:tx-meta tx-report))
+                          (orig repo tx-report))))]
+        (with-datascript-conns conn client-ops-conn
+          (fn []
+            (d/transact! conn [[:db/add (:db/id child1) :block/title "same"]])
+            (is (= 1 (count (#'db-sync/pending-txs test-repo))))
+            (#'db-sync/apply-remote-tx!
+             test-repo
+             nil
+             [[:db/add (:db/id child1) :block/title "same"]])
+            (is (= 1 (count (#'db-sync/pending-txs test-repo))))))))))

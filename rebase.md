@@ -1,7 +1,7 @@
 # Remote Rebase (Client)
 
 This doc describes how the client rebases and applies remote tx data in
-`rebase-apply-remote-tx!` to keep the server thin and to tolerate offline
+`apply-remote-tx!` to keep the server thin and to tolerate offline
 conflicts.
 
 ## Goals
