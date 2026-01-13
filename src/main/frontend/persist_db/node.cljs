@@ -104,10 +104,19 @@
                                                       (string/split-lines)
                                                       (->> (some #(when (string/starts-with? % "data: ")
                                                                     (subs % 6)))))]
-                                (let [{:keys [type payload]} (js->clj (js/JSON.parse line) :keywordize-keys true)]
-                                  (when (and type payload)
-                                    (handler (keyword type) (ldb/read-transit-str payload) wrapped-worker))))
-                              (recur))))))
+                                (let [{:keys [type payload]} (js->clj (js/JSON.parse line) :keywordize-keys true)
+                                      decoded (when (some? payload)
+                                                (try
+                                                  (ldb/read-transit-str payload)
+                                                  (catch :default _ payload)))
+                                      [event-type event-payload] (if (and (vector? decoded)
+                                                                          (= 2 (count decoded))
+                                                                          (keyword? (first decoded)))
+                                                                   [(first decoded) (second decoded)]
+                                                                   [(keyword type) decoded])]
+                                  (when (some? type)
+                                    (handler event-type event-payload wrapped-worker)))))
+                            (recur)))))
                  (.on res "error" (fn [e]
                                     (log/error :db-worker-node-events-error e)))))]
       (.on req "error" (fn [e]
