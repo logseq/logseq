@@ -48,16 +48,6 @@
   (when (string? tag-name)
     (not (re-find #"[#\t\r\n]+" tag-name))))
 
-(defn tag?
-  "Whether `s` is a tag."
-  [s]
-  (and (string? s)
-       (string/starts-with? s "#")
-       (or
-        (not (string/includes? s " "))
-        (string/starts-with? s "#[[")
-        (string/ends-with? s "]]"))))
-
 (defn safe-subs
   ([s start]
    (let [c (count s)]
@@ -65,10 +55,6 @@
   ([s start end]
    (let [c (count s)]
      (subs s (min c start) (min c end)))))
-
-(defn unquote-string
-  [v]
-  (string/trim (subs v 1 (dec (count v)))))
 
 (defn wrapped-by
   [v start end]
@@ -254,15 +240,6 @@
   [fmt & args]
   (apply gstring/format fmt args))
 
-(defn remove-first [pred coll]
-  ((fn inner [coll]
-     (lazy-seq
-      (when-let [[x & xs] (seq coll)]
-        (if (pred x)
-          xs
-          (cons x (inner xs))))))
-   coll))
-
 (defn concat-without-nil
   [& cols]
   (->> (apply concat cols)
@@ -297,10 +274,6 @@
 (defn replace-ignore-case
   [s old-value new-value]
   (string/replace s (re-pattern (str "(?i)" (escape-regex-chars old-value))) new-value))
-
-(defn replace-first-ignore-case
-  [s old-value new-value]
-  (string/replace-first s (re-pattern (str "(?i)" (escape-regex-chars old-value))) new-value))
 
 (defn sort-coll-by-dependency
   "Sort the elements in the collection based on dependencies.

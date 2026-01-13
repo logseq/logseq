@@ -201,12 +201,6 @@
                 ;; 3. local asset link
                 (boolean (common-config/local-relative-asset? ref-value))))))))
 
-(defn link?
-  [format link]
-  (when (string? link)
-    (some-> (first (inline->edn link (default-config format)))
-            ast-link?)))
-
 (defn mldoc-link?
   "Check whether s is a link (including page/block refs)."
   [format s]

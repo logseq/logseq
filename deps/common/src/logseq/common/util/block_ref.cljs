@@ -8,10 +8,6 @@
   (str left-parens right-parens))
 (def block-ref-re #"\(\(([a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12})\)\)")
 
-(defn get-all-block-ref-ids
-  [content]
-  (map second (re-seq block-ref-re content)))
-
 (defn get-block-ref-id
   "Extracts block id from block-ref using regex"
   [s]
