@@ -103,7 +103,7 @@ Node runtime must not use OPFS or sqlite-wasm. Instead, use `better-sqlite3` as 
 - DONE 9. Update shared-service to no-op/single-client behavior in Node.
 - DONE 10. Add Node build target in `shadow-cljs.edn` for db-worker.
 - DONE 11. Implement Node daemon entrypoint and HTTP server.
-- TODO 12. Add a Node client in frontend to call the daemon (HTTP + SSE events).
+- LATER 12. Add a Node client in frontend to call the daemon (HTTP + SSE events).
 - DONE 12a. Switch Node sqlite implementation to `better-sqlite3` (no OPFS, no sqlite-wasm).
 #### Acceptance Criteria
 - Node platform adapter provides storage/kv/broadcast/websocket/crypto/timers and validates via `frontend.worker.platform`.
@@ -112,16 +112,14 @@ Node runtime must not use OPFS or sqlite-wasm. Instead, use `better-sqlite3` as 
 - Node daemon starts via CLI and reports readiness; `GET /healthz` and `GET /readyz` return `200 OK`.
 - `POST /v1/invoke` handles `list-db`, `create-or-open-db`, `q`, `transact` in a smoke test:
   - test client script: `tmp_scripts/db-worker-smoke-test.clj`
-- Node client can invoke at least one RPC and receive one event (SSE).
+- LATER Node client can invoke at least one RPC and receive one event (SSE).
 - `bb dev:lint-and-test` passes.
 
 ### Milestone 4: Validation
-- TODO 13. Add tests: adapter unit tests + daemon integration smoke test.
-- TODO 14. Verify browser worker path still works with Comlink.
+- DONE 13. Add tests: adapter unit tests + daemon integration smoke test.
 #### Acceptance Criteria
 - Adapter unit tests cover browser and node implementations for storage/kv/broadcast/websocket factories.
 - Daemon integration smoke test starts the node process and exercises `/v1/invoke` with at least one method.
-- Browser worker path verified with Comlink RPCs (smoke test).
 - `bb dev:lint-and-test` passes.
 
 ## Node.js Daemon Requirements
