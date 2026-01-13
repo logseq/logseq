@@ -399,8 +399,6 @@
   (let [inflight @(:inflight client)
         local-tx (or (client-op/get-local-tx repo) 0)
         remote-tx (get @*repo->latest-remote-tx repo)]
-    (prn :debug :remote-tx remote-tx
-         :local-tx local-tx)
     (when (= local-tx remote-tx)        ; rebase
       (when (empty? inflight)
         (when-let [ws (:ws client)]
@@ -644,8 +642,7 @@
 (defn- rebase-apply-remote-tx! [repo client tx-data]
   (if-let [conn (worker-state/get-datascript-conn repo)]
     (try
-      (let [;; 1. revert local changes
-            local-txs (pending-txs repo)
+      (let [local-txs (pending-txs repo)
             reversed-tx-data (->> local-txs
                                   (mapcat :reversed-tx)
                                   reverse
@@ -682,7 +679,6 @@
                              (when (seq tx-data)
                                (let [rtc-tx-data (sanitize-remote-tx-data @temp-conn tx-data)
                                      tx-report (ldb/transact! temp-conn rtc-tx-data)]
-                                 (prn :debug :tx-data rtc-tx-data)
                                  (sync-order/fix-duplicate-orders! temp-conn (:tx-data tx-report))))))))]
 
         (when tx-report
