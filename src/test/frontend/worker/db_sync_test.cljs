@@ -2,80 +2,184 @@
   (:require [cljs.test :refer [deftest is testing run-test]]
             [datascript.core :as d]
             [frontend.worker.db-sync :as db-sync]
+            [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.state :as worker-state]
-            [logseq.common.config :as common-config]
-            [logseq.db :as ldb]
-            [logseq.db.test.helper :as db-test]))
+            [logseq.db.test.helper :as db-test]
+            [logseq.outliner.core :as outliner-core]))
 
 (def ^:private test-repo "test-db-sync-repo")
 
-(defn- with-datascript-conn
-  [conn f]
-  (let [prev @worker-state/*datascript-conns]
-    (reset! worker-state/*datascript-conns {test-repo conn})
+(defn- with-datascript-conns
+  [db-conn ops-conn f]
+  (let [db-prev @worker-state/*datascript-conns
+        ops-prev @worker-state/*client-ops-conns]
+    (reset! worker-state/*datascript-conns {test-repo db-conn})
+    (reset! worker-state/*client-ops-conns {test-repo ops-conn})
+    (when ops-conn
+      (d/listen! db-conn ::listen-db
+                 (fn [tx-report]
+                   (db-sync/enqueue-local-tx! test-repo tx-report))))
     (try
       (f)
       (finally
-        (reset! worker-state/*datascript-conns prev)))))
+        (reset! worker-state/*datascript-conns db-prev)
+        (reset! worker-state/*client-ops-conns ops-prev)))))
 
 (defn- setup-parent-child
   []
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
-               [{:page {:block/title "page1"}
+               [{:page {:block/title "page 1"}
                  :blocks [{:block/title "parent"
-                           :build/children [{:block/title "child"}]}]}]})
+                           :build/children [{:block/title "child 1"}
+                                            {:block/title "child 2"}
+                                            {:block/title "child 3"}]}]}]})
+        client-ops-conn (d/create-conn client-op/schema-in-db)
         parent (db-test/find-block-by-content @conn "parent")
-        child (db-test/find-block-by-content @conn "child")]
+        child1 (db-test/find-block-by-content @conn "child 1")
+        child2 (db-test/find-block-by-content @conn "child 2")
+        child3 (db-test/find-block-by-content @conn "child 3")]
     {:conn conn
+     :client-ops-conn client-ops-conn
      :parent parent
-     :child child}))
-
-(deftest create-recycle-page-when-missing-test
-  (testing "recycle page is created when missing during db-sync repair"
-    (let [{:keys [conn parent child]} (setup-parent-child)
-          recycle-page (ldb/get-built-in-page @conn common-config/recycle-page-name)]
-      (ldb/transact! conn [[:db/retractEntity (:db/id recycle-page)]])
-      (with-datascript-conn conn
-        (fn []
-          (#'db-sync/rebase-apply-remote-tx!
-           test-repo
-           nil
-           [[:db/retractEntity (:db/id parent)]])
-          (let [recycle-page' (ldb/get-built-in-page @conn common-config/recycle-page-name)]
-            (is (= common-config/recycle-page-name (:block/title recycle-page')))
-            (is (= "Recycle" (:block/title (:block/parent (d/entity @conn (:db/id child))))))))))))
+     :child1 child1
+     :child2 child2
+     :child3 child3}))
 
 (deftest reparent-block-when-cycle-detected-test
   (testing "cycle from remote sync reparent block to page root"
-    (let [{:keys [conn parent child]} (setup-parent-child)]
-      (with-datascript-conn conn
+    (let [{:keys [conn parent child1]} (setup-parent-child)]
+      (with-datascript-conns conn nil
         (fn []
           (#'db-sync/rebase-apply-remote-tx!
            test-repo
            nil
-           [[:db/add (:db/id parent) :block/parent (:db/id child)]])
+           [[:db/add (:db/id parent) :block/parent (:db/id child1)]])
           (let [parent' (d/entity @conn (:db/id parent))
-                child' (d/entity @conn (:db/id child))
+                child' (d/entity @conn (:db/id child1))
                 page' (:block/page parent')]
             (is (some? page'))
             (is (= (:db/id page') (:db/id (:block/parent parent'))))
             (is (= (:db/id parent') (:db/id (:block/parent child'))))))))))
 
-(deftest drop-missing-parent-update-test
-  (testing "drop invalid parent updates during remote rebase"
-    (let [{:keys [conn child]} (setup-parent-child)
-          child-uuid (:block/uuid child)
-          original-parent-uuid (:block/uuid (:block/parent (d/entity @conn (:db/id child))))
-          missing-parent-uuid (random-uuid)]
-      (prn :debug :missing-parent-uuid missing-parent-uuid)
-      (with-datascript-conn conn
+(deftest two-children-cycle-test
+  (testing "cycle from remote sync reparent block to page root"
+    (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)]
+      (with-datascript-conns conn client-ops-conn
         (fn []
+          (d/transact! conn [[:db/add (:db/id child1) :block/parent (:db/id child2)]])
           (#'db-sync/rebase-apply-remote-tx!
            test-repo
            nil
-           [[:db/add [:block/uuid child-uuid]
-             :block/parent [:block/uuid missing-parent-uuid]]])
-          (let [child' (d/entity @conn (:db/id child))]
-            (is (= original-parent-uuid
-                   (:block/uuid (:block/parent child'))))))))))
+           [[:db/add (:db/id child2) :block/parent (:db/id child1)]])
+          (let [child' (d/entity @conn (:db/id child1))
+                child2' (d/entity @conn (:db/id child2))]
+            (is (= "child 2" (:block/title (:block/parent child'))))
+            (is (= "page 1" (:block/title (:block/parent child2'))))))))))
+
+(deftest three-children-cycle-test
+  (testing "cycle from remote sync reparent block to page root"
+    (let [{:keys [conn client-ops-conn child1 child2 child3]} (setup-parent-child)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (d/transact! conn [[:db/add (:db/id child2) :block/parent (:db/id child1)]
+                             [:db/add (:db/id child3) :block/parent (:db/id child2)]])
+          (#'db-sync/rebase-apply-remote-tx!
+           test-repo
+           nil
+           [[:db/add (:db/id child2) :block/parent (:db/id child3)]
+            [:db/add (:db/id child1) :block/parent (:db/id child2)]])
+          (let [child' (d/entity @conn (:db/id child1))
+                child2' (d/entity @conn (:db/id child2))
+                child3' (d/entity @conn (:db/id child3))]
+            (is (= "page 1" (:block/title (:block/parent child'))))
+            (is (= "page 1" (:block/title (:block/parent child2'))))
+            (is (= "child 2" (:block/title (:block/parent child3'))))))))))
+
+(deftest ignore-missing-parent-update-after-local-delete-test
+  (testing "remote parent retracted while local adds another child"
+    (let [{:keys [conn client-ops-conn parent child1]} (setup-parent-child)
+          child-uuid (:block/uuid child1)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (outliner-core/insert-blocks! conn [{:block/title "child 4"}] parent {:sibling? false})
+          (#'db-sync/rebase-apply-remote-tx!
+           test-repo
+           nil
+           [[:db/retractEntity [:block/uuid (:block/uuid parent)]]])
+          (let [child' (d/entity @conn [:block/uuid child-uuid])]
+            (is (nil? child'))))))))
+
+(deftest fix-duplicate-orders-after-rebase-test
+  (testing "duplicate order updates are fixed after remote rebase"
+    (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)
+          order (:block/order (d/entity @conn (:db/id child1)))]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (d/transact! conn [[:db/add (:db/id child1) :block/title "child 1 local"]])
+          (#'db-sync/rebase-apply-remote-tx!
+           test-repo
+           nil
+           [[:db/add (:db/id child1) :block/order order]
+            [:db/add (:db/id child2) :block/order order]])
+          (let [child1' (d/entity @conn (:db/id child1))
+                child2' (d/entity @conn (:db/id child2))
+                orders [(:block/order child1') (:block/order child2')]]
+            (is (every? some? orders))
+            (is (= 2 (count (distinct orders))))))))))
+
+(deftest fix-duplicate-order-against-existing-sibling-test
+  (testing "duplicate order update is fixed when it collides with an existing sibling"
+    (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)
+          child2-order (:block/order (d/entity @conn (:db/id child2)))]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (d/transact! conn [[:db/add (:db/id child1) :block/title "child 1 local"]])
+          (#'db-sync/rebase-apply-remote-tx!
+           test-repo
+           nil
+           [[:db/add (:db/id child1) :block/order child2-order]])
+          (let [child1' (d/entity @conn (:db/id child1))
+                child2' (d/entity @conn (:db/id child2))]
+            (is (some? (:block/order child1')))
+            (is (not= (:block/order child1') (:block/order child2')))))))))
+
+(deftest fix-duplicate-orders-with-local-and-remote-new-blocks-test
+  (testing "local and remote new sibling blocks at the same location get unique orders"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+          parent-id (:db/id parent)
+          page-uuid (:block/uuid (:block/page parent))
+          remote-uuid-1 (random-uuid)
+          remote-uuid-2 (random-uuid)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (outliner-core/insert-blocks! conn [{:block/title "local 1"
+                                               :block/uuid (random-uuid)}
+                                              {:block/title "local 2"
+                                               :block/uuid (random-uuid)}]
+                                        parent
+                                        {:sibling? true})
+          (let [local1 (db-test/find-block-by-content @conn "local 1")
+                local2 (db-test/find-block-by-content @conn "local 2")]
+            (#'db-sync/rebase-apply-remote-tx!
+             test-repo
+             nil
+             [[:db/add -1 :block/uuid remote-uuid-1]
+              [:db/add -1 :block/title "remote 1"]
+              [:db/add -1 :block/parent [:block/uuid page-uuid]]
+              [:db/add -1 :block/page [:block/uuid page-uuid]]
+              [:db/add -1 :block/order (:block/order local1)]
+              [:db/add -1 :block/updated-at 1768308019312]
+              [:db/add -1 :block/created-at 1768308019312]
+              [:db/add -2 :block/uuid remote-uuid-2]
+              [:db/add -2 :block/title "remote 2"]
+              [:db/add -2 :block/parent [:block/uuid page-uuid]]
+              [:db/add -2 :block/page [:block/uuid page-uuid]]
+              [:db/add -2 :block/order (:block/order local2)]
+              [:db/add -2 :block/updated-at 1768308019312]
+              [:db/add -2 :block/created-at 1768308019312]]))
+          (let [parent' (d/entity @conn parent-id)
+                children (vec (:block/_parent parent'))
+                orders (map :block/order children)]
+            (is (every? some? orders))
+            (is (= (count orders) (count (distinct orders))))))))))

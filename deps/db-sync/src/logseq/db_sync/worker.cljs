@@ -5,12 +5,9 @@
             [lambdaisland.glogi :as log]
             [lambdaisland.glogi.console :as glogi-console]
             [logseq.common.authorization :as authorization]
-            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db-sync.common :as common :refer [cors-headers]]
             [logseq.db-sync.malli-schema :as db-sync-schema]
-            [logseq.db-sync.order :as sync-order]
-            [logseq.db-sync.parent-missing :as db-sync-parent-missing]
             [logseq.db-sync.protocol :as protocol]
             [logseq.db-sync.storage :as storage]
             [logseq.db.common.normalize :as db-normalize]
@@ -333,21 +330,9 @@
         conn (.-conn self)]
     (when-not conn
       (fail-fast :db-sync/missing-db {:op :apply-tx}))
-    (let [tx-data (protocol/transit->tx txs)]
-      (ldb/transact-with-temp-conn!
-       conn
-       {:apply-tx? true}
-       (fn [temp-conn *batch-tx-data]
-         (let [recycle-page-id (:db/id (db-sync-parent-missing/ensure-recycle-page! conn))
-               tx-data' (->> tx-data
-                             (db-sync-parent-missing/fix-parent-missing-for-tx-data! conn recycle-page-id)
-                             db-normalize/replace-attr-retract-with-retract-entity-v2)
-               tx-report (ldb/transact! temp-conn tx-data' {:op :apply-client-tx})]
-           (prn :debug :fix-parent-missing)
-           ;; TODO: fix cycle
-           (db-sync-parent-missing/fix-parent-missing! temp-conn tx-report)
-           (prn :debug :fix-duplicate-orders)
-           (sync-order/fix-duplicate-orders! temp-conn @*batch-tx-data))))
+    (let [tx-data (->> (protocol/transit->tx txs)
+                       db-normalize/replace-attr-retract-with-retract-entity-v2)]
+      (ldb/transact! conn tx-data {:op :apply-client-tx})
       (prn :debug :finished-db-transact)
       (let [new-t (storage/get-t sql)]
         ;; FIXME: no need to broadcast if client tx is less than remote tx

@@ -857,10 +857,14 @@
                 ;; Replace entities with eid because Datascript doesn't support entity transaction
                 full-tx' (walk/prewalk
                           (fn [f]
-                            (if (de/entity? f)
+                            (cond
+                              (de/entity? f)
                               (if-let [id (id->new-uuid (:db/id f))]
                                 [:block/uuid id]
                                 (:db/id f))
+                              (map? f)
+                              (dissoc f :block/level)
+                              :else
                               f))
                           full-tx)]
             {:tx-data full-tx'

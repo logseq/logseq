@@ -40,7 +40,6 @@
 (defonce views-page-name "$$$views")
 (defonce library-page-name "Library")
 (defonce quick-add-page-name "Quick add")
-(defonce recycle-page-name "Recycle")
 
 (defn local-relative-asset?
   [s]
