@@ -1,6 +1,5 @@
 (ns logseq.db
-  "Main namespace for db fns that handles DB and file graphs. For db graph only
-  fns, you can also use logseq.db.frontend.db."
+  "Main namespace for db fns. All fns are only for DB graphs"
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
@@ -309,44 +308,37 @@
 
 (def get-first-page-by-name common-initial-data/get-first-page-by-name)
 
-(def db-based-graph? entity-plus/db-based-graph?)
-
 (defn page-exists?
-  "Returns truthy value if page exists.
-   For db graphs, returns all page db ids that given title and one of the given `tags`.
-   For file graphs, returns page db/id vector if it exists"
+  "Returns all page db ids that given title and one of the given `tags`."
   [db page-name tags]
   (when page-name
-    (if (db-based-graph? db)
-      (let [tags' (if (coll? tags) (set tags) #{tags})]
+    (let [tags' (if (coll? tags) (set tags) #{tags})]
         ;; Classes and properties are case sensitive and can be looked up
         ;; as such in case-sensitive contexts e.g. no Page
-        (if (and (seq tags') (every? #{:logseq.class/Tag :logseq.class/Property} tags'))
-          (seq
-           (d/q
-            '[:find [?p ...]
-              :in $ ?name [?tag-ident ...]
-              :where
-              [?p :block/title ?name]
-              [?p :block/tags ?tag]
-              [?tag :db/ident ?tag-ident]]
-            db
-            page-name
-            tags'))
-          ;; TODO: Decouple db graphs from file specific :block/name
-          (seq
-           (d/q
-            '[:find [?p ...]
-              :in $ ?name [?tag-ident ...]
-              :where
-              [?p :block/name ?name]
-              [?p :block/tags ?tag]
-              [?tag :db/ident ?tag-ident]]
-            db
-            (common-util/page-name-sanity-lc page-name)
-            tags'))))
-      (when-let [id (:db/id (d/entity db [:block/name (common-util/page-name-sanity-lc page-name)]))]
-        [id]))))
+      (if (and (seq tags') (every? #{:logseq.class/Tag :logseq.class/Property} tags'))
+        (seq
+         (d/q
+          '[:find [?p ...]
+            :in $ ?name [?tag-ident ...]
+            :where
+            [?p :block/title ?name]
+            [?p :block/tags ?tag]
+            [?tag :db/ident ?tag-ident]]
+          db
+          page-name
+          tags'))
+        ;; TODO: Decouple db graphs from file specific :block/name
+        (seq
+         (d/q
+          '[:find [?p ...]
+            :in $ ?name [?tag-ident ...]
+            :where
+            [?p :block/name ?name]
+            [?p :block/tags ?tag]
+            [?tag :db/ident ?tag-ident]]
+          db
+          (common-util/page-name-sanity-lc page-name)
+          tags'))))))
 
 (defn get-page
   "Get a page given its unsanitized name or uuid"

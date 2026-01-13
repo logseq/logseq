@@ -1,7 +1,6 @@
 (ns logseq.cli.commands.graph
   "Graph related commands"
   (:require ["fs" :as fs]
-            ["path" :as node-path]
             [cljs-time.coerce :as tc]
             [clojure.pprint :as pprint]
             [clojure.string :as string]
@@ -22,7 +21,6 @@
     (let [graph-dir (cli-util/get-graph-path graph)]
       (if (fs/existsSync graph-dir)
         (let [conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))
-              _ (cli-util/ensure-db-graph-for-command @conn)
               kv-value #(:kv/value (d/entity @conn %))]
           (pprint/print-table
            (map #(array-map "Name" (first %) "Value" (second %))
@@ -39,16 +37,7 @@
 
 (defn list-graphs
   []
-  (let [[db-graphs* file-graphs*] ((juxt filter remove) #(string/starts-with? % common-config/db-version-prefix)
-                                                        (cli-common-graph/get-db-based-graphs))
-        db-graphs (->> db-graphs*
+  (let [db-graphs (->> (cli-common-graph/get-db-based-graphs)
                        (map #(string/replace-first % common-config/db-version-prefix ""))
-                       sort)
-        file-graphs (->> file-graphs*
-                         (map #(string/replace-first % common-config/file-version-prefix ""))
-                         (map node-path/basename)
-                         sort)]
-    (println "DB Graphs:")
-    (println (string/join "\n" db-graphs))
-    (println "\nFile Graphs:")
-    (println (string/join "\n" file-graphs))))
+                       sort)]
+    (println (string/join "\n" db-graphs))))

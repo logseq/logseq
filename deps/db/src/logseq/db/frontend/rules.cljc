@@ -2,7 +2,7 @@
   "Datalog rules for DB graphs")
 
 (def ^:large-vars/data-var rules
-  "Rules used mainly in frontend.db.model for both DB and file graphs"
+  "Rules used mainly in frontend.db.model"
   ;; rule "parent" is optimized for parent node -> child node nesting queries
   {:parent
    '[[(parent ?p ?c)

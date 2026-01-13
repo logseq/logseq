@@ -34,10 +34,10 @@
   []
   [:<>
    (ui/menu-background-color #(property-handler/batch-set-block-property! (state/get-selection-block-ids)
-                                                                          (pu/get-pid :logseq.property/background-color)
+                                                                          :logseq.property/background-color
                                                                           %)
                              #(property-handler/batch-remove-block-property! (state/get-selection-block-ids)
-                                                                             (pu/get-pid :logseq.property/background-color)))
+                                                                             :logseq.property/background-color))
    (ui/menu-heading #(editor-handler/batch-set-heading! (state/get-selection-block-ids) %)
                     #(editor-handler/batch-set-heading! (state/get-selection-block-ids) true)
                     #(editor-handler/batch-remove-heading! (state/get-selection-block-ids)))
@@ -126,10 +126,10 @@
                       false)]
       [:<>
        (ui/menu-background-color #(property-handler/set-block-property! block-id
-                                                                        (pu/get-pid :logseq.property/background-color)
+                                                                        :logseq.property/background-color
                                                                         %)
                                  #(property-handler/remove-block-property! block-id
-                                                                           (pu/get-pid :logseq.property/background-color)))
+                                                                           :logseq.property/background-color))
 
        (ui/menu-heading heading
                         #(editor-handler/set-heading! block-id %)
