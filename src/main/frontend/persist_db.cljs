@@ -22,8 +22,11 @@
   []
   (if (node-runtime?)
     (or @node-db
-        (reset! node-db (node/start! (assoc (node/default-config)
-                                            :event-handler worker-handler/handle))))
+        (let [client (node/start! (assoc (node/default-config)
+                                         :event-handler worker-handler/handle))]
+          (reset! node-db client)
+          (reset! state/*db-worker (:wrapped-worker client))
+          client))
     opfs-db))
 
 (defn <list-db []

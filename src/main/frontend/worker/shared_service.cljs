@@ -314,20 +314,17 @@
                           forward the data broadcast from the master client directly to the UI thread."
   [service-name target on-become-master-handler broadcast-data-types {:keys [import?]}]
   (clear-old-service!)
-  (log/info :shared-service/create-start {:service service-name
-                                          :node-runtime? (node-runtime?)
-                                          :import? import?})
   (if (node-runtime?)
     (p/do!
      (reset! *master-client? true)
      (reset! *client-id "node")
-     (log/info :shared-service/node-single-client {:service service-name
-                                                   :client-id @*client-id})
      (p/let [status {:ready (p/deferred)}]
        (p/do!
         (on-become-master-handler service-name)
         (p/resolve! (:ready status)))
-       {:proxy target
+       {:proxy #js {"remoteInvoke"
+                    (fn [args]
+                      (<apply-target-f! target "remoteInvoke" args))}
         :status status
         :client-id @*client-id}))
     (do
