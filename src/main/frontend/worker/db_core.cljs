@@ -33,7 +33,6 @@
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.thread-atom]
-            [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.cli.common.mcp.tools :as cli-common-mcp-tools]
             [logseq.common.util :as common-util]
@@ -92,10 +91,8 @@
   (when-not @*publishing?
     (or (get-storage-pool graph)
         (p/let [storage (platform/storage (platform/current))
-                _ (log/info :db-worker/get-opfs-pool {:graph graph})
                 ^js pool ((:install-opfs-pool storage) @*sqlite (worker-util/get-pool-name graph))]
           (remember-storage-pool! graph pool)
-          (log/info :db-worker/get-opfs-pool-done {:graph graph})
           pool))))
 
 (defn- init-sqlite-module!
@@ -230,9 +227,6 @@
                        (.getCapacity pool))
             _ (when (and (some? capacity) (zero? capacity))
                 (.unpauseVfs pool))
-            _ (log/info :db-worker/get-dbs-paths {:repo repo
-                                                  :repo-dir (.-repoDir pool)
-                                                  :capacity capacity})
             db-path (resolve-db-path repo pool repo-path)
             search-path (resolve-db-path repo pool (str "search" repo-path))
             client-ops-path (resolve-db-path repo pool (str "client-ops-" repo-path))
@@ -345,8 +339,7 @@
             (let [client-ops (rtc-migrate/migration-results=>client-ops migration-result)]
               (client-op/add-ops! repo client-ops))))
 
-        (db-listener/listen-db-changes! repo (get @*datascript-conns repo))
-        (log/info :db-worker/create-or-open-done {:repo repo})))))
+        (db-listener/listen-db-changes! repo (get @*datascript-conns repo))))))
 
 (defn- <list-all-dbs
   []
@@ -361,7 +354,6 @@
 
 (def-thread-api :thread-api/list-db
   []
-  (log/info :thread-api/list-db nil)
   (<list-all-dbs))
 
 (defn- <db-exists?
@@ -407,17 +399,12 @@
   (p/do!
    (when close-other-db?
      (close-other-dbs! repo))
-   (log/info :db-worker/start-db {:repo repo
-                                  :close-other-db? close-other-db?
-                                  :master? @shared-service/*master-client?})
    (when @shared-service/*master-client?
      (<create-or-open-db! repo (dissoc opts :close-other-db?)))
    nil))
 
 (def-thread-api :thread-api/create-or-open-db
   [repo opts]
-  (log/info :thread-api/create-or-open-db {:repo repo
-                                           :opts (dissoc opts :config)})
   (when-not (= repo (worker-state/get-current-repo)) ; graph switched
     (reset! worker-state/*deleted-block-uuid->db-id {}))
   (start-db! repo opts))
@@ -870,8 +857,7 @@
      ;; Don't wait for rtc started because the app will be slow to be ready
      ;; for users.
      (when @worker-state/*rtc-ws-url
-       (rtc.core/new-task--rtc-start true))
-     (log/info :db-worker/on-become-master-done {:repo repo}))))
+       (rtc.core/new-task--rtc-start true)))))
 
 (def broadcast-data-types
   (set (map
@@ -944,7 +930,6 @@
                                            {:client-id client-id}))
                  (get-in service [:status :ready])
                  ;; wait for service ready
-                 (log/info :DEBUG [k args])
                  (js-invoke (:proxy service) k args)))
 
              (or
@@ -956,7 +941,6 @@
              :else
              ;; ensure service is ready
              (p/let [_ready-value (get-in service [:status :ready])]
-               (log/info :DEBUG [k args])
                (js-invoke (:proxy service) k args)))))]))
    (into {})
    bean/->js))
