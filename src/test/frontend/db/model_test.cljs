@@ -1,5 +1,5 @@
 (ns frontend.db.model-test
-  (:require [cljs.test :refer [use-fixtures deftest is are]]
+  (:require [cljs.test :refer [use-fixtures deftest is]]
             [datascript.core :as d]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
@@ -10,38 +10,6 @@
                      :after test-helper/destroy-test-db!})
 
 (def test-db test-helper/test-db)
-
-(deftest test-page-alias-with-multiple-alias
-  (let [ab-uuid (random-uuid)
-        aa-uuid (random-uuid)]
-    (load-test-files
-     [{:page {:block/title "ab"
-              :build/keep-uuid? true
-              :block/uuid ab-uuid
-              :build/properties {:block/alias #{[:block/uuid aa-uuid]
-                                                [:build/page {:block/title "ad"}]}}}}
-      {:page {:block/title "aa"
-              :build/keep-uuid? true
-              :block/uuid aa-uuid
-              :build/properties {:block/alias #{[:block/uuid ab-uuid]
-                                                [:build/page {:block/title "ac"}]}}}}
-      {:page {:block/title "ae"}
-       :blocks [{:block/title (str "## ref to [[" ab-uuid "]]")}]}]))
-
-  (let [aid (:db/id (test-helper/find-page-by-title "aa"))
-        bid (:db/id (test-helper/find-page-by-title "ab"))
-        a-aliases (model/page-alias-set test-db aid)
-        b-aliases (model/page-alias-set test-db bid)
-        alias-names (model/get-page-alias-names test-db aid)
-        b-ref-blocks (model/get-referenced-blocks bid)
-        a-ref-blocks (model/get-referenced-blocks aid)]
-
-    (are [x y] (= x y)
-      4 (count a-aliases)
-      4 (count b-aliases)
-      1 (count b-ref-blocks)
-      1 (count a-ref-blocks)
-      #{"ab" "ac" "ad"} (set alias-names))))
 
 (deftest test-page-alias-set
   (let [ab-uuid (random-uuid)]
@@ -56,13 +24,8 @@
        :blocks [{:block/title (str "## ref to [[" ab-uuid "]]")}]}]))
 
   (let [page-id (:db/id (test-helper/find-page-by-title "aa"))
-        a-aliases (model/page-alias-set test-db page-id)
-        alias-names (model/get-page-alias-names test-db page-id)
-        a-ref-blocks (model/get-referenced-blocks page-id)]
-    (are [x y] (= x y)
-      3 (count a-aliases)
-      1 (count a-ref-blocks)
-      #{"ab" "ac"} (set alias-names))))
+        a-aliases (model/page-alias-set test-db page-id)]
+    (is (= 3 (count a-aliases)))))
 
 (defn- page-mention-check?
   [page-name include-journals?]

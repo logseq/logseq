@@ -105,47 +105,6 @@
 
 (def media-formats (set/union (common-config/img-formats) audio-formats video-formats))
 
-(defn extname-of-supported?
-  ([input] (extname-of-supported?
-            input
-            [image-formats doc-formats audio-formats
-             video-formats markup-formats
-             (common-config/text-formats)]))
-  ([input formats]
-   (when-let [input (some->
-                     (cond-> input
-                       (and (string? input)
-                            (not (string/blank? input)))
-                       (string/replace-first "." ""))
-                     (util/safe-lower-case)
-                     (keyword))]
-     (boolean
-      (some
-       (fn [s]
-         (contains? s input))
-       formats)))))
-
-(defn ext-of-video?
-  ([s] (ext-of-video? s true))
-  ([s html5?]
-   (when-let [s (and (string? s) (util/get-file-ext s))]
-     (let [video-formats' (cond-> video-formats
-                            html5? (disj :mkv))]
-       (extname-of-supported? s [video-formats'])))))
-
-(defn ext-of-audio?
-  ([s] (ext-of-audio? s true))
-  ([s html5?]
-   (when-let [s (and (string? s) (util/get-file-ext s))]
-     (let [audio-formats' (cond-> audio-formats
-                            html5? (disj :wma :ogg))]
-       (extname-of-supported? s [audio-formats'])))))
-
-(defn ext-of-image?
-  [s]
-  (when-let [s (and (string? s) (util/get-file-ext s))]
-    (extname-of-supported? s [image-formats])))
-
 (def mobile?
   "Triggering condition: Mobile phones
    *** Warning!!! ***
