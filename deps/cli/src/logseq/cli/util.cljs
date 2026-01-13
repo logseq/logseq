@@ -4,7 +4,6 @@
             ["path" :as node-path]
             [clojure.string :as string]
             [logseq.cli.common.graph :as cli-common-graph]
-            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.sqlite :as common-sqlite]
             [nbb.error]
             [promesa.core :as p]))
@@ -81,11 +80,6 @@
     (str (count (:properties edn-map)) " " (pluralize "property" (count (:properties edn-map))) ", "
          (count (:classes edn-map)) " " (pluralize "class" (count (:classes edn-map))) " and "
          (count (:pages-and-blocks edn-map)) " " (pluralize "page" (count (:pages-and-blocks edn-map))))))
-
-(defn ensure-db-graph-for-command
-  [db]
-  (when-not (entity-plus/db-based-graph? db)
-    (error "This command must be called on a DB graph")))
 
 (defn api-command?
   "Given user options and $LOGSEQ_API_SERVER_TOKEN, determines if

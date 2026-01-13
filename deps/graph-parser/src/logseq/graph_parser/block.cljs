@@ -16,6 +16,7 @@
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-util :as entity-util]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.text :as text]
@@ -305,21 +306,28 @@
 ;; Hack to detect export as some fns are too deeply nested to be refactored to get explicit option
 (def *export-to-db-graph? (atom false))
 
+(defn- get-page
+  "Similar to get-page but only for file graphs"
+  [db page-name]
+  (when (and db (string? page-name))
+    (d/entity db
+              (first (sort (map :e (entity-util/get-pages-by-name db page-name)))))))
+
 (defn- page-name-string->map
   [original-page-name db date-formatter
    {:keys [with-timestamp? page-uuid from-page class? skip-existing-page-check?]}]
-  (let [db-based? (ldb/db-based-graph? db)
+  (let [db-based? (entity-plus/db-based-graph? db)
         original-page-name (common-util/remove-boundary-slashes original-page-name)
         [original-page-name' page-name journal-day] (convert-page-if-journal original-page-name date-formatter {:export-to-db-graph? @*export-to-db-graph?})
         namespace? (and (or (not db-based?) @*export-to-db-graph?)
                         (not (boolean (text/get-nested-page-name original-page-name')))
                         (text/namespace-page? original-page-name'))
         page-entity (when (and db (not skip-existing-page-check?))
-                      (if class?
+                      (if (and class? db-based?)
                         (some->> (ldb/page-exists? db original-page-name' #{:logseq.class/Tag})
                                  first
                                  (d/entity db))
-                        (ldb/get-page db original-page-name')))
+                        (get-page db original-page-name')))
         original-page-name' (or from-page (:block/title page-entity) original-page-name')
         page (merge
               {:block/name page-name
@@ -384,7 +392,7 @@
    & {:keys [page-uuid class?] :as options}]
   (when-not (and db (common-util/uuid-string? original-page-name)
                  (not (page-entity? (d/entity db [:block/uuid (uuid original-page-name)]))))
-    (let [db-based? (ldb/db-based-graph? db)
+    (let [db-based? (entity-plus/db-based-graph? db)
           original-page-name (cond-> (string/trim original-page-name)
                                db-based?
                                sanitize-hashtag-name)
@@ -463,7 +471,7 @@
 (defn- with-page-refs-and-tags
   [{:keys [title body tags refs marker priority] :as block} db date-formatter {:keys [structured-tags]
                                                                                :or {structured-tags #{}}}]
-  (let [db-based? (and (ldb/db-based-graph? db) (not @*export-to-db-graph?))
+  (let [db-based? (and (entity-plus/db-based-graph? db) (not @*export-to-db-graph?))
         refs (->> (concat tags refs (when-not db-based? [marker priority]))
                   (remove string/blank?)
                   (distinct))

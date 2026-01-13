@@ -880,3 +880,20 @@
                   :else
                   false)))
             values)))
+
+(defn lookup
+  "Get the property value by a built-in property's db-ident from coll"
+  [block db-ident]
+  (let [val (get block db-ident)]
+    (if (built-in-has-ref-value? db-ident) (property-value-content val) val)))
+
+(defn get-block-property-value
+  "Get the value of built-in block's property by its db-ident"
+  [db block db-ident]
+  (when db
+    (let [block (or (d/entity db (:db/id block)) block)]
+      (lookup block db-ident))))
+
+(defn shape-block?
+  [db block]
+  (= :whiteboard-shape (get-block-property-value db block :logseq.property/ls-type)))

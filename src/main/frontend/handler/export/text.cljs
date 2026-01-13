@@ -42,9 +42,8 @@
                              (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)]))
             format (get first-block :block/format :markdown)]
         (binding [cli-export-common/*current-db* (conn/get-db repo)
-                  cli-export-common/*current-repo* repo
                   cli-export-common/*content-config* (common/get-content-config)]
-          (cli-export-text/export-helper repo content format options)))
+          (cli-export-text/export-helper content format options)))
       (catch :default e
         (js/console.error e)))))
 
@@ -59,9 +58,8 @@
        (util/profile (print-str :export-files-as-markdown title)
          [(or path title)
           (binding [cli-export-common/*current-db* db
-                    cli-export-common/*current-repo* repo
                     cli-export-common/*content-config* content-config]
-            (cli-export-text/export-helper repo content :markdown options))]))
+            (cli-export-text/export-helper content :markdown options))]))
      files)))
 
 (defn export-repo-as-markdown!

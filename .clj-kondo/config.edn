@@ -171,7 +171,6 @@
              logseq.db.common.entity-plus entity-plus
              logseq.db.common.initial-data common-initial-data
              logseq.db.common.order db-order
-             logseq.db.common.property-util db-property-util
              logseq.db.common.sqlite common-sqlite
              logseq.db.common.view db-view
              logseq.db.frontend.class db-class

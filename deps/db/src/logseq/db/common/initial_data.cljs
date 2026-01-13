@@ -6,7 +6,6 @@
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
-            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.db :as db-db]
@@ -164,23 +163,18 @@
 (defn hidden-ref?
   "Whether ref-block (for block with the `id`) should be hidden."
   [db ref-block id]
-  (let [db-based? (entity-plus/db-based-graph? db)]
-    (if db-based?
-      (let [entity (d/entity db id)]
-        (or
-         (= (:db/id ref-block) id)
-         (= id (:db/id (:block/page ref-block)))
-         (= id (:db/id (:logseq.property/view-for ref-block)))
-         (entity-util/hidden? (:block/page ref-block))
-         (entity-util/hidden? ref-block)
-         (and (entity-util/class? entity)
-              (let [children (db-class/get-structured-children db id)
-                    class-ids (set (conj children id))]
-                (some class-ids (map :db/id (:block/tags ref-block)))))
-         (some? (get ref-block (:db/ident entity)))))
-      (or
-       (= (:db/id ref-block) id)
-       (= id (:db/id (:block/page ref-block)))))))
+  (let [entity (d/entity db id)]
+    (or
+     (= (:db/id ref-block) id)
+     (= id (:db/id (:block/page ref-block)))
+     (= id (:db/id (:logseq.property/view-for ref-block)))
+     (entity-util/hidden? (:block/page ref-block))
+     (entity-util/hidden? ref-block)
+     (and (entity-util/class? entity)
+          (let [children (db-class/get-structured-children db id)
+                class-ids (set (conj children id))]
+            (some class-ids (map :db/id (:block/tags ref-block)))))
+     (some? (get ref-block (:db/ident entity))))))
 
 (defn get-block-refs
   [db id]
@@ -324,12 +318,9 @@
      (d/datoms db :avet :logseq.property.user/email))))
 
 (defn get-initial-data
-  "Returns current database schema and initial data.
-   NOTE: This fn is called by DB and file graphs"
+  "Returns current database schema and initial data"
   [db]
-  (let [db-graph? (entity-plus/db-based-graph? db)
-        _ (when db-graph?
-            (reset! db-order/*max-key (db-order/get-max-order db)))
+  (let [_ (reset! db-order/*max-key (db-order/get-max-order db))
         schema (:schema db)
         idents (mapcat (fn [id]
                          (when-let [e (d/entity db id)]
@@ -343,22 +334,17 @@
                         :logseq.kv/graph-backup-folder
                         :logseq.kv/graph-text-embedding-model-name
                         :logseq.property/empty-placeholder])
-        favorites (when db-graph? (get-favorites db))
+        favorites (get-favorites db)
         recent-updated-pages (let [pages (get-recent-updated-pages db)]
                                (mapcat (fn [p] (d/datoms db :eavt (:db/id p))) pages))
         all-files (get-all-files db)
-        structured-datoms (when db-graph?
-                            (get-structured-datoms db))
+        structured-datoms (get-structured-datoms db)
         user-datoms (get-all-user-datoms db)
-        pages-datoms (if db-graph?
-                       (let [contents-id (get-first-page-by-title db "Contents")
-                             capture-page-id (:db/id (db-db/get-built-in-page db common-config/quick-add-page-name))
-                             views-id (get-first-page-by-title db common-config/views-page-name)]
-                         (mapcat #(d/datoms db :eavt %)
-                                 (remove nil? [contents-id capture-page-id views-id])))
-                       ;; load all pages for file graphs
-                       (->> (d/datoms db :avet :block/name)
-                            (mapcat (fn [d] (d/datoms db :eavt (:e d))))))
+        pages-datoms (let [contents-id (get-first-page-by-title db "Contents")
+                           capture-page-id (:db/id (db-db/get-built-in-page db common-config/quick-add-page-name))
+                           views-id (get-first-page-by-title db common-config/views-page-name)]
+                       (mapcat #(d/datoms db :eavt %)
+                               (remove nil? [contents-id capture-page-id views-id])))
         data (->> (concat idents
                           structured-datoms
                           user-datoms
