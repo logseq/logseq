@@ -179,6 +179,44 @@
   (println "  --log-level <level>  (default info)")
   (println "  --auth-token <token> (optional)"))
 
+(defn start-daemon!
+  [{:keys [host port data-dir repo rtc-ws-url auth-token]}]
+  (let [host (or host "127.0.0.1")
+        port (or port 9101)]
+    (reset! *ready? false)
+    (set-main-thread-stub!)
+    (p/let [platform (platform-node/node-platform {:data-dir data-dir
+                                                   :event-fn handle-event!})
+            proxy (db-core/init-core! platform)
+            _ (<init-worker! proxy (or rtc-ws-url ""))]
+      (reset! *ready? true)
+      (p/do!
+       (<maybe-open-repo! proxy repo)
+       (let [server (make-server proxy {:auth-token auth-token})]
+         (p/create
+          (fn [resolve reject]
+            (.listen server port host
+                     (fn []
+                       (let [address (.address server)
+                             actual-port (if (number? address)
+                                           address
+                                           (.-port address))
+                             stop! (fn []
+                                     (p/create
+                                      (fn [resolve _]
+                                        (reset! *ready? false)
+                                        (doseq [^js res @*sse-clients]
+                                          (try
+                                            (.end res)
+                                            (catch :default _)))
+                                        (reset! *sse-clients #{})
+                                        (.close server (fn [] (resolve true))))))]
+                         (resolve {:host host
+                                   :port actual-port
+                                   :server server
+                                   :stop! stop!}))))
+            (.on server "error" reject))))))))
+
 (defn main
   []
   (let [{:keys [host port data-dir repo rtc-ws-url log-level auth-token help?]}
@@ -191,21 +229,18 @@
       (.exit js/process 0))
     (glogi-console/install!)
     (log/set-levels {:glogi/root log-level})
-    (set-main-thread-stub!)
-    (p/let [platform (platform-node/node-platform {:data-dir data-dir
-                                                   :event-fn handle-event!})
-            proxy (db-core/init-core! platform)
-            _ (<init-worker! proxy (or rtc-ws-url ""))]
-      (reset! *ready? true)
-      (p/do!
-       (<maybe-open-repo! proxy repo)
-       (let [server (make-server proxy {:auth-token auth-token})]
-         (.listen server port host (fn []
-                                     (log/info :db-worker-node-ready {:host host :port port})))
-         (let [shutdown (fn []
-                          (reset! *ready? false)
-                          (.close server (fn []
-                                           (log/info :db-worker-node-stopped nil)
-                                           (.exit js/process 0))))]
-           (.on js/process "SIGINT" shutdown)
-           (.on js/process "SIGTERM" shutdown)))))))
+    (p/let [{:keys [stop!] :as daemon}
+            (start-daemon! {:host host
+                            :port port
+                            :data-dir data-dir
+                            :repo repo
+                            :rtc-ws-url rtc-ws-url
+                            :auth-token auth-token})]
+      (log/info :db-worker-node-ready {:host (:host daemon) :port (:port daemon)})
+      (let [shutdown (fn []
+                       (-> (stop!)
+                           (p/finally (fn []
+                                        (log/info :db-worker-node-stopped nil)
+                                        (.exit js/process 0)))))]
+        (.on js/process "SIGINT" shutdown)
+        (.on js/process "SIGTERM" shutdown)))))
