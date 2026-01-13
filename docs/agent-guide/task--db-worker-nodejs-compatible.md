@@ -103,21 +103,16 @@ Node runtime must not use OPFS or sqlite-wasm. Instead, use `better-sqlite3` as 
 - DONE 9. Update shared-service to no-op/single-client behavior in Node.
 - DONE 10. Add Node build target in `shadow-cljs.edn` for db-worker.
 - DONE 11. Implement Node daemon entrypoint and HTTP server.
-- TODO 12. Add a Node client in frontend to call the daemon (HTTP + SSE/WS events).
+- TODO 12. Add a Node client in frontend to call the daemon (HTTP + SSE events).
 - DONE 12a. Switch Node sqlite implementation to `better-sqlite3` (no OPFS, no sqlite-wasm).
 #### Acceptance Criteria
 - Node platform adapter provides storage/kv/broadcast/websocket/crypto/timers and validates via `frontend.worker.platform`.
 - Node sqlite adapter uses `better-sqlite3` and opens file-backed dbs in data-dir.
 - Node build target compiles db-worker core without browser-only APIs.
 - Node daemon starts via CLI and reports readiness; `GET /healthz` and `GET /readyz` return `200 OK`.
-- `POST /v1/invoke` handles `list-db`, `create-or-open-db`, `q`, `transact` in a smoke test.
-  - steps:
-	1. list-db
-	2. create-or-open-db
-	3. list-db, ensure new created db existing
-	4. transact
-	5. q
-- Node client can invoke at least one RPC and receive one event (SSE or WS).
+- `POST /v1/invoke` handles `list-db`, `create-or-open-db`, `q`, `transact` in a smoke test:
+  - test client script: `tmp_scripts/db-worker-smoke-test.clj`
+- Node client can invoke at least one RPC and receive one event (SSE).
 - `bb dev:lint-and-test` passes.
 
 ### Milestone 4: Validation
@@ -182,6 +177,7 @@ Event delivery options:
 - `BroadcastChannel` and `navigator.locks` are browser-only; Node should use a simpler single-client mode.
 - `Comlink` is browser-optimized; the Node daemon should use HTTP, not Comlink.
 - sqlite-wasm must remain browser-only; Node uses `better-sqlite3` directly.
+- only db-graph supported in Node db-worker 
 
 ## Success Criteria
 - Browser build continues to work with WebWorker + Comlink.
