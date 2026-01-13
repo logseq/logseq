@@ -61,3 +61,21 @@
             (is (some? page'))
             (is (= (:db/id page') (:db/id (:block/parent parent'))))
             (is (= (:db/id parent') (:db/id (:block/parent child'))))))))))
+
+(deftest drop-missing-parent-update-test
+  (testing "drop invalid parent updates during remote rebase"
+    (let [{:keys [conn child]} (setup-parent-child)
+          child-uuid (:block/uuid child)
+          original-parent-uuid (:block/uuid (:block/parent (d/entity @conn (:db/id child))))
+          missing-parent-uuid (random-uuid)]
+      (prn :debug :missing-parent-uuid missing-parent-uuid)
+      (with-datascript-conn conn
+        (fn []
+          (#'db-sync/rebase-apply-remote-tx!
+           test-repo
+           nil
+           [[:db/add [:block/uuid child-uuid]
+             :block/parent [:block/uuid missing-parent-uuid]]])
+          (let [child' (d/entity @conn (:db/id child))]
+            (is (= original-parent-uuid
+                   (:block/uuid (:block/parent child'))))))))))

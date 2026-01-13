@@ -1,4 +1,4 @@
-(ns logseq.db-sync.worker-core
+(ns logseq.db-sync.order
   (:require [datascript.core :as d]
             [logseq.db.common.order :as db-order]))
 
