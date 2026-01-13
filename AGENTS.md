@@ -21,6 +21,10 @@
   - `bb dev:test -v <namespace/testcase-name>`
 - E2E tests files are located in `/clj-e2e`
 
+## db-worker-node
+- Build: `clojure -M:cljs compile db-worker-node`
+- Run: `node ./static/db-worker-node.js` (default port 9101)
+
 ## Common used cljs keywords
 - All commonly used ClojureScript keywords are defined using `logseq.common.defkeywords/defkeyword`.
 - Search for `defkeywords` to find all the definitions.
@@ -31,4 +35,3 @@
 ## Review Checklist
 - Linters and unit-tests must pass
 - Check the review notes listed in @prompts/review.md
-
