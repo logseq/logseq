@@ -60,9 +60,16 @@
           "--help" (recur remaining (assoc opts :help? true))
           (recur remaining opts))))))
 
+(defn- encode-event-payload
+  [payload]
+  (if (string? payload)
+    payload
+    (ldb/write-transit-str payload)))
+
 (defn- handle-event!
   [type payload]
-  (let [event (js/JSON.stringify (clj->js {:type type :payload payload}))
+  (let [event (js/JSON.stringify (clj->js {:type type
+                                          :payload (encode-event-payload payload)}))
         message (str "data: " event "\n\n")]
     (doseq [^js res @*sse-clients]
       (try
@@ -94,7 +101,6 @@
                                 {:method method
                                  :elapsed-ms (- (js/Date.now) started-at)}))
                     10000)]
-    (log/info ::<invoke! [method direct-pass? args])
     (-> (.remoteInvoke proxy method (boolean direct-pass?) args')
         (p/finally (fn []
                      (js/clearTimeout timeout-id))))))
@@ -145,8 +151,6 @@
                          args' (if direct-pass?
                                  args
                                  (or argsTransit args))
-                         _ (log/info :db-worker-node-http-invoke
-                                     {:method method :direct-pass? direct-pass?})
                          result (<invoke! proxy method direct-pass? args')]
                    (send-json! res 200 (if direct-pass?
                                          {:ok true :result result}
