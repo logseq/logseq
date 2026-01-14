@@ -62,6 +62,8 @@ frontend.worker.rtc.op-mem-layer/_sync-loop-canceler
 frontend.worker.db-worker/init
 ;; Used by shadow.cljs (node entrypoint)
 frontend.worker.db-worker-node/main
+;; CLI entrypoint (shadow-cljs :node-script)
+logseq.cli.main/main
 ;; Future use?
 frontend.worker.rtc.hash/hash-blocks
 ;; Repl fn

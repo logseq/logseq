@@ -1,6 +1,6 @@
 (ns logseq.cli.format
-  (:require [clojure.string :as string]
-            [clojure.walk :as walk]))
+  "Formatting helpers for CLI output."
+  (:require [clojure.walk :as walk]))
 
 (defn- normalize-json
   [value]
