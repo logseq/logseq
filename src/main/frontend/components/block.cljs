@@ -2365,7 +2365,7 @@
 
 (rum/defc task-spent-time-cp
   [block]
-  (when (and (state/enable-timetracking?) (ldb/class-instance? (db/entity :logseq.class/Task) block))
+  (when (ldb/class-instance? (db/entity :logseq.class/Task) block)
     (let [[result set-result!] (rum/use-state nil)
           repo (state/get-current-repo)
           [status-history time-spent] result]

@@ -441,13 +441,6 @@
           (fn []
             (state/toggle-shortcut-tooltip!))))
 
-(defn timetracking-row [t enable-timetracking?]
-  (toggle "enable_timetracking"
-          (t :settings-page/enable-timetracking)
-          enable-timetracking?
-          #(let [value (not enable-timetracking?)]
-             (config-handler/set-config! :feature/enable-timetracking? value))))
-
 (defn update-home-page
   [event]
   (let [value (util/evalue event)]
@@ -631,7 +624,6 @@
 (rum/defcs settings-editor < rum/reactive
   [_state]
   (let [preferred-date-format (state/get-date-formatter)
-        enable-timetracking? (state/enable-timetracking?)
         enable-all-pages-public? (state/all-pages-public?)
         logical-outdenting? (state/logical-outdenting?)
         show-full-blocks? (state/show-full-blocks?)
@@ -656,7 +648,6 @@
        (shortcut-tooltip-row t enable-shortcut-tooltip?))
      (when-not (or (util/mobile?) (mobile-util/native-platform?))
        (tooltip-row t enable-tooltip?))
-     (timetracking-row t enable-timetracking?)
      (enable-all-pages-public-row t enable-all-pages-public?)]))
 
 (rum/defc settings-advanced < rum/reactive

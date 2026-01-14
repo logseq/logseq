@@ -586,10 +586,6 @@ Similar to re-frame subscriptions"
   []
   (true? (:feature/disable-scheduled-and-deadline-query? (sub-config))))
 
-(defn enable-timetracking?
-  []
-  (not (false? (:feature/enable-timetracking? (sub-config)))))
-
 (defn enable-fold-button-right?
   []
   (let [_ (sub :ui/viewport)]

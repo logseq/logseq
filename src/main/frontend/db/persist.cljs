@@ -4,7 +4,6 @@
             [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.config :as config]
-            [frontend.db.conn :as db-conn]
             [frontend.persist-db :as persist-db]
             [frontend.util :as util]
             [logseq.common.config :as common-config]
@@ -34,7 +33,6 @@
 
 (defn delete-graph!
   [graph]
-  (let [key (db-conn/get-repo-path graph)]
-    (p/let [_ (persist-db/<unsafe-delete graph)]
-      (when (util/electron?)
-        (ipc/ipc "deleteGraph" graph key true)))))
+  (p/let [_ (persist-db/<unsafe-delete graph)]
+    (when (util/electron?)
+      (ipc/ipc "deleteGraph" graph))))
