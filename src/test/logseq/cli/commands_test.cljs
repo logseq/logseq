@@ -3,10 +3,11 @@
             [logseq.cli.commands :as commands]))
 
 (deftest test-parse-args
-  (testing "parses ping"
-    (let [result (commands/parse-args ["ping"])]
-      (is (true? (:ok? result)))
-      (is (= :ping (:command result)))))
+  (testing "rejects removed commands"
+    (doseq [command ["ping" "status" "query" "export"]]
+      (let [result (commands/parse-args [command])]
+        (is (false? (:ok? result)))
+        (is (= :unknown-command (get-in result [:error :code]))))))
 
   (testing "errors on missing command"
     (let [result (commands/parse-args [])]
@@ -17,39 +18,6 @@
     (let [result (commands/parse-args ["wat"])]
       (is (false? (:ok? result)))
       (is (= :unknown-command (get-in result [:error :code]))))))
-
-(deftest test-build-action
-  (testing "query requires repo"
-    (let [parsed {:ok? true
-                  :command :query
-                  :options {:query "[:find ?e :where [?e :block/name]]"}}
-          result (commands/build-action parsed {})]
-      (is (false? (:ok? result)))
-      (is (= :missing-repo (get-in result [:error :code])))))
-
-  (testing "query uses repo from config"
-    (let [parsed {:ok? true
-                  :command :query
-                  :options {:query "[:find ?e :where [?e :block/name]]"}}
-          result (commands/build-action parsed {:repo "test-repo"})]
-      (is (true? (:ok? result)))
-      (is (= "thread-api/q" (get-in result [:action :method])))))
-
-  (testing "export rejects unsupported format"
-    (let [parsed {:ok? true
-                  :command :export
-                  :options {:repo "repo" :format "nope" :out "output.edn"}}
-          result (commands/build-action parsed {})]
-      (is (false? (:ok? result)))
-      (is (= :unsupported-format (get-in result [:error :code])))))
-
-  (testing "export builds edn action"
-    (let [parsed {:ok? true
-                  :command :export
-                  :options {:repo "repo" :format "edn" :out "output.edn"}}
-          result (commands/build-action parsed {})]
-      (is (true? (:ok? result)))
-      (is (= "thread-api/export-edn" (get-in result [:action :method]))))))
 
 (deftest test-graph-commands
   (testing "graph-list uses list-db"

@@ -5,7 +5,7 @@
             [logseq.cli.main :as cli-main]
             [promesa.core :as p]
             ["fs" :as fs]
-            ["path" :as path]))
+            ["path" :as node-path]))
 
 (defn- run-cli
   [args url cfg-path]
@@ -16,22 +16,6 @@
   [result]
   (js->clj (js/JSON.parse (:output result)) :keywordize-keys true))
 
-(deftest test-cli-ping
-  (async done
-    (let [data-dir (node-helper/create-tmp-dir "db-worker")]
-      (-> (p/let [daemon (db-worker-node/start-daemon! {:host "127.0.0.1"
-                                                        :port 0
-                                                        :data-dir data-dir})
-                  url (str "http://127.0.0.1:" (:port daemon))
-                  result (cli-main/run! ["ping" "--base-url" url "--json"] {:exit? false})]
-            (is (= 0 (:exit-code result)))
-            (is (= "{\"status\":\"ok\",\"data\":{\"message\":\"ok\"}}" (:output result)))
-            (p/let [_ ((:stop! daemon))]
-              (done)))
-          (p/catch (fn [e]
-                     (is false (str "unexpected error: " e))
-                     (done)))))))
-
 (deftest test-cli-graph-list
   (async done
     (let [data-dir (node-helper/create-tmp-dir "db-worker")]
@@ -39,7 +23,7 @@
                                                         :port 0
                                                         :data-dir data-dir})
                   url (str "http://127.0.0.1:" (:port daemon))
-                  cfg-path (path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                  cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                   result (run-cli ["graph-list"] url cfg-path)
                   payload (parse-json-output result)]
             (is (= 0 (:exit-code result)))
@@ -58,7 +42,7 @@
                                                         :port 0
                                                         :data-dir data-dir})
                   url (str "http://127.0.0.1:" (:port daemon))
-                  cfg-path (path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                  cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                   _ (fs/writeFileSync cfg-path "{}")
                   create-result (run-cli ["graph-create" "--graph" "demo-graph"] url cfg-path)
                   create-payload (parse-json-output create-result)
@@ -82,7 +66,7 @@
                                                         :port 0
                                                         :data-dir data-dir})
                   url (str "http://127.0.0.1:" (:port daemon))
-                  cfg-path (path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                  cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                   _ (fs/writeFileSync cfg-path "{}")
                   _ (run-cli ["graph-create" "--graph" "content-graph"] url cfg-path)
                   add-result (run-cli ["add" "--page" "TestPage" "--content" "hello world"] url cfg-path)

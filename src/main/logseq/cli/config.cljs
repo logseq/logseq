@@ -1,10 +1,11 @@
 (ns logseq.cli.config
+  "CLI configuration resolution and persistence."
   (:require [cljs.reader :as reader]
             [clojure.string :as string]
             [goog.object :as gobj]
             ["fs" :as fs]
             ["os" :as os]
-            ["path" :as path]))
+            ["path" :as node-path]))
 
 (defn- parse-int
   [value]
@@ -13,7 +14,7 @@
 
 (defn- default-config-path
   []
-  (path/join (.homedir os) ".logseq" "cli.edn"))
+  (node-path/join (.homedir os) ".logseq" "cli.edn"))
 
 (defn- read-config-file
   [config-path]
@@ -24,7 +25,7 @@
 (defn- ensure-config-dir!
   [config-path]
   (when (seq config-path)
-    (let [dir (path/dirname config-path)]
+    (let [dir (node-path/dirname config-path)]
       (when (and (seq dir) (not (fs/existsSync dir)))
         (.mkdirSync fs dir #js {:recursive true})))))
 
