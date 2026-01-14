@@ -1,4 +1,5 @@
 (ns logseq.cli.transport
+  "HTTP transport for communicating with db-worker-node."
   (:require [clojure.string :as string]
             [logseq.db :as ldb]
             [promesa.core :as p]
@@ -66,39 +67,23 @@
 (defn request
   [{:keys [method url headers body timeout-ms retries]
     :or {retries 0}}]
-  (p/loop [attempt 0]
-    (-> (p/let [response (<raw-request {:method method
-                                        :url url
-                                        :headers headers
-                                        :body body
-                                        :timeout-ms timeout-ms})]
-          (if (<= 200 (:status response) 299)
-            response
-            (throw (ex-info "http request failed"
-                            {:code :http-error
-                             :status (:status response)
-                             :body (:body response)}))))
-        (p/catch (fn [error]
-                   (if (and (< attempt retries) (retryable-error? error))
-                     (p/recur (inc attempt))
-                     (throw error)))))))
-
-(defn ping
-  [{:keys [base-url timeout-ms retries]}]
-  (request {:method "GET"
-            :url (str (string/replace base-url #"/$" "") "/healthz")
-            :timeout-ms timeout-ms
-            :retries retries
-            :headers {}}))
-
-(defn ready
-  [{:keys [base-url timeout-ms retries]}]
-  (-> (request {:method "GET"
-                :url (str (string/replace base-url #"/$" "") "/readyz")
-                :timeout-ms timeout-ms
-                :retries retries
-                :headers {}})
-      (p/then (fn [_] true))))
+  (letfn [(attempt-request [attempt]
+            (-> (p/let [response (<raw-request {:method method
+                                                :url url
+                                                :headers headers
+                                                :body body
+                                                :timeout-ms timeout-ms})]
+                  (if (<= 200 (:status response) 299)
+                    response
+                    (throw (ex-info "http request failed"
+                                    {:code :http-error
+                                     :status (:status response)
+                                     :body (:body response)}))))
+                (p/catch (fn [error]
+                           (if (and (< attempt retries) (retryable-error? error))
+                             (attempt-request (inc attempt))
+                             (throw error))))))]
+    (attempt-request 0)))
 
 (defn invoke
   [{:keys [base-url auth-token timeout-ms retries]}
@@ -122,10 +107,6 @@
       (if direct-pass?
         result
         (ldb/read-transit-str resultTransit)))))
-
-(defn list-db
-  [config]
-  (invoke config "thread-api/list-db" false []))
 
 (defn write-output
   [{:keys [format path data]}]
