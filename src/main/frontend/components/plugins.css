@@ -192,6 +192,14 @@
       overflow: hidden;
       line-height: 24px;
       padding-right: 24px;
+
+      > .l {
+        display: inline-block;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        width: 92%;
+      }
     }
 
     .desc {
