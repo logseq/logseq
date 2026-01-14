@@ -23,7 +23,7 @@ const results = await logseq.DB.datascriptQuery(`
 `, `"my-page"`)
 
 // Watch database changes
-logseq.DB. onChanged(({ blocks, txData }) => {
+logseq.DB.onChanged(({ blocks, txData }) => {
   console.log('Changed blocks:', blocks)
 })
 
@@ -95,7 +95,7 @@ logseq.DB.onBlockChanged(uuid, (block, txData) => {
 ;; Multiple parameters
 [:find (pull ?b [*])
  :in $ ?marker ? page-name
- :where 
+ :where
  [?b :block/marker ?marker]
  [? p :block/name ?page-name]
  [?b : block/page ?p]]
@@ -112,64 +112,64 @@ logseq.DB.onBlockChanged(uuid, (block, txData) => {
 
 #### 3.1 Block Attributes
 
-| Attribute | File Graph | DB Graph | Type | Description |
-|-----------|: ----------:|:--------:|------|-------------|
-| `:block/uuid` | ✅ | ✅ | UUID | Unique block identifier |
-| `:block/content` | ✅ | ❌ | String | Raw block content (File Graph only) |
-| `:block/title` | ❌ | ✅ | String | Block title/content (DB Graph only) |
-| `:block/page` | ✅ | ✅ | Ref | Parent page reference |
-| `:block/parent` | ✅ | ✅ | Ref | Parent block reference |
-| `:block/left` | ✅ | ❌ | Ref | Left sibling block |
-| `:block/order` | ❌ | ✅ | String | Block order in DB Graph |
-| `:block/refs` | ✅ | ✅ | Ref[] | Referenced pages/blocks |
-| `:block/marker` | ✅ | ❌ | String | Task marker (TODO/DOING/DONE) |
-| `:block/priority` | ✅ | ❌ | String | Priority (A/B/C) |
-| `:block/scheduled` | ✅ | ❌ | Int | Scheduled date (YYYYMMDD) |
-| `:block/deadline` | ✅ | ❌ | Int | Deadline date (YYYYMMDD) |
-| `:block/properties` | ✅ | ❌ | Map | Properties as key-value map |
-| `:block/tags` | ✅ | ✅ | Ref[] | Tag references |
-| `:block/link` | ❌ | ✅ | Ref | Link to class/tag in DB Graph |
-| `:block/tx-id` | ❌ | ✅ | Int | Transaction ID |
-| `:block/created-at` | ✅ | ❌ | Int | Creation timestamp (File Graph) |
-| `:block/updated-at` | ✅ | ❌ | Int | Update timestamp (File Graph) |
+| Attribute           | File Graph | DB Graph | Type   | Description                         |
+|---------------------|:----------:|:--------:|--------|-------------------------------------|
+| `:block/uuid`       |     ✅      |    ✅     | UUID   | Unique block identifier             |
+| `:block/content`    |     ✅      |    ❌     | String | Raw block content (File Graph only) |
+| `:block/title`      |     ❌      |    ✅     | String | Block title/content (DB Graph only) |
+| `:block/page`       |     ✅      |    ✅     | Ref    | Parent page reference               |
+| `:block/parent`     |     ✅      |    ✅     | Ref    | Parent block reference              |
+| `:block/left`       |     ✅      |    ❌     | Ref    | Left sibling block                  |
+| `:block/order`      |     ❌      |    ✅     | String | Block order in DB Graph             |
+| `:block/refs`       |     ✅      |    ✅     | Ref[]  | Referenced pages/blocks             |
+| `:block/marker`     |     ✅      |    ❌     | String | Task marker (TODO/DOING/DONE)       |
+| `:block/priority`   |     ✅      |    ❌     | String | Priority (A/B/C)                    |
+| `:block/scheduled`  |     ✅      |    ❌     | Int    | Scheduled date (YYYYMMDD)           |
+| `:block/deadline`   |     ✅      |    ❌     | Int    | Deadline date (YYYYMMDD)            |
+| `:block/properties` |     ✅      |    ❌     | Map    | Properties as key-value map         |
+| `:block/tags`       |     ✅      |    ✅     | Ref[]  | Tag references                      |
+| `:block/link`       |     ❌      |    ✅     | Ref    | Link to class/tag in DB Graph       |
+| `:block/tx-id`      |     ❌      |    ✅     | Int    | Transaction ID                      |
+| `:block/created-at` |     ✅      |    ❌     | Int    | Creation timestamp (File Graph)     |
+| `:block/updated-at` |     ✅      |    ❌     | Int    | Update timestamp (File Graph)       |
 
 #### 3.2 Page Attributes
 
-| Attribute | File Graph | DB Graph | Type | Description |
-|-----------|:----------:|:--------:|------|-------------|
-| `:block/name` | ✅ | ✅ | String | Page name (lowercase) |
-| `:block/original-name` | ✅ | ✅ | String | Original page name |
-| `:block/journal?` | ✅ | ✅ | Boolean | Is journal page |
-| `:block/journal-day` | ✅ | ✅ | Int | Journal date (YYYYMMDD) |
-| `:block/type` | ❌ | ✅ | String | Type ("page", "class", "property", etc.) |
-| `:block/format` | ✅ | ❌ | Keyword | Format (:markdown or :org) |
-| `:block/file` | ✅ | ❌ | Ref | Associated file reference |
+| Attribute              | File Graph | DB Graph | Type    | Description                              |
+|------------------------|:----------:|:--------:|---------|------------------------------------------|
+| `:block/name`          |     ✅      |    ✅     | String  | Page name (lowercase)                    |
+| `:block/original-name` |     ✅      |    ✅     | String  | Original page name                       |
+| `:block/journal?`      |     ✅      |    ✅     | Boolean | Is journal page                          |
+| `:block/journal-day`   |     ✅      |    ✅     | Int     | Journal date (YYYYMMDD)                  |
+| `:block/type`          |     ❌      |    ✅     | String  | Type ("page", "class", "property", etc.) |
+| `:block/format`        |     ✅      |    ❌     | Keyword | Format (:markdown or :org)               |
+| `:block/file`          |     ✅      |    ❌     | Ref     | Associated file reference                |
 
 #### 3.3 DB Graph Specific - System Properties (Idents)
 
-| Attribute | Type | Description |
-|-----------|------|-------------|
-| `:logseq.property/created-at` | Int (ms) | Creation timestamp |
-| `:logseq.property/updated-at` | Int (ms) | Update timestamp |
-| `:logseq.property/icon` | Object | Icon definition `{type, id}` |
-| `:logseq.property/hide-empty-value` | Boolean | Hide property if empty |
-| `:logseq.property/closed-value-mode` | Boolean | Enum mode for property |
-| `:logseq.property/closed-values` | Array | Allowed enum values |
-| `:logseq.property/schema` | Object | Property schema definition |
-| `:logseq.property. class/extends` | Ref[] | Parent class references |
-| `:logseq.property.class/properties` | Ref[] | Class property references |
+| Attribute                            | Type     | Description                  |
+|--------------------------------------|----------|------------------------------|
+| `:logseq.property/created-at`        | Int (ms) | Creation timestamp           |
+| `:logseq.property/updated-at`        | Int (ms) | Update timestamp             |
+| `:logseq.property/icon`              | Object   | Icon definition `{type, id}` |
+| `:logseq.property/hide-empty-value`  | Boolean  | Hide property if empty       |
+| `:logseq.property/closed-value-mode` | Boolean  | Enum mode for property       |
+| `:logseq.property/closed-values`     | Array    | Allowed enum values          |
+| `:logseq.property/schema`            | Object   | Property schema definition   |
+| `:logseq.property. class/extends`    | Ref[]    | Parent class references      |
+| `:logseq.property.class/properties`  | Ref[]    | Class property references    |
 
 #### 3.4 DB Graph Task System
 
 In DB Graph, tasks use a different system based on tags/classes:
 
-| Attribute | Description |
-|-----------|-------------|
-| `:block/tags` | Reference to task status class (e.g., `#logseq.class/Todo`) |
-| `:logseq.task/status` | Task status property |
-| `:logseq.task/priority` | Task priority property |
-| `:logseq.task/deadline` | Task deadline property |
-| `:logseq.task/scheduled` | Task scheduled property |
+| Attribute                | Description                                                 |
+|--------------------------|-------------------------------------------------------------|
+| `:block/tags`            | Reference to task status class (e.g., `#logseq.class/Todo`) |
+| `:logseq.task/status`    | Task status property                                        |
+| `:logseq.task/priority`  | Task priority property                                      |
+| `:logseq.task/deadline`  | Task deadline property                                      |
+| `:logseq.task/scheduled` | Task scheduled property                                     |
 
 ---
 
@@ -178,6 +178,7 @@ In DB Graph, tasks use a different system based on tags/classes:
 #### 4.1 Task Queries
 
 **File Graph:**
+
 ```typescript
 // All TODOs
 const todos = await logseq.DB.datascriptQuery(`
@@ -186,7 +187,7 @@ const todos = await logseq.DB.datascriptQuery(`
 `)
 
 // TODO or DOING
-const activeTasks = await logseq.DB. datascriptQuery(`
+const activeTasks = await logseq.DB.datascriptQuery(`
   [:find (pull ?b [*])
    :in $ [?m ...]
    :where [?b :block/marker ? m]]
@@ -201,8 +202,8 @@ const priorityTasks = await logseq.DB.datascriptQuery(`
 `)
 
 // Scheduled for today
-const today = new Date().toISOString().slice(0,10).replace(/-/g, '')
-const scheduled = await logseq.DB. datascriptQuery(`
+const today = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+const scheduled = await logseq.DB.datascriptQuery(`
   [:find (pull ?b [*])
    :in $ ? today
    :where [?b : block/scheduled ?today]]
@@ -210,6 +211,7 @@ const scheduled = await logseq.DB. datascriptQuery(`
 ```
 
 **DB Graph:**
+
 ```typescript
 // All tasks with TODO status
 const todos = await logseq.DB.datascriptQuery(`
@@ -220,7 +222,7 @@ const todos = await logseq.DB.datascriptQuery(`
 `)
 
 // Tasks by status property
-const tasks = await logseq.DB. datascriptQuery(`
+const tasks = await logseq.DB.datascriptQuery(`
   [:find (pull ?b [*])
    :where
    [?b :logseq.task/status ?s]
@@ -231,6 +233,7 @@ const tasks = await logseq.DB. datascriptQuery(`
 #### 4.2 Page Queries
 
 **Both File Graph and DB Graph:**
+
 ```typescript
 // All journal pages
 const journals = await logseq.DB.datascriptQuery(`
@@ -239,7 +242,7 @@ const journals = await logseq.DB.datascriptQuery(`
 `)
 
 // Journals in specific month
-const monthJournals = await logseq. DB.datascriptQuery(`
+const monthJournals = await logseq.DB.datascriptQuery(`
   [:find (pull ?p [*])
    :where
    [?p :block/journal?  true]
@@ -249,7 +252,7 @@ const monthJournals = await logseq. DB.datascriptQuery(`
 `)
 
 // Blocks in a specific page
-const blocks = await logseq.DB. datascriptQuery(`
+const blocks = await logseq.DB.datascriptQuery(`
   [:find (pull ?b [*])
    :in $ ? name
    :where
@@ -259,6 +262,7 @@ const blocks = await logseq.DB. datascriptQuery(`
 ```
 
 **DB Graph only:**
+
 ```typescript
 // Pages by type
 const pages = await logseq.DB.datascriptQuery(`
@@ -267,14 +271,14 @@ const pages = await logseq.DB.datascriptQuery(`
 `)
 
 // Class/Tag pages
-const classes = await logseq.DB. datascriptQuery(`
+const classes = await logseq.DB.datascriptQuery(`
   [:find (pull ?p [*])
    :where [?p : block/type "class"]]
 `)
 
 // Recently created pages (last 7 days)
 const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
-const recentPages = await logseq. DB.datascriptQuery(`
+const recentPages = await logseq.DB.datascriptQuery(`
   [:find (pull ?p [*])
    :where
    [?p :block/type "page"]
@@ -286,9 +290,10 @@ const recentPages = await logseq. DB.datascriptQuery(`
 #### 4.3 Reference Queries
 
 **Both File Graph and DB Graph:**
+
 ```typescript
 // Blocks referencing a specific page
-const refs = await logseq.DB. datascriptQuery(`
+const refs = await logseq.DB.datascriptQuery(`
   [:find (pull ?b [*])
    :in $ ?page
    :where
@@ -297,7 +302,7 @@ const refs = await logseq.DB. datascriptQuery(`
 `, `"target-page"`)
 
 // Block references (backlinks)
-const blockRefs = await logseq. DB.datascriptQuery(`
+const blockRefs = await logseq.DB.datascriptQuery(`
   [:find (pull ?b [*])
    :in $ ?uuid
    :where
@@ -309,9 +314,10 @@ const blockRefs = await logseq. DB.datascriptQuery(`
 #### 4.4 Property Queries
 
 **File Graph:**
+
 ```typescript
 // Blocks with specific property
-const withProp = await logseq. DB.datascriptQuery(`
+const withProp = await logseq.DB.datascriptQuery(`
   [:find (pull ?b [*])
    :where
    [?b :block/properties ?props]
@@ -329,6 +335,7 @@ const statusDone = await logseq.DB.datascriptQuery(`
 ```
 
 **DB Graph:**
+
 ```typescript
 // Blocks with property value (properties are direct attributes)
 const withProp = await logseq.DB.datascriptQuery(`
@@ -338,7 +345,7 @@ const withProp = await logseq.DB.datascriptQuery(`
 `)
 
 // Query by property ident
-const results = await logseq.DB. datascriptQuery(`
+const results = await logseq.DB.datascriptQuery(`
   [:find (pull ?b [*])
    :where
    [? prop :db/ident : user.property/status]
@@ -350,9 +357,10 @@ const results = await logseq.DB. datascriptQuery(`
 #### 4.5 Content Search
 
 **File Graph:**
+
 ```typescript
 // Content contains keyword
-const results = await logseq.DB. datascriptQuery(`
+const results = await logseq.DB.datascriptQuery(`
   [:find (pull ?b [*])
    :where
    [? b :block/content ?c]
@@ -361,6 +369,7 @@ const results = await logseq.DB. datascriptQuery(`
 ```
 
 **DB Graph:**
+
 ```typescript
 // Title contains keyword
 const results = await logseq.DB.datascriptQuery(`
@@ -373,7 +382,7 @@ const results = await logseq.DB.datascriptQuery(`
 
 ---
 
-### 5.  Predicate Functions
+### 5. Predicate Functions
 
 ```clojure
 ;; Comparison
@@ -394,7 +403,7 @@ const results = await logseq.DB.datascriptQuery(`
 [(contains? #{"A" "B" "C"} ?v)]
 
 ;; Null checks
-[(some?  ?v)]
+[(some? ?v)]
 [(nil? ?v)]
 
 ;; Math operations
@@ -424,9 +433,9 @@ const results = await logseq.DB.datascriptQuery(`
 [:find (pull ?b [*])
  :where
  (or-join [? b]
-   (and [?b :block/marker "TODO"]
-        [?b :block/priority "A"])
-   (and [?b :block/marker "DOING"]))]
+          (and [?b :block/marker "TODO"]
+               [?b :block/priority "A"])
+          (and [?b :block/marker "DOING"]))]
 ```
 
 ---
@@ -435,13 +444,13 @@ const results = await logseq.DB.datascriptQuery(`
 
 ```typescript
 // Count
-const count = await logseq. DB.datascriptQuery(`
+const count = await logseq.DB.datascriptQuery(`
   [:find (count ?b)
    :where [?b : block/marker "TODO"]]
 `)
 
 // Group by page
-const grouped = await logseq.DB. datascriptQuery(`
+const grouped = await logseq.DB.datascriptQuery(`
   [:find ? name (count ?b)
    :where
    [?b :block/marker "TODO"]
@@ -450,7 +459,7 @@ const grouped = await logseq.DB. datascriptQuery(`
 `)
 
 // Min/Max
-const range = await logseq.DB. datascriptQuery(`
+const range = await logseq.DB.datascriptQuery(`
   [:find (min ?d) (max ?d)
    :where
    [?p :block/journal? true]
@@ -466,11 +475,11 @@ const range = await logseq.DB. datascriptQuery(`
 import '@logseq/libs'
 
 async function detectGraphType(): Promise<'db' | 'file'> {
-  const result = await logseq.DB. datascriptQuery(`
+  const result = await logseq.DB.datascriptQuery(`
     [:find ? type . 
      :where [_ :block/type ?type]]
   `)
-  return result ?  'db' : 'file'
+  return result ? 'db' : 'file'
 }
 
 async function queryTodos(graphType: 'db' | 'file') {
@@ -507,8 +516,8 @@ async function main() {
   logseq.Editor.registerSlashCommand('Query TODOs', async () => {
     try {
       const results = await queryTodos(graphType)
-      const todos = results?. flat() || []
-      
+      const todos = results?.flat() || []
+
       if (todos.length) {
         const content = todos.map(t => `- ((${t.uuid}))`).join('\n')
         await logseq.Editor.insertAtEditingCursor(content)
