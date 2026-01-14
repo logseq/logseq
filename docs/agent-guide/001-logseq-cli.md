@@ -17,7 +17,7 @@ The CLI should provide a stable interface for scripting and troubleshooting, and
 
 ## Testing Plan
 
-I will add an integration test that starts db-worker-node on a test port and verifies the CLI can connect and run a simple request like ping or status.
+I will add an integration test that starts db-worker-node on a test port and verifies the CLI can connect and run a simple graph/content request.
 I will add unit tests for command parsing, configuration precedence, and error formatting.
 I will add unit tests for the client transport layer to ensure timeouts and retries behave correctly.
 I will add unit tests for new graph/content commands (parsing, validation, and request mapping).
@@ -45,7 +45,7 @@ The CLI will use JSON for request and response bodies for ease of scripting.
 
 ## Implementation plan
 
-1. Use TodoWrite to track the full task list and include the @test-driven-development red-green-refactor steps.
+1. Use tool(update_plan) to track the full task list and include the @test-driven-development red-green-refactor steps.
 2. Read @test-driven-development guidelines and confirm the red phase will include all CLI tests first.
 3. Identify existing db-worker-node request handlers and document their request and response shapes.
 4. Define the initial CLI command surface as a table that includes command, input, output, and errors.
@@ -63,14 +63,28 @@ The CLI will use JSON for request and response bodies for ease of scripting.
 16. Refactor for naming and reuse while keeping tests green.
 17. Document how to build and run the CLI in a short section in README.md.
 
+## Current status (2026-01-14)
+
+Implemented:
+- CLI build target, entrypoint, config resolution, transport, formatting, and command wiring.
+- Graph commands: list/create/switch/remove/validate/info.
+- Content commands: add/remove/search/tree.
+- Unit tests for config/commands/format/transport and integration tests for graph/content commands.
+- CLI docs moved to `docs/cli/logseq-cli.md` and linked from README.
+
+Not fully aligned with plan:
+- Red-first TDD sequence was not strictly followed (some tests added after initial implementation).
+- README section was replaced by a link to the dedicated doc.
+- `search` currently queries `:block/title` only (no page name/content search).
+
+Open follow-ups (optional):
+- Expand `search` to include page name/content and update tests.
+- Add any additional graph metadata to `graph-info` beyond `:logseq.kv/graph-created-at` and `:logseq.kv/schema-version`.
+
 ## Command surface definition
 
 | Command | Input | Output | Errors |
 | --- | --- | --- | --- |
-| ping | none | ok message | server unavailable, timeout |
-| status | none | server version, db state | server unavailable, timeout |
-| query | query string or file | query result JSON | invalid query, parse error |
-| export | target path and format | export result | unsupported format, write error |
 | graph-list | none | list of graphs | server unavailable, timeout |
 | graph-create | graph name | created graph + set current graph | invalid name, server unavailable |
 | graph-switch | graph name | switched graph + set current graph | missing graph, server unavailable |
@@ -79,7 +93,7 @@ The CLI will use JSON for request and response bodies for ease of scripting.
 | graph-info | graph name or current graph | graph metadata/info | missing graph, server unavailable |
 | add | block/page payload | created block IDs | invalid input, server unavailable |
 | remove | block/page id or name | removal confirmation | invalid input, server unavailable |
-| search | query string | matched blocks/pages | invalid input, server unavailable |
+| search | text query | matched blocks/pages | invalid input, server unavailable |
 | tree | block/page id or name | hierarchical tree output | invalid input, server unavailable |
 
 ## Edge cases
@@ -141,7 +155,7 @@ I will keep unit tests focused on pure functions like parsing, formatting, and c
 
 ## Question
 
-Which exact db-worker-node endpoints and request schemas should the CLI use for ping, status, query, and export.
+Which exact db-worker-node endpoints and request schemas should the CLI use for graph/content commands.
 - Answer: all thread-apis are available in http endpoint, check @src/main/frontend/worker/db_worker_node.cljs
 
 Do we want WebSocket or HTTP as the default transport for the CLI.

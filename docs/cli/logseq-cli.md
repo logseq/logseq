@@ -18,7 +18,7 @@ node ./static/db-worker-node.js
 ## Run the CLI
 
 ```bash
-node ./static/logseq-cli.js ping --base-url http://127.0.0.1:9101
+node ./static/logseq-cli.js graph-list --base-url http://127.0.0.1:9101
 ```
 
 ## Configuration

@@ -1,11 +1,11 @@
 (ns logseq.cli.config-test
   (:require [cljs.reader :as reader]
-            [cljs.test :refer [deftest is testing]]
+            [cljs.test :refer [deftest is]]
             [frontend.test.node-helper :as node-helper]
             [goog.object :as gobj]
             [logseq.cli.config :as config]
             ["fs" :as fs]
-            ["path" :as path]))
+            ["path" :as node-path]))
 
 (defn- with-env
   [env f]
@@ -21,7 +21,7 @@
 
 (deftest test-config-precedence
   (let [dir (node-helper/create-tmp-dir)
-        cfg-path (path/join dir "cli.edn")
+        cfg-path (node-path/join dir "cli.edn")
         _ (fs/writeFileSync cfg-path
                             (str "{:base-url \"http://file:7777\" "
                                  ":auth-token \"file-token\" "
@@ -53,7 +53,7 @@
 
 (deftest test-env-overrides-file
   (let [dir (node-helper/create-tmp-dir)
-        cfg-path (path/join dir "cli.edn")
+        cfg-path (node-path/join dir "cli.edn")
         _ (fs/writeFileSync cfg-path "{:base-url \"http://file:7777\" :repo \"file-repo\"}")
         env {"LOGSEQ_DB_WORKER_URL" "http://env:9999"
              "LOGSEQ_CLI_REPO" "env-repo"}
@@ -63,7 +63,7 @@
 
 (deftest test-update-config
   (let [dir (node-helper/create-tmp-dir "cli")
-        cfg-path (path/join dir "cli.edn")
+        cfg-path (node-path/join dir "cli.edn")
         _ (fs/writeFileSync cfg-path "{:repo \"old\"}")
         _ (config/update-config! {:config-path cfg-path} {:repo "new"})
         contents (.toString (fs/readFileSync cfg-path) "utf8")

@@ -1,5 +1,5 @@
 (ns logseq.cli.transport-test
-  (:require [cljs.test :refer [deftest is async testing]]
+  (:require [cljs.test :refer [deftest is async]]
             [promesa.core :as p]
             [logseq.cli.transport :as transport]))
 

@@ -1,4 +1,5 @@
 (ns logseq.cli.main
+  "CLI entrypoint for invoking db-worker-node."
   (:refer-clojure :exclude [run!])
   (:require [clojure.string :as string]
             [logseq.cli.commands :as commands]
@@ -11,14 +12,14 @@
   (string/join "\n"
                ["logseq-cli <command> [options]"
                 ""
-                "Commands: ping, status, query, export, graph-list, graph-create, graph-switch, graph-remove, graph-validate, graph-info, add, remove, search, tree"
+                "Commands: graph-list, graph-create, graph-switch, graph-remove, graph-validate, graph-info, add, remove, search, tree"
                 ""
                 "Options:"
                 summary]))
 
 (defn run!
-  ([args] (run! args {:exit? true}))
-  ([args {:keys [exit?] :or {exit? true}}]
+  ([args] (run! args {}))
+  ([args _opts]
    (let [parsed (commands/parse-args args)]
      (cond
        (:help? parsed)
