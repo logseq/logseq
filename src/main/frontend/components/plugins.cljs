@@ -338,7 +338,7 @@
 
      [:div.r
       [:h3.head.text-xl.font-bold.pt-1.5
-
+       {:title name}
        [:span.l.link-block.cursor-pointer
         {:on-click (get-open-plugin-readme-handler url item repo)}
         name]
@@ -361,7 +361,14 @@
          (str "ID: " id)]]]
 
     ;; Github repo
-      [:div.flag.is-top.opacity-50
+      [:div.flag.is-top.flex.items-center.space-x-2
+       (cond
+         (false? (:supportsDB item))
+         [:a.flex.cursor-help {:title "Not supports DB graph"}
+          (shui/tabler-icon "database-off" {:size 17})]
+         (true? (:supportsDB item))
+         [:a.flex.cursor-help {:title "Supports DB graph"}
+          (shui/tabler-icon "database-heart" {:size 17})])
        (when repo
          [:a.flex {:target "_blank"
                    :href   (plugin-handler/gh-repo-url repo)}
@@ -670,6 +677,10 @@
                      {:title (t :plugin/title "A - Z")
                       :options {:on-click #(reset! *sort-by :letters)}
                       :icon (ui/icon (aim-icon :letters))}
+
+                     {:title   (t :plugin/supports-db)
+                      :options {:on-click #(reset! *sort-by :supportsDB)}
+                      :icon    (ui/icon (aim-icon :supportsDB))}
 
                      {:title   (t :plugin/date-added)
                       :options {:on-click #(reset! *sort-by :addedAt)}

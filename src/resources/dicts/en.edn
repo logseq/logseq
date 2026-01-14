@@ -325,6 +325,7 @@
  :plugin/marketplace "Marketplace"
  :plugin/downloads "Downloads"
  :plugin/date-added "Newly added"
+ :plugin/supports-db "Supports DB graphs"
  :plugin/popular "Popular"
  :plugin/stars "Stars"
  :plugin/title "Title ({1})"
