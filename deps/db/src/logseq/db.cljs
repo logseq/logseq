@@ -187,7 +187,7 @@
 (defn transact-with-temp-conn!
   "Validate db and store once for a batch transaction, the `temp` conn can still load data from disk,
   however it can't write to the disk."
-  [conn tx-meta batch-tx-fn]
+  [conn tx-meta batch-tx-fn & {:keys [listen-db]}]
   (let [temp-conn (d/conn-from-db @conn)
         *batch-tx-data (volatile! [])]
     ;; can read from disk, write is disallowed
@@ -195,8 +195,9 @@
            :skip-store? true
            :batch-temp-conn? true)
     (d/listen! temp-conn ::temp-conn-batch-tx
-               (fn [{:keys [tx-data]}]
-                 (vswap! *batch-tx-data into tx-data)))
+               (fn [{:keys [tx-data] :as tx-report}]
+                 (vswap! *batch-tx-data into tx-data)
+                 (listen-db tx-report)))
     (batch-tx-fn temp-conn *batch-tx-data)
     (let [tx-data @*batch-tx-data]
       (d/unlisten! temp-conn ::temp-conn-batch-tx)
