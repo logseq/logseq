@@ -138,7 +138,6 @@
 
  :settings-page/enable-journals "Journaals"
  :settings-page/enable-shortcut-tooltip "Snelkoppeling tooltip inschakelen"
- :settings-page/enable-timetracking "Tijdregistratie inschakelen"
  :settings-page/enable-tooltip "Tooltips inschakelen"
  :settings-page/export-theme "Exporteer thema"
  :settings-page/home-default-page "De standaard startpagina instellen"
@@ -158,10 +157,6 @@
  :command.auto-complete/next             "Automatisch aanvullen: Selecteer volgend item"
  :command.auto-complete/prev             "Automatisch aanvullen: Selecteer vorig item"
  :command.auto-complete/shift-complete   "Automatisch aanvullen: Open geselecteerd item in zijbalk"
- :command.cards/forgotten                "Kaarten: vergeten"
- :command.cards/next-card                "Kaarten: volgende kaart"
- :command.cards/recall                   "Kaarten: het duurt even om terug te roepen"
- :command.cards/remembered               "Kaarten: herinnerd"
  :command.cards/toggle-answers           "Kaarten: toon/verberg antwoorden/clozes"
  :command.command/run                    "Voer git commando uit"
  :command.command/toggle-favorite        "Toevoegen aan/verwijderen uit favorieten"
