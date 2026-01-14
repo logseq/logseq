@@ -16,6 +16,7 @@ node_modules/
 static/**
 tmp
 cljs-test-runner-out
+.tmp/
 
 .cpcache/
 /src/gen

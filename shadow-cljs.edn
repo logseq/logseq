@@ -95,6 +95,16 @@
                                       :warnings {:fn-deprecated false
                                                  :redef false}}}
 
+  :logseq-cli {:target :node-script
+               :output-to "static/logseq-cli.js"
+               :main logseq.cli.main/main
+               :compiler-options {:infer-externs :auto
+                                  :source-map true
+                                  :externs ["datascript/externs.js"
+                                            "externs.js"]
+                                  :warnings {:fn-deprecated false
+                                             :redef false}}}
+
   :inference-worker {:target        :browser
                      :module-loader true
                      :js-options    {:js-provider    :external
