@@ -54,11 +54,6 @@
 
 (defmulti handle first)
 
-(defmethod handle :graph/added [[_ repo {:keys [empty-graph?]}]]
-  (search-handler/rebuild-indices!)
-  (plugin-handler/hook-plugin-app :graph-after-indexed {:repo repo :empty-graph? empty-graph?})
-  (route-handler/redirect-to-home!))
-
 (defmethod handle :init/commands [_]
   (page-handler/init-commands!))
 
@@ -100,9 +95,6 @@
 (defmethod handle :graph/open-new-window [[_ev target-repo]]
   (ui-handler/open-new-window-or-tab! target-repo))
 
-(defmethod handle :graph/migrated [[_ _repo]]
-  (js/alert "Graph migrated."))
-
 (defmethod handle :page/create [[_ page-name opts]]
   (if (= page-name (date/today))
     (page-handler/create-today-journal!)
@@ -115,10 +107,6 @@
 (defmethod handle :page/renamed [[_ repo data]]
   (when-not (util/mobile?)
     (page-common-handler/after-page-renamed! repo data)))
-
-(defmethod handle :page/create-today-journal [[_ _repo]]
-  (p/let [_ (page-handler/create-today-journal!)]
-    (ui-handler/re-render-root!)))
 
 (defmethod handle :graph/sync-context []
   (let [context {:dev? config/dev?
