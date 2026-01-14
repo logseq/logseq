@@ -104,7 +104,6 @@
  :settings-page/custom-date-format "偏好日期格式"
  :settings-page/preferred-pasting-file "保存連結為文件"
  :settings-page/enable-shortcut-tooltip "啟用快捷鍵提示"
- :settings-page/enable-timetracking "啟用時間追蹤"
  :settings-page/enable-tooltip "啟用提示"
  :settings-page/enable-journals "啟用日記頁面"
  :settings-page/home-default-page "設定預設首頁"

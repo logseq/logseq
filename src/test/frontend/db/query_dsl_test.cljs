@@ -103,7 +103,7 @@
       "(and \"for #clojure\" #tag foo)")))
 
 (defn- testable-content
-  "Only test :block/title up to page-ref as page-ref content varies between db and file graphs"
+  "Only test :block/title up to page-ref to make tests readable"
   [{:block/keys [title]}]
   (some->> title
            (re-find #"[^\[]+")

@@ -34,8 +34,7 @@
 
 (defn <get-all-properties
   "Returns all public properties as property maps including their
-  :block/title and :db/ident. For file graphs the map only contains
-  :block/title"
+  :block/title and :db/ident"
   [& {:as opts}]
   (when-let [graph (state/get-current-repo)]
     (db-model/get-all-properties graph opts)))
