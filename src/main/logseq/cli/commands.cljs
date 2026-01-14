@@ -1,4 +1,5 @@
 (ns logseq.cli.commands
+  "Command parsing and action building for the Logseq CLI."
   (:require ["fs" :as fs]
             [cljs-time.coerce :as tc]
             [cljs.reader :as reader]
@@ -12,11 +13,7 @@
             [promesa.core :as p]))
 
 (def ^:private command->keyword
-  {"ping" :ping
-   "status" :status
-   "query" :query
-   "export" :export
-   "graph-list" :graph-list
+  {"graph-list" :graph-list
    "graph-create" :graph-create
    "graph-switch" :graph-switch
    "graph-remove" :graph-remove
@@ -45,7 +42,7 @@
    [nil "--json" "Output JSON"
     :id :json?
     :default false]
-   [nil "--format FORMAT" "Output format (tree/export)"]
+   [nil "--format FORMAT" "Output format (tree)"]
    [nil "--limit N" "Limit results"
     :parse-fn #(js/parseInt % 10)]
    [nil "--page PAGE" "Page name"]
@@ -54,10 +51,7 @@
    [nil "--content TEXT" "Block content for add"]
    [nil "--blocks EDN" "EDN vector of blocks for add"]
    [nil "--blocks-file PATH" "EDN file of blocks for add"]
-   [nil "--text TEXT" "Search text"]
-   [nil "--query QUERY" "EDN query input"]
-   [nil "--file PATH" "Path to EDN query file"]
-   [nil "--out PATH" "Output path"]])
+   [nil "--text TEXT" "Search text"]])
 
 (defn parse-args
   [args]
@@ -115,21 +109,6 @@
       (first command-args)
       (:repo config)))
 
-(defn- read-query
-  [{:keys [query file]}]
-  (cond
-    (seq query)
-    {:ok? true :value (reader/read-string query)}
-
-    (seq file)
-    (let [contents (.toString (fs/readFileSync file) "utf8")]
-      {:ok? true :value (reader/read-string contents)})
-
-    :else
-    {:ok? false
-     :error {:code :missing-query
-             :message "query is required"}}))
-
 (defn- read-blocks
   [options command-args]
   (cond
@@ -150,14 +129,6 @@
     {:ok? false
      :error {:code :missing-content
              :message "content is required"}}))
-
-(defn- ensure-vector
-  [value]
-  (if (vector? value)
-    {:ok? true :value value}
-    {:ok? false
-     :error {:code :invalid-query
-             :message "query must be a vector"}}))
 
 (defn- ensure-blocks
   [value]
@@ -289,6 +260,139 @@
     (when (seq graph)
       (graph->repo graph))))
 
+(defn- missing-graph-error
+  []
+  {:ok? false
+   :error {:code :missing-graph
+           :message "graph name is required"}})
+
+(defn- missing-repo-error
+  [message]
+  {:ok? false
+   :error {:code :missing-repo
+           :message message}})
+
+(defn- build-graph-action
+  [command graph repo]
+  (case command
+    :graph-list
+    {:ok? true
+     :action {:type :invoke
+              :method "thread-api/list-db"
+              :direct-pass? false
+              :args []}}
+
+    :graph-create
+    (if-not (seq graph)
+      (missing-graph-error)
+      {:ok? true
+       :action {:type :invoke
+                :method "thread-api/create-or-open-db"
+                :direct-pass? false
+                :args [repo {}]
+                :persist-repo (repo->graph repo)}})
+
+    :graph-switch
+    (if-not (seq graph)
+      (missing-graph-error)
+      {:ok? true
+       :action {:type :graph-switch
+                :repo repo
+                :graph (repo->graph repo)}})
+
+    :graph-remove
+    (if-not (seq graph)
+      (missing-graph-error)
+      {:ok? true
+       :action {:type :invoke
+                :method "thread-api/unsafe-unlink-db"
+                :direct-pass? false
+                :args [repo]}})
+
+    :graph-validate
+    (if-not (seq repo)
+      (missing-graph-error)
+      {:ok? true
+       :action {:type :invoke
+                :method "thread-api/validate-db"
+                :direct-pass? false
+                :args [repo]}})
+
+    :graph-info
+    (if-not (seq repo)
+      (missing-graph-error)
+      {:ok? true
+       :action {:type :graph-info
+                :repo repo
+                :graph (repo->graph repo)}})))
+
+(defn- build-add-action
+  [options args repo]
+  (if-not (seq repo)
+    (missing-repo-error "repo is required for add")
+    (let [blocks-result (read-blocks options args)]
+      (if-not (:ok? blocks-result)
+        blocks-result
+        (let [vector-result (ensure-blocks (:value blocks-result))]
+          (if-not (:ok? vector-result)
+            vector-result
+            {:ok? true
+             :action {:type :add
+                      :repo repo
+                      :graph (repo->graph repo)
+                      :page (:page options)
+                      :parent (:parent options)
+                      :blocks (:value vector-result)}}))))))
+
+(defn- build-remove-action
+  [options repo]
+  (if-not (seq repo)
+    (missing-repo-error "repo is required for remove")
+    (let [block (:block options)
+          page (:page options)]
+      (if (or (seq block) (seq page))
+        {:ok? true
+         :action {:type :remove
+                  :repo repo
+                  :block block
+                  :page page}}
+        {:ok? false
+         :error {:code :missing-target
+                 :message "block or page is required"}}))))
+
+(defn- build-search-action
+  [options args repo]
+  (if-not (seq repo)
+    (missing-repo-error "repo is required for search")
+    (let [text (or (:text options) (string/join " " args))]
+      (if (seq text)
+        {:ok? true
+         :action {:type :search
+                  :repo repo
+                  :text text
+                  :limit (:limit options)}}
+        {:ok? false
+         :error {:code :missing-search-text
+                 :message "search text is required"}}))))
+
+(defn- build-tree-action
+  [options repo]
+  (if-not (seq repo)
+    (missing-repo-error "repo is required for tree")
+    (let [block (:block options)
+          page (:page options)
+          target (or block page)]
+      (if (seq target)
+        {:ok? true
+         :action {:type :tree
+                  :repo repo
+                  :block block
+                  :page page
+                  :format (some-> (:format options) string/lower-case)}}
+        {:ok? false
+         :error {:code :missing-target
+                 :message "block or page is required"}}))))
+
 (defn build-action
   [parsed config]
   (if-not (:ok? parsed)
@@ -297,198 +401,20 @@
           graph (pick-graph options args config)
           repo (resolve-repo graph)]
       (case command
-        :ping
-        {:ok? true :action {:type :ping}}
-
-        :status
-        {:ok? true :action {:type :status}}
-
-        :query
-        (if-not (seq repo)
-          {:ok? false
-           :error {:code :missing-repo
-                   :message "repo is required for query"}}
-          (let [query-result (read-query options)]
-            (if-not (:ok? query-result)
-              query-result
-              (let [vector-result (ensure-vector (:value query-result))]
-                (if-not (:ok? vector-result)
-                  vector-result
-                  {:ok? true
-                   :action {:type :invoke
-                            :method "thread-api/q"
-                            :direct-pass? false
-                            :args [repo (:value vector-result)]}})))))
-
-        :export
-        (let [format (some-> (:format options) string/lower-case)
-              out (:out options)
-              repo repo]
-          (cond
-            (not (seq repo))
-            {:ok? false
-             :error {:code :missing-repo
-                     :message "repo is required for export"}}
-
-            (not (seq out))
-            {:ok? false
-             :error {:code :missing-output
-                     :message "output path is required"}}
-
-            (= format "edn")
-            {:ok? true
-             :action {:type :invoke
-                      :method "thread-api/export-edn"
-                      :direct-pass? false
-                      :args [repo {}]
-                      :write {:format :edn
-                              :path out}}}
-
-            (= format "db")
-            {:ok? true
-             :action {:type :invoke
-                      :method "thread-api/export-db"
-                      :direct-pass? true
-                      :args [repo]
-                      :write {:format :db
-                              :path out}}}
-
-            :else
-            {:ok? false
-             :error {:code :unsupported-format
-                     :message (str "unsupported format: " format)}}))
-
-        :graph-list
-        {:ok? true
-         :action {:type :invoke
-                  :method "thread-api/list-db"
-                  :direct-pass? false
-                  :args []}}
-
-        :graph-create
-        (if-not (seq graph)
-          {:ok? false
-           :error {:code :missing-graph
-                   :message "graph name is required"}}
-          {:ok? true
-           :action {:type :invoke
-                    :method "thread-api/create-or-open-db"
-                    :direct-pass? false
-                    :args [repo {}]
-                    :persist-repo (repo->graph repo)}})
-
-        :graph-switch
-        (if-not (seq graph)
-          {:ok? false
-           :error {:code :missing-graph
-                   :message "graph name is required"}}
-          {:ok? true
-           :action {:type :graph-switch
-                    :repo repo
-                    :graph (repo->graph repo)}})
-
-        :graph-remove
-        (if-not (seq graph)
-          {:ok? false
-           :error {:code :missing-graph
-                   :message "graph name is required"}}
-          {:ok? true
-           :action {:type :invoke
-                    :method "thread-api/unsafe-unlink-db"
-                    :direct-pass? false
-                    :args [repo]}})
-
-        :graph-validate
-        (if-not (seq repo)
-          {:ok? false
-           :error {:code :missing-graph
-                   :message "graph name is required"}}
-          {:ok? true
-           :action {:type :invoke
-                    :method "thread-api/validate-db"
-                    :direct-pass? false
-                    :args [repo]}})
-
-        :graph-info
-        (if-not (seq repo)
-          {:ok? false
-           :error {:code :missing-graph
-                   :message "graph name is required"}}
-          {:ok? true
-           :action {:type :graph-info
-                    :repo repo
-                    :graph (repo->graph repo)}})
+        (:graph-list :graph-create :graph-switch :graph-remove :graph-validate :graph-info)
+        (build-graph-action command graph repo)
 
         :add
-        (if-not (seq repo)
-          {:ok? false
-           :error {:code :missing-repo
-                   :message "repo is required for add"}}
-          (let [blocks-result (read-blocks options args)]
-            (if-not (:ok? blocks-result)
-              blocks-result
-              (let [vector-result (ensure-blocks (:value blocks-result))]
-                (if-not (:ok? vector-result)
-                  vector-result
-                  {:ok? true
-                   :action {:type :add
-                            :repo repo
-                            :graph (repo->graph repo)
-                            :page (:page options)
-                            :parent (:parent options)
-                            :blocks (:value vector-result)}})))))
+        (build-add-action options args repo)
 
         :remove
-        (if-not (seq repo)
-          {:ok? false
-           :error {:code :missing-repo
-                   :message "repo is required for remove"}}
-          (let [block (:block options)
-                page (:page options)]
-            (if (or (seq block) (seq page))
-              {:ok? true
-               :action {:type :remove
-                        :repo repo
-                        :block block
-                        :page page}}
-              {:ok? false
-               :error {:code :missing-target
-                       :message "block or page is required"}})))
+        (build-remove-action options repo)
 
         :search
-        (if-not (seq repo)
-          {:ok? false
-           :error {:code :missing-repo
-                   :message "repo is required for search"}}
-          (let [text (or (:text options) (string/join " " args))]
-            (if (seq text)
-              {:ok? true
-               :action {:type :search
-                        :repo repo
-                        :text text
-                        :limit (:limit options)}}
-              {:ok? false
-               :error {:code :missing-search-text
-                       :message "search text is required"}})))
+        (build-search-action options args repo)
 
         :tree
-        (if-not (seq repo)
-          {:ok? false
-           :error {:code :missing-repo
-                   :message "repo is required for tree"}}
-          (let [block (:block options)
-                page (:page options)
-                target (or block page)]
-            (if (seq target)
-              {:ok? true
-               :action {:type :tree
-                        :repo repo
-                        :block block
-                        :page page
-                        :format (some-> (:format options) string/lower-case)}}
-              {:ok? false
-               :error {:code :missing-target
-                       :message "block or page is required"}})))
+        (build-tree-action options repo)
 
         {:ok? false
          :error {:code :unknown-command
@@ -497,18 +423,6 @@
 (defn execute
   [action config]
   (case (:type action)
-    :ping
-    (-> (transport/ping config)
-        (p/then (fn [_]
-                  {:status :ok :data {:message "ok"}})))
-
-    :status
-    (-> (p/let [ready? (transport/ready config)
-                dbs (transport/list-db config)]
-          {:status :ok
-           :data {:ready ready?
-                  :dbs dbs}}))
-
     :invoke
     (-> (p/let [result (transport/invoke config
                                          (:method action)
