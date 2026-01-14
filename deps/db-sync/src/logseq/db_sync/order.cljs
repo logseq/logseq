@@ -11,34 +11,31 @@
                              [(:db/id parent) v]))
                          updates)
         fixes (reduce-kv
-               (fn [acc [parent-eid value] group]
+               (fn [acc [parent-eid value] _group]
                  (if (and parent-eid value)
-                   (let [update-eids (->> group (map :e) sort vec)
-                         siblings (d/datoms db :avet :block/parent parent-eid)
-                         update-eids-set (set update-eids)
+                   (let [siblings (d/datoms db :avet :block/parent parent-eid)
                          existing-same (->> siblings
                                             (keep (fn [datom]
                                                     (let [sib-eid (:e datom)]
-                                                      (when (and (not (contains? update-eids-set sib-eid))
-                                                                 (= value (:block/order (d/entity db sib-eid))))
+                                                      (when (= value (:block/order (d/entity db sib-eid)))
                                                         sib-eid)))))
-                         need-fix? (or (seq existing-same)
-                                       (> (count update-eids) 1))]
+                         same-order-siblings (->> (map (fn [id] (d/entity db id)) existing-same)
+                                                  (sort-by :block/uuid))
+                         need-fix? (> (count same-order-siblings) 1)]
                      (if need-fix?
                        (let [orders (->> siblings
                                          (keep (fn [d]
                                                  (let [sib-eid (:e d)]
-                                                   (when-not (contains? update-eids-set sib-eid)
-                                                     (:block/order (d/entity db sib-eid)))))))
+                                                   (:block/order (d/entity db sib-eid))))))
                              end (some (fn [order]
                                          (when (> (compare order value) 0)
                                            order))
                                        orders)
-                             new-orders (db-order/gen-n-keys (count update-eids) value end)]
+                             new-orders (db-order/gen-n-keys (count same-order-siblings) value end)]
                          (into acc
                                (map-indexed (fn [idx id]
                                               [:db/add id :block/order (nth new-orders idx)])
-                                            update-eids)))
+                                            (map :db/id same-order-siblings))))
                        acc))
                    acc))
                []

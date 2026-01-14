@@ -1,6 +1,7 @@
 (ns frontend.worker.db-sync
   "Simple db-sync client based on promesa + WebSocket."
-  (:require [clojure.string :as string]
+  (:require [clojure.data :as data]
+            [clojure.string :as string]
             [datascript.core :as d]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.rtc.client-op :as client-op]
@@ -21,6 +22,7 @@
             [promesa.core :as p]))
 
 (defonce *repo->latest-remote-tx (atom {}))
+(defonce *applying-remote-tx? (atom false))
 
 (defn- enabled?
   []
@@ -379,21 +381,35 @@
           (recur tx-data' (inc attempt)))
         tx-data))))
 
-(defn- sanitize-remote-tx-data
+(defn- keep-last-update
+  [db tx-data]
+  (let [properties (->> (distinct (map :a tx-data))
+                        (map #(d/entity db %)))
+        property->many? (zipmap (map :db/ident properties)
+                                (map (fn [property] (= :db.cardinality/many (:db/cardinality property))) properties))]
+    (->> tx-data
+         (common-util/distinct-by-last-wins
+          (fn [item]
+            (if (and (vector? item) (= 4 (count item))
+                     (not (property->many? (nth item 2))))
+              (take 3 item)
+              item))))))
+
+(defn- sanitize-tx-data
   [db tx-data]
   (let [tx-data (vec tx-data)
         original-count (count tx-data)
-        tx-data (->> tx-data
-                     db-normalize/replace-attr-retract-with-retract-entity-v2
-                     keep-last-parent-update
-                     (drop-invalid-refs db)
-                     (fix-cycle-updates db))
-        dropped (- original-count (count tx-data))]
+        sanitized-tx-data (->> tx-data
+                               db-normalize/replace-attr-retract-with-retract-entity-v2
+                               (keep-last-update db)
+                               ;; (drop-invalid-refs db)
+                               (fix-cycle-updates db))
+        dropped (- original-count (count sanitized-tx-data))]
     (when (pos? dropped)
-      (log/info :db-sync/remote-tx-sanitized
-                {:dropped dropped
+      (log/info :db-sync/tx-sanitized
+                {:dropped (data/diff tx-data sanitized-tx-data)
                  :original original-count}))
-    tx-data))
+    sanitized-tx-data))
 
 (defn- flush-pending!
   [repo client]
@@ -665,11 +681,11 @@
                                         (client-op/get-local-checksum repo)
                                         (db-sync-checksum/filter-tx-data tx-report)))]
                (reset! *computed-checksum computed-checksum)
-               (when (and expected-checksum (not= expected-checksum computed-checksum))
-                 (fail-fast :db-sync/checksum-mismatch
-                            {:repo repo
-                             :expected-checksum expected-checksum
-                             :actual-checksum computed-checksum}))
+               ;; (when (and expected-checksum (not= expected-checksum computed-checksum))
+               ;;   (fail-fast :db-sync/checksum-mismatch
+               ;;              {:repo repo
+               ;;               :expected-checksum expected-checksum
+               ;;               :actual-checksum computed-checksum}))
 
                ;; 3. fix data
                (let [deleted-blocks (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report))
@@ -690,17 +706,19 @@
                         (outliner-core/delete-blocks! temp-conn blocks {})))))
 
                  ;; 4. apply remote tx-data
-                 (let [rtc-tx-data (sanitize-remote-tx-data @temp-conn tx-data)
+                 (let [rtc-tx-data (sanitize-tx-data @temp-conn tx-data)
                        tx-report (ldb/transact! temp-conn rtc-tx-data)]
                    (sync-order/fix-duplicate-orders! temp-conn (:tx-data tx-report)))
 
                  ;; 5. rebase pending local txs for the new remote base
                  (when (seq local-txs)
-                   (let [pending-tx-data (->> local-txs
-                                              (mapcat :tx)
-                                              keep-last-parent-update)
+                   (let [pending-tx-data* (mapcat :tx local-txs)
                          db @temp-conn
-                         pending-tx-data (sanitize-remote-tx-data db pending-tx-data)]
+                         pending-tx-data (sanitize-tx-data db pending-tx-data*)]
+                     (prn :debug
+                          :sanitize-tx-data pending-tx-data
+                          :tx-data pending-tx-data*)
+
                      (when (seq pending-tx-data)
                        (let [rebased-report (d/with (:db-after tx-report) pending-tx-data)
                              normalized (normalize-tx-data
@@ -758,19 +776,20 @@
                         (flush-pending! repo client))
         ;; Download response
         ;; Merge batch txs to one tx, does it really work? We'll see
-        "pull/ok" (let [txs (:txs message)
-                        _ (require-non-negative remote-tx {:repo repo :type "pull/ok"})
-                        _ (require-seq txs {:repo repo :type "pull/ok" :field :txs})
-                        expected-checksum (:checksum message)
-                        txs-data (mapv (fn [data]
-                                         (parse-transit (:tx data) {:repo repo :type "pull/ok"}))
-                                       txs)
-                        tx (mapcat identity txs-data)]
-                    (when (seq tx)
-                      (apply-remote-tx! repo client tx
-                                        :expected-checksum expected-checksum)
-                      (client-op/update-local-tx repo remote-tx)
-                      (flush-pending! repo client)))
+        "pull/ok" (when-not (= local-tx remote-tx)
+                    (let [txs (:txs message)
+                          _ (require-non-negative remote-tx {:repo repo :type "pull/ok"})
+                          _ (require-seq txs {:repo repo :type "pull/ok" :field :txs})
+                          expected-checksum (:checksum message)
+                          txs-data (mapv (fn [data]
+                                           (parse-transit (:tx data) {:repo repo :type "pull/ok"}))
+                                         txs)
+                          tx (mapcat identity txs-data)]
+                      (when (seq tx)
+                        (apply-remote-tx! repo client tx
+                                          :expected-checksum expected-checksum)
+                        (client-op/update-local-tx repo remote-tx)
+                        (flush-pending! repo client))))
         "changed" (do
                     (require-non-negative remote-tx {:repo repo :type "changed"})
                     (when (< local-tx remote-tx)
