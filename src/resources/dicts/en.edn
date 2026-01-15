@@ -136,7 +136,6 @@
  :asset/copy "Copy image"
  :asset/edit "Edit image"
  :asset/rotation "Rotation"
- :asset/zoom "Zoom"
  :asset/crop "Crop"
  :asset/crop-start "Enable crop"
  :asset/crop-cancel "Cancel crop"

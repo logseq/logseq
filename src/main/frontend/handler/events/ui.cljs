@@ -4,6 +4,7 @@
             [clojure.core.async.interop :refer [p->c]]
             [frontend.components.assets :as assets]
             [frontend.components.block-image-editor :as block-image-editor]
+            [frontend.context.i18n :refer [t]]
             [frontend.components.cmdk.core :as cmdk]
             [frontend.components.page :as component-page]
             [frontend.components.page-menu :as page-menu]
@@ -296,7 +297,7 @@
   (shui/dialog-open!
    (block-image-editor/editor-content asset-block opts)
    {:id :block-image-editor
-    :title "Edit Image"
+    :title (t :asset/edit)
     :center? true
     :content-props {:class "w-[640px] max-w-[90vw]"}}))
 

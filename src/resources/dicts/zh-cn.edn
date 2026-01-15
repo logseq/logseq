@@ -259,7 +259,6 @@
  :asset/copy "复制图片"
  :asset/edit "编辑图片"
  :asset/rotation "旋转"
- :asset/zoom "缩放"
  :asset/crop "裁剪"
  :asset/crop-start "开始裁剪"
  :asset/crop-cancel "取消裁剪"
