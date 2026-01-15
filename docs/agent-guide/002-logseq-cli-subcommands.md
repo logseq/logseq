@@ -104,9 +104,8 @@ Each subcommand uses a nested path and its own options.
 
 ## Status
 
-- Completed: Plan tasks 1-6.
-- In progress: Plan task 7.
-- Pending: Plan tasks 8-19.
+- Completed: Plan tasks 1-10, 12-19.
+- Skipped: Plan task 11 (red-phase confirmation no longer applicable after parser swap).
 
 ## Edge cases
 
@@ -130,7 +129,7 @@ Expected output includes a failing assertion about subcommand help text and ends
 Run the full unit test suite in green phase.
 
 ```bash
-bb dev:test -v logseq.cli.*
+bb dev:test -r logseq.cli.*
 ```
 
 Expected output includes 0 failures and 0 errors.
