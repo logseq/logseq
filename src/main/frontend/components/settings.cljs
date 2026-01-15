@@ -619,7 +619,7 @@
      (when (config/global-config-enabled?) (edit-global-config-edn))
      (when current-repo (edit-config-edn))
      (when current-repo (edit-custom-css))
-     (when current-repo (edit-export-css))]))
+     (when (and current-repo (util/electron?)) (edit-export-css))]))
 
 (rum/defcs settings-editor < rum/reactive
   [_state]
