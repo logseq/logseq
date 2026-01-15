@@ -1844,7 +1844,8 @@
 
                        :else
                        bullet)]
-         (when-not @*bullet-dragging?
+         (if @*bullet-dragging?
+           bullet'
            (ui/tooltip
             bullet'
             [:div.flex.flex-col.gap-1.p-2
