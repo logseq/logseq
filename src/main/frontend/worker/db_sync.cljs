@@ -316,7 +316,8 @@
          (remove (fn [tx]
                    (when-let [id (when (and (vector? tx) (= 4 (count tx)))
                                    (let [lookup (second tx)]
-                                     (when (= :block/uuid (first lookup))
+                                     (when (and (vector? lookup)
+                                                (= :block/uuid (first lookup)))
                                        (second lookup))))]
                      (contains? deleted-ids id)))))
     tx-data))
@@ -595,6 +596,42 @@
                                (p/resolved nil)))
                            (p/resolved nil)))))
 
+(defn- get-local-deleted-blocks
+  [db reversed-tx-report reversed-tx-data remote-tx-report]
+  (when (seq reversed-tx-data)
+    (->>
+     (:tx-data reversed-tx-report)
+     (keep
+      (fn [[e a _v _t added]]
+        (when (and (= :block/uuid a) added
+                   (nil? (d/entity db e))
+                   (some? (d/entity (:db-after remote-tx-report) e)))
+          (d/entity (:db-after reversed-tx-report) e))))
+     distinct)))
+
+(defn- delete-nodes!
+  [temp-conn local-deleted-blocks]
+  (when (seq local-deleted-blocks)
+    (let [pages (filter ldb/page? local-deleted-blocks)
+          blocks (remove ldb/page? local-deleted-blocks)]
+                       ;; deleting pages first
+      (doseq [page pages]
+        (worker-page/delete! temp-conn (:block/uuid page) {}))
+      (when (seq blocks)
+        (outliner-tx/transact!
+         {:gen-undo-ops? false
+          :outliner-op :delete-blocks
+          :transact-opts {:conn temp-conn}}
+         (outliner-core/delete-blocks! temp-conn blocks {}))))))
+
+(defn- fix-tx!
+  [temp-conn remote-tx-report rebase-tx-report]
+  (let [cycle-tx-report (sync-cycle/fix-cycle! temp-conn remote-tx-report rebase-tx-report)]
+    (sync-order/fix-duplicate-orders! temp-conn
+                                      (mapcat :tx-data [remote-tx-report
+                                                        rebase-tx-report
+                                                        cycle-tx-report]))))
+
 (defn- apply-remote-tx!
   [repo client tx-data* & {:keys [expected-checksum]}]
   (if-let [conn (worker-state/get-datascript-conn repo)]
@@ -634,35 +671,14 @@
                ;;               :actual-checksum computed-checksum}))
 
                (when has-local-changes?
-                 ;; 3. fix data
-                 (let [local-deleted-blocks (when (seq reversed-tx-data)
-                                              (keep
-                                               (fn [[e a _v _t added]]
-                                                 (when (and (= :block/uuid a) added
-                                                            (nil? (d/entity db e)))
-                                                   (d/entity (:db-after reversed-tx-report) e)))
-                                               (:tx-data reversed-tx-report)))
+                 ;; 3. Remove nodes which parents have been deleted locally
+                 ;; We may improve the ux by restoring parent path later
+                 (let [local-deleted-blocks (get-local-deleted-blocks db reversed-tx-report reversed-tx-data remote-tx-report)
                        remote-deleted-blocks (->> (outliner-pipeline/filter-deleted-blocks (:tx-data remote-tx-report))
                                                   (map #(d/entity db (:db/id %))))
                        deleted-nodes (concat local-deleted-blocks remote-deleted-blocks)
-                       deleted-ids (set (keep :block/uuid deleted-nodes))
-                       nodes (->> deleted-nodes
-                                  (remove nil?)
-                                  (common-util/distinct-by :block/uuid)
-                                  (keep (fn [block]
-                                          (d/entity @temp-conn (:db/id block)))))]
-                   (when (seq nodes)
-                     (let [pages (filter ldb/page? nodes)
-                           blocks (remove ldb/page? nodes)]
-                       ;; deleting pages first
-                       (doseq [page pages]
-                         (worker-page/delete! temp-conn (:block/uuid page) {}))
-                       (when (seq blocks)
-                         (outliner-tx/transact!
-                          {:gen-undo-ops? false
-                           :outliner-op :delete-blocks
-                           :transact-opts {:conn temp-conn}}
-                          (outliner-core/delete-blocks! temp-conn blocks {})))))
+                       deleted-ids (set (keep :block/uuid deleted-nodes))]
+                   (delete-nodes! temp-conn local-deleted-blocks)
 
                    ;; 4. rebase pending local txs
                    (let [rebase-tx-report (when (seq local-txs)
@@ -671,12 +687,9 @@
                                               (prn :debug :pending-tx-data pending-tx-data
                                                    :rebased-tx-data rebased-tx-data)
                                               (when (seq rebased-tx-data)
-                                                (ldb/transact! temp-conn rebased-tx-data {:gen-undo-ops? false}))))
-                         fix-cycle-tx-report (sync-cycle/fix-cycle! temp-conn remote-tx-report rebase-tx-report)]
-                     (sync-order/fix-duplicate-orders! temp-conn
-                                                       (mapcat :tx-data [remote-tx-report
-                                                                         rebase-tx-report
-                                                                         fix-cycle-tx-report])))))))
+                                                (ldb/transact! temp-conn rebased-tx-data {:gen-undo-ops? false}))))]
+                     ;; 5. fix tx data
+                     (fix-tx! temp-conn remote-tx-report rebase-tx-report))))))
            {:listen-db (fn [{:keys [tx-data tx-meta]}]
                          (when (and has-local-changes? (not (:rtc-tx? tx-meta)))
                            (swap! *rebased-tx-data into tx-data)))})
