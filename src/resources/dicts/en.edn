@@ -139,6 +139,7 @@
  :asset/crop "Crop"
  :asset/crop-start "Enable crop"
  :asset/crop-cancel "Cancel crop"
+ :asset/edit-unsupported "Editing is only supported for PNG, JPEG, and WebP images"
  :asset/image-saved "Image saved successfully"
  :asset/maximize "Maximize image"
  :asset/ref-block "Asset ref block"

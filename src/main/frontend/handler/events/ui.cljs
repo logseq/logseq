@@ -294,12 +294,14 @@
     :center? true}))
 
 (defmethod events/handle :editor/show-block-image-editor [[_ asset-block opts]]
-  (shui/dialog-open!
-   (block-image-editor/editor-content asset-block opts)
-   {:id :block-image-editor
-    :title (t :asset/edit)
-    :center? true
-    :content-props {:class "w-[640px] max-w-[90vw]"}}))
+  (if (block-image-editor/editable-image? asset-block (:src opts))
+    (shui/dialog-open!
+     (block-image-editor/editor-content asset-block opts)
+     {:id :block-image-editor
+      :title (t :asset/edit)
+      :center? true
+      :content-props {:class "w-[640px] max-w-[90vw]"}})
+    (notification/show! (t :asset/edit-unsupported) :warning)))
 
 (defmethod events/handle :user/fetch-info-and-graphs [[_]]
   (state/set-state! [:ui/loading? :login] false)

@@ -11,6 +11,7 @@
             [dommy.core :as dom]
             [electron.ipc :as ipc]
             [frontend.components.block.macros :as block-macros]
+            [frontend.components.block-image-editor :as block-image-editor]
             [frontend.components.icon :as icon-component]
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.components.macro :as macro]
@@ -289,7 +290,9 @@
                   {:on-click handle-copy!}
                   [:span.flex.items-center.gap-1
                    (ui/icon "copy") (t :asset/copy)])
-                 (when (and local? (not config/publishing?))
+                 (when (and local?
+                            (not config/publishing?)
+                            (block-image-editor/editable-image? asset-block image-src))
                    (shui/dropdown-menu-item
                     {:on-click (fn [e]
                                  (util/stop e)

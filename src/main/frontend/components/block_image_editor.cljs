@@ -1,6 +1,7 @@
 (ns frontend.components.block-image-editor
   "Block image editor component for cropping and rotating images."
   (:require
+   [clojure.string :as string]
    [frontend.context.i18n :refer [t]]
    [frontend.fs :as fs]
    [frontend.handler.assets :as assets-handler]
@@ -13,6 +14,31 @@
    [logseq.shui.ui :as shui]
    [promesa.core :as p]
    [rum.core :as rum]))
+
+;; Only allow editing formats that we can safely encode back to.
+(def ^:private editable-image-types #{:png :jpg :jpeg :webp})
+
+(defn- resolve-asset-type
+  [asset-block image-src]
+  (let [ext (some-> (or (:logseq.property.asset/type asset-block)
+                        (some-> image-src util/get-file-ext))
+                    name
+                    string/lower-case)
+        type (some-> ext keyword)]
+    {:ext ext :type type}))
+
+(defn editable-image?
+  [asset-block image-src]
+  (contains? editable-image-types (:type (resolve-asset-type asset-block image-src))))
+
+(defn- asset-type->mime
+  [asset-type]
+  (case asset-type
+    :png "image/png"
+    :jpg "image/jpeg"
+    :jpeg "image/jpeg"
+    :webp "image/webp"
+    nil))
 
 ;; ============================================================================
 ;; Canvas utilities
@@ -73,28 +99,31 @@
 
 (defn- process-image
   "Apply rotation and crop to an image, return a blob."
-  [image-src rotation crop]
+  [image-src rotation crop mime-type]
   (p/let [img (create-image image-src)
           rotated-canvas (apply-rotation img rotation)
           final-canvas (if crop
                          (apply-crop rotated-canvas crop)
                          rotated-canvas)]
-    (canvas->blob final-canvas "image/png" 0.92)))
+    (canvas->blob final-canvas mime-type 0.92)))
 
 (defn- save-edited-image!
   "Save the edited image, replacing the original asset."
   [repo asset-block image-src rotation crop on-complete]
-  (p/let [blob (process-image image-src rotation crop)
-          _ (when-not blob
-              (throw (js/Error. "Failed to create image blob")))
-          ;; Get asset info
-          asset-uuid (:block/uuid asset-block)
-          asset-type (or (:logseq.property.asset/type asset-block) "png")
-          ;; Prepare file path
-          [repo-dir asset-dir-rpath] (assets-handler/ensure-assets-dir! repo)
-          file-rpath (str asset-dir-rpath "/" asset-uuid "." (name asset-type))
-          ;; Write the file
-          buffer (.arrayBuffer blob)]
+  (let [{:keys [ext type]} (resolve-asset-type asset-block image-src)
+        mime-type (asset-type->mime type)]
+    (when-not (contains? editable-image-types type)
+      (throw (js/Error. (t :asset/edit-unsupported))))
+    (p/let [blob (process-image image-src rotation crop mime-type)
+            _ (when-not blob
+                (throw (js/Error. "Failed to create image blob")))
+            ;; Get asset info
+            asset-uuid (:block/uuid asset-block)
+            ;; Prepare file path
+            [repo-dir asset-dir-rpath] (assets-handler/ensure-assets-dir! repo)
+            file-rpath (str asset-dir-rpath "/" asset-uuid "." ext)
+            ;; Write the file
+            buffer (.arrayBuffer blob)]
     (if (util/electron?)
       (p/do!
        (js/window.apis.writeFile repo (path/path-join repo-dir file-rpath) buffer)
@@ -114,7 +143,7 @@
            {:logseq.property.asset/checksum checksum
             :logseq.property.asset/resize-metadata nil}))
         (notification/show! (t :asset/image-saved) :success)
-        (when on-complete (on-complete))))))
+        (when on-complete (on-complete)))))))
 
 ;; ============================================================================
 ;; Crop selection component
@@ -171,33 +200,33 @@
         {:keys [display-width display-height]} image-size
         {:keys [x y width height]} crop
 
-        on-mouse-down (fn [e action]
-                        (.preventDefault e)
-                        (.stopPropagation e)
-                        (set-dragging! action)
-                        (set-start-pos! {:x (.-clientX e) :y (.-clientY e)})
-                        (set-start-crop! crop))
+        on-pointer-down (fn [e action]
+                          (.preventDefault e)
+                          (.stopPropagation e)
+                          (set-dragging! action)
+                          (set-start-pos! {:x (.-clientX e) :y (.-clientY e)})
+                          (set-start-crop! crop))
 
-        on-mouse-move (fn [e]
-                        (when (and dragging start-pos start-crop)
-                          (let [dx (- (.-clientX e) (:x start-pos))
-                                dy (- (.-clientY e) (:y start-pos))
-                                new-crop (calc-crop-for-action dragging dx dy start-crop
-                                                               display-width display-height)]
-                            (set-crop! new-crop))))
+        on-pointer-move (fn [e]
+                          (when (and dragging start-pos start-crop)
+                            (let [dx (- (.-clientX e) (:x start-pos))
+                                  dy (- (.-clientY e) (:y start-pos))
+                                  new-crop (calc-crop-for-action dragging dx dy start-crop
+                                                                 display-width display-height)]
+                              (set-crop! new-crop))))
 
-        on-mouse-up (fn [_e]
-                      (set-dragging! nil)
-                      (set-start-pos! nil)
-                      (set-start-crop! nil))]
+        on-pointer-up (fn [_e]
+                        (set-dragging! nil)
+                        (set-start-pos! nil)
+                        (set-start-crop! nil))]
 
     (hooks/use-effect!
      (fn []
        (when dragging
-         (js/document.addEventListener "mousemove" on-mouse-move)
-         (js/document.addEventListener "mouseup" on-mouse-up))
-       #(do (js/document.removeEventListener "mousemove" on-mouse-move)
-            (js/document.removeEventListener "mouseup" on-mouse-up)))
+         (js/document.addEventListener "pointermove" on-pointer-move)
+         (js/document.addEventListener "pointerup" on-pointer-up))
+       #(do (js/document.removeEventListener "pointermove" on-pointer-move)
+            (js/document.removeEventListener "pointerup" on-pointer-up)))
      [dragging])
 
     [:<>
@@ -208,18 +237,18 @@
      [:div.absolute.bg-black.bg-opacity-50 {:style {:top y :left (+ x width) :right 0 :height height}}]
      ;; Crop area
      [:div.absolute.border-2.border-white.cursor-move
-      {:style {:top y :left x :width width :height height}
-       :on-mouse-down #(on-mouse-down % :move)}
+      {:style {:top y :left x :width width :height height :touch-action "none"}
+       :on-pointer-down #(on-pointer-down % :move)}
       ;; Grid lines
       [:div.absolute.border-white.border-opacity-30 {:style {:top "33.33%" :left 0 :right 0 :border-top-width 1}}]
       [:div.absolute.border-white.border-opacity-30 {:style {:top "66.66%" :left 0 :right 0 :border-top-width 1}}]
       [:div.absolute.border-white.border-opacity-30 {:style {:top 0 :bottom 0 :left "33.33%" :border-left-width 1}}]
       [:div.absolute.border-white.border-opacity-30 {:style {:top 0 :bottom 0 :left "66.66%" :border-left-width 1}}]
       ;; Resize handles
-      [:div.absolute.w-4.h-4.bg-white.cursor-nw-resize {:style {:top -8 :left -8} :on-mouse-down #(on-mouse-down % :resize-nw)}]
-      [:div.absolute.w-4.h-4.bg-white.cursor-ne-resize {:style {:top -8 :right -8} :on-mouse-down #(on-mouse-down % :resize-ne)}]
-      [:div.absolute.w-4.h-4.bg-white.cursor-sw-resize {:style {:bottom -8 :left -8} :on-mouse-down #(on-mouse-down % :resize-sw)}]
-      [:div.absolute.w-4.h-4.bg-white.cursor-se-resize {:style {:bottom -8 :right -8} :on-mouse-down #(on-mouse-down % :resize-se)}]]]))
+      [:div.absolute.w-4.h-4.bg-white.cursor-nw-resize {:style {:top -8 :left -8} :on-pointer-down #(on-pointer-down % :resize-nw)}]
+      [:div.absolute.w-4.h-4.bg-white.cursor-ne-resize {:style {:top -8 :right -8} :on-pointer-down #(on-pointer-down % :resize-ne)}]
+      [:div.absolute.w-4.h-4.bg-white.cursor-sw-resize {:style {:bottom -8 :left -8} :on-pointer-down #(on-pointer-down % :resize-sw)}]
+      [:div.absolute.w-4.h-4.bg-white.cursor-se-resize {:style {:bottom -8 :right -8} :on-pointer-down #(on-pointer-down % :resize-se)}]]]))
 
 ;; ============================================================================
 ;; Main editor component - helper functions
@@ -311,7 +340,7 @@
         container-ref (rum/use-ref nil)
 
         on-rotate! (fn [delta]
-                     (set-rotation! #(+ % delta))
+                     (set-rotation! #(mod (+ % delta) 360))
                      (set-crop! nil)
                      (set-crop-enabled! false))
 
