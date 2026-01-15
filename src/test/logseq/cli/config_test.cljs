@@ -27,25 +27,29 @@
                                  ":auth-token \"file-token\" "
                                  ":repo \"file-repo\" "
                                  ":timeout-ms 111 "
-                                 ":retries 1}"))
+                                 ":retries 1 "
+                                 ":output-format :edn}"))
         env {"LOGSEQ_DB_WORKER_URL" "http://env:9999"
              "LOGSEQ_DB_WORKER_AUTH_TOKEN" "env-token"
              "LOGSEQ_CLI_REPO" "env-repo"
              "LOGSEQ_CLI_TIMEOUT_MS" "222"
-             "LOGSEQ_CLI_RETRIES" "2"}
+             "LOGSEQ_CLI_RETRIES" "2"
+             "LOGSEQ_CLI_OUTPUT" "json"}
         opts {:config-path cfg-path
               :base-url "http://cli:1234"
               :auth-token "cli-token"
               :repo "cli-repo"
               :timeout-ms 333
-              :retries 3}
+              :retries 3
+              :output-format :human}
         result (with-env env #(config/resolve-config opts))]
     (is (= cfg-path (:config-path result)))
     (is (= "http://cli:1234" (:base-url result)))
     (is (= "cli-token" (:auth-token result)))
     (is (= "cli-repo" (:repo result)))
     (is (= 333 (:timeout-ms result)))
-    (is (= 3 (:retries result)))))
+    (is (= 3 (:retries result)))
+    (is (= :human (:output-format result)))))
 
 (deftest test-host-port-derived-base-url
   (let [result (config/resolve-config {:host "127.0.0.2" :port 9200})]
@@ -60,6 +64,14 @@
         result (with-env env #(config/resolve-config {:config-path cfg-path}))]
     (is (= "http://env:9999" (:base-url result)))
     (is (= "env-repo" (:repo result)))))
+
+(deftest test-output-format-env-overrides-file
+  (let [dir (node-helper/create-tmp-dir)
+        cfg-path (node-path/join dir "cli.edn")
+        _ (fs/writeFileSync cfg-path "{:output-format :edn}")
+        env {"LOGSEQ_CLI_OUTPUT" "json"}
+        result (with-env env #(config/resolve-config {:config-path cfg-path}))]
+    (is (= :json (:output-format result)))))
 
 (deftest test-update-config
   (let [dir (node-helper/create-tmp-dir "cli")
