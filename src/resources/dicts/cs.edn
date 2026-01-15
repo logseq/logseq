@@ -469,7 +469,6 @@
 :help/awesome-logseq "Úžasný Logseq"
 :help/blog "Logseq blog"
 :help/markdown-syntax "Markdown syntaxe"
-:help/org-mode-syntax "Org mode syntaxe"
 :linked-references/filter-directions "Kliknutím na tlačítko zahrnete a kliknutím s klávesou Shift vyloučíte. Dalším kliknutím odstraníte."
 :linked-references/filter-excludes "Nezahrnuje: "
 :linked-references/filter-heading "Filtruje"

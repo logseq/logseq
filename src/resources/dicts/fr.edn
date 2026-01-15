@@ -16,7 +16,6 @@
     :help/open-link-in-sidebar "Ouvrir le lien dans la barre latérale"
     :help/context-menu "Menu contextuel"
     :help/markdown-syntax "Syntaxe Markdown"
-    :help/org-mode-syntax "Syntaxe Org mode"
     :bold "Gras"
     :italics "Italique"
     :highlight "Surligner"

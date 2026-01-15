@@ -64,7 +64,6 @@
  :search-item/no-result "Eşleşen sonuç yok"
  :help/context-menu "Blok kısayol menüsü"
  :help/markdown-syntax "Markdown sözdizimi"
- :help/org-mode-syntax "Org modu sözdizimi"
  :bold "Kalın"
  :italics "İtalik"
  :highlight "Vurgulu"

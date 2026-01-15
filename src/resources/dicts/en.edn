@@ -65,7 +65,6 @@
  :search-item/no-result "No matched result"
  :help/context-menu "Block context menu"
  :help/markdown-syntax "Markdown syntax"
- :help/org-mode-syntax "Org mode syntax"
  :bold "Bold"
  :italics "Italics"
  :highlight "Highlight"

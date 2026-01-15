@@ -18,7 +18,6 @@
  :help/open-link-in-sidebar "Otwórz link w panelu bocznym"
  :help/context-menu "Menu kontekstowe bloku"
  :help/markdown-syntax "Składnia Markdown"
- :help/org-mode-syntax "Składnia Org mode"
  :bold "Pogrubienie"
  :italics "Pochylenie"
  :highlight "Wyróżnij"

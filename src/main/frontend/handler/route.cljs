@@ -18,7 +18,8 @@
             [logseq.db :as ldb]
             [logseq.graph-parser.text :as text]
             [logseq.shui.ui :as shui]
-            [reitit.frontend.easy :as rfe]))
+            [reitit.frontend.easy :as rfe]
+            [logseq.common.config :as common-config]))
 
 (defn redirect!
   "If `push` is truthy, previous page will be left in history."
@@ -128,8 +129,8 @@
           block-title (when (and block? (not page))
                         (when-let [block (db/entity [:block/uuid (uuid name)])]
                           (let [content (text/remove-level-spaces (:block/title block)
-                                                                  (get block :block/format :markdown)
-                                                                  (config/get-block-pattern (get block :block/format :markdown)))]
+                                                                  :markdown
+                                                                  common-config/block-pattern)]
                             (if (> (count content) 48)
                               (str (subs content 0 48) "...")
                               content))))
