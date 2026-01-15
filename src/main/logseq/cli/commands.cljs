@@ -710,7 +710,7 @@
 
     :tree
     (-> (p/let [tree-data (fetch-tree config action)
-                format (or (:format action) (when (:json? config) "json"))]
+                format (:format action)]
           (case format
             "edn"
             {:status :ok
