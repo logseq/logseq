@@ -42,11 +42,10 @@
             (= status :error) (assoc :error error))))
 
 (defn format-result
-  [result {:keys [json? output-format]}]
+  [result {:keys [output-format]}]
   (let [format (cond
                  (= output-format :edn) :edn
                  (= output-format :json) :json
-                 json? :json
                  :else :human)]
     (case format
       :json (->json result)
