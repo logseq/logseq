@@ -20,7 +20,6 @@
  :search-item/page "Página"
  :help/context-menu "Menu de contexto"
  :help/markdown-syntax "Sintaxe de Markdown"
- :help/org-mode-syntax "Sintaxe do modo Org"
  :bold "Negrito"
  :italics "Itálico"
  :highlight "Realçado"

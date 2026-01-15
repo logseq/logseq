@@ -17,7 +17,6 @@
  :help/open-link-in-sidebar "사이드바에서 링크 열기"
  :help/context-menu "블록 컨텍스트 메뉴"
  :help/markdown-syntax "Markdown 문법"
- :help/org-mode-syntax "Org mode 문법"
  :bold "볼드체"
  :italics "이탤릭체"
  :highlight "하이라이트"

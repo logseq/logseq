@@ -134,9 +134,7 @@
   [url]
   (match url
     ["File" s]
-    (-> (string/replace s "file://" "")
-             ;; "file:/Users/ll/Downloads/test.pdf" is a normal org file link
-        (string/replace "file:" ""))
+    (string/replace s "file://" "")
 
     ["Complex" m]
     (let [{:keys [link protocol]} m]
@@ -1117,21 +1115,9 @@
        [:span.text-gray-500 page-ref/right-brackets])]))
 
 (defn- show-link?
-  [config metadata s full-text]
-  (let [media-formats (set (map name config/media-formats))
-        metadata-show (:show (common-util/safe-read-map-string metadata))
-        format (get-in config [:block :block/format] :markdown)]
+  [s full-text]
+  (let [media-formats (set (map name config/media-formats))]
     (or
-     (and
-      (= :org format)
-      (or
-       (and
-        (nil? metadata-show)
-        (or
-         (common-config/local-relative-asset? s)
-         (text-util/media-link? media-formats s)))
-       (true? (boolean metadata-show))))
-
      ;; markdown
      (string/starts-with? (string/triml full-text) "!")
 
@@ -1214,7 +1200,7 @@
                 :target "_blank"}
             (map-inline config label))
 
-    (show-link? config metadata s full_text)
+    (show-link? s full_text)
     (media-link config url s label metadata full_text)
 
     (util/electron?)
@@ -1257,15 +1243,10 @@
                            id label*)))
 
       ["Page_ref" page]
-      (let [format (get-in config [:block :block/format] :markdown)]
-        (if (and (= format :org)
-                 (show-link? config nil page page)
-                 (not (contains? #{"pdf" "mp4" "ogg" "webm"} (util/get-file-ext page))))
-          (image-link config url page nil metadata full_text)
-          (let [label* (if (seq (mldoc/plain->text label)) label nil)]
-            (if (and (string? page) (string/blank? page))
-              [:span (ref/->page-ref page)]
-              (page-reference config page label*)))))
+      (let [label* (if (seq (mldoc/plain->text label)) label nil)]
+        (if (and (string? page) (string/blank? page))
+          [:span (ref/->page-ref page)]
+          (page-reference config page label*)))
 
       ["Embed_data" src]
       (image-link config url src nil metadata full_text)
@@ -1282,15 +1263,8 @@
                      (assoc :link-js-url (try (js/URL. href)
                                               (catch :default _ nil))))]
         (cond
-          (and (= (get-in config [:block :block/format] :markdown) :org)
-               (= "Complex" protocol)
-               (= (string/lower-case (:protocol path)) "id")
-               (string? (:link path))
-               (util/uuid-string? (:link path)))       ; org mode id
-          (block-reference config (:link path) label)
-
           (= protocol "file")
-          (if (show-link? config metadata href full_text)
+          (if (show-link? href full_text)
             (media-link config url href label metadata full_text)
             (let [href* (if (util/electron?)
                           (relative-assets-path->absolute-path href)
@@ -1310,7 +1284,7 @@
                   title (assoc :title title))
                 (map-inline config label))]))
 
-          (show-link? config metadata href full_text)
+          (show-link? href full_text)
           (media-link config url href label metadata full_text)
 
           :else

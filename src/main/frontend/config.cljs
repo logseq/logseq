@@ -115,18 +115,10 @@
   (when-not util/node-test?
     (util/safe-re-find #"Mobi" js/navigator.userAgent)))
 
-;; TODO: protocol design for future formats support
-
-(defn get-block-pattern
-  [format]
-  (common-config/get-block-pattern (or format (state/get-preferred-format))))
-
 (defn get-hr
   [format]
   (let [format (or format (keyword (state/get-preferred-format)))]
     (case format
-      :org
-      "-----"
       :markdown
       "---"
       "")))
@@ -135,8 +127,6 @@
   [format]
   (let [format (or format (keyword (state/get-preferred-format)))]
     (case format
-      :org
-      "*"
       :markdown
       "**"
       "")))
@@ -145,8 +135,6 @@
   [format]
   (let [format (or format (keyword (state/get-preferred-format)))]
     (case format
-      :org
-      "/"
       :markdown
       "*"
       "")))
@@ -154,8 +142,6 @@
   [format]
   (let [format (or format (keyword (state/get-preferred-format)))]
     (case format
-      :org
-      "_"
       :markdown ;; no underline for markdown
       ""
       "")))
@@ -163,8 +149,6 @@
   [format]
   (let [format (or format (keyword (state/get-preferred-format)))]
     (case format
-      :org
-      "+"
       :markdown
       "~~"
       "")))
@@ -172,8 +156,6 @@
 (defn get-highlight
   [format]
   (case format
-    :org
-    "^^"
     :markdown
     "=="
     ""))
@@ -182,8 +164,6 @@
   [format]
   (let [format (or format (keyword (state/get-preferred-format)))]
     (case format
-      :org
-      "~"
       :markdown
       "`"
       "")))
@@ -191,28 +171,19 @@
 (defn get-empty-link-and-forward-pos
   [format]
   (case format
-    :org
-    ["[[][]]" 2]
     :markdown
     ["[]()" 1]
     ["" 0]))
 
 (defn link-format
-  [format label link]
+  [label link]
   (if (not-empty label)
-    (case format
-      :org
-      (util/format "[[%s][%s]]" link label)
-      :markdown
-      (util/format "[%s](%s)" label link))
+    (util/format "[%s](%s)" label link)
     link))
 
 (defn with-default-link
   [format link]
   (case format
-    :org
-    [(util/format "[[%s][]]" link)
-     (+ 4 (count link))]
     :markdown
     [(util/format "[](%s)" link)
      1]
@@ -221,9 +192,6 @@
 (defn with-label-link
   [format label link]
   (case format
-    :org
-    [(util/format "[[%s][%s]]" link label)
-     (+ 4 (count link) (count label))]
     :markdown
     [(util/format "[%s](%s)" label link)
      (+ 4 (count link) (count label))]
@@ -232,9 +200,6 @@
 (defn with-default-label
   [format label]
   (case format
-    :org
-    [(util/format "[[][%s]]" label)
-     2]
     :markdown
     [(util/format "[%s]()" label)
      (+ 3 (count label))]

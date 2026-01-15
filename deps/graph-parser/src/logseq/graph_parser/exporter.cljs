@@ -37,7 +37,8 @@
             [logseq.graph-parser.extract :as extract]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.utf8 :as utf8]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [logseq.graph-parser.text :as text]))
 
 (defn- add-missing-timestamps
   "Add updated-at or created-at timestamps if they doesn't exist"
@@ -1339,7 +1340,7 @@
     (cond
       (page-ref/page-ref? (str (first (:arguments (second embed-node)))))
       (let [page-uuid (get-page-uuid page-names-to-uuids
-                                     (some-> (page-ref/get-page-name (first (:arguments (second embed-node))))
+                                     (some-> (text/get-page-name (first (:arguments (second embed-node))))
                                              common-util/page-name-sanity-lc)
                                      {:block block})]
         (merge block
@@ -1766,11 +1767,16 @@
              (update :block/refs fix-block-uuids {:ref? true :properties (:block/properties b)})))
          blocks)))
 
+(defn- get-block-pattern
+  [format]
+  (let [format' (keyword format)]
+    (if (= format' :org) "*" "-")))
+
 (defn- extract-pages-and-blocks
   "Main fn which calls graph-parser to convert markdown into data"
   [db file content {:keys [extract-options import-state]}]
   (let [format (common-util/get-format file)
-        extract-options' (merge {:block-pattern (common-config/get-block-pattern format)
+        extract-options' (merge {:block-pattern (get-block-pattern format)
                                  :date-formatter "MMM do, yyyy"
                                  :uri-encoded? false
                                  ;; Alters behavior in gp-block
@@ -1779,7 +1785,7 @@
                                 extract-options
                                 {:db db})
         extracted
-        (cond (contains? common-config/mldoc-support-formats format)
+        (cond (contains? #{:org :markdown :md} format)
               (-> (extract/extract file content extract-options')
                   (update :pages (fn [pages]
                                    (map #(dissoc % :block.temp/original-page-name) pages)))
