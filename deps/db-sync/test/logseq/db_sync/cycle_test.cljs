@@ -1,70 +1,100 @@
 (ns logseq.db-sync.cycle-test
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
-            [logseq.db.frontend.schema :as db-schema]
-            [logseq.db-sync.cycle :as cycle]))
+            [logseq.db-sync.cycle :as cycle]
+            [logseq.db.test.helper :as db-test]))
 
 (defn- new-conn []
-  (d/create-conn db-schema/schema))
+  (db-test/create-conn))
 
-(deftest block-parent-cycle-test
+(defn- fix-cycle!
+  [temp-conn remote-tx-report rebase-tx-report]
+  (cycle/fix-cycle! temp-conn remote-tx-report rebase-tx-report {:transact! d/transact!}))
+
+(defn- create-page!
+  [conn title]
+  (let [page-uuid (random-uuid)]
+    (d/transact! conn [{:block/uuid page-uuid
+                        :block/name title
+                        :block/title title}])
+    page-uuid))
+
+(defn- block-eid
+  [db uuid]
+  (d/entid db [:block/uuid uuid]))
+
+(deftest block-parent-2-node-cycle-test
   (let [conn (new-conn)
+        page-uuid (create-page! conn "page")
+        a (random-uuid)
+        b (random-uuid)]
+    (d/transact! conn [{:block/uuid a
+                        :block/page [:block/uuid page-uuid]
+                        :block/parent [:block/uuid page-uuid]}
+                       {:block/uuid b
+                        :block/page [:block/uuid page-uuid]
+                        :block/parent [:block/uuid a]}])
+    (testing "breaks a 2-node :block/parent cycle and reparents to the page"
+      (let [remote-report (d/transact! conn [{:block/uuid a :block/parent [:block/uuid b]}])]
+        (fix-cycle! conn remote-report nil)
+        (let [a' (d/entity @conn [:block/uuid a])
+              b' (d/entity @conn [:block/uuid b])]
+          (is (= (block-eid @conn page-uuid) (:db/id (:block/parent a'))))
+          (is (= (block-eid @conn a) (:db/id (:block/parent b')))))))))
+
+(deftest block-parent-3-node-cycle-test
+  (let [conn (new-conn)
+        page-uuid (create-page! conn "page")
         a (random-uuid)
         b (random-uuid)
         c (random-uuid)]
-    (d/transact! conn [{:block/uuid a}
-                       {:block/uuid b :block/parent [:block/uuid a]}
-                       {:block/uuid c :block/parent [:block/uuid b]}])
-    (testing "detects a parent cycle"
-      (let [tx [{:block/uuid a :block/parent [:block/uuid c]}]
-            result (cycle/detect-cycle @conn tx)]
-        (is (= :block/parent (:attr result)))))
-    (testing "accepts a non-cycle update"
-      (let [tx [{:block/uuid c :block/parent [:block/uuid a]}]
-            result (cycle/detect-cycle @conn tx)]
-        (is (nil? result))))))
+    (d/transact! conn [{:block/uuid a
+                        :block/page [:block/uuid page-uuid]
+                        :block/parent [:block/uuid page-uuid]}
+                       {:block/uuid b
+                        :block/page [:block/uuid page-uuid]
+                        :block/parent [:block/uuid a]}
+                       {:block/uuid c
+                        :block/page [:block/uuid page-uuid]
+                        :block/parent [:block/uuid b]}])
+    (testing "breaks a 3-node :block/parent cycle and reparents to the page"
+      (let [remote-report (d/transact! conn [{:block/uuid a :block/parent [:block/uuid c]}])]
+        (fix-cycle! conn remote-report nil)
+        (let [a' (d/entity @conn [:block/uuid a])
+              b' (d/entity @conn [:block/uuid b])
+              c' (d/entity @conn [:block/uuid c])]
+          (is (= (block-eid @conn page-uuid) (:db/id (:block/parent a'))))
+          (is (= (block-eid @conn a) (:db/id (:block/parent b'))))
+          (is (= (block-eid @conn b) (:db/id (:block/parent c')))))))))
 
-(deftest class-extends-cycle-test
+(deftest class-extends-2-node-cycle-test
   (let [conn (new-conn)]
-    (d/transact! conn [{:db/ident :user.class/A :logseq.property.class/extends :user.class/B}
+    (d/transact! conn [{:db/ident :logseq.class/Root}
+                       {:db/ident :user.class/B}
+                       {:db/ident :user.class/A :logseq.property.class/extends :user.class/B}])
+    (testing "breaks a 2-node :logseq.property.class/extends cycle"
+      (let [remote-report (d/transact! conn [{:db/ident :user.class/B
+                                              :logseq.property.class/extends :user.class/A}])]
+        (fix-cycle! conn remote-report nil)
+        (let [b (d/entity @conn :user.class/B)
+              _ (prn :debug :extends (:logseq.property.class/extends b))
+              extends (set (map :db/ident (:logseq.property.class/extends b)))]
+          (is (not (contains? extends :user.class/A)))
+          (is (contains? extends :logseq.class/Root)))))))
+
+(deftest class-extends-3-node-cycle-with-multiple-values-test
+  (let [conn (new-conn)]
+    (d/transact! conn [{:db/ident :logseq.class/Root}
+                       {:db/ident :user.class/C}
+                       {:db/ident :user.class/D}
                        {:db/ident :user.class/B :logseq.property.class/extends :user.class/C}
-                       {:db/ident :user.class/C}])
-    (let [tx [{:db/ident :user.class/C :logseq.property.class/extends :user.class/A}]
-          result (cycle/detect-cycle @conn tx)]
-      (is (= :logseq.property.class/extends (:attr result))))))
-
-(deftest server-values-test
-  (let [conn (new-conn)
-        a (random-uuid)
-        b (random-uuid)]
-    (d/transact! conn [{:block/uuid a}
-                       {:block/uuid b :block/parent [:block/uuid a]}])
-    (let [tx [{:block/uuid b :block/parent [:block/uuid b]}]
-          values (cycle/server-values-for @conn tx :block/parent)]
-      (is (= {[:block/uuid b] [:block/uuid a]} values)))))
-
-(deftest numeric-entity-cycle-test
-  (let [conn (new-conn)
-        a (random-uuid)
-        b (random-uuid)]
-    (d/transact! conn [{:block/uuid a}
-                       {:block/uuid b :block/parent [:block/uuid a]}])
-    (let [a-eid (d/entid @conn [:block/uuid a])
-          tx [[:db/add a-eid :block/parent [:block/uuid b]]]
-          result (cycle/detect-cycle @conn tx)]
-      (is (= :block/parent (:attr result)))
-      (is (= [:block/uuid a] (:entity result))))))
-
-(deftest three-block-cycle-test
-  (let [conn (new-conn)
-        a (random-uuid)
-        b (random-uuid)
-        c (random-uuid)]
-    (d/transact! conn [{:block/uuid a}
-                       {:block/uuid b :block/parent [:block/uuid a]}
-                       {:block/uuid c :block/parent [:block/uuid b]}])
-    (let [a-eid (d/entid @conn [:block/uuid a])
-          tx [[:db/add a-eid :block/parent [:block/uuid c]]]
-          result (cycle/detect-cycle @conn tx)]
-      (is (= :block/parent (:attr result)))
-      (is (= [:block/uuid a] (:entity result))))))
+                       {:db/ident :user.class/A :logseq.property.class/extends :user.class/B}])
+    (testing "breaks a 3-node :logseq.property.class/extends cycle while preserving other extends"
+      (let [remote-report (d/transact! conn [{:db/ident :user.class/C
+                                              :logseq.property.class/extends #{:user.class/A :user.class/D}}])]
+        (fix-cycle! conn remote-report nil)
+        (let [c (d/entity @conn :user.class/C)
+              extends (set (map :db/ident (:logseq.property.class/extends c)))]
+          (is (not (contains? extends :user.class/A)))
+          (is (contains? extends :user.class/D))
+          (is (contains? extends :logseq.class/Root)))))))
