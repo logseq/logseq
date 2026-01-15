@@ -6,7 +6,6 @@
             [lambdaisland.glogi.console :as glogi-console]
             [logseq.common.authorization :as authorization]
             [logseq.db :as ldb]
-            [logseq.db-sync.checksum :as checksum]
             [logseq.db-sync.common :as common :refer [cors-headers]]
             [logseq.db-sync.malli-schema :as db-sync-schema]
             [logseq.db-sync.protocol :as protocol]
@@ -294,11 +293,10 @@
 (defn- pull-response [^js self since]
   (let [sql (.-sql self)
         txs (storage/fetch-tx-since sql since)
-        checksum (storage/get-or-init-checksum! sql)
         response {:type "pull/ok"
                   :t (t-now self)
                   :txs txs}]
-    (assoc response :checksum checksum)))
+    response))
 
 ;; FIXME: memory limit, should re-download graph using sqlite table rows
 ;; (defn- snapshot-response [^js self]
@@ -317,8 +315,7 @@
       (common/sql-exec sql "delete from tx_log")
       (common/sql-exec sql "delete from sync_meta")
       (storage/init-schema! sql)
-      (storage/set-t! sql 0)
-      (storage/set-checksum! sql (checksum/initial-chain-checksum)))
+      (storage/set-t! sql 0))
     (when (seq rows)
       (doseq [[addr content addresses] rows]
         (common/sql-exec sql
@@ -361,8 +358,7 @@
           (if (and (map? new-t) (= "tx/reject" (:type new-t)))
             new-t
             {:type "tx/batch/ok"
-             :t new-t
-             :checksum (storage/get-or-init-checksum! (.-sql self))}))
+             :t new-t}))
         {:type "tx/reject"
          :reason "empty tx data"}))))
 
