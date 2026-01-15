@@ -55,7 +55,6 @@
  :search-item/no-result "Tidak ada hasil yang cocok"
  :help/context-menu "Blokir menu konteks"
  :help/markdown-syntax "Sintaks penurunan harga"
- :help/org-mode-syntax "Sintaks mode org"
  :bold "Cetak tebal"
  :italics "Cetak miring"
  :highlight "Sorot"

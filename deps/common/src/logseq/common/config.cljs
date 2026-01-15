@@ -72,14 +72,6 @@
   [path]
   (string/starts-with? path default-draw-directory))
 
-;; TODO: rename
-(defonce mldoc-support-formats
-  #{:org :markdown :md})
-
-(defn mldoc-support?
-  [format]
-  (contains? mldoc-support-formats (keyword format)))
-
 (defn text-formats
   []
   #{:json :org :md :yml :dat :asciidoc :rst :txt :markdown :adoc :html :js :ts :edn :clj :ml :rb :ex :erl :java :php :c :css
@@ -89,14 +81,7 @@
   []
   #{:gif :svg :jpeg :ico :png :jpg :bmp :webp})
 
-(defn get-block-pattern
-  [format]
-  (let [format' (keyword format)]
-    (case format'
-      :org
-      "*"
-
-      "-")))
+(defonce block-pattern "-")
 
 (def file-only-config
   "File only config keys that are deprecated in DB graphs along with

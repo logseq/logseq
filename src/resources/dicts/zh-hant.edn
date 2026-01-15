@@ -21,7 +21,6 @@
  :search-item/page "頁面"
  :help/context-menu "區塊內容選單"
  :help/markdown-syntax "Markdown 格式"
- :help/org-mode-syntax "Org-mode 格式"
  :bold "粗體"
  :italics "斜體"
  :highlight "高亮"

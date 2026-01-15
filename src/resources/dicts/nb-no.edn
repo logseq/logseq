@@ -19,7 +19,6 @@
  :help/open-link-in-sidebar "Åpne lenke i sidestolpe"
  :help/context-menu "Kontekstmeny"
  :help/markdown-syntax "Markdown syntaks"
- :help/org-mode-syntax "Org mode syntaks"
  :bold "Fet"
  :italics "Kursiv"
  :highlight "Markering"

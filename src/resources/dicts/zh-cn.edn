@@ -47,7 +47,6 @@
  :search-item/no-result "未找到匹配项"
  :help/context-menu "右键菜单"
  :help/markdown-syntax "Markdown 语法"
- :help/org-mode-syntax "Org Mode 语法"
  :bold "粗体"
  :italics "斜体"
  :highlight "高亮"

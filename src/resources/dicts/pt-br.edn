@@ -64,7 +64,6 @@
  :search-item/no-result "Nenhum resultado correspondente"
  :help/context-menu "Bloquear menu de contexto"
  :help/markdown-syntax "Sintaxe de Markdown"
- :help/org-mode-syntax "Sintaxe de Org mode"
  :bold "Negrito"
  :italics "Itálico"
  :highlight "Destaque"

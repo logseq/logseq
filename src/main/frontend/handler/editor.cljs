@@ -1645,7 +1645,6 @@
         label (or label "")]
     (case (keyword format)
       :markdown (util/format "[%s](%s)" label link)
-      :org (util/format "[[%s][%s]]" link label)
       nil)))
 
 (defn- get-image-link
@@ -1653,8 +1652,7 @@
   (let [link (or link "")
         label (or label "")]
     (case (keyword format)
-      :markdown (util/format "![%s](%s)" label link)
-      :org (util/format "[[%s]]"))))
+      :markdown (util/format "![%s](%s)" label link))))
 
 (defn handle-command-input-close [id]
   (state/set-editor-show-input! nil)

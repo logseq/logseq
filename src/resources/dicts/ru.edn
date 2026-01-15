@@ -26,7 +26,6 @@
  :search-item/page                                     "Страница"
  :help/context-menu                                    "Контекстное меню блока"
  :help/markdown-syntax                                 "Markdown синтаксис"
- :help/org-mode-syntax                                 "Org-mode синтаксис"
  :bold                                                 "Жирный"
  :italics                                              "Курсив"
  :highlight                                            "Выделение"

@@ -39,7 +39,6 @@
  :search-item/no-result  "نتایجی یافت نشد"
  :help/context-menu    "فهرست زمینه‌ای بلوک"
  :help/markdown-syntax "نحو مارک‌داون"
- :help/org-mode-syntax "نحو حالت Org"
  :bold "ضخیم"
  :italics "کج"
  :strikethrough "خط‌زده"

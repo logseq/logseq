@@ -10,7 +10,6 @@
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
-            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.graph-parser.block :as gp-block]
@@ -20,12 +19,16 @@
             [logseq.graph-parser.whiteboard :as gp-whiteboard]
             [medley.core :as medley]))
 
+(defn- mldoc-support?
+  [format']
+  (contains? #{:org :markdown :md} (keyword format')))
+
 (defn- filepath->page-name
   [filepath]
   (when-let [file-name (last (string/split filepath #"/"))]
     (let [result (first (common-util/split-last "." file-name))
           ext (string/lower-case (common-util/get-file-ext filepath))]
-      (if (or (common-config/mldoc-support? ext) (= "edn" ext))
+      (if (or (mldoc-support? ext) (= "edn" ext))
         (common-util/safe-decode-uri-component (string/replace result "." "/"))
         result))))
 
@@ -117,7 +120,7 @@
                                     (string? title)
                                     title))
             file-name (when-let [result (path->file-body file)]
-                        (if (common-config/mldoc-support? (common-util/get-file-ext file))
+                        (if (mldoc-support? (common-util/get-file-ext file))
                           (title-parsing result filename-format)
                           result))]
         (or property-name

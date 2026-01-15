@@ -48,11 +48,9 @@
         (string/join "\n"
                      (mapv (fn [p] (->> (string/trim p)
                                         ((fn [p]
-                                           (if (util/safe-re-find (if (= format :org)
-                                                                    #"\s*\*+\s+"
-                                                                    #"\s*-\s+") p)
+                                           (if (util/safe-re-find #"\s*-\s+" p)
                                              p
-                                             (str (if (= format :org) "* " "- ") p))))))
+                                             (str "- " p))))))
                            paragraphs))]
     (paste-text-parseable format updated-paragraphs)))
 
@@ -81,15 +79,13 @@
 
 (defn- selection-within-link?
   [selection-and-format]
-  (let [{:keys [format selection-start selection-end selection value]} selection-and-format]
+  (let [{:keys [selection-start selection-end selection value]} selection-and-format]
     (and (not= selection-start selection-end)
-         (->> (case format
-                :markdown (util/re-pos #"\[.*?\]\(.*?\)" value)
-                :org (util/re-pos #"\[\[.*?\]\[.*?\]\]" value))
+         (->> (util/re-pos #"\[.*?\]\(.*?\)" value)
               (some (fn [[start-index matched-text]]
                       (and (<= start-index selection-start)
                            (>= (+ start-index (count matched-text)) selection-end)
-                           (clojure.string/includes? matched-text selection))))
+                           (string/includes? matched-text selection))))
               some?))))
 
 ;; See https://developer.chrome.com/blog/web-custom-formats-for-the-async-clipboard-api/
@@ -111,10 +107,6 @@
 (defn- markdown-blocks?
   [text]
   (boolean (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text)))
-
-(defn- org-blocks?
-  [text]
-  (boolean (util/safe-re-find #"(?m)^\s*\*+\s+" text)))
 
 (defn- get-revert-cut-txs
   "Get reverted previous cut tx when paste"
@@ -165,17 +157,16 @@
       (let [format (or (db/get-page-format (state/get-current-page)) :markdown)
             html-text (let [result (when-not (string/blank? html)
                                      (try
-                                       (html-parser/convert format html)
+                                       (html-parser/convert html)
                                        (catch :default e
                                          (log/error :exception e)
                                          nil)))]
                         (if (string/blank? result) nil result))
-            text-blocks? (if (= format :markdown) markdown-blocks? org-blocks?)
             text' (or html-text
                       (when (common-util/url? text)
                         (wrap-macro-url text))
                       text)
-            blocks? (text-blocks? text')]
+            blocks? (markdown-blocks? text')]
         (cond
           blocks?
           (paste-text-parseable format text')

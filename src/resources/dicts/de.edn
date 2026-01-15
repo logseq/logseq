@@ -145,7 +145,6 @@
  :help/forum-community "Forum"
  :help/markdown-syntax "Syntax von Markdown"
  :help/open-link-in-sidebar "Link in Seitenleiste öffnen"
- :help/org-mode-syntax "Syntax von Org-mode"
  :help/privacy "Datenschutzrichtlinie"
  :help/reference-autocomplete "Seitenverweis Autovervollständigung"
  :help/search "Suche Seiten/Blöcke/Befehle"

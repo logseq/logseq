@@ -16,7 +16,6 @@
  :help/open-link-in-sidebar "Apri il link nel pannello laterale"
  :help/context-menu "Menù contestuale del blocco"
  :help/markdown-syntax "Sintassi Markdown"
- :help/org-mode-syntax "Sintassi Org mode"
  :bold "Grassetto"
  :italics "Corsivo"
  :highlight "Evidenzia"
