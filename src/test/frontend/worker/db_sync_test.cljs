@@ -4,7 +4,7 @@
             [frontend.worker.db-sync :as db-sync]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.state :as worker-state]
-            [logseq.db-sync.checksum :as db-sync-checksum]
+            [logseq.db-sync.compare :as sync-compare]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]))
 
@@ -235,8 +235,8 @@
                  :logseq.property.embedding/hnsw-label-updated-at 1]]
           tx-2 [[:db/add [:block/uuid block-uuid]
                  :logseq.property.embedding/hnsw-label-updated-at 2]]
-          checksum-1 (db-sync-checksum/next-checksum nil tx-1)
-          checksum-2 (db-sync-checksum/next-checksum nil tx-2)]
+          checksum-1 (sync-compare/next-checksum nil tx-1)
+          checksum-2 (sync-compare/next-checksum nil tx-2)]
       (is (= checksum-1 checksum-2)))))
 
 (comment
@@ -254,15 +254,15 @@
     (let [block-uuid (random-uuid)
           tx-1 [[:db/add [:block/uuid block-uuid] :block/title "block"]]
           tx-2 [[:db/add [:block/uuid block-uuid] :block/title "block updated"]]
-          checksum-1 (db-sync-checksum/next-checksum nil tx-1)
-          checksum-2 (db-sync-checksum/next-checksum nil tx-2)]
+          checksum-1 (sync-compare/next-checksum nil tx-1)
+          checksum-2 (sync-compare/next-checksum nil tx-2)]
       (is (not= checksum-1 checksum-2)))))
 
 (deftest apply-remote-tx-checksum-validation-test
   (testing "apply-remote-tx honors checksum"
     (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
           tx-1 [[:db/add (:db/id child1) :block/title "child 1 remote"]]
-          expected (db-sync-checksum/next-checksum nil tx-1)]
+          expected (sync-compare/next-checksum nil tx-1)]
       (with-datascript-conns conn client-ops-conn
         (fn []
           (#'db-sync/apply-remote-tx!
