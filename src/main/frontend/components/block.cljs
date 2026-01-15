@@ -292,6 +292,7 @@
                    (ui/icon "copy") (t :asset/copy)])
                  (when (and local?
                             (not config/publishing?)
+                            (not (state/mobile?))
                             (block-image-editor/editable-image? asset-block image-src))
                    (shui/dropdown-menu-item
                     {:on-click (fn [e]
