@@ -552,7 +552,7 @@
                            (string/replace matched link (util/node-path.join url link))
                            matched)))
                       content)]
-        (format/to-html content :markdown (gp-mldoc/default-config :markdown))))
+        (format/to-html content (gp-mldoc/default-config :markdown))))
     (catch :default e
       (log/error :parse-user-md-exception e)
       content)))

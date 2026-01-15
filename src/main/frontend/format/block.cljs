@@ -5,7 +5,6 @@
   (:require [cljs.cache :as cache]
             [clojure.string :as string]
             [frontend.common.cache :as common.cache]
-            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.format :as format]
             [frontend.format.mldoc :as mldoc]
@@ -13,7 +12,8 @@
             [frontend.state :as state]
             [lambdaisland.glogi :as log]
             [logseq.graph-parser.block :as gp-block]
-            [logseq.graph-parser.property :as gp-property]))
+            [logseq.graph-parser.property :as gp-property]
+            [logseq.common.config :as common-config]))
 
 (defn extract-blocks
   "Wrapper around logseq.graph-parser.block/extract-blocks that adds in system state
@@ -23,7 +23,7 @@ and handles unexpected failure."
     (try
       (let [blocks (gp-block/extract-blocks blocks content format
                                             {:user-config (state/get-config)
-                                             :block-pattern (config/get-block-pattern format)
+                                             :block-pattern common-config/block-pattern
                                              :db (db/get-db repo)
                                              :date-formatter (state/get-date-formatter)
                                              :page-name page-name
@@ -53,7 +53,7 @@ and handles unexpected failure."
           ;; it enabled yet and can cause visible bugs when '#' is used
           blocks (if (:logseq.property.node/display-type block)
                    [block]
-                   (let [ast (format/to-edn title format parse-config)]
+                   (let [ast (format/to-edn title parse-config)]
                      (extract-blocks ast title format {})))
           new-block (first blocks)
           block (cond-> (merge block new-block)
@@ -67,9 +67,9 @@ and handles unexpected failure."
 (defonce *blocks-ast-cache (volatile! (cache/lru-cache-factory {} :threshold 5000)))
 
 (defn- parse-title-and-body-helper
-  [format content]
-  (let [parse-config (mldoc/get-default-config format)
-        ast (->> (format/to-edn content format parse-config)
+  [_format content]
+  (let [parse-config (mldoc/get-default-config :markdown)
+        ast (->> (format/to-edn content parse-config)
                  (map first))
         title (when (gp-block/heading-block? (first ast))
                 (:title (second (first ast))))
@@ -96,7 +96,7 @@ and handles unexpected failure."
                                   (:block/title block)))))
   ([_block-uuid format content]
    (when-not (string/blank? content)
-     (let [content (str (config/get-block-pattern format) " " (string/triml content))]
+     (let [content (str common-config/block-pattern " " (string/triml content))]
        (cached-parse-title-and-body-helper format content)))))
 
 (defn break-line-paragraph?

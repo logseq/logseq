@@ -2,7 +2,6 @@
   "DB-based graph implementation"
   (:require [clojure.string :as string]
             [frontend.commands :as commands]
-            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
@@ -16,7 +15,8 @@
             [frontend.util :as util]
             [logseq.db.frontend.content :as db-content]
             [logseq.outliner.op]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [logseq.common.config :as common-config]))
 
 (defn- remove-non-existed-refs!
   [refs]
@@ -54,7 +54,7 @@
                 (let [ast (mldoc/->edn (string/trim title) :markdown)
                       first-elem-type (first (ffirst ast))
                       block-with-title? (mldoc/block-with-title? first-elem-type)
-                      content' (str (config/get-block-pattern :markdown) (if block-with-title? " " "\n") title)
+                      content' (str common-config/block-pattern (if block-with-title? " " "\n") title)
                       parsed-block (block/parse-block (assoc block :block/title content'))
                       block' (-> (merge block parsed-block {:block/title title})
                                  (dissoc :block/format))]

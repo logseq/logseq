@@ -21,7 +21,6 @@
  :search-item/page "Сторінка"
  :help/context-menu "Контекстне меню блоку"
  :help/markdown-syntax "Синтаксис Markdown"
- :help/org-mode-syntax "Синтаксис Org-режиму"
  :bold "Жирний"
  :italics "Курсив"
  :highlight "Виділення"

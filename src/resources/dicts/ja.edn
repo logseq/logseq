@@ -64,7 +64,6 @@
  :search-item/no-result "一致する結果がありません"
  :help/context-menu "ブロックのコンテキストメニュー"
  :help/markdown-syntax "マークダウン文法"
- :help/org-mode-syntax "Org mode 文法"
  :bold "太字"
  :italics "斜体"
  :highlight "ハイライト"
