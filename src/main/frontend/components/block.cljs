@@ -289,6 +289,15 @@
                   {:on-click handle-copy!}
                   [:span.flex.items-center.gap-1
                    (ui/icon "copy") (t :asset/copy)])
+                 (when (and local? (not config/publishing?))
+                   (shui/dropdown-menu-item
+                    {:on-click (fn [e]
+                                 (util/stop e)
+                                 (state/pub-event! [:editor/show-block-image-editor
+                                                    asset-block
+                                                    {:src image-src}]))}
+                    [:span.flex.items-center.gap-1
+                     (ui/icon "photo-edit") (t :asset/edit)]))
                  (when (util/electron?)
                    (shui/dropdown-menu-item
                     {:on-click (fn [e]

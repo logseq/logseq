@@ -3,6 +3,7 @@
   (:require [clojure.core.async :as async]
             [clojure.core.async.interop :refer [p->c]]
             [frontend.components.assets :as assets]
+            [frontend.components.block-image-editor :as block-image-editor]
             [frontend.components.cmdk.core :as cmdk]
             [frontend.components.page :as component-page]
             [frontend.components.page-menu :as page-menu]
@@ -290,6 +291,14 @@
    {:id :edit-external-asset-source-dialog
     :title (str (if asset-block "Edit" "Create") " asset")
     :center? true}))
+
+(defmethod events/handle :editor/show-block-image-editor [[_ asset-block opts]]
+  (shui/dialog-open!
+   (block-image-editor/editor-content asset-block opts)
+   {:id :block-image-editor
+    :title "Edit Image"
+    :center? true
+    :content-props {:class "w-[640px] max-w-[90vw]"}}))
 
 (defmethod events/handle :user/fetch-info-and-graphs [[_]]
   (state/set-state! [:ui/loading? :login] false)
