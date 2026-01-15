@@ -30,7 +30,7 @@
        (p/resolved {:exit-code 1
                     :output (format/format-result {:status :error
                                                    :error (:error parsed)}
-                                                  {:json? false})})
+                                                  {})})
 
        :else
        (let [cfg (config/resolve-config (:options parsed))

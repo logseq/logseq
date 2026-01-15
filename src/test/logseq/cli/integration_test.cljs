@@ -1,5 +1,7 @@
 (ns logseq.cli.integration-test
-  (:require [cljs.test :refer [deftest is async]]
+  (:require [cljs.reader :as reader]
+            [cljs.test :refer [deftest is async]]
+            [clojure.string :as string]
             [frontend.test.node-helper :as node-helper]
             [frontend.worker.db-worker-node :as db-worker-node]
             [logseq.cli.main :as cli-main]
@@ -9,12 +11,19 @@
 
 (defn- run-cli
   [args url cfg-path]
-  (cli-main/run! (vec (concat args ["--base-url" url "--config" cfg-path "--output" "json"]))
-                 {:exit? false}))
+  (let [args-with-output (if (some #{"--output"} args)
+                           args
+                           (concat args ["--output" "json"]))]
+    (cli-main/run! (vec (concat args-with-output ["--base-url" url "--config" cfg-path]))
+                   {:exit? false})))
 
 (defn- parse-json-output
   [result]
   (js->clj (js/JSON.parse (:output result)) :keywordize-keys true))
+
+(defn- parse-edn-output
+  [result]
+  (reader/read-string (:output result)))
 
 (deftest test-cli-graph-list
   (async done
@@ -83,6 +92,30 @@
             (is (seq (get-in search-payload [:data :results])))
             (is (= "ok" (:status tree-payload)))
             (is (= "ok" (:status remove-payload)))
+            (p/let [_ ((:stop! daemon))]
+              (done)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))
+                     (done)))))))
+
+(deftest test-cli-output-formats-graph-list
+  (async done
+    (let [data-dir (node-helper/create-tmp-dir "db-worker")]
+      (-> (p/let [daemon (db-worker-node/start-daemon! {:host "127.0.0.1"
+                                                        :port 0
+                                                        :data-dir data-dir})
+                  url (str "http://127.0.0.1:" (:port daemon))
+                  cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                  json-result (run-cli ["graph" "list" "--output" "json"] url cfg-path)
+                  json-payload (parse-json-output json-result)
+                  edn-result (run-cli ["graph" "list" "--output" "edn"] url cfg-path)
+                  edn-payload (parse-edn-output edn-result)
+                  human-result (run-cli ["graph" "list" "--output" "human"] url cfg-path)]
+            (is (= 0 (:exit-code json-result)))
+            (is (= "ok" (:status json-payload)))
+            (is (= 0 (:exit-code edn-result)))
+            (is (= :ok (:status edn-payload)))
+            (is (not (string/starts-with? (:output human-result) "{:status")))
             (p/let [_ ((:stop! daemon))]
               (done)))
           (p/catch (fn [e]

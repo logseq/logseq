@@ -18,6 +18,13 @@
                                        {:output-format nil})]
       (is (= "ok" result)))))
 
+(deftest test-format-ignores-legacy-json-flag
+  (testing "json? flag does not override output-format"
+    (let [result (format/format-result {:status :ok :data {:message "ok"}}
+                                       {:output-format nil
+                                        :json? true})]
+      (is (= "ok" result)))))
+
 (deftest test-format-error
   (testing "json error via output-format"
     (let [result (format/format-result {:status :error :error {:code :boom :message "nope"}}
