@@ -21,7 +21,7 @@
   (let [error-message (atom nil)]
     (with-redefs [notification/show! (fn [msg _] (reset! error-message msg))
                   rfe/href (constantly "")]
-      (config-edn-common-handler/detect-deprecations "config.edn" config-body {})
+      (config-edn-common-handler/detect-deprecations "config.edn" config-body)
       (str @error-message))))
 
 (deftest validate-config-edn
@@ -61,8 +61,8 @@
 (deftest detect-deprecations
   (is (re-find
        #":editor/command-trigger.*is"
-       (deprecation-warnings-for "{:preferred-workflow :todo :editor/command-trigger \",\"}"))
+       (deprecation-warnings-for "{:editor/command-trigger \",\"}"))
       "Warning when there is a deprecation")
 
-  (is (= "" (deprecation-warnings-for "{:preferred-workflow :todo}"))
+  (is (= "" (deprecation-warnings-for "{}"))
       "No warning when there is no deprecation"))
