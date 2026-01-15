@@ -127,7 +127,7 @@
   [data-dir _sqlite pool-name]
   (p/let [repo-dir-path (repo-dir data-dir pool-name)
           _ (ensure-dir! repo-dir-path)
-          pool (js-obj)]
+          ^js pool (js-obj)]
     (set! (.-repoDir pool) repo-dir-path)
     (set! (.-getCapacity pool) (fn [] 1))
     (set! (.-pauseVfs pool) (fn [] nil))
@@ -146,7 +146,7 @@
       (fs/writeFile full-path (->buffer data)))))
 
 (defn- remove-vfs!
-  [pool]
+  [^js pool]
   (when pool
     (fs/rm (.-repoDir pool) #js {:recursive true :force true})))
 
