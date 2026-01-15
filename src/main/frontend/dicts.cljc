@@ -41,6 +41,7 @@
 (def dicts
   "Main dictionary map used by tongue to translate app"
   {:en      en-dicts
+   :ar      (edn-resource "dicts/ar.edn")
    :de      (edn-resource "dicts/de.edn")
    :nl      (edn-resource "dicts/nl.edn")
    :fr      (edn-resource "dicts/fr.edn")
@@ -62,11 +63,13 @@
    :uk      (edn-resource "dicts/uk.edn")
    :fa      (edn-resource "dicts/fa.edn")
    :id      (edn-resource "dicts/id.edn")
-   :cs      (edn-resource "dicts/cs.edn")})
+   :cs      (edn-resource "dicts/cs.edn")
+   })
 
 (def languages
   "List of languages presented to user"
-  [{:label "English" :value :en}
+  [{:label "العربية" :value :ar}
+   {:label "English" :value :en}
    {:label "Français" :value :fr}
    {:label "Deutsch" :value :de}
    {:label "Dutch (Nederlands)" :value :nl}
