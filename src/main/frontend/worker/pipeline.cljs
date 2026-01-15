@@ -530,12 +530,9 @@
 
 (defn invoke-hooks
   [conn {:keys [tx-meta] :as tx-report} context]
-  (let [{:keys [from-disk? new-graph? transact-new-graph-refs?]} tx-meta]
+  (let [{:keys [transact-new-graph-refs?]} tx-meta]
     (when-not transact-new-graph-refs?
       (cond
-        (or from-disk? new-graph?)
-        {:tx-report tx-report}
-
         ;; Rebuild refs for a new DB graph using EDN or when EDN data is imported.
         ;; Ref rebuilding happens here because transact-pipeline doesn't rebuild refs
         ;; for these cases

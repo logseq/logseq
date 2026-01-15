@@ -26,7 +26,7 @@
   ;; (prn :debug
   ;;      :tx-meta tx-meta
   ;;      :tx-data tx-data)
-  (let [{:keys [from-disk? new-graph? initial-pages? end?]} tx-meta
+  (let [{:keys [initial-pages? end?]} tx-meta
         tx-report {:tx-meta tx-meta
                    :tx-data tx-data}]
     (when (= repo (state/get-current-repo))
@@ -49,11 +49,6 @@
             (when end?
               (state/pub-event! [:init/commands])
               (ui-handler/re-render-root!)))
-
-          (or from-disk? new-graph?)
-          (do
-            (d/transact! conn tx-data tx-meta)
-            (ui-handler/re-render-root!))
 
           :else
           (do
