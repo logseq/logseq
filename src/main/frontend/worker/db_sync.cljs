@@ -356,7 +356,7 @@
     (when (and conn (= local-tx remote-tx))        ; rebase
       (when (empty? inflight)
         (when-let [ws (:ws client)]
-          (when (ws-open? ws)
+          (when (and (ws-open? ws) (worker-state/online?))
             (let [batch (pending-txs repo {:limit 50})]
               (when (seq batch)
                 (let [tx-ids (mapv :tx-id batch)
@@ -596,9 +596,10 @@
                            (p/resolved nil)))))
 
 (defn- apply-remote-tx!
-  [repo client tx-data & {:keys [expected-checksum]}]
+  [repo client tx-data* & {:keys [expected-checksum]}]
   (if-let [conn (worker-state/get-datascript-conn repo)]
-    (let [local-txs (pending-txs repo)
+    (let [tx-data (keep-last-update @conn tx-data*)
+          local-txs (pending-txs repo)
           *computed-checksum (atom nil)
           reversed-tx-data (->> local-txs
                                 (mapcat :reversed-tx)
