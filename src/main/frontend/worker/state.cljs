@@ -123,6 +123,10 @@
   []
   (:auth/id-token @*state))
 
+(defn online?
+  []
+  @(:thread-atom/online-event @*state))
+
 (comment
   (defn mobile?
     []
