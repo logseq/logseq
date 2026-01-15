@@ -85,7 +85,6 @@
   (let [defaults {:base-url "http://127.0.0.1:9101"
                   :timeout-ms 10000
                   :retries 0
-                  :json? false
                   :output-format nil
                   :config-path (default-config-path)}
         env (env-config)
