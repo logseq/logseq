@@ -73,7 +73,7 @@
   "This fn is the db version of file-handler/alter-file"
   [path content]
   (let [file-valid? (if (= path "logseq/config.edn")
-                      (do (config-edn-common-handler/detect-deprecations path content {:db-graph? true})
+                      (do (config-edn-common-handler/detect-deprecations path content)
                           (config-edn-common-handler/validate-config-edn path content repo-config-schema/Config-edn))
                       true)]
 
