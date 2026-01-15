@@ -88,7 +88,7 @@
                      (swap! *sse-clients disj res))))
 
 (defn- <invoke!
-  [proxy method direct-pass? args]
+  [^js proxy method direct-pass? args]
   (let [args' (if direct-pass?
                 (into-array (or args []))
                 (if (string? args)
