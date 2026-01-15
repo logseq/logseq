@@ -297,10 +297,11 @@
 
   - Computes candidates from remote + rebase tx reports for configured attrs.
   - Iteratively breaks cycles until stable."
-  [temp-conn remote-tx-report rebase-tx-report]
+  [temp-conn remote-tx-report rebase-tx-report & {:keys [transact!]
+                                                  :or {transact! ldb/transact!}}]
   (let [remote-touched-by-attr (touched-eids-many (:tx-data remote-tx-report))
         local-touched-by-attr  (touched-eids-many (:tx-data rebase-tx-report))
         candidates-by-attr     (union-candidates remote-touched-by-attr local-touched-by-attr)
         touched-info           (touched-info-by-attr remote-touched-by-attr local-touched-by-attr)]
     (when (seq candidates-by-attr)
-      (apply-cycle-repairs! ldb/transact! temp-conn candidates-by-attr touched-info default-attr-opts))))
+      (apply-cycle-repairs! transact! temp-conn candidates-by-attr touched-info default-attr-opts))))
