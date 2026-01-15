@@ -41,57 +41,56 @@
 (def dicts
   "Main dictionary map used by tongue to translate app"
   {:en      en-dicts
-   :ar      (edn-resource "dicts/ar.edn")
-   :de      (edn-resource "dicts/de.edn")
-   :nl      (edn-resource "dicts/nl.edn")
-   :fr      (edn-resource "dicts/fr.edn")
-   :zh-CN   (edn-resource "dicts/zh-cn.edn")
-   :zh-Hant (edn-resource "dicts/zh-hant.edn")
    :af      (edn-resource "dicts/af.edn")
+   :ar      (edn-resource "dicts/ar.edn")
    :ca      (edn-resource "dicts/ca.edn")
+   :cs      (edn-resource "dicts/cs.edn")
+   :de      (edn-resource "dicts/de.edn")
    :es      (edn-resource "dicts/es.edn")
+   :fa      (edn-resource "dicts/fa.edn")
+   :fr      (edn-resource "dicts/fr.edn")
+   :id      (edn-resource "dicts/id.edn")
+   :it      (edn-resource "dicts/it.edn")
+   :ja      (edn-resource "dicts/ja.edn")
+   :ko      (edn-resource "dicts/ko.edn")
+   :nl      (edn-resource "dicts/nl.edn")
    :nb-NO   (edn-resource "dicts/nb-no.edn")
+   :pl      (edn-resource "dicts/pl.edn")
    :pt-BR   (edn-resource "dicts/pt-br.edn")
    :pt-PT   (edn-resource "dicts/pt-pt.edn")
    :ru      (edn-resource "dicts/ru.edn")
-   :ja      (edn-resource "dicts/ja.edn")
-   :it      (edn-resource "dicts/it.edn")
-   :tr      (edn-resource "dicts/tr.edn")
-   :ko      (edn-resource "dicts/ko.edn")
-   :pl      (edn-resource "dicts/pl.edn")
    :sk      (edn-resource "dicts/sk.edn")
+   :tr      (edn-resource "dicts/tr.edn")
    :uk      (edn-resource "dicts/uk.edn")
-   :fa      (edn-resource "dicts/fa.edn")
-   :id      (edn-resource "dicts/id.edn")
-   :cs      (edn-resource "dicts/cs.edn")
-   })
+   :zh-CN   (edn-resource "dicts/zh-cn.edn")
+   :zh-Hant (edn-resource "dicts/zh-hant.edn")})
 
 (def languages
   "List of languages presented to user"
-  [{:label "العربية" :value :ar}
-   {:label "English" :value :en}
-   {:label "Français" :value :fr}
-   {:label "Deutsch" :value :de}
-   {:label "Dutch (Nederlands)" :value :nl}
-   {:label "简体中文" :value :zh-CN}
-   {:label "繁體中文" :value :zh-Hant}
+  [{:label "English" :value :en}
    {:label "Afrikaans" :value :af}
+   {:label "العربية" :value :ar}
    {:label "Català" :value :ca}
+   {:label "Čeština" :value :cs}
+   {:label "Deutsch" :value :de}
    {:label "Español" :value :es}
+   {:label "فارسی" :value :fa}
+   {:label "Français" :value :fr}
+   {:label "Bahasa Indonesia" :value :id}
+   {:label "Italiano" :value :it}
+   {:label "日本語" :value :ja}
+   {:label "한국어" :value :ko}
+   {:label "Dutch (Nederlands)" :value :nl}
    {:label "Norsk (bokmål)" :value :nb-NO}
    {:label "Polski" :value :pl}
    {:label "Português (Brasileiro)" :value :pt-BR}
    {:label "Português (Europeu)" :value :pt-PT}
    {:label "Русский" :value :ru}
-   {:label "日本語" :value :ja}
-   {:label "Italiano" :value :it}
+   {:label "Slovenčina" :value :sk}
    {:label "Türkçe" :value :tr}
    {:label "Українська" :value :uk}
-   {:label "한국어" :value :ko}
-   {:label "Slovenčina" :value :sk}
-   {:label "فارسی" :value :fa}
-   {:label "Bahasa Indonesia" :value :id}
-   {:label "Čeština" :value :cs}])
+   {:label "简体中文" :value :zh-CN}
+   {:label "繁體中文" :value :zh-Hant}])
 
 (assert (= (set (keys dicts)) (set (map :value languages)))
         "List of user-facing languages must match list of dictionaries")
