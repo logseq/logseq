@@ -3,11 +3,12 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [datascript.storage :refer [IStorage]]
-            [logseq.db-sync.checksum :as checksum]
             [logseq.db-sync.common :as common]
             [logseq.db.common.normalize :as db-normalize]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.frontend.schema :as db-schema]))
+
+;; TODO: GC kvs table
 
 (defn init-schema! [sql]
   (common/sql-exec sql "create table if not exists kvs (addr INTEGER primary key, content TEXT, addresses JSON)")
@@ -36,35 +37,6 @@
                         " on conflict(key) do update set value = excluded.value")
                    (name k)
                    (str v)))
-
-(defn get-checksum [sql]
-  (get-meta sql :checksum))
-
-(defn set-checksum! [sql checksum]
-  (set-meta! sql :checksum checksum))
-
-(defn- fetch-all-txs [sql]
-  (let [rows (common/get-sql-rows
-              (common/sql-exec sql
-                               "select t, tx from tx_log order by t asc"))]
-    (mapv (fn [row]
-            {:t (aget row "t")
-             :tx (aget row "tx")})
-          rows)))
-
-(defn get-or-init-checksum!
-  [sql]
-  (if-let [existing (get-checksum sql)]
-    existing
-    (let [txs (fetch-all-txs sql)
-          tx-data (mapcat (fn [entry]
-                            (common/read-transit (:tx entry)))
-                          txs)
-          checksum (if (seq tx-data)
-                     (checksum/next-checksum nil tx-data)
-                     (checksum/initial-chain-checksum))]
-      (set-checksum! sql checksum)
-      checksum)))
 
 (defn get-t [sql]
   (let [value (get-meta sql :t)]
@@ -142,19 +114,14 @@
       (restore-data-from-addr sql addr))))
 
 (defn- append-tx-for-tx-report
-  [sql {:keys [db-after db-before tx-data] :as tx-report}]
+  [sql {:keys [db-after db-before tx-data]}]
   (let [new-t (next-t! sql)
         created-at (common/now-ms)
         normalized-data (->> tx-data
                              db-normalize/replace-attr-retract-with-retract-entity
                              (db-normalize/normalize-tx-data db-after db-before))
-        tx-str (common/write-transit normalized-data)
-        prev-checksum (get-or-init-checksum! sql)
-        next-checksum (checksum/next-checksum
-                       prev-checksum
-                       (checksum/filter-tx-data tx-report))]
-    (append-tx! sql new-t tx-str created-at)
-    (set-checksum! sql next-checksum)))
+        tx-str (common/write-transit normalized-data)]
+    (append-tx! sql new-t tx-str created-at)))
 
 (defn- listen-db-updates!
   [sql conn]

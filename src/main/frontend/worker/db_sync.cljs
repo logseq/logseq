@@ -10,7 +10,7 @@
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [logseq.db-sync.checksum :as sync-checksum]
+            [logseq.db-sync.compare :as sync-compare]
             [logseq.db-sync.cycle :as sync-cycle]
             [logseq.db-sync.malli-schema :as db-sync-schema]
             [logseq.db-sync.order :as sync-order]
@@ -389,16 +389,6 @@
            (fn [prev]
              (p/then prev (fn [_] (task)))))))
 
-(defn- asset-type-from-files
-  [repo asset-uuid]
-  (p/let [paths (worker-state/<invoke-main-thread :thread-api/get-all-asset-file-paths repo)]
-    (some (fn [path]
-            (let [stem (path/file-stem path)
-                  ext (path/file-ext path)]
-              (when (and (seq stem) (seq ext) (= stem (str asset-uuid)))
-                ext)))
-          paths)))
-
 (defn- upload-remote-asset!
   [repo graph-id asset-uuid asset-type checksum]
   (let [base (http-base-url)]
@@ -609,11 +599,10 @@
                                                         cycle-tx-report]))))
 
 (defn- apply-remote-tx!
-  [repo client tx-data* & {:keys [expected-checksum]}]
+  [repo client tx-data* & {:keys [local-tx remote-tx]}]
   (if-let [conn (worker-state/get-datascript-conn repo)]
     (let [tx-data (keep-last-update @conn tx-data*)
           local-txs (pending-txs repo)
-          *computed-checksum (atom nil)
           reversed-tx-data (->> local-txs
                                 (mapcat :reversed-tx)
                                 reverse
@@ -634,17 +623,17 @@
                    ;; 2. transact remote tx-data
                    remote-tx-report (ldb/transact! temp-conn tx-data tx-meta)
                    _ (reset! *remote-tx-report remote-tx-report)
-                   computed-checksum (when expected-checksum
-                                       (sync-checksum/next-checksum
-                                        (client-op/get-local-checksum repo)
-                                        (sync-checksum/filter-tx-data remote-tx-report)))]
-
-               (reset! *computed-checksum computed-checksum)
-               ;; (when (and expected-checksum (not= expected-checksum computed-checksum))
-               ;;   (fail-fast :db-sync/checksum-mismatch
-               ;;              {:repo repo
-               ;;               :expected-checksum expected-checksum
-               ;;               :actual-checksum computed-checksum}))
+                   remote-received-tx-data (sync-compare/filter-received-tx-data remote-tx-report tx-data)
+                   remote-applied-tx-data (sync-compare/filter-applied-tx-data remote-tx-report)]
+               (when (not= remote-received-tx-data remote-applied-tx-data)
+                 (fail-fast :db-sync/compare-tx-data-mismatch
+                            {:repo repo
+                             :tx-data tx-data
+                             :remote-received-tx-data remote-received-tx-data
+                             :remote-applied-tx-data remote-applied-tx-data
+                             :local-tx local-tx
+                             :remote-tx remote-tx
+                             :tempids (:tempids remote-tx-report)}))
 
                (when has-local-changes?
                  ;; 3. Remove nodes which parents have been deleted locally
@@ -679,8 +668,6 @@
           (persist-local-tx! repo normalized-tx-data reversed-datoms {:op :rtc-rebase})))
 
       (when tx-report
-        (when-let [computed-checksum @*computed-checksum]
-          (client-op/update-local-checksum repo computed-checksum))
         (let [asset-uuids (asset-uuids-from-tx (:db-after remote-tx-report) (:tx-data remote-tx-report))]
           (when (seq asset-uuids)
             (enqueue-asset-downloads! repo client asset-uuids))))
@@ -707,10 +694,6 @@
         ;; Upload response
         "tx/batch/ok" (do
                         (require-non-negative remote-tx {:repo repo :type "tx/batch/ok"})
-                        ;; TODO: should be able to calculate the batch tx's checksum with
-                        ;; `(d/with current-db reversed-tx)`
-                        (when-let [checksum (:checksum message)]
-                          (client-op/update-local-checksum repo checksum))
                         (client-op/update-local-tx repo remote-tx)
                         (remove-pending-txs! repo @(:inflight client))
                         (reset! (:inflight client) [])
@@ -721,14 +704,14 @@
                     (let [txs (:txs message)
                           _ (require-non-negative remote-tx {:repo repo :type "pull/ok"})
                           _ (require-seq txs {:repo repo :type "pull/ok" :field :txs})
-                          expected-checksum (:checksum message)
                           txs-data (mapv (fn [data]
                                            (parse-transit (:tx data) {:repo repo :type "pull/ok"}))
                                          txs)
                           tx (mapcat identity txs-data)]
                       (when (seq tx)
                         (apply-remote-tx! repo client tx
-                                          :expected-checksum expected-checksum)
+                                          :local-tx local-tx
+                                          :remote-tx remote-tx)
                         (client-op/update-local-tx repo remote-tx)
                         (flush-pending! repo client))))
         "changed" (do
