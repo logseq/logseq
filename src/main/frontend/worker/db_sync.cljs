@@ -241,9 +241,9 @@
   (->> tx-data
        (keep (fn [datom]
                (when (and (:added datom)
-                          (= :logseq.property.asset/remote-metadata (:a datom)))
+                          (= :logseq.property.asset/size (:a datom)))
                  (when-let [ent (d/entity db (:e datom))]
-                   (some-> (:block/uuid ent) str)))))
+                   (:block/uuid ent)))))
        (distinct)))
 
 (defn- client-ops-conn [repo]
@@ -366,7 +366,6 @@
                                    (keep-last-update @conn)
                                    distinct)]
                   (when (seq txs)
-                    (prn :debug :upload :txs txs)
                     (reset! (:inflight client) tx-ids)
                     (send! ws {:type "tx/batch"
                                :t_before local-tx
@@ -399,21 +398,6 @@
               (when (and (seq stem) (seq ext) (= stem (str asset-uuid)))
                 ext)))
           paths)))
-
-(defn- delete-remote-asset!
-  [repo graph-id asset-uuid asset-type]
-  (let [base (http-base-url)]
-    (if (and (seq base) (seq graph-id) (seq asset-type))
-      (p/let [url (asset-url base graph-id (str asset-uuid) asset-type)
-              opts (with-auth-headers {:method "DELETE"})
-              resp (js/fetch url (clj->js opts))]
-        (when-not (.-ok resp)
-          (log/error :db-sync/asset-delete-failed {:repo repo
-                                                   :asset-uuid asset-uuid
-                                                   :status (.-status resp)})))
-      (log/info :db-sync/asset-delete-skipped {:repo repo
-                                               :asset-uuid asset-uuid
-                                               :reason :missing-base-or-type}))))
 
 (defn- upload-remote-asset!
   [repo graph-id asset-uuid asset-type checksum]
@@ -499,15 +483,7 @@
         (fail-fast :db-sync/missing-db {:repo repo :op :process-asset-op}))
 
       (contains? asset-op :remove-asset)
-      (-> (p/let [conn (worker-state/get-datascript-conn repo)
-                  ent (when conn (d/entity @conn [:block/uuid asset-uuid]))
-                  asset-type (if (seq (:logseq.property.asset/type ent))
-                               (:logseq.property.asset/type ent)
-                               (asset-type-from-files repo asset-uuid))]
-            (require-asset-field repo :asset-type asset-type {:op :remove-asset :asset-uuid asset-uuid})
-            (p/do!
-             (delete-remote-asset! repo graph-id asset-uuid asset-type)
-             (client-op/remove-asset-op repo asset-uuid)))
+      (-> (client-op/remove-asset-op repo asset-uuid)
           (p/catch (fn [e]
                      (log/error :db-sync/asset-delete-failed
                                 {:repo repo
