@@ -1,10 +1,10 @@
 (ns logseq.cli.commands
   "Command parsing and action building for the Logseq CLI."
   (:require ["fs" :as fs]
+            [babashka.cli :as cli]
             [cljs-time.coerce :as tc]
             [cljs.reader :as reader]
             [clojure.string :as string]
-            [clojure.tools.cli :as cli]
             [logseq.cli.config :as cli-config]
             [logseq.cli.transport :as transport]
             [logseq.common.config :as common-config]
@@ -12,83 +12,307 @@
             [logseq.common.util.date-time :as date-time-util]
             [promesa.core :as p]))
 
-(def ^:private command->keyword
-  {"graph-list" :graph-list
-   "graph-create" :graph-create
-   "graph-switch" :graph-switch
-   "graph-remove" :graph-remove
-   "graph-validate" :graph-validate
-   "graph-info" :graph-info
-   "add" :add
-   "remove" :remove
-   "search" :search
-   "tree" :tree})
+(def ^:private global-spec
+  {:help {:alias :h
+          :desc "Show help"
+          :coerce :boolean}
+   :config {:desc "Path to cli.edn"}
+   :base-url {:desc "Base URL for db-worker-node"}
+   :host {:desc "Host for db-worker-node"}
+   :port {:desc "Port for db-worker-node"
+          :coerce :long}
+   :auth-token {:desc "Auth token for db-worker-node"}
+   :repo {:desc "Graph name"}
+   :timeout-ms {:desc "Request timeout in ms"
+                :coerce :long}
+   :retries {:desc "Retry count for requests"
+             :coerce :long}
+   :output {:desc "Output format (human, json, edn)"}})
 
-(def ^:private cli-options
-  [["-h" "--help" "Show help"]
-   [nil "--config PATH" "Path to cli.edn"
-    :id :config-path]
-   [nil "--base-url URL" "Base URL for db-worker-node"]
-   [nil "--host HOST" "Host for db-worker-node"]
-   [nil "--port PORT" "Port for db-worker-node"
-    :parse-fn #(js/parseInt % 10)]
-   [nil "--auth-token TOKEN" "Auth token for db-worker-node"]
-   [nil "--repo REPO" "Graph name"]
-   [nil "--graph GRAPH" "Graph name (alias for --repo in graph commands)"]
-   [nil "--timeout-ms MS" "Request timeout in ms"
-    :parse-fn #(js/parseInt % 10)]
-   [nil "--retries N" "Retry count for requests"
-    :parse-fn #(js/parseInt % 10)]
-   [nil "--json" "Output JSON"
-    :id :json?
-    :default false]
-   [nil "--format FORMAT" "Output format (tree)"]
-   [nil "--limit N" "Limit results"
-    :parse-fn #(js/parseInt % 10)]
-   [nil "--page PAGE" "Page name"]
-   [nil "--block UUID" "Block UUID"]
-   [nil "--parent UUID" "Parent block UUID for add"]
-   [nil "--content TEXT" "Block content for add"]
-   [nil "--blocks EDN" "EDN vector of blocks for add"]
-   [nil "--blocks-file PATH" "EDN file of blocks for add"]
-   [nil "--text TEXT" "Search text"]])
+(def ^:private graph-spec
+  {:graph {:desc "Graph name"}})
 
-(defn parse-args
+(def ^:private content-add-spec
+  {:content {:desc "Block content for add"}
+   :blocks {:desc "EDN vector of blocks for add"}
+   :blocks-file {:desc "EDN file of blocks for add"}
+   :page {:desc "Page name"}
+   :parent {:desc "Parent block UUID for add"}})
+
+(def ^:private content-remove-spec
+  {:block {:desc "Block UUID"}
+   :page {:desc "Page name"}})
+
+(def ^:private content-search-spec
+  {:text {:desc "Search text"}
+   :limit {:desc "Limit results"
+           :coerce :long}})
+
+(def ^:private content-tree-spec
+  {:block {:desc "Block UUID"}
+   :page {:desc "Page name"}
+   :format {:desc "Output format (tree)"}})
+
+(defn- format-commands
+  [table]
+  (let [rows (->> table
+                  (filter (comp seq :cmds))
+                  (map (fn [{:keys [cmds desc spec]}]
+                         (let [command (str (string/join " " cmds)
+                                            (when (seq spec) " [options]"))]
+                           {:command command
+                            :desc desc}))))
+        width (apply max 0 (map (comp count :command) rows))]
+    (->> rows
+         (map (fn [{:keys [command desc]}]
+                (let [padding (apply str (repeat (- width (count command)) " "))]
+                  (cond-> (str "  " command padding)
+                    (seq desc) (str "  " desc)))))
+         (string/join "\n"))))
+
+(defn- group-summary
+  [group table]
+  (let [group-table (filter #(= group (first (:cmds %))) table)]
+    (string/join "\n"
+                 [(str "Usage: logseq-cli " group " <subcommand> [options]")
+                  ""
+                  "Subcommands:"
+                  (format-commands group-table)
+                  ""
+                  "Options:"
+                  (cli/format-opts {:spec global-spec})])))
+
+(defn- top-level-summary
+  [table]
+  (string/join "\n"
+               ["Usage: logseq-cli <command> [options]"
+                ""
+                "Commands:"
+                (format-commands table)
+                ""
+                "Options:"
+                (cli/format-opts {:spec global-spec})]))
+
+(defn- command-summary
+  [{:keys [cmds spec]}]
+  (string/join "\n"
+               [(str "Usage: logseq-cli " (string/join " " cmds) " [options]")
+                ""
+                "Options:"
+                (cli/format-opts {:spec spec})]))
+
+(defn- merge-spec
+  [spec]
+  (merge global-spec (or spec {})))
+
+(defn- normalize-opts
+  [opts]
+  (cond-> opts
+    (:config opts) (-> (assoc :config-path (:config opts))
+                       (dissoc :config))))
+
+(defn- ok-result
+  [command opts args summary]
+  {:ok? true
+   :command command
+   :options (normalize-opts opts)
+   :args (vec args)
+   :summary summary})
+
+(defn- missing-graph-result
+  [summary]
+  {:ok? false
+   :error {:code :missing-graph
+           :message "graph name is required"}
+   :summary summary})
+
+(defn- missing-content-result
+  [summary]
+  {:ok? false
+   :error {:code :missing-content
+           :message "content is required"}
+   :summary summary})
+
+(defn- missing-target-result
+  [summary]
+  {:ok? false
+   :error {:code :missing-target
+           :message "block or page is required"}
+   :summary summary})
+
+(defn- missing-search-result
+  [summary]
+  {:ok? false
+   :error {:code :missing-search-text
+           :message "search text is required"}
+   :summary summary})
+
+(defn- help-result
+  [summary]
+  {:ok? false
+   :help? true
+   :summary summary})
+
+(defn- invalid-options-result
+  [summary message]
+  {:ok? false
+   :error {:code :invalid-options
+           :message message}
+   :summary summary})
+
+(defn- unknown-command-result
+  [summary message]
+  {:ok? false
+   :error {:code :unknown-command
+           :message message}
+   :summary summary})
+
+(defn- command-entry
+  [cmds command desc spec]
+  (let [spec* (merge-spec spec)]
+    {:cmds cmds
+     :desc desc
+     :spec spec*
+     :restrict true
+     :fn (fn [{:keys [opts args]}]
+           {:command command
+            :cmds cmds
+            :spec spec*
+            :opts opts
+            :args args})}))
+
+(def ^:private table
+  [(command-entry ["graph" "list"] :graph-list "List graphs" {})
+   (command-entry ["graph" "create"] :graph-create "Create graph" graph-spec)
+   (command-entry ["graph" "switch"] :graph-switch "Switch current graph" graph-spec)
+   (command-entry ["graph" "remove"] :graph-remove "Remove graph" graph-spec)
+   (command-entry ["graph" "validate"] :graph-validate "Validate graph" graph-spec)
+   (command-entry ["graph" "info"] :graph-info "Graph metadata" graph-spec)
+   (command-entry ["block" "add"] :add "Add blocks" content-add-spec)
+   (command-entry ["block" "remove"] :remove "Remove block or page" content-remove-spec)
+   (command-entry ["block" "search"] :search "Search blocks" content-search-spec)
+   (command-entry ["block" "tree"] :tree "Show tree" content-tree-spec)])
+
+(def ^:private global-aliases
+  (->> global-spec
+       (keep (fn [[k {:keys [alias]}]]
+               (when alias
+                 [alias k])))
+       (into {})))
+
+(def ^:private global-flag-options
+  (->> global-spec
+       (keep (fn [[k {:keys [coerce]}]]
+               (when (= coerce :boolean) k)))
+       (set)))
+
+(defn- global-opt-key
+  [token]
+  (cond
+    (string/starts-with? token "--")
+    (keyword (subs token 2))
+
+    (and (string/starts-with? token "-")
+         (= 2 (count token)))
+    (get global-aliases (keyword (subs token 1)))
+
+    :else nil))
+
+(defn- parse-leading-global-opts
   [args]
-  (let [{:keys [options arguments errors summary]} (cli/parse-opts args cli-options)
-        command-str (first arguments)
-        command-args (vec (rest arguments))
-        command (get command->keyword command-str)]
+  (loop [remaining args
+         opts {}]
+    (if (empty? remaining)
+      {:opts opts :args []}
+      (let [token (first remaining)]
+        (if-let [opt-key (global-opt-key token)]
+          (if (contains? global-flag-options opt-key)
+            (recur (rest remaining) (assoc opts opt-key true))
+            (if-let [value (second remaining)]
+              (recur (drop 2 remaining) (assoc opts opt-key value))
+              {:opts opts :args (rest remaining)}))
+          {:opts opts :args remaining})))))
+
+(defn- unknown-command-message
+  [{:keys [dispatch wrong-input]}]
+  (string/join " " (cond-> (vec dispatch)
+                     wrong-input (conj wrong-input))))
+
+(defn- finalize-command
+  [summary {:keys [command opts args cmds spec]}]
+  (let [opts (normalize-opts opts)
+        args (vec args)
+        cmd-summary (command-summary {:cmds cmds :spec spec})
+        graph (or (:graph opts) (:repo opts))
+        has-args? (seq args)
+        has-content? (or (seq (:content opts))
+                         (seq (:blocks opts))
+                         (seq (:blocks-file opts))
+                         has-args?)]
     (cond
-      (seq errors)
-      {:ok? false
-       :error {:code :invalid-options
-               :message (string/join "\n" errors)}
-       :summary summary}
+      (:help opts)
+      (help-result cmd-summary)
 
-      (:help options)
-      {:ok? false
-       :help? true
-       :summary summary}
+      (and (#{:graph-create :graph-switch :graph-remove :graph-validate} command)
+           (not (seq graph)))
+      (missing-graph-result summary)
 
-      (nil? command-str)
-      {:ok? false
-       :error {:code :missing-command
-               :message "missing command"}
-       :summary summary}
+      (and (= command :add) (not has-content?))
+      (missing-content-result summary)
 
-      (nil? command)
-      {:ok? false
-       :error {:code :unknown-command
-               :message (str "unknown command: " command-str)}
-       :summary summary}
+      (and (= command :remove) (not (or (seq (:block opts)) (seq (:page opts)))))
+      (missing-target-result summary)
+
+      (and (= command :tree) (not (or (seq (:block opts)) (seq (:page opts)))))
+      (missing-target-result summary)
+
+      (and (= command :search) (not (or (seq (:text opts)) has-args?)))
+      (missing-search-result summary)
 
       :else
-      {:ok? true
-       :command command
-       :options options
-       :args command-args
-       :summary summary})))
+      (ok-result command opts args summary))))
+
+(defn- cli-error->result
+  [summary {:keys [msg]}]
+  (invalid-options-result summary (or msg "invalid options")))
+
+(defn parse-args
+  [raw-args]
+  (let [summary (top-level-summary table)
+        {:keys [opts args]} (parse-leading-global-opts raw-args)]
+    (if (empty? args)
+      (if (:help opts)
+        (help-result summary)
+        {:ok? false
+         :error {:code :missing-command
+                 :message "missing command"}
+         :summary summary})
+      (if (and (= 1 (count args)) (#{"graph" "block"} (first args)))
+        (help-result (group-summary (first args) table))
+        (try
+          (let [result (cli/dispatch table args {:spec global-spec})]
+            (if (nil? result)
+              (unknown-command-result summary (str "unknown command: " (string/join " " args)))
+              (finalize-command summary (update result :opts #(merge opts (or % {}))))))
+          (catch :default e
+            (let [{:keys [cause] :as data} (ex-data e)]
+              (cond
+                (= cause :input-exhausted)
+                (if (:help opts)
+                  (help-result summary)
+                  {:ok? false
+                   :error {:code :missing-command
+                           :message "missing command"}
+                   :summary summary})
+
+                (= cause :no-match)
+                (unknown-command-result summary (str "unknown command: " (unknown-command-message data)))
+
+                (some? data)
+                (cli-error->result summary data)
+
+                :else
+                (unknown-command-result summary (str "unknown command: " (string/join " " args)))))))))))
 
 (defn- graph->repo
   [graph]

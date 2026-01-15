@@ -22,6 +22,7 @@
   cljs-drag-n-drop/cljs-drag-n-drop     {:mvn/version "0.1.0"}
   cljs-http/cljs-http                   {:mvn/version "0.1.48"}
   org.babashka/sci                      {:mvn/version "0.3.2"}
+  org.babashka/cli                      {:mvn/version "0.8.67"}
   org.clj-commons/hickory               {:mvn/version "0.7.3"}
   hiccups/hiccups                       {:mvn/version "0.3.0"}
   tongue/tongue                         {:mvn/version "0.4.4"}
