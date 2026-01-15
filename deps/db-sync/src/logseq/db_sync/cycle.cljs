@@ -1,64 +1,87 @@
 (ns logseq.db-sync.cycle
-  "Generic cycle / bad-ref repair utilities for DataScript graphs.
+  "Generic cycle repair utilities for DataScript graphs.
 
-  Goal:
-  - Support multiple ref attributes that can form chains/cycles, e.g.
-    :block/parent, :logseq.property.class/extends, etc.
-    * Cycle repair (after rebase): detect & break cycles, preferably breaking edges
-      introduced by local rebase (if available).
+  Supports:
+  - :block/parent (cardinality-one)
+  - :logseq.property.class/extends (cardinality-many)
+
+  Runs AFTER rebase:
+  - Detect cycles reachable from touched entities and break enough edges until
+    the graph becomes acyclic (within a bounded number of iterations).
 
   Notes:
-  - We assume attributes are single-valued refs (cardinality-one).
-  - We intentionally keep repairs as simple datoms (db/retract + db/add) to avoid
-    triggering complex outliner logic."
-
+  - Repairs are plain datoms: [:db/retract e attr v] (and optional add).
+  - For cardinality-many attrs, we retract ONE edge on the detected cycle path
+    per iteration; we iterate to handle multiple/overlapping cycles."
   (:refer-clojure :exclude [cycle])
   (:require
    [datascript.core :as d]
    [logseq.db :as ldb]))
 
-;; FIXME: `extends` cardinality-many
-
 ;; -----------------------------------------------------------------------------
-;; Configure which ref attributes should be repaired, and how to find a safe target
+;; Config
 ;; -----------------------------------------------------------------------------
 
-(def ^:private repair-attrs
-  "Ref attributes that can form chains/cycles and should be repaired client-side."
-  #{:block/parent
-    :logseq.property.class/extends})
+(defn- entid
+  "Resolve to an entity id.
+   Accepts eid, entity map, or keyword ident."
+  [db x]
+  (cond
+    (nil? x) nil
+    (number? x) x
+    (map? x) (:db/id x)
+    (keyword? x) (d/entid db x)
+    :else x))
 
 (defn- safe-target-for-block-parent
   "Default safe target for :block/parent.
-   We attach to the page entity by default. If your tree requires a page-root BLOCK
-   instead of the page entity, replace this to return that block eid."
+   If your outliner requires a page-root BLOCK instead of the page entity,
+   replace this to return that block eid."
   [db e _attr _bad-v]
   (some-> (d/entity db e) :block/page :db/id))
 
 (defn- safe-target-for-class-extends
-  "Default safe target for :logseq.property.class/extends."
-  [_db _e _attr _bad-v]
-  :logseq.class/Root)
+  "Default safe target for :logseq.property.class/extends.
+   Must resolve to an existing entity. If you prefer 'retract only', return nil."
+  [db _e _attr _bad-v]
+  (d/entid db :logseq.class/Root))
 
 (def ^:private default-attr-opts
-  {;; Keep blocks inside a sane container
+  {;; Cardinality-one
    :block/parent
-   {:safe-target-fn safe-target-for-block-parent}
+   {:cardinality :one
+    :safe-target-fn safe-target-for-block-parent}
 
-   ;; For class inheritance cycles, safest default is to retract the edge.
+   ;; Cardinality-many
    :logseq.property.class/extends
-   {:safe-target-fn safe-target-for-class-extends}})
+   {:cardinality :many
+    :safe-target-fn safe-target-for-class-extends}})
+
+(def ^:private repair-attrs
+  (set (keys default-attr-opts)))
 
 ;; -----------------------------------------------------------------------------
 ;; Basics
 ;; -----------------------------------------------------------------------------
 
-(defn ref-eid
-  "Read a cardinality-one ref attribute as eid."
-  [db e attr]
-  (some-> (d/entity db e) (get attr) :db/id))
+(defn- ref-eids
+  "Read a ref attribute as a set of eids.
 
-(defn touched-eids
+  Supports:
+  - cardinality-one: returns #{v} or #{}
+  - cardinality-many: returns #{v1 v2 ...} or #{}"
+  [db e attr {:keys [cardinality] :or {cardinality :one}}]
+  (let [v (some-> (d/entity db e) (get attr))]
+    (case cardinality
+      :many (cond
+              (nil? v) #{}
+              (set? v) (into #{} (keep #(entid db %)) v)
+              (sequential? v) (into #{} (keep #(entid db %)) v)
+              :else (let [id (entid db v)] (if id #{id} #{})))
+      ;; :one
+      (let [id (entid db v)] (if id #{id} #{})))))
+
+(defn- touched-eids
   "Collect entity ids whose `attr` was added/changed (added=true) in tx-data."
   [tx-data attr]
   (->> tx-data
@@ -66,7 +89,7 @@
                (when (and added (= a attr)) e)))
        distinct))
 
-(defn touched-eids-many
+(defn- touched-eids-many
   "Collect touched entity ids for repair attrs.
    Returns {attr #{eid ...}}"
   [tx-data]
@@ -77,120 +100,176 @@
           repair-attrs))
 
 ;; -----------------------------------------------------------------------------
-;; Cycle detection
+;; Cycle detection (DFS; cardinality-one and cardinality-many)
 ;; -----------------------------------------------------------------------------
 
-(defn reachable-cycle
-  "Detect a ref-cycle reachable by repeatedly following (e --attr--> v).
+(defn- reachable-cycle
+  "Detect a ref-cycle reachable from `start-eid` following edges of `attr`.
 
   Returns a vector like [a b c a] or nil.
-  Only follows `attr` edges.
+  For cardinality-many attrs, we DFS across ALL outgoing edges.
 
-  `skip?` can be used to ignore certain edges in traversal."
-  [db start-eid attr {:keys [skip?] :as _attr-opts}]
+  attr-opts:
+  - :cardinality :one|:many
+  - :skip? (fn [db from attr to] -> boolean) ; ignore a specific edge"
+  [db start-eid attr {:keys [skip?] :as attr-opts}]
   (let [visited  (volatile! #{})
         stack    (volatile! [])
         in-stack (volatile! #{})
         cycle    (volatile! nil)]
-    (letfn [(next-eid [e]
-              (let [v (ref-eid db e attr)]
-                (when (and v (not (and skip? (skip? db e attr v))))
-                  v)))
+    (letfn [(neighbors [e]
+              (->> (ref-eids db e attr attr-opts)
+                   (remove nil?)
+                   (remove (fn [to] (and skip? (skip? db e attr to))))
+                   vec))
+            (record-cycle! [e]
+              (let [stk @stack
+                    idx (.indexOf stk e)]
+                (when (>= idx 0)
+                  (vreset! cycle (conj (subvec stk idx) e)))))
             (dfs! [e]
               (when-not @cycle
                 (cond
-                  (contains? @in-stack e)
-                  (let [stk @stack
-                        idx (.indexOf stk e)]
-                    (when (>= idx 0)
-                      (vreset! cycle (conj (subvec stk idx) e))))
-
-                  (contains? @visited e)
-                  nil
-
+                  (contains? @in-stack e) (record-cycle! e)
+                  (contains? @visited e)  nil
                   :else
                   (do
                     (vswap! visited conj e)
                     (vswap! in-stack conj e)
                     (vswap! stack conj e)
-                    (when-let [n (next-eid e)]
-                      (dfs! n))
+                    (doseq [n (neighbors e)]
+                      (when-not @cycle
+                        (dfs! n)))
                     (vswap! stack pop)
                     (vswap! in-stack disj e)))))]
       (dfs! start-eid)
       @cycle)))
 
+;; -----------------------------------------------------------------------------
+;; Breaking cycles
+;; -----------------------------------------------------------------------------
+
+(defn- cycle-edges
+  "Convert cycle path [a b c a] into directed edges [[a b] [b c] [c a]]."
+  [cycle]
+  (when (and (vector? cycle) (>= (count cycle) 2))
+    (mapv (fn [i] [(nth cycle i) (nth cycle (inc i))])
+          (range (dec (count cycle))))))
+
 (defn- pick-victim
   "Pick which node in the cycle to detach.
 
-  Inputs:
-  - cycle: [a b c a]
-  - local-touched?: (fn [eid] -> boolean) ; edge likely introduced by local rebase
-  - remote-touched?: (fn [eid] -> boolean) ; edge likely introduced by remote tx
-
-  Strategy:
-  1) Prefer nodes touched by local rebase
-  2) else nodes touched by remote
-  3) else first node"
-  [cycle local-touched? remote-touched?]
-  (let [nodes (vec (distinct (butlast cycle)))]
-    (or (some (fn [e] (when (local-touched? e) e)) nodes)
-        (some (fn [e] (when (remote-touched? e) e)) nodes)
+  Preference:
+  1) touched by local rebase
+  2) touched by remote
+  3) first node"
+  [cycle {:keys [local-touched remote-touched]}]
+  (let [nodes (vec (distinct (butlast cycle)))
+        local?  (fn [e] (contains? (or local-touched #{}) e))
+        remote? (fn [e] (contains? (or remote-touched #{}) e))]
+    (or (some (fn [e] (when (local? e) e)) nodes)
+        (some (fn [e] (when (remote? e) e)) nodes)
         (first nodes))))
 
-(defn break-cycle-tx
-  "Generate tx to break one cycle for one attr.
+(defn- break-cycle-edge!
+  "Given a detected cycle, retract ONE edge on the cycle path.
 
-  We detach victim by retracting its current (e attr v) and optionally add a safe
-  target from `safe-target-fn`. If safe-target-fn returns nil, we just retract.
+  Returns a tx vector (possibly with an add), or nil."
+  [db cycle attr {:keys [safe-target-fn skip?] :as attr-opts} touched]
+  (let [edges (cycle-edges cycle)
+        victim (pick-victim cycle touched)
+        [_from bad-v] (some (fn [[from _to :as e]]
+                              (when (= from victim) e))
+                            edges)
+        bad-v (entid db bad-v)]
+    (when (and victim bad-v)
+      (when-not (and skip? (skip? db victim attr bad-v))
+        ;; Ensure the edge still exists in current db.
+        (when (contains? (ref-eids db victim attr attr-opts) bad-v)
+          (let [safe (when safe-target-fn (safe-target-fn db victim attr bad-v))]
+            (prn :debug
+                 :victim victim
+                 :page-id (:db/id (:block/page (d/entity db victim)))
+                 :attr attr
+                 :safe safe
+                 :bad-v bad-v
+                 :fix-tx (cond
+                           (and safe (not= safe bad-v))
+                           [[:db/retract victim attr bad-v]
+                            [:db/add     victim attr safe]]
 
-  touched-info:
-  - {:local-touched #{...} :remote-touched #{...}} ; per attr
-  "
-  [db cycle attr {:keys [safe-target-fn skip?] :as _attr-opts} {:keys [local-touched remote-touched]}]
-  (when (seq cycle)
-    (let [local-touched?  (fn [e] (contains? (or local-touched #{}) e))
-          remote-touched? (fn [e] (contains? (or remote-touched #{}) e))
-          victim          (pick-victim cycle local-touched? remote-touched?)]
-      (when victim
-        (let [bad-v (ref-eid db victim attr)]
-          (when (and bad-v (not (and skip? (skip? db victim attr bad-v))))
-            (let [safe (when safe-target-fn (safe-target-fn db victim attr bad-v))]
-              (cond
-                (and safe (not= safe bad-v))
-                [[:db/retract victim attr bad-v]
-                 [:db/add     victim attr safe]]
+                           :else
+                           [[:db/retract victim attr bad-v]]))
+            (cond
+              (and safe (not= safe bad-v))
+              [[:db/retract victim attr bad-v]
+               [:db/add     victim attr safe]]
 
-                :else
-                [[:db/retract victim attr bad-v]]))))))))
+              :else
+              [[:db/retract victim attr bad-v]])))))))
 
-(defn apply-cycle-repairs!
-  "Detect & break cycles AFTER rebase.
+;; -----------------------------------------------------------------------------
+;; Iterative repair (THIS is the key fix)
+;; -----------------------------------------------------------------------------
+
+(defn- apply-cycle-repairs!
+  "Detect & break cycles AFTER rebase, iterating until stable.
+
+  Why iteration:
+  - With cardinality-many (extends), you can end up with multiple disjoint or
+    overlapping cycles after merging remote + local edges.
+  - Breaking one cycle edge may still leave other cycles (e.g. 1<->2 and 2<->3).
 
   Inputs:
-  - candidates-by-attr: {attr #{eid ...}}  (usually union of remote+local touched)
+  - candidates-by-attr: {attr #{eid ...}}
   - touched-by-attr: {attr {:local-touched #{...} :remote-touched #{...}}}
-  - attr-opts: {attr {:safe-target-fn ... :skip? ...}}
+  - attr-opts: {attr {:cardinality :one|:many :safe-target-fn ... :skip? ...}}
 
-  We de-dup repairs by `distinct` tx vectors to reduce repeated work."
+  We cap iterations to avoid infinite loops if something keeps reintroducing cycles."
   [transact! temp-conn candidates-by-attr touched-by-attr attr-opts]
-  (let [db @temp-conn
-        tx (->> candidates-by-attr
-                (mapcat (fn [[attr es]]
-                          (let [opts (get attr-opts attr {})
-                                touched (get touched-by-attr attr {})]
-                            (keep (fn [e]
-                                    (when-let [cycle (reachable-cycle db e attr opts)]
-                                      (prn :debug :detected-cycle cycle)
-                                      (break-cycle-tx db cycle attr opts touched)))
-                                  es))))
-                distinct
-                (apply concat))]
-    (when (seq tx)
-      (prn :debug :tx tx)
-      (transact! temp-conn tx {:outliner-op :fix-cycle :gen-undo-ops? false}))))
+  (let [max-iterations 16]
+    (loop [it 0
+           ;; Track edges we already retracted to avoid repeating identical work.
+           ;; Edge key is [e attr v].
+           seen-edges #{}]
+      (when (< it max-iterations)
+        (let [db @temp-conn
+              ;; Collect a set of edge-breaking txs for this iteration.
+              ;; We dedupe by edge key, not by tx vector.
+              {tx :tx
+               seen-edges' :seen}
+              (reduce
+               (fn [acc [attr es]]
+                 (let [opts    (merge {:cardinality :one} (get attr-opts attr {}))
+                       touched (get touched-by-attr attr {})]
+                   (reduce
+                    (fn [{:keys [tx seen] :as acc2} e]
+                      (if-let [cycle (reachable-cycle db e attr opts)]
+                        (do
+                          (prn :debug :cycle-detected cycle)
+                          (if-let [t (break-cycle-edge! db cycle attr opts touched)]
+                            (let [[_op e2 a2 v2] (first t)
+                                  edge [e2 a2 v2]]
+                              ;; Skip if we've already retracted this exact edge.
+                              (if (contains? seen edge)
+                                acc2
+                                {:tx (into tx t)
+                                 :seen (conj seen edge)}))
+                            acc2))
+                        acc2))
+                    acc
+                    es)))
+               {:tx [] :seen seen-edges}
+               candidates-by-attr)]
 
-(defn union-candidates
+          (if (seq tx)
+            (do
+              (transact! temp-conn tx {:outliner-op :fix-cycle :gen-undo-ops? false})
+              (recur (inc it) seen-edges'))
+            ;; No more cycles detected from these candidates => done
+            nil))))))
+
+(defn- union-candidates
   "Union remote + local candidates: {attr #{...}}"
   [remote-by-attr local-by-attr]
   (reduce
@@ -202,7 +281,7 @@
    {}
    (distinct (concat (keys remote-by-attr) (keys local-by-attr)))))
 
-(defn touched-info-by-attr
+(defn- touched-info-by-attr
   "Build {attr {:remote-touched #{...} :local-touched #{...}}}."
   [remote-by-attr local-by-attr]
   (reduce
@@ -214,13 +293,14 @@
    (distinct (concat (keys remote-by-attr) (keys local-by-attr)))))
 
 (defn fix-cycle!
+  "Entry point: call AFTER rebase.
+
+  - Computes candidates from remote + rebase tx reports for configured attrs.
+  - Iteratively breaks cycles until stable."
   [temp-conn remote-tx-report rebase-tx-report]
   (let [remote-touched-by-attr (touched-eids-many (:tx-data remote-tx-report))
-        local-touched-by-attr (touched-eids-many (:tx-data rebase-tx-report))
-        ;; Union candidates (remote + local) for cycle detection
-        candidates-by-attr (union-candidates remote-touched-by-attr local-touched-by-attr)
-
-        ;; Per-attr touched info to prefer breaking local edges first
-        touched-info (touched-info-by-attr remote-touched-by-attr local-touched-by-attr)]
+        local-touched-by-attr  (touched-eids-many (:tx-data rebase-tx-report))
+        candidates-by-attr     (union-candidates remote-touched-by-attr local-touched-by-attr)
+        touched-info           (touched-info-by-attr remote-touched-by-attr local-touched-by-attr)]
     (when (seq candidates-by-attr)
       (apply-cycle-repairs! ldb/transact! temp-conn candidates-by-attr touched-info default-attr-opts))))
