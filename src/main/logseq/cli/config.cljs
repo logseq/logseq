@@ -12,6 +12,18 @@
   (when (and (some? value) (not (string/blank? value)))
     (js/parseInt value 10)))
 
+(def ^:private output-formats
+  #{:human :json :edn})
+
+(defn- parse-output-format
+  [value]
+  (let [kw (cond
+             (keyword? value) value
+             (string? value) (-> value string/trim string/lower-case keyword)
+             :else nil)]
+    (when (output-formats kw)
+      kw)))
+
 (defn- default-config-path
   []
   (node-path/join (.homedir os) ".logseq" "cli.edn"))
@@ -57,6 +69,9 @@
       (seq (gobj/get env "LOGSEQ_CLI_RETRIES"))
       (assoc :retries (parse-int (gobj/get env "LOGSEQ_CLI_RETRIES")))
 
+      (seq (gobj/get env "LOGSEQ_CLI_OUTPUT"))
+      (assoc :output-format (parse-output-format (gobj/get env "LOGSEQ_CLI_OUTPUT")))
+
       (seq (gobj/get env "LOGSEQ_CLI_CONFIG"))
       (assoc :config-path (gobj/get env "LOGSEQ_CLI_CONFIG")))))
 
@@ -78,7 +93,14 @@
                         (:config-path env)
                         (:config-path defaults))
         file-config (or (read-config-file config-path) {})
+        output-format (or (parse-output-format (:output-format opts))
+                          (parse-output-format (:output opts))
+                          (parse-output-format (:output-format env))
+                          (parse-output-format (:output env))
+                          (parse-output-format (:output-format file-config))
+                          (parse-output-format (:output file-config)))
         merged (merge defaults file-config env opts {:config-path config-path})
         derived (build-base-url merged)]
     (cond-> merged
+      output-format (assoc :output-format output-format)
       (seq derived) (assoc :base-url derived))))

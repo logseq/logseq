@@ -9,7 +9,7 @@
 
 (defn- run-cli
   [args url cfg-path]
-  (cli-main/run! (vec (concat args ["--base-url" url "--config" cfg-path "--json"]))
+  (cli-main/run! (vec (concat args ["--base-url" url "--config" cfg-path "--output" "json"]))
                  {:exit? false}))
 
 (defn- parse-json-output
@@ -24,7 +24,7 @@
                                                         :data-dir data-dir})
                   url (str "http://127.0.0.1:" (:port daemon))
                   cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
-                  result (run-cli ["graph-list"] url cfg-path)
+                  result (run-cli ["graph" "list"] url cfg-path)
                   payload (parse-json-output result)]
             (is (= 0 (:exit-code result)))
             (is (= "ok" (:status payload)))
@@ -44,9 +44,9 @@
                   url (str "http://127.0.0.1:" (:port daemon))
                   cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                   _ (fs/writeFileSync cfg-path "{}")
-                  create-result (run-cli ["graph-create" "--graph" "demo-graph"] url cfg-path)
+                  create-result (run-cli ["graph" "create" "--graph" "demo-graph"] url cfg-path)
                   create-payload (parse-json-output create-result)
-                  info-result (run-cli ["graph-info"] url cfg-path)
+                  info-result (run-cli ["graph" "info"] url cfg-path)
                   info-payload (parse-json-output info-result)]
             (is (= 0 (:exit-code create-result)))
             (is (= "ok" (:status create-payload)))
@@ -68,15 +68,15 @@
                   url (str "http://127.0.0.1:" (:port daemon))
                   cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                   _ (fs/writeFileSync cfg-path "{}")
-                  _ (run-cli ["graph-create" "--graph" "content-graph"] url cfg-path)
-                  add-result (run-cli ["add" "--page" "TestPage" "--content" "hello world"] url cfg-path)
+                  _ (run-cli ["graph" "create" "--graph" "content-graph"] url cfg-path)
+                  add-result (run-cli ["block" "add" "--page" "TestPage" "--content" "hello world"] url cfg-path)
                   _ (parse-json-output add-result)
-                  search-result (run-cli ["search" "--text" "hello world"] url cfg-path)
+                  search-result (run-cli ["block" "search" "--text" "hello world"] url cfg-path)
                   search-payload (parse-json-output search-result)
-                  tree-result (run-cli ["tree" "--page" "TestPage" "--format" "json"] url cfg-path)
+                  tree-result (run-cli ["block" "tree" "--page" "TestPage" "--format" "json"] url cfg-path)
                   tree-payload (parse-json-output tree-result)
                   block-uuid (get-in tree-payload [:data :root :children 0 :uuid])
-                  remove-result (run-cli ["remove" "--block" (str block-uuid)] url cfg-path)
+                  remove-result (run-cli ["block" "remove" "--block" (str block-uuid)] url cfg-path)
                   remove-payload (parse-json-output remove-result)]
             (is (= 0 (:exit-code add-result)))
             (is (= "ok" (:status search-payload)))
