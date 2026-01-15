@@ -10,8 +10,8 @@
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [logseq.db-sync.checksum :as db-sync-checksum]
-            [logseq.db-sync.cycle :as db-sync-cycle]
+            [logseq.db-sync.checksum :as sync-checksum]
+            [logseq.db-sync.cycle :as sync-cycle]
             [logseq.db-sync.malli-schema :as db-sync-schema]
             [logseq.db-sync.order :as sync-order]
             [logseq.db.common.normalize :as db-normalize]
@@ -321,43 +321,6 @@
                      (contains? deleted-ids id)))))
     tx-data))
 
-(defn- remove-attr-updates
-  [db tx-data attr entity-ref]
-  (remove (fn [tx]
-            (and (vector? tx)
-                 (= attr (nth tx 2 nil))
-                 (entity-ref-matches? db entity-ref (nth tx 1 nil))))
-          tx-data))
-
-(defn- tx-entity-ref
-  [db entity-ref]
-  (or (entity-ref->entid db entity-ref)
-      (normalize-entity-ref entity-ref)))
-
-(defn- replace-parent-with-page-root
-  [db tx-data entity-ref]
-  (let [entity-entid (entity-ref->entid db entity-ref)
-        page-uuid (when entity-entid
-                    (some-> (d/entity db entity-entid) :block/page :block/uuid))
-        page-ref (when page-uuid [:block/uuid page-uuid])]
-    (cond-> (remove-attr-updates db tx-data :block/parent entity-ref)
-      page-ref
-      (conj [:db/add (tx-entity-ref db entity-ref) :block/parent page-ref]))))
-
-(defn- fix-cycle-updates
-  [db tx-data]
-  (loop [tx-data tx-data
-         attempt 0]
-    (if (>= attempt 4)
-      tx-data
-      (if-let [{:keys [attr entity]} (db-sync-cycle/detect-cycle db tx-data)]
-        (let [tx-data' (case attr
-                         :block/parent (replace-parent-with-page-root db tx-data entity)
-                         :logseq.property.class/extends (remove-attr-updates db tx-data attr entity)
-                         (remove-attr-updates db tx-data attr entity))]
-          (recur tx-data' (inc attempt)))
-        tx-data))))
-
 (defn- keep-last-update
   [db tx-data]
   (let [properties (->> (distinct (map :a tx-data))
@@ -378,8 +341,7 @@
         sanitized-tx-data (->> tx-data
                                db-normalize/replace-attr-retract-with-retract-entity-v2
                                (keep-last-update db)
-                               (drop-invalid-refs deleted-ids)
-                               (fix-cycle-updates db))]
+                               (drop-invalid-refs deleted-ids))]
     (when (not= tx-data sanitized-tx-data)
       (log/info :db-sync/tx-sanitized
                 {:diff (data/diff tx-data sanitized-tx-data)}))
@@ -656,12 +618,12 @@
                    reversed-tx-report (when has-local-changes?
                                         (ldb/transact! temp-conn reversed-tx-data tx-meta))
                    ;; 2. transact remote tx-data
-                   tx-report (ldb/transact! temp-conn tx-data tx-meta)
-                   _ (reset! *remote-tx-report tx-report)
+                   remote-tx-report (ldb/transact! temp-conn tx-data tx-meta)
+                   _ (reset! *remote-tx-report remote-tx-report)
                    computed-checksum (when expected-checksum
-                                       (db-sync-checksum/next-checksum
+                                       (sync-checksum/next-checksum
                                         (client-op/get-local-checksum repo)
-                                        (db-sync-checksum/filter-tx-data tx-report)))]
+                                        (sync-checksum/filter-tx-data remote-tx-report)))]
 
                (reset! *computed-checksum computed-checksum)
                ;; (when (and expected-checksum (not= expected-checksum computed-checksum))
@@ -679,7 +641,7 @@
                                                             (nil? (d/entity db e)))
                                                    (d/entity (:db-after reversed-tx-report) e)))
                                                (:tx-data reversed-tx-report)))
-                       remote-deleted-blocks (->> (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report))
+                       remote-deleted-blocks (->> (outliner-pipeline/filter-deleted-blocks (:tx-data remote-tx-report))
                                                   (map #(d/entity db (:db/id %))))
                        deleted-nodes (concat local-deleted-blocks remote-deleted-blocks)
                        deleted-ids (set (keep :block/uuid deleted-nodes))
@@ -708,9 +670,12 @@
                                               (prn :debug :pending-tx-data pending-tx-data
                                                    :rebased-tx-data rebased-tx-data)
                                               (when (seq rebased-tx-data)
-                                                (ldb/transact! temp-conn rebased-tx-data {:gen-undo-ops? false}))))]
-                     (sync-order/fix-duplicate-orders! temp-conn (concat (:tx-data tx-report)
-                                                                         (:tx-data rebase-tx-report))))))))
+                                                (ldb/transact! temp-conn rebased-tx-data {:gen-undo-ops? false}))))
+                         fix-cycle-tx-report (sync-cycle/fix-cycle! temp-conn remote-tx-report rebase-tx-report)]
+                     (sync-order/fix-duplicate-orders! temp-conn
+                                                       (mapcat :tx-data [remote-tx-report
+                                                                         rebase-tx-report
+                                                                         fix-cycle-tx-report])))))))
            {:listen-db (fn [{:keys [tx-data tx-meta]}]
                          (when (and has-local-changes? (not (:rtc-tx? tx-meta)))
                            (swap! *rebased-tx-data into tx-data)))})
