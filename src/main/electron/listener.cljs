@@ -88,6 +88,10 @@
                  (fn [args]
                    (state/pub-event! [:editor/quick-capture args])))
 
+  (safe-api-call "invokeCommand"
+                 (fn [args]
+                   (state/pub-event! [:editor/invoke-command args])))
+
   (safe-api-call "openNewWindowOfGraph"
                  ;; Handle open new window in renderer, until the destination graph doesn't rely on setting local storage
                  ;; No db cache persisting ensured. Should be handled by the caller
