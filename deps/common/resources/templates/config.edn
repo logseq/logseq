@@ -1,7 +1,6 @@
 {:meta/version 1
 
  ;; Hide empty block properties
- ;; This is _only_ for DB graphs.
  ;; Default value: false
  ;; :ui/hide-empty-properties? false
 
@@ -33,10 +32,6 @@
  ;; Enable flashcards.
  ;; Default value: true
  ;; :feature/enable-flashcards? true
-
- ;; Enable whiteboards.
- ;; Default value: true
- ;; :feature/enable-whiteboards? true
 
  ;; Disable the journal's built-in 'Scheduled tasks and deadlines' query.
  ;; Default value: false

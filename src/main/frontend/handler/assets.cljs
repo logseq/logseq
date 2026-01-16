@@ -128,7 +128,8 @@
    If path is relative path, return blob url or file url according to environment."
   ([path] (<make-asset-url path (try (js/URL. path) (catch :default _ nil))))
   ([path ^js js-url]
-   ;; path start with "/assets"(editor) or compatible for "../assets"(whiteboards)
+   ;; path start with "/assets"(editor)
+   ;; TODO: Remove compatible for "../assets" related to whiteboards?
    (if config/publishing?
      ;; Relative path needed since assets are not under '/' if published graph is not under '/'
      (string/replace-first path #"^/" "")

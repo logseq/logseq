@@ -33,11 +33,6 @@
   [entity]
   (has-tag? entity :logseq.class/Property))
 
-(defn whiteboard?
-  "Given a page entity or map, check if it is a whiteboard page"
-  [entity]
-  (has-tag? entity :logseq.class/Whiteboard))
-
 (defn closed-value?
   [entity]
   (some? (:block/closed-value-property entity)))
@@ -52,8 +47,7 @@
   (or (internal-page? entity)
       (journal? entity)
       (class? entity)
-      (property? entity)
-      (whiteboard? entity)))
+      (property? entity)))
 
 (defn asset?
   "Given an entity or map, check if it is an asset block"
@@ -80,7 +74,6 @@
   (let [ident->type {:logseq.class/Tag :class
                      :logseq.class/Property :property
                      :logseq.class/Journal :journal
-                     :logseq.class/Whiteboard :whiteboard
                      :logseq.class/Page :page}]
     (set (map #(ident->type (:db/ident %)) (:block/tags entity)))))
 

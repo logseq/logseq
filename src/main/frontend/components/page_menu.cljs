@@ -81,8 +81,7 @@
   [page]
   (when-let [page-name (and page (db/page? page) (:block/name page))]
     (let [page-title (str (:block/uuid page))
-          whiteboard? (ldb/whiteboard? page)
-          block? (and page (util/uuid-string? page-name) (not whiteboard?))
+          block? (and page (util/uuid-string? page-name))
           contents? (= page-name "contents")
           public? (:logseq.property/publishing-public? page)
           _favorites-updated? (state/sub :favorites/updated?)
@@ -116,8 +115,7 @@
             {:title   (t :export-page)
              :options {:on-click #(shui/dialog-open!
                                    (fn []
-                                     (export/export-blocks [(:block/uuid page)] {:whiteboard? whiteboard?
-                                                                                 :export-type :page}))
+                                     (export/export-blocks [(:block/uuid page)] {:export-type :page}))
                                    {:class "w-auto md:max-w-4xl max-h-[80vh] overflow-y-auto"})}})
 
           (when (and page (not config/publishing?))

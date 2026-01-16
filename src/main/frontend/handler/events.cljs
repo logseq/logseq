@@ -64,8 +64,7 @@
   (page-handler/init-commands!)
   ;; load config
   (repo-config-handler/restore-repo-config! graph)
-  (when-not (= :draw (state/get-current-route))
-    (route-handler/redirect-to-home!))
+  (route-handler/redirect-to-home!)
   (graph-handler/settle-metadata-to-local! {:last-seen-at (js/Date.now)}))
 
 ;; Parameters for the `persist-db` function, to show the notification messages
@@ -202,14 +201,6 @@
   (fsrs/update-due-cards-count)
   (when-not (mobile-util/native-platform?)
     (state/pub-event! [:graph/ready graph])))
-
-(defmethod handle :whiteboard-link [[_ shapes]]
-  (route-handler/go-to-search! :whiteboard/link)
-  (state/set-state! :whiteboard/linked-shapes shapes))
-
-(defmethod handle :whiteboard-go-to-link [[_ link]]
-  (route-handler/redirect! {:to :page
-                            :path-params {:name link}}))
 
 (defmethod handle :graph/save-db-to-disk [[_ _opts]]
   (persist-db/export-current-graph! {:succ-notification? true :force-save? true}))
