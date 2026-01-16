@@ -118,8 +118,8 @@
   (let [new-t (next-t! sql)
         created-at (common/now-ms)
         normalized-data (->> tx-data
-                             db-normalize/replace-attr-retract-with-retract-entity
                              (db-normalize/normalize-tx-data db-after db-before))
+        _ (prn :debug :normalized-data normalized-data)
         tx-str (common/write-transit normalized-data)]
     (append-tx! sql new-t tx-str created-at)))
 

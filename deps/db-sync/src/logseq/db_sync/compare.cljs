@@ -36,11 +36,12 @@
         (fn [[op e a v]]
           (if (= op :db.fn/retractEntity)
             (let [entity (d/entity db-before e)]
-              (map
+              (keep
                (fn [a]
                  (let [v (get entity a)
                        v' (if (de/entity? v) [:block/uuid (:block/uuid v)] v)]
-                   [:db/retract [:block/uuid (:block/uuid entity)] a v']))
+                   (when v'
+                     [:db/retract [:block/uuid (:block/uuid entity)] a v'])))
                compare-attrs))
             (when (contains? compare-attrs a)
               (let [e' (if (neg-int? e)

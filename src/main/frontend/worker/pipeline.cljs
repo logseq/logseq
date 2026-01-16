@@ -464,7 +464,8 @@
 (defn transact-pipeline
   "Compute extra tx-data and block/refs, should ensure it's a pure function and
   doesn't call `d/transact!` or `ldb/transact!`."
-  [repo {:keys [db-after tx-meta] :as tx-report}]
+  [repo {:keys [db-before db-after tx-meta] :as tx-report}]
+  (prn :debug :pipeline)
   (let [extra-tx-data (compute-extra-tx-data tx-report)
         tx-report* (if (seq extra-tx-data)
                      (let [result (d/with db-after extra-tx-data)]
@@ -474,7 +475,12 @@
                      tx-report)
         {:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report*)
         deleted-blocks (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report*))
-        deleted-block-ids (set (map :db/id deleted-blocks))
+        delete-views (mapcat
+                      (fn [item]
+                        (let [block (d/entity db-before (:db/id item))]
+                          (:logseq.property/_view-for block)))
+                      deleted-blocks)
+        deleted-block-ids (set (map :db/id (concat deleted-blocks delete-views)))
         blocks' (remove (fn [b] (deleted-block-ids (:db/id b))) blocks)
         block-refs (when (seq blocks')
                      (rebuild-block-refs repo tx-report* blocks'))
@@ -487,7 +493,8 @@
                                (when (:block/uuid (d/entity db-after db-id))
                                  {:db/id db-id
                                   :block/tx-id tx-id}))) updated-blocks))
-        block-refs-tx-id-data (concat block-refs tx-id-data)
+        delete-views-tx-data (map (fn [b] [:db/retractEntity (:db/id b)]) delete-views)
+        block-refs-tx-id-data (concat delete-views-tx-data block-refs tx-id-data)
         replace-tx-report (when (seq block-refs-tx-id-data)
                             (d/with (:db-after tx-report*) block-refs-tx-id-data))
         tx-report' (or replace-tx-report tx-report*)
