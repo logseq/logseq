@@ -190,7 +190,6 @@
   [db-after db-before tx-data]
   (->> tx-data
        remove-ignored-attrs
-       db-normalize/replace-attr-retract-with-retract-entity
        (db-normalize/normalize-tx-data db-after db-before)))
 
 (defn- reverse-tx-data
@@ -340,7 +339,7 @@
   [db deleted-ids tx-data]
   (let [tx-data (vec tx-data)
         sanitized-tx-data (->> tx-data
-                               db-normalize/replace-attr-retract-with-retract-entity-v2
+                               ;; db-normalize/replace-attr-retract-with-retract-entity-v2
                                (keep-last-update db)
                                (drop-invalid-refs deleted-ids))]
     (when (not= tx-data sanitized-tx-data)
@@ -605,8 +604,7 @@
           local-txs (pending-txs repo)
           reversed-tx-data (->> local-txs
                                 (mapcat :reversed-tx)
-                                reverse
-                                db-normalize/replace-attr-retract-with-retract-entity-v2)
+                                reverse)
           has-local-changes? (seq reversed-tx-data)
           *rebased-tx-data (atom [])
           *remote-tx-report (atom nil)
@@ -620,12 +618,15 @@
                    ;; 1. reverse local pending txs
                    reversed-tx-report (when has-local-changes?
                                         (ldb/transact! temp-conn reversed-tx-data tx-meta))
+                   _ (prn :debug :tx-data (distinct tx-data))
                    ;; 2. transact remote tx-data
                    remote-tx-report (ldb/transact! temp-conn tx-data tx-meta)
                    _ (reset! *remote-tx-report remote-tx-report)
                    remote-received-tx-data (sync-compare/filter-received-tx-data remote-tx-report tx-data)
                    remote-applied-tx-data (sync-compare/filter-applied-tx-data remote-tx-report)]
                (when (not= remote-received-tx-data remote-applied-tx-data)
+                 (prn :diff-tx-data-mismatch
+                      (data/diff remote-received-tx-data remote-applied-tx-data))
                  (fail-fast :db-sync/compare-tx-data-mismatch
                             {:repo repo
                              :tx-data tx-data

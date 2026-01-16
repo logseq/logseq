@@ -2,19 +2,34 @@
   "Normalize && denormalize eid for sync"
   (:require [datascript.core :as d]))
 
+(defn- remove-retract-entity-ref
+  [tx-data]
+  (let [retracted (-> (keep (fn [[op value]]
+                              (when (= op :db.fn/retractEntity)
+                                value)) tx-data)
+                      set)]
+    (if (seq retracted)
+      (remove (fn [item]
+                (and (= :db/retract (first item))
+                     (= 4 (count item))
+                     (contains? retracted (last item)))) tx-data)
+      tx-data)))
+
 (defn replace-attr-retract-with-retract-entity-v2
   [normalized-tx-data]
-  (map (fn [[op eid a v]]
-         (cond
-           (and (= op :db/retract) (= a :block/uuid))
-           [:db.fn/retractEntity eid]
-           (and a (some? v))
-           [op eid a v]
-           :else
-           [op eid]))
-       normalized-tx-data))
+  (->
+   (map (fn [[op eid a v]]
+          (cond
+            (and (= op :db/retract) (= a :block/uuid))
+            [:db.fn/retractEntity eid]
+            (and a (some? v))
+            [op eid a v]
+            :else
+            [op eid]))
+        normalized-tx-data)
+   remove-retract-entity-ref))
 
-(defn replace-attr-retract-with-retract-entity
+(defn- replace-attr-retract-with-retract-entity
   [tx-data]
   (let [e-datoms (->> (group-by first tx-data)
                       (sort-by first))]
@@ -52,6 +67,7 @@
 (defn normalize-tx-data
   [db-after db-before tx-data]
   (->> tx-data
+       replace-attr-retract-with-retract-entity
        sort-datoms
        (keep
         (fn [d]
@@ -75,4 +91,6 @@
                 (if added
                   [:db/add e' a v']
                   [:db/retract e' a v'])))
-            d)))))
+            d)))
+       remove-retract-entity-ref
+       distinct))

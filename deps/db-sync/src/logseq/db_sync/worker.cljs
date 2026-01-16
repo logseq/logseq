@@ -331,8 +331,7 @@
         conn (.-conn self)]
     (when-not conn
       (fail-fast :db-sync/missing-db {:op :apply-tx}))
-    (let [tx-data (->> (protocol/transit->tx txs)
-                       db-normalize/replace-attr-retract-with-retract-entity-v2)]
+    (let [tx-data (protocol/transit->tx txs)]
       (ldb/transact! conn tx-data {:op :apply-client-tx})
       (prn :debug :finished-db-transact)
       (let [new-t (storage/get-t sql)]
