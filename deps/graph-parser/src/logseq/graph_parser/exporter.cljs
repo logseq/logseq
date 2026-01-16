@@ -35,10 +35,9 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.extract :as extract]
-            [logseq.graph-parser.property :as gp-property]
+            [logseq.graph-parser.text :as text]
             [logseq.graph-parser.utf8 :as utf8]
-            [promesa.core :as p]
-            [logseq.graph-parser.text :as text]))
+            [promesa.core :as p]))
 
 (defn- add-missing-timestamps
   "Add updated-at or created-at timestamps if they doesn't exist"
@@ -323,17 +322,6 @@
    (:date-formatter config)
    "MMM do, yyyy"))
 
-(defn- config-whiteboard?
-  [path]
-  (and path
-       (string/includes? path (str "whiteboards" "/"))
-       (string/ends-with? path ".edn")))
-
-(defn- whiteboard-entity?
-  [entity]
-  (or (entity-util/whiteboard? entity)
-      (identical? "whiteboard" (:block/type entity))))
-
 (defn- journal-entity?
   [entity]
   (or (entity-util/journal? entity)
@@ -342,7 +330,7 @@
 (defn- page-entity?
   [entity]
   (or (entity-util/page? entity)
-      (contains? #{"page" "journal" "whiteboard"} (:block/type entity))))
+      (contains? #{"page" "journal"} (:block/type entity))))
 
 (defn- find-or-create-deadline-scheduled-value
   "Given a :block/scheduled or :block/deadline value, creates the datetime property value
@@ -457,8 +445,6 @@
   [db-ident]
   ;; Map of unique cases where the db graph keyword name is different than the file graph id
   (let [unique-file-ids {:logseq.property/order-list-type :logseq.order-list-type
-                         :logseq.property.tldraw/page :logseq.tldraw.page
-                         :logseq.property.tldraw/shape :logseq.tldraw.shape
                          :logseq.property/publishing-public? :public}]
     (or (get unique-file-ids db-ident)
         (keyword (name db-ident)))))
@@ -492,8 +478,7 @@
   #{:alias :tags :background-color :heading
     :query-table :query-properties :query-sort-by :query-sort-desc
     :ls-type :hl-type :hl-color :hl-page :hl-stamp :hl-value :file :file-path
-    :logseq.order-list-type :logseq.tldraw.page :logseq.tldraw.shape
-    :icon :public :exclude-from-graph-view :filters})
+    :logseq.order-list-type :icon :public :exclude-from-graph-view :filters})
 
 (assert (set/subset? file-built-in-property-names all-built-in-property-file-ids)
         "All file-built-in properties are used in db graph")
@@ -1039,35 +1024,31 @@
 (defn- update-block-refs
   "Updates the attributes of a block ref as this is where a new page is defined. Also
    updates block content effected by refs"
-  [block page-names-to-uuids {:keys [whiteboard?]}]
-  (let [ref-to-ignore? (if whiteboard?
-                         #(and (map? %) (:block/uuid %))
-                         #(and (vector? %) (= :block/uuid (first %))))]
-    (if (seq (:block/refs block))
-      (cond-> block
-        true
-        (update
-         :block/refs
-         (fn [refs]
-           (mapv (fn [ref]
-                   ;; Only keep :block/uuid as we don't want to re-transact page refs
-                   (if (map? ref)
-                     ;; a new page's uuid can change across blocks so rely on consistent one from pages-tx
-                     (if-let [existing-uuid (some->> (:block/name ref) (get @page-names-to-uuids))]
-                       [:block/uuid existing-uuid]
-                       [:block/uuid (:block/uuid ref)])
-                     ref))
-                 refs)))
-        (:block/title block)
-        (assoc :block/title
-               ;; TODO: Handle refs for whiteboard block which has none
-               (let [refs (->> (:block/refs block)
-                               (remove #(or (ref-to-ignore? %)
-                                  ;; ignore deadline related refs that don't affect content
-                                            (and (keyword? %) (db-malli-schema/internal-ident? %))))
-                               (map #(add-uuid-to-page-map % page-names-to-uuids)))]
-                 (db-content/title-ref->id-ref (:block/title block) refs {:replace-tag? false}))))
-      block)))
+  [block page-names-to-uuids]
+  (if (seq (:block/refs block))
+    (cond-> block
+      true
+      (update
+       :block/refs
+       (fn [refs]
+         (mapv (fn [ref]
+                 ;; Only keep :block/uuid as we don't want to re-transact page refs
+                 (if (map? ref)
+                   ;; a new page's uuid can change across blocks so rely on consistent one from pages-tx
+                   (if-let [existing-uuid (some->> (:block/name ref) (get @page-names-to-uuids))]
+                     [:block/uuid existing-uuid]
+                     [:block/uuid (:block/uuid ref)])
+                   ref))
+               refs)))
+      (:block/title block)
+      (assoc :block/title
+             (let [refs (->> (:block/refs block)
+                             (remove #(or (and (vector? %) (= :block/uuid (first %)))
+                                          ;; ignore deadline related refs that don't affect content
+                                          (and (keyword? %) (db-malli-schema/internal-ident? %))))
+                             (map #(add-uuid-to-page-map % page-names-to-uuids)))]
+               (db-content/title-ref->id-ref (:block/title block) refs {:replace-tag? false}))))
+    block))
 
 (defn- fix-pre-block-references
   "Point pre-block children to parents since pre blocks don't exist in db graphs"
@@ -1378,15 +1359,14 @@
           block' (-> prepared-block
                      (fix-pre-block-references pre-blocks page-names-to-uuids)
                      (fix-block-name-lookup-ref page-names-to-uuids)
-                     (update-block-refs page-names-to-uuids options)
+                     (update-block-refs page-names-to-uuids)
                      (update-block-tags db (:user-options options) per-file-state (:all-idents import-state))
                      (handle-embeds page-names-to-uuids walked-ast-blocks (select-keys options [:log-fn]))
                      (handle-quotes (select-keys options [:log-fn]))
                      (update-block-marker options)
                      (update-block-priority options)
                      add-missing-timestamps
-                   ;; old whiteboards may have :block/left
-                     (dissoc :block/left :block/format :block.temp/ast-blocks)
+                     (dissoc :block/format :block.temp/ast-blocks)
                   ;;  ((fn [x] (prn ::block-out x) x))
                      )]
     ;; Order matters as previous txs are referenced in block
@@ -1409,7 +1389,6 @@
         (journal-created-ats (:block/name m))
         (assoc :block/created-at (journal-created-ats (:block/name m))))
       add-missing-timestamps
-      (dissoc :block/whiteboard?)
       (update-page-tags db user-options per-file-state all-idents)))
 
 (defn- get-page-parents
@@ -1505,7 +1484,7 @@
 
 (defn- build-pages-tx
   "Given all the pages and blocks parsed from a file, return a map containing
-  all non-whiteboard pages to be transacted, pages' properties and additional
+  all pages to be transacted, pages' properties and additional
   data for subsequent steps"
   [conn pages blocks {:keys [import-state user-options]
                       :as options}]
@@ -1722,16 +1701,6 @@
      :property-pages-tx (concat property-pages-tx converted-property-pages-tx retract-page-tag-from-properties-tx)
      :property-page-properties-tx property-page-properties-tx}))
 
-(defn- update-whiteboard-blocks [blocks format]
-  (map (fn [b]
-         (if (seq (:block/properties b))
-           (-> (dissoc b :block/content)
-               (update :block/title #(gp-property/remove-properties format %)))
-           (cond-> (dissoc b :block/content)
-             (:block/content b)
-             (assoc :block/title (:block/content b)))))
-       blocks))
-
 (defn- fix-extracted-block-tags-and-refs
   "A tag or ref can have different :block/uuid's across extracted blocks. This makes
    sense for most in-app uses but not for importing where we want consistent identity.
@@ -1791,20 +1760,10 @@
                                    (map #(dissoc % :block.temp/original-page-name) pages)))
                   (update :blocks fix-extracted-block-tags-and-refs))
 
-              (config-whiteboard? file)
-              (-> (extract/extract-whiteboard-edn file content extract-options')
-                  (update :pages (fn [pages]
-                                   (->> pages
-                                        ;; migrate previous attribute for :block/title
-                                        (map #(-> %
-                                                  (assoc :block/title (or (:block/original-name %) (:block/title %))
-                                                         :block/tags #{:logseq.class/Whiteboard})
-                                                  (dissoc :block/type :block/original-name))))))
-                  (update :blocks update-whiteboard-blocks format))
-
               :else
-              (swap! (:ignored-files import-state) conj
-                     {:path file :reason :unsupported-file-format}))]
+              (when-not (re-find #"whiteboards/.*\.edn$" (str file))
+                (swap! (:ignored-files import-state) conj
+                       {:path file :reason :unsupported-file-format})))]
     ;; Annotation markdown pages are saved for later as they are dependant on the asset being annotated
     (if (string/starts-with? (str (path/basename file)) "hls__")
       (do
@@ -1893,16 +1852,8 @@
           old-properties (keys @(get-in options [:import-state :property-schemas]))
           ;; Build page and block txs
           {:keys [pages-tx page-properties-tx per-file-state existing-pages]} (build-pages-tx conn pages blocks tx-options)
-          whiteboard-pages (->> pages-tx
-                                ;; support old and new whiteboards
-                                (filter whiteboard-entity?)
-                                (map (fn [page-block]
-                                       (-> page-block
-                                           (assoc :logseq.property/ls-type :whiteboard-page)))))
           pre-blocks (->> blocks (keep #(when (:block/pre-block? %) (:block/uuid %))) set)
-
-          blocks-tx (let [tx-options' (assoc tx-options :whiteboard? (some? (seq whiteboard-pages)))]
-                      (<build-blocks-tx conn blocks pre-blocks per-file-state tx-options'))
+          blocks-tx (<build-blocks-tx conn blocks pre-blocks per-file-state tx-options)
           {:keys [property-pages-tx property-page-properties-tx] pages-tx' :pages-tx}
           (split-pages-and-properties-tx pages-tx old-properties existing-pages (:import-state options) @(:upstream-properties tx-options))
           ;; _ (when (seq property-pages-tx) (cljs.pprint/pprint {:property-pages-tx property-pages-tx}))
@@ -1927,12 +1878,12 @@
           blocks-index (set/union (set block-ids) (set block-refs-ids))
           ;; Order matters. pages-index and blocks-index needs to come before their corresponding tx for
           ;; uuids to be valid. Also upstream-properties-tx comes after blocks-tx to possibly override blocks
-          tx (concat whiteboard-pages pages-index page-properties-tx property-page-properties-tx pages-tx'' classes-tx' blocks-index blocks-tx)
+          tx (concat pages-index page-properties-tx property-page-properties-tx pages-tx'' classes-tx' blocks-index blocks-tx)
           tx' (common-util/fast-remove-nils tx)
-          ;; (prn :tx-counts (map #(vector %1 (count %2))
-          ;;                        [:whiteboard-pages :pages-index :page-properties-tx :property-page-properties-tx :pages-tx' :classes-tx :blocks-index :blocks-tx]
-          ;;                        [whiteboard-pages pages-index page-properties-tx property-page-properties-tx pages-tx' classes-tx blocks-index blocks-tx]))
-          ;; _ (when (not (seq whiteboard-pages)) (cljs.pprint/pprint {#_:property-pages-tx #_property-pages-tx :pages-tx pages-tx :tx tx'}))
+          ;; _ (prn :tx-counts (map #(vector %1 (count %2))
+          ;;                        [:pages-index :page-properties-tx :property-page-properties-tx :pages-tx' :classes-tx :blocks-index :blocks-tx]
+          ;;                        [pages-index page-properties-tx property-page-properties-tx pages-tx' classes-tx blocks-index blocks-tx]))
+          ;; _ (cljs.pprint/pprint {#_:property-pages-tx #_property-pages-tx :pages-tx pages-tx :tx tx'})
           main-tx-report (d/transact! conn tx' {::new-graph? true ::path file})
           _ (save-from-tx tx' options)
 
