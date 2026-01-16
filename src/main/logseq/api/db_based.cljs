@@ -381,3 +381,8 @@
           block (db-async/<get-block repo block-id)]
     (db-property-handler/remove-block-property! (:block/uuid block)
                                                 :logseq.property/icon)))
+
+(defn add-property-value-choices [property-id ^js choices]
+  (when-let [values (and property-id (bean/->clj choices))]
+    (db-property-handler/add-existing-values-to-closed-values!
+     property-id values)))
