@@ -226,7 +226,7 @@
   - attr-opts: {attr {:cardinality :one|:many :safe-target-fn ... :skip? ...}}
 
   We cap iterations to avoid infinite loops if something keeps reintroducing cycles."
-  [transact! temp-conn candidates-by-attr touched-by-attr attr-opts]
+  [transact! temp-conn candidates-by-attr touched-by-attr attr-opts tx-meta]
   (let [max-iterations 16]
     (loop [it 0
            ;; Track edges we already retracted to avoid repeating identical work.
@@ -264,7 +264,8 @@
 
           (if (seq tx)
             (do
-              (transact! temp-conn tx {:outliner-op :fix-cycle :gen-undo-ops? false})
+              (transact! temp-conn tx (merge tx-meta
+                                             {:outliner-op :fix-cycle :gen-undo-ops? false}))
               (recur (inc it) seen-edges'))
             ;; No more cycles detected from these candidates => done
             nil))))))
@@ -297,11 +298,11 @@
 
   - Computes candidates from remote + rebase tx reports for configured attrs.
   - Iteratively breaks cycles until stable."
-  [temp-conn remote-tx-report rebase-tx-report & {:keys [transact!]
+  [temp-conn remote-tx-report rebase-tx-report & {:keys [transact! tx-meta]
                                                   :or {transact! ldb/transact!}}]
   (let [remote-touched-by-attr (touched-eids-many (:tx-data remote-tx-report))
         local-touched-by-attr  (touched-eids-many (:tx-data rebase-tx-report))
         candidates-by-attr     (union-candidates remote-touched-by-attr local-touched-by-attr)
         touched-info           (touched-info-by-attr remote-touched-by-attr local-touched-by-attr)]
     (when (seq candidates-by-attr)
-      (apply-cycle-repairs! transact! temp-conn candidates-by-attr touched-info default-attr-opts))))
+      (apply-cycle-repairs! transact! temp-conn candidates-by-attr touched-info default-attr-opts tx-meta))))

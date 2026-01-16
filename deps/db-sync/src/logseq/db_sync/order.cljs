@@ -2,7 +2,7 @@
   (:require [datascript.core :as d]
             [logseq.db.common.order :as db-order]))
 
-(defn fix-duplicate-orders! [conn tx-data]
+(defn fix-duplicate-orders! [conn tx-data tx-meta]
   (let [db @conn
         updates (->> tx-data
                      (filter (fn [[e a v _tx added]] (and (= a :block/order) added e v))))
@@ -41,4 +41,4 @@
                []
                groups)]
     (when (seq fixes)
-      (d/transact! conn fixes {:op :fix-duplicate-order}))))
+      (d/transact! conn fixes (merge tx-meta {:op :fix-duplicate-order})))))

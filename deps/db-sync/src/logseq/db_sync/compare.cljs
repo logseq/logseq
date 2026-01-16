@@ -26,7 +26,8 @@
                        (or (eid->lookup db-before v) (eid->lookup db-after v))
                        v)]
               [op e' a v']))))
-       distinct
+       ;; e has been added and retracted in the batched tx data, so that we can ignore it
+       (remove (fn [[_op e]] (nil? e)))
        set))
 
 (defn filter-received-tx-data
@@ -53,4 +54,5 @@
                            [:block/uuid id])
                          v)]
                 [[op e' a v']])))))
+       (remove (fn [[_op e]] (nil? e)))
        set))
