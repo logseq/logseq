@@ -71,4 +71,4 @@
                                            (when (:db/id %) (vector :db.fn/retractEntity (:db/id %))))
                                         (:block/macros b)))
                                 retracted-blocks))]
-        (concat txs retracted-tx retract-history-tx macros-tx)))))
+        (concat retracted-tx retract-history-tx macros-tx)))))
