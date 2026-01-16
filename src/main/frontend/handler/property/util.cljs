@@ -13,9 +13,3 @@
   [block db-ident]
   (let [db (conn/get-db (state/get-current-repo))]
     (db-property/get-block-property-value db block db-ident)))
-
-(defn shape-block?
-  [block]
-  (let [repo (state/get-current-repo)
-        db (conn/get-db repo)]
-    (db-property/shape-block? db block)))
