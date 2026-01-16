@@ -3,6 +3,12 @@
     "version": "0.0.1",
     "private": true,
     "main": "static/electron.js",
+    "bin": {
+	"logseq": "static/logseq-cli.js"
+    },
+    "files": [
+	"static/db-worker-node.js"
+    ],
     "engines": {
         "node": ">=22.20.0"
     },
