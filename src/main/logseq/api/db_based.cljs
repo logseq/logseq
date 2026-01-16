@@ -212,36 +212,35 @@
         (sdk-utils/result->js result)))))
 
 (defn create-tag [title ^js opts]
-  (this-as
-   this
-   (when-not (string? title)
-     (throw (ex-info "Tag title should be a string" {:title title})))
-   (when (string/blank? title)
-     (throw (ex-info "Tag title shouldn't be empty" {:title title})))
-   (when (text/namespace-page? title)
-     (throw (ex-info "Tag title shouldn't include forward slash" {:title title})))
-   (p/let [opts (bean/->clj opts)
-           class-ident-namespace (api-block/resolve-class-prefix-for-db this)
-           opts' (assoc opts
-                        :redirect? false
-                        :class-ident-namespace class-ident-namespace)
-           tag-properties (:tagProperties opts)
-           tag (db-page-handler/<create-class! title opts')
-           properties (when (seq tag-properties)
-                        (p/all (map
-                                (fn [{:keys [name schema properties]}]
-                                  (let [name' (api-block/sanitize-user-property-name name)
-                                        property-ident (api-block/get-db-ident-from-property-name name' this)
-                                        property-entity (db/entity property-ident)]
-                                    (or property-entity ; property exists already
-                                        (upsert-property-aux this name schema {:properties properties}))))
-                                tag-properties)))]
-     (when (seq properties)
-       (db-property-handler/set-block-property! (:db/id tag)
-                                                :logseq.property.class/properties
-                                                (map :db/id properties)))
-     (let [tag (db/entity (:db/id tag))]
-       (sdk-utils/result->js tag)))))
+  (this-as this
+    (when-not (string? title)
+      (throw (ex-info "Tag title should be a string" {:title title})))
+    (when (string/blank? title)
+      (throw (ex-info "Tag title shouldn't be empty" {:title title})))
+    (when (text/namespace-page? title)
+      (throw (ex-info "Tag title shouldn't include forward slash" {:title title})))
+    (p/let [opts (bean/->clj opts)
+            class-ident-namespace (api-block/resolve-class-prefix-for-db this)
+            opts' (assoc opts
+                    :redirect? false
+                    :class-ident-namespace class-ident-namespace)
+            tag-properties (:tagProperties opts)
+            tag (db-page-handler/<create-class! title opts')
+            properties (when (seq tag-properties)
+                         (p/all (map
+                                 (fn [{:keys [name schema properties]}]
+                                   (let [name' (api-block/sanitize-user-property-name name)
+                                         property-ident (api-block/get-db-ident-from-property-name name' this)
+                                         property-entity (db/entity property-ident)]
+                                     (or property-entity    ; property exists already
+                                         (upsert-property-aux this name schema {:properties properties}))))
+                                 tag-properties)))]
+      (when (seq properties)
+        (db-property-handler/set-block-property! (:db/id tag)
+                                                 :logseq.property.class/properties
+                                                 (map :db/id properties)))
+      (let [tag (db/entity (:db/id tag))]
+        (sdk-utils/result->js tag)))))
 
 (defn- throw-error-if-not-tag!
   [tag tag-id]
@@ -271,20 +270,28 @@
                                                 :logseq.property.class/extends
                                                 (:db/id extend))))
 
-(defn- resolve-tag-eid [this class-uuid-or-ident-or-title]
-  (let [eid (if (number? class-uuid-or-ident-or-title)
-              class-uuid-or-ident-or-title
-              (let [title-or-ident (-> (if-not (string? class-uuid-or-ident-or-title)
-                                         (str class-uuid-or-ident-or-title)
-                                         class-uuid-or-ident-or-title)
+(defn- resolve-eid [^js plugin uuid-or-ident-or-title prefix-resolver]
+  (let [eid (if (number? uuid-or-ident-or-title)
+              uuid-or-ident-or-title
+              (let [title-or-ident (-> (if-not (string? uuid-or-ident-or-title)
+                                         (str uuid-or-ident-or-title)
+                                         uuid-or-ident-or-title)
                                        (string/replace #"^:+" ""))]
                 (if (text/namespace-page? title-or-ident)
                   (keyword title-or-ident)
                   (if (util/uuid-string? title-or-ident)
                     (when-let [id (sdk-utils/uuid-or-throw-error title-or-ident)]
                       [:block/uuid id])
-                    (keyword (api-block/resolve-class-prefix-for-db this) title-or-ident)))))]
+                    (keyword (prefix-resolver plugin) title-or-ident)))))]
     eid))
+
+(defn resolve-tag-eid [this class-uuid-or-ident-or-title]
+  (resolve-eid this class-uuid-or-ident-or-title
+               api-block/resolve-class-prefix-for-db))
+
+(defn resolve-property-eid [this prop-uuid-or-ident-or-title]
+  (resolve-eid this prop-uuid-or-ident-or-title
+               api-block/resolve-property-prefix-for-db))
 
 (defn get-tag [class-uuid-or-ident-or-title]
   (this-as this
@@ -300,16 +307,18 @@
     (sdk-utils/result->js tags)))
 
 (defn tag-add-property [tag-id property-id-or-name]
-  (p/let [tag (db/get-case-page tag-id)
-          property (db/get-case-page property-id-or-name)]
-    (when-not (ldb/class? tag) (throw (ex-info "Not a valid tag" {:tag tag-id})))
-    (when-not (ldb/property? property) (throw (ex-info "Not a valid property" {:property property-id-or-name})))
-    (when (and (not (ldb/public-built-in-property? property))
-               (ldb/built-in? property))
-      (throw (ex-info "This is a private built-in property that can't be used." {:value property})))
-    (p/do!
-     (db-property-handler/class-add-property! (:db/id tag) (:db/ident property))
-     (sdk-utils/result->js (db/get-case-page tag-id)))))
+  (this-as this
+    (p/let [tag (db/get-case-page tag-id)
+            eid (resolve-property-eid this property-id-or-name)
+            property (db/entity eid)]
+      (when-not (ldb/class? tag) (throw (ex-info "Not a valid tag" {:tag tag-id})))
+      (when-not (ldb/property? property) (throw (ex-info "Not a valid property" {:property property-id-or-name})))
+      (when (and (not (ldb/public-built-in-property? property))
+                 (ldb/built-in? property))
+        (throw (ex-info "This is a private built-in property that can't be used." {:value property})))
+      (p/do!
+       (db-property-handler/class-add-property! (:db/id tag) (:db/ident property))
+       (sdk-utils/result->js (db/get-case-page tag-id))))))
 
 (defn tag-remove-property [tag-id property-id-or-name]
   (p/let [tag (db/get-case-page tag-id)
