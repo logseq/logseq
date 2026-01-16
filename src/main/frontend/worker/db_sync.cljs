@@ -618,7 +618,6 @@
                    ;; 1. reverse local pending txs
                    reversed-tx-report (when has-local-changes?
                                         (ldb/transact! temp-conn reversed-tx-data tx-meta))
-                   _ (prn :debug :tx-data (distinct tx-data))
                    ;; 2. transact remote tx-data
                    remote-tx-report (ldb/transact! temp-conn tx-data tx-meta)
                    _ (reset! *remote-tx-report remote-tx-report)
@@ -708,7 +707,7 @@
                           txs-data (mapv (fn [data]
                                            (parse-transit (:tx data) {:repo repo :type "pull/ok"}))
                                          txs)
-                          tx (mapcat identity txs-data)]
+                          tx (distinct (mapcat identity txs-data))]
                       (when (seq tx)
                         (apply-remote-tx! repo client tx
                                           :local-tx local-tx
