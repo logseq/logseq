@@ -11,7 +11,6 @@
     [:feature/enable-search-remove-accents? :boolean]
     [:feature/enable-journals? :boolean]
     [:feature/enable-flashcards? :boolean]
-    [:feature/enable-whiteboards? :boolean]
     [:feature/disable-scheduled-and-deadline-query? :boolean]
     [:scheduled/future-days :int]
     [:start-of-week [:enum 0 1 2 3 4 5 6]]

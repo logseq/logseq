@@ -49,9 +49,7 @@
         (let [file-id file]
           [:tr {:key file-id}
            [:td
-            (let [href (if (common-config/draw? file)
-                         (rfe/href :draw nil {:file (string/replace file (str common-config/default-draw-directory "/") "")})
-                         (rfe/href :file {:path file-id}))]
+            (let [href (rfe/href :file {:path file-id})]
               [:a {:href href}
                file])]
            (when-not mobile?

@@ -28,8 +28,7 @@
   get-block-immediate-children get-file
   get-latest-journals get-page get-case-page
   get-page-format journal-page? page? sub-block
-  page-exists? get-alias-source-page
-  has-children? whiteboard-page?])
+  page-exists? get-alias-source-page has-children?])
 
 (defn start-db-conn!
   ([repo]

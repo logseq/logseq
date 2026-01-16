@@ -32,6 +32,7 @@
       :properties {:logseq.property.class/extends :logseq.class/Page
                    :logseq.property.journal/title-format "MMM do, yyyy"}}
 
+     ;; TODO: Remove deprecated
      :logseq.class/Whiteboard
      {:title "Whiteboard"
       :properties {:logseq.property.class/extends :logseq.class/Page}}

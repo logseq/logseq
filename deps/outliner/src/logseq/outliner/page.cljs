@@ -86,11 +86,9 @@
                              (assoc :real-outliner-op :rename-page)))
             true))))))
 
-(defn- build-page-tx [db properties page {:keys [whiteboard? class? tags class-ident-namespace]}]
+(defn- build-page-tx [db properties page {:keys [class? tags class-ident-namespace]}]
   (when (:block/uuid page)
-    (let [type-tag (cond class? :logseq.class/Tag
-                         whiteboard? :logseq.class/Whiteboard
-                         :else :logseq.class/Page)
+    (let [type-tag (if class? :logseq.class/Tag :logseq.class/Page)
           tags' (if (:block/journal-day page) tags (conj tags type-tag))
           page' (update page :block/tags
                         (fnil into [])
@@ -237,7 +235,7 @@
   "Pure function without side effects"
   [db title*
    {uuid' :uuid
-    :keys [tags properties persist-op? whiteboard?
+    :keys [tags properties persist-op?
            class? today-journal? split-namespace? class-ident-namespace]
     :or   {properties               nil
            persist-op?              true}
@@ -251,8 +249,6 @@
         title (sanitize-title title*)
         types (cond class?
                     #{:logseq.class/Tag}
-                    whiteboard?
-                    #{:logseq.class/Whiteboard}
                     today-journal?
                     #{:logseq.class/Journal}
                     (seq tags)
@@ -306,7 +302,7 @@
               (outliner-validate/validate-page-title-characters (str (:block/title parent)) {:node parent})))
 
           (let [page-uuid (:block/uuid page)
-                page-txs (build-page-tx db properties page (select-keys options [:whiteboard? :class? :tags :class-ident-namespace]))
+                page-txs (build-page-tx db properties page (select-keys options [:class? :tags :class-ident-namespace]))
                 txs (concat
                      ;; transact doesn't support entities
                      (remove de/entity? parents')

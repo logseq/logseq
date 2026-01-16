@@ -288,14 +288,6 @@ independent of format as format specific heading characters are stripped"
   (when (string? page-name)
     (ldb/journal? (ldb/get-page (conn/get-db) page-name))))
 
-(defn whiteboard-page?
-  "Given a page entity, page object or page name, check if it is a whiteboard page"
-  [page]
-  (let [page (if (string? page)
-               (get-page page)
-               page)]
-    (ldb/whiteboard? page)))
-
 ;; FIXME: use `Untitled` instead of UUID for db based graphs
 (defn untitled-page?
   [page-name]
