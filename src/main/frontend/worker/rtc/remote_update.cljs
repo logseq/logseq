@@ -659,7 +659,7 @@
             tx-meta {:rtc-tx? true
                      :persist-op? false
                      :gen-undo-ops? false}]
-        (rtc-log-and-state/update-remote-t graph-uuid remote-t)
+        (rtc-log-and-state/update-remote-t graph-uuid remote-t repo)
         (js/console.groupCollapsed "rtc/apply-remote-ops-log")
         (ldb/transact-with-temp-conn!
          conn tx-meta
