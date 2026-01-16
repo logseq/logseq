@@ -378,7 +378,7 @@
   "Support DB or file graphs because of exporter"
   [entity]
   (or (entity-util/page? entity)
-      (contains? #{"page" "journal" "whiteboard"} (:block/type entity))))
+      (contains? #{"page" "journal"} (:block/type entity))))
 
 ;; TODO: refactor
 (defn page-name->map
