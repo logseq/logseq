@@ -52,7 +52,7 @@
     :created-at :updated-at :last-modified-at
     :query-table :query-properties :query-sort-by :query-sort-desc :ls-type
     :hl-type :hl-page :hl-stamp :hl-color :hl-value :logseq.macro-name :logseq.macro-arguments
-    :logseq.order-list-type :logseq.tldraw.page :logseq.tldraw.shape
+    :logseq.order-list-type
      ; task markers
     :todo :doing :now :later :done})
 

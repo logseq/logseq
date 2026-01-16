@@ -11,7 +11,3 @@ logseq.graph-parser.mldoc/mldoc-link?
 ;; API
 logseq.graph-parser.text/get-page-name
 logseq.graph-parser.text/get-namespace-last-part
-;; API
-logseq.graph-parser.whiteboard/shape->block
-;; API
-logseq.graph-parser.test.docs-graph-helper/clone-docs-repo-if-not-exists

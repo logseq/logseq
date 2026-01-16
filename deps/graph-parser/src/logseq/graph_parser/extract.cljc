@@ -15,22 +15,11 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.property :as gp-property]
-            [logseq.graph-parser.text :as text]
-            [logseq.graph-parser.whiteboard :as gp-whiteboard]
-            [medley.core :as medley]))
+            [logseq.graph-parser.text :as text]))
 
 (defn- mldoc-support?
   [format']
   (contains? #{:org :markdown :md} (keyword format')))
-
-(defn- filepath->page-name
-  [filepath]
-  (when-let [file-name (last (string/split filepath #"/"))]
-    (let [result (first (common-util/split-last "." file-name))
-          ext (string/lower-case (common-util/get-file-ext filepath))]
-      (if (or (mldoc-support? ext) (= "edn" ext))
-        (common-util/safe-decode-uri-component (string/replace result "." "/"))
-        result))))
 
 (defn- path->file-name
   ;; Only for internal paths, as they are converted to POXIS already
@@ -305,42 +294,6 @@
         {:pages pages
          :blocks blocks
          :ast ast}))))
-
-(defn extract-whiteboard-edn
-  "Extracts whiteboard page from given edn file
-   Whiteboard page edn is a subset of page schema
-   - it will only contain a single page (for now). The page properties are stored under :logseq.tldraw.* properties and contain 'bindings' etc
-   - blocks will be adapted to tldraw shapes. All blocks's parent is the given page."
-  [file content {:keys [verbose] :or {verbose true}}]
-  (let [_ (when verbose (println "Parsing start: " file))
-        {:keys [pages blocks]} (common-util/safe-read-map-string content)
-        blocks (map
-                (fn [block]
-                  (-> block
-                      (medley/dissoc-in [:block/parent :block/name])
-                      ;; :block/left here for backward compatibility
-                      (medley/dissoc-in [:block/left :block/name])))
-                blocks)
-        serialized-page (first pages)
-        ;; whiteboard edn file should normally have valid :block/title, :block/name, :block/uuid
-        page-name (-> (or (:block/name serialized-page)
-                          (filepath->page-name file))
-                      (common-util/page-name-sanity-lc))
-        title (or (:block/title serialized-page)
-                  page-name)
-        page-block (merge {:block/name page-name
-                           :block/title title
-                           :block/file {:file/path (common-util/path-normalize file)}}
-                          serialized-page
-                          ;; Ensure old whiteboards have correct type
-                          {:block/type "whiteboard"})
-        page-block (gp-whiteboard/migrate-page-block page-block)
-        blocks (->> blocks
-                    (map gp-whiteboard/migrate-shape-block)
-                    (map #(merge % (gp-whiteboard/with-whiteboard-block-props % [:block/uuid (:block/uuid page-block)]))))
-        _ (when verbose (println "Parsing finished: " file))]
-    {:pages (list page-block)
-     :blocks blocks}))
 
 (defn- with-block-uuid
   [pages]
