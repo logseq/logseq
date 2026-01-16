@@ -82,7 +82,6 @@
       :network/online?         true
       :me                      nil
       :git/current-repo        current-graph
-      :draw?                   false
       :db/restoring?           nil
 
       :search/q                              ""
@@ -148,7 +147,6 @@
       :editor/start-pos                      (atom nil)
       :editor/async-unsaved-chars            (atom nil)
       :editor/hidden-editors                 #{} ;; page names
-      :editor/draw-mode?                     false
 
       :editor/action                         (atom nil)
       :editor/action-data                    nil

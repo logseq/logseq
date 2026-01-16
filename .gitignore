@@ -52,7 +52,6 @@ ios/App/App/public
 
 startup.png
 
-/src/main/frontend/tldraw-logseq.js
 /src/test/docs*
 ~*~
 

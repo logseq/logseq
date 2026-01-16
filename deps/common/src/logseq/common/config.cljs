@@ -66,12 +66,6 @@
         (string/replace-first asset-protocol "file://"))
     s))
 
-(defonce default-draw-directory "draws")
-
-(defn draw?
-  [path]
-  (string/starts-with? path default-draw-directory))
-
 (defn text-formats
   []
   #{:json :org :md :yml :dat :asciidoc :rst :txt :markdown :adoc :html :js :ts :edn :clj :ml :rb :ex :erl :java :php :c :css
@@ -103,7 +97,8 @@
      :property-pages/excludelist
      :srs/learning-fraction
      :srs/initial-interval
-     :whiteboards-directory]
+     :whiteboards-directory
+     :feature/enable-whiteboards?]
     (repeat "is not used in DB graphs"))
    {:preferred-format
     "is not used in DB graphs as there is only markdown mode."

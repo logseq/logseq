@@ -53,8 +53,7 @@
                   (and
                    (= url-type "Page_ref")
                    (and (string? value)
-                        (not (or (common-config/local-relative-asset? value)
-                                 (common-config/draw? value))))
+                        (not (common-config/local-relative-asset? value)))
                    value)
 
                   (and

@@ -126,7 +126,7 @@
                 [:db/add eid :logseq.property.class/extends :logseq.class/Root]
                 [:db/retract eid :block/tags :logseq.class/Page]])
 
-             ;; remove #Page from tags/journals/whiteboards, etc.
+             ;; remove #Page from tags/journals etc.
              (= (:db/id page-tag) (:v datom))
              (let [tags (->> entity
                              :block/tags

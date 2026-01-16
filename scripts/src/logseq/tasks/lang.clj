@@ -184,31 +184,27 @@
   "Allows certain keys in a language to have the same translation
    as English. Happens more in romance languages but pretty rare otherwise"
   {:fr #{:port :type :help/docs :search-item/page :shortcut.category/navigating :text/image
-         :settings-of-plugins :code :shortcut.category/plugins :whiteboard/rectangle :whiteboard/triangle}
-   :de #{:graph :host :plugins :port :right-side-bar/whiteboards
+         :settings-of-plugins :code :shortcut.category/plugins}
+   :de #{:graph :host :plugins :port
          :settings-of-plugins :shortcut.category/navigating
-         :settings-page/enable-tooltip :settings-page/enable-whiteboards :settings-page/plugin-system}
-   :ca #{:port :settings-page/tab-editor :settings-page/tab-general
-         :whiteboard/color :whiteboard/connector :whiteboard/text :whiteboard/triangle}
-   :es #{:settings-page/tab-general :settings-page/tab-editor :whiteboard/color}
+         :settings-page/enable-tooltip :settings-page/plugin-system}
+   :ca #{:port :settings-page/tab-editor :settings-page/tab-general}
+   :es #{:settings-page/tab-general :settings-page/tab-editor}
    :it #{:home :handbook/home :host :help/awesome-logseq
-         :settings-page/tab-account :settings-page/tab-editor :whiteboard/link}
+         :settings-page/tab-account :settings-page/tab-editor}
    :nl #{:plugins :type :left-side-bar/nav-recent-pages :plugin/update}
-   :pl #{:port :home :host :plugin/marketplace :whiteboard/link}
+   :pl #{:port :home :host :plugin/marketplace}
    :pt-BR #{:plugins :right-side-bar/flashcards :settings-page/enable-flashcards :page/backlinks
-            :host :settings-page/tab-editor :shortcut.category/plugins :whiteboard/link :settings-of-plugins :whiteboard
-            :whiteboards :on-boarding/quick-tour-journal-page-desc-2 :plugin/downloads :plugin/popular
-            :right-side-bar/whiteboards :settings-page/enable-whiteboards :settings-page/plugin-system
-            :shortcut.category/whiteboard :command.whiteboard/zoom-in :command.whiteboard/zoom-out}
+            :host :settings-page/tab-editor :shortcut.category/plugins :settings-of-plugins
+            :on-boarding/quick-tour-journal-page-desc-2 :plugin/downloads :plugin/popular
+            :settings-page/plugin-system}
    :pt-PT #{:plugins :settings-of-plugins :plugin/downloads :right-side-bar/flashcards
             :settings-page/enable-flashcards :settings-page/plugin-system}
-   :nb-NO #{:port :type :whiteboard :right-side-bar/flashcards :right-side-bar/whiteboards
-            :settings-page/enable-flashcards :settings-page/enable-whiteboards
-            :settings-page/tab-editor :shortcut.category/whiteboard :whiteboard/medium
-            :whiteboard/twitter-url :whiteboard/youtube-url :linked-references/filter-heading}
+   :nb-NO #{:port :type :right-side-bar/flashcards :settings-page/enable-flashcards
+            :settings-page/tab-editor :linked-references/filter-heading}
    :tr #{:help/awesome-logseq}
    :id #{:host :port}
-   :cs #{:host :port :help/blog :settings-page/tab-editor :whiteboard/text}})
+   :cs #{:host :port :help/blog :settings-page/tab-editor}})
 
 (defn- validate-languages-dont-have-duplicates
   "Looks up duplicates for all languages"

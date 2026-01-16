@@ -1655,9 +1655,6 @@
 (defn- bullet-on-click
   [e block uuid {:keys [on-redirect-to-page]}]
   (cond
-    (pu/shape-block? block)
-    (route-handler/redirect-to-page! (get-in block [:block/page :block/uuid]) {:block-id uuid})
-
     (gobj/get e "shiftKey")
     (do
       (state/sidebar-add-block!

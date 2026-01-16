@@ -146,8 +146,6 @@
     (str "#"  (:name path-params))
     :diff
     "Git diff"
-    :draw
-    "Draw"
     :settings
     "Settings"
     :import

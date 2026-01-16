@@ -229,7 +229,7 @@
      :logseq.property/asset   {:title "Asset"
                                :schema {:type :entity
                                         :hide? true}}
-     ;; used by pdf and whiteboard
+     ;; used by pdf
      ;; TODO: remove ls-type
      :logseq.property/ls-type {:schema {:type :keyword
                                         :hide? true}}
@@ -268,9 +268,11 @@
                                                   :schema {:type :node
                                                            :cardinality :many
                                                            :hide? true}}
+     ;; TODO: Remove deprecated
      :logseq.property.tldraw/page {:title "Tldraw Page"
                                    :schema {:type :map
                                             :hide? true}}
+     ;; TODO: Remove deprecated
      :logseq.property.tldraw/shape {:title "Tldraw Shape"
                                     :schema {:type :map
                                              :hide? true}}
@@ -893,7 +895,3 @@
   (when db
     (let [block (or (d/entity db (:db/id block)) block)]
       (lookup block db-ident))))
-
-(defn shape-block?
-  [db block]
-  (= :whiteboard-shape (get-block-property-value db block :logseq.property/ls-type)))

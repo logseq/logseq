@@ -175,7 +175,7 @@
         page (db/entity repo page-id)]
 
     ;; Redirect to the newly renamed page
-    (when (and redirect? (not (db/whiteboard-page? page)))
+    (when redirect?
       (route-handler/redirect! {:to          :page
                                 :push        false
                                 :path-params {:name (str (:block/uuid page))}}))
