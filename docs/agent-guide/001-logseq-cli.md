@@ -28,19 +28,19 @@ NOTE: I will write *all* tests before I add any implementation behavior.
 ## Architecture sketch
 
 The CLI is a Node program that parses flags, loads config, and sends requests to db-worker-node.
-The db-worker-node server is already built from the :db-worker-node shadow-cljs target and listens on a TCP port.
+The db-worker-node server is already built from the :db-worker-node shadow-cljs target and listens on a random localhost TCP port recorded in the lock file.
 
 ASCII diagram:
 
 +--------------+        HTTP or WS        +---------------------+
 | logseq-cli   | -----------------------> | db-worker-node       |
-| node script  | <----------------------- | server on port 9101  |
+| node script  | <----------------------- | server on random port |
 +--------------+                          +---------------------+
 
 ## Assumptions
 
 The db-worker-node server exposes a stable API for a small set of requests needed by the CLI.
-The CLI will default to localhost:9101 unless configured otherwise.
+The CLI always uses localhost and discovers the server port from the lock file.
 The CLI will use JSON for request and response bodies for ease of scripting.
 
 ## Implementation plan
@@ -98,7 +98,7 @@ Open follow-ups (optional):
 
 ## Edge cases
 
-The db-worker-node server is not running or is listening on a different port.
+The db-worker-node server is not running or the lock file points to a stale server.
 The response payload is invalid JSON or missing fields.
 The request times out or the server closes the connection early.
 The user passes incompatible flags or unknown commands.
