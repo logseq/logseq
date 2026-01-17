@@ -214,6 +214,7 @@
 (def ^:export remove_tag_property db-based-api/tag-remove-property)
 (def ^:export set_block_icon db-based-api/set-block-icon)
 (def ^:export remove_block_icon db-based-api/remove-block-icon)
+(def ^:export add_property_value_choices db-based-api/add-property-value-choices)
 
 ;; Internal db-based CLI APIs
 ;; CLI APIs should use ensure-db-graph unless they have a nested check in cli-common-mcp-tools ns

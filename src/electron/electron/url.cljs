@@ -77,6 +77,11 @@
                                                             (= append "true"))}
                                   win))
 
+      (= action "/invokeCommand")
+      (let [[action payload] (get-URL-decoded-params parsed-url ["action" "payload"])]
+        (send-to-focused-renderer "invokeCommand" {:action action
+                                                   :payload payload} win))
+
       :else
       (send-to-focused-renderer "notification" {:type "error"
                                                 :payload (str "Unimplemented x-callback-url action: `"

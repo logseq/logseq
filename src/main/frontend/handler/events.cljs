@@ -43,6 +43,7 @@
             [frontend.quick-capture :as quick-capture]
             [frontend.state :as state]
             [frontend.util :as util]
+            [logseq.api.plugin :as plugin-api]
             [goog.dom :as gdom]
             [lambdaisland.glogi :as log]
             [logseq.db.frontend.schema :as db-schema]
@@ -236,8 +237,19 @@
   (when (and command (not (string/blank? content)))
     (shell-handler/run-cli-command-wrapper! command content)))
 
-(defmethod handle :editor/quick-capture [[_ args]]
+(defmethod handle :editor/quick-capture [[_ ^js args]]
   (quick-capture/quick-capture args))
+
+(defmethod handle :editor/invoke-command [[_ ^js args]]
+  (when-let [{:keys [action payload]} (bean/->clj args)]
+    ;; parse "plugin.vibe-clipper.models.onReceiveClipperData"
+    (let [keys' (string/split action #"\.")
+          [type id group] keys'
+          action (last keys')]
+      (case (keyword type)
+        :plugin (plugin-api/invoke_external_plugin_cmd id group action [payload])
+        (log/warn :unknown-invoke-command-type action))
+      )))
 
 (defmethod handle :modal/keymap [[_]]
   (state/open-settings! :keymap))

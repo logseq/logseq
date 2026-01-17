@@ -793,6 +793,7 @@ export interface IEditorProxy extends Record<string, any> {
    * */
   setBlockIcon: (blockId: BlockIdentity, iconType: 'tabler-icon' | 'emoji', iconName: string) => Promise<void>
   removeBlockIcon: (blockId: BlockIdentity) => Promise<void>
+  addPropertyValueChoices: (propertyId: BlockIdentity, choices: Array<BlockIdentity>) => Promise<void>
 
   prependBlockInPage: (
     page: PageIdentity,
