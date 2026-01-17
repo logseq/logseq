@@ -7,9 +7,9 @@
 (defn check-common-errors
   []
   (let [prompt (String. (fs/read-all-bytes "prompts/review.md"))
-        diff (:out (shell {:out :string} "git diff --no-prefix -U100 -- '*.cljs'"))]
+        diff (:out (shell {:out :string :shutdown nil} "git diff --no-prefix -U100 -- '*.cljs'"))]
     (when-not (string/blank? diff)
       (let [command (format "gh models run openai/gpt-5 \"%s\""
                             (str prompt
                                  (format "\n\n <diff>%s</diff>" diff)))]
-        (shell command)))))
+        (shell {:shutdown nil} command)))))
