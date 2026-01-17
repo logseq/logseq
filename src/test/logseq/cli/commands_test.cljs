@@ -1,7 +1,9 @@
 (ns logseq.cli.commands-test
-  (:require [clojure.string :as string]
-            [cljs.test :refer [deftest is testing]]
-            [logseq.cli.commands :as commands]))
+  (:require [cljs.test :refer [async deftest is testing]]
+            [clojure.string :as string]
+            [logseq.cli.commands :as commands]
+            [logseq.cli.server :as cli-server]
+            [promesa.core :as p]))
 
 (deftest test-help-output
   (testing "top-level help lists subcommand groups"
@@ -9,7 +11,8 @@
           summary (:summary result)]
       (is (true? (:help? result)))
       (is (string/includes? summary "graph"))
-      (is (string/includes? summary "block")))))
+      (is (string/includes? summary "block"))
+      (is (string/includes? summary "server")))))
 
 (deftest test-parse-args
   (testing "graph group shows subcommands"
@@ -25,6 +28,13 @@
       (is (true? (:help? result)))
       (is (string/includes? summary "block add"))
       (is (string/includes? summary "block search"))))
+
+  (testing "server group shows subcommands"
+    (let [result (commands/parse-args ["server"])
+          summary (:summary result)]
+      (is (true? (:help? result)))
+      (is (string/includes? summary "server list"))
+      (is (string/includes? summary "server start"))))
 
   (testing "graph group aligns subcommand columns"
     (let [result (commands/parse-args ["graph"])
@@ -43,6 +53,21 @@
 
   (testing "block group aligns subcommand columns"
     (let [result (commands/parse-args ["block"])
+          summary (:summary result)
+          subcommand-lines (let [lines (string/split-lines summary)
+                                 start (inc (.indexOf lines "Subcommands:"))]
+                             (->> lines
+                                  (drop start)
+                                  (take-while (complement string/blank?))))
+          desc-starts (->> subcommand-lines
+                           (keep (fn [line]
+                                   (when-let [[_ desc] (re-matches #"^\s+.*?\s{2,}(.+)$" line)]
+                                     (.indexOf line desc)))))]
+      (is (seq subcommand-lines))
+      (is (apply = desc-starts))))
+
+  (testing "server group aligns subcommand columns"
+    (let [result (commands/parse-args ["server"])
           summary (:summary result)
           subcommand-lines (let [lines (string/split-lines summary)
                                  start (inc (.indexOf lines "Subcommands:"))]
@@ -95,71 +120,93 @@
       (is (true? (:ok? result)))
       (is (= :graph-list (:command result)))))
 
-  (testing "graph create requires graph option"
+  (testing "graph create requires repo option"
     (let [result (commands/parse-args ["graph" "create"])]
       (is (false? (:ok? result)))
       (is (= :missing-graph (get-in result [:error :code])))))
 
-  (testing "graph create parses with graph option"
-    (let [result (commands/parse-args ["graph" "create" "--graph" "demo"])]
+  (testing "graph create parses with repo option"
+    (let [result (commands/parse-args ["graph" "create" "--repo" "demo"])]
       (is (true? (:ok? result)))
       (is (= :graph-create (:command result)))
-      (is (= "demo" (get-in result [:options :graph])))))
+      (is (= "demo" (get-in result [:options :repo])))))
 
-  (testing "graph switch requires graph option"
+  (testing "graph switch requires repo option"
     (let [result (commands/parse-args ["graph" "switch"])]
       (is (false? (:ok? result)))
       (is (= :missing-graph (get-in result [:error :code])))))
 
-  (testing "graph switch parses with graph option"
-    (let [result (commands/parse-args ["graph" "switch" "--graph" "demo"])]
+  (testing "graph switch parses with repo option"
+    (let [result (commands/parse-args ["graph" "switch" "--repo" "demo"])]
       (is (true? (:ok? result)))
       (is (= :graph-switch (:command result)))
-      (is (= "demo" (get-in result [:options :graph])))))
+      (is (= "demo" (get-in result [:options :repo])))))
 
-  (testing "graph remove requires graph option"
+  (testing "graph remove requires repo option"
     (let [result (commands/parse-args ["graph" "remove"])]
       (is (false? (:ok? result)))
       (is (= :missing-graph (get-in result [:error :code])))))
 
-  (testing "graph remove parses with graph option"
-    (let [result (commands/parse-args ["graph" "remove" "--graph" "demo"])]
+  (testing "graph remove parses with repo option"
+    (let [result (commands/parse-args ["graph" "remove" "--repo" "demo"])]
       (is (true? (:ok? result)))
       (is (= :graph-remove (:command result)))
-      (is (= "demo" (get-in result [:options :graph])))))
+      (is (= "demo" (get-in result [:options :repo])))))
 
-  (testing "graph validate requires graph option"
+  (testing "graph validate requires repo option"
     (let [result (commands/parse-args ["graph" "validate"])]
       (is (false? (:ok? result)))
       (is (= :missing-graph (get-in result [:error :code])))))
 
-  (testing "graph validate parses with graph option"
-    (let [result (commands/parse-args ["graph" "validate" "--graph" "demo"])]
+  (testing "graph validate parses with repo option"
+    (let [result (commands/parse-args ["graph" "validate" "--repo" "demo"])]
       (is (true? (:ok? result)))
       (is (= :graph-validate (:command result)))
-      (is (= "demo" (get-in result [:options :graph])))))
+      (is (= "demo" (get-in result [:options :repo])))))
 
-  (testing "graph info parses without graph option"
+  (testing "graph info parses without repo option"
     (let [result (commands/parse-args ["graph" "info"])]
       (is (true? (:ok? result)))
       (is (= :graph-info (:command result)))))
 
-  (testing "graph info parses with graph option"
-    (let [result (commands/parse-args ["graph" "info" "--graph" "demo"])]
+  (testing "graph info parses with repo option"
+    (let [result (commands/parse-args ["graph" "info" "--repo" "demo"])]
       (is (true? (:ok? result)))
       (is (= :graph-info (:command result)))
-      (is (= "demo" (get-in result [:options :graph])))))
+      (is (= "demo" (get-in result [:options :repo])))))
 
   (testing "graph subcommands reject unknown flags"
     (doseq [subcommand ["list" "create" "switch" "remove" "validate" "info"]]
       (let [result (commands/parse-args ["graph" subcommand "--wat"])]
         (is (false? (:ok? result)))
-        (is (= :invalid-options (get-in result [:error :code])))))))
+        (is (= :invalid-options (get-in result [:error :code]))))))
+
 
   (testing "graph subcommands accept output option"
     (let [result (commands/parse-args ["graph" "list" "--output" "edn"])]
       (is (true? (:ok? result)))
       (is (= "edn" (get-in result [:options :output])))))
+
+  (testing "server list parses"
+    (let [result (commands/parse-args ["server" "list"])]
+      (is (true? (:ok? result)))
+      (is (= :server-list (:command result)))))
+
+  (testing "server start requires repo"
+    (let [result (commands/parse-args ["server" "start"])]
+      (is (false? (:ok? result)))
+      (is (= :missing-repo (get-in result [:error :code])))))
+
+  (testing "server start parses with repo"
+    (let [result (commands/parse-args ["server" "start" "--repo" "demo"])]
+      (is (true? (:ok? result)))
+      (is (= :server-start (:command result)))
+      (is (= "demo" (get-in result [:options :repo])))))
+
+  (testing "server stop parses with repo"
+    (let [result (commands/parse-args ["server" "stop" "--repo" "demo"])]
+      (is (true? (:ok? result)))
+      (is (= :server-stop (:command result))))))
 
 (deftest test-block-subcommand-parse
   (testing "block add requires content source"
@@ -222,16 +269,34 @@
     (let [parsed {:ok? true :command :graph-list :options {}}
           result (commands/build-action parsed {})]
       (is (true? (:ok? result)))
-      (is (= "thread-api/list-db" (get-in result [:action :method])))))
+      (is (= :graph-list (get-in result [:action :type])))))
 
-  (testing "graph-create requires graph name"
+  (testing "server list builds action"
+    (let [parsed {:ok? true :command :server-list :options {}}
+          result (commands/build-action parsed {})]
+      (is (true? (:ok? result)))
+      (is (= :server-list (get-in result [:action :type])))))
+
+  (testing "server start requires repo"
+    (let [parsed {:ok? true :command :server-start :options {}}
+          result (commands/build-action parsed {})]
+      (is (false? (:ok? result)))
+      (is (= :missing-repo (get-in result [:error :code])))))
+
+  (testing "server stop builds action"
+    (let [parsed {:ok? true :command :server-stop :options {:repo "demo"}}
+          result (commands/build-action parsed {})]
+      (is (true? (:ok? result)))
+      (is (= :server-stop (get-in result [:action :type])))))
+
+  (testing "graph-create requires repo name"
     (let [parsed {:ok? true :command :graph-create :options {}}
           result (commands/build-action parsed {})]
       (is (false? (:ok? result)))
       (is (= :missing-graph (get-in result [:error :code])))))
 
   (testing "graph-switch uses graph name"
-    (let [parsed {:ok? true :command :graph-switch :options {:graph "demo"}}
+    (let [parsed {:ok? true :command :graph-switch :options {:repo "demo"}}
           result (commands/build-action parsed {})]
       (is (true? (:ok? result)))
       (is (= :graph-switch (get-in result [:action :type])))))
@@ -271,3 +336,20 @@
           result (commands/build-action parsed {:repo "demo"})]
       (is (false? (:ok? result)))
       (is (= :missing-target (get-in result [:error :code]))))))
+
+(deftest test-execute-requires-existing-graph
+  (async done
+         (with-redefs [cli-server/list-graphs (fn [_] [])
+                       cli-server/ensure-server! (fn [_ _]
+                                                   (throw (ex-info "should not start server" {})))]
+           (-> (p/let [result (commands/execute {:type :search
+                                                 :repo "logseq_db_missing"
+                                                 :text "hello"}
+                                                {})]
+                 (is (= :error (:status result)))
+                 (is (= :graph-not-exists (get-in result [:error :code])))
+                 (is (= "graph not exists" (get-in result [:error :message])))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
