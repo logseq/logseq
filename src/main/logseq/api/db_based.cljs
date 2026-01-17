@@ -386,3 +386,17 @@
   (when-let [values (and property-id (bean/->clj choices))]
     (db-property-handler/add-existing-values-to-closed-values!
      property-id values)))
+
+(defn set-property-node-tags [property-id ^js tag-ids]
+  (let [tag-ids (and property-id (seq (bean/->clj tag-ids)))]
+    (p/let [repo (state/get-current-repo)
+            property (db-async/<get-block repo property-id)]
+      (when-not (ldb/property? property)
+        (throw (ex-info "Not a valid property" {:property property-id})))
+
+      (doseq [tag-id tag-ids]
+        (when-not (number? tag-id)
+          (throw (ex-info "Tag id should be a number" {:tag-id tag-id}))))
+
+      (db-property-handler/set-block-property!
+       (:db/id property) :logseq.property/classes tag-ids))))
