@@ -6,6 +6,7 @@
             [cljs.reader :as reader]
             [clojure.string :as string]
             [logseq.cli.config :as cli-config]
+            [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
@@ -17,20 +18,17 @@
           :desc "Show help"
           :coerce :boolean}
    :config {:desc "Path to cli.edn"}
-   :base-url {:desc "Base URL for db-worker-node"}
-   :host {:desc "Host for db-worker-node"}
-   :port {:desc "Port for db-worker-node"
-          :coerce :long}
    :auth-token {:desc "Auth token for db-worker-node"}
    :repo {:desc "Graph name"}
+   :data-dir {:desc "Path to db-worker data dir"}
    :timeout-ms {:desc "Request timeout in ms"
                 :coerce :long}
    :retries {:desc "Retry count for requests"
              :coerce :long}
    :output {:desc "Output format (human, json, edn)"}})
 
-(def ^:private graph-spec
-  {:graph {:desc "Graph name"}})
+(def ^:private server-spec
+  {:repo {:desc "Graph name"}})
 
 (def ^:private content-add-spec
   {:content {:desc "Block content for add"}
@@ -126,6 +124,13 @@
            :message "graph name is required"}
    :summary summary})
 
+(defn- missing-repo-result
+  [summary]
+  {:ok? false
+   :error {:code :missing-repo
+           :message "repo is required"}
+   :summary summary})
+
 (defn- missing-content-result
   [summary]
   {:ok? false
@@ -183,11 +188,16 @@
 
 (def ^:private table
   [(command-entry ["graph" "list"] :graph-list "List graphs" {})
-   (command-entry ["graph" "create"] :graph-create "Create graph" graph-spec)
-   (command-entry ["graph" "switch"] :graph-switch "Switch current graph" graph-spec)
-   (command-entry ["graph" "remove"] :graph-remove "Remove graph" graph-spec)
-   (command-entry ["graph" "validate"] :graph-validate "Validate graph" graph-spec)
-   (command-entry ["graph" "info"] :graph-info "Graph metadata" graph-spec)
+   (command-entry ["graph" "create"] :graph-create "Create graph" {})
+   (command-entry ["graph" "switch"] :graph-switch "Switch current graph" {})
+   (command-entry ["graph" "remove"] :graph-remove "Remove graph" {})
+   (command-entry ["graph" "validate"] :graph-validate "Validate graph" {})
+   (command-entry ["graph" "info"] :graph-info "Graph metadata" {})
+   (command-entry ["server" "list"] :server-list "List db-worker-node servers" {})
+   (command-entry ["server" "status"] :server-status "Show server status for a graph" server-spec)
+   (command-entry ["server" "start"] :server-start "Start db-worker-node for a graph" server-spec)
+   (command-entry ["server" "stop"] :server-stop "Stop db-worker-node for a graph" server-spec)
+   (command-entry ["server" "restart"] :server-restart "Restart db-worker-node for a graph" server-spec)
    (command-entry ["block" "add"] :add "Add blocks" content-add-spec)
    (command-entry ["block" "remove"] :remove "Remove block or page" content-remove-spec)
    (command-entry ["block" "search"] :search "Search blocks" content-search-spec)
@@ -243,7 +253,7 @@
   (let [opts (normalize-opts opts)
         args (vec args)
         cmd-summary (command-summary {:cmds cmds :spec spec})
-        graph (or (:graph opts) (:repo opts))
+        graph (:repo opts)
         has-args? (seq args)
         has-content? (or (seq (:content opts))
                          (seq (:blocks opts))
@@ -269,6 +279,10 @@
       (and (= command :search) (not (or (seq (:text opts)) has-args?)))
       (missing-search-result summary)
 
+      (and (#{:server-status :server-start :server-stop :server-restart} command)
+           (not (seq (:repo opts))))
+      (missing-repo-result summary)
+
       :else
       (ok-result command opts args summary))))
 
@@ -287,7 +301,7 @@
          :error {:code :missing-command
                  :message "missing command"}
          :summary summary})
-      (if (and (= 1 (count args)) (#{"graph" "block"} (first args)))
+      (if (and (= 1 (count args)) (#{"graph" "block" "server"} (first args)))
         (help-result (group-summary (first args) table))
         (try
           (let [result (cli/dispatch table args {:spec global-spec})]
@@ -326,10 +340,21 @@
   (when (seq repo)
     (string/replace-first repo common-config/db-version-prefix "")))
 
+(defn- ensure-existing-graph
+  [action config]
+  (if (and (:repo action) (not (:allow-missing-graph action)))
+    (p/let [graphs (cli-server/list-graphs config)
+            graph (repo->graph (:repo action))]
+      (if (some #(= graph %) graphs)
+        {:ok? true}
+        {:ok? false
+         :error {:code :graph-not-exists
+                 :message "graph not exists"}}))
+    (p/resolved {:ok? true})))
+
 (defn- pick-graph
   [options command-args config]
-  (or (:graph options)
-      (:repo options)
+  (or (:repo options)
       (first command-args)
       (:repo config)))
 
@@ -501,10 +526,7 @@
   (case command
     :graph-list
     {:ok? true
-     :action {:type :invoke
-              :method "thread-api/list-db"
-              :direct-pass? false
-              :args []}}
+     :action {:type :graph-list}}
 
     :graph-create
     (if-not (seq graph)
@@ -514,6 +536,8 @@
                 :method "thread-api/create-or-open-db"
                 :direct-pass? false
                 :args [repo {}]
+                :repo repo
+                :allow-missing-graph true
                 :persist-repo (repo->graph repo)}})
 
     :graph-switch
@@ -531,7 +555,8 @@
        :action {:type :invoke
                 :method "thread-api/unsafe-unlink-db"
                 :direct-pass? false
-                :args [repo]}})
+                :args [repo]
+                :repo repo}})
 
     :graph-validate
     (if-not (seq repo)
@@ -540,7 +565,8 @@
        :action {:type :invoke
                 :method "thread-api/validate-db"
                 :direct-pass? false
-                :args [repo]}})
+                :args [repo]
+                :repo repo}})
 
     :graph-info
     (if-not (seq repo)
@@ -549,6 +575,45 @@
        :action {:type :graph-info
                 :repo repo
                 :graph (repo->graph repo)}})))
+
+(defn- build-server-action
+  [command repo]
+  (case command
+    :server-list
+    {:ok? true
+     :action {:type :server-list}}
+
+    :server-status
+    (if-not (seq repo)
+      (missing-repo-error "repo is required for server status")
+      {:ok? true
+       :action {:type :server-status
+                :repo repo}})
+
+    :server-start
+    (if-not (seq repo)
+      (missing-repo-error "repo is required for server start")
+      {:ok? true
+       :action {:type :server-start
+                :repo repo}})
+
+    :server-stop
+    (if-not (seq repo)
+      (missing-repo-error "repo is required for server stop")
+      {:ok? true
+       :action {:type :server-stop
+                :repo repo}})
+
+    :server-restart
+    (if-not (seq repo)
+      (missing-repo-error "repo is required for server restart")
+      {:ok? true
+       :action {:type :server-restart
+                :repo repo}})
+
+    {:ok? false
+     :error {:code :unknown-command
+             :message (str "unknown server command: " command)}}))
 
 (defn- build-add-action
   [options args repo]
@@ -623,10 +688,14 @@
     parsed
     (let [{:keys [command options args]} parsed
           graph (pick-graph options args config)
-          repo (resolve-repo graph)]
+          repo (resolve-repo graph)
+          server-repo (resolve-repo (:repo options))]
       (case command
         (:graph-list :graph-create :graph-switch :graph-remove :graph-validate :graph-info)
         (build-graph-action command graph repo)
+
+        (:server-list :server-status :server-start :server-stop :server-restart)
+        (build-server-action command server-repo)
 
         :add
         (build-add-action options args repo)
@@ -644,87 +713,160 @@
          :error {:code :unknown-command
                  :message (str "unknown command: " command)}}))))
 
+(defn- execute-graph-list
+  [_action config]
+  (let [graphs (cli-server/list-graphs config)]
+    {:status :ok
+     :data {:graphs graphs}}))
+
+(defn- execute-invoke
+  [action config]
+  (-> (p/let [cfg (if-let [repo (:repo action)]
+                    (cli-server/ensure-server! config repo)
+                    (p/resolved config))
+              result (transport/invoke cfg
+                                       (:method action)
+                                       (:direct-pass? action)
+                                       (:args action))]
+        (when-let [repo (:persist-repo action)]
+          (cli-config/update-config! config {:repo repo}))
+        (if-let [write (:write action)]
+          (let [{:keys [format path]} write]
+            (transport/write-output {:format format :path path :data result})
+            {:status :ok
+             :data {:message (str "wrote " path)}})
+          {:status :ok :data {:result result}}))))
+
+(defn- execute-graph-switch
+  [action config]
+  (-> (p/let [graphs (cli-server/list-graphs config)
+              graph (:graph action)]
+        (if-not (some #(= graph %) graphs)
+          {:status :error
+           :error {:code :graph-not-found
+                   :message (str "graph not found: " graph)}}
+          (p/let [_ (cli-server/ensure-server! config (:repo action))]
+            (cli-config/update-config! config {:repo graph})
+            {:status :ok
+             :data {:message (str "switched to " graph)}})))))
+
+(defn- execute-graph-info
+  [action config]
+  (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
+              created (transport/invoke cfg "thread-api/pull" false [(:repo action) [:kv/value] :logseq.kv/graph-created-at])
+              schema (transport/invoke cfg "thread-api/pull" false [(:repo action) [:kv/value] :logseq.kv/schema-version])]
+        {:status :ok
+         :data {:graph (:graph action)
+                :logseq.kv/graph-created-at (:kv/value created)
+                :logseq.kv/schema-version (:kv/value schema)}})))
+
+(defn- execute-add
+  [action config]
+  (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
+              target-id (resolve-add-target cfg action)
+              ops [[:insert-blocks [(:blocks action)
+                                    target-id
+                                    {:sibling? false
+                                     :bottom? true
+                                     :outliner-op :insert-blocks}]]]
+              result (transport/invoke cfg "thread-api/apply-outliner-ops" false [(:repo action) ops {}])]
+        {:status :ok
+         :data {:result result}})))
+
+(defn- execute-remove
+  [action config]
+  (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
+              result (perform-remove cfg action)]
+        {:status :ok
+         :data {:result result}})))
+
+(defn- execute-search
+  [action config]
+  (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
+              query '[:find ?e ?title
+                      :in $ ?q
+                      :where
+                      [?e :block/title ?title]
+                      [(clojure.string/includes? ?title ?q)]]
+              results (transport/invoke cfg "thread-api/q" false [(:repo action) [query (:text action)]])
+              mapped (mapv (fn [[id title]] {:db/id id :block/title title}) results)
+              limited (if (some? (:limit action)) (vec (take (:limit action) mapped)) mapped)]
+        {:status :ok
+         :data {:results limited}})))
+
+(defn- execute-tree
+  [action config]
+  (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
+              tree-data (fetch-tree cfg action)
+              format (:format action)]
+        (case format
+          "edn"
+          {:status :ok
+           :data tree-data
+           :output-format :edn}
+
+          "json"
+          {:status :ok
+           :data tree-data
+           :output-format :json}
+
+          {:status :ok
+           :data {:message (tree->text tree-data)}}))))
+
+(defn- server-result->response
+  [result]
+  (if (:ok? result)
+    {:status :ok
+     :data (:data result)}
+    {:status :error
+     :error (:error result)}))
+
+(defn- execute-server-list
+  [_action config]
+  (-> (p/let [servers (cli-server/list-servers config)]
+        {:status :ok
+         :data {:servers servers}})))
+
+(defn- execute-server-status
+  [action config]
+  (-> (p/let [result (cli-server/server-status config (:repo action))]
+        (server-result->response result))))
+
+(defn- execute-server-start
+  [action config]
+  (-> (p/let [result (cli-server/start-server! config (:repo action))]
+        (server-result->response result))))
+
+(defn- execute-server-stop
+  [action config]
+  (-> (p/let [result (cli-server/stop-server! config (:repo action))]
+        (server-result->response result))))
+
+(defn- execute-server-restart
+  [action config]
+  (-> (p/let [result (cli-server/restart-server! config (:repo action))]
+        (server-result->response result))))
+
 (defn execute
   [action config]
-  (case (:type action)
-    :invoke
-    (-> (p/let [result (transport/invoke config
-                                         (:method action)
-                                         (:direct-pass? action)
-                                         (:args action))]
-          (when-let [repo (:persist-repo action)]
-            (cli-config/update-config! config {:repo repo}))
-          (if-let [write (:write action)]
-            (let [{:keys [format path]} write]
-              (transport/write-output {:format format :path path :data result})
-              {:status :ok
-               :data {:message (str "wrote " path)}})
-            {:status :ok :data {:result result}})))
-
-    :graph-switch
-    (-> (p/let [exists? (transport/invoke config "thread-api/db-exists" false [(:repo action)])]
-          (if-not exists?
+  (-> (p/let [check (ensure-existing-graph action config)]
+        (if-not (:ok? check)
+          {:status :error
+           :error (:error check)}
+          (case (:type action)
+            :graph-list (execute-graph-list action config)
+            :invoke (execute-invoke action config)
+            :graph-switch (execute-graph-switch action config)
+            :graph-info (execute-graph-info action config)
+            :add (execute-add action config)
+            :remove (execute-remove action config)
+            :search (execute-search action config)
+            :tree (execute-tree action config)
+            :server-list (execute-server-list action config)
+            :server-status (execute-server-status action config)
+            :server-start (execute-server-start action config)
+            :server-stop (execute-server-stop action config)
+            :server-restart (execute-server-restart action config)
             {:status :error
-             :error {:code :graph-not-found
-                     :message (str "graph not found: " (:graph action))}}
-            (p/let [_ (transport/invoke config "thread-api/create-or-open-db" false [(:repo action) {}])]
-              (cli-config/update-config! config {:repo (:graph action)})
-              {:status :ok
-               :data {:message (str "switched to " (:graph action))}}))))
-
-    :graph-info
-    (-> (p/let [created (transport/invoke config "thread-api/pull" false [(:repo action) [:kv/value] :logseq.kv/graph-created-at])
-                schema (transport/invoke config "thread-api/pull" false [(:repo action) [:kv/value] :logseq.kv/schema-version])]
-          {:status :ok
-           :data {:graph (:graph action)
-                  :logseq.kv/graph-created-at (:kv/value created)
-                  :logseq.kv/schema-version (:kv/value schema)}}))
-
-    :add
-    (-> (p/let [target-id (resolve-add-target config action)
-                ops [[:insert-blocks [(:blocks action)
-                                      target-id
-                                      {:sibling? false
-                                       :bottom? true
-                                       :outliner-op :insert-blocks}]]]
-                result (transport/invoke config "thread-api/apply-outliner-ops" false [(:repo action) ops {}])]
-          {:status :ok
-           :data {:result result}}))
-
-    :remove
-    (-> (p/let [result (perform-remove config action)]
-          {:status :ok
-           :data {:result result}}))
-
-    :search
-    (-> (p/let [query '[:find ?e ?title
-                        :in $ ?q
-                        :where
-                        [?e :block/title ?title]
-                        [(clojure.string/includes? ?title ?q)]]
-                results (transport/invoke config "thread-api/q" false [(:repo action) [query (:text action)]])
-                mapped (mapv (fn [[id title]] {:db/id id :block/title title}) results)
-                limited (if (some? (:limit action)) (vec (take (:limit action) mapped)) mapped)]
-          {:status :ok
-           :data {:results limited}}))
-
-    :tree
-    (-> (p/let [tree-data (fetch-tree config action)
-                format (:format action)]
-          (case format
-            "edn"
-            {:status :ok
-             :data tree-data
-             :output-format :edn}
-
-            "json"
-            {:status :ok
-             :data tree-data
-             :output-format :json}
-
-            {:status :ok
-             :data {:message (tree->text tree-data)}})))
-
-    {:status :error
-     :error {:code :unknown-action
-             :message "unknown action"}}))
+             :error {:code :unknown-action
+                     :message "unknown action"}})))))

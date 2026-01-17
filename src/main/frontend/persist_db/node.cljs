@@ -38,7 +38,7 @@
   [method url headers body]
   (p/create
    (fn [resolve reject]
-     (let [req (.request (request-module url)
+     (let [^js req (.request (request-module url)
                          #js {:method method
                               :hostname (.-hostname url)
                               :port (or (.-port url) (if (= "https:" (.-protocol url)) 443 80))
@@ -84,7 +84,7 @@
         headers (base-headers auth-token)
         buffer (atom "")
         handler (or event-handler (fn [_type _payload _wrapped-worker] nil))]
-    (let [req (.request
+    (let [^js req (.request
                (request-module url)
                #js {:method "GET"
                     :hostname (.-hostname url)
