@@ -24,7 +24,7 @@
   (async done
     (let [calls (atom 0)]
       (-> (p/let [{:keys [url stop!]} (start-server
-                                       (fn [_req res]
+                                       (fn [_req ^js res]
                                          (let [attempt (swap! calls inc)]
                                            (if (= attempt 1)
                                              (do

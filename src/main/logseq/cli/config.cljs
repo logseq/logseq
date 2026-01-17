@@ -54,14 +54,14 @@
   []
   (let [env (.-env js/process)]
     (cond-> {}
-      (seq (gobj/get env "LOGSEQ_DB_WORKER_URL"))
-      (assoc :base-url (gobj/get env "LOGSEQ_DB_WORKER_URL"))
-
       (seq (gobj/get env "LOGSEQ_DB_WORKER_AUTH_TOKEN"))
       (assoc :auth-token (gobj/get env "LOGSEQ_DB_WORKER_AUTH_TOKEN"))
 
       (seq (gobj/get env "LOGSEQ_CLI_REPO"))
       (assoc :repo (gobj/get env "LOGSEQ_CLI_REPO"))
+
+      (seq (gobj/get env "LOGSEQ_CLI_DATA_DIR"))
+      (assoc :data-dir (gobj/get env "LOGSEQ_CLI_DATA_DIR"))
 
       (seq (gobj/get env "LOGSEQ_CLI_TIMEOUT_MS"))
       (assoc :timeout-ms (parse-int (gobj/get env "LOGSEQ_CLI_TIMEOUT_MS")))
@@ -75,17 +75,12 @@
       (seq (gobj/get env "LOGSEQ_CLI_CONFIG"))
       (assoc :config-path (gobj/get env "LOGSEQ_CLI_CONFIG")))))
 
-(defn- build-base-url
-  [{:keys [host port]}]
-  (when (or (seq host) (some? port))
-    (str "http://" (or host "127.0.0.1") ":" (or port 9101))))
-
 (defn resolve-config
   [opts]
-  (let [defaults {:base-url "http://127.0.0.1:9101"
-                  :timeout-ms 10000
+  (let [defaults {:timeout-ms 10000
                   :retries 0
                   :output-format nil
+                  :data-dir "~/.logseq/db-worker"
                   :config-path (default-config-path)}
         env (env-config)
         config-path (or (:config-path opts)
@@ -98,8 +93,6 @@
                           (parse-output-format (:output env))
                           (parse-output-format (:output-format file-config))
                           (parse-output-format (:output file-config)))
-        merged (merge defaults file-config env opts {:config-path config-path})
-        derived (build-base-url merged)]
+        merged (merge defaults file-config env opts {:config-path config-path})]
     (cond-> merged
-      output-format (assoc :output-format output-format)
-      (seq derived) (assoc :base-url derived))))
+      output-format (assoc :output-format output-format))))
