@@ -128,8 +128,7 @@ The db-worker should be runnable as a standalone process for Node.js environment
 ### Entry Point
 - Provide a CLI entry (example: `bin/logseq-db-worker` or `node dist/db-worker-node.js`).
 - CLI flags (suggested):
-  - `--host` (default `127.0.0.1`)
-  - `--port` (default `9101`)
+  - Binds to localhost on a random port and records it in the repo lock file.
   - `--data-dir` (path for sqlite files, required or default to `~/.logseq/db-worker`)
   - `--repo` (optional: auto-open a repo on boot)
   - `--rtc-ws-url` (optional)

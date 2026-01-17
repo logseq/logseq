@@ -3,10 +3,14 @@
             [cljs.test :refer [async deftest is]]
             [clojure.string :as string]
             [frontend.test.node-helper :as node-helper]
+            [frontend.worker-common.util :as worker-util]
             [frontend.worker.db-worker-node :as db-worker-node]
+            [goog.object :as gobj]
             [logseq.db :as ldb]
             [logseq.db.sqlite.util :as sqlite-util]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            ["fs" :as fs]
+            ["path" :as node-path]))
 
 (defn- http-request
   [opts body]
@@ -56,6 +60,37 @@
       (is (:ok parsed))
       (ldb/read-transit-str (:resultTransit parsed)))))
 
+(defn- invoke-raw
+  [host port method args]
+  (let [payload (js/JSON.stringify
+                 (clj->js {:method method
+                           :directPass false
+                           :argsTransit (ldb/write-transit-str args)}))]
+    (http-request {:hostname host
+                   :port port
+                   :path "/v1/invoke"
+                   :method "POST"
+                   :headers {"Content-Type" "application/json"}}
+                  payload)))
+
+(defn- lock-path
+  [data-dir repo]
+  (let [pool-name (worker-util/get-pool-name repo)
+        repo-dir (node-path/join data-dir (str "." pool-name))]
+    (node-path/join repo-dir "db-worker.lock")))
+
+(deftest db-worker-node-parse-args-ignores-host-and-port
+  (let [parse-args #'db-worker-node/parse-args
+        result (parse-args #js ["node" "db-worker-node.js"
+                                "--host" "0.0.0.0"
+                                "--port" "1234"
+                                "--repo" "logseq_db_parse_args"
+                                "--data-dir" "/tmp/db-worker"])]
+    (is (nil? (:host result)))
+    (is (nil? (:port result)))
+    (is (= "logseq_db_parse_args" (:repo result)))
+    (is (= "/tmp/db-worker" (:data-dir result)))))
+
 (deftest db-worker-node-daemon-smoke-test
   (async done
     (let [daemon (atom nil)
@@ -66,9 +101,8 @@
           block-uuid (random-uuid)]
       (-> (p/let [{:keys [host port stop!]}
                   (db-worker-node/start-daemon!
-                   {:host "127.0.0.1"
-                    :port 0
-                    :data-dir data-dir})
+                   {:data-dir data-dir
+                    :repo repo})
                   health (http-get host port "/healthz")
                   ready (http-get host port "/readyz")
                   _ (do
@@ -88,6 +122,11 @@
                                             (subs repo (count prefix))
                                             repo)]
                         (is (some #(= expected-name (:name %)) dbs))))
+                  lock-file (lock-path data-dir repo)
+                  _ (is (fs/existsSync lock-file))
+                  lock-contents (js/JSON.parse (.toString (fs/readFileSync lock-file) "utf8"))
+                  _ (is (= repo (gobj/get lock-contents "repo")))
+                  _ (is (= host (gobj/get lock-contents "host")))
                   _ (invoke host port "thread-api/transact"
                             [repo
                              [{:block/uuid page-uuid
@@ -119,5 +158,51 @@
           (p/finally (fn []
                        (if-let [stop! (:stop! @daemon)]
                          (-> (stop!)
-                             (p/finally (fn [] (done))))
+                             (p/finally (fn []
+                                          (is (not (fs/existsSync (lock-path data-dir repo))))
+                                          (done))))
+                         (done))))))))
+
+(deftest db-worker-node-repo-mismatch-test
+  (async done
+    (let [daemon (atom nil)
+          data-dir (node-helper/create-tmp-dir "db-worker-repo-mismatch")
+          repo (str "logseq_db_mismatch_" (subs (str (random-uuid)) 0 8))
+          other-repo (str repo "_other")]
+      (-> (p/let [{:keys [host port stop!]}
+                  (db-worker-node/start-daemon! {:data-dir data-dir
+                                                 :repo repo})
+                  _ (reset! daemon {:host host :port port :stop! stop!})
+                  {:keys [status body]} (invoke-raw host port "thread-api/create-or-open-db" [other-repo {}])
+                  parsed (js->clj (js/JSON.parse body) :keywordize-keys true)]
+            (is (= 409 status))
+            (is (= false (:ok parsed)))
+            (is (= "repo-mismatch" (get-in parsed [:error :code]))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (if-let [stop! (:stop! @daemon)]
+                         (-> (stop!) (p/finally (fn [] (done))))
+                         (done))))))))
+
+(deftest db-worker-node-lock-prevents-multiple-daemons
+  (async done
+    (let [daemon (atom nil)
+          data-dir (node-helper/create-tmp-dir "db-worker-lock")
+          repo (str "logseq_db_lock_" (subs (str (random-uuid)) 0 8))]
+      (-> (p/let [{:keys [stop!]}
+                  (db-worker-node/start-daemon! {:data-dir data-dir
+                                                 :repo repo})
+                  _ (reset! daemon {:stop! stop!})]
+            (-> (db-worker-node/start-daemon! {:data-dir data-dir
+                                               :repo repo})
+                (p/then (fn [_]
+                          (is false "expected lock error")))
+                (p/catch (fn [e]
+                           (is (= :repo-locked (-> (ex-data e) :code)))))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (if-let [stop! (:stop! @daemon)]
+                         (-> (stop!) (p/finally (fn [] (done))))
                          (done))))))))
