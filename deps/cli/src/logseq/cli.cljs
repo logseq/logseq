@@ -109,7 +109,7 @@
     :args->opts [:args] :require [:args] :coerce {:args []}
     :spec cli-spec/append}
    {:cmds ["mcp-server"] :desc "Run a MCP server"
-    :description "Run a MCP server against a local graph if --graph is given or against the current in-app graph. For the in-app graph, the API server must be on in the app. By default the MCP server runs as a HTTP Streamable server. Use --stdio to run it as a stdio server."
+    :description "Run a MCP server against a local graph if --repo is given or against the current in-app graph. For the in-app graph, the API server must be on in the app. By default the MCP server runs as a HTTP Streamable server. Use --stdio to run it as a stdio server."
     :fn (lazy-load-fn 'logseq.cli.commands.mcp-server/start)
     :spec cli-spec/mcp-server}
    {:cmds ["validate"] :desc "Validate DB graph"

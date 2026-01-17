@@ -5,7 +5,7 @@ Goal: Based on the current `logseq-cli` and `db-worker-node` implementations, re
 ## Background and Current State (from existing code)
 
 - `db-worker-node` currently accepts `--repo` but it is optional; it can open/switch graphs via `thread-api/create-or-open-db` at runtime. Entrypoint: `src/main/frontend/worker/db_worker_node.cljs`.
-- `logseq-cli` connects to an existing db-worker-node via `base-url`; it does not start/stop the server. Entrypoint: `src/main/logseq/cli/main.cljs`, `src/main/logseq/cli/commands.cljs`, `src/main/logseq/cli/transport.cljs`.
+- `logseq-cli` connects to an existing db-worker-node on localhost using the port recorded in the lock file; it does not start/stop the server. Entrypoint: `src/main/logseq/cli/main.cljs`, `src/main/logseq/cli/commands.cljs`, `src/main/logseq/cli/transport.cljs`.
 - Tests explicitly start db-worker-node (`src/test/logseq/cli/integration_test.cljs`, `src/test/frontend/worker/db_worker_node_test.cljs`).
 
 ## Requirements
@@ -62,12 +62,12 @@ Key changes:
 - **Repo resolution**: for all graph/content commands, require `--repo` or resolved repo from config; otherwise error.
 - **Ensure server** (new helper `ensure-server!`):
   1. Derive data-dir, repo dir, and lock file path from repo.
-  2. If lock file exists, read host/port/pid; probe `/healthz` + `/readyz`.
-  3. If healthy, reuse existing server; set `config :base-url` dynamically.
+  2. If lock file exists, read port/pid; probe `/healthz` + `/readyz`.
+  3. If healthy, reuse existing server; build the connection URL from localhost and the lock file port.
   4. If unhealthy or stale, attempt to spawn a new server; if db-worker-node cannot handle the lock situation, CLI repairs the lock then retries.
-  5. Spawn via `child_process.spawn`: `node ./static/db-worker-node.js --repo <repo> --data-dir <...> --host 127.0.0.1 --port 0`.
-  6. Resolve actual port from lock file or server output.
-- **base-url usage**: dynamically set based on repo server; no longer required from user. If `--base-url` is provided, decide if it is ignored or overrides orchestration (see Compatibility section).
+  5. Spawn via `child_process.spawn`: `node ./static/db-worker-node.js --repo <repo> --data-dir <...>`.
+  6. Resolve actual port from the lock file written by db-worker-node.
+- **Connection URL**: derived from the repo lock file; host is always localhost and the port is always discovered from the lock file.
 
 ### 3) CLI `server` subcommands
 

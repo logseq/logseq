@@ -98,7 +98,7 @@
 (defn- open-sqlite-db
   [{:keys [sqlite pool path mode]}]
   (if pool
-    (new (.-OpfsSAHPoolDb pool) path)
+    (new (.-OpfsSAHPoolDb ^js pool) path)
     (let [^js DB (.-DB ^js (.-oo1 ^js sqlite))]
       (new DB path (or mode "c")))))
 

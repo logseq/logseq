@@ -77,7 +77,7 @@
         (p/catch (fn [_] false)))))
 
 (defn- exec-sql
-  [db opts-or-sql]
+  [^js db opts-or-sql]
   (if (string? opts-or-sql)
     (.exec db opts-or-sql)
     (let [sql (gobj/get opts-or-sql "sql")
@@ -94,7 +94,7 @@
                         (gobj/set out normalized value)))
                     out)
                   bind)
-          stmt (.prepare db sql)]
+          ^js stmt (.prepare db sql)]
       (if (= row-mode "array")
         (do
           (.raw stmt)
