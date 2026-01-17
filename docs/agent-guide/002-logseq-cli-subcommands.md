@@ -25,8 +25,8 @@ NOTE: I will write all tests before I add any implementation behavior.
 ## Architecture sketch
 
 +--------------+        HTTP        +---------------------+
-| logseq-cli   | -----------------> | db-worker-node       |
-| node script  | <----------------- | server on port 9101  |
+| logseq-cli   | -----------------> | db-worker-node        |
+| node script  | <----------------- | server on random port |
 +--------------+                    +---------------------+
 
 ## Command and output surface
@@ -56,9 +56,6 @@ Global options apply to all subcommands and are parsed before subcommand options
 | --- | --- | --- |
 | --help | Show help | Available at top level and per subcommand. |
 | --config PATH | Config file path | Defaults to ~/.logseq/cli.edn. |
-| --base-url URL | Server URL | Overrides host/port. |
-| --host HOST | Server host | Combined with --port. |
-| --port PORT | Server port | Combined with --host. |
 | --auth-token TOKEN | Auth token | Sent as header. |
 | --repo REPO | Graph name | Used as current repo. |
 | --timeout-ms MS | Request timeout | Integer milliseconds. |
@@ -70,11 +67,11 @@ Each subcommand uses a nested path and its own options.
 | Subcommand path | Required args | Options | Notes |
 | --- | --- | --- | --- |
 | graph list | none | --output | Lists all graphs. |
-| graph create | none | --graph GRAPH, --output | Creates and switches graph. |
-| graph switch | none | --graph GRAPH, --output | Switches current graph. |
-| graph remove | none | --graph GRAPH, --output | Removes graph. |
-| graph validate | none | --graph GRAPH, --output | Validates graph. |
-| graph info | none | --graph GRAPH, --output | Shows metadata, defaults to config repo if omitted. |
+| graph create | none | --repo GRAPH, --output | Creates and switches graph. |
+| graph switch | none | --repo GRAPH, --output | Switches current graph. |
+| graph remove | none | --repo GRAPH, --output | Removes graph. |
+| graph validate | none | --repo GRAPH, --output | Validates graph. |
+| graph info | none | --repo GRAPH, --output | Shows metadata, defaults to config repo if omitted. |
 | block add | none | --content TEXT, --blocks EDN, --blocks-file PATH, --page PAGE, --parent UUID, --output | Content source is required, with file and text variants. |
 | block remove | none | --block UUID, --page PAGE, --output | One of block or page is required. |
 | block search | none | --text TEXT, --limit N, --output | Search text is required. |
@@ -145,7 +142,7 @@ Expected output includes successful linting and tests with exit code 0.
 ## Testing Details
 
 The unit tests will exercise parsing and output formatting behavior without mocking internal parser details.
-The integration tests will start db-worker-node on a test port and invoke the CLI entrypoint with subcommands to verify end-to-end behavior.
+The integration tests will start db-worker-node on a random port and invoke the CLI entrypoint with subcommands to verify end-to-end behavior.
 
 ## Implementation Details
 
