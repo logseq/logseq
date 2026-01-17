@@ -12,7 +12,7 @@
     (loop [n 1000]
       (if (and (fs/exists? "static/js/main.js")
                (task-util/file-modified-later-than? "static/js/main.js" start-time))
-        (shell cmd)
+        (shell {:shutdown nil} cmd)
         (println "Waiting for app to build..."))
       (Thread/sleep 1000)
       (when-not (or (and (fs/exists? "ios/App/App/public/js/main.js")
@@ -24,11 +24,11 @@
 (defn- set-system-env
   "Updates capacitor.config.ts serve url with IP from ifconfig"
   []
-  (let [ip (string/trim (:out (or (shell {:out :string :continue true} "ipconfig getifaddr en0")
-                                  (shell {:out :string} "ipconfig getifaddr en1"))))
+  (let [ip (string/trim (:out (or (shell {:out :string :continue true :shutdown nil} "ipconfig getifaddr en0")
+                                  (shell {:out :string :shutdown nil} "ipconfig getifaddr en1"))))
         logseq-app-server-url (format "%s://%s:%s" "http" ip "3001")]
     (println "Server URL:" logseq-app-server-url)
-    (shell "git checkout capacitor.config.ts")
+    (shell {:shutdown nil} "git checkout capacitor.config.ts")
     (let [new-body (-> (slurp "capacitor.config.ts")
                        (string/replace "// , server:" " , server:")
                        (string/replace "//    url:" "    url:")
@@ -46,28 +46,28 @@
   (doseq [cmd ["yarn clean"
                "yarn app-watch"]]
     (println cmd)
-    (shell cmd)))
+    (shell {:shutdown nil} cmd)))
 
 (defn npx-cap-run-ios
   "Copy assets files to iOS build directory, and run app in Xcode"
   []
   (open-dev-app "npx cap sync ios")
-  (shell "npx cap open ios"))
+  (shell {:shutdown nil} "npx cap open ios"))
 
 (defn npx-cap-run-android
   "Copy assets files to Android build directory, and run app in Android Studio"
   []
   (open-dev-app "npx cap sync android")
-  (shell "npx cap open android"))
+  (shell {:shutdown nil} "npx cap open android"))
 
 (defn run-ios-release
   "Build iOS app release"
   []
-  (shell "git checkout capacitor.config.ts")
-  (shell "yarn run-ios-release"))
+  (shell {:shutdown nil} "git checkout capacitor.config.ts")
+  (shell {:shutdown nil} "yarn run-ios-release"))
 
 (defn run-android-release
   "Build Android app release"
   []
-  (shell "git checkout capacitor.config.ts")
-  (shell "yarn run-android-release"))
+  (shell {:shutdown nil} "git checkout capacitor.config.ts")
+  (shell {:shutdown nil} "yarn run-android-release"))
