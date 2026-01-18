@@ -93,6 +93,18 @@ Options grouping:
 Output formats:
 - Global `--output <human|json|edn>` (also accepted per subcommand)
 - Human output is plain text. List/search commands render tables with a final `Count: N` line. For list subcommands, the ID column uses `:db/id` (not UUID). If `:db/ident` exists, an `IDENT` column is included. Times such as list `UPDATED-AT`/`CREATED-AT` and `graph info` `Created at` are shown in human-friendly relative form. Errors include error codes and may include a `Hint:` line. Use `--output json|edn` for structured output.
+- `show` human output prints the `:db/id` as the first column followed by a tree:
+
+```
+id1 block1
+id2 ├── b2
+id3 │   └── b3
+id4 ├── b4
+id5 │   ├── b5
+id6 │   │   └── b6
+id7 │   └── b7
+id8 └── b8
+```
 
 Examples:
 

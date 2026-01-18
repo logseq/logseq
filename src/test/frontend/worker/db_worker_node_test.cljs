@@ -140,6 +140,34 @@
                          (-> (stop!) (p/finally (fn [] (done))))
                          (done))))))))
 
+(deftest db-worker-node-log-retention
+  (let [enforce-log-retention! #'db-worker-node/enforce-log-retention!
+        data-dir (node-helper/create-tmp-dir "db-worker-log-retention")
+        repo (str "logseq_db_log_retention_" (subs (str (random-uuid)) 0 8))
+        pool-name (worker-util/get-pool-name repo)
+        repo-dir (node-path/join data-dir (str "." pool-name))
+        days ["20240101" "20240102" "20240103" "20240104" "20240105"
+              "20240106" "20240107" "20240108" "20240109"]
+        make-log (fn [day]
+                   (node-path/join repo-dir (str "db-worker-node-" day ".log")))]
+    (fs/mkdirSync repo-dir #js {:recursive true})
+    (doseq [day days]
+      (fs/writeFileSync (make-log day) "log\n"))
+    (enforce-log-retention! repo-dir)
+    (let [remaining (->> (fs/readdirSync repo-dir)
+                         (filter (fn [^js name]
+                                   (re-matches #"db-worker-node-\d{8}\.log" name)))
+                         (sort))]
+      (is (= 7 (count remaining)))
+      (is (= ["db-worker-node-20240103.log"
+              "db-worker-node-20240104.log"
+              "db-worker-node-20240105.log"
+              "db-worker-node-20240106.log"
+              "db-worker-node-20240107.log"
+              "db-worker-node-20240108.log"
+              "db-worker-node-20240109.log"]
+             remaining)))))
+
 (deftest db-worker-node-parse-args-ignores-host-and-port
   (let [parse-args #'db-worker-node/parse-args
         result (parse-args #js ["node" "db-worker-node.js"

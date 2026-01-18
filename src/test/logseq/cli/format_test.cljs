@@ -145,12 +145,20 @@
                                                          :content "Note"
                                                          :uuid "u2"
                                                          :updated-at 4
-                                                         :created-at 2}]}}
+                                                         :created-at 2}
+                                                        {:type "tag"
+                                                         :title "Taggy"
+                                                         :uuid "u3"}
+                                                        {:type "property"
+                                                         :title "Prop"
+                                                         :uuid "u4"}]}}
                                        {:output-format nil})]
-      (is (= (str "TYPE   TITLE/CONTENT  UUID  UPDATED-AT  CREATED-AT\n"
-                  "page   Alpha          u1    3           1\n"
-                  "block  Note           u2    4           2\n"
-                  "Count: 2")
+      (is (= (str "TYPE      TITLE/CONTENT  UUID  UPDATED-AT  CREATED-AT\n"
+                  "page      Alpha          u1    3           1\n"
+                  "block     Note           u2    4           2\n"
+                  "tag       Taggy          u3    -           -\n"
+                  "property  Prop           u4    -           -\n"
+                  "Count: 4")
              result))))
 
   (testing "show renders text payloads directly"

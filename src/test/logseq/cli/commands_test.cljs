@@ -130,6 +130,44 @@
       (is (true? (:ok? result)))
       (is (= "json" (get-in result [:options :output]))))))
 
+(deftest test-tree->text-format
+  (testing "show tree text uses db/id with tree glyphs"
+    (let [tree->text #'commands/tree->text
+          tree-data {:root {:db/id 1
+                            :block/title "Root"
+                            :block/children [{:db/id 2
+                                              :block/title "Child A"
+                                              :block/children [{:db/id 3
+                                                                :block/title "Grandchild A1"}]}
+                                             {:db/id 4
+                                              :block/title "Child B"}]}}]
+      (is (= (str "1 Root\n"
+                  "2 ├── Child A\n"
+                  "3 │   └── Grandchild A1\n"
+                  "4 └── Child B")
+             (tree->text tree-data))))))
+
+(deftest test-tree->text-multiline
+  (testing "show tree text renders multiline blocks under glyph column"
+    (let [tree->text #'commands/tree->text
+          tree-data {:root {:db/id 168
+                            :block/title "Jan 18th, 2026"
+                            :block/children [{:db/id 169
+                                              :block/title "b1"}
+                                             {:db/id 173
+                                              :block/title "aaaxx"}
+                                             {:db/id 174
+                                              :block/title "block-line1\nblock-line2"}
+                                             {:db/id 175
+                                              :block/title "cccc"}]}}]
+      (is (= (str "168 Jan 18th, 2026\n"
+                  "169 ├── b1\n"
+                  "173 ├── aaaxx\n"
+                  "174 ├── block-line1\n"
+                  "    │   block-line2\n"
+                  "175 └── cccc")
+             (tree->text tree-data))))))
+
 (deftest test-list-subcommand-parse
   (testing "list page parses"
     (let [result (commands/parse-args ["list" "page"
