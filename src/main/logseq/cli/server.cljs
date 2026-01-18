@@ -1,5 +1,5 @@
 (ns logseq.cli.server
-  "db-worker-node lifecycle orchestration for logseq-cli."
+  "db-worker-node lifecycle orchestration for logseq."
   (:require ["child_process" :as child-process]
             ["fs" :as fs]
             ["http" :as http]
