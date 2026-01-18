@@ -46,7 +46,6 @@ Group names and order:
 | list | page | List pages |
 | list | tag | List tags |
 | list | property | List properties |
-| list | block | List blocks |
 | add | block | Add blocks |
 | add | page | Create page |
 | remove | block | Remove block |
@@ -65,10 +64,10 @@ Common list options:
 | Option | Applies to | Purpose | Notes |
 | --- | --- | --- | --- |
 | --expand | page, tag, property | Include expanded metadata | Maps to existing api-list-* expand behavior. |
-| --limit N | page, tag, property, block | Limit results | Implemented in CLI after fetch unless server supports it. |
-| --offset N | page, tag, property, block | Offset results | Implemented in CLI after fetch unless server supports it. |
-| --sort FIELD | page, tag, property, block | Sort results | Field whitelist per type. |
-| --order asc|desc | page, tag, property, block | Sort direction | Defaults to asc. |
+| --limit N | page, tag, property | Limit results | Implemented in CLI after fetch unless server supports it. |
+| --offset N | page, tag, property | Offset results | Implemented in CLI after fetch unless server supports it. |
+| --sort FIELD | page, tag, property | Sort results | Field whitelist per type. |
+| --order asc|desc | page, tag, property | Sort direction | Defaults to asc. |
 | --output FORMAT | all | Output format | Existing output handling. |
 
 List page options:
@@ -132,26 +131,25 @@ Show has no subcommands and returns the block tree for a page or block.
 ## Plan
 
 1. Review current CLI command parsing and action routing in src/main/logseq/cli/commands.cljs to map block group behavior to verb-first commands.
-2. Add failing unit tests in src/test/logseq/cli/commands_test.cljs for verb-first help output and parse behavior for list, add, remove, search, and tree.
-3. Add failing unit tests that assert list subtype option parsing and validation for list page, list tag, list property, and list block.
-4. Add failing unit tests for add page, add tag, add property, remove tag, and remove property parse and validation behavior.
-5. Add failing unit tests that assert search defaults to all types and respects --type and --include-content options.
-6. Add failing unit tests that assert tree accepts --page or --block and rejects missing targets.
-7. Run bb dev:test -v logseq.cli.commands-test/test-parse-args and confirm failures are about the new verbs and options.
-8. Update src/main/logseq/cli/commands.cljs to replace block subcommands with verb-first entries and to add list subcommand group.
-9. Update summary helpers in src/main/logseq/cli/commands.cljs to show group help for list, add, and remove instead of block, and to render help groups as Graph Inspect and Edit first, Graph Management last.
-10. Update src/main/logseq/cli/main.cljs usage string to reflect the verb-first command surface.
-11. Add list option specs in src/main/logseq/cli/commands.cljs and update validation to enforce required args and mutually exclusive flags.
-12. Implement list actions in src/main/logseq/cli/commands.cljs that call existing thread-apis for pages, tags, and properties.
-13. Implement add page using thread-api/apply-outliner-ops with :create-page in src/main/logseq/cli/commands.cljs.
-14. Update search logic in src/main/logseq/cli/commands.cljs to query all resource types and honor --type, --tag, --sort, and --include-content.
-15. Update show logic in src/main/logseq/cli/commands.cljs to support --id, --uuid, --page-name, and --level.
-16. Add failing integration tests in src/test/logseq/cli/integration_test.cljs for list page, list tag, list property, add page, remove page, search all, and show.
-21. Run bb dev:test -v logseq.cli.integration-test/test-cli-list-and-search and confirm failures before implementation.
-22. Implement behavior for list, add, remove, search, and tree until all tests pass.
-23. Update docs/cli/logseq-cli.md with new verb-first commands and examples.
-24. Run bb dev:test -r logseq.cli.* and confirm 0 failures and 0 errors.
-25. Run bb dev:lint-and-test and confirm a zero exit code.
+2. Add failing unit tests in src/test/logseq/cli/commands_test.cljs for verb-first help output and parse behavior for list, add, remove, search, and show.
+3. Add failing unit tests that assert list subtype option parsing and validation for list page, list tag, and list property.
+4. Add failing unit tests that assert search defaults to all types and respects --type and --include-content options.
+5. Add failing unit tests that assert show accepts --page-name, --uuid, or --id and rejects missing targets.
+6. Run bb dev:test -v logseq.cli.commands-test/test-parse-args and confirm failures are about the new verbs and options.
+7. Update src/main/logseq/cli/commands.cljs to replace block subcommands with verb-first entries and to add list subcommand group.
+8. Update summary helpers in src/main/logseq/cli/commands.cljs to show group help for list, add, and remove instead of block, and to render help groups as Graph Inspect and Edit first, Graph Management last.
+9. Update src/main/logseq/cli/main.cljs usage string to reflect the verb-first command surface.
+10. Add list option specs in src/main/logseq/cli/commands.cljs and update validation to enforce required args and mutually exclusive flags.
+11. Implement list actions in src/main/logseq/cli/commands.cljs that call existing thread-apis for pages, tags, and properties.
+12. Implement add page using thread-api/apply-outliner-ops with :create-page in src/main/logseq/cli/commands.cljs.
+13. Update search logic in src/main/logseq/cli/commands.cljs to query all resource types and honor --type, --tag, --sort, and --include-content.
+14. Update show logic in src/main/logseq/cli/commands.cljs to support --id, --uuid, --page-name, and --level.
+15. Add failing integration tests in src/test/logseq/cli/integration_test.cljs for list page, list tag, list property, add page, remove page, search all, and show.
+16. Run bb dev:test -v logseq.cli.integration-test/test-cli-list-and-search and confirm failures before implementation.
+17. Implement behavior for list, add, remove, search, and show until all tests pass.
+18. Update docs/cli/logseq-cli.md with new verb-first commands and examples.
+19. Run bb dev:test -r logseq.cli.* and confirm 0 failures and 0 errors.
+20. Run bb dev:lint-and-test and confirm a zero exit code.
 
 ## Edge cases
 
@@ -178,7 +176,7 @@ Expected output includes failing assertions about the new verb-first commands an
 Run the integration tests in red phase.
 
 ```bash
-bb dev:test -v logseq.cli.integration-test/test-cli-list-and-search
+bb dev:test -v logseq.cli.integration-test/test-cli-list-add-search-show-remove
 ```
 
 Expected output includes failing assertions about list and search output and ends with a non-zero exit code.
@@ -216,8 +214,6 @@ The integration tests will create a temporary graph, add pages, tags, and proper
 
 ## Question
 
-Add tag, remove tag, add property, remove property are Implement Later.
-
-Rename for page, tag, and property is Implement Later.
+None.
 
 ---

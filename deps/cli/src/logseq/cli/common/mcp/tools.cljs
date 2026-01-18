@@ -18,9 +18,14 @@
 
 (defn list-properties
   "Main fn for ListProperties tool"
-  [db {:keys [expand]}]
+  [db {:keys [expand include-built-in] :as options}]
+  (ensure-db-graph db)
+  (let [include-built-in? (if (contains? options :include-built-in) include-built-in true)]
   (->> (d/datoms db :avet :block/tags :logseq.class/Property)
        (map #(d/entity db (:e %)))
+       (remove (fn [e]
+                 (and (not include-built-in?)
+                      (ldb/built-in? e))))
        #_((fn [x] (prn :prop-keys (distinct (mapcat keys x))) x))
        (map (fn [e]
               (if expand
@@ -35,13 +40,18 @@
                   (:logseq.property/description e)
                   (update :logseq.property/description db-property/property-value-content))
                 {:block/title (:block/title e)
-                 :block/uuid (str (:block/uuid e))})))))
+                 :block/uuid (str (:block/uuid e))}))))))
 
 (defn list-tags
   "Main fn for ListTags tool"
-  [db {:keys [expand]}]
+  [db {:keys [expand include-built-in] :as options}]
+  (ensure-db-graph db)
+  (let [include-built-in? (if (contains? options :include-built-in) include-built-in true)]
   (->> (d/datoms db :avet :block/tags :logseq.class/Tag)
        (map #(d/entity db (:e %)))
+       (remove (fn [e]
+                 (and (not include-built-in?)
+                      (ldb/built-in? e))))
        (map (fn [e]
               (if expand
                 (cond-> (into {} e)
@@ -59,7 +69,7 @@
                   (:logseq.property/description e)
                   (update :logseq.property/description db-property/property-value-content))
                 {:block/title (:block/title e)
-                 :block/uuid (str (:block/uuid e))})))))
+                 :block/uuid (str (:block/uuid e))}))))))
 
 (defn- get-page-blocks
   [db page-id]
@@ -91,12 +101,40 @@
                        (dissoc :block/children :block/page))
                   (get-page-blocks db (:db/id page)))}))
 
+(defn- parse-time
+  [value]
+  (cond
+    (number? value) value
+    (string? value) (let [ms (js/Date.parse value)]
+                      (when-not (js/isNaN ms) ms))
+    :else nil))
+
 (defn list-pages
   "Main fn for ListPages tool"
-  [db {:keys [expand]}]
+  [db {:keys [expand include-hidden include-journal journal-only created-after updated-after] :as options}]
+  (ensure-db-graph db)
+  (let [include-hidden? (boolean include-hidden)
+        include-journal? (if (contains? options :include-journal) include-journal true)
+        journal-only? (boolean journal-only)
+        created-after-ms (parse-time created-after)
+        updated-after-ms (parse-time updated-after)]
   (->> (d/datoms db :avet :block/name)
        (map #(d/entity db (:e %)))
-       (remove entity-util/hidden?)
+       (remove (fn [e]
+                 (and (not include-hidden?)
+                      (entity-util/hidden? e))))
+       (remove (fn [e]
+                 (let [is-journal? (ldb/journal? e)]
+                   (cond
+                     journal-only? (not is-journal?)
+                     (false? include-journal?) is-journal?
+                     :else false))))
+       (remove (fn [e]
+                 (and created-after-ms
+                      (<= (:block/created-at e 0) created-after-ms))))
+       (remove (fn [e]
+                 (and updated-after-ms
+                      (<= (:block/updated-at e 0) updated-after-ms))))
        (map (fn [e]
               (if expand
                 (-> e
@@ -105,7 +143,7 @@
                     (select-keys [:block/uuid :block/title :block/created-at :block/updated-at])
                     (update :block/uuid str))
                 {:block/title (:block/title e)
-                 :block/uuid (str (:block/uuid e))})))))
+                 :block/uuid (str (:block/uuid e))}))))))
 
 ;; upsert-nodes tool
 ;; =================

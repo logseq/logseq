@@ -12,7 +12,7 @@
   (string/join "\n"
                ["logseq-cli <command> [options]"
                 ""
-                "Commands: graph list, graph create, graph switch, graph remove, graph validate, graph info, server list, server status, server start, server stop, server restart, block add, block remove, block search, block tree"
+                "Commands: list page, list tag, list property, add block, add page, remove block, remove page, search, show, graph list, graph create, graph switch, graph remove, graph validate, graph info, server list, server status, server start, server stop, server restart"
                 ""
                 "Options:"
                 summary]))
