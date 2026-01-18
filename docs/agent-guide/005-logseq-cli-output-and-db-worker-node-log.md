@@ -20,7 +20,7 @@ Target: plain text, no ANSI colors. Each command has a stable layout and orderin
 | graph switch | `Graph switched: <graph>` | n/a | Use graph name from action/options |
 | graph remove | `Graph removed: <graph>` | n/a | Use graph name from action/options |
 | graph validate | `Graph validated: <graph>` | n/a | Use graph name from action/options |
-| graph info | Lines: `Graph: <graph>`, `Created at: <ts>`, `Schema version: <v>` | n/a | Use `:logseq.kv/*` data; show `-` if missing |
+| graph info | Lines: `Graph: <graph>`, `Created at: <relative time>`, `Schema version: <v>` | n/a | Use `:logseq.kv/*` data; show `-` if missing; `Created at` should use the same human-friendly relative format as list outputs |
 | server list | Table with header `REPO STATUS HOST PORT PID`, rows for servers, followed by `Count: N` | Header + `Count: 0` | Data from `{:servers [...]}` |
 | server status/start/stop/restart | `Server <status>: <repo>` + details line `Host: <host>  Port: <port>` when available | n/a | Use `:status` keyword where present |
 | list page/tag/property | Table with header (fields vary by command) and rows, followed by `Count: N` | Header + `Count: 0` | Defaults: page/tag/property `ID TITLE UPDATED-AT CREATED-AT` (ID uses `:db/id`); if `:db/ident` present, include `IDENT` column |

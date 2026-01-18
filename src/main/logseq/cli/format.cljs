@@ -176,10 +176,12 @@
          (or results []))))
 
 (defn- format-graph-info
-  [{:keys [graph logseq.kv/graph-created-at logseq.kv/schema-version]}]
+  [{:keys [graph logseq.kv/graph-created-at logseq.kv/schema-version]} now-ms]
   (string/join "\n"
                [(str "Graph: " (or graph "-"))
-                (str "Created at: " (or graph-created-at "-"))
+                (str "Created at: " (if (some? graph-created-at)
+                                      (human-ago graph-created-at now-ms)
+                                      "-"))
                 (str "Schema version: " (or schema-version "-"))]))
 
 (defn- format-server-status
@@ -233,7 +235,7 @@
       :ok
       (case command
         :graph-list (format-graph-list (:graphs data))
-        :graph-info (format-graph-info data)
+        :graph-info (format-graph-info data now-ms)
         (:graph-create :graph-switch :graph-remove :graph-validate)
         (format-graph-action command context)
         :server-list (format-server-list (:servers data))
@@ -264,7 +266,7 @@
             (= status :error) (assoc :error error))))
 
 (defn format-result
-  [result {:keys [output-format now-ms] :as opts}]
+  [result {:keys [output-format] :as opts}]
   (let [format (cond
                  (= output-format :edn) :edn
                  (= output-format :json) :json

@@ -173,3 +173,40 @@
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))
                      (done)))))))
+
+(deftest test-cli-show-page-block-by-id-and-uuid
+  (async done
+    (let [data-dir (node-helper/create-tmp-dir "db-worker")]
+      (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                  _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                  _ (run-cli ["graph" "create" "--repo" "show-page-block-graph"] data-dir cfg-path)
+                  _ (run-cli ["add" "page" "--page" "TestPage"] data-dir cfg-path)
+                  list-page-result (run-cli ["list" "page" "--expand"] data-dir cfg-path)
+                  list-page-payload (parse-json-output list-page-result)
+                  page-item (some (fn [item]
+                                    (when (= "TestPage" (or (:block/title item) (:title item)))
+                                      item))
+                                  (get-in list-page-payload [:data :items]))
+                  page-id (or (:db/id page-item) (:id page-item))
+                  page-uuid (or (:block/uuid page-item) (:uuid page-item))
+                  show-by-id-result (run-cli ["show" "--id" (str page-id) "--format" "json"] data-dir cfg-path)
+                  show-by-id-payload (parse-json-output show-by-id-result)
+                  show-by-uuid-result (run-cli ["show" "--uuid" (str page-uuid) "--format" "json"] data-dir cfg-path)
+                  show-by-uuid-payload (parse-json-output show-by-uuid-result)
+                  stop-result (run-cli ["server" "stop" "--repo" "show-page-block-graph"] data-dir cfg-path)
+                  stop-payload (parse-json-output stop-result)]
+            (is (= "ok" (:status list-page-payload)))
+            (is (some? page-item))
+            (is (some? page-id))
+            (is (some? page-uuid))
+            (is (= "ok" (:status show-by-id-payload)))
+            (is (= (str page-uuid) (str (or (get-in show-by-id-payload [:data :root :uuid])
+                                            (get-in show-by-id-payload [:data :root :block/uuid])))))
+            (is (= "ok" (:status show-by-uuid-payload)))
+            (is (= (str page-uuid) (str (or (get-in show-by-uuid-payload [:data :root :uuid])
+                                            (get-in show-by-uuid-payload [:data :root :block/uuid])))))
+            (is (= "ok" (:status stop-payload)))
+            (done))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))
+                     (done)))))))
