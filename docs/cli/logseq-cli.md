@@ -1,6 +1,6 @@
 # Logseq CLI (Node)
 
-The Logseq CLI is a Node.js program compiled from ClojureScript that connects to a db-worker-node server managed by the CLI.
+The Logseq CLI is a Node.js program compiled from ClojureScript that connects to a db-worker-node server managed by the CLI. When installed, the CLI binary name is `logseq`.
 
 ## Build the CLI
 
@@ -10,12 +10,18 @@ clojure -M:cljs compile logseq-cli
 
 ## db-worker-node lifecycle
 
-`logseq-cli` manages `db-worker-node` automatically. You should not start the server manually. The server binds to localhost on a random port and records that port in the repo lock file.
+`logseq` manages `db-worker-node` automatically. You should not start the server manually. The server binds to localhost on a random port and records that port in the repo lock file.
 
 ## Run the CLI
 
 ```bash
 node ./static/logseq-cli.js graph list
+
+If installed globally, run:
+
+```bash
+logseq graph list
+```
 ```
 
 ## Configuration
@@ -81,9 +87,12 @@ Subcommands:
   show [options]           Show tree
 ```
 
+Options grouping:
+- Help output separates **Global options** (apply to all commands) and **Command options** (command-specific flags).
+
 Output formats:
 - Global `--output <human|json|edn>` (also accepted per subcommand)
-- Human output is plain text. List/search commands render tables with a final `Count: N` line. For list subcommands, the ID column uses `:db/id` (not UUID). If `:db/ident` exists, an `IDENT` column is included. Errors include error codes and may include a `Hint:` line. Use `--output json|edn` for structured output.
+- Human output is plain text. List/search commands render tables with a final `Count: N` line. For list subcommands, the ID column uses `:db/id` (not UUID). If `:db/ident` exists, an `IDENT` column is included. Times such as list `UPDATED-AT`/`CREATED-AT` and `graph info` `Created at` are shown in human-friendly relative form. Errors include error codes and may include a `Hint:` line. Use `--output json|edn` for structured output.
 
 Examples:
 
