@@ -6,12 +6,18 @@
             [promesa.core :as p]))
 
 (deftest test-help-output
-  (testing "top-level help lists subcommand groups"
+  (testing "top-level help lists command groups"
     (let [result (commands/parse-args ["--help"])
           summary (:summary result)]
       (is (true? (:help? result)))
+      (is (string/includes? summary "Graph Inspect and Edit"))
+      (is (string/includes? summary "Graph Management"))
+      (is (string/includes? summary "list"))
+      (is (string/includes? summary "add"))
+      (is (string/includes? summary "remove"))
+      (is (string/includes? summary "search"))
+      (is (string/includes? summary "show"))
       (is (string/includes? summary "graph"))
-      (is (string/includes? summary "block"))
       (is (string/includes? summary "server")))))
 
 (deftest test-parse-args
@@ -22,12 +28,27 @@
       (is (string/includes? summary "graph list"))
       (is (string/includes? summary "graph create"))))
 
-  (testing "block group shows subcommands"
-    (let [result (commands/parse-args ["block"])
+  (testing "list group shows subcommands"
+    (let [result (commands/parse-args ["list"])
           summary (:summary result)]
       (is (true? (:help? result)))
-      (is (string/includes? summary "block add"))
-      (is (string/includes? summary "block search"))))
+      (is (string/includes? summary "list page"))
+      (is (string/includes? summary "list tag"))
+      (is (string/includes? summary "list property"))))
+
+  (testing "add group shows subcommands"
+    (let [result (commands/parse-args ["add"])
+          summary (:summary result)]
+      (is (true? (:help? result)))
+      (is (string/includes? summary "add block"))
+      (is (string/includes? summary "add page"))))
+
+  (testing "remove group shows subcommands"
+    (let [result (commands/parse-args ["remove"])
+          summary (:summary result)]
+      (is (true? (:help? result)))
+      (is (string/includes? summary "remove block"))
+      (is (string/includes? summary "remove page"))))
 
   (testing "server group shows subcommands"
     (let [result (commands/parse-args ["server"])
@@ -51,23 +72,8 @@
       (is (seq subcommand-lines))
       (is (apply = desc-starts))))
 
-  (testing "block group aligns subcommand columns"
-    (let [result (commands/parse-args ["block"])
-          summary (:summary result)
-          subcommand-lines (let [lines (string/split-lines summary)
-                                 start (inc (.indexOf lines "Subcommands:"))]
-                             (->> lines
-                                  (drop start)
-                                  (take-while (complement string/blank?))))
-          desc-starts (->> subcommand-lines
-                           (keep (fn [line]
-                                   (when-let [[_ desc] (re-matches #"^\s+.*?\s{2,}(.+)$" line)]
-                                     (.indexOf line desc)))))]
-      (is (seq subcommand-lines))
-      (is (apply = desc-starts))))
-
-  (testing "server group aligns subcommand columns"
-    (let [result (commands/parse-args ["server"])
+  (testing "list group aligns subcommand columns"
+    (let [result (commands/parse-args ["list"])
           summary (:summary result)
           subcommand-lines (let [lines (string/split-lines summary)
                                  start (inc (.indexOf lines "Subcommands:"))]
@@ -83,21 +89,21 @@
 
   (testing "rejects legacy commands"
     (doseq [command ["graph-list" "graph-create" "graph-switch" "graph-remove"
-                     "graph-validate" "graph-info" "add" "remove" "search" "tree"
+                     "graph-validate" "graph-info" "block" "tree"
                      "ping" "status" "query" "export"]]
       (let [result (commands/parse-args [command])]
         (is (false? (:ok? result)))
         (is (= :unknown-command (get-in result [:error :code]))))))
 
-  (testing "rejects removed commands"
-    (let [result (commands/parse-args ["graph" "wat"])]
-      (is (false? (:ok? result)))
-      (is (= :unknown-command (get-in result [:error :code])))))
-
   (testing "rejects removed group commands"
-    (let [result (commands/parse-args ["content" "add"])]
-      (is (false? (:ok? result)))
-      (is (= :unknown-command (get-in result [:error :code])))))
+    (doseq [args [["block" "add"]
+                  ["block" "remove"]
+                  ["block" "search"]
+                  ["block" "tree"]
+                  ["content" "add"]]]
+      (let [result (commands/parse-args args)]
+        (is (false? (:ok? result)))
+        (is (= :unknown-command (get-in result [:error :code]))))))
 
   (testing "errors on missing command"
     (let [result (commands/parse-args [])]
@@ -114,153 +120,153 @@
       (is (true? (:ok? result)))
       (is (= "json" (get-in result [:options :output]))))))
 
-(deftest test-graph-subcommand-parse
-  (testing "graph list parses"
-    (let [result (commands/parse-args ["graph" "list"])]
+(deftest test-list-subcommand-parse
+  (testing "list page parses"
+    (let [result (commands/parse-args ["list" "page"
+                                       "--expand"
+                                       "--include-journal"
+                                       "--limit" "10"
+                                       "--offset" "5"
+                                       "--sort" "updated-at"
+                                       "--order" "desc"
+                                       "--fields" "title,updated-at"])]
       (is (true? (:ok? result)))
-      (is (= :graph-list (:command result)))))
+      (is (= :list-page (:command result)))
+      (is (true? (get-in result [:options :expand])))
+      (is (true? (get-in result [:options :include-journal])))
+      (is (= 10 (get-in result [:options :limit])))
+      (is (= 5 (get-in result [:options :offset])))
+      (is (= "updated-at" (get-in result [:options :sort])))
+      (is (= "desc" (get-in result [:options :order])))
+      (is (= "title,updated-at" (get-in result [:options :fields])))))
 
-  (testing "graph create requires repo option"
-    (let [result (commands/parse-args ["graph" "create"])]
+  (testing "list tag parses"
+    (let [result (commands/parse-args ["list" "tag"
+                                       "--expand"
+                                       "--include-built-in"
+                                       "--with-properties"
+                                       "--with-extends"
+                                       "--fields" "name,properties"])]
+      (is (true? (:ok? result)))
+      (is (= :list-tag (:command result)))
+      (is (true? (get-in result [:options :expand])))
+      (is (true? (get-in result [:options :include-built-in])))
+      (is (true? (get-in result [:options :with-properties])))
+      (is (true? (get-in result [:options :with-extends])))
+      (is (= "name,properties" (get-in result [:options :fields])))))
+
+  (testing "list property parses"
+    (let [result (commands/parse-args ["list" "property"
+                                       "--expand"
+                                       "--include-built-in"
+                                       "--with-classes"
+                                       "--with-type"
+                                       "--fields" "name,type"])]
+      (is (true? (:ok? result)))
+      (is (= :list-property (:command result)))
+      (is (true? (get-in result [:options :expand])))
+      (is (true? (get-in result [:options :include-built-in])))
+      (is (true? (get-in result [:options :with-classes])))
+      (is (true? (get-in result [:options :with-type])))
+      (is (= "name,type" (get-in result [:options :fields]))))))
+
+(deftest test-list-subcommand-validation
+  (testing "list page rejects mutually exclusive journal flags"
+    (let [result (commands/parse-args ["list" "page"
+                                       "--include-journal"
+                                       "--journal-only"])]
       (is (false? (:ok? result)))
-      (is (= :missing-graph (get-in result [:error :code])))))
+      (is (= :invalid-options (get-in result [:error :code])))))
 
-  (testing "graph create parses with repo option"
-    (let [result (commands/parse-args ["graph" "create" "--repo" "demo"])]
-      (is (true? (:ok? result)))
-      (is (= :graph-create (:command result)))
-      (is (= "demo" (get-in result [:options :repo])))))
-
-  (testing "graph switch requires repo option"
-    (let [result (commands/parse-args ["graph" "switch"])]
+  (testing "list page rejects invalid sort field"
+    (let [result (commands/parse-args ["list" "page" "--sort" "wat"])]
       (is (false? (:ok? result)))
-      (is (= :missing-graph (get-in result [:error :code])))))
+      (is (= :invalid-options (get-in result [:error :code])))))
 
-  (testing "graph switch parses with repo option"
-    (let [result (commands/parse-args ["graph" "switch" "--repo" "demo"])]
-      (is (true? (:ok? result)))
-      (is (= :graph-switch (:command result)))
-      (is (= "demo" (get-in result [:options :repo])))))
-
-  (testing "graph remove requires repo option"
-    (let [result (commands/parse-args ["graph" "remove"])]
+  (testing "list tag rejects invalid sort field"
+    (let [result (commands/parse-args ["list" "tag" "--sort" "wat"])]
       (is (false? (:ok? result)))
-      (is (= :missing-graph (get-in result [:error :code])))))
+      (is (= :invalid-options (get-in result [:error :code])))))
 
-  (testing "graph remove parses with repo option"
-    (let [result (commands/parse-args ["graph" "remove" "--repo" "demo"])]
-      (is (true? (:ok? result)))
-      (is (= :graph-remove (:command result)))
-      (is (= "demo" (get-in result [:options :repo])))))
-
-  (testing "graph validate requires repo option"
-    (let [result (commands/parse-args ["graph" "validate"])]
+  (testing "list property rejects invalid sort field"
+    (let [result (commands/parse-args ["list" "property" "--sort" "wat"])]
       (is (false? (:ok? result)))
-      (is (= :missing-graph (get-in result [:error :code])))))
+      (is (= :invalid-options (get-in result [:error :code]))))))
 
-  (testing "graph validate parses with repo option"
-    (let [result (commands/parse-args ["graph" "validate" "--repo" "demo"])]
-      (is (true? (:ok? result)))
-      (is (= :graph-validate (:command result)))
-      (is (= "demo" (get-in result [:options :repo])))))
-
-  (testing "graph info parses without repo option"
-    (let [result (commands/parse-args ["graph" "info"])]
-      (is (true? (:ok? result)))
-      (is (= :graph-info (:command result)))))
-
-  (testing "graph info parses with repo option"
-    (let [result (commands/parse-args ["graph" "info" "--repo" "demo"])]
-      (is (true? (:ok? result)))
-      (is (= :graph-info (:command result)))
-      (is (= "demo" (get-in result [:options :repo])))))
-
-  (testing "graph subcommands reject unknown flags"
-    (doseq [subcommand ["list" "create" "switch" "remove" "validate" "info"]]
-      (let [result (commands/parse-args ["graph" subcommand "--wat"])]
-        (is (false? (:ok? result)))
-        (is (= :invalid-options (get-in result [:error :code]))))))
-
-
-  (testing "graph subcommands accept output option"
-    (let [result (commands/parse-args ["graph" "list" "--output" "edn"])]
-      (is (true? (:ok? result)))
-      (is (= "edn" (get-in result [:options :output])))))
-
-  (testing "server list parses"
-    (let [result (commands/parse-args ["server" "list"])]
-      (is (true? (:ok? result)))
-      (is (= :server-list (:command result)))))
-
-  (testing "server start requires repo"
-    (let [result (commands/parse-args ["server" "start"])]
-      (is (false? (:ok? result)))
-      (is (= :missing-repo (get-in result [:error :code])))))
-
-  (testing "server start parses with repo"
-    (let [result (commands/parse-args ["server" "start" "--repo" "demo"])]
-      (is (true? (:ok? result)))
-      (is (= :server-start (:command result)))
-      (is (= "demo" (get-in result [:options :repo])))))
-
-  (testing "server stop parses with repo"
-    (let [result (commands/parse-args ["server" "stop" "--repo" "demo"])]
-      (is (true? (:ok? result)))
-      (is (= :server-stop (:command result))))))
-
-(deftest test-block-subcommand-parse
-  (testing "block add requires content source"
-    (let [result (commands/parse-args ["block" "add"])]
+(deftest test-verb-subcommand-parse
+  (testing "add block requires content source"
+    (let [result (commands/parse-args ["add" "block"])]
       (is (false? (:ok? result)))
       (is (= :missing-content (get-in result [:error :code])))))
 
-  (testing "block add parses with content"
-    (let [result (commands/parse-args ["block" "add" "--content" "hello"])]
+  (testing "add block parses with content"
+    (let [result (commands/parse-args ["add" "block" "--content" "hello"])]
       (is (true? (:ok? result)))
-      (is (= :add (:command result)))
+      (is (= :add-block (:command result)))
       (is (= "hello" (get-in result [:options :content])))))
 
-  (testing "block remove requires target"
-    (let [result (commands/parse-args ["block" "remove"])]
+  (testing "add page requires page name"
+    (let [result (commands/parse-args ["add" "page"])]
+      (is (false? (:ok? result)))
+      (is (= :missing-page-name (get-in result [:error :code])))))
+
+  (testing "add page parses with name"
+    (let [result (commands/parse-args ["add" "page" "--page" "Home"])]
+      (is (true? (:ok? result)))
+      (is (= :add-page (:command result)))
+      (is (= "Home" (get-in result [:options :page])))))
+
+  (testing "remove block requires target"
+    (let [result (commands/parse-args ["remove" "block"])]
       (is (false? (:ok? result)))
       (is (= :missing-target (get-in result [:error :code])))))
 
-  (testing "block remove parses with block"
-    (let [result (commands/parse-args ["block" "remove" "--block" "demo"])]
+  (testing "remove block parses with block"
+    (let [result (commands/parse-args ["remove" "block" "--block" "demo"])]
       (is (true? (:ok? result)))
-      (is (= :remove (:command result)))
+      (is (= :remove-block (:command result)))
       (is (= "demo" (get-in result [:options :block])))))
 
-  (testing "block search requires text"
-    (let [result (commands/parse-args ["block" "search"])]
+  (testing "remove page parses with page"
+    (let [result (commands/parse-args ["remove" "page" "--page" "Home"])]
+      (is (true? (:ok? result)))
+      (is (= :remove-page (:command result)))
+      (is (= "Home" (get-in result [:options :page])))))
+
+  (testing "search requires text"
+    (let [result (commands/parse-args ["search"])]
       (is (false? (:ok? result)))
       (is (= :missing-search-text (get-in result [:error :code])))))
 
-  (testing "block search parses with text"
-    (let [result (commands/parse-args ["block" "search" "--text" "hello"])]
+  (testing "search parses with text"
+    (let [result (commands/parse-args ["search" "--text" "hello"])]
       (is (true? (:ok? result)))
       (is (= :search (:command result)))
       (is (= "hello" (get-in result [:options :text])))))
 
-  (testing "block tree requires target"
-    (let [result (commands/parse-args ["block" "tree"])]
+  (testing "show requires target"
+    (let [result (commands/parse-args ["show"])]
       (is (false? (:ok? result)))
       (is (= :missing-target (get-in result [:error :code])))))
 
-  (testing "block tree parses with page"
-    (let [result (commands/parse-args ["block" "tree" "--page" "Home"])]
+  (testing "show parses with page name"
+    (let [result (commands/parse-args ["show" "--page-name" "Home"])]
       (is (true? (:ok? result)))
-      (is (= :tree (:command result)))
-      (is (= "Home" (get-in result [:options :page])))))
+      (is (= :show (:command result)))
+      (is (= "Home" (get-in result [:options :page-name])))))
 
-  (testing "block subcommands reject unknown flags"
-    (doseq [subcommand ["add" "remove" "search" "tree"]]
-      (let [result (commands/parse-args ["block" subcommand "--wat"])]
+  (testing "verb subcommands reject unknown flags"
+    (doseq [args [["list" "page" "--wat"]
+                  ["add" "block" "--wat"]
+                  ["remove" "block" "--wat"]
+                  ["search" "--wat"]
+                  ["show" "--wat"]]]
+      (let [result (commands/parse-args args)]
         (is (false? (:ok? result)))
         (is (= :invalid-options (get-in result [:error :code]))))))
 
-  (testing "block subcommands accept output option"
-    (let [result (commands/parse-args ["block" "search" "--text" "hello" "--output" "json"])]
+  (testing "verb subcommands accept output option"
+    (let [result (commands/parse-args ["search" "--text" "hello" "--output" "json"])]
       (is (true? (:ok? result)))
       (is (= "json" (get-in result [:options :output]))))))
 
@@ -307,20 +313,32 @@
       (is (true? (:ok? result)))
       (is (= :graph-info (get-in result [:action :type])))))
 
-  (testing "add requires content"
-    (let [parsed {:ok? true :command :add :options {}}
+  (testing "list page requires repo"
+    (let [parsed {:ok? true :command :list-page :options {}}
+          result (commands/build-action parsed {})]
+      (is (false? (:ok? result)))
+      (is (= :missing-repo (get-in result [:error :code])))))
+
+  (testing "add block requires content"
+    (let [parsed {:ok? true :command :add-block :options {}}
           result (commands/build-action parsed {:repo "demo"})]
       (is (false? (:ok? result)))
       (is (= :missing-content (get-in result [:error :code])))))
 
-  (testing "add builds insert-blocks op"
-    (let [parsed {:ok? true :command :add :options {:content "hello"}}
+  (testing "add block builds insert-blocks op"
+    (let [parsed {:ok? true :command :add-block :options {:content "hello"}}
           result (commands/build-action parsed {:repo "demo"})]
       (is (true? (:ok? result)))
-      (is (= :add (get-in result [:action :type])))))
+      (is (= :add-block (get-in result [:action :type])))))
 
-  (testing "remove requires target"
-    (let [parsed {:ok? true :command :remove :options {}}
+  (testing "add page requires name"
+    (let [parsed {:ok? true :command :add-page :options {}}
+          result (commands/build-action parsed {:repo "demo"})]
+      (is (false? (:ok? result)))
+      (is (= :missing-page-name (get-in result [:error :code])))))
+
+  (testing "remove block requires target"
+    (let [parsed {:ok? true :command :remove-block :options {}}
           result (commands/build-action parsed {:repo "demo"})]
       (is (false? (:ok? result)))
       (is (= :missing-target (get-in result [:error :code])))))
@@ -331,8 +349,8 @@
       (is (false? (:ok? result)))
       (is (= :missing-search-text (get-in result [:error :code])))))
 
-  (testing "tree requires target"
-    (let [parsed {:ok? true :command :tree :options {}}
+  (testing "show requires target"
+    (let [parsed {:ok? true :command :show :options {}}
           result (commands/build-action parsed {:repo "demo"})]
       (is (false? (:ok? result)))
       (is (= :missing-target (get-in result [:error :code]))))))

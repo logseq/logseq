@@ -51,24 +51,34 @@ Server commands:
 - `server stop --repo <name>` - stop db-worker-node for a graph
 - `server restart --repo <name>` - restart db-worker-node for a graph
 
-Block commands:
-- `block add --content <text> [--page <name>] [--parent <uuid>]` - add blocks; defaults to today’s journal page if no page is given
-- `block add --blocks <edn> [--page <name>] [--parent <uuid>]` - insert blocks via EDN vector
-- `block add --blocks-file <path> [--page <name>] [--parent <uuid>]` - insert blocks from an EDN file
-- `block remove --block <uuid>` - remove a block and its children
-- `block remove --page <name>` - remove a page and its children
-- `block search --text <query> [--limit <n>]` - search block titles (Datalog includes?)
-- `block tree --page <name> [--format text|json|edn]` - show page tree
-- `block tree --block <uuid> [--format text|json|edn]` - show block tree
+Inspect and edit commands:
+- `list page [--expand] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list pages
+- `list tag [--expand] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list tags
+- `list property [--expand] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list properties
+- `add block --content <text> [--page <name>] [--parent <uuid>]` - add blocks; defaults to today’s journal page if no page is given
+- `add block --blocks <edn> [--page <name>] [--parent <uuid>]` - insert blocks via EDN vector
+- `add block --blocks-file <path> [--page <name>] [--parent <uuid>]` - insert blocks from an EDN file
+- `add page --page <name>` - create a page
+- `remove block --block <uuid>` - remove a block and its children
+- `remove page --page <name>` - remove a page and its children
+- `search --text <query> [--type page|block|tag|property|all] [--include-content] [--limit <n>]` - search across pages, blocks, tags, and properties
+- `show --page-name <name> [--format text|json|edn] [--level <n>]` - show page tree
+- `show --uuid <uuid> [--format text|json|edn] [--level <n>]` - show block tree
+- `show --id <id> [--format text|json|edn] [--level <n>]` - show block tree by db/id
 
 Help output:
 
 ```
 Subcommands:
-  block add [options]     Add blocks
-  block remove [options]  Remove block or page
-  block search [options]  Search blocks
-  block tree [options]    Show tree
+  list page [options]      List pages
+  list tag [options]       List tags
+  list property [options]  List properties
+  add block [options]      Add blocks
+  add page [options]       Create page
+  remove block [options]   Remove block
+  remove page [options]    Remove page
+  search [options]         Search graph
+  show [options]           Show tree
 ```
 
 Output formats:
@@ -78,8 +88,8 @@ Examples:
 
 ```bash
 node ./static/logseq-cli.js graph create --repo demo
-node ./static/logseq-cli.js block add --page TestPage --content "hello world"
-node ./static/logseq-cli.js block search --text "hello"
-node ./static/logseq-cli.js block tree --page TestPage --format json --output json
+node ./static/logseq-cli.js add block --page TestPage --content "hello world"
+node ./static/logseq-cli.js search --text "hello"
+node ./static/logseq-cli.js show --page-name TestPage --format json --output json
 node ./static/logseq-cli.js server list
 ```
