@@ -29,7 +29,8 @@
        (not (:ok? parsed))
        (p/resolved {:exit-code 1
                     :output (format/format-result {:status :error
-                                                   :error (:error parsed)}
+                                                   :error (:error parsed)
+                                                   :command (:command parsed)}
                                                   {})})
 
        :else
@@ -38,7 +39,10 @@
          (if-not (:ok? action-result)
            (p/resolved {:exit-code 1
                         :output (format/format-result {:status :error
-                                                       :error (:error action-result)}
+                                                       :error (:error action-result)
+                                                       :command (:command parsed)
+                                                       :context (select-keys (:options parsed)
+                                                                             [:repo :graph :page :block])}
                                                       cfg)})
            (-> (commands/execute (:action action-result) cfg)
                (p/then (fn [result]

@@ -9,6 +9,29 @@ Tech Stack: ClojureScript, babashka/cli, lambdaisland.glogi, Node.js fs/path.
 
 Related: Builds on docs/agent-guide/004-logseq-cli-verb-subcommands.md and docs/agent-guide/003-db-worker-node-cli-orchestration.md.
 
+## Human Output Specification
+
+Target: plain text, no ANSI colors. Each command has a stable layout and ordering.
+
+| Command | OK output (human) | Empty output | Notes |
+| --- | --- | --- | --- |
+| graph list | Table with header `GRAPH` and rows of graph names, followed by `Count: N` | Header + `Count: 0` | Data from `{:graphs [...]}` |
+| graph create | `Graph created: <graph>` | n/a | Use graph name from action/options |
+| graph switch | `Graph switched: <graph>` | n/a | Use graph name from action/options |
+| graph remove | `Graph removed: <graph>` | n/a | Use graph name from action/options |
+| graph validate | `Graph validated: <graph>` | n/a | Use graph name from action/options |
+| graph info | Lines: `Graph: <graph>`, `Created at: <ts>`, `Schema version: <v>` | n/a | Use `:logseq.kv/*` data; show `-` if missing |
+| server list | Table with header `REPO STATUS HOST PORT PID`, rows for servers, followed by `Count: N` | Header + `Count: 0` | Data from `{:servers [...]}` |
+| server status/start/stop/restart | `Server <status>: <repo>` + details line `Host: <host>  Port: <port>` when available | n/a | Use `:status` keyword where present |
+| list page/tag/property | Table with header (fields vary by command) and rows, followed by `Count: N` | Header + `Count: 0` | Defaults: page/tag/property `ID TITLE UPDATED-AT CREATED-AT` (ID uses `:db/id`); if `:db/ident` present, include `IDENT` column |
+| add block | `Added blocks: <count> (repo: <repo>)` | n/a | Count = number of blocks submitted |
+| add page | `Added page: <page> (repo: <repo>)` | n/a | |
+| remove block | `Removed block: <block-id> (repo: <repo>)` | n/a | Prefer UUID if available |
+| remove page | `Removed page: <page> (repo: <repo>)` | n/a | |
+| search | Table with header `TYPE TITLE/CONTENT UUID UPDATED-AT CREATED-AT`, rows in stable order, followed by `Count: N` | Header + `Count: 0` | For block rows use content snippet; for tag/property rows omit timestamps |
+| show (text) | Raw tree text (no table), trimmed | n/a | For `--format json|edn`, keep existing structured output |
+| errors | `Error (<code>): <message>` + optional `Hint: <hint>` line | n/a | Ensure error codes are stable and consistent |
+
 ## Problem statement
 
 The current logseq-cli human output is mostly raw pr-str output, which is hard to read and inconsistent across commands.
