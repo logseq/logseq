@@ -693,15 +693,37 @@
 
 (defn- tree->text
   [{:keys [root]}]
-  (let [title (or (:block/title root) (:block/name root) (str (:block/uuid root)))
-        lines (atom [title])
-        walk (fn walk [node depth]
-               (doseq [child (:block/children node)]
-                 (let [prefix (apply str (repeat depth "  "))
-                       label (or (:block/title child) (:block/name child) (str (:block/uuid child)))]
-                   (swap! lines conj (str prefix "- " label)))
-                 (walk child (inc depth))))]
-    (walk root 1)
+  (let [label (fn [node]
+                (or (:block/title node) (:block/name node) (str (:block/uuid node))))
+        node-id (fn [node]
+                  (or (:db/id node) "-"))
+        id-padding (fn [node]
+                     (apply str (repeat (inc (count (str (node-id node)))) " ")))
+        split-lines (fn [value]
+                      (string/split (or value "") #"\n"))
+        lines (atom [])
+        walk (fn walk [node prefix]
+               (let [children (:block/children node)
+                     total (count children)]
+                 (doseq [[idx child] (map-indexed vector children)]
+                   (let [last-child? (= idx (dec total))
+                         branch (if last-child? "└── " "├── ")
+                         next-prefix (str prefix (if last-child? "    " "│   "))
+                         rows (split-lines (label child))
+                         first-row (first rows)
+                         rest-rows (rest rows)
+                         line (str (node-id child) " " prefix branch first-row)]
+                     (swap! lines conj line)
+                     (doseq [row rest-rows]
+                       (swap! lines conj (str (id-padding child) next-prefix row)))
+                     (walk child next-prefix)))))]
+    (let [rows (split-lines (label root))
+          first-row (first rows)
+          rest-rows (rest rows)]
+      (swap! lines conj (str (node-id root) " " first-row))
+      (doseq [row rest-rows]
+        (swap! lines conj (str (id-padding root) row))))
+    (walk root "")
     (string/join "\n" @lines)))
 
 (defn- resolve-repo
