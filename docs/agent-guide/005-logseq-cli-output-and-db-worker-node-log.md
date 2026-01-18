@@ -29,7 +29,7 @@ Target: plain text, no ANSI colors. Each command has a stable layout and orderin
 | remove block | `Removed block: <block-id> (repo: <repo>)` | n/a | Prefer UUID if available |
 | remove page | `Removed page: <page> (repo: <repo>)` | n/a | |
 | search | Table with header `TYPE TITLE/CONTENT UUID UPDATED-AT CREATED-AT`, rows in stable order, followed by `Count: N` | Header + `Count: 0` | For block rows use content snippet; for tag/property rows omit timestamps |
-| show (text) | Raw tree text (no table), trimmed | n/a | For `--format json|edn`, keep existing structured output |
+| show (text) | Raw tree text with `:db/id` as first column, trimmed | n/a | Tree lines should be prefixed by `:db/id` followed by the tree glyphs. Example:<br/><br/>`id1 block1`<br/>`id2 ├── b2`<br/>`id3 │   └── b3`<br/>`id4 ├── b4`<br/>`id5 │   ├── b5`<br/>`id6 │   │   └── b6`<br/>`id7 │   └── b7`<br/>`id8 └── b8`<br/><br/>If a block title spans multiple lines, show the first line on the tree line and indent the remaining lines under the glyph column. Example:<br/><br/>`168 Jan 18th, 2026`<br/>`169 ├── b1`<br/>`173 ├── aaaxx`<br/>`174 ├── block-line1`<br/>`    │   block-line2`<br/>`175 └── cccc`<br/><br/>For `--format json|edn`, keep existing structured output |
 | errors | `Error (<code>): <message>` + optional `Hint: <hint>` line | n/a | Ensure error codes are stable and consistent |
 
 ## Problem statement
