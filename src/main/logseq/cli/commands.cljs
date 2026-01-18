@@ -37,19 +37,78 @@
    :page {:desc "Page name"}
    :parent {:desc "Parent block UUID for add"}})
 
-(def ^:private content-remove-spec
-  {:block {:desc "Block UUID"}
-   :page {:desc "Page name"}})
+(def ^:private add-page-spec
+  {:page {:desc "Page name"}})
 
-(def ^:private content-search-spec
-  {:text {:desc "Search text"}
+(def ^:private remove-block-spec
+  {:block {:desc "Block UUID"}})
+
+(def ^:private remove-page-spec
+  {:page {:desc "Page name"}})
+
+(def ^:private list-common-spec
+  {:expand {:desc "Include expanded metadata"
+            :coerce :boolean}
    :limit {:desc "Limit results"
-           :coerce :long}})
+           :coerce :long}
+   :offset {:desc "Offset results"
+            :coerce :long}
+   :sort {:desc "Sort field"}
+   :order {:desc "Sort order (asc, desc)"}})
 
-(def ^:private content-tree-spec
-  {:block {:desc "Block UUID"}
-   :page {:desc "Page name"}
-   :format {:desc "Output format (tree)"}})
+(def ^:private list-page-spec
+  (merge list-common-spec
+         {:include-journal {:desc "Include journal pages"
+                            :coerce :boolean}
+          :journal-only {:desc "Only journal pages"
+                         :coerce :boolean}
+          :include-hidden {:desc "Include hidden pages"
+                           :coerce :boolean}
+          :updated-after {:desc "Filter by updated-at (ISO8601)"}
+          :created-after {:desc "Filter by created-at (ISO8601)"}
+          :fields {:desc "Select output fields (comma separated)"}}))
+
+(def ^:private list-tag-spec
+  (merge list-common-spec
+         {:include-built-in {:desc "Include built-in tags"
+                             :coerce :boolean}
+          :with-properties {:desc "Include tag properties"
+                            :coerce :boolean}
+          :with-extends {:desc "Include tag extends"
+                         :coerce :boolean}
+          :fields {:desc "Select output fields (comma separated)"}}))
+
+(def ^:private list-property-spec
+  (merge list-common-spec
+         {:include-built-in {:desc "Include built-in properties"
+                             :coerce :boolean}
+          :with-classes {:desc "Include property classes"
+                         :coerce :boolean}
+          :with-type {:desc "Include property type"
+                      :coerce :boolean}
+          :fields {:desc "Select output fields (comma separated)"}}))
+
+(def ^:private search-spec
+  {:text {:desc "Search text"}
+   :type {:desc "Search types (page, block, tag, property, all)"}
+   :tag {:desc "Restrict to a specific tag"}
+   :limit {:desc "Limit results"
+           :coerce :long}
+   :case-sensitive {:desc "Case sensitive search"
+                    :coerce :boolean}
+   :include-content {:desc "Search block content"
+                     :coerce :boolean}
+   :sort {:desc "Sort field (updated-at, created-at)"}
+   :order {:desc "Sort order (asc, desc)"}})
+
+(def ^:private show-spec
+  {:id {:desc "Block db/id"
+        :coerce :long}
+   :uuid {:desc "Block UUID"}
+   :page-name {:desc "Page name"}
+   :level {:desc "Limit tree depth"
+           :coerce :long}
+   :format {:desc "Output format (text, json, edn)"}})
 
 (defn- format-commands
   [table]
@@ -82,14 +141,21 @@
 
 (defn- top-level-summary
   [table]
-  (string/join "\n"
-               ["Usage: logseq-cli <command> [options]"
-                ""
-                "Commands:"
-                (format-commands table)
-                ""
-                "Options:"
-                (cli/format-opts {:spec global-spec})]))
+  (let [groups [{:title "Graph Inspect and Edit"
+                 :commands #{"list" "add" "remove" "search" "show"}}
+                {:title "Graph Management"
+                 :commands #{"graph" "server"}}]
+        render-group (fn [{:keys [title commands]}]
+                       (let [entries (filter #(contains? commands (first (:cmds %))) table)]
+                         (string/join "\n" [title (format-commands entries)])))]
+    (string/join "\n"
+                 ["Usage: logseq-cli <command> [options]"
+                  ""
+                  "Commands:"
+                  (string/join "\n\n" (map render-group groups))
+                  ""
+                  "Options:"
+                  (cli/format-opts {:spec global-spec})])))
 
 (defn- command-summary
   [{:keys [cmds spec]}]
@@ -145,6 +211,13 @@
            :message "block or page is required"}
    :summary summary})
 
+(defn- missing-page-name-result
+  [summary]
+  {:ok? false
+   :error {:code :missing-page-name
+           :message "page name is required"}
+   :summary summary})
+
 (defn- missing-search-result
   [summary]
   {:ok? false
@@ -172,6 +245,67 @@
            :message message}
    :summary summary})
 
+(def ^:private list-sort-fields
+  {:list-page #{"title" "created-at" "updated-at"}
+   :list-tag #{"name" "title"}
+   :list-property #{"name" "title"}})
+
+(def ^:private show-formats
+  #{"text" "json" "edn"})
+
+(def ^:private search-types
+  #{"page" "block" "tag" "property" "all"})
+
+(defn- invalid-list-options?
+  [command opts]
+  (let [{:keys [order include-journal journal-only]} opts
+        sort-field (:sort opts)
+        allowed (get list-sort-fields command)]
+    (cond
+      (and include-journal journal-only)
+      "include-journal and journal-only are mutually exclusive"
+
+      (and (seq sort-field) (not (contains? allowed sort-field)))
+      (str "invalid sort field: " sort-field)
+
+      (and (seq order) (not (#{"asc" "desc"} order)))
+      (str "invalid order: " order)
+
+      :else
+      nil)))
+
+(defn- invalid-show-options?
+  [opts]
+  (let [format (:format opts)
+        level (:level opts)]
+    (cond
+      (and (seq format) (not (contains? show-formats (string/lower-case format))))
+      (str "invalid format: " format)
+
+      (and (some? level) (< level 1))
+      "level must be >= 1"
+
+      :else
+      nil)))
+
+(defn- invalid-search-options?
+  [opts]
+  (let [type (:type opts)
+        order (:order opts)
+        sort-field (:sort opts)]
+    (cond
+      (and (seq type) (not (contains? search-types type)))
+      (str "invalid type: " type)
+
+      (and (seq sort-field) (not (#{"updated-at" "created-at"} sort-field)))
+      (str "invalid sort field: " sort-field)
+
+      (and (seq order) (not (#{"asc" "desc"} order)))
+      (str "invalid order: " order)
+
+      :else
+      nil)))
+
 (defn- command-entry
   [cmds command desc spec]
   (let [spec* (merge-spec spec)]
@@ -198,10 +332,15 @@
    (command-entry ["server" "start"] :server-start "Start db-worker-node for a graph" server-spec)
    (command-entry ["server" "stop"] :server-stop "Stop db-worker-node for a graph" server-spec)
    (command-entry ["server" "restart"] :server-restart "Restart db-worker-node for a graph" server-spec)
-   (command-entry ["block" "add"] :add "Add blocks" content-add-spec)
-   (command-entry ["block" "remove"] :remove "Remove block or page" content-remove-spec)
-   (command-entry ["block" "search"] :search "Search blocks" content-search-spec)
-   (command-entry ["block" "tree"] :tree "Show tree" content-tree-spec)])
+   (command-entry ["list" "page"] :list-page "List pages" list-page-spec)
+   (command-entry ["list" "tag"] :list-tag "List tags" list-tag-spec)
+   (command-entry ["list" "property"] :list-property "List properties" list-property-spec)
+   (command-entry ["add" "block"] :add-block "Add blocks" content-add-spec)
+   (command-entry ["add" "page"] :add-page "Create page" add-page-spec)
+   (command-entry ["remove" "block"] :remove-block "Remove block" remove-block-spec)
+   (command-entry ["remove" "page"] :remove-page "Remove page" remove-page-spec)
+   (command-entry ["search"] :search "Search graph" search-spec)
+   (command-entry ["show"] :show "Show tree" show-spec)])
 
 (def ^:private global-aliases
   (->> global-spec
@@ -258,7 +397,8 @@
         has-content? (or (seq (:content opts))
                          (seq (:blocks opts))
                          (seq (:blocks-file opts))
-                         has-args?)]
+                         has-args?)
+        show-targets (filter some? [(:id opts) (:uuid opts) (:page-name opts)])]
     (cond
       (:help opts)
       (help-result cmd-summary)
@@ -267,17 +407,36 @@
            (not (seq graph)))
       (missing-graph-result summary)
 
-      (and (= command :add) (not has-content?))
+      (and (= command :add-block) (not has-content?))
       (missing-content-result summary)
 
-      (and (= command :remove) (not (or (seq (:block opts)) (seq (:page opts)))))
+      (and (= command :add-page) (not (seq (:page opts))))
+      (missing-page-name-result summary)
+
+      (and (= command :remove-block) (not (seq (:block opts))))
       (missing-target-result summary)
 
-      (and (= command :tree) (not (or (seq (:block opts)) (seq (:page opts)))))
+      (and (= command :remove-page) (not (seq (:page opts))))
       (missing-target-result summary)
+
+      (and (= command :show) (empty? show-targets))
+      (missing-target-result summary)
+
+      (and (= command :show) (> (count show-targets) 1))
+      (invalid-options-result summary "only one of --id, --uuid, or --page-name is allowed")
 
       (and (= command :search) (not (or (seq (:text opts)) has-args?)))
       (missing-search-result summary)
+
+      (and (#{:list-page :list-tag :list-property} command)
+           (invalid-list-options? command opts))
+      (invalid-options-result summary (invalid-list-options? command opts))
+
+      (and (= command :show) (invalid-show-options? opts))
+      (invalid-options-result summary (invalid-show-options? opts))
+
+      (and (= command :search) (invalid-search-options? opts))
+      (invalid-options-result summary (invalid-search-options? opts))
 
       (and (#{:server-status :server-start :server-stop :server-restart} command)
            (not (seq (:repo opts))))
@@ -301,7 +460,7 @@
          :error {:code :missing-command
                  :message "missing command"}
          :summary summary})
-      (if (and (= 1 (count args)) (#{"graph" "block" "server"} (first args)))
+      (if (and (= 1 (count args)) (#{"graph" "server" "list" "add" "remove"} (first args)))
         (help-result (group-summary (first args) table))
         (try
           (let [result (cli/dispatch table args {:spec global-spec})]
@@ -457,38 +616,56 @@
       (mapv first rows))))
 
 (defn- build-tree
-  [blocks root-id]
+  [blocks root-id max-depth]
   (let [parent->children (group-by #(get-in % [:block/parent :db/id]) blocks)
         sort-children (fn [children]
                         (vec (sort-by :block/order children)))
-        build (fn build [parent-id]
+        build (fn build [parent-id depth]
                 (mapv (fn [b]
-                        (let [children (build (:db/id b))]
+                        (let [children (build (:db/id b) (inc depth))]
                           (cond-> b
                             (seq children) (assoc :block/children children))))
-                      (sort-children (get parent->children parent-id))))]
-    (build root-id)))
+                      (if (and max-depth (>= depth max-depth))
+                        []
+                        (sort-children (get parent->children parent-id)))))]
+    (build root-id 1)))
 
 (defn- fetch-tree
-  [config {:keys [repo block page]}]
-  (if (seq block)
-    (if-not (common-util/uuid-string? block)
-      (p/rejected (ex-info "block must be a uuid" {:code :invalid-block}))
+  [config {:keys [repo id uuid page-name level]}]
+  (let [max-depth (or level 10)]
+    (cond
+      (some? id)
       (p/let [entity (transport/invoke config "thread-api/pull" false
-                                       [repo [:db/id :block/uuid :block/title {:block/page [:db/id :block/title]}]
-                                        [:block/uuid (uuid block)]])]
+                                       [repo [:db/id :block/uuid :block/title {:block/page [:db/id :block/title]}] id])]
         (if-let [page-id (get-in entity [:block/page :db/id])]
           (p/let [blocks (fetch-blocks-for-page config repo page-id)
-                  children (build-tree blocks (:db/id entity))]
+                  children (build-tree blocks (:db/id entity) max-depth)]
             {:root (assoc entity :block/children children)})
-          (throw (ex-info "block not found" {:code :block-not-found})))))
-    (p/let [page-entity (transport/invoke config "thread-api/pull" false
-                                          [repo [:db/id :block/uuid :block/title] [:block/name page]])]
-      (if-let [page-id (:db/id page-entity)]
-        (p/let [blocks (fetch-blocks-for-page config repo page-id)
-                children (build-tree blocks page-id)]
-          {:root (assoc page-entity :block/children children)})
-        (throw (ex-info "page not found" {:code :page-not-found}))))))
+          (throw (ex-info "block not found" {:code :block-not-found}))))
+
+      (seq uuid)
+      (if-not (common-util/uuid-string? uuid)
+        (p/rejected (ex-info "block must be a uuid" {:code :invalid-block}))
+        (p/let [entity (transport/invoke config "thread-api/pull" false
+                                         [repo [:db/id :block/uuid :block/title {:block/page [:db/id :block/title]}]
+                                          [:block/uuid (uuid uuid)]])]
+          (if-let [page-id (get-in entity [:block/page :db/id])]
+            (p/let [blocks (fetch-blocks-for-page config repo page-id)
+                    children (build-tree blocks (:db/id entity) max-depth)]
+              {:root (assoc entity :block/children children)})
+            (throw (ex-info "block not found" {:code :block-not-found})))))
+
+      (seq page-name)
+      (p/let [page-entity (transport/invoke config "thread-api/pull" false
+                                            [repo [:db/id :block/uuid :block/title] [:block/name page-name]])]
+        (if-let [page-id (:db/id page-entity)]
+          (p/let [blocks (fetch-blocks-for-page config repo page-id)
+                  children (build-tree blocks page-id max-depth)]
+            {:root (assoc page-entity :block/children children)})
+          (throw (ex-info "page not found" {:code :page-not-found}))))
+
+      :else
+      (p/rejected (ex-info "block or page required" {:code :missing-target})))))
 
 (defn- tree->text
   [{:keys [root]}]
@@ -520,6 +697,81 @@
   {:ok? false
    :error {:code :missing-repo
            :message message}})
+
+(def ^:private list-page-field-map
+  {"title" :block/title
+   "uuid" :block/uuid
+   "created-at" :block/created-at
+   "updated-at" :block/updated-at})
+
+(def ^:private list-tag-field-map
+  {"name" :block/title
+   "title" :block/title
+   "uuid" :block/uuid
+   "properties" :logseq.property.class/properties
+   "extends" :logseq.property.class/extends
+   "description" :logseq.property/description})
+
+(def ^:private list-property-field-map
+  {"name" :block/title
+   "title" :block/title
+   "uuid" :block/uuid
+   "classes" :logseq.property/classes
+   "type" :logseq.property/type
+   "description" :logseq.property/description})
+
+(defn- parse-field-list
+  [fields]
+  (when (seq fields)
+    (->> (string/split fields #",")
+         (map string/trim)
+         (remove string/blank?)
+         vec)))
+
+(defn- apply-fields
+  [items fields field-map]
+  (if (seq fields)
+    (let [keys (->> fields
+                    (map #(get field-map %))
+                    (remove nil?)
+                    vec)]
+      (if (seq keys)
+        (mapv #(select-keys % keys) items)
+        items))
+    items))
+
+(defn- apply-sort
+  [items sort-field order field-map]
+  (if (seq sort-field)
+    (let [sort-key (get field-map sort-field)
+          sorted (if sort-key
+                   (sort-by #(get % sort-key) items)
+                   items)
+          sorted (if (= "desc" order) (reverse sorted) sorted)]
+      (vec sorted))
+    (vec items)))
+
+(defn- apply-offset-limit
+  [items offset limit]
+  (cond-> items
+    (some? offset) (->> (drop offset) vec)
+    (some? limit) (->> (take limit) vec)))
+
+(defn- prepare-tag-item
+  [item {:keys [expand with-properties with-extends]}]
+  (if expand
+    (cond-> item
+      (not with-properties) (dissoc :logseq.property.class/properties)
+      (not with-extends) (dissoc :logseq.property.class/extends))
+    item))
+
+(defn- prepare-property-item
+  [item {:keys [expand with-classes with-type]}]
+  (if expand
+    (cond-> item
+      (not with-classes) (dissoc :logseq.property/classes)
+      (not with-type) (dissoc :logseq.property/type))
+    item))
 
 (defn- build-graph-action
   [command graph repo]
@@ -615,7 +867,7 @@
      :error {:code :unknown-command
              :message (str "unknown server command: " command)}}))
 
-(defn- build-add-action
+(defn- build-add-block-action
   [options args repo]
   (if-not (seq repo)
     (missing-repo-error "repo is required for add")
@@ -626,28 +878,64 @@
           (if-not (:ok? vector-result)
             vector-result
             {:ok? true
-             :action {:type :add
+             :action {:type :add-block
                       :repo repo
                       :graph (repo->graph repo)
                       :page (:page options)
                       :parent (:parent options)
                       :blocks (:value vector-result)}}))))))
 
-(defn- build-remove-action
+(defn- build-add-page-action
+  [options repo]
+  (if-not (seq repo)
+    (missing-repo-error "repo is required for add")
+    (let [page (some-> (:page options) string/trim)]
+      (if (seq page)
+        {:ok? true
+         :action {:type :add-page
+                  :repo repo
+                  :graph (repo->graph repo)
+                  :page page}}
+        {:ok? false
+         :error {:code :missing-page-name
+                 :message "page name is required"}}))))
+
+(defn- build-remove-block-action
   [options repo]
   (if-not (seq repo)
     (missing-repo-error "repo is required for remove")
-    (let [block (:block options)
-          page (:page options)]
-      (if (or (seq block) (seq page))
+    (let [block (some-> (:block options) string/trim)]
+      (if (seq block)
         {:ok? true
-         :action {:type :remove
+         :action {:type :remove-block
                   :repo repo
-                  :block block
+                  :block block}}
+        {:ok? false
+         :error {:code :missing-target
+                 :message "block is required"}}))))
+
+(defn- build-remove-page-action
+  [options repo]
+  (if-not (seq repo)
+    (missing-repo-error "repo is required for remove")
+    (let [page (some-> (:page options) string/trim)]
+      (if (seq page)
+        {:ok? true
+         :action {:type :remove-page
+                  :repo repo
                   :page page}}
         {:ok? false
          :error {:code :missing-target
-                 :message "block or page is required"}}))))
+                 :message "page is required"}}))))
+
+(defn- build-list-action
+  [command options repo]
+  (if-not (seq repo)
+    (missing-repo-error "repo is required for list")
+    {:ok? true
+     :action {:type command
+              :repo repo
+              :options options}}))
 
 (defn- build-search-action
   [options args repo]
@@ -659,28 +947,35 @@
          :action {:type :search
                   :repo repo
                   :text text
-                  :limit (:limit options)}}
+                  :search-type (:type options)
+                  :tag (:tag options)
+                  :limit (:limit options)
+                  :case-sensitive (:case-sensitive options)
+                  :include-content (:include-content options)
+                  :sort (:sort options)
+                  :order (:order options)}}
         {:ok? false
          :error {:code :missing-search-text
                  :message "search text is required"}}))))
 
-(defn- build-tree-action
+(defn- build-show-action
   [options repo]
   (if-not (seq repo)
-    (missing-repo-error "repo is required for tree")
-    (let [block (:block options)
-          page (:page options)
-          target (or block page)]
-      (if (seq target)
-        {:ok? true
-         :action {:type :tree
-                  :repo repo
-                  :block block
-                  :page page
-                  :format (some-> (:format options) string/lower-case)}}
+    (missing-repo-error "repo is required for show")
+    (let [format (some-> (:format options) string/lower-case)
+          targets (filter some? [(:id options) (:uuid options) (:page-name options)])]
+      (if (empty? targets)
         {:ok? false
          :error {:code :missing-target
-                 :message "block or page is required"}}))))
+                 :message "block or page is required"}}
+        {:ok? true
+         :action {:type :show
+                  :repo repo
+                  :id (:id options)
+                  :uuid (:uuid options)
+                  :page-name (:page-name options)
+                  :level (:level options)
+                  :format format}}))))
 
 (defn build-action
   [parsed config]
@@ -697,17 +992,26 @@
         (:server-list :server-status :server-start :server-stop :server-restart)
         (build-server-action command server-repo)
 
-        :add
-        (build-add-action options args repo)
+        (:list-page :list-tag :list-property)
+        (build-list-action command options repo)
 
-        :remove
-        (build-remove-action options repo)
+        :add-block
+        (build-add-block-action options args repo)
+
+        :add-page
+        (build-add-page-action options repo)
+
+        :remove-block
+        (build-remove-block-action options repo)
+
+        :remove-page
+        (build-remove-page-action options repo)
 
         :search
         (build-search-action options args repo)
 
-        :tree
-        (build-tree-action options repo)
+        :show
+        (build-show-action options repo)
 
         {:ok? false
          :error {:code :unknown-command
@@ -760,7 +1064,57 @@
                 :logseq.kv/graph-created-at (:kv/value created)
                 :logseq.kv/schema-version (:kv/value schema)}})))
 
-(defn- execute-add
+(defn- execute-list-page
+  [action config]
+  (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
+              options (:options action)
+              items (transport/invoke cfg "thread-api/api-list-pages" false
+                                      [(:repo action) options])
+              order (or (:order options) "asc")
+              fields (parse-field-list (:fields options))
+              sorted (apply-sort items (:sort options) order list-page-field-map)
+              limited (apply-offset-limit sorted (:offset options) (:limit options))
+              final (if (:expand options)
+                      (apply-fields limited fields list-page-field-map)
+                      limited)]
+        {:status :ok
+         :data {:items final}})))
+
+(defn- execute-list-tag
+  [action config]
+  (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
+              options (:options action)
+              items (transport/invoke cfg "thread-api/api-list-tags" false
+                                      [(:repo action) options])
+              order (or (:order options) "asc")
+              fields (parse-field-list (:fields options))
+              prepared (mapv #(prepare-tag-item % options) items)
+              sorted (apply-sort prepared (:sort options) order list-tag-field-map)
+              limited (apply-offset-limit sorted (:offset options) (:limit options))
+              final (if (:expand options)
+                      (apply-fields limited fields list-tag-field-map)
+                      limited)]
+        {:status :ok
+         :data {:items final}})))
+
+(defn- execute-list-property
+  [action config]
+  (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
+              options (:options action)
+              items (transport/invoke cfg "thread-api/api-list-properties" false
+                                      [(:repo action) options])
+              order (or (:order options) "asc")
+              fields (parse-field-list (:fields options))
+              prepared (mapv #(prepare-property-item % options) items)
+              sorted (apply-sort prepared (:sort options) order list-property-field-map)
+              limited (apply-offset-limit sorted (:offset options) (:limit options))
+              final (if (:expand options)
+                      (apply-fields limited fields list-property-field-map)
+                      limited)]
+        {:status :ok
+         :data {:items final}})))
+
+(defn- execute-add-block
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
               target-id (resolve-add-target cfg action)
@@ -773,6 +1127,14 @@
         {:status :ok
          :data {:result result}})))
 
+(defn- execute-add-page
+  [action config]
+  (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
+              ops [[:create-page [(:page action) {}]]]
+              result (transport/invoke cfg "thread-api/apply-outliner-ops" false [(:repo action) ops {}])]
+        {:status :ok
+         :data {:result result}})))
+
 (defn- execute-remove
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
@@ -780,21 +1142,179 @@
         {:status :ok
          :data {:result result}})))
 
+(defn- query-pages
+  [cfg repo text case-sensitive?]
+  (let [query (if case-sensitive?
+                '[:find ?e ?title ?uuid ?updated ?created
+                  :in $ ?q
+                  :where
+                  [?e :block/name ?name]
+                  [?e :block/title ?title]
+                  [?e :block/uuid ?uuid]
+                  [(get-else $ ?e :block/updated-at 0) ?updated]
+                  [(get-else $ ?e :block/created-at 0) ?created]
+                  [(string/includes? ?title ?q)]]
+                '[:find ?e ?title ?uuid ?updated ?created
+                  :in $ ?q
+                  :where
+                  [?e :block/name ?name]
+                  [?e :block/title ?title]
+                  [?e :block/uuid ?uuid]
+                  [(get-else $ ?e :block/updated-at 0) ?updated]
+                  [(get-else $ ?e :block/created-at 0) ?created]
+                  [(string/includes? (string/lower-case ?title) ?q)]])
+        q* (if case-sensitive? text (string/lower-case text))]
+    (transport/invoke cfg "thread-api/q" false [repo [query q*]])))
+
+(defn- query-blocks
+  [cfg repo text case-sensitive? tag include-content?]
+  (let [has-tag? (seq tag)
+        content-attr (if include-content? :block/content :block/title)
+        query (cond
+                (and case-sensitive? has-tag?)
+                `[:find ?e ?value ?uuid ?updated ?created
+                  :in $ ?q ?tag-name
+                  :where
+                  [?tag :block/name ?tag-name]
+                  [?e :block/tags ?tag]
+                  [?e ~content-attr ?value]
+                  [(missing? $ ?e :block/name)]
+                  [?e :block/uuid ?uuid]
+                  [(get-else $ ?e :block/updated-at 0) ?updated]
+                  [(get-else $ ?e :block/created-at 0) ?created]
+                  [(string/includes? ?value ?q)]]
+
+                case-sensitive?
+                `[:find ?e ?value ?uuid ?updated ?created
+                  :in $ ?q
+                  :where
+                  [?e ~content-attr ?value]
+                  [(missing? $ ?e :block/name)]
+                  [?e :block/uuid ?uuid]
+                  [(get-else $ ?e :block/updated-at 0) ?updated]
+                  [(get-else $ ?e :block/created-at 0) ?created]
+                  [(string/includes? ?value ?q)]]
+
+                has-tag?
+                `[:find ?e ?value ?uuid ?updated ?created
+                  :in $ ?q ?tag-name
+                  :where
+                  [?tag :block/name ?tag-name]
+                  [?e :block/tags ?tag]
+                  [?e ~content-attr ?value]
+                  [(missing? $ ?e :block/name)]
+                  [?e :block/uuid ?uuid]
+                  [(get-else $ ?e :block/updated-at 0) ?updated]
+                  [(get-else $ ?e :block/created-at 0) ?created]
+                  [(string/includes? (string/lower-case ?value) ?q)]]
+
+                :else
+                `[:find ?e ?value ?uuid ?updated ?created
+                  :in $ ?q
+                  :where
+                  [?e ~content-attr ?value]
+                  [(missing? $ ?e :block/name)]
+                  [?e :block/uuid ?uuid]
+                  [(get-else $ ?e :block/updated-at 0) ?updated]
+                  [(get-else $ ?e :block/created-at 0) ?created]
+                  [(string/includes? (string/lower-case ?value) ?q)]])
+        q* (if case-sensitive? text (string/lower-case text))
+        tag-name (some-> tag string/lower-case)]
+    (if has-tag?
+      (transport/invoke cfg "thread-api/q" false [repo [query q* tag-name]])
+      (transport/invoke cfg "thread-api/q" false [repo [query q*]]))))
+
+(defn- normalize-search-types
+  [type]
+  (let [type (or type "all")]
+    (case type
+      "page" [:page]
+      "block" [:block]
+      "tag" [:tag]
+      "property" [:property]
+      [:page :block :tag :property])))
+
+(defn- search-sort-key
+  [item sort-field]
+  (case sort-field
+    "updated-at" (:updated-at item)
+    "created-at" (:created-at item)
+    nil))
+
 (defn- execute-search
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
-              query '[:find ?e ?title
-                      :in $ ?q
-                      :where
-                      [?e :block/title ?title]
-                      [(clojure.string/includes? ?title ?q)]]
-              results (transport/invoke cfg "thread-api/q" false [(:repo action) [query (:text action)]])
-              mapped (mapv (fn [[id title]] {:db/id id :block/title title}) results)
-              limited (if (some? (:limit action)) (vec (take (:limit action) mapped)) mapped)]
+              types (normalize-search-types (:search-type action))
+              case-sensitive? (boolean (:case-sensitive action))
+              text (:text action)
+              tag (:tag action)
+              page-results (when (some #{:page} types)
+                             (p/let [rows (query-pages cfg (:repo action) text case-sensitive?)]
+                               (mapv (fn [[id title uuid updated created]]
+                                       {:type "page"
+                                        :db/id id
+                                        :title title
+                                        :uuid (str uuid)
+                                        :updated-at updated
+                                        :created-at created})
+                                     rows)))
+              include-content? (boolean (:include-content action))
+              block-results (when (some #{:block} types)
+                              (p/let [rows (query-blocks cfg (:repo action) text case-sensitive? tag include-content?)]
+                                (mapv (fn [[id content uuid updated created]]
+                                        {:type "block"
+                                         :db/id id
+                                         :content content
+                                         :uuid (str uuid)
+                                         :updated-at updated
+                                         :created-at created})
+                                      rows)))
+              tag-results (when (some #{:tag} types)
+                            (p/let [items (transport/invoke cfg "thread-api/api-list-tags" false
+                                                            [(:repo action) {:expand true :include-built-in true}])
+                                    q* (if case-sensitive? text (string/lower-case text))]
+                              (->> items
+                                   (filter (fn [item]
+                                             (let [title (:block/title item)]
+                                               (if case-sensitive?
+                                                 (string/includes? title q*)
+                                                 (string/includes? (string/lower-case title) q*)))))
+                                   (mapv (fn [item]
+                                           {:type "tag"
+                                            :title (:block/title item)
+                                            :uuid (:block/uuid item)})))))
+              property-results (when (some #{:property} types)
+                                 (p/let [items (transport/invoke cfg "thread-api/api-list-properties" false
+                                                                 [(:repo action) {:expand true :include-built-in true}])
+                                         q* (if case-sensitive? text (string/lower-case text))]
+                                   (->> items
+                                        (filter (fn [item]
+                                                  (let [title (:block/title item)]
+                                                    (if case-sensitive?
+                                                      (string/includes? title q*)
+                                                      (string/includes? (string/lower-case title) q*)))))
+                                        (mapv (fn [item]
+                                                {:type "property"
+                                                 :title (:block/title item)
+                                                 :uuid (:block/uuid item)})))))
+              results (->> (concat (or page-results [])
+                                   (or block-results [])
+                                   (or tag-results [])
+                                   (or property-results []))
+                           (distinct)
+                           vec)
+              sorted (if-let [sort-field (:sort action)]
+                       (let [order (or (:order action) "desc")]
+                         (->> results
+                              (sort-by #(search-sort-key % sort-field))
+                              (cond-> (= order "desc") reverse)
+                              vec))
+                       results)
+              limited (if (some? (:limit action)) (vec (take (:limit action) sorted)) sorted)]
         {:status :ok
          :data {:results limited}})))
 
-(defn- execute-tree
+(defn- execute-show
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
               tree-data (fetch-tree cfg action)
@@ -858,10 +1378,15 @@
             :invoke (execute-invoke action config)
             :graph-switch (execute-graph-switch action config)
             :graph-info (execute-graph-info action config)
-            :add (execute-add action config)
-            :remove (execute-remove action config)
+            :list-page (execute-list-page action config)
+            :list-tag (execute-list-tag action config)
+            :list-property (execute-list-property action config)
+            :add-block (execute-add-block action config)
+            :add-page (execute-add-page action config)
+            :remove-block (execute-remove action config)
+            :remove-page (execute-remove action config)
             :search (execute-search action config)
-            :tree (execute-tree action config)
+            :show (execute-show action config)
             :server-list (execute-server-list action config)
             :server-status (execute-server-status action config)
             :server-start (execute-server-start action config)
