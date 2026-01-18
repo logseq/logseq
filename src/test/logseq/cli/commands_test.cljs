@@ -18,9 +18,14 @@
       (is (string/includes? summary "search"))
       (is (string/includes? summary "show"))
       (is (string/includes? summary "graph"))
-      (is (string/includes? summary "server")))))
+      (is (string/includes? summary "server"))))
 
-(deftest test-parse-args
+  (testing "top-level help separates global and command options"
+    (let [summary (:summary (commands/parse-args ["--help"]))]
+      (is (string/includes? summary "Global options:"))
+      (is (string/includes? summary "Command options:")))))
+
+(deftest test-parse-args-help
   (testing "graph group shows subcommands"
     (let [result (commands/parse-args ["graph"])
           summary (:summary result)]
@@ -34,7 +39,9 @@
       (is (true? (:help? result)))
       (is (string/includes? summary "list page"))
       (is (string/includes? summary "list tag"))
-      (is (string/includes? summary "list property"))))
+      (is (string/includes? summary "list property"))
+      (is (string/includes? summary "Global options:"))
+      (is (string/includes? summary "Command options:"))))
 
   (testing "add group shows subcommands"
     (let [result (commands/parse-args ["add"])
@@ -55,8 +62,9 @@
           summary (:summary result)]
       (is (true? (:help? result)))
       (is (string/includes? summary "server list"))
-      (is (string/includes? summary "server start"))))
+      (is (string/includes? summary "server start")))))
 
+(deftest test-parse-args-help-alignment
   (testing "graph group aligns subcommand columns"
     (let [result (commands/parse-args ["graph"])
           summary (:summary result)
@@ -85,8 +93,9 @@
                                    (when-let [[_ desc] (re-matches #"^\s+.*?\s{2,}(.+)$" line)]
                                      (.indexOf line desc)))))]
       (is (seq subcommand-lines))
-      (is (apply = desc-starts))))
+      (is (apply = desc-starts)))))
 
+(deftest test-parse-args-errors
   (testing "rejects legacy commands"
     (doseq [command ["graph-list" "graph-create" "graph-switch" "graph-remove"
                      "graph-validate" "graph-info" "block" "tree"
@@ -113,8 +122,9 @@
   (testing "errors on unknown command"
     (let [result (commands/parse-args ["wat"])]
       (is (false? (:ok? result)))
-      (is (= :unknown-command (get-in result [:error :code])))))
+      (is (= :unknown-command (get-in result [:error :code]))))))
 
+(deftest test-parse-args-global-options
   (testing "global output option is accepted"
     (let [result (commands/parse-args ["--output" "json" "graph" "list"])]
       (is (true? (:ok? result)))

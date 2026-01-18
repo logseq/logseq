@@ -110,11 +110,12 @@
     (let [result (format/format-result {:status :ok
                                         :command :graph-info
                                         :data {:graph "demo-graph"
-                                               :logseq.kv/graph-created-at 123
+                                               :logseq.kv/graph-created-at 40000
                                                :logseq.kv/schema-version 2}}
-                                       {:output-format nil})]
+                                       {:output-format nil
+                                        :now-ms 100000})]
       (is (= (str "Graph: demo-graph\n"
-                  "Created at: 123\n"
+                  "Created at: 1m ago\n"
                   "Schema version: 2")
              result)))))
 
