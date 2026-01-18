@@ -11,7 +11,8 @@
 (deftest spawn-server-omits-host-and-port-flags
   (let [spawn-server! #'cli-server/spawn-server!
         captured (atom nil)
-        original-spawn (.-spawn child-process)]
+        original-spawn (.-spawn child-process)
+        original-cwd (.cwd js/process)]
     (set! (.-spawn child-process)
           (fn [cmd args opts]
             (reset! captured {:cmd cmd
@@ -19,14 +20,19 @@
                               :opts (js->clj opts :keywordize-keys true)})
             (js-obj "unref" (fn [] nil))))
     (try
+      (.chdir js/process "/")
       (spawn-server! {:repo "logseq_db_spawn_test"
                       :data-dir "/tmp/logseq-db-worker"})
       (is (= "node" (:cmd @captured)))
+      (is (= (node-path/join js/__dirname "db-worker-node.js")
+             (first (:args @captured))))
       (is (some #{"--repo"} (:args @captured)))
       (is (some #{"--data-dir"} (:args @captured)))
       (is (not-any? #{"--host" "--port"} (:args @captured)))
       (finally
+        (.chdir js/process original-cwd)
         (set! (.-spawn child-process) original-spawn)))))
+
 
 (deftest ensure-server-repairs-stale-lock
   (async done
