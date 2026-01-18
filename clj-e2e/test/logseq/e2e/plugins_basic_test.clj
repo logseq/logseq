@@ -376,3 +376,15 @@
       ;; Verify the result contains valid tag structure
       (is (string? (get (first result) "uuid")) "returned tag should have uuid")
       (is (string? (get (first result) "title")) "returned tag should have title"))))
+
+(deftest set-property-node-tags
+  (testing "set property node tags"
+    (let [property-name (new-property)
+          _ (ls-api-call! :editor.upsertProperty property-name {:type "node"})
+          tag1 (ls-api-call! :editor.createTag "Tag A")
+          tag2 (ls-api-call! :editor.createTag "Tag B")
+          tags [(get tag1 "id") (get tag2 "id")]
+          _ (ls-api-call! :editor.setPropertyNodeTags property-name tags)
+          property (ls-api-call! :editor.getProperty property-name)
+          node-tags (get property ":logseq.property/classes")]
+      (is (= (set node-tags) (set tags)) "property node tags should match the set tags"))))
