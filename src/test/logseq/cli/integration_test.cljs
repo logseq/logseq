@@ -128,3 +128,48 @@
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))
                      (done)))))))
+
+(deftest test-cli-list-outputs-include-id
+  (async done
+    (let [data-dir (node-helper/create-tmp-dir "db-worker")]
+      (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                  _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                  _ (run-cli ["graph" "create" "--repo" "list-id-graph"] data-dir cfg-path)
+                  _ (run-cli ["add" "page" "--page" "TestPage"] data-dir cfg-path)
+                  list-page-result (run-cli ["list" "page"] data-dir cfg-path)
+                  list-page-payload (parse-json-output list-page-result)
+                  list-tag-result (run-cli ["list" "tag"] data-dir cfg-path)
+                  list-tag-payload (parse-json-output list-tag-result)
+                  list-property-result (run-cli ["list" "property"] data-dir cfg-path)
+                  list-property-payload (parse-json-output list-property-result)
+                  stop-result (run-cli ["server" "stop" "--repo" "list-id-graph"] data-dir cfg-path)
+                  stop-payload (parse-json-output stop-result)]
+            (is (= "ok" (:status list-page-payload)))
+            (is (every? #(contains? % :id) (get-in list-page-payload [:data :items])))
+            (is (= "ok" (:status list-tag-payload)))
+            (is (every? #(contains? % :id) (get-in list-tag-payload [:data :items])))
+            (is (= "ok" (:status list-property-payload)))
+            (is (every? #(contains? % :id) (get-in list-property-payload [:data :items])))
+            (is (= "ok" (:status stop-payload)))
+            (done))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))
+                     (done)))))))
+
+(deftest test-cli-list-page-human-output
+  (async done
+    (let [data-dir (node-helper/create-tmp-dir "db-worker")]
+      (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                  _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                  _ (run-cli ["graph" "create" "--repo" "human-list-graph"] data-dir cfg-path)
+                  _ (run-cli ["add" "page" "--page" "TestPage"] data-dir cfg-path)
+                  list-page-result (run-cli ["list" "page" "--output" "human"] data-dir cfg-path)
+                  output (:output list-page-result)]
+            (is (= 0 (:exit-code list-page-result)))
+            (is (string/includes? output "TITLE"))
+            (is (string/includes? output "TestPage"))
+            (is (string/includes? output "Count:"))
+            (done))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))
+                     (done)))))))

@@ -83,6 +83,7 @@ Subcommands:
 
 Output formats:
 - Global `--output <human|json|edn>` (also accepted per subcommand)
+- Human output is plain text. List/search commands render tables with a final `Count: N` line. For list subcommands, the ID column uses `:db/id` (not UUID). If `:db/ident` exists, an `IDENT` column is included. Errors include error codes and may include a `Hint:` line. Use `--output json|edn` for structured output.
 
 Examples:
 

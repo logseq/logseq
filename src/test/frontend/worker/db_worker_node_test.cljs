@@ -79,6 +79,67 @@
         repo-dir (node-path/join data-dir (str "." pool-name))]
     (node-path/join repo-dir "db-worker.lock")))
 
+(defn- pad2
+  [value]
+  (if (< value 10)
+    (str "0" value)
+    (str value)))
+
+(defn- yyyymmdd
+  [^js date]
+  (str (.getFullYear date)
+       (pad2 (inc (.getMonth date)))
+       (pad2 (.getDate date))))
+
+(defn- log-path
+  [data-dir repo]
+  (let [pool-name (worker-util/get-pool-name repo)
+        repo-dir (node-path/join data-dir (str "." pool-name))
+        date-str (yyyymmdd (js/Date.))]
+    (node-path/join repo-dir (str "db-worker-node-" date-str ".log"))))
+
+(deftest db-worker-node-creates-log-file
+  (async done
+    (let [daemon (atom nil)
+          data-dir (node-helper/create-tmp-dir "db-worker-log")
+          repo (str "logseq_db_log_" (subs (str (random-uuid)) 0 8))
+          log-file (log-path data-dir repo)]
+      (-> (p/let [{:keys [stop!]}
+                  (db-worker-node/start-daemon! {:data-dir data-dir
+                                                 :repo repo})
+                  _ (reset! daemon {:stop! stop!})
+                  _ (p/delay 50)]
+            (is (fs/existsSync log-file)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (if-let [stop! (:stop! @daemon)]
+                         (-> (stop!) (p/finally (fn [] (done))))
+                         (done))))))))
+
+(deftest db-worker-node-log-file-has-entries
+  (async done
+    (let [daemon (atom nil)
+          data-dir (node-helper/create-tmp-dir "db-worker-log-entries")
+          repo (str "logseq_db_log_entries_" (subs (str (random-uuid)) 0 8))
+          log-file (log-path data-dir repo)]
+      (-> (p/let [{:keys [host port stop!]}
+                  (db-worker-node/start-daemon! {:data-dir data-dir
+                                                 :repo repo})
+                  _ (reset! daemon {:stop! stop!})
+                  _ (invoke host port "thread-api/create-or-open-db" [repo {}])
+                  _ (p/delay 50)
+                  contents (when (fs/existsSync log-file)
+                             (.toString (fs/readFileSync log-file) "utf8"))]
+            (is (fs/existsSync log-file))
+            (is (pos? (count contents))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (if-let [stop! (:stop! @daemon)]
+                         (-> (stop!) (p/finally (fn [] (done))))
+                         (done))))))))
+
 (deftest db-worker-node-parse-args-ignores-host-and-port
   (let [parse-args #'db-worker-node/parse-args
         result (parse-args #js ["node" "db-worker-node.js"
