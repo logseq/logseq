@@ -778,17 +778,20 @@
   (case command
     :graph-list
     {:ok? true
-     :action {:type :graph-list}}
+     :action {:type :graph-list
+              :command :graph-list}}
 
     :graph-create
     (if-not (seq graph)
       (missing-graph-error)
       {:ok? true
        :action {:type :invoke
+                :command :graph-create
                 :method "thread-api/create-or-open-db"
                 :direct-pass? false
                 :args [repo {}]
                 :repo repo
+                :graph (repo->graph repo)
                 :allow-missing-graph true
                 :persist-repo (repo->graph repo)}})
 
@@ -797,6 +800,7 @@
       (missing-graph-error)
       {:ok? true
        :action {:type :graph-switch
+                :command :graph-switch
                 :repo repo
                 :graph (repo->graph repo)}})
 
@@ -805,26 +809,31 @@
       (missing-graph-error)
       {:ok? true
        :action {:type :invoke
+                :command :graph-remove
                 :method "thread-api/unsafe-unlink-db"
                 :direct-pass? false
                 :args [repo]
-                :repo repo}})
+                :repo repo
+                :graph (repo->graph repo)}})
 
     :graph-validate
     (if-not (seq repo)
       (missing-graph-error)
       {:ok? true
        :action {:type :invoke
+                :command :graph-validate
                 :method "thread-api/validate-db"
                 :direct-pass? false
                 :args [repo]
-                :repo repo}})
+                :repo repo
+                :graph (repo->graph repo)}})
 
     :graph-info
     (if-not (seq repo)
       (missing-graph-error)
       {:ok? true
        :action {:type :graph-info
+                :command :graph-info
                 :repo repo
                 :graph (repo->graph repo)}})))
 
@@ -1369,29 +1378,32 @@
 
 (defn execute
   [action config]
-  (-> (p/let [check (ensure-existing-graph action config)]
-        (if-not (:ok? check)
-          {:status :error
-           :error (:error check)}
-          (case (:type action)
-            :graph-list (execute-graph-list action config)
-            :invoke (execute-invoke action config)
-            :graph-switch (execute-graph-switch action config)
-            :graph-info (execute-graph-info action config)
-            :list-page (execute-list-page action config)
-            :list-tag (execute-list-tag action config)
-            :list-property (execute-list-property action config)
-            :add-block (execute-add-block action config)
-            :add-page (execute-add-page action config)
-            :remove-block (execute-remove action config)
-            :remove-page (execute-remove action config)
-            :search (execute-search action config)
-            :show (execute-show action config)
-            :server-list (execute-server-list action config)
-            :server-status (execute-server-status action config)
-            :server-start (execute-server-start action config)
-            :server-stop (execute-server-stop action config)
-            :server-restart (execute-server-restart action config)
-            {:status :error
-             :error {:code :unknown-action
-                     :message "unknown action"}})))))
+  (-> (p/let [check (ensure-existing-graph action config)
+              result (if-not (:ok? check)
+                       {:status :error
+                        :error (:error check)}
+                       (case (:type action)
+                         :graph-list (execute-graph-list action config)
+                         :invoke (execute-invoke action config)
+                         :graph-switch (execute-graph-switch action config)
+                         :graph-info (execute-graph-info action config)
+                         :list-page (execute-list-page action config)
+                         :list-tag (execute-list-tag action config)
+                         :list-property (execute-list-property action config)
+                         :add-block (execute-add-block action config)
+                         :add-page (execute-add-page action config)
+                         :remove-block (execute-remove action config)
+                         :remove-page (execute-remove action config)
+                         :search (execute-search action config)
+                         :show (execute-show action config)
+                         :server-list (execute-server-list action config)
+                         :server-status (execute-server-status action config)
+                         :server-start (execute-server-start action config)
+                         :server-stop (execute-server-stop action config)
+                         :server-restart (execute-server-restart action config)
+                         {:status :error
+                          :error {:code :unknown-action
+                                  :message "unknown action"}}))]
+        (assoc result
+               :command (or (:command action) (:type action))
+               :context (select-keys action [:repo :graph :page :block :blocks])))))

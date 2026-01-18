@@ -6,16 +6,9 @@
             ["os" :as os]
             ["path" :as node-path]
             [clojure.string :as string]
-            [frontend.worker.db-worker-node :as db-worker-node]
             [frontend.worker-common.util :as worker-util]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]))
-
-(defonce ^:private *inproc-servers (atom {}))
-
-(defn- inproc-enabled?
-  []
-  (boolean (.-DEBUG js/goog)))
 
 (defn- expand-home
   [path]
@@ -172,19 +165,12 @@
 
 (defn- spawn-server!
   [{:keys [repo data-dir]}]
-  (let [script (node-path/join (js/process.cwd) "static" "db-worker-node.js")
+  (let [script (node-path/join js/__dirname "db-worker-node.js")
         args #js [script "--repo" repo "--data-dir" data-dir]
         child (.spawn child-process "node" args #js {:detached true
                                                      :stdio "ignore"})]
     (.unref child)
     child))
-
-(defn- start-inproc-server!
-  [{:keys [repo data-dir]}]
-  (p/let [daemon (db-worker-node/start-daemon! {:data-dir data-dir
-                                                :repo repo})]
-    (swap! *inproc-servers assoc repo daemon)
-    daemon))
 
 (defn- ensure-server-started!
   [config repo]
@@ -193,9 +179,7 @@
     (p/let [existing (read-lock path)
             _ (cleanup-stale-lock! path existing)
             _ (when (not (fs/existsSync path))
-                (if (inproc-enabled?)
-                  (start-inproc-server! {:repo repo :data-dir data-dir})
-                  (spawn-server! {:repo repo :data-dir data-dir}))
+                (spawn-server! {:repo repo :data-dir data-dir})
                 (wait-for-lock path))
             lock (read-lock path)]
       (when-not lock
@@ -232,7 +216,6 @@
                         (p/resolved (not (fs/existsSync path))))
                       {:timeout-ms 5000
                        :interval-ms 200})
-            (swap! *inproc-servers dissoc repo)
             {:ok? true
              :data {:repo repo}})
           (p/catch (fn [_]
@@ -248,10 +231,8 @@
                        {:ok? false
                         :error {:code :server-stop-timeout
                                 :message "timed out stopping server"}}
-                       (do
-                         (swap! *inproc-servers dissoc repo)
-                         {:ok? true
-                          :data {:repo repo}}))))))))
+                       {:ok? true
+                        :data {:repo repo}})))))))
 
 (defn start-server!
   [config repo]
