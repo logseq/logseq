@@ -10,7 +10,7 @@
 (defn- usage
   [summary]
   (string/join "\n"
-               ["logseq-cli <command> [options]"
+               ["logseq <command> [options]"
                 ""
                 "Commands: list page, list tag, list property, add block, add page, remove block, remove page, search, show, graph list, graph create, graph switch, graph remove, graph validate, graph info, server list, server status, server start, server stop, server restart"
                 ""

@@ -131,13 +131,16 @@
   [group table]
   (let [group-table (filter #(= group (first (:cmds %))) table)]
     (string/join "\n"
-                 [(str "Usage: logseq-cli " group " <subcommand> [options]")
+                 [(str "Usage: logseq " group " <subcommand> [options]")
                   ""
                   "Subcommands:"
                   (format-commands group-table)
                   ""
-                  "Options:"
-                  (cli/format-opts {:spec global-spec})])))
+                  "Global options:"
+                  (cli/format-opts {:spec global-spec})
+                  ""
+                  "Command options:"
+                  (str "  See `logseq " group " <subcommand> --help`")])))
 
 (defn- top-level-summary
   [table]
@@ -149,21 +152,28 @@
                        (let [entries (filter #(contains? commands (first (:cmds %))) table)]
                          (string/join "\n" [title (format-commands entries)])))]
     (string/join "\n"
-                 ["Usage: logseq-cli <command> [options]"
+                 ["Usage: logseq <command> [options]"
                   ""
                   "Commands:"
                   (string/join "\n\n" (map render-group groups))
                   ""
-                  "Options:"
-                  (cli/format-opts {:spec global-spec})])))
+                  "Global options:"
+                  (cli/format-opts {:spec global-spec})
+                  ""
+                  "Command options:"
+                  "  See `logseq <command> --help`"])))
 
 (defn- command-summary
   [{:keys [cmds spec]}]
-  (string/join "\n"
-               [(str "Usage: logseq-cli " (string/join " " cmds) " [options]")
-                ""
-                "Options:"
-                (cli/format-opts {:spec spec})]))
+  (let [command-spec (apply dissoc spec (keys global-spec))]
+    (string/join "\n"
+                 [(str "Usage: logseq " (string/join " " cmds) " [options]")
+                  ""
+                  "Global options:"
+                  (cli/format-opts {:spec global-spec})
+                  ""
+                  "Command options:"
+                  (cli/format-opts {:spec command-spec})])))
 
 (defn- merge-spec
   [spec]
@@ -631,29 +641,43 @@
     (build root-id 1)))
 
 (defn- fetch-tree
-  [config {:keys [repo id uuid page-name level]}]
-  (let [max-depth (or level 10)]
+  [config {:keys [repo id page-name level] :as opts}]
+  (let [max-depth (or level 10)
+        uuid-str (:uuid opts)]
     (cond
       (some? id)
       (p/let [entity (transport/invoke config "thread-api/pull" false
-                                       [repo [:db/id :block/uuid :block/title {:block/page [:db/id :block/title]}] id])]
+                                       [repo [:db/id :block/name :block/uuid :block/title {:block/page [:db/id :block/title]}] id])]
         (if-let [page-id (get-in entity [:block/page :db/id])]
           (p/let [blocks (fetch-blocks-for-page config repo page-id)
                   children (build-tree blocks (:db/id entity) max-depth)]
             {:root (assoc entity :block/children children)})
-          (throw (ex-info "block not found" {:code :block-not-found}))))
+          (if (:db/id entity)
+            (p/let [blocks (fetch-blocks-for-page config repo (:db/id entity))
+                    children (build-tree blocks (:db/id entity) max-depth)]
+              {:root (assoc entity :block/children children)})
+            (throw (ex-info "block not found" {:code :block-not-found})))))
 
-      (seq uuid)
-      (if-not (common-util/uuid-string? uuid)
+      (seq uuid-str)
+      (if-not (common-util/uuid-string? uuid-str)
         (p/rejected (ex-info "block must be a uuid" {:code :invalid-block}))
         (p/let [entity (transport/invoke config "thread-api/pull" false
-                                         [repo [:db/id :block/uuid :block/title {:block/page [:db/id :block/title]}]
-                                          [:block/uuid (uuid uuid)]])]
+                                         [repo [:db/id :block/name :block/uuid :block/title {:block/page [:db/id :block/title]}]
+                                          [:block/uuid (uuid uuid-str)]])
+                entity (if (:db/id entity)
+                         entity
+                         (transport/invoke config "thread-api/pull" false
+                                           [repo [:db/id :block/name :block/uuid :block/title {:block/page [:db/id :block/title]}]
+                                            [:block/uuid uuid-str]]))]
           (if-let [page-id (get-in entity [:block/page :db/id])]
             (p/let [blocks (fetch-blocks-for-page config repo page-id)
                     children (build-tree blocks (:db/id entity) max-depth)]
               {:root (assoc entity :block/children children)})
-            (throw (ex-info "block not found" {:code :block-not-found})))))
+            (if (:db/id entity)
+              (p/let [blocks (fetch-blocks-for-page config repo (:db/id entity))
+                      children (build-tree blocks (:db/id entity) max-depth)]
+                {:root (assoc entity :block/children children)})
+              (throw (ex-info "block not found" {:code :block-not-found}))))))
 
       (seq page-name)
       (p/let [page-entity (transport/invoke config "thread-api/pull" false
