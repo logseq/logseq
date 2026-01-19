@@ -1,6 +1,6 @@
 ;; Script that generates classes and properties for a demo of inferring properties.
 ;; To generate this graph:
-;; bb dev:db-create inferred deps/db/create_graph/inferred.edn
+;; bb dev:create inferred deps/db/create_graph/inferred.edn
 ;;
 ;; To try the demo in the UI, in any page type:
 ;; - Good Will Hunting #Movie #Ben-Affleck

@@ -14,7 +14,7 @@ Before running [nbb-logseq](https://github.com/logseq/nbb-logseq) scripts, be su
 
 These scripts generate custom database graphs written with nbb-logseq. If this is
 your first time generating a DB graph, first try the
-`dev:db-create` bb task in [db graph
+`dev:create` bb task in [db graph
 tasks](../docs/dev-practices.md#db-graph-tasks) as it only requires writing EDN.
 
 Creating graphs from the commandline using scripts and a concise EDN map is

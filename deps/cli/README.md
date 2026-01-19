@@ -60,8 +60,8 @@ To run a command against the current desktop graph, set `$LOGSEQ_API_SERVER_TOKE
 # Search your current graph and print highlighted results one per line like grep
 $ logseq search woot -a my-token
 Search found 100 results:
-dev:db-export woot woot.edn && dev:db-create woot2 woot.edn
-dev:db-diff woot woot2
+dev:db-export woot woot.edn && dev:create woot2 woot.edn
+dev:diff-graphs woot woot2
 ...
 # Can also authenticate api with $LOGSEQ_API_SERVER_TOKEN
 $ export LOGSEQ_API_SERVER_TOKEN=my-token
