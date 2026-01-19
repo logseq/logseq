@@ -1,6 +1,7 @@
 (ns logseq.cli.transport
   "HTTP transport for communicating with db-worker-node."
-  (:require [clojure.string :as string]
+  (:require [cljs.reader :as reader]
+            [clojure.string :as string]
             [logseq.db :as ldb]
             [promesa.core :as p]
             ["fs" :as fs]
@@ -120,4 +121,24 @@
                    (js/Buffer.from data))]
       (fs/writeFileSync path buffer))
 
+    :sqlite
+    (let [buffer (if (instance? js/Buffer data)
+                   data
+                   (js/Buffer.from data))]
+      (fs/writeFileSync path buffer))
+
     (throw (ex-info "unsupported output format" {:format format}))))
+
+(defn read-input
+  [{:keys [format path]}]
+  (case format
+    :edn
+    (reader/read-string (.toString (fs/readFileSync path) "utf8"))
+
+    :db
+    (fs/readFileSync path)
+
+    :sqlite
+    (fs/readFileSync path)
+
+    (throw (ex-info "unsupported input format" {:format format}))))

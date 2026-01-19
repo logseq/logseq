@@ -110,6 +110,14 @@
            :coerce :long}
    :format {:desc "Output format (text, json, edn)"}})
 
+(def ^:private graph-export-spec
+  {:type {:desc "Export type (edn, sqlite)"}
+   :output {:desc "Output path"}})
+
+(def ^:private graph-import-spec
+  {:type {:desc "Import type (edn, sqlite)"}
+   :input {:desc "Input path"}})
+
 (defn- format-commands
   [table]
   (let [rows (->> table
@@ -228,6 +236,27 @@
            :message "page name is required"}
    :summary summary})
 
+(defn- missing-type-result
+  [summary]
+  {:ok? false
+   :error {:code :missing-type
+           :message "type is required"}
+   :summary summary})
+
+(defn- missing-input-result
+  [summary]
+  {:ok? false
+   :error {:code :missing-input
+           :message "input is required"}
+   :summary summary})
+
+(defn- missing-output-result
+  [summary]
+  {:ok? false
+   :error {:code :missing-output
+           :message "output is required"}
+   :summary summary})
+
 (defn- missing-search-result
   [summary]
   {:ok? false
@@ -265,6 +294,13 @@
 
 (def ^:private search-types
   #{"page" "block" "tag" "property" "all"})
+
+(def ^:private import-export-types
+  #{"edn" "sqlite"})
+
+(defn- normalize-import-export-type
+  [value]
+  (some-> value string/lower-case string/trim))
 
 (defn- invalid-list-options?
   [command opts]
@@ -337,6 +373,8 @@
    (command-entry ["graph" "remove"] :graph-remove "Remove graph" {})
    (command-entry ["graph" "validate"] :graph-validate "Validate graph" {})
    (command-entry ["graph" "info"] :graph-info "Graph metadata" {})
+   (command-entry ["graph" "export"] :graph-export "Export graph" graph-export-spec)
+   (command-entry ["graph" "import"] :graph-import "Import graph" graph-import-spec)
    (command-entry ["server" "list"] :server-list "List db-worker-node servers" {})
    (command-entry ["server" "status"] :server-status "Show server status for a graph" server-spec)
    (command-entry ["server" "start"] :server-start "Start db-worker-node for a graph" server-spec)
@@ -448,6 +486,29 @@
       (and (= command :search) (invalid-search-options? opts))
       (invalid-options-result summary (invalid-search-options? opts))
 
+      (and (= command :graph-export) (not (seq (normalize-import-export-type (:type opts)))))
+      (missing-type-result summary)
+
+      (and (= command :graph-export) (not (seq (:output opts))))
+      (missing-output-result summary)
+
+      (and (= command :graph-export)
+           (not (contains? import-export-types (normalize-import-export-type (:type opts)))))
+      (invalid-options-result summary (str "invalid type: " (:type opts)))
+
+      (and (= command :graph-import) (not (seq (normalize-import-export-type (:type opts)))))
+      (missing-type-result summary)
+
+      (and (= command :graph-import) (not (seq (:input opts))))
+      (missing-input-result summary)
+
+      (and (= command :graph-import) (not (seq (:repo opts))))
+      (missing-repo-result summary)
+
+      (and (= command :graph-import)
+           (not (contains? import-export-types (normalize-import-export-type (:type opts)))))
+      (invalid-options-result summary (str "invalid type: " (:type opts)))
+
       (and (#{:server-status :server-start :server-stop :server-restart} command)
            (not (seq (:repo opts))))
       (missing-repo-result summary)
@@ -519,6 +580,18 @@
         {:ok? false
          :error {:code :graph-not-exists
                  :message "graph not exists"}}))
+    (p/resolved {:ok? true})))
+
+(defn- ensure-missing-graph
+  [action config]
+  (if (and (= :graph-import (:type action)) (:repo action))
+    (p/let [graphs (cli-server/list-graphs config)
+            graph (repo->graph (:repo action))]
+      (if (some #(= graph %) graphs)
+        {:ok? false
+         :error {:code :graph-exists
+                 :message "graph already exists"}}
+        {:ok? true}))
     (p/resolved {:ok? true})))
 
 (defn- pick-graph
@@ -1044,6 +1117,30 @@
         (:graph-list :graph-create :graph-switch :graph-remove :graph-validate :graph-info)
         (build-graph-action command graph repo)
 
+        :graph-export
+        (let [export-type (normalize-import-export-type (:type options))]
+          (if-not (seq repo)
+            (missing-repo-error "repo is required for export")
+            {:ok? true
+             :action {:type :graph-export
+                      :repo repo
+                      :graph (repo->graph repo)
+                      :export-type export-type
+                      :output (:output options)}}))
+
+        :graph-import
+        (let [import-repo (resolve-repo (:repo options))
+              import-type (normalize-import-export-type (:type options))]
+          (if-not (seq import-repo)
+            (missing-repo-error "repo is required for import")
+            {:ok? true
+             :action {:type :graph-import
+                      :repo import-repo
+                      :graph (repo->graph import-repo)
+                      :import-type import-type
+                      :input (:input options)
+                      :allow-missing-graph true}}))
+
         (:server-list :server-status :server-start :server-stop :server-restart)
         (build-server-action command server-repo)
 
@@ -1118,6 +1215,51 @@
          :data {:graph (:graph action)
                 :logseq.kv/graph-created-at (:kv/value created)
                 :logseq.kv/schema-version (:kv/value schema)}})))
+
+(defn- execute-graph-export
+  [action config]
+  (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
+              export-type (:export-type action)
+              export-result (case export-type
+                              "edn"
+                              (transport/invoke cfg
+                                                "thread-api/export-edn"
+                                                false
+                                                [(:repo action) {:export-type :graph}])
+                              "sqlite"
+                              (transport/invoke cfg
+                                                "thread-api/export-db-base64"
+                                                true
+                                                [(:repo action)])
+                              (throw (ex-info "unsupported export type" {:export-type export-type})))
+              data (if (= export-type "sqlite")
+                     (js/Buffer.from export-result "base64")
+                     export-result)
+              format (if (= export-type "sqlite") :sqlite :edn)]
+        (transport/write-output {:format format :path (:output action) :data data})
+        {:status :ok
+         :data {:message (str "wrote " (:output action))}})))
+
+(defn- execute-graph-import
+  [action config]
+  (-> (p/let [_ (cli-server/stop-server! config (:repo action))
+              cfg (cli-server/ensure-server! config (:repo action))
+              import-type (:import-type action)
+              input-data (case import-type
+                           "edn" (transport/read-input {:format :edn :path (:input action)})
+                           "sqlite" (transport/read-input {:format :sqlite :path (:input action)})
+                           (throw (ex-info "unsupported import type" {:import-type import-type})))
+              payload (if (= import-type "sqlite")
+                        (.toString (js/Buffer.from input-data) "base64")
+                        input-data)
+              method (if (= import-type "sqlite")
+                       "thread-api/import-db-base64"
+                       "thread-api/import-edn")
+              direct-pass? (= import-type "sqlite")
+              _ (transport/invoke cfg method direct-pass? [(:repo action) payload])
+              _ (cli-server/restart-server! config (:repo action))]
+        {:status :ok
+         :data {:message (str "imported " import-type " from " (:input action))}})))
 
 (defn- execute-list-page
   [action config]
@@ -1208,7 +1350,7 @@
                   [?e :block/uuid ?uuid]
                   [(get-else $ ?e :block/updated-at 0) ?updated]
                   [(get-else $ ?e :block/created-at 0) ?created]
-                  [(string/includes? ?title ?q)]]
+                  [(clojure.string/includes? ?title ?q)]]
                 '[:find ?e ?title ?uuid ?updated ?created
                   :in $ ?q
                   :where
@@ -1217,10 +1359,12 @@
                   [?e :block/uuid ?uuid]
                   [(get-else $ ?e :block/updated-at 0) ?updated]
                   [(get-else $ ?e :block/created-at 0) ?created]
-                  [(string/includes? (string/lower-case ?title) ?q)]])
+                  [(clojure.string/includes? (clojure.string/lower-case ?title) ?q)]])
         q* (if case-sensitive? text (string/lower-case text))]
     (transport/invoke cfg "thread-api/q" false [repo [query q*]])))
 
+
+#_{:clj-kondo/ignore [:aliased-namespace-symbol]}
 (defn- query-blocks
   [cfg repo text case-sensitive? tag include-content?]
   (let [has-tag? (seq tag)
@@ -1237,7 +1381,7 @@
                   [?e :block/uuid ?uuid]
                   [(get-else $ ?e :block/updated-at 0) ?updated]
                   [(get-else $ ?e :block/created-at 0) ?created]
-                  [(string/includes? ?value ?q)]]
+                  [(clojure.string/includes? ?value ?q)]]
 
                 case-sensitive?
                 `[:find ?e ?value ?uuid ?updated ?created
@@ -1248,7 +1392,7 @@
                   [?e :block/uuid ?uuid]
                   [(get-else $ ?e :block/updated-at 0) ?updated]
                   [(get-else $ ?e :block/created-at 0) ?created]
-                  [(string/includes? ?value ?q)]]
+                  [(clojure.string/includes? ?value ?q)]]
 
                 has-tag?
                 `[:find ?e ?value ?uuid ?updated ?created
@@ -1261,7 +1405,7 @@
                   [?e :block/uuid ?uuid]
                   [(get-else $ ?e :block/updated-at 0) ?updated]
                   [(get-else $ ?e :block/created-at 0) ?created]
-                  [(string/includes? (string/lower-case ?value) ?q)]]
+                  [(clojure.string/includes? (clojure.string/lower-case ?value) ?q)]]
 
                 :else
                 `[:find ?e ?value ?uuid ?updated ?created
@@ -1272,7 +1416,7 @@
                   [?e :block/uuid ?uuid]
                   [(get-else $ ?e :block/updated-at 0) ?updated]
                   [(get-else $ ?e :block/created-at 0) ?created]
-                  [(string/includes? (string/lower-case ?value) ?q)]])
+                  [(clojure.string/includes? (clojure.string/lower-case ?value) ?q)]])
         q* (if case-sensitive? text (string/lower-case text))
         tag-name (some-> tag string/lower-case)]
     (if has-tag?
@@ -1424,15 +1568,25 @@
 
 (defn execute
   [action config]
-  (-> (p/let [check (ensure-existing-graph action config)
-              result (if-not (:ok? check)
+  (-> (p/let [missing-check (ensure-missing-graph action config)
+              check (ensure-existing-graph action config)
+              result (cond
+                       (not (:ok? missing-check))
+                       {:status :error
+                        :error (:error missing-check)}
+
+                       (not (:ok? check))
                        {:status :error
                         :error (:error check)}
+
+                       :else
                        (case (:type action)
                          :graph-list (execute-graph-list action config)
                          :invoke (execute-invoke action config)
                          :graph-switch (execute-graph-switch action config)
                          :graph-info (execute-graph-info action config)
+                         :graph-export (execute-graph-export action config)
+                         :graph-import (execute-graph-import action config)
                          :list-page (execute-list-page action config)
                          :list-tag (execute-list-tag action config)
                          :list-property (execute-list-property action config)
