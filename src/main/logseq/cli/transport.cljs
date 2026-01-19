@@ -90,11 +90,16 @@
   [{:keys [base-url auth-token timeout-ms retries]}
    method direct-pass? args]
   (let [url (str (string/replace base-url #"/$" "") "/v1/invoke")
+        method* (cond
+                  (keyword? method) (subs (str method) 1)
+                  (string? method) method
+                  (nil? method) nil
+                  :else (str method))
         payload (if direct-pass?
-                  {:method method
+                  {:method method*
                    :directPass true
                    :args args}
-                  {:method method
+                  {:method method*
                    :directPass false
                    :argsTransit (ldb/write-transit-str args)})
         body (js/JSON.stringify (clj->js payload))]
