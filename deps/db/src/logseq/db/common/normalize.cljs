@@ -11,19 +11,19 @@
     (if (seq retracted)
       (remove (fn [item]
                 (and (= :db/retract (first item))
-                     (= 4 (count item))
-                     (contains? retracted (last item)))) tx-data)
+                     (= 5 (count item))
+                     (contains? retracted (nth item 3)))) tx-data)
       tx-data)))
 
 (defn replace-attr-retract-with-retract-entity-v2
   [normalized-tx-data]
   (->
-   (map (fn [[op eid a v]]
+   (map (fn [[op eid a v t]]
           (cond
             (and (= op :db/retract) (= a :block/uuid))
             [:db.fn/retractEntity eid]
             (and a (some? v))
-            [op eid a v]
+            [op eid a v t]
             :else
             [op eid]))
         normalized-tx-data)
@@ -72,7 +72,7 @@
        (keep
         (fn [d]
           (if (= (count d) 5)
-            (let [[e a v _t added] d
+            (let [[e a v t added] d
                   retract? (not added)
                   e' (if retract?
                        (eid->lookup db-before e)
@@ -89,8 +89,8 @@
                        v)]
               (when (and (some? e') (some? v'))
                 (if added
-                  [:db/add e' a v']
-                  [:db/retract e' a v'])))
+                  [:db/add e' a v' t]
+                  [:db/retract e' a v' t])))
             d)))
        remove-retract-entity-ref
        distinct))

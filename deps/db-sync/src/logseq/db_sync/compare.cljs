@@ -31,7 +31,7 @@
        set))
 
 (defn filter-received-tx-data
-  [{:keys [tempids db-before db-after]} tx-data]
+  [{:keys [tempids db-before db-after] :as report} tx-data]
   (->> tx-data
        (mapcat
         (fn [[op e a v]]
