@@ -400,7 +400,7 @@
                                   [:db/retract (:db/id block) :block/order]
                                   [:db/retract (:db/id block) :block/page]])
         (let [ids (cons (:db/id this) (ldb/get-block-full-children-ids db (:db/id block)))
-              txs (map (fn [id] [:db.fn/retractEntity id]) ids)
+              txs (map (fn [id] [:db/retractEntity id]) ids)
               page-tx (let [block (d/entity db [:block/uuid block-id])]
                         (when (:block/pre-block? block)
                           (when-let [id (:db/id (:block/page block))]

@@ -26,7 +26,7 @@ conflicts.
 
 Remote tx data is transformed before transact to avoid invalid operations:
 
-- Convert :block/uuid retracts into :db.fn/retractEntity.
+- Convert :block/uuid retracts into :db/retractEntity.
 - Keep only the last :block/parent update per entity.
 - Drop datoms that reference missing entities or missing ref targets.
 - Repair parent cycles by reparenting to the page root.

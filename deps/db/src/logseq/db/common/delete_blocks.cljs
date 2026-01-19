@@ -47,9 +47,8 @@
          tx))
      refs)))
 
-(defn update-refs-history-and-macros
-  "When a block is deleted, refs are updated, property history are deleted. For file graphs, macros associated
-  with the block are also deleted"
+(defn update-refs-history
+  "When a block is deleted, refs are updated, property history are deleted."
   [db txs _opts]
   (let [retracted-block-ids (->> (keep (fn [tx]
                                          (when (and (vector? tx)
@@ -63,12 +62,11 @@
             retract-history-tx (mapcat (fn [e]
                                          (map (fn [history] [:db/retractEntity (:db/id history)])
                                               (:logseq.property.history/_block e))) retracted-blocks)
-            macros-tx (when-not (entity-plus/db-based-graph? db)
-                        (mapcat (fn [b]
-                                  ;; Only delete if last reference
-                                  (keep #(when (<= (count (:block/_macros (d/entity db (:db/id %))))
-                                                   1)
-                                           (when (:db/id %) (vector :db.fn/retractEntity (:db/id %))))
-                                        (:block/macros b)))
-                                retracted-blocks))]
-        (concat retracted-tx retract-history-tx macros-tx)))))
+            delete-views (->>
+                          (mapcat
+                           (fn [item]
+                             (let [block (d/entity db (:db/id item))]
+                               (:logseq.property/_view-for block)))
+                           retracted-blocks)
+                          (map (fn [b] [:db/retractEntity (:db/id b)])))]
+        (concat retracted-tx delete-views retract-history-tx)))))

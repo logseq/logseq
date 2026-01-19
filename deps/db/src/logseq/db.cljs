@@ -169,7 +169,7 @@
                                        (integer? m)
                                        (empty? m)))))
          delete-blocks-tx (when-not (string? repo-or-conn)
-                            (delete-blocks/update-refs-history-and-macros @repo-or-conn tx-data tx-meta))
+                            (delete-blocks/update-refs-history @repo-or-conn tx-data tx-meta))
          tx-data (concat tx-data delete-blocks-tx)]
 
      ;; Ensure worker can handle the request sequentially (one by one)
@@ -187,7 +187,7 @@
 (defn transact-with-temp-conn!
   "Validate db and store once for a batch transaction, the `temp` conn can still load data from disk,
   however it can't write to the disk."
-  [conn tx-meta batch-tx-fn & {:keys [listen-db]}]
+  [conn tx-meta batch-tx-fn & {:keys [listen-db filter-tx-data]}]
   (let [temp-conn (d/conn-from-db @conn)
         *batch-tx-data (volatile! [])]
     ;; can read from disk, write is disallowed
@@ -200,13 +200,17 @@
                  (when (fn? listen-db)
                    (listen-db tx-report))))
     (batch-tx-fn temp-conn *batch-tx-data)
-    (let [tx-data @*batch-tx-data]
+    (let [tx-data @*batch-tx-data
+          temp-after-db @temp-conn]
       (d/unlisten! temp-conn ::temp-conn-batch-tx)
       (reset! temp-conn nil)
       (vreset! *batch-tx-data nil)
       (when (seq tx-data)
         ;; transact tx-data to `conn` and validate db
-        (transact! conn tx-data tx-meta)))))
+        (let [tx-data' (if (fn? filter-tx-data)
+                         (filter-tx-data temp-after-db tx-data)
+                         tx-data)]
+          (transact! conn tx-data' tx-meta))))))
 
 (def page? common-entity-util/page?)
 (def internal-page? entity-util/internal-page?)
