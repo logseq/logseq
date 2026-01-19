@@ -252,6 +252,127 @@
                                           (done))))
                          (done))))))))
 
+(deftest db-worker-node-import-edn
+  (async done
+    (let [daemon-a (atom nil)
+          daemon-b (atom nil)
+          data-dir (node-helper/create-tmp-dir "db-worker-import-edn")
+          repo-a (str "logseq_db_import_edn_a_" (subs (str (random-uuid)) 0 8))
+          repo-b (str "logseq_db_import_edn_b_" (subs (str (random-uuid)) 0 8))
+          now (js/Date.now)
+          page-uuid (random-uuid)]
+      (-> (p/let [{:keys [host port stop!]}
+                  (db-worker-node/start-daemon! {:data-dir data-dir
+                                                 :repo repo-a})
+                  _ (reset! daemon-a {:stop! stop!})
+                  _ (invoke host port "thread-api/create-or-open-db" [repo-a {}])
+                  _ (invoke host port "thread-api/transact"
+                            [repo-a
+                             [{:block/uuid page-uuid
+                               :block/title "Import Page"
+                               :block/name "import-page"
+                               :block/tags #{:logseq.class/Page}
+                               :block/created-at now
+                               :block/updated-at now}]
+                             {}
+                             nil])
+                  export-edn (invoke host port "thread-api/export-edn" [repo-a {:export-type :graph}])]
+            (is (map? export-edn))
+            (p/let [_ ((:stop! @daemon-a))
+                    {:keys [host port stop!]}
+                    (db-worker-node/start-daemon! {:data-dir data-dir
+                                                   :repo repo-b})
+                    _ (reset! daemon-b {:stop! stop!})
+                    _ (invoke host port "thread-api/create-or-open-db" [repo-b {}])
+                    _ (invoke host port "thread-api/import-edn" [repo-b export-edn])
+                    result (invoke host port "thread-api/q"
+                                   [repo-b
+                                    ['[:find ?e
+                                       :in $ ?title
+                                       :where [?e :block/title ?title]]
+                                     "Import Page"]])]
+              (is (seq result))))
+          (p/catch (fn [e]
+                     (println "[db-worker-node-test] import-edn error:" e)
+                     (is false (str e))))
+          (p/finally (fn []
+                       (let [stop-a (:stop! @daemon-a)
+                             stop-b (:stop! @daemon-b)]
+                         (cond
+                           (and stop-a stop-b)
+                           (-> (stop-a)
+                               (p/finally (fn [] (-> (stop-b) (p/finally (fn [] (done)))))))
+
+                           stop-a
+                           (-> (stop-a) (p/finally (fn [] (done))))
+
+                           stop-b
+                           (-> (stop-b) (p/finally (fn [] (done))))
+
+                           :else
+                           (done)))))))))
+
+(deftest db-worker-node-import-db-base64
+  (async done
+    (let [daemon-a (atom nil)
+          daemon-b (atom nil)
+          data-dir (node-helper/create-tmp-dir "db-worker-import-sqlite")
+          repo-a (str "logseq_db_import_sqlite_a_" (subs (str (random-uuid)) 0 8))
+          repo-b (str "logseq_db_import_sqlite_b_" (subs (str (random-uuid)) 0 8))
+          now (js/Date.now)
+          page-uuid (random-uuid)]
+      (-> (p/let [{:keys [host port stop!]}
+                  (db-worker-node/start-daemon! {:data-dir data-dir
+                                                 :repo repo-a})
+                  _ (reset! daemon-a {:stop! stop!})
+                  _ (invoke host port "thread-api/create-or-open-db" [repo-a {}])
+                  _ (invoke host port "thread-api/transact"
+                            [repo-a
+                             [{:block/uuid page-uuid
+                               :block/title "SQLite Import Page"
+                               :block/name "sqlite-import-page"
+                               :block/tags #{:logseq.class/Page}
+                               :block/created-at now
+                               :block/updated-at now}]
+                             {}
+                             nil])
+                  export-base64 (invoke host port "thread-api/export-db-base64" [repo-a])]
+            (is (string? export-base64))
+            (is (pos? (count export-base64)))
+            (p/let [_ ((:stop! @daemon-a))
+                    {:keys [host port stop!]}
+                    (db-worker-node/start-daemon! {:data-dir data-dir
+                                                   :repo repo-b})
+                    _ (reset! daemon-b {:stop! stop!})
+                    _ (invoke host port "thread-api/import-db-base64" [repo-b export-base64])
+                    _ (invoke host port "thread-api/create-or-open-db" [repo-b {}])
+                    result (invoke host port "thread-api/q"
+                                   [repo-b
+                                    ['[:find ?e
+                                       :in $ ?title
+                                       :where [?e :block/title ?title]]
+                                     "SQLite Import Page"]])]
+              (is (seq result))))
+          (p/catch (fn [e]
+                     (println "[db-worker-node-test] import-sqlite error:" e)
+                     (is false (str e))))
+          (p/finally (fn []
+                       (let [stop-a (:stop! @daemon-a)
+                             stop-b (:stop! @daemon-b)]
+                         (cond
+                           (and stop-a stop-b)
+                           (-> (stop-a)
+                               (p/finally (fn [] (-> (stop-b) (p/finally (fn [] (done)))))))
+
+                           stop-a
+                           (-> (stop-a) (p/finally (fn [] (done))))
+
+                           stop-b
+                           (-> (stop-b) (p/finally (fn [] (done))))
+
+                           :else
+                           (done)))))))))
+
 (deftest db-worker-node-repo-mismatch-test
   (async done
     (let [daemon (atom nil)
