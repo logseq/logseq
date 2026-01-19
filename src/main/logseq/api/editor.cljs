@@ -102,6 +102,12 @@
     (when page
       (sdk-utils/result->js page))))
 
+(defn get_today_page
+  []
+  (p/let [today-name (date/today)
+          page (<get-block today-name {:children? false})]
+    (some-> page (sdk-utils/result->js))))
+
 (defn get_all_pages
   []
   (p/let [result (db-async/<q
