@@ -68,6 +68,22 @@
     payload
     (ldb/write-transit-str payload)))
 
+(defn- normalize-method-kw
+  [method]
+  (cond
+    (keyword? method) method
+    (string? method) (keyword method)
+    (nil? method) nil
+    :else (keyword (str method))))
+
+(defn- normalize-method-str
+  [method]
+  (cond
+    (keyword? method) (subs (str method) 1)
+    (string? method) method
+    (nil? method) nil
+    :else (str method)))
+
 (defn- handle-event!
   [type payload]
   (let [event (js/JSON.stringify (clj->js {:type type}
@@ -90,7 +106,7 @@
                      (swap! *sse-clients disj res))))
 
 (defn- <invoke!
-  [^js proxy method direct-pass? args]
+  [^js proxy method-str method-kw direct-pass? args]
   (let [args' (if direct-pass?
                 (into-array (or args []))
                 (if (string? args)
@@ -100,22 +116,24 @@
         timeout-id (js/setTimeout
                     (fn []
                       (log/warn :db-worker-node-invoke-timeout
-                                {:method method
+                                {:method (or method-kw method-str)
                                  :elapsed-ms (- (js/Date.now) started-at)}))
                     10000)]
-    (-> (.remoteInvoke proxy method (boolean direct-pass?) args')
+    (-> (.remoteInvoke proxy method-str (boolean direct-pass?) args')
         (p/finally (fn []
                      (js/clearTimeout timeout-id))))))
 
 (defn- <init-worker!
   [proxy rtc-ws-url]
-  (<invoke! proxy "thread-api/init" true #js [rtc-ws-url]))
+  (let [method-kw :thread-api/init
+        method-str (normalize-method-str method-kw)]
+    (<invoke! proxy method-str method-kw true #js [rtc-ws-url])))
 
 (def ^:private non-repo-methods
-  #{"thread-api/init"
-    "thread-api/list-db"
-    "thread-api/get-version"
-    "thread-api/set-infer-worker-proxy"})
+  #{:thread-api/init
+    :thread-api/list-db
+    :thread-api/get-version
+    :thread-api/set-infer-worker-proxy})
 
 (defn- repo-arg
   [args]
@@ -126,23 +144,24 @@
 
 (defn- repo-error
   [method args bound-repo]
-  (when-not (contains? non-repo-methods method)
-    (let [repo (repo-arg args)]
-      (cond
-        (not (seq repo))
-        {:status 400
-         :error {:code :missing-repo
-                 :message "repo is required"}}
+  (let [method-kw (normalize-method-kw method)]
+    (when-not (contains? non-repo-methods method-kw)
+      (let [repo (repo-arg args)]
+        (cond
+          (not (seq repo))
+          {:status 400
+           :error {:code :missing-repo
+                   :message "repo is required"}}
 
-        (not= repo bound-repo)
-        {:status 409
-         :error {:code :repo-mismatch
-                 :message "repo does not match bound repo"
-                 :repo repo
-                 :bound-repo bound-repo}}
+          (not= repo bound-repo)
+          {:status 409
+           :error {:code :repo-mismatch
+                   :message "repo does not match bound repo"
+                   :repo repo
+                   :bound-repo bound-repo}}
 
-        :else
-        nil))))
+          :else
+          nil)))))
 
 (defn- set-main-thread-stub!
   []
@@ -177,6 +196,8 @@
              (-> (p/let [body (<read-body req)
                          payload (js/JSON.parse body)
                          {:keys [method directPass argsTransit args]} (js->clj payload :keywordize-keys true)
+                         method-kw (normalize-method-kw method)
+                         method-str (normalize-method-str method)
                          direct-pass? (boolean directPass)
                          args' (if direct-pass?
                                  args
@@ -186,9 +207,9 @@
                                                (if (string? args')
                                                  (ldb/read-transit-str args')
                                                  args'))]
-                   (if-let [{:keys [status error]} (repo-error method args-for-validation bound-repo)]
+                   (if-let [{:keys [status error]} (repo-error method-kw args-for-validation bound-repo)]
                      (send-json! res status {:ok false :error error})
-                     (p/let [result (<invoke! proxy method direct-pass? args')]
+                     (p/let [result (<invoke! proxy method-str method-kw direct-pass? args')]
                        (send-json! res 200 (if direct-pass?
                                              {:ok true :result result}
                                              {:ok true :resultTransit result})))))
@@ -311,7 +332,9 @@
                                                                :host host
                                                                :port port})
                     _ (reset! *lock-info {:path path :lock lock})
-                    _ (<invoke! proxy "thread-api/create-or-open-db" false [repo {}])]
+                    _ (let [method-kw :thread-api/create-or-open-db
+                            method-str (normalize-method-str method-kw)]
+                        (<invoke! proxy method-str method-kw false [repo {}]))]
               (let [stop!* (atom nil)
                     server (make-server proxy {:auth-token auth-token
                                                :bound-repo repo
