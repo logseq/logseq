@@ -12,7 +12,7 @@
   (string/join "\n"
                ["logseq <command> [options]"
                 ""
-                "Commands: list page, list tag, list property, add block, add page, remove block, remove page, search, show, graph list, graph create, graph switch, graph remove, graph validate, graph info, server list, server status, server start, server stop, server restart"
+                "Commands: list page, list tag, list property, add block, add page, remove block, remove page, search, show, graph list, graph create, graph switch, graph remove, graph validate, graph info, graph export, graph import, server list, server status, server start, server stop, server restart"
                 ""
                 "Options:"
                 summary]))
@@ -52,9 +52,16 @@
                            {:exit-code 0
                             :output (format/format-result result opts)})))
                (p/catch (fn [error]
-                          (let [message (or (some-> (ex-data error) :message)
-                                            (.-message error)
-                                            (str error))]
+                          (let [data (ex-data error)
+                                message (cond
+                                          (and (= :http-error (:code data)) (seq (:body data)))
+                                          (str "http request failed (" (:status data) "): " (:body data))
+
+                                          (some? (:message data))
+                                          (:message data)
+
+                                          :else
+                                          (or (.-message error) (str error)))]
                             {:exit-code 1
                              :output (format/format-result {:status :error
                                                             :error {:code :exception

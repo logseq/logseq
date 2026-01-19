@@ -3,6 +3,7 @@
             [clojure.string :as string]
             [logseq.cli.commands :as commands]
             [logseq.cli.server :as cli-server]
+            [logseq.cli.transport :as transport]
             [promesa.core :as p]))
 
 (deftest test-help-output
@@ -31,7 +32,9 @@
           summary (:summary result)]
       (is (true? (:help? result)))
       (is (string/includes? summary "graph list"))
-      (is (string/includes? summary "graph create"))))
+      (is (string/includes? summary "graph create"))
+      (is (string/includes? summary "graph export"))
+      (is (string/includes? summary "graph import"))))
 
   (testing "list group shows subcommands"
     (let [result (commands/parse-args ["list"])
@@ -303,6 +306,51 @@
       (is (= :show (:command result)))
       (is (= "Home" (get-in result [:options :page-name])))))
 
+  (testing "graph export parses with type and output"
+    (let [result (commands/parse-args ["graph" "export"
+                                       "--type" "edn"
+                                       "--output" "export.edn"])]
+      (is (true? (:ok? result)))
+      (is (= :graph-export (:command result)))
+      (is (= "edn" (get-in result [:options :type])))
+      (is (= "export.edn" (get-in result [:options :output])))))
+
+  (testing "graph import parses with type, input, and repo"
+    (let [result (commands/parse-args ["graph" "import"
+                                       "--type" "sqlite"
+                                       "--input" "import.sqlite"
+                                       "--repo" "demo"])]
+      (is (true? (:ok? result)))
+      (is (= :graph-import (:command result)))
+      (is (= "sqlite" (get-in result [:options :type])))
+      (is (= "import.sqlite" (get-in result [:options :input])))
+      (is (= "demo" (get-in result [:options :repo])))))
+
+  (testing "graph export requires type"
+    (let [result (commands/parse-args ["graph" "export" "--output" "export.edn"])]
+      (is (false? (:ok? result)))
+      (is (= :missing-type (get-in result [:error :code])))))
+
+  (testing "graph export requires output"
+    (let [result (commands/parse-args ["graph" "export" "--type" "edn"])]
+      (is (false? (:ok? result)))
+      (is (= :missing-output (get-in result [:error :code])))))
+
+  (testing "graph import requires repo"
+    (let [result (commands/parse-args ["graph" "import"
+                                       "--type" "edn"
+                                       "--input" "import.edn"])]
+      (is (false? (:ok? result)))
+      (is (= :missing-repo (get-in result [:error :code])))))
+
+  (testing "graph import rejects unknown type"
+    (let [result (commands/parse-args ["graph" "import"
+                                       "--type" "zip"
+                                       "--input" "import.zip"
+                                       "--repo" "demo"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
   (testing "verb subcommands reject unknown flags"
     (doseq [args [["list" "page" "--wat"]
                   ["add" "block" "--wat"]
@@ -360,6 +408,22 @@
           result (commands/build-action parsed {:repo "demo"})]
       (is (true? (:ok? result)))
       (is (= :graph-info (get-in result [:action :type])))))
+
+  (testing "graph export uses config repo"
+    (let [parsed {:ok? true
+                  :command :graph-export
+                  :options {:type "edn" :output "export.edn"}}
+          result (commands/build-action parsed {:repo "demo"})]
+      (is (true? (:ok? result)))
+      (is (= :graph-export (get-in result [:action :type])))))
+
+  (testing "graph import requires repo"
+    (let [parsed {:ok? true
+                  :command :graph-import
+                  :options {:type "edn" :input "import.edn"}}
+          result (commands/build-action parsed {})]
+      (is (false? (:ok? result)))
+      (is (= :missing-repo (get-in result [:error :code])))))
 
   (testing "list page requires repo"
     (let [parsed {:ok? true :command :list-page :options {}}
@@ -419,3 +483,140 @@
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))
                           (done)))))))
+
+(deftest test-execute-graph-import-rejects-existing-graph
+  (async done
+    (let [orig-list-graphs cli-server/list-graphs
+          orig-ensure-server! cli-server/ensure-server!]
+      (set! cli-server/list-graphs (fn [_] ["demo"]))
+      (set! cli-server/ensure-server! (fn [_ _]
+                                        (throw (ex-info "should not start server" {}))))
+      (-> (p/let [result (commands/execute {:type :graph-import
+                                            :repo "logseq_db_demo"
+                                            :allow-missing-graph true}
+                                           {})]
+            (is (= :error (:status result)))
+            (is (= :graph-exists (get-in result [:error :code]))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (set! cli-server/list-graphs orig-list-graphs)
+                       (set! cli-server/ensure-server! orig-ensure-server!)
+                       (done)))))))
+
+(deftest test-execute-graph-export
+  (async done
+    (let [invoke-calls (atom [])
+          write-calls (atom [])
+          orig-list-graphs cli-server/list-graphs
+          orig-ensure-server! cli-server/ensure-server!
+          orig-invoke transport/invoke
+          orig-write-output transport/write-output]
+      (set! cli-server/list-graphs (fn [_] ["demo"]))
+      (set! cli-server/ensure-server! (fn [config _]
+                                        (assoc config :base-url "http://127.0.0.1:9999")))
+      (set! transport/invoke (fn [_ method direct-pass? args]
+                               (swap! invoke-calls conj [method direct-pass? args])
+                               (if (= method "thread-api/export-db-base64")
+                                 "c3FsaXRl"
+                                 {:exported true})))
+      (set! transport/write-output (fn [opts]
+                                     (swap! write-calls conj opts)))
+      (-> (p/let [edn-result (commands/execute {:type :graph-export
+                                                :repo "logseq_db_demo"
+                                                :graph "demo"
+                                                :export-type "edn"
+                                                :output "/tmp/export.edn"
+                                                :allow-missing-graph true}
+                                               {})
+                  sqlite-result (commands/execute {:type :graph-export
+                                                   :repo "logseq_db_demo"
+                                                   :graph "demo"
+                                                   :export-type "sqlite"
+                                                   :output "/tmp/export.sqlite"
+                                                   :allow-missing-graph true}
+                                                  {})]
+            (is (= :ok (:status edn-result)))
+            (is (= :ok (:status sqlite-result)))
+            (is (= [["thread-api/export-edn" false ["logseq_db_demo" {:export-type :graph}]]
+                    ["thread-api/export-db-base64" true ["logseq_db_demo"]]]
+                   @invoke-calls))
+            (is (= 2 (count @write-calls)))
+            (let [[edn-write sqlite-write] @write-calls]
+              (is (= {:format :edn :path "/tmp/export.edn" :data {:exported true}}
+                     edn-write))
+              (is (= :sqlite (:format sqlite-write)))
+              (is (= "/tmp/export.sqlite" (:path sqlite-write)))
+              (is (= "sqlite" (.toString (:data sqlite-write) "utf8")))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (set! cli-server/list-graphs orig-list-graphs)
+                       (set! cli-server/ensure-server! orig-ensure-server!)
+                       (set! transport/invoke orig-invoke)
+                       (set! transport/write-output orig-write-output)
+                       (done)))))))
+
+(deftest test-execute-graph-import
+  (async done
+    (let [invoke-calls (atom [])
+          read-calls (atom [])
+          stop-calls (atom [])
+          restart-calls (atom [])
+          orig-list-graphs cli-server/list-graphs
+          orig-stop-server! cli-server/stop-server!
+          orig-restart-server! cli-server/restart-server!
+          orig-ensure-server! cli-server/ensure-server!
+          orig-read-input transport/read-input
+          orig-invoke transport/invoke]
+      (set! cli-server/list-graphs (fn [_] []))
+      (set! cli-server/stop-server! (fn [_ repo]
+                                      (swap! stop-calls conj repo)
+                                      (p/resolved {:ok? true})))
+      (set! cli-server/restart-server! (fn [_ repo]
+                                         (swap! restart-calls conj repo)
+                                         (p/resolved {:ok? true})))
+      (set! cli-server/ensure-server! (fn [config _]
+                                        (assoc config :base-url "http://127.0.0.1:9999")))
+      (set! transport/read-input (fn [{:keys [format path]}]
+                                   (swap! read-calls conj [format path])
+                                   (if (= format :edn)
+                                     {:page "Import Page"}
+                                     (js/Buffer.from "sqlite" "utf8"))))
+      (set! transport/invoke (fn [_ method _ args]
+                               (swap! invoke-calls conj [method args])
+                               {:ok true}))
+      (-> (p/let [edn-result (commands/execute {:type :graph-import
+                                                :repo "logseq_db_demo"
+                                                :graph "demo"
+                                                :import-type "edn"
+                                                :input "/tmp/import.edn"
+                                                :allow-missing-graph true}
+                                               {})
+                  sqlite-result (commands/execute {:type :graph-import
+                                                   :repo "logseq_db_demo"
+                                                   :graph "demo"
+                                                   :import-type "sqlite"
+                                                   :input "/tmp/import.sqlite"
+                                                   :allow-missing-graph true}
+                                                  {})]
+            (is (= :ok (:status edn-result)))
+            (is (= :ok (:status sqlite-result)))
+            (is (= [[:edn "/tmp/import.edn"]
+                    [:sqlite "/tmp/import.sqlite"]]
+                   @read-calls))
+            (is (= [["thread-api/import-edn" ["logseq_db_demo" {:page "Import Page"}]]
+                    ["thread-api/import-db-base64" ["logseq_db_demo" "c3FsaXRl"]]]
+                   @invoke-calls))
+            (is (= ["logseq_db_demo" "logseq_db_demo"] @stop-calls))
+            (is (= ["logseq_db_demo" "logseq_db_demo"] @restart-calls)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (set! cli-server/list-graphs orig-list-graphs)
+                       (set! cli-server/stop-server! orig-stop-server!)
+                       (set! cli-server/restart-server! orig-restart-server!)
+                       (set! cli-server/ensure-server! orig-ensure-server!)
+                       (set! transport/read-input orig-read-input)
+                       (set! transport/invoke orig-invoke)
+                       (done)))))))
