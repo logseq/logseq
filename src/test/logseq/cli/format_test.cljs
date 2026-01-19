@@ -105,6 +105,23 @@
                                        {:output-format nil})]
       (is (= "Removed page: Home (repo: demo-repo)" result)))))
 
+(deftest test-human-output-graph-import-export
+  (testing "graph export renders a succinct success line"
+    (let [result (format/format-result {:status :ok
+                                        :command :graph-export
+                                        :context {:export-type "edn"
+                                                  :output "/tmp/export.edn"}}
+                                       {:output-format nil})]
+      (is (= "Exported edn to /tmp/export.edn" result))))
+
+  (testing "graph import renders a succinct success line"
+    (let [result (format/format-result {:status :ok
+                                        :command :graph-import
+                                        :context {:import-type "sqlite"
+                                                  :input "/tmp/import.sqlite"}}
+                                       {:output-format nil})]
+      (is (= "Imported sqlite from /tmp/import.sqlite" result)))))
+
 (deftest test-human-output-graph-info
   (testing "graph info includes key metadata lines"
     (let [result (format/format-result {:status :ok

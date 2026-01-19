@@ -218,6 +218,14 @@
   [{:keys [repo block]}]
   (str "Removed block: " block " (repo: " repo ")"))
 
+(defn- format-graph-export
+  [{:keys [export-type output]}]
+  (str "Exported " export-type " to " output))
+
+(defn- format-graph-import
+  [{:keys [import-type input]}]
+  (str "Imported " import-type " from " input))
+
 (defn- format-graph-action
   [command {:keys [graph]}]
   (let [verb (case command
@@ -248,6 +256,8 @@
         :add-page (format-add-page context)
         :remove-page (format-remove-page context)
         :remove-block (format-remove-block context)
+        :graph-export (format-graph-export context)
+        :graph-import (format-graph-import context)
         :search (format-search-results (:results data))
         :show (or (:message data) (pr-str data))
         (if (and (map? data) (contains? data :message))
