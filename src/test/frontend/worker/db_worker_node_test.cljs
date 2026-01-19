@@ -180,6 +180,22 @@
     (is (= "logseq_db_parse_args" (:repo result)))
     (is (= "/tmp/db-worker" (:data-dir result)))))
 
+(deftest db-worker-node-repo-error-handles-keyword-methods
+  (let [repo-error #'db-worker-node/repo-error
+        bound-repo "logseq_db_bound"]
+    (is (nil? (repo-error :thread-api/list-db [] bound-repo)))
+    (is (nil? (repo-error "thread-api/list-db" [] bound-repo)))
+    (is (= {:status 400
+            :error {:code :missing-repo
+                    :message "repo is required"}}
+           (repo-error :thread-api/create-or-open-db [] bound-repo)))
+    (is (= {:status 409
+            :error {:code :repo-mismatch
+                    :message "repo does not match bound repo"
+                    :repo "other"
+                    :bound-repo bound-repo}}
+           (repo-error :thread-api/create-or-open-db ["other"] bound-repo)))))
+
 (deftest db-worker-node-daemon-smoke-test
   (async done
     (let [daemon (atom nil)
