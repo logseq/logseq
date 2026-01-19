@@ -68,7 +68,7 @@
 (defn- error-hint
   [{:keys [code]}]
   (case code
-    :missing-graph "Use --graph <name>"
+    :missing-graph "Use --repo <name>"
     :missing-repo "Use --repo <name>"
     :missing-content "Use --content or pass content as args"
     :missing-search-text "Provide search text or --text"

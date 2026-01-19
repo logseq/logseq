@@ -72,23 +72,46 @@
                    (is false (str "unexpected error: " e))
                    (done))))))
 
+(deftest test-invoke-accepts-keyword-method
+  (async done
+    (let [received (atom nil)]
+      (-> (p/let [{:keys [url stop!]} (start-server
+                                       (fn [^js req ^js res]
+                                         (let [chunks (array)]
+                                           (.on req "data" (fn [chunk] (.push chunks chunk)))
+                                           (.on req "end" (fn []
+                                                            (let [buf (js/Buffer.concat chunks)
+                                                                  payload (js/JSON.parse (.toString buf "utf8"))]
+                                                              (reset! received (js->clj payload :keywordize-keys true))
+                                                              (.writeHead res 200 #js {"Content-Type" "application/json"})
+                                                              (.end res (js/JSON.stringify #js {:result "ok"}))))))))
+                 result (transport/invoke {:base-url url} :thread-api/pull true ["repo" [:block/title]])]
+            (is (= "ok" result))
+            (is (= "thread-api/pull" (:method @received)))
+            (is (= true (:directPass @received)))
+            (p/let [_ (stop!)]
+              (done)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))
+                     (done)))))))
+
 (deftest test-read-input
   (testing "reads edn input"
-    (let [path (temp-path "input.edn")]
-      (.writeFileSync fs path "{:a 1}")
-      (is (= {:a 1} (transport/read-input {:format :edn :path path})))))
+    (let [file-path (temp-path "input.edn")]
+      (.writeFileSync fs file-path "{:a 1}")
+      (is (= {:a 1} (transport/read-input {:format :edn :path file-path})))))
 
   (testing "reads sqlite input as buffer"
-    (let [path (temp-path "input.sqlite")
+    (let [file-path (temp-path "input.sqlite")
           buffer (js/Buffer.from "sqlite-data")]
-      (.writeFileSync fs path buffer)
-      (let [result (transport/read-input {:format :sqlite :path path})]
+      (.writeFileSync fs file-path buffer)
+      (let [result (transport/read-input {:format :sqlite :path file-path})]
         (is (instance? js/Buffer result))
         (is (= "sqlite-data" (.toString result "utf8")))))))
 
 (deftest test-write-output
   (testing "writes sqlite output as buffer"
-    (let [path (temp-path "output.sqlite")
+    (let [file-path (temp-path "output.sqlite")
           buffer (js/Buffer.from "sqlite-export")]
-      (transport/write-output {:format :sqlite :path path :data buffer})
-      (is (= "sqlite-export" (.toString (.readFileSync fs path) "utf8"))))))
+      (transport/write-output {:format :sqlite :path file-path :data buffer})
+      (is (= "sqlite-export" (.toString (.readFileSync fs file-path) "utf8"))))))

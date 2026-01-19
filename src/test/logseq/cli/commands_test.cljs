@@ -1,6 +1,7 @@
 (ns logseq.cli.commands-test
   (:require [cljs.test :refer [async deftest is testing]]
             [clojure.string :as string]
+            [logseq.cli.command.show :as show-command]
             [logseq.cli.commands :as commands]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
@@ -127,6 +128,13 @@
       (is (false? (:ok? result)))
       (is (= :unknown-command (get-in result [:error :code]))))))
 
+(deftest test-parse-args-rejects-graph-option
+  (testing "rejects legacy --graph option"
+    (let [result (commands/parse-args ["--graph" "demo" "graph" "list"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))
+      (is (= "unknown option: --graph" (get-in result [:error :message]))))))
+
 (deftest test-parse-args-global-options
   (testing "global output option is accepted"
     (let [result (commands/parse-args ["--output" "json" "graph" "list"])]
@@ -135,7 +143,7 @@
 
 (deftest test-tree->text-format
   (testing "show tree text uses db/id with tree glyphs"
-    (let [tree->text #'commands/tree->text
+    (let [tree->text #'show-command/tree->text
           tree-data {:root {:db/id 1
                             :block/title "Root"
                             :block/children [{:db/id 2
@@ -152,7 +160,7 @@
 
 (deftest test-tree->text-multiline
   (testing "show tree text renders multiline blocks under glyph column"
-    (let [tree->text #'commands/tree->text
+    (let [tree->text #'show-command/tree->text
           tree-data {:root {:db/id 168
                             :block/title "Jan 18th, 2026"
                             :block/children [{:db/id 169
@@ -244,7 +252,7 @@
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code]))))))
 
-(deftest test-verb-subcommand-parse
+(deftest test-verb-subcommand-parse-add-remove
   (testing "add block requires content source"
     (let [result (commands/parse-args ["add" "block"])]
       (is (false? (:ok? result)))
@@ -282,8 +290,9 @@
     (let [result (commands/parse-args ["remove" "page" "--page" "Home"])]
       (is (true? (:ok? result)))
       (is (= :remove-page (:command result)))
-      (is (= "Home" (get-in result [:options :page])))))
+      (is (= "Home" (get-in result [:options :page]))))))
 
+(deftest test-verb-subcommand-parse-search-show
   (testing "search requires text"
     (let [result (commands/parse-args ["search"])]
       (is (false? (:ok? result)))
@@ -304,8 +313,9 @@
     (let [result (commands/parse-args ["show" "--page-name" "Home"])]
       (is (true? (:ok? result)))
       (is (= :show (:command result)))
-      (is (= "Home" (get-in result [:options :page-name])))))
+      (is (= "Home" (get-in result [:options :page-name]))))))
 
+(deftest test-verb-subcommand-parse-graph-import-export
   (testing "graph export parses with type and output"
     (let [result (commands/parse-args ["graph" "export"
                                        "--type" "edn"
@@ -349,8 +359,9 @@
                                        "--input" "import.zip"
                                        "--repo" "demo"])]
       (is (false? (:ok? result)))
-      (is (= :invalid-options (get-in result [:error :code])))))
+      (is (= :invalid-options (get-in result [:error :code]))))))
 
+(deftest test-verb-subcommand-parse-flags
   (testing "verb subcommands reject unknown flags"
     (doseq [args [["list" "page" "--wat"]
                   ["add" "block" "--wat"]
@@ -517,7 +528,7 @@
                                         (assoc config :base-url "http://127.0.0.1:9999")))
       (set! transport/invoke (fn [_ method direct-pass? args]
                                (swap! invoke-calls conj [method direct-pass? args])
-                               (if (= method "thread-api/export-db-base64")
+                               (if (= method :thread-api/export-db-base64)
                                  "c3FsaXRl"
                                  {:exported true})))
       (set! transport/write-output (fn [opts]
@@ -538,8 +549,8 @@
                                                   {})]
             (is (= :ok (:status edn-result)))
             (is (= :ok (:status sqlite-result)))
-            (is (= [["thread-api/export-edn" false ["logseq_db_demo" {:export-type :graph}]]
-                    ["thread-api/export-db-base64" true ["logseq_db_demo"]]]
+            (is (= [[:thread-api/export-edn false ["logseq_db_demo" {:export-type :graph}]]
+                    [:thread-api/export-db-base64 true ["logseq_db_demo"]]]
                    @invoke-calls))
             (is (= 2 (count @write-calls)))
             (let [[edn-write sqlite-write] @write-calls]
@@ -605,8 +616,8 @@
             (is (= [[:edn "/tmp/import.edn"]
                     [:sqlite "/tmp/import.sqlite"]]
                    @read-calls))
-            (is (= [["thread-api/import-edn" ["logseq_db_demo" {:page "Import Page"}]]
-                    ["thread-api/import-db-base64" ["logseq_db_demo" "c3FsaXRl"]]]
+            (is (= [[:thread-api/import-edn ["logseq_db_demo" {:page "Import Page"}]]
+                    [:thread-api/import-db-base64 ["logseq_db_demo" "c3FsaXRl"]]]
                    @invoke-calls))
             (is (= ["logseq_db_demo" "logseq_db_demo"] @stop-calls))
             (is (= ["logseq_db_demo" "logseq_db_demo"] @restart-calls)))
