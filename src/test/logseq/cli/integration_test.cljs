@@ -73,21 +73,21 @@
       (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                   _ (fs/writeFileSync cfg-path "{:output-format :json}")
                   _ (run-cli ["graph" "create" "--repo" "content-graph"] data-dir cfg-path)
-                  add-page-result (run-cli ["add" "page" "--page" "TestPage"] data-dir cfg-path)
+                  add-page-result (run-cli ["--repo" "content-graph" "add" "page" "--page" "TestPage"] data-dir cfg-path)
                   add-page-payload (parse-json-output add-page-result)
-                  list-page-result (run-cli ["list" "page"] data-dir cfg-path)
+                  list-page-result (run-cli ["--repo" "content-graph" "list" "page"] data-dir cfg-path)
                   list-page-payload (parse-json-output list-page-result)
-                  list-tag-result (run-cli ["list" "tag"] data-dir cfg-path)
+                  list-tag-result (run-cli ["--repo" "content-graph" "list" "tag"] data-dir cfg-path)
                   list-tag-payload (parse-json-output list-tag-result)
-                  list-property-result (run-cli ["list" "property"] data-dir cfg-path)
+                  list-property-result (run-cli ["--repo" "content-graph" "list" "property"] data-dir cfg-path)
                   list-property-payload (parse-json-output list-property-result)
-                  add-block-result (run-cli ["add" "block" "--page" "TestPage" "--content" "hello world"] data-dir cfg-path)
+                  add-block-result (run-cli ["--repo" "content-graph" "add" "block" "--page" "TestPage" "--content" "hello world"] data-dir cfg-path)
                   _ (parse-json-output add-block-result)
-                  search-result (run-cli ["search" "--text" "hello world" "--include-content"] data-dir cfg-path)
+                  search-result (run-cli ["--repo" "content-graph" "search" "--text" "hello world"] data-dir cfg-path)
                   search-payload (parse-json-output search-result)
-                  show-result (run-cli ["show" "--page-name" "TestPage" "--format" "json"] data-dir cfg-path)
+                  show-result (run-cli ["--repo" "content-graph" "show" "--page-name" "TestPage" "--format" "json"] data-dir cfg-path)
                   show-payload (parse-json-output show-result)
-                  remove-page-result (run-cli ["remove" "page" "--page" "TestPage"] data-dir cfg-path)
+                  remove-page-result (run-cli ["--repo" "content-graph" "remove" "page" "--page" "TestPage"] data-dir cfg-path)
                   remove-page-payload (parse-json-output remove-page-result)
                   stop-result (run-cli ["server" "stop" "--repo" "content-graph"] data-dir cfg-path)
                   stop-payload (parse-json-output stop-result)]
@@ -206,6 +206,84 @@
             (is (= (str page-uuid) (str (or (get-in show-by-uuid-payload [:data :root :uuid])
                                             (get-in show-by-uuid-payload [:data :root :block/uuid])))))
             (is (= "ok" (:status stop-payload)))
+            (done))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))
+                     (done)))))))
+
+(deftest test-cli-graph-export-import-edn
+  (async done
+    (let [data-dir (node-helper/create-tmp-dir "db-worker-export-edn")]
+      (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                  _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                  export-graph "export-edn-graph"
+                  import-graph "import-edn-graph"
+                  export-path (node-path/join (node-helper/create-tmp-dir "exports") "graph.edn")
+                  _ (run-cli ["graph" "create" "--repo" export-graph] data-dir cfg-path)
+                  _ (run-cli ["--repo" export-graph "add" "page" "--page" "ExportPage"] data-dir cfg-path)
+                  _ (run-cli ["--repo" export-graph "add" "block" "--page" "ExportPage" "--content" "Export content"] data-dir cfg-path)
+                  export-result (run-cli ["--repo" export-graph
+                                          "graph" "export"
+                                          "--type" "edn"
+                                          "--output" export-path] data-dir cfg-path)
+                  export-payload (parse-json-output export-result)
+                  _ (run-cli ["--repo" import-graph
+                              "graph" "import"
+                              "--type" "edn"
+                              "--input" export-path] data-dir cfg-path)
+                  list-result (run-cli ["--repo" import-graph "list" "page"] data-dir cfg-path)
+                  list-payload (parse-json-output list-result)
+                  stop-export (run-cli ["server" "stop" "--repo" export-graph] data-dir cfg-path)
+                  stop-import (run-cli ["server" "stop" "--repo" import-graph] data-dir cfg-path)]
+            (is (= 0 (:exit-code export-result)))
+            (is (= "ok" (:status export-payload)))
+            (is (fs/existsSync export-path))
+            (is (pos? (.-size (fs/statSync export-path))))
+            (is (= "ok" (:status list-payload)))
+            (is (some (fn [item]
+                        (= "ExportPage" (or (:title item) (:block/title item))))
+                      (get-in list-payload [:data :items])))
+            (is (= 0 (:exit-code stop-export)))
+            (is (= 0 (:exit-code stop-import)))
+            (done))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))
+                     (done)))))))
+
+(deftest test-cli-graph-export-import-sqlite
+  (async done
+    (let [data-dir (node-helper/create-tmp-dir "db-worker-export-sqlite")]
+      (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                  _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                  export-graph "export-sqlite-graph"
+                  import-graph "import-sqlite-graph"
+                  export-path (node-path/join (node-helper/create-tmp-dir "exports") "graph.sqlite")
+                  _ (run-cli ["graph" "create" "--repo" export-graph] data-dir cfg-path)
+                  _ (run-cli ["--repo" export-graph "add" "page" "--page" "SQLiteExportPage"] data-dir cfg-path)
+                  _ (run-cli ["--repo" export-graph "add" "block" "--page" "SQLiteExportPage" "--content" "SQLite export content"] data-dir cfg-path)
+                  export-result (run-cli ["--repo" export-graph
+                                          "graph" "export"
+                                          "--type" "sqlite"
+                                          "--output" export-path] data-dir cfg-path)
+                  export-payload (parse-json-output export-result)
+                  _ (run-cli ["--repo" import-graph
+                              "graph" "import"
+                              "--type" "sqlite"
+                              "--input" export-path] data-dir cfg-path)
+                  list-result (run-cli ["--repo" import-graph "list" "page"] data-dir cfg-path)
+                  list-payload (parse-json-output list-result)
+                  stop-export (run-cli ["server" "stop" "--repo" export-graph] data-dir cfg-path)
+                  stop-import (run-cli ["server" "stop" "--repo" import-graph] data-dir cfg-path)]
+            (is (= 0 (:exit-code export-result)))
+            (is (= "ok" (:status export-payload)))
+            (is (fs/existsSync export-path))
+            (is (pos? (.-size (fs/statSync export-path))))
+            (is (= "ok" (:status list-payload)))
+            (is (some (fn [item]
+                        (= "SQLiteExportPage" (or (:title item) (:block/title item))))
+                      (get-in list-payload [:data :items])))
+            (is (= 0 (:exit-code stop-export)))
+            (is (= 0 (:exit-code stop-import)))
             (done))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))
