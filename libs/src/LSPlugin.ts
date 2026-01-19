@@ -639,6 +639,7 @@ export interface IEditorProxy extends Record<string, any> {
   getEditingBlockContent: () => Promise<string>
 
   getCurrentPage: () => Promise<PageEntity | BlockEntity | null>
+  getTodayPage: () => Promise<PageEntity | null>
 
   getCurrentBlock: () => Promise<BlockEntity | null>
 
