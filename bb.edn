@@ -71,41 +71,41 @@
   {:doc "Run CLI with current deps/db code. Commands with JS deps are not usable e.g. mcp-server"
    :task (apply shell {:dir "deps/db"}
                 "yarn nbb-logseq -cp src:../cli/src:../graph-parser/src:../outliner/src -m logseq.cli" *command-line-args*)}
-  dev:db-query
+  dev:query
   {:doc "Query a DB graph's datascript db"
    :requires ([babashka.fs :as fs])
    :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
                 "yarn -s nbb-logseq script/query.cljs" *command-line-args*)}
 
-  dev:db-transact
+  dev:transact
   {:doc "Transact against a DB graph's datascript db"
    :requires ([babashka.fs :as fs])
    :task (apply shell {:dir "deps/outliner" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
                 "yarn -s nbb-logseq script/transact.cljs" *command-line-args*)}
 
-  dev:db-create
+  dev:create
   {:doc "Create a DB graph given a sqlite.build EDN file"
    :requires ([babashka.fs :as fs])
    :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
                 "yarn -s nbb-logseq -cp src:../outliner/src:script script/create_graph.cljs" *command-line-args*)}
 
-  dev:db-diff
+  dev:diff-graphs
   {:doc "Diffs two DB graphs"
    :requires ([babashka.fs :as fs])
    :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
                 "yarn -s nbb-logseq script/diff_graphs.cljs" *command-line-args*)}
 
-  dev:db-import
+  dev:import
   {:doc "Import a file graph to db graph"
    :requires ([babashka.fs :as fs])
    :task (apply shell {:dir "deps/graph-parser" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
                 "yarn -s nbb-logseq -cp src:../outliner/src script/db_import.cljs" *command-line-args*)}
 
-  dev:db-import-many
+  dev:import-many
   {:doc "Import multiple file graphs to db graphs"
    :task logseq.tasks.dev/db-import-many}
 
-  dev:db-datoms
+  dev:datoms
   {:doc "Write db's datoms to a file"
    :requires ([babashka.fs :as fs])
    :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
@@ -190,9 +190,6 @@
 
   lint:ns-docstrings
   logseq.bb-tasks.lint.ns-docstrings/-main
-
-  lint:db-and-file-graphs-separate
-  logseq.tasks.dev.db-and-file-graphs/-main
 
   lint:worker-and-frontend-separate
   logseq.tasks.dev.lint/worker-and-frontend-separate
