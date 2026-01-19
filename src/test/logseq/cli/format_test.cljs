@@ -193,5 +193,5 @@
                                                 :message "graph name is required"}}
                                        {:output-format nil})]
       (is (= (str "Error (missing-graph): graph name is required\n"
-                  "Hint: Use --graph <name>")
+                  "Hint: Use --repo <name>")
              result)))))
