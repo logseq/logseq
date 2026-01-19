@@ -5,7 +5,7 @@
 (defn- remove-retract-entity-ref
   [tx-data]
   (let [retracted (-> (keep (fn [[op value]]
-                              (when (= op :db.fn/retractEntity)
+                              (when (= op :db/retractEntity)
                                 value)) tx-data)
                       set)]
     (if (seq retracted)
@@ -21,7 +21,7 @@
    (map (fn [[op eid a v t]]
           (cond
             (and (= op :db/retract) (= a :block/uuid))
-            [:db.fn/retractEntity eid]
+            [:db/retractEntity eid]
             (and a (some? v))
             [op eid a v t]
             :else
@@ -29,7 +29,7 @@
         normalized-tx-data)
    remove-retract-entity-ref))
 
-(defn- replace-attr-retract-with-retract-entity
+(defn replace-attr-retract-with-retract-entity
   [tx-data]
   (let [e-datoms (->> (group-by first tx-data)
                       (sort-by first))]
@@ -38,7 +38,7 @@
        (if-let [d (some (fn [d]
                           (when (and (= :block/uuid (:a d)) (false? (:added d)))
                             d)) datoms)]  ; retract entity
-         [[:db.fn/retractEntity [:block/uuid (:v d)]]]
+         [[:db/retractEntity [:block/uuid (:v d)]]]
          datoms))
      e-datoms)))
 

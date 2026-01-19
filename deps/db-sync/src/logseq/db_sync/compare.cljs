@@ -35,7 +35,7 @@
   (->> tx-data
        (mapcat
         (fn [[op e a v]]
-          (if (= op :db.fn/retractEntity)
+          (if (= op :db/retractEntity)
             (let [entity (d/entity db-before e)]
               (keep
                (fn [a]
