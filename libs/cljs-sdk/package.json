@@ -1,0 +1,27 @@
+{
+  "name": "@logseq/cljs-libs",
+  "version": "0.0.11",
+  "description": "Logseq plugin API wrapper",
+  "dependencies": {
+    "@logseq/libs": "^0.2.3"
+  },
+  "files": [
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/logseq/logseq.git"
+  },
+  "keywords": [
+    "logseq",
+    "clojurescript",
+    "plugin",
+    "@logseq/libs"
+  ],
+  "author": "logseq",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/logseq/logseq/issues"
+  },
+  "homepage": "https://github.com/logseq/logseq#readme"
+}

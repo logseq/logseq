@@ -1,21 +1,46 @@
 (ns frontend.handler.common.developer
   "Common fns for developer related functionality"
-  (:require [frontend.db :as db]
-            [cljs.pprint :as pprint]
-            [frontend.state :as state]
+  (:require [cljs.pprint :as pprint]
+            [datascript.impl.entity :as de]
+            [frontend.db :as db]
+            [frontend.format.mldoc :as mldoc]
+            [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.handler.notification :as notification]
+            [frontend.persist-db :as persist-db]
+            [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util.page :as page-util]
-            [logseq.graph-parser.mldoc :as gp-mldoc]))
+            [logseq.db.frontend.property :as db-property]
+            [promesa.core :as p]))
 
 ;; Fns used between menus and commands
 (defn show-entity-data
-  [& pull-args]
-  (let [pull-data (with-out-str (pprint/pprint (apply db/pull pull-args)))]
+  [eid]
+  (let [result* (db/pull eid)
+        entity (db/entity eid)
+        result (cond-> result*
+                 (seq (:block/properties entity))
+                 (assoc :block.debug/properties
+                        (->> (:block/properties entity)
+                             (map (fn [[k v]]
+                                    [k
+                                     (cond
+                                       (de/entity? v)
+                                       (db-property/property-value-content v)
+                                       (and (set? v) (every? de/entity? v))
+                                       (set (map db-property/property-value-content v))
+                                       :else
+                                       v)]))
+                             (into {})))
+                 (seq (:block/refs result*))
+                 (assoc :block.debug/refs
+                        (mapv #(or (:block/title (db/entity (:db/id %))) %) (:block/refs result*))))
+        pull-data (with-out-str (pprint/pprint result))]
     (println pull-data)
     (notification/show!
-     [:div
-      [:pre.code pull-data]
+     [:div.ls-wrap-widen
+      [:pre.code (str "ID: " (:db/id result) "\n"
+                      pull-data)]
       [:br]
       (ui/button "Copy to clipboard"
                  :on-click #(.writeText js/navigator.clipboard pull-data))]
@@ -24,12 +49,12 @@
 
 (defn show-content-ast
   [content format]
-  (let [ast-data (-> (gp-mldoc/->edn content (gp-mldoc/default-config format))
+  (let [ast-data (-> (mldoc/->edn content format)
                      pprint/pprint
                      with-out-str)]
     (println ast-data)
     (notification/show!
-     [:div
+     [:div.ls-wrap-widen
       ;; Show clipboard at top since content is really long for pages
       (ui/button "Copy to clipboard"
                  :on-click #(.writeText js/navigator.clipboard ast-data))
@@ -46,8 +71,8 @@
     (notification/show! "No block found" :warning)))
 
 (defn ^:export show-block-ast []
-  (if-let [{:block/keys [content format]} (:block (first (state/get-editor-args)))]
-    (show-content-ast content format)
+  (if-let [{:block/keys [title format]} (:block (first (state/get-editor-args)))]
+    (show-content-ast title (or format :markdown))
     (notification/show! "No block found" :warning)))
 
 (defn ^:export show-page-data []
@@ -55,9 +80,20 @@
     (show-entity-data page-id)
     (notification/show! "No page found" :warning)))
 
-(defn ^:export show-page-ast []
-  (let [page-data (db/pull '[:block/format {:block/file [:file/content]}]
-                           (page-util/get-current-page-id))]
-    (if (get-in page-data [:block/file :file/content])
-      (show-content-ast (get-in page-data [:block/file :file/content]) (:block/format page-data))
-      (notification/show! "No page found" :warning))))
+(defn ^:export validate-db []
+  (state/<invoke-db-worker :thread-api/validate-db (state/get-current-repo)))
+
+(defn import-chosen-graph
+  [repo]
+  (p/let [_ (persist-db/<unsafe-delete repo)]
+    (notification/show! (str "Graph updated! Switching to graph ...") :success)
+    (state/pub-event! [:graph/switch repo])))
+
+(defn ^:export replace-graph-with-db-file []
+  (state/pub-event! [:dialog-select/db-graph-replace]))
+
+(defn ^:export rtc-stop []
+  (rtc-handler/<rtc-stop!))
+
+(defn ^:export rtc-start []
+  (rtc-handler/<rtc-start! (state/get-current-repo)))

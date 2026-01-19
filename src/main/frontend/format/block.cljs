@@ -1,43 +1,47 @@
 (ns frontend.format.block
   "Block code needed by app but not graph-parser"
   (:require [cljs-time.format :as tf]
+            [cljs.cache :as cache]
             [clojure.string :as string]
+            [frontend.common.cache :as common.cache]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.format :as format]
+            [frontend.format.mldoc :as mldoc]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
+            [lambdaisland.glogi :as log]
             [logseq.graph-parser.block :as gp-block]
-            [logseq.graph-parser.property :as gp-property]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
-            [lambdaisland.glogi :as log]))
+            [logseq.graph-parser.property :as gp-property]))
 
 (defn extract-blocks
   "Wrapper around logseq.graph-parser.block/extract-blocks that adds in system state
 and handles unexpected failure."
-  [blocks content format {:keys [with-id? page-name]
-                          :or {with-id? true}}]
-  (try
-    (gp-block/extract-blocks blocks content with-id? format
-                             {:user-config (state/get-config)
-                              :block-pattern (config/get-block-pattern format)
-                              :db (db/get-db (state/get-current-repo))
-                              :date-formatter (state/get-date-formatter)
-                              :page-name page-name})
-    (catch :default e
-      (log/error :exception e)
-      (state/pub-event! [:capture-error {:error e
-                                         :payload {:type "Extract-blocks"}}])
-      (notification/show! "An unexpected error occurred during block extraction." :error)
-      [])))
-
-(defn page-name->map
-  "Wrapper around logseq.graph-parser.block/page-name->map that adds in db"
-  ([original-page-name with-id?]
-   (page-name->map original-page-name with-id? true))
-  ([original-page-name with-id? with-timestamp?]
-   (gp-block/page-name->map original-page-name with-id? (db/get-db (state/get-current-repo)) with-timestamp? (state/get-date-formatter))))
+  [blocks content format {:keys [page-name]}]
+  (let [repo (state/get-current-repo)]
+    (try
+      (let [blocks (gp-block/extract-blocks blocks content format
+                                            {:user-config (state/get-config)
+                                             :block-pattern (config/get-block-pattern format)
+                                             :db (db/get-db repo)
+                                             :date-formatter (state/get-date-formatter)
+                                             :page-name page-name
+                                             :db-graph-mode? true})]
+        (map (fn [block]
+               (cond-> (dissoc block :block/format :block/properties :block/macros :block/properties-order)
+                 (:block/properties block)
+                 (merge (update-keys (:block/properties block)
+                                     (fn [k]
+                                       (or ({:heading :logseq.property/heading} k)
+                                           (throw (ex-info (str "Don't know how to save graph-parser property " (pr-str k)) {}))))))))
+             blocks))
+      (catch :default e
+        (log/error :exception e)
+        (state/pub-event! [:capture-error {:error e
+                                           :payload {:type "Extract-blocks"}}])
+        (notification/show! "An unexpected error occurred during block extraction." :error)
+        []))))
 
 (defn- normalize-as-percentage
   [block]
@@ -67,60 +71,62 @@ and handles unexpected failure."
        (first)))
 
 (defn parse-block
-  ([block]
-   (parse-block block nil))
-  ([{:block/keys [uuid content format] :as block} {:keys [with-id?]
-                                                        :or {with-id? true}}]
-   (when-not (string/blank? content)
-     (let [block (dissoc block :block/pre-block?)
-           ast (format/to-edn content format nil)
-           blocks (extract-blocks ast content format {:with-id? with-id?})
-           new-block (first blocks)
-           block (cond->
-                   (merge block new-block)
-                   (> (count blocks) 1)
-                   (assoc :block/warning :multiple-blocks))
-           block (dissoc block :block/title :block/body :block/level)]
-       (if uuid (assoc block :block/uuid uuid) block)))))
+  [{:block/keys [uuid title format] :as block}]
+  (when-not (string/blank? title)
+    (let [block (dissoc block :block/pre-block?)
+          format (or format :markdown)
+          parse-config (mldoc/get-default-config format)
+          ;; Disable extraction for display-type blocks as there isn't a reason to have
+          ;; it enabled yet and can cause visible bugs when '#' is used
+          blocks (if (:logseq.property.node/display-type block)
+                   [block]
+                   (let [ast (format/to-edn title format parse-config)]
+                     (extract-blocks ast title format {})))
+          new-block (first blocks)
+          block (cond-> (merge block new-block)
+                  (> (count blocks) 1)
+                  (assoc :block/warning :multiple-blocks)
+                  true
+                  (dissoc :block/format))
+          block (dissoc block :block.temp/ast-body :block/level)]
+      (if uuid (assoc block :block/uuid uuid) block))))
+
+(defonce *blocks-ast-cache (volatile! (cache/lru-cache-factory {} :threshold 5000)))
+
+(defn- parse-title-and-body-helper
+  [format content]
+  (let [parse-config (mldoc/get-default-config format)
+        ast (->> (format/to-edn content format parse-config)
+                 (map first))
+        title (when (gp-block/heading-block? (first ast))
+                (:title (second (first ast))))
+        body (vec (if title (rest ast) ast))
+        body (drop-while gp-property/properties-ast? body)]
+    (cond->
+     (if (seq body) {:block.temp/ast-body body} {})
+      title
+      (assoc :block.temp/ast-title title))))
+
+(def ^:private cached-parse-title-and-body-helper
+  (common.cache/cache-fn
+   *blocks-ast-cache
+   (fn [format content]
+     [[format content] [format content]])
+   parse-title-and-body-helper))
 
 (defn parse-title-and-body
   ([block]
    (when (map? block)
      (merge block
             (parse-title-and-body (:block/uuid block)
-                                  (:block/format block)
+                                  (get block :block/format :markdown)
                                   (:block/pre-block? block)
-                                  (:block/content block)))))
-  ([block-uuid format pre-block? content]
+                                  (:block/title block)))))
+  ([_block-uuid format pre-block? content]
    (when-not (string/blank? content)
      (let [content (if pre-block? content
                        (str (config/get-block-pattern format) " " (string/triml content)))]
-       (if-let [result (state/get-block-ast block-uuid content)]
-         result
-         (let [ast (->> (format/to-edn content format (gp-mldoc/default-config format))
-                        (map first))
-               title (when (gp-block/heading-block? (first ast))
-                       (:title (second (first ast))))
-               body (vec (if title (rest ast) ast))
-               body (drop-while gp-property/properties-ast? body)
-               result (cond->
-                       (if (seq body) {:block/body body} {})
-                        title
-                        (assoc :block/title title))]
-           (state/add-block-ast-cache! block-uuid content result)
-           result))))))
-
-(defn macro-subs
-  [macro-content arguments]
-  (loop [s macro-content
-         args arguments
-         n 1]
-    (if (seq args)
-      (recur
-       (string/replace s (str "$" n) (first args))
-       (rest args)
-       (inc n))
-      s)))
+       (cached-parse-title-and-body-helper format content)))))
 
 (defn break-line-paragraph?
   [[typ break-lines]]
@@ -133,13 +139,13 @@ and handles unexpected failure."
     (if (= typ "Paragraph")
       (let [indexed-paras (map-indexed vector paras)]
         [typ (->> (filter
-                            #(let [[index value] %]
-                               (not (and (> index 0)
-                                         (= value ["Break_Line"])
-                                         (contains? #{"Timestamp" "Macro"}
-                                                    (first (nth paras (dec index)))))))
-                            indexed-paras)
-                           (map #(last %)))])
+                   #(let [[index value] %]
+                      (not (and (> index 0)
+                                (= value ["Break_Line"])
+                                (contains? #{"Timestamp" "Macro"}
+                                           (first (nth paras (dec index)))))))
+                   indexed-paras)
+                  (map #(last %)))])
       ast)))
 
 (defn trim-break-lines!

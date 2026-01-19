@@ -43,17 +43,17 @@ on:
         type: boolean
         required: true
         default: true
-  schedule: # Every workday at the 2 P.M. (UTC) we run a scheduled nightly build
-    - cron: '0 14 * * MON-FRI'
+  # schedule: # Every workday at the 2 P.M. (UTC) we run a scheduled nightly build
+  #   - cron: '0 14 * * MON-FRI'
 
 env:
   CLOJURE_VERSION: '1.11.1.1413'
-  NODE_VERSION: '20'
+  NODE_VERSION: '22'
   JAVA_VERSION: '11'
 
 jobs:
   compile-cljs:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
       - name: Check build options
         if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'nightly' || github.event.inputs.build-target == 'beta') && github.event.inputs.git-ref != 'master' }}
@@ -62,12 +62,12 @@ jobs:
           exit 1
 
       - name: Check out Git repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.git-ref }}
 
       - name: Install Node.js, NPM and Yarn
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
@@ -76,7 +76,7 @@ jobs:
         run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
 
       - name: Cache yarn cache directory
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         id: yarn-cache
         with:
           path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
@@ -85,13 +85,13 @@ jobs:
             ${{ runner.os }}-yarn-
 
       - name: Setup Java JDK
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: ${{ env.JAVA_VERSION }}
 
       - name: Cache clojure deps
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.m2/repository
@@ -130,7 +130,7 @@ jobs:
           echo "ENABLE_FILE_SYNC_PRODUCTION=${{ github.event_name == 'schedule' || github.event.inputs.enable-file-sync-production == 'true' }}" >> $GITHUB_ENV
 
       - name: Compile CLJS
-        run: yarn install && gulp build && yarn cljs:release-electron
+        run: yarn install && gulp build && yarn cljs:release-electron && yarn webpack-app-build
         env:
           LOGSEQ_SENTRY_DSN: ${{ secrets.LOGSEQ_SENTRY_DSN }}
           LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
@@ -153,9 +153,9 @@ jobs:
         working-directory: ./static
 
       - name: Upload Sentry Sourcemaps (beta only)
-        if: ${{ github.repository == 'logseq/logseq' && github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
+        # if: ${{ github.repository == 'logseq/logseq' && github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
         run: |
-          curl -sL https://sentry.io/get-cli/ | bash
+          curl -sL https://sentry.io/get-cli/ | SENTRY_CLI_VERSION=2.58.4 bash
           release_name="logseq@${{ steps.ref.outputs.version }}"
           sentry-cli releases new "${release_name}"
           sentry-cli releases files "${release_name}" upload-sourcemaps --ext map --ext js ./static/js --url-prefix '~/static/js'
@@ -166,68 +166,16 @@ jobs:
           SENTRY_PROJECT: logseq
 
       - name: Cache Static File
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: static
           path: static
-
-  e2e-test:
-    name: E2E Test Shard ${{ matrix.shard }}
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        shard: [1, 2, 3]
-    needs: [ compile-cljs ]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Download The Static Asset
-        uses: actions/download-artifact@v3
-        with:
-          name: static
-          path: static
-
-      - name: Set up Node
-        uses: actions/setup-node@v3
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'yarn'
-          cache-dependency-path: |
-            yarn.lock
-            static/yarn.lock
-
-      - name: Fetch yarn deps for E2E test
-        run: |
-          yarn install
-          (cd static && yarn install && yarn rebuild:all)
-        env:
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
-
-      - name: Install Fluxbox
-        run: sudo apt-get update && sudo apt-get install -y fluxbox
-
-      # Emulate a virtual framebuffer on machines with no display hardware
-      - name: Run XVFB
-        run: Xvfb :1 -screen 0 1024x768x24 >/dev/null 2>&1 &
-
-      # Start a lightweight window manager to simulate window actions (maximize,restore etc)
-      - name: Start Fluxbox
-        run:  DISPLAY=:1.0 fluxbox >/dev/null 2>&1 &
-
-      - name: Run Playwright test
-        run: DISPLAY=:1.0 npx playwright test --reporter github --shard=${{ matrix.shard }}/3
-        env:
-          LOGSEQ_CI: true
-          DEBUG: "pw:api"
-          RELEASE: true # skip dev only test
-
   build-linux-x64:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs: [ compile-cljs ]
     steps:
       - name: Download The Static Asset
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: static
           path: static
@@ -239,12 +187,12 @@ jobs:
           echo "version=$pkgver" >> $GITHUB_OUTPUT
 
       - name: Install Node.js, NPM and Yarn
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       # - name: Cache Node Modules
-      #   uses: actions/cache@v3
+      #   uses: actions/cache@v4
       #   with:
       #     path: |
       #       **/node_modules
@@ -263,17 +211,17 @@ jobs:
           mv static/out/make/zip/linux/x64/*-linux-x64-*.zip ./builds/Logseq-linux-x64-${{ steps.ref.outputs.version }}.zip
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: logseq-linux-x64-builds
           path: builds
 
   build-linux-arm64:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs: [ compile-cljs ]
     steps:
       - name: Download The Static Asset
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: static
           path: static
@@ -285,7 +233,7 @@ jobs:
           echo "version=$pkgver" >> $GITHUB_OUTPUT
 
       - name: Install Node.js, NPM and Yarn
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
@@ -294,14 +242,6 @@ jobs:
           npm_config_arch: arm64
         run: |
           yarn install --target_arch=arm64 --target_platform=linux
-          rsapi_version=`node -e 'console.log(require("@logseq/rsapi/package.json").optionalDependencies["@logseq/rsapi-linux-arm64-gnu"])'`
-          temp_dir=`mktemp -d`
-          cd "$temp_dir"
-          echo '{"dependencies": {"@logseq/rsapi-linux-arm64-gnu": "'"$rsapi_version"'"}}' > package.json
-          yarn install --ignore-platform
-          cd -
-          mv "$temp_dir/node_modules/@logseq/rsapi-linux-arm64-gnu" node_modules/@logseq/rsapi-linux-arm64-gnu
-          rm -rf "$temp_dir" "node_modules/@logseq/rsapi-linux-x64-gnu"
         working-directory: ./static
 
       - name: Build/Release Electron App
@@ -317,17 +257,17 @@ jobs:
           mv static/out/make/zip/linux/arm64/*-linux-arm64-*.zip ./builds/Logseq-linux-arm64-${{ steps.ref.outputs.version }}.zip
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: logseq-linux-arm64-builds
           path: builds
 
-  build-windows:
+  build-windows-x64:
     runs-on: windows-latest
     needs: [ compile-cljs ]
     steps:
       - name: Download The Static Asset
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: static
           path: static
@@ -337,12 +277,12 @@ jobs:
         run: echo "version=$(cat ./static/VERSION)" >> $env:GITHUB_OUTPUT
 
       - name: Install Node.js, NPM and Yarn
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       # - name: Cache Node Modules
-      #   uses: actions/cache@v3
+      #   uses: actions/cache@v4
       #   with:
       #    path: |
       #      **/node_modules
@@ -352,49 +292,113 @@ jobs:
         run: yarn install
         working-directory: ./static
 
-      - name: Fix Deps Electron app
-        run: yarn run postinstall
-        working-directory: ./static/node_modules/dugite/
-
       - name: Build/Release Electron app
         run: yarn electron:make
         working-directory: ./static
-        #env:
-        #  CODE_SIGN_CERTIFICATE_FILE: ../codesign.pfx
-        #  CODE_SIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODE_SIGN_CERTIFICATE_PASSWORD }}
-
-      - name: Save Artifact for Code Signing
-        run: |
-          mkdir builds
-          mv static\out\make\squirrel.windows\x64\*.exe    builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.exe
-
-      - name: Upload Artifact for Code Signing
-        uses: actions/upload-artifact@v3
-        with:
-          name: logseq-win64-unsigned-builds
-          path: builds
+        env:
+          DEBUG: electron-packager
 
       - name: Save Artifact
         run: |
-          rm builds\*.exe
+          mkdir builds
           mv static\out\make\squirrel.windows\x64\*.nupkg  builds\Logseq-win-x64-${{ steps.ref.outputs.version }}-full.nupkg
-          mv static\out\make\zip\win32\x64\*.zip           builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.zip
+          mv static\out\make\zip\win32\x64\*.exe           builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.exe
           mv static\out\make\wix\x64\Logseq.msi            builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.msi
           mv static\out\make\squirrel.windows\x64\RELEASES builds\RELEASES
 
+      - name: Sign
+        uses: azure/trusted-signing-action@v0.5.9
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: https://eus.codesigning.azure.net/
+          trusted-signing-account-name: logseqwin
+          certificate-profile-name: Logseq
+          files-folder: builds
+          files-folder-filter: exe,msi
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: logseq-win64-builds
           path: builds
 
+  build-windows-arm64:
+    runs-on: windows-latest
+    needs: [ compile-cljs ]
+    steps:
+      - name: Download The Static Asset
+        uses: actions/download-artifact@v4
+        with:
+          name: static
+          path: static
+
+      - name: Retrieve tag version
+        id: ref
+        run: echo "version=$(cat ./static/VERSION)" >> $env:GITHUB_OUTPUT
+
+      - name: Install Node.js, NPM and Yarn
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # - name: Cache Node Modules
+      #   uses: actions/cache@v4
+      #   with:
+      #    path: |
+      #      **/node_modules
+      #    key: ${{ runner.os }}-node-modules
+
+      - name: Deps Electron app
+        run: yarn install
+        working-directory: ./static
+
+      - name: Build/Release Electron app
+        run: yarn electron:make-win-arm64
+        working-directory: ./static
+        env:
+          DEBUG: electron-packager
+
+      - name: Save Artifact
+        run: |
+          mkdir builds
+          mv static\out\make\squirrel.windows\arm64\*.nupkg  builds\Logseq-win-arm64-${{ steps.ref.outputs.version }}-full.nupkg
+          mv static\out\make\zip\win32\arm64\*.exe           builds\Logseq-win-arm64-${{ steps.ref.outputs.version }}.exe
+          mv static\out\make\wix\arm64\Logseq.msi            builds\Logseq-win-arm64-${{ steps.ref.outputs.version }}.msi
+          mv static\out\make\squirrel.windows\arm64\RELEASES builds\RELEASES
+
+      - name: Sign
+        uses: azure/trusted-signing-action@v0.5.9
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: https://eus.codesigning.azure.net/
+          trusted-signing-account-name: logseqwin
+          certificate-profile-name: Logseq
+          files-folder: builds
+          files-folder-filter: exe,msi
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: logseq-win-arm64-builds
+          path: builds
+
   build-macos-x64:
     needs: [ compile-cljs ]
-    runs-on: macos-13
+    runs-on: macos-15-intel
 
     steps:
       - name: Download The Static Asset
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: static
           path: static
@@ -409,7 +413,7 @@ jobs:
         run: ls -al ./static
 
       - name: Install Node.js, NPM and Yarn
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
@@ -422,7 +426,7 @@ jobs:
         id: yarn-cache-dir-path
         run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
       - name: Cache yarn cache directory
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         id: yarn-cache
         with:
           path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
@@ -438,14 +442,14 @@ jobs:
           p12-password: ${{ secrets.APPLE_CERTIFICATES_P12_PASSWORD }}
 
       # - name: Cache Node Modules
-      #   uses: actions/cache@v3
+      #   uses: actions/cache@v4
       #   with:
       #     path: |
       #       **/node_modules
       #     key: ${{ runner.os }}-node-modules
 
       - name: Build/Release Electron App for x64
-        run: yarn install && yarn electron:make
+        run: yarn install && yarn rebuild:all && yarn electron:make
         working-directory: ./static
         env:
           APPLE_ID: ${{ secrets.APPLE_ID_EMAIL }}
@@ -459,7 +463,7 @@ jobs:
           mv static/out/make/zip/darwin/x64/*.zip ./builds/Logseq-darwin-x64-${{ steps.ref.outputs.version }}.zip
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: logseq-darwin-x64-builds
           path: builds
@@ -470,7 +474,7 @@ jobs:
 
     steps:
       - name: Download The Static Asset
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: static
           path: static
@@ -482,7 +486,7 @@ jobs:
           echo "version=$pkgver" >> $GITHUB_OUTPUT
 
       - name: Install Node.js, NPM and Yarn
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
@@ -490,7 +494,7 @@ jobs:
         id: yarn-cache-dir-path
         run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
       - name: Cache yarn cache directory
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         id: yarn-cache
         with:
           path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
@@ -511,14 +515,14 @@ jobs:
           p12-password: ${{ secrets.APPLE_CERTIFICATES_P12_PASSWORD }}
 
       # - name: Cache Node Modules
-      #   uses: actions/cache@v3
+      #   uses: actions/cache@v4
       #   with:
       #     path: |
       #       **/node_modules
       #     key: ${{ runner.os }}-node-modules
 
-      - name: Fetch deps and fix dugit arch for arm64
-        run: yarn install --ignore-platform && cd node_modules/dugite && npm_config_arch=arm64 node script/download-git.js
+      - name: Fetch deps
+        run: yarn install --ignore-platform && yarn rebuild:all
         working-directory: ./static
 
       - name: Build/Release Electron App for arm64
@@ -536,7 +540,7 @@ jobs:
           mv static/out/make/zip/darwin/arm64/*.zip ./builds/Logseq-darwin-arm64-${{ steps.ref.outputs.version }}.zip
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: logseq-darwin-arm64-builds
           path: builds
@@ -554,73 +558,49 @@ jobs:
       ANDROID_KEYSTORE_PASSWORD: "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
       SENTRY_AUTH_TOKEN: "${{ secrets.SENTRY_AUTH_TOKEN }}"
 
-  codesign-windows:
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.build-target == 'nightly' || github.event.inputs.build-target == 'beta' }}
-    needs: [ build-windows ]
-    runs-on: [self-hosted, macos, token]
-    steps:
-      - name: Download Windows Artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: logseq-win64-unsigned-builds
-          path: ./builds
-
-      - name: Sign Windows Executable
-        run: |
-          ls -lah ./builds
-          jsign --storetype ETOKEN --storepass "${PASS}" -t http://timestamp.sectigo.com ./builds/*.exe
-        env:
-          PASS: ${{ secrets.CODE_SIGN_CERTIFICATE_PASSWORD }}
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: logseq-win64-signed-builds
-          path: builds
-
   nightly-release:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.build-target == 'nightly' }}
-    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, codesign-windows, build-android, e2e-test ]
-    runs-on: ubuntu-20.04
+    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, build-windows-x64, build-windows-arm64 ]
+    runs-on: ubuntu-22.04
     steps:
       - name: Download MacOS x64 Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-darwin-x64-builds
           path: ./
 
       - name: Download MacOS arm64 Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-darwin-arm64-builds
           path: ./
 
       - name: Download The Linux x64 Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-linux-x64-builds
           path: ./
 
       - name: Download The Linux arm64 Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-linux-arm64-builds
           path: ./
 
-      - name: Download The Windows Artifact (Signed)
-        uses: actions/download-artifact@v3
-        with:
-          name: logseq-win64-signed-builds
-          path: ./
-
-      - name: Download The Windows Artifact
-        uses: actions/download-artifact@v3
+      - name: Download The Windows Artifact x64
+        uses: actions/download-artifact@v4
         with:
           name: logseq-win64-builds
           path: ./
 
+      - name: Download The Windows Artifact arm64
+        uses: actions/download-artifact@v4
+        with:
+          name: logseq-win-arm64-builds
+          path: ./
+
       - name: Download Android Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-android-builds
           path: ./
@@ -642,7 +622,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: nightly
-          name: 'Desktop/Android APP Nightly Release $$'
+          name: 'Desktop app Nightly Release $$'
           draft: false
           prerelease: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.is-pre-release) || (github.event_name == 'schedule')}}
           body: |
@@ -660,47 +640,47 @@ jobs:
   release:
     # NOTE: For now, we only have beta channel to be released on Github
     if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
-    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, codesign-windows, build-android, e2e-test ]
-    runs-on: ubuntu-20.04
+    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, build-windows-x64, build-windows-arm64]
+    runs-on: ubuntu-22.04
     steps:
       - name: Download MacOS x64 Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-darwin-x64-builds
           path: ./
 
       - name: Download MacOS arm64 Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-darwin-arm64-builds
           path: ./
 
       - name: Download The Linux x64 Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-linux-x64-builds
           path: ./
 
       - name: Download The Linux arm64 Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: logseq-linux-arm64-builds
           path: ./
 
-      - name: Download The Windows Artifact (Signed)
-        uses: actions/download-artifact@v3
+      - name: Download The Windows Artifact
+        uses: actions/download-artifact@v4
         with:
-          name: logseq-win64-signed-builds
+          name: logseq-win-x64-builds
           path: ./
 
       - name: Download The Windows Artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
-          name: logseq-win64-builds
+          name: logseq-win-arm64-builds
           path: ./
 
       - name: Download Android Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         if: ${{ github.event_name == 'schedule' || github.event.inputs.build-android == 'true' }}
         with:
           name: logseq-android-builds
@@ -734,7 +714,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ steps.ref.outputs.version }}
-          name: Desktop/Android APP ${{ steps.ref.outputs.version }} (Beta Testing)
+          name: Desktop APP ${{ steps.ref.outputs.version }} (Beta Testing)
           body: "TODO: Fill this changelog. Sorry for the inconvenience!"
           draft: ${{ github.event.inputs.is-draft }}
           prerelease: ${{ github.event.inputs.is-pre-release }}

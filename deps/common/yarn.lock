@@ -2,14 +2,13 @@
 # yarn lockfile v1
 
 
-"@logseq/nbb-logseq@^1.2.173":
-  version "1.2.173"
-  resolved "https://registry.yarnpkg.com/@logseq/nbb-logseq/-/nbb-logseq-1.2.173.tgz#27a52c350f06ac9c337d73687738f6ea8b2fc3f3"
-  integrity sha512-ABKPtVnSOiS4Zpk9+UTaGcs5H6EUmRADr9FJ0aEAVpa0WfAyvUbX/NgkQGMe1kKRv3EbIuLwaxfy+txr31OtAg==
+"@logseq/nbb-logseq@github:logseq/nbb-logseq#feat-db-v31":
+  version "1.2.173-feat-db-v31"
+  resolved "https://codeload.github.com/logseq/nbb-logseq/tar.gz/d5b76a675f484dbfb5fbff8235aec6ff84b2f980"
   dependencies:
-    import-meta-resolve "^2.1.0"
+    import-meta-resolve "^4.1.0"
 
-import-meta-resolve@^2.1.0:
-  version "2.2.2"
-  resolved "https://registry.yarnpkg.com/import-meta-resolve/-/import-meta-resolve-2.2.2.tgz#75237301e72d1f0fbd74dbc6cca9324b164c2cc9"
-  integrity sha512-f8KcQ1D80V7RnqVm+/lirO9zkOxjGxhaTC1IPrBGd3MEfNgmNG67tSUO9gTi2F3Blr2Az6g1vocaxzkVnWl9MA==
+import-meta-resolve@^4.1.0:
+  version "4.1.0"
+  resolved "https://registry.yarnpkg.com/import-meta-resolve/-/import-meta-resolve-4.1.0.tgz#f9db8bead9fafa61adb811db77a2bf22c5399706"
+  integrity sha512-I6fiaX09Xivtk+THaMfAwnA3MVA5Big1WHF1Dfx9hFuvNIWpXnorlkzhcQf6ehrqQiiZECRt1poOAkPmer3ruw==

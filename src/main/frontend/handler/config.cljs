@@ -1,10 +1,11 @@
 (ns frontend.handler.config
   "Fns for setting repo config"
-  (:require [frontend.state :as state]
-            [frontend.handler.file :as file-handler]
-            [frontend.handler.repo-config :as repo-config-handler]
+  (:require [borkdude.rewrite-edn :as rewrite]
+            [clojure.string :as string]
             [frontend.db :as db]
-            [borkdude.rewrite-edn :as rewrite]))
+            [frontend.handler.db-based.editor :as db-editor-handler]
+            [frontend.handler.repo-config :as repo-config-handler]
+            [frontend.state :as state]))
 
 (defn parse-repo-config
   "Parse repo configuration file content"
@@ -13,17 +14,17 @@
 
 (defn- repo-config-set-key-value
   [path k v]
-  (when-let [repo (state/get-current-repo)]
+  (when (state/get-current-repo)
     (when-let [content (db/get-file path)]
       (repo-config-handler/read-repo-config content)
-      (let [result (parse-repo-config content)
+      (let [result (parse-repo-config (if (string/blank? content) "{}" content))
             ks (if (vector? k) k [k])
             v (cond->> v
-                       (map? v)
-                       (reduce-kv (fn [a k v] (rewrite/assoc a k v)) (rewrite/parse-string "{}")))
+                (map? v)
+                (reduce-kv (fn [a k v] (rewrite/assoc a k v)) (rewrite/parse-string "{}")))
             new-result (rewrite/assoc-in result ks v)
             new-content (str new-result)]
-        (file-handler/set-file-content! repo path new-content) nil))))
+        (db-editor-handler/save-file! path new-content) nil))))
 
 (defn set-config!
   [k v]

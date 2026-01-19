@@ -1,7 +1,23 @@
 {:deps
- ;; External deps should be kept in sync with https://github.com/logseq/nbb-logseq/blob/main/bb.edn
- {datascript/datascript {:mvn/version "1.5.3"}}
+ ;; These nbb-logseq deps are kept in sync with https://github.com/logseq/nbb-logseq/blob/main/bb.edn
+ {datascript/datascript {:git/url "https://github.com/logseq/datascript" ;; fork
+                         :sha     "ff5a7d5326e2546f40146e4a489343f557519bc3"}
+  ;; datascript/datascript                 {:local/root "../../../../datascript"}
+  datascript-transit/datascript-transit {:mvn/version "0.3.0"
+                                         :exclusions [datascript/datascript]}
+  cljs-bean/cljs-bean         {:mvn/version "1.5.0"}
+  com.cognitect/transit-cljs   {:mvn/version "0.8.280"}
+  org.flatland/ordered         {:mvn/version "1.15.11"}
+
+  ;; Any other deps should be added here and to nbb.edn
+  logseq/common                {:local/root "../common"}
+  logseq/clj-fractional-indexing        {:git/url "https://github.com/logseq/clj-fractional-indexing"
+                                         :sha     "1087f0fb18aa8e25ee3bbbb0db983b7a29bce270"}
+  borkdude/rewrite-edn {:mvn/version "0.4.9"}
+  metosin/malli {:mvn/version "0.16.1"}
+  medley/medley {:mvn/version "1.4.0"}}
+
  :aliases
  {:clj-kondo
-  {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2023.05.26"}}
+  {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2024.09.27"}}
    :main-opts  ["-m" "clj-kondo.main"]}}}

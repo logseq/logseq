@@ -6,14 +6,12 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.fs.protocol :as protocol]
-            [frontend.state :as state]
             [frontend.util :as util]
-            [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]
-            [logseq.common.path :as path]))
+            [logseq.common.path :as path]
+            [promesa.core :as p]))
 
-(defn- contents-matched?
+(defn- <contents-matched?
   [disk-content db-content]
   (when (and (string? disk-content) (string? db-content))
     (p/resolved (= (string/trim disk-content) (string/trim db-content)))))
@@ -38,32 +36,19 @@
                                             (js/console.error error)
                                             nil))))
               disk-content (or disk-content "")
-              ext (string/lower-case (util/get-file-ext rpath))
               db-content (or old-content (db/get-file repo rpath) "")
-              contents-matched? (contents-matched? disk-content db-content)]
-        (cond
-          (and
-           (not= stat :not-found)         ; file on the disk was deleted
-           (not contents-matched?)
-           (not (contains? #{"excalidraw" "edn" "css"} ext))
-           (not (string/includes? rpath "/.recycle/")))
-          (state/pub-event! [:file/not-matched-from-disk rpath disk-content content])
-
-          :else
-          (->
-           (p/let [result (ipc/ipc "writeFile" repo file-fpath content)
-                   mtime (gobj/get result "mtime")]
-             (when-not contents-matched?
-               (ipc/ipc "backupDbFile" (config/get-local-dir repo) rpath disk-content content))
-             (db/set-file-last-modified-at! repo rpath mtime)
-             (db/set-file-content! repo rpath content)
-             (when ok-handler
-               (ok-handler repo rpath result))
-             result)
-           (p/catch (fn [error]
-                      (if error-handler
-                        (error-handler error)
-                        (log/error :write-file-failed error))))))))))
+              contents-matched? (<contents-matched? disk-content db-content)]
+        (->
+         (p/let [result (ipc/ipc "writeFile" repo file-fpath content)]
+           (when-not contents-matched?
+             (ipc/ipc "backupDbFile" (config/get-local-dir repo) rpath disk-content content))
+           (when ok-handler
+             (ok-handler repo rpath result))
+           result)
+         (p/catch (fn [error]
+                    (if error-handler
+                      (error-handler error)
+                      (log/error :write-file-failed error)))))))))
 
 (defn- open-dir
   "Open a new directory"
@@ -77,6 +62,10 @@
           result (bean/->clj result)]
     result))
 
+(defn- wrap-throw-ex-info
+  [p]
+  (p/catch p (fn [e] (throw (ex-info (str e) {})))))
+
 (defrecord Node []
   protocol/Fs
   (mkdir! [_this dir]
@@ -89,9 +78,10 @@
   (mkdir-recur! [_this dir]
     (ipc/ipc "mkdir-recur" dir))
 
-  (readdir [_this dir]                   ; recursive
-    (p/then (ipc/ipc "readdir" dir)
-            bean/->clj))
+  (readdir [_this dir]                  ; recursive
+    (wrap-throw-ex-info
+     (p/then (ipc/ipc "readdir" dir)
+             bean/->clj)))
 
   (unlink! [_this repo path _opts]
     (ipc/ipc "unlink"
@@ -105,7 +95,13 @@
     (let [path (if (nil? dir)
                  path
                  (path/path-join dir path))]
-      (ipc/ipc "readFile" path)))
+      (wrap-throw-ex-info (ipc/ipc "readFile" path))))
+
+  (read-file-raw [_this dir path _options]
+    (let [path (if (nil? dir)
+                 path
+                 (path/path-join dir path))]
+      (wrap-throw-ex-info (ipc/ipc "readFileRaw" path))))
 
   (write-file! [this repo dir path content opts]
     (p/let [fpath (path/path-join dir path)
@@ -133,8 +129,6 @@
         (p/then (fn [result]
                   (:files (bean/->clj result))))))
 
-  (watch-dir! [_this dir options]
-    (ipc/ipc "addDirWatcher" dir options))
+  (watch-dir! [_this _dir _options])
 
-  (unwatch-dir! [_this dir]
-    (ipc/ipc "unwatchDir" dir)))
+  (unwatch-dir! [_this _dir]))

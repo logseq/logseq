@@ -5,7 +5,7 @@ import '../src/index.css'
 import { useEffect } from 'react'
 
 // require in this file to keep app state when HMR
-const { setupGlobals } = require('../src')
+const { setupGlobals } = require('../src/ui')
 
 setupGlobals()
 

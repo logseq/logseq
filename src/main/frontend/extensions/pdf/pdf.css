@@ -76,25 +76,17 @@ input::-webkit-inner-spin-button {
 
       > .r {
         a.button {
-          user-select: none;
-          display: flex;
-          align-items: center;
-          margin-left: 8px;
-          margin-right: 8px;
-          padding: 4px 2px;
-          color: var(--ls-icon-color);
-          background-color: transparent;
-          transition: none;
-          word-break: normal;
+          @apply select-none flex items-center mx-2 py-1 px-0.5 bg-transparent
+          transition-none break-normal hover:opacity-80;
 
           &.is-active {
-            opacity: 1;
+            @apply opacity-100 rounded-none;
+
             border-bottom: 2px solid #969494;
-            border-radius: 0;
           }
 
           &:active {
-            opacity: .6;
+            @apply opacity-60;
           }
         }
       }
@@ -728,7 +720,7 @@ input::-webkit-inner-spin-button {
   }
 
   &[data-theme=light] {
-    background-color: #FFFFFF;
+    @apply bg-white;
   }
 
   &[data-theme=dark] {
@@ -768,32 +760,24 @@ input::-webkit-inner-spin-button {
 
     .extensions__pdf-toolbar {
       .buttons {
-        background-color: #f6efdf;
+        @apply bg-[#f6efdf];
       }
     }
   }
 }
 
-.asset-ref {
-  &.is-pdf {
-    &:before {
-      content: "[[📚";
-      opacity: .7;
-      margin-right: 4px;
-    }
-
-    &:after {
-      content: "]]";
-      opacity: .7;
+html[data-theme=dark] {
+  .extensions__pdf-container[data-theme=warm] {
+    .extensions__pdf-toolbar {
+      .buttons {
+        @apply bg-background;
+      }
     }
   }
 }
 
 .block-ref {
   &-wrap {
-    &[data-type=annotation] {
-    }
-
     &[data-hl-type=area] {
       display: block;
 
@@ -812,54 +796,41 @@ input::-webkit-inner-spin-button {
 .block-content {
   &[data-type=annotation] {
     .prefix-link {
-      display: inline-flex;
-      align-items: center;
-      padding-right: 4px;
-      cursor: alias;
+      @apply inline-flex items-center pr-1 cursor-alias;
+
       color: var(--ls-link-ref-text-color);
 
       &:before {
         content: "📌 ";
       }
+
+      &.as-block {
+        @apply inline-block;
+      }
     }
 
     [data-hl-type=area] {
-      .prefix-link {
-        padding-top: 5px;
-        display: block;
-      }
 
       .hl-page {
-        display: inline-flex;
-        justify-content: space-between;
-        width: 85%;
-
         > label {
-          flex: 1;
-          cursor: text;
+          @apply flex-1 cursor-text;
         }
       }
     }
 
     .hl-area {
-      @apply relative inline-block cursor-text border rounded-md overflow-hidden mt-1;
+      @apply relative block cursor-text mt-1;
 
-      .actions {
-        @apply absolute right-1 top-1 flex opacity-0 transition-opacity;
-      }
+      > .asset-container {
+        @apply mt-0 border rounded-md overflow-hidden;
 
-      &:hover {
-        .actions {
-          @apply opacity-100;
+        > .asset-action-bar {
+          @apply top-1 right-1;
         }
       }
 
       img {
-        margin: 0;
-        box-shadow: none;
-        max-width: 100%;
-        max-height: 420px;
-        cursor: alias;
+        @apply cursor-alias;
       }
     }
   }
@@ -1037,5 +1008,19 @@ html.is-system-window {
 }
 
 .pdfViewer .page.loadingIcon::after {
-  background: none;
+  @apply bg-none;
+}
+
+.textLayer :is(span, br) {
+  &::selection {
+    @apply text-transparent;
+  }
+}
+
+.block-title-wrap[data-hl-type=area] {
+  @apply flex flex-col;
+
+  .prefix-link {
+    @apply inline-block;
+  }
 }

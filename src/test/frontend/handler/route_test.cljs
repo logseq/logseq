@@ -20,7 +20,7 @@ foo:: bar
   (testing ":page-block route"
     (let [block (ffirst
                  (db-utils/q '[:find (pull ?b [:block/uuid])
-                               :where [?b :block/content "## B1"]]))]
+                               :where [?b :block/title "## B1"]]))]
       (is (= {:to :page-block
               :path-params {:name "foo" :block-route-name "b1"}}
              (#'route-handler/default-page-route (:block/uuid block)))
@@ -28,7 +28,7 @@ foo:: bar
 
   (let [block (ffirst
                (db-utils/q '[:find (pull ?b [:block/uuid])
-                             :where [?b :block/content "### Header 2\nfoo:: bar"]]))]
+                             :where [?b :block/title "### Header 2\nfoo:: bar"]]))]
     (is (= {:to :page-block
             :path-params {:name "foo" :block-route-name "header 2"}}
            (#'route-handler/default-page-route (:block/uuid block)))
@@ -36,7 +36,7 @@ foo:: bar
 
     (let [block (ffirst
                  (db-utils/q '[:find (pull ?b [:block/uuid])
-                               :where [?b :block/content "## Header 3 [[Dec 19th, 2022]]"]]))]
+                               :where [?b :block/title "## Header 3 [[Dec 19th, 2022]]"]]))]
       (is (= {:to :page-block
               :path-params {:name "foo" :block-route-name "header 3 [[dec 19th, 2022]]"}}
              (#'route-handler/default-page-route (:block/uuid block)))
@@ -44,7 +44,7 @@ foo:: bar
 
   (testing ":page route"
     (let [uuid (-> (db-utils/q '[:find (pull ?b [:block/uuid])
-                                 :where [?b :block/content "b2"]])
+                                 :where [?b :block/title "b2"]])
                    ffirst
                    :block/uuid)]
       (is (= {:to :page :path-params {:name (str uuid)}}

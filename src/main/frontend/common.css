@@ -20,6 +20,10 @@ html:not(.is-native-android) {
   serif, Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol !important;
 }
 
+:root {
+  text-autospace: normal;
+}
+
 /* region Reset top elements */
 html {
   overflow: hidden;
@@ -31,6 +35,7 @@ body {
   line-height: 1.5;
   min-height: 100%;
   word-break: break-word; /* compatible for overflow-wrap: anywhere */
+  overflow-y: overlay;
 }
 
 @layer base {
@@ -110,16 +115,26 @@ body {
     font-weight: bold;
   }
 
-  blockquote {
-    display: block;
+  blockquote, .block-content-or-editor-wrap[data-node-type='quote'] {
     text-indent: 0;
-    padding: 8px 20px;
+    padding: 8px 16px;
     border-left: 4px solid;
-    border-left-color: var(--ls-page-blockquote-border-color, hsl(var(--primary)/.4));
-    background-color: var(--ls-page-blockquote-bg-color, hsl(var(--secondary)));
+    background-color: var(--ls-page-blockquote-bg-color, var(--lx-gray-04, hsl(var(--secondary))));
     color: var(--ls-page-blockquote-color, hsl(var(--secondary-foreground)));
     margin: 1rem 0;
     font-size: 1rem;
+
+    &:has(.positioned-properties) {
+      padding-left: 10px;
+    }
+  }
+
+  html blockquote, .block-content-or-editor-wrap[data-node-type='quote']  {
+    border-left-color: var(--ls-page-blockquote-border-color, var(--lx-gray-05-alpha, hsl(var(--primary)/.4)));
+  }
+
+  .block-content-or-editor-wrap[data-node-type='quote'] {
+    margin: 0.5rem 0;
   }
 
   summary {
@@ -128,13 +143,16 @@ body {
 
   iframe {
     width: 100%;
-    margin: 1rem 0;
+    margin: 0.25rem 0;
   }
 
-  img,
-  video {
+  img {
     margin-left: auto;
     margin-right: auto;
+  }
+
+  video {
+    max-height: 557px;
   }
 
   ::selection {
@@ -147,6 +165,7 @@ body {
     color: var(--ls-primary-text-color);
   }
 }
+
 /* endregion */
 
 /** region App utilities **/
@@ -202,6 +221,7 @@ li p:last-child,
 .external-link {
   text-decoration: none;
   border-bottom: 1px solid;
+  word-break: break-all;
 
   &:hover {
     cursor: alias;
@@ -268,14 +288,6 @@ li p:last-child,
   @apply border-r;
 }
 
-i.ti {
-  /*
-  compensates the wrong top spacing in the iconfont.
-  See https://github.com/tabler/tabler-icons/issues/118/
-  */
-  transform: translateY(-1px);
-}
-
 .dnd-separator {
   border-bottom: 3px solid #ccc;
 }
@@ -297,60 +309,37 @@ i.ti {
 }
 
 .admonitionblock {
-  margin: 2rem 0;
-}
-
-.abstract {
-  margin: 2rem 0;
-  width: 80%;
-  font-style: italic;
-}
-
-.abstract p:last-of-type::before {
-  content: '    ';
-  white-space: pre;
-}
-
-.dropdown-overflow-auto {
-  max-height: 400px;
-  overflow-y: auto;
+  @apply my-2 p-2;
 }
 
 .heading-bg {
-  border-radius: 50%;
-  width: 18px;
-  height: 18px;
+  @apply rounded-full w-[18px] h-[18px];
 
   &.remove {
-    @apply border flex items-center justify-center;
-
-    border-color: var(--border-color);
+    @apply border flex items-center justify-center border-gray-07 hover:border-gray-09;
   }
 }
 
 .to-heading-button {
-  @apply px-1 text-lg !important;
+  @apply px-1 text-lg;
 }
 
 /** endregion **/
 
 /* region FIXME: override elements (?) */
-h1.title, h1.title input {
-  @apply mb-4 font-medium;
+h1.title, h1.title input, .ls-page-title-container {
+  @apply font-medium;
 
   color: var(--lx-gray-12, var(--ls-title-text-color, hsl(var(--foreground))));
   font-size: var(--ls-page-title-size, 32px);
 }
 
-.title .page-icon {
-  margin-right: 12px;
-}
-
 .block-highlight,
-.content .selected {
+.ls-block.selected,
+.ls-table-cell.selected
+{
   transition: background-color 0.2s cubic-bezier(0, 1, 0, 1);
   background-color: var(--ls-block-highlight-color, var(--rx-gray-04));
-  padding: -1px;
 }
 
 span.timestamp {
@@ -401,7 +390,7 @@ button.menu:focus {
 
 .menu-link {
   @apply text-popover-foreground/75 select-none hover:text-popover-foreground/100;
-  @apply text-sm px-2 py-1.5 mx-1 hover:rounded transition-opacity duration-150;
+  @apply text-sm px-2 py-1.5 hover:rounded transition-opacity duration-150;
 }
 
 .menu-separator {
@@ -435,67 +424,82 @@ a.warning,
 span.warning,
 div.warning:not(.admonitionblock),
 p.warning {
-  background: var(--ls-warning-background-color);
-  padding: 0.1em 0.4em;
-  border-radius: var(--ls-border-radius-low);
-  color: var(--ls-warning-text-color);
+  @apply bg-yellow-rx-05-alpha text-yellow-rx-08 dark:bg-yellow-rx-07-alpha
+  dark:text-yellow-rx-10 rounded px-1.5 py-[2px] leading-none;
 }
 
 .text-warning {
-  color: var(--ls-warning-text-color);
+  @apply text-yellow-600 dark:text-yellow-500/70;
 }
 
 .bg-warning {
-  background: var(--ls-warning-background-color);
+  @apply bg-yellow-300 dark:bg-yellow-500/50;
 }
 
 a.error,
 span.error {
-  background: var(--ls-error-background-color);
-  padding: 0.1em 0.4em;
-  border-radius: var(--ls-border-radius-low);
-  color: var(--ls-error-text-color);
+  @apply bg-red-rx-04-alpha text-red-rx-09 dark:bg-red-rx-06-alpha
+  dark:text-red-rx-10 rounded px-1.5 py-[2px] leading-none;
 }
 
 .text-error {
-  color: var(--ls-error-text-color);
+  @apply text-red-rx-09;
 }
 
 .bg-error {
-  background: var(--ls-error-background-color);
+  @apply bg-red-rx-04-alpha;
+}
+
+a.error,
+span.error {
+  @apply bg-red-rx-04-alpha text-red-rx-09 dark:bg-red-rx-06-alpha
+  dark:text-red-rx-10 rounded px-1.5 py-[2px] leading-none;
+}
+
+.text-error {
+  @apply text-red-rx-09;
+}
+
+.bg-error {
+  @apply bg-red-rx-04-alpha;
 }
 
 .text-success {
-  color: var(--ls-success-text-color);
+  @apply text-green-rx-09;
 }
 
 .bg-success {
-  background: var(--ls-success-background-color);
+  @apply bg-green-rx-04-alpha;
 }
 
 img.small {
-  display: inline;
-  width: 20px;
-  height: 20px;
-  margin-top: 0;
-  margin-bottom: 0;
+  @apply inline w-5 h-5 m-0;
 }
 
 a.tag {
-  font-size: 0.9em;
-  text-align: center;
-  text-decoration: none;
-  display: inline-block;
-  cursor: pointer;
-  padding: 0 2px;
-  border-radius: 4px;
+  @apply text-sm inline-flex items-center text-center cursor-pointer rounded opacity-70;
+
   color: var(--lx-accent-11, var(--ls-tag-text-color, hsl(var(--primary))));
-  opacity: var(--ls-tag-text-opacity, 0.7);
+
+  &:hover {
+    opacity: var(--ls-tag-text-hover-opasxcity, 1);
+  }
+
+  &[data-ref] + &[data-ref] {
+    @apply mx-[3px];
+  }
 }
 
-a.tag:hover {
-  opacity: var(--ls-tag-text-hover-opacity, 1);
-  text-decoration: underline;
+.preview-ref-link {
+  @apply inline;
+
+  & + &, & + a.tag, a.tag + & {
+    @apply mx-[3px];
+  }
+
+  .block-title-wrap.as-heading {
+    @apply my-0 pb-0;
+  }
 }
 
 svg.note {
@@ -521,7 +525,7 @@ svg.tip {
 /* endregion */
 
 hr {
-  margin: 2rem 0;
+  @apply my-4 sm:my-8 mx-0;
   border-color: var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05)));
 }
 
@@ -554,6 +558,10 @@ a.fade-link:hover {
   height: 20px;
 }
 
+#head div[data-tooltipped] {
+  display: flex !important;
+}
+
 .svg-small svg {
   transform: scale(0.6);
   display: inline;
@@ -571,26 +579,8 @@ a.navigation {
 mark {
   background: var(--ls-page-mark-bg-color, #fef3ac);
   color: var(--ls-page-mark-color, #262626);
-  padding: 2px 4px;
-  border-radius: 3px;
-}
-
-/* page reference */
-
-.page-reference {
-  border-radius: 3px;
-  padding: 2px 0px;
-  transition: 0.3s;
-}
-
-.page-reference .bracket {
-  opacity: 0.3;
-}
-
-/* block references */
-.block-ref .block-ref {
-  padding: 6px 5px;
-  border: none;
+  padding: 0 4px;
+  border-radius: 4px;
 }
 
 /* inline code */
@@ -618,35 +608,6 @@ mark > code {
   line-height: inherit !important;
   background: #fef3ac !important;
   color: #262626 !important;
-}
-
-b > code {
-  font-weight: bold !important;
-}
-
-i > code {
-  font-style: italic !important;
-}
-
-a {
-  transition: 0.3s;
-}
-
-a.tooltip-priority {
-  transition: none;
-}
-
-.page-reference:hover {
-  background: var(--lx-accent-04-alpha, var(--ls-secondary-background-color, hsl(var(--primary)/.4)));
-}
-
-.references-blocks .page-reference:hover {
-  background: var(--lx-accent-04-alpha, var(--ls-tertiary-background-color, hsl(var(--primary)/.4)));
-}
-
-#head .fade-link {
-  font-weight: 600;
-  font-size: 13px;
 }
 
 .text-link {
@@ -718,7 +679,7 @@ html.is-mobile {
     margin-top: 5px;
   }
 
-  main.theme-inner {
+  main.theme-container-inner {
     @apply overflow-x-hidden;
   }
 }
@@ -733,4 +694,12 @@ html.is-mobile {
   img {
     @apply inline-block;
   }
+}
+
+button[role="checkbox"][data-state=unchecked] {
+  border-color: var(--lx-gray-12, var(--ls-primary-text-color, hsl(var(--foreground))));
+}
+
+.dark-theme button[role="checkbox"][data-state=unchecked] {
+  border-color: var(--lx-gray-11, var(--ls-primary-text-color, hsl(var(--foreground))));
 }

@@ -5,7 +5,7 @@
             [shadow.test.env :as env]
             [lambdaisland.glogi.console :as glogi-console]
             ;; activate humane test output for all tests
-            [pjstadig.humane-test-output]))
+            #_[pjstadig.humane-test-output]))
 
 ;; Needed for new test runners
 (defn ^:dev/after-load reset-test-data! []

@@ -50,6 +50,7 @@ class LSPluginCaller extends EventEmitter {
     }
   }
 
+  // run in host
   async connectToChild() {
     if (this._connected) return
 
@@ -274,6 +275,7 @@ class LSPluginCaller extends EventEmitter {
       url: url.href,
       classListArray: ['lsp-iframe-sandbox'],
       model: { baseInfo: JSON.parse(JSON.stringify(pl.toJSON())) },
+      allow: pl.options.allow,
     })
 
     let handshake = pt.sendHandshake()
@@ -303,7 +305,7 @@ class LSPluginCaller extends EventEmitter {
 
           this._call = async (...args: any) => {
             // parent all will get message before handshake
-            await refChild.call(LSPMSGFn(pl.id), {
+            refChild.call(LSPMSGFn(pl.id), {
               type: args[0],
               payload: Object.assign(args[1] || {}, {
                 $$pid: pl.id,

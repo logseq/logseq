@@ -1,12 +1,13 @@
 (ns frontend.components.bug-report
-  (:require [rum.core :as rum]
-            [frontend.ui :as ui]
+  (:require [clojure.string :as string]
             [frontend.components.header :as header]
-            [frontend.util :as util]
-            [reitit.frontend.easy :as rfe]
-            [clojure.string :as string]
+            [frontend.context.i18n :refer [t]]
             [frontend.handler.notification :as notification]
-            [frontend.context.i18n :refer [t]]))
+            [frontend.ui :as ui]
+            [frontend.util :as util]
+            [logseq.shui.hooks :as hooks]
+            [reitit.frontend.easy :as rfe]
+            [rum.core :as rum]))
 
 (defn parse-clipboard-data-transfer
   "parse dataTransfer
@@ -49,7 +50,7 @@
                       (set-step! 0)
                       (set-result! {}))]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (cond (= step 0) (js/addEventListener "paste" paste-handler!))
        (fn [] (cond (= step 0) (js/removeEventListener "paste" paste-handler!))))
@@ -93,11 +94,11 @@
 
 (rum/defc report-item-button
   [title description icon-name {:keys [on-click]}]
-   [:a.cp__bug-report-item-button.flex.items-center.px-4.py-2.my-2.rounded-lg {:on-click on-click}
-    [(ui/icon icon-name)
-     [:div.flex.flex-col.ml-2
-      [:div title]
-      [:div.opacity-60 description]]]])
+  [:a.cp__bug-report-item-button.flex.items-center.px-4.py-2.my-2.rounded-lg {:on-click on-click}
+   [(ui/icon icon-name)
+    [:div.flex.flex-col.ml-2
+     [:div title]
+     [:div.opacity-60 description]]]])
 
 (rum/defc bug-report
   []
@@ -111,9 +112,9 @@
     [:h1.text-2xl (t :bug-report/section-clipboard-title)]
     [:div.opacity-60 (t :bug-report/section-clipboard-desc)]
     (report-item-button (t :bug-report/section-clipboard-btn-title)
-                 (t :bug-report/section-clipboard-btn-desc)
-                 "clipboard"
-                 {:on-click #(util/open-url (rfe/href :bug-report-tools {:tool "clipboard-data-inspector"}))})
+                        (t :bug-report/section-clipboard-btn-desc)
+                        "clipboard"
+                        {:on-click #(util/open-url (rfe/href :bug-report-tools {:tool "clipboard-data-inspector"}))})
     [:div.py-2] ;; divider
     [:div.flex.flex-col
      [:h1.text-2xl (t :bug-report/section-issues-title)]

@@ -5,14 +5,16 @@
             [clojure.string :as string]
             [clojure.zip :as z]
             [frontend.db :as db]
-            [frontend.handler.export.common :as common :refer [*state*]]
+            [frontend.format.mldoc :as mldoc]
+            [frontend.handler.export.common :as common]
             [frontend.handler.export.zip-helper :refer [get-level goto-last
                                                         goto-level]]
-            [frontend.state :as state]
-            [frontend.util :as util :refer [concatv mapcatv removev]]
+            [frontend.util :as util]
             [hiccups.runtime :as h]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
-            [malli.core :as m]))
+            [logseq.cli.common.export.common :as cli-export-common :refer [*state*]]
+            [logseq.cli.common.util :refer-macros [concatv mapcatv removev]]
+            [malli.core :as m]
+            [frontend.db.conn :as conn]))
 
 (def ^:private hiccup-malli-schema
   [:cat :keyword [:* :any]])
@@ -383,7 +385,7 @@
                                :remove-page-ref-brackets? (contains? remove-options :page-ref)
                                :remove-tags? (contains? remove-options :tag)
                                :keep-only-level<=N (:keep-only-level<=N other-options)}})]
-      (let [ast (util/profile :gp-mldoc/->edn (gp-mldoc/->edn content (gp-mldoc/default-config format)))
+      (let [ast (util/profile :mldoc/->edn (mldoc/->edn content format))
             ast (util/profile :remove-pos (mapv common/remove-block-ast-pos ast))
             ast (removev common/Properties-block-ast? ast)
             keep-level<=n (get-in *state* [:export-options :keep-only-level<=N])
@@ -416,16 +418,20 @@
 
 (defn export-blocks-as-html
   "options: see also `export-blocks-as-markdown`"
-  [repo root-block-uuids-or-page-name options]
-  {:pre [(or (coll? root-block-uuids-or-page-name)
-             (string? root-block-uuids-or-page-name))]}
+  [repo root-block-uuids-or-page-uuid options]
+  {:pre [(or (coll? root-block-uuids-or-page-uuid)
+             (uuid? root-block-uuids-or-page-uuid))]}
   (let [content
-        (if (string? root-block-uuids-or-page-name)
+        (if (uuid? root-block-uuids-or-page-uuid)
           ;; page
-          (common/get-page-content root-block-uuids-or-page-name)
-          (common/root-block-uuids->content repo root-block-uuids-or-page-name))
-        first-block (db/entity [:block/uuid (first root-block-uuids-or-page-name)])
-        format (or (:block/format first-block) (state/get-preferred-format))]
-    (export-helper content format options)))
+          (common/get-page-content root-block-uuids-or-page-uuid)
+          (common/root-block-uuids->content repo root-block-uuids-or-page-uuid))
+        first-block (and (coll? root-block-uuids-or-page-uuid)
+                         (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)]))
+        format (get first-block :block/format :markdown)]
+    (binding [cli-export-common/*current-repo* repo
+              cli-export-common/*current-db* (conn/get-db repo)
+              cli-export-common/*content-config* (common/get-content-config)]
+      (export-helper content format options))))
 
 ;;; export fns (ends)

@@ -1,23 +1,24 @@
 (ns ^:no-doc frontend.handler.paste
-  (:require [frontend.state :as state]
-            [frontend.db :as db]
-            [frontend.format.block :as block]
-            [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.block :as gp-block]
-            [logseq.graph-parser.util.block-ref :as block-ref]
+  (:require ["/frontend/utils" :as utils]
             [clojure.string :as string]
-            [frontend.util :as util]
-            [frontend.handler.editor :as editor-handler]
-            [frontend.extensions.html-parser :as html-parser]
-            [goog.object :as gobj]
-            [frontend.mobile.util :as mobile-util]
-            [frontend.util.thingatpt :as thingatpt]
-            ["/frontend/utils" :as utils]
             [frontend.commands :as commands]
-            [frontend.util.text :as text-util]
+            [frontend.db :as db]
+            [frontend.extensions.html-parser :as html-parser]
+            [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
+            [frontend.handler.editor :as editor-handler]
+            [frontend.handler.notification :as notification]
+            [frontend.mobile.util :as mobile-util]
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [frontend.util.text :as text-util]
+            [frontend.util.thingatpt :as thingatpt]
+            [goog.object :as gobj]
             [lambdaisland.glogi :as log]
+            [logseq.common.util :as common-util]
+            [logseq.common.util.block-ref :as block-ref]
+            [logseq.db.frontend.content :as db-content]
+            [logseq.graph-parser.block :as gp-block]
             [promesa.core :as p]))
 
 (defn- paste-text-parseable
@@ -25,11 +26,20 @@
   (when-let [editing-block (state/get-edit-block)]
     (let [page-id (:db/id (:block/page editing-block))
           blocks (block/extract-blocks
-                  (mldoc/->edn text (gp-mldoc/default-config format))
+                  (mldoc/->edn text format)
                   text format
                   {:page-name (:block/name (db/entity page-id))})
-          blocks' (gp-block/with-parent-and-left page-id blocks)]
-      (editor-handler/paste-blocks blocks' {:keep-uuid? true}))))
+          blocks' (cond->> (gp-block/with-parent-and-order page-id blocks)
+                    true
+                    (map (fn [block]
+                           (let [refs (:block/refs block)]
+                             (-> block
+                                 (dissoc :block/tags)
+                                 (update :block/title (fn [title]
+                                                        (let [title' (db-content/replace-tags-with-id-refs title refs)]
+                                                          (db-content/title-ref->id-ref title' refs)))))))))]
+      (editor-handler/paste-blocks blocks' {:keep-uuid? true
+                                            :outliner-real-op :paste-text}))))
 
 (defn- paste-segmented-text
   [format text]
@@ -52,7 +62,8 @@
     (boolean (text-util/get-matched-video url))
     (util/format "{{video %s}}" url)
 
-    (or (string/includes? url "twitter.com") (string/includes? url "x.com"))
+    (or (re-matches #"^https://twitter\.com.*?$" url)
+        (re-matches #"^https://x\.com.*?$" url))
     (util/format "{{twitter %s}}" url)))
 
 (defn- try-parse-as-json
@@ -65,7 +76,7 @@
 (defn- get-whiteboard-tldr-from-text
   [text]
   (when-let [matched-text (util/safe-re-find #"<whiteboard-tldr>(.*)</whiteboard-tldr>"
-                                             (gp-util/safe-decode-uri-component text))]
+                                             (common-util/safe-decode-uri-component text))]
     (try-parse-as-json (second matched-text))))
 
 (defn- selection-within-link?
@@ -94,8 +105,8 @@
                                 (.getType ^js (first clipboard-items)
                                           "web application/logseq"))))
           blocks-str (when blocks-blob (.text blocks-blob))]
-         (when blocks-str
-           (gp-util/safe-read-string blocks-str))))
+    (when blocks-str
+      (common-util/safe-read-map-string blocks-str))))
 
 (defn- markdown-blocks?
   [text]
@@ -127,8 +138,8 @@
                           ;; text should always be prepared block-ref generated in tldr
                           text)
         {:keys [selection] :as selection-and-format} (editor-handler/get-selection-and-format)
-        text-url? (gp-util/url? text)
-        selection-url? (gp-util/url? selection)]
+        text-url? (common-util/url? text)
+        selection-url? (common-util/url? selection)]
     (cond
       (not (string/blank? shape-refs-text))
       (commands/simple-insert! input-id shape-refs-text nil)
@@ -161,7 +172,7 @@
                         (if (string/blank? result) nil result))
             text-blocks? (if (= format :markdown) markdown-blocks? org-blocks?)
             text' (or html-text
-                      (when (gp-util/url? text)
+                      (when (common-util/url? text)
                         (wrap-macro-url text))
                       text)
             blocks? (text-blocks? text')]
@@ -179,26 +190,44 @@
   ;; todo: logseq/whiteboard-shapes is now text/html
   [input text e html]
   (util/stop e)
-  (->
-   (p/let [copied-blocks (get-copied-blocks)]
-     (if (seq copied-blocks)
+  (let [repo (state/get-current-repo)]
+    (->
+     (p/let [{:keys [graph blocks embed-block?]} (get-copied-blocks)]
+       (if (and (seq blocks) (= graph repo))
        ;; Handle internal paste
-       (let [revert-cut-txs (get-revert-cut-txs copied-blocks)
-             keep-uuid? (= (state/get-block-op-type) :cut)]
-         (editor-handler/paste-blocks copied-blocks {:revert-cut-txs revert-cut-txs
-                                                     :keep-uuid? keep-uuid?}))
-       (paste-copied-text input text html)))
-   (p/catch (fn [error]
-              (log/error :msg "Paste failed" :exception error)
-              (state/pub-event! [:capture-error {:error error
-                                                 :payload {:type ::paste-copied-blocks-or-text}}])))))
+         (let [revert-cut-txs (get-revert-cut-txs blocks)
+               keep-uuid? (= (state/get-block-op-type) :cut)
+               blocks (map (fn [b] (dissoc b :block/properties)) blocks)]
+           (if embed-block?
+             (when-let [block-id (:block/uuid (first blocks))]
+               (when-let [current-block (state/get-edit-block)]
+                 (cond
+                   (some #(= block-id (:block/uuid %)) (db/get-block-parents repo (:block/uuid current-block) {}))
+                   (notification/show! "Can't embed parent block as its own property" :error)
+
+                   :else
+                   (p/do!
+                    (editor-handler/api-insert-new-block! ""
+                                                          {:block-uuid (:block/uuid current-block)
+                                                           :sibling? true
+                                                           :outliner-op :paste
+                                                           :replace-empty-target? true
+                                                           :other-attrs {:block/link (:db/id (db/entity [:block/uuid block-id]))}})
+                    (state/clear-edit!)))))
+             (editor-handler/paste-blocks blocks {:revert-cut-txs revert-cut-txs
+                                                  :keep-uuid? keep-uuid?})))
+         (paste-copied-text input text html)))
+     (p/catch (fn [error]
+                (log/error :msg "Paste failed" :exception error)
+                (state/pub-event! [:capture-error {:error error
+                                                   :payload {:type ::paste-copied-blocks-or-text}}]))))))
 
 (defn paste-text-in-one-block-at-point
   []
   (utils/getClipText
    (fn [clipboard-data]
      (when-let [_ (state/get-input)]
-       (if (gp-util/url? clipboard-data)
+       (if (common-util/url? clipboard-data)
          (if (string/blank? (util/get-selected-text))
            (editor-handler/insert (or (wrap-macro-url clipboard-data) clipboard-data) true)
            (editor-handler/html-link-format! clipboard-data))
@@ -206,10 +235,16 @@
    (fn [error]
      (js/console.error error))))
 
+(defn- editing-display-type-block?
+  []
+  (boolean
+   (when-let [editing-block (some-> (state/get-edit-block) :db/id db/entity)]
+     (:logseq.property.node/display-type editing-block))))
+
 (defn- paste-text-or-blocks-aux
   [input e text html]
-  (if (or (thingatpt/markdown-src-at-point input)
-          (thingatpt/org-admonition&src-at-point input))
+  (if (or (editing-display-type-block?)
+          (thingatpt/markdown-src-at-point input))
     (when-not (mobile-util/native-ios?)
       (util/stop e)
       (paste-text-in-one-block-at-point))
@@ -219,11 +254,9 @@
   (when id
     (let [clipboard-data (gobj/get e "clipboardData")
           files (.-files clipboard-data)]
-      (loop [files files]
-        (when-let [file (first files)]
-          (when-let [block (state/get-edit-block)]
-            (editor-handler/upload-asset id #js[file] (:block/format block) editor-handler/*asset-uploading? true))
-          (recur (rest files))))
+      (editor-handler/upload-asset! id files
+                                    (get (state/get-edit-block) :block/format :markdown)
+                                    editor-handler/*asset-uploading? true)
       (util/stop e))))
 
 (defn editor-on-paste!
@@ -243,19 +276,8 @@
           html (.getData clipboard-data "text/html")
           text (.getData clipboard-data "text")
           has-files? (seq (.-files clipboard-data))]
-      (cond
-        (and (string/blank? text) (string/blank? html))
-        ;; When both text and html are blank, paste file if exists.
-        ;; NOTE: util/stop is not called here if no file is provided,
-        ;; so the default paste behavior of the native platform will be used.
-        (when has-files?
-          (paste-file-if-exists id e))
-
-        ;; both file attachment and text/html exist
-        (and has-files? (state/preferred-pasting-file?))
+      (if has-files?
         (paste-file-if-exists id e)
-
-        :else
         (paste-text-or-blocks-aux (state/get-input) e text html)))))
 
 (defn editor-on-paste-raw!

@@ -1,24 +1,24 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport"
-        content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
-  <meta http-equiv="X-UA-Compatible" content="ie=edge">
-  <title>Logseq Marketplace</title>
-  <link rel="stylesheet"
-        href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/4.0.0/github-markdown.min.css"
-        integrity="sha512-Oy18vBnbSJkXTndr2n6lDMO5NN31UljR8e/ICzVPrGpSud4Gkckb8yUpqhKuUNoE+o9gAb4O/rAxxw1ojyUVzg=="
-        crossorigin="anonymous" referrerpolicy="no-referrer"/>
-  <style>
-    html, body {
-      padding: 0;
-      margin: 0;
-      box-sizing: border-box;
-      font-family: sans-serif;
-      width: 100%;
-      min-height: 100%;
-    }
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Logseq Marketplace</title>
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/4.0.0/github-markdown.min.css"
+          integrity="sha512-Oy18vBnbSJkXTndr2n6lDMO5NN31UljR8e/ICzVPrGpSud4Gkckb8yUpqhKuUNoE+o9gAb4O/rAxxw1ojyUVzg=="
+          crossorigin="anonymous" referrerpolicy="no-referrer"/>
+    <style>
+      html, body {
+        padding: 0;
+        margin: 0;
+        box-sizing: border-box;
+        font-family: sans-serif;
+        width: 100%;
+        min-height: 100%;
+      }
 
       html::-webkit-scrollbar-thumb {
         background-color: rgba(0, 0, 0, 0.1);
@@ -41,34 +41,35 @@
         background: transparent;
       }
 
-    body {
-      display: flex;
-    }
+      body {
+        display: flex;
+      }
 
-    #app {
-      display: flex;
-      justify-content: center;
-      flex: 1;
-      width: 900px;
-      min-height: 100%;
-      padding: 30px;
-      margin: 0 auto;
-      color: #333;
-    }
+      #app {
+        display: flex;
+        justify-content: center;
+        flex: 1;
+        width: 900px;
+        min-height: 100%;
+        padding: 30px;
+        margin: 0 auto;
+        color: #333;
+      }
 
-    #app > strong {
-      padding-top: 30vh;
-      font-weight: 400;
-    }
+      #app > strong {
+        padding-top: 30vh;
+        font-weight: 400;
+      }
 
-    pre {
-      max-width: 800px;
-    }
-  </style>
+      pre {
+        max-width: 800px;
+      }
+    </style>
 </head>
 <body>
 <div id="app"></div>
 <script src="./js/marked.min.js"></script>
+<script src="./js/purify.js"></script>
 <script>
   ;(async function () {
     const app = document.getElementById('app')
@@ -82,30 +83,17 @@
     const setContent = (content) => app.innerHTML = `<main class="markdown-body">${content}</main>`
     const endpoint = (repo, branch, file) => `https://raw.githubusercontent.com/${repo}/${branch}/${file}`
 
-    let content = ''
-    let points = [
+    let defaultPoints = [
       endpoint(repo, 'master', 'README.md'), endpoint(repo, 'main', 'README.md'),
       endpoint(repo, 'master', 'readme.md'), endpoint(repo, 'main', 'readme.md')]
+
+    let content = ''
     let readme
 
-    setMsg('Loading ...')
+    const fixLink = (link) => readme.replace(/[^\/]+\.md$/i, link)
+    const isRelative = (href) => href && !href.startsWith('http') && !!href.match(/^([.\/]+|[^\/]+)/) &&
+      href.replace(/^[.\/]+/, '')
 
-    for (let url of points) {
-      try {
-        const res = await fetch(url)
-        if (res.status !== 200) {
-          throw new Error(res.statusText)
-        }
-        content = await res.text()
-        readme = url
-        break
-      } catch (e) {
-        console.debug('Error:', url, e.message)
-      }
-    }
-
-    const fixLink = (link) => readme.replace(/README\.md$/i, link)
-    const isRelative = (href) => href && !href.startsWith('http') && !!href.match(/^([.\/]+|[^\/]+)/) && href.replace(/^[.\/]+/, '')
     marked.use({
       renderer: {
         link (href, title, text) {
@@ -121,12 +109,47 @@
           }
 
           return false
-        }
-      }
+        },
+      },
     })
 
-    content = marked.parse(content).replace('src="./', `src="${fixLink('')}`)
-    setContent(content)
+    // load exist points content
+    async function loadPage (points) {
+      setMsg('Loading ...')
+
+      for (let url of points) {
+        try {
+          const res = await fetch(url)
+          if (res.status !== 200) {
+            throw new Error(res.statusText)
+          }
+          content = await res.text()
+          readme = url
+          break
+        } catch (e) {
+          console.debug('Error:', url, e.message)
+        }
+      }
+
+      content = marked.parse(content).replace('src="./', `src="${fixLink('')}`)
+      setContent(DOMPurify.sanitize(content))
+    }
+
+    // load default
+    await loadPage(defaultPoints)
+
+    // handle link
+    document.querySelector('#app').addEventListener('click', (e) => {
+      const target = e.target
+      const href = target.getAttribute('href')
+      if (!!href && href.endsWith('.md') && !href.startsWith('http')) {
+        loadPage([
+          endpoint(repo, 'master', href),
+          endpoint(repo, 'main', href)
+        ])
+        e.preventDefault()
+      }
+    })
   }())
 </script>
 </body>

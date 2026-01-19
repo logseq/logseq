@@ -1,17 +1,3 @@
-.ui__modal {
-  &[label="keymap-manager"] {
-    .panel-content {
-      @apply m-[-16px];
-    }
-
-    @screen lg {
-      .panel-content {
-        width: 980px;
-      }
-    }
-  }
-}
-
 .cp__shortcut {
   &-table-wrap {
     @apply relative;
@@ -183,14 +169,18 @@
 }
 
 .sidebar-item .cp__shortcut-page-x {
-    padding: 12px 0 0 0;
-    background-color: var(--color-level-2);
+  padding: 12px 0 0 0;
+  background-color: var(--color-level-2);
 }
 
 .sidebar-item article {
-    max-height: unset;
+  max-height: unset;
 }
 
 .keyboard-shortcut {
-    @apply inline-flex;
+  @apply inline-flex;
+
+  .ui__button {
+    @apply cursor-default;
+  }
 }

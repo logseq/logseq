@@ -21,22 +21,8 @@ html[data-theme=light] {
   height: calc(100vh - 48px);
 }
 
-html[data-theme=light] a.toggle:hover {
-  color: var(--ls-primary-text-color);
-}
-
-.cp__header {
-  > .r > div:not(.ui__dropdown-trigger) a, button {
-    color: var(--lx-gray-11, var(--ls-header-button-background, var(--rx-gray-11)));
-
-    &:hover {
-      color: var(--lx-gray-12, var(--ls-header-button-background, var(--rx-gray-12)));
-    }
-  }
-}
-
 .cp__right-sidebar-topbar {
-  @apply px-1 h-12 bg-transparent;
+  @apply px-1 h-12;
 
   button {
     @apply opacity-100;

@@ -1,15 +1,16 @@
 (ns frontend.mixins
   "Rum mixins for use in components"
-  (:require [rum.core :as rum]
-            [goog.dom :as dom]
+  (:require [frontend.state :as state]
             [frontend.util :refer [profile] :as util]
-            [frontend.state :as state])
+            [goog.dom :as dom]
+            [rum.core :as rum])
   (:import [goog.events EventHandler]))
 
 (defn detach
   "Detach all event listeners."
   [state]
-  (some-> state ::event-handler .removeAll))
+  (when-let [^EventHandler handler (some-> state ::event-handler)]
+    (.removeAll handler)))
 
 (defn listen
   "Register an event `handler` for events of `type` on `target`."
@@ -38,8 +39,8 @@
                            (let [target (.. e -target)]
                              ;; If the click target is outside of current node
                              (when (and
-                                     (not (dom/contains dom-node target))
-                                     (not (.contains (.-classList target) "ignore-outside-event")))
+                                    (not (dom/contains dom-node target))
+                                    (not (.contains (.-classList target) "ignore-outside-event")))
                                (on-hide state e :click))))]
             (when-not (false? outside?)
               (listen state js/window "mousedown" click-fn)))
@@ -58,13 +59,13 @@
         nil))))
 
 (defn on-enter
-  [state & {:keys [on-enter node]}]
+  [state & {on-enter-fn :on-enter :keys [node]}]
   (let [node (or node (rum/dom-node state))]
     (listen state node "keyup"
             (fn [e]
               (case (.-keyCode e)
                 ;; Enter
-                13 (on-enter e)
+                13 (on-enter-fn e)
                 nil)))))
 
 (defn on-key-up
@@ -102,11 +103,7 @@
              (init-callback state))
      :did-mount (fn [state]
                   (attach-listeners state)
-                  state)
-     :will-remount (fn [old-state new-state]
-                     (detach old-state)
-                     (attach-listeners new-state)
-                     new-state)})))
+                  state)})))
 
 (defn modal
   [k]
@@ -133,15 +130,13 @@
               :toggle-fn (fn []
                            (swap! open? not)))))))
 
-(def component-editing-mode
-  {:will-mount
-   (fn [state]
-     (state/set-block-component-editing-mode! true)
-     state)
-   :will-unmount
-   (fn [state]
-     (state/set-block-component-editing-mode! false)
-     state)})
+(def container-id
+  "Notice: the first parameter needs to be a `config` with `id`, optional `sidebar?`, `whiteboard?`"
+  {:init (fn [state]
+           (let [config (first (:rum/args state))
+                 key (select-keys config [:id :sidebar? :whiteboard? :embed? :custom-query? :query :current-block :table? :block? :db/id :page-name])
+                 container-id (or (:container-id config) (state/get-container-id key))]
+             (assoc state :container-id container-id)))})
 
 (defn perf-measure-mixin
   "Does performance measurements in development."

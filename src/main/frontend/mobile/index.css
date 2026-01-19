@@ -1,142 +1,42 @@
-.cp__footer {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  padding: 10px 20px;
-  background-color: var(--ls-primary-background-color);
-  z-index: 10;
-  display: flex;
-  flex: 0 0 auto;
-  white-space: nowrap;
-  height: 80px;
-  align-items: flex-start;
-  box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.05);
-
-  .bottom-action {
-    width: 23px;
-    height: 23px;
-  }
-
-  .ti, .timer {
-    color: var(--ls-primary-text-color);
-  }
-
-  .timer {
-    position: absolute;
-    left: 40px;
-  }
-}
-
 .action-bar {
-  position: fixed;
-  bottom: 100px;
-  height: 70px;
-  padding: 6px;
-  border-radius: 10px;
-  background-color: var(--ls-secondary-background-color);
-  overflow-x: overlay;
-  overflow-y: hidden;
-  box-shadow: rgba(0, 0, 0, 0.02) 0px 1px 1px 0px, rgba(27, 31, 35, 0.10) 0px 0px 0px 1px;
-  z-index: 100;
+  @apply fixed bottom-[100px] h-[70px] p-1.5 rounded-md overflow-y-hidden overflow-x-auto
+  bg-[var(--ls-secondary-background-color)] z-[99999];
+
+  box-shadow: /* bottom = shadow-lg */ 0 10px 15px -3px rgba(0, 0, 0, 0.1),
+  0 4px 6px -4px rgba(0, 0, 0, 0.1),
+    /* top = lighter (closer to shadow-md) */ 0 -6px 10px -4px rgba(0, 0, 0, 0.08),
+  0 -2px 4px -4px rgba(0, 0, 0, 0.08);
 
   .action-bar-commands {
-    position: relative;
-    display: flex;
-    justify-content: space-around;
-    width: 120%;
+    @apply relative flex w-full;
 
 
     .ti, .tie {
-      color: var(--ls-primary-text-color);
-      font-size: 23px;
-      opacity: 50%;
+      @apply text-[var(--ls-primary-text-color)] text-[23px] opacity-90;
     }
 
     .description {
-      color: var(--ls-primary-text-color);
-      font-size: 13px;
-      opacity: 60%;
+      @apply text-[var(--ls-primary-text-color)] text-[10px] opacity-100;
     }
 
     button {
-      padding: 5px 10px
+      @apply flex-1 flex flex-col items-center justify-center py-3 px-1
+      opacity-80 active:opacity-100;
     }
-  }
-}
-
-#mobile-editor-toolbar {
-  position: fixed;
-  bottom: 0;
-  transition: bottom 260ms;
-  transition-timing-function: ease-out;
-  left: 0;
-  width: 100%;
-  z-index: 9999;
-  display: flex;
-  justify-content: space-between;
-
-  button {
-    @apply flex items-center py-2 px-2;
-  }
-
-  .submenu {
-    @apply fixed left-0 bottom-0 w-full flex-row justify-evenly items-center z-10 bg-base-2;
-    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.02);
-    overflow-x: overlay;
-    overflow-y: hidden;
-    height: 40px;
-    display: none;
-
-    &.show-submenu {
-      display: flex;
-    }
-  }
-
-  .toolbar-commands {
-    justify-content: space-between;
-    display: flex;
-    align-items: center;
-    overflow-x: overlay;
-    overflow-y: hidden;
-    overflow-scrolling: touch;
-    width: 95%;
-
-    &::-webkit-scrollbar {
-      height: 4px;
-    }
-  }
-
-  .toolbar-hide-keyboard {
-    border-left: 1px solid;
-    border-color: var(--ls-quaternary-background-color);
   }
 }
 
 html.is-native-ipad {
-  .cp__footer {
-    height: 55px;
-    right: 0;
-    box-shadow: none;
-    flex: 1;
-    index: 0;
-  }
-
   .action-bar {
-    width: 70%;
-    min-width: 550px;
-
-    .action-bar-commands {
-      width: 100%;
-    }
+    @apply w-[70%] min-w-[550px];
 
     @media (orientation: landscape) {
-      width: 50%;
+      @apply w-1/2;
     }
   }
 }
 
 html.is-native-iphone {
-
   .action-bar {
     left: 3%;
     right: 3%;
@@ -153,10 +53,6 @@ html.is-native-iphone {
       right: 15%;
       width: 70%;
       min-width: 450px;
-
-      .action-bar-commands {
-        width: 100%;
-      }
     }
   }
 }
@@ -179,10 +75,6 @@ html.is-native-android {
       left: 15%;
       right: 15%;
       width: 70%;
-
-      .action-bar-commands {
-        width: 100%;
-      }
     }
   }
 
@@ -220,30 +112,24 @@ html.is-zoomed-native-ios {
   }
 }
 
-.ui__modal {
-  &[label=graph-setup] {
-    align-items: center;
+.ui__dialog-content {
+    margin-top: 45px;
+}
 
-    .ui__modal-panel {
-      transform: translate3d(0, -78px, 0);
-    }
-
-    .panel-content {
-      padding: 0;
-    }
-
-    .cp__graph-picker {
-      padding: 58px 20px 20px 20px;
-      background: var(--ls-primary-background-color);
-
-      > h1 {
-        position: absolute;
-        font-size: 18px;
-        font-weight: 500;
-        top: 12px;
-        left: 20px;
-        opacity: .9;
-      }
+html.has-mobile-keyboard {
+  .ui__dialog-overlay {
+    &:has(.app-login-modal) {
+      @apply overflow-y-auto;
     }
   }
+
+  .ui__dialog-content {
+    &.app-login-modal {
+      margin-bottom: 460px;
+    }
+  }
+}
+
+.ui__dialog-content[label=user-login] {
+  @apply rounded-lg pb-3;
 }

@@ -8,14 +8,12 @@
     [:meta/version :int]
     ;; Loose since it looks like capitalization and string are possible
     [:preferred-format [:or :keyword :string]]
-    [:preferred-workflow [:enum :now :todo]]
     [:hidden [:vector :string]]
     [:default-templates [:map
                          [:journals {:optional true} :string]]]
     [:journal/page-title-format :string]
     [:ui/enable-tooltip? :boolean]
     [:ui/show-brackets? :boolean]
-    [:feature/enable-block-timestamps? :boolean]
     [:feature/enable-search-remove-accents? :boolean]
     [:feature/enable-journals? :boolean]
     [:feature/enable-flashcards? :boolean]
@@ -25,7 +23,6 @@
     [:start-of-week [:enum 0 1 2 3 4 5 6]]
     [:custom-css-url :string]
     [:custom-js-url :string]
-    [:arweave/gateway :string]
     [:export/bullet-indentation
      [:enum :eight-spaces :four-spaces :two-spaces :tab]]
     [:publishing/all-pages-public? :boolean]
@@ -39,10 +36,11 @@
                  :keyword
                  [:or :string false? [:vector :string]]]]
     [:shortcut/doc-mode-enter-for-new-block? :boolean]
-    [:block/content-max-length :int]
+    [:block/title-max-length :int]
     [:ui/show-command-doc? :boolean]
     [:ui/show-empty-bullets? :boolean]
     [:ui/show-full-blocks? :boolean]
+    [:ui/hide-empty-properties? :boolean]
     [:ui/auto-expand-block-refs? :boolean]
     [:query/views [:map-of
                    :keyword
@@ -61,8 +59,7 @@
               [:or :string :keyword]
               :string]]
     [:ref/default-open-blocks-level :int]
-    [:ref/linked-references-collapsed-threshold :int]
-    [:graph/settings [:map-of :keyword :boolean]]
+    [:graph/settings [:map-of :keyword [:or :boolean :int :nil]]]
     [:graph/forcesettings [:map-of :keyword :int]]
     [:favorites [:vector :string]]
     ;; There isn't a :float yet
@@ -89,7 +86,4 @@
                                                [:insert-today? :boolean]
                                                [:redirect-page? :boolean]
                                                [:default-page :string]])]
-    [:file-sync/ignore-files [:vector :string]]
-    [:dwim/settings [:map-of :keyword :boolean]]
-    [:file/name-format [:enum :legacy :triple-lowbar]]
     [:journal/file-name-format :string]]))

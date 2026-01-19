@@ -15,17 +15,19 @@
   (state/set-state! :notification/contents nil))
 
 (defn show!
+  "status: :info/:warning/:error/:success"
   ([content]
    (show! content :info true nil 2000 nil))
   ([content status]
    (show! content status (not= status :error) nil 1500 nil))
   ([content status clear?]
-   (show! content status clear? nil 1500 nil))
+   (show! content status clear? nil 2000 nil))
   ([content status clear? uid]
-   (show! content status clear? uid 1500 nil))
+   (show! content status clear? uid 2000 nil))
   ([content status clear? uid timeout]
    (show! content status clear? uid timeout nil))
   ([content status clear? uid timeout close-cb]
+   (assert (keyword? status) "status should be a keyword")
    (let [contents (state/get-notification-contents)
          uid (or uid (keyword (util/unique-id)))]
      (state/set-state! :notification/contents (assoc contents
@@ -33,7 +35,7 @@
                                                           :status status
                                                           :close-cb close-cb}))
 
-     (when (and clear? (or timeout (not= status :error)))
+     (when (and (not= status :error) (not (false? clear?)))
        (js/setTimeout #(clear! uid) (or timeout 2000)))
 
      uid)))

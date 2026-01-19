@@ -1,5 +1,9 @@
 apply plugin: 'com.android.application'
 
+apply from: 'capacitor.build.gradle'
+apply plugin: 'kotlin-android'
+apply plugin: 'org.jetbrains.kotlin.plugin.compose'
+
 android {
     namespace "com.logseq.app"
     compileSdkVersion rootProject.ext.compileSdkVersion
@@ -7,12 +11,12 @@ android {
         applicationId "com.logseq.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 84
-        versionName "0.10.10"
+        versionCode 88
+        versionName "2.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
-             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
-             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+            // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
@@ -22,10 +26,22 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
+
+    buildFeatures {
+        compose true
+    }
+
+    composeOptions {
+        kotlinCompilerExtensionVersion rootProject.ext.composeCompilerVersion
+    }
+
+    kotlinOptions {
+        jvmTarget = '21'
+    }
 }
 
 repositories {
-    flatDir{
+    flatDir {
         dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
     }
 }
@@ -35,6 +51,16 @@ dependencies {
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation fileTree(include: ['*.jar'], dir: 'libs')
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation platform("androidx.compose:compose-bom:$composeBomVersion")
+    implementation "androidx.activity:activity-compose:$androidxActivityVersion"
+    implementation "androidx.compose.ui:ui"
+    implementation "androidx.compose.foundation:foundation"
+    implementation "androidx.compose.material3:material3"
+    implementation "androidx.compose.material:material-icons-extended"
+    implementation "androidx.compose.runtime:runtime"
+    implementation "androidx.compose.animation:animation"
+    implementation "androidx.navigation:navigation-compose:$androidxNavigationVersion"
+    implementation "com.google.android.material:material:$materialVersion"
     implementation project(':capacitor-android')
     implementation 'androidx.documentfile:documentfile:1.0.1'
     testImplementation "junit:junit:$junitVersion"
@@ -43,13 +69,11 @@ dependencies {
     implementation project(':capacitor-cordova-android-plugins')
 }
 
-apply from: 'capacitor.build.gradle'
-
 try {
     def servicesJSON = file('google-services.json')
     if (servicesJSON.text) {
         apply plugin: 'com.google.gms.google-services'
     }
-} catch(Exception e) {
+} catch (Exception e) {
     logger.warn("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
 }

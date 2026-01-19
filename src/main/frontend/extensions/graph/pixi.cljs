@@ -40,7 +40,7 @@
                         (let [v (js/Math.abs (hash parent))]
                           (nth colors (mod v (count colors)))))
                       (.-color node)))
-          :label  {:content  (fn [node] (.-id node))
+          :label  {:content  (fn [node] (.-label node))
                    :type     (.-TEXT (.-TextType Pixi-Graph))
                    :fontSize 12
                    :color (if dark? "rgba(255, 255, 255, 0.8)" "rgba(0, 0, 0, 0.8)")
@@ -201,39 +201,39 @@
       (clear-nodes! (:graph @*graph-instance))
       (destroy-instance!))
     (let [{:keys [nodes links style hover-style height register-handlers-fn dark? link-dist charge-strength charge-range]} (first (:rum/args state))
-          style                                                                     (or style (default-style dark?))
-          hover-style                                                               (or hover-style (default-hover-style dark?))
-          graph                                                                     (Graph.)
-          nodes-set                                                                 (set (map :id nodes))
-          links                                                                     (->>
-                                                                                     (filter
-                                                                                      (fn [link]
-                                                                                        (and (nodes-set (:source link)) (nodes-set (:target link))))
-                                                                                      links)
-                                                                                     (distinct)) ;; #3331 (@zhaohui0923) seems caused by duplicated links. Why distinct doesn't work?
-          nodes                                                                     (remove nil? nodes)
-          links                                                                     (remove (fn [{:keys [source target]}] (or (nil? source) (nil? target))) links)
-          nodes-js                                                                  (bean/->js nodes)
-          links-js                                                                  (bean/->js links)
-          simulation                                                                (layout! nodes-js links-js link-dist charge-strength charge-range)]
+          style       (or style (default-style dark?))
+          hover-style (or hover-style (default-hover-style dark?))
+          graph       (Graph.)
+          nodes-set   (set (map :id nodes))
+          links       (->>
+                       (filter
+                        (fn [link]
+                          (and (nodes-set (:source link)) (nodes-set (:target link))))
+                        links)
+                       (distinct)) ;; #3331 (@zhaohui0923) seems caused by duplicated links. Why distinct doesn't work?
+          nodes       (remove nil? nodes)
+          links       (remove (fn [{:keys [source target]}] (or (nil? source) (nil? target))) links)
+          nodes-js    (bean/->js nodes)
+          links-js    (bean/->js links)
+          simulation  (layout! nodes-js links-js link-dist charge-strength charge-range)]
       (doseq [node nodes-js]
         (try (.addNode graph (.-id node) node)
-          (catch :default e
-            (js/console.error e))))
+             (catch :default e
+               (js/console.error e))))
       (doseq [link links-js]
         (let [source (.-id (.-source link))
               target (.-id (.-target link))]
           (try (.addEdge graph source target link)
-            (catch :default e
-              (js/console.error e)))))
+               (catch :default e
+                 (js/console.error e)))))
       (when-let [container-ref (:ref state)]
         (let [pixi-graph (new (.-PixiGraph Pixi-Graph)
-                           (bean/->js
-                            {:container  @container-ref
-                             :graph      graph
-                             :style      style
-                             :hoverStyle hover-style
-                             :height     height}))]
+                              (bean/->js
+                               {:container  @container-ref
+                                :graph      graph
+                                :style      style
+                                :hoverStyle hover-style
+                                :height     height}))]
           (reset! *graph-instance
                   {:graph graph
                    :pixi  pixi-graph})

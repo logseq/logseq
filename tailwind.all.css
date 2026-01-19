@@ -1,27 +1,20 @@
 @charset "utf-8";
-@import "tailwindcss/base";
-@import "tailwindcss/components";
-@import "tailwindcss/utilities";
 
 @import "packages/ui/src/radix.css";
 @import "packages/ui/src/radix-hsl.css";
 @import "packages/ui/src/vars-classic.css";
 @import "packages/ui/src/colors.css";
-@import "packages/ui/src/index.css";
+@import "packages/ui/src/index.css";  /* Tailwind base imported here */
 @import "resources/css/shui.css";
 @import "inter-ui/inter.css";
-@import "reveal.js/dist/reveal.css";
-@import "reveal.js/dist/theme/black.css";
 @import "photoswipe/dist/photoswipe.css";
 @import "shepherd.js/dist/css/shepherd.css";
-@import "packages/amplify/dist/amplify.css";
-@import "tldraw/apps/tldraw-logseq/src/styles.css";
 @import "katex/dist/katex.min.css";
 @import "codemirror/lib/codemirror.css";
 @import "codemirror/theme/solarized.css";
 @import "codemirror/addon/hint/show-hint.css";
-@import "react-tippy/dist/tippy.css";
 @import "pdfjs-dist/web/pdf_viewer.css";
 @import "resources/css/tabler-extension.css";
 @import "resources/css/codemirror.lsradix.css";
+@import "@tabler/icons-webfont/tabler-icons.min.css";
 @import-glob "src/main/frontend/**/[!_]*.css";

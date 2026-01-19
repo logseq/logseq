@@ -1,0 +1,125 @@
+{:blocks ({:block/title "block with page ref [[some page]]"
+           :block/created-at 1720805247589
+           :block/format :markdown
+           :block/parent
+           {:block/uuid #uuid "6691676f-2eed-4619-b56a-69fd7d572c59"}
+           :block/properties
+           {}
+           :block/updated-at 1720809014394
+           :block/uuid #uuid "6691677f-c208-4c83-aa40-6efc4286100c"}
+          {:block/created-at 1721935480784
+           :block/properties
+           {:ls-type :whiteboard-shape
+            :logseq.tldraw.shape
+            {:blockType "B"
+             :stroke ""
+             :collapsed false
+             :borderRadius 8
+             :scale [1 1]
+             :pageId "6691677f-c208-4c83-aa40-6efc4286100c"
+             :scaleLevel "md"
+             :fill ""
+             :compact true
+             :isAutoResizing true
+             :type "logseq-portal"
+             :size [400 124.9781494140625]
+             :strokeType "line"
+             :strokeWidth 2
+             :opacity 1
+             :id "01b33340-4074-11ef-956e-7d9aebf284ae"
+             :noFill false
+             :point [430.41563108563423 233.00156784057617]
+             :parentId "6691676f-2eed-4619-b56a-69fd7d572c59"
+             :collapsedHeight 0
+             :nonce 1720805246071
+             :pageName nil}}
+           :block/updated-at 1721935480784}
+          {:block/title "block with block ref ((669168ed-8734-4943-8a86-5e3a553a526d))"
+           :block/created-at 1720808993012
+           :block/format :markdown
+           :block/parent
+           {:block/uuid #uuid "6691676f-2eed-4619-b56a-69fd7d572c59"}
+           :block/properties
+           {}
+           :block/updated-at 1720809157098
+           :block/uuid #uuid "66917621-93ae-475b-aa4c-6ae9e797cf68"}
+          {:block/properties
+           {:ls-type :whiteboard-shape
+            :logseq.tldraw.shape
+            {:blockType "B"
+             :stroke ""
+             :collapsed false
+             :borderRadius 8
+             :scale [1 1]
+             :pageId "66917621-93ae-475b-aa4c-6ae9e797cf68"
+             :scaleLevel "md"
+             :fill ""
+             :compact true
+             :isAutoResizing true
+             :type "logseq-portal"
+             :size [400 79.9781265258789]
+             :strokeType "line"
+             :strokeWidth 2
+             :opacity 1
+             :id "b999ee10-407c-11ef-956e-7d9aebf284ae"
+             :noFill false
+             :point [478.6382088826831 337.7821947259741]
+             :parentId "6691676f-2eed-4619-b56a-69fd7d572c59"
+             :collapsedHeight 0
+             :nonce 1720808990579
+             :pageName nil}}
+           :block/updated-at 1720809157310
+           :block/created-at 1720809157310}
+          {:block/title "block with props\nprop-num:: 10"
+           :block/created-at 1721935480737
+           :block/format :markdown
+           :block/parent
+           {:block/uuid #uuid "6691676f-2eed-4619-b56a-69fd7d572c59"}
+           :block/properties
+           {:prop-num 10}
+           :block/updated-at 1721935504617
+           :block/uuid #uuid "66a2a678-1cea-44b6-a458-4b8c15e18a8d"}
+          {:block/properties
+           {:ls-type :whiteboard-shape
+            :logseq.tldraw.shape
+            {:blockType "B"
+             :stroke ""
+             :collapsed false
+             :borderRadius 8
+             :scale [1 1]
+             :pageId "66a2a678-1cea-44b6-a458-4b8c15e18a8d"
+             :scaleLevel "md"
+             :fill ""
+             :compact true
+             :isAutoResizing true
+             :type "logseq-portal"
+             :size [400 320]
+             :strokeType "line"
+             :strokeWidth 2
+             :opacity 1
+             :id "86f86420-4abb-11ef-9161-b98dd17dbef1"
+             :noFill false
+             :point [648.5671437694965 179.003191006195]
+             :parentId "6691676f-2eed-4619-b56a-69fd7d572c59"
+             :collapsedHeight 0
+             :nonce 1721935475555
+             :pageName nil}}
+           :block/updated-at 1721935504609
+           :block/created-at 1721935504609})
+ :pages ({:block/tx-id 536871657
+          :block/uuid #uuid "6691676f-2eed-4619-b56a-69fd7d572c59"
+          :block/properties
+          {:ls-type :whiteboard-page
+           :logseq.tldraw.page
+           {:id "6691676f-2eed-4619-b56a-69fd7d572c59"
+            :name "ref page"
+            :bindings
+            {}
+            :nonce 1
+            :assets []}}
+          :block/updated-at 1721935504609
+          :block/created-at 1720805231835
+          :block/format :markdown
+          :block/type "whiteboard"
+          :block/name "ref page"
+          :block/title "ref page"})}

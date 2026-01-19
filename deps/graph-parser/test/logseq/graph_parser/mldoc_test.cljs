@@ -1,10 +1,10 @@
 (ns logseq.graph-parser.mldoc-test
-  (:require [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.text :as text]
+  (:require [cljs.test :refer [testing deftest are is]]
             [clojure.string :as string]
-            [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]
             [logseq.graph-parser.cli :as gp-cli]
-            [cljs.test :refer [testing deftest are is]]))
+            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]
+            [logseq.graph-parser.text :as text]))
 
 (deftest test-link
   (testing "non-link"
@@ -127,7 +127,7 @@ body"
       line 2
  line 3
 line 4"]
-              (gp-mldoc/remove-indentation-spaces s 2 false)))) 
+              (gp-mldoc/remove-indentation-spaces s 2 false))))
     (is (=  "\t- block 1.1\n  line 1\n    line 2\nline 3\nline 4"
             (let [s "\t- block 1.1
 \t    line 1
@@ -135,11 +135,10 @@ line 4"]
 \t line 3
 \tline 4"]
               (gp-mldoc/remove-indentation-spaces s 3 false))))))
-    
 
 (deftest ^:integration test->edn
-  (let [graph-dir "test/docs-0.9.2"
-        _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir "v0.9.2")
+  (let [graph-dir "test/resources/docs-0.10.12"
+        _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir "v0.10.12")
         files (#'gp-cli/build-graph-files graph-dir {})
         asts-by-file (->> files
                           (map (fn [{:file/keys [path content]}]
@@ -149,20 +148,20 @@ line 4"]
                                     (gp-mldoc/->edn content
                                                     (gp-mldoc/default-config format))])))
                           (into {}))]
-    (is (= {"Custom" 50,
-            "Displayed_Math" 1,
+    (is (= {"Custom" 62,
+            "Displayed_Math" 2,
             "Drawer" 1,
-            "Example" 20,
+            "Example" 22,
             "Footnote_Definition" 2,
-            "Heading" 5648,
+            "Heading" 6764,
             "Hiccup" 9,
-            "List" 22,
-            "Paragraph" 571,
-            "Properties" 87,
-            "Property_Drawer" 423,
-            "Quote" 24,
+            "List" 25,
+            "Paragraph" 629,
+            "Properties" 85,
+            "Property_Drawer" 510,
+            "Quote" 28,
             "Raw_Html" 18,
-            "Src" 79,
+            "Src" 82,
             "Table" 8}
            (->> asts-by-file (mapcat val) (map ffirst) frequencies))
         "AST node type counts")))
