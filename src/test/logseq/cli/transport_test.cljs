@@ -1,7 +1,16 @@
 (ns logseq.cli.transport-test
-  (:require [cljs.test :refer [deftest is async]]
+  (:require [cljs.test :refer [deftest is async testing]]
             [promesa.core :as p]
             [logseq.cli.transport :as transport]))
+
+(def ^:private fs (js/require "fs"))
+(def ^:private os (js/require "os"))
+(def ^:private path (js/require "path"))
+
+(defn- temp-path
+  [filename]
+  (let [dir (.mkdtempSync fs (.join path (.tmpdir os) "logseq-cli-"))]
+    (.join path dir filename)))
 
 (defn- start-server
   [handler]
@@ -62,3 +71,24 @@
         (p/catch (fn [e]
                    (is false (str "unexpected error: " e))
                    (done))))))
+
+(deftest test-read-input
+  (testing "reads edn input"
+    (let [path (temp-path "input.edn")]
+      (.writeFileSync fs path "{:a 1}")
+      (is (= {:a 1} (transport/read-input {:format :edn :path path})))))
+
+  (testing "reads sqlite input as buffer"
+    (let [path (temp-path "input.sqlite")
+          buffer (js/Buffer.from "sqlite-data")]
+      (.writeFileSync fs path buffer)
+      (let [result (transport/read-input {:format :sqlite :path path})]
+        (is (instance? js/Buffer result))
+        (is (= "sqlite-data" (.toString result "utf8")))))))
+
+(deftest test-write-output
+  (testing "writes sqlite output as buffer"
+    (let [path (temp-path "output.sqlite")
+          buffer (js/Buffer.from "sqlite-export")]
+      (transport/write-output {:format :sqlite :path path :data buffer})
+      (is (= "sqlite-export" (.toString (.readFileSync fs path) "utf8"))))))

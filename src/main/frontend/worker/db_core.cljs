@@ -579,6 +579,17 @@
   (p/let [data (<export-db-file repo)]
     (platform/transfer (platform/current) data #js [(.-buffer data)])))
 
+(def-thread-api :thread-api/export-db-base64
+  [repo]
+  (when-let [^js db (worker-state/get-sqlite-conn repo :db)]
+    (.exec db "PRAGMA wal_checkpoint(2)"))
+  (p/let [data (<export-db-file repo)]
+    (when data
+      (let [buffer (if (instance? js/Buffer data)
+                     data
+                     (js/Buffer.from data))]
+        (.toString buffer "base64")))))
+
 (def-thread-api :thread-api/export-debug-log-db
   [repo]
   (when-let [^js db (worker-state/get-sqlite-conn repo :debug-log)]
@@ -601,6 +612,16 @@
   (when-not (string/blank? repo)
     (p/let [pool (<get-opfs-pool repo)]
       (<import-db pool data)
+      nil)))
+
+(def-thread-api :thread-api/import-db-base64
+  [repo base64]
+  (when-not (string/blank? repo)
+    (p/let [pool (<get-opfs-pool repo)
+            data (js/Buffer.from base64 "base64")
+            _ (close-db! repo)
+            _ (<import-db pool data)
+            _ (start-db! repo {:import-type :sqlite-db})]
       nil)))
 
 (def-thread-api :thread-api/search-blocks
@@ -694,6 +715,17 @@
                                 ["An unexpected error occurred during export. See the javascript console for details."
                                  :error])
         {:export-edn-error (.-message e)}))))
+
+(def-thread-api :thread-api/import-edn
+  [repo export-edn]
+  (let [conn (worker-state/get-datascript-conn repo)]
+    (when-not conn
+      (throw (ex-info "graph not opened" {:code :graph-not-opened :repo repo})))
+    (let [{:keys [init-tx block-props-tx misc-tx]} (sqlite-export/build-import export-edn @conn {})
+          tx-data (vec (concat init-tx block-props-tx misc-tx))
+          tx-meta {::sqlite-export/imported-data? true}]
+      (ldb/transact! conn tx-data tx-meta)
+      {:tx-count (count tx-data)})))
 
 (def-thread-api :thread-api/get-view-data
   [repo view-id option]

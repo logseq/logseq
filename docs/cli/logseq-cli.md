@@ -47,8 +47,10 @@ Graph commands:
 - `graph remove --repo <name>` - remove a graph
 - `graph validate --repo <name>` - validate graph data
 - `graph info [--repo <name>]` - show graph metadata (defaults to current graph)
+- `graph export --type edn|sqlite --output <path> [--repo <name>]` - export a graph to EDN or SQLite
+- `graph import --type edn|sqlite --input <path> --repo <name>` - import a graph from EDN or SQLite (new graph only)
 
-For any command that requires `--repo`, if the target graph does not exist, the CLI returns `graph not exists` (except for `graph create`).
+For any command that requires `--repo`, if the target graph does not exist, the CLI returns `graph not exists` (except for `graph create`). `graph import` fails if the target graph already exists.
 
 Server commands:
 - `server list` - list running db-worker-node servers
@@ -92,6 +94,7 @@ Options grouping:
 
 Output formats:
 - Global `--output <human|json|edn>` (also accepted per subcommand)
+- For `graph export`, `--output` refers to the destination file path. Output formatting is controlled via `:output-format` in config or `LOGSEQ_CLI_OUTPUT`.
 - Human output is plain text. List/search commands render tables with a final `Count: N` line. For list subcommands, the ID column uses `:db/id` (not UUID). If `:db/ident` exists, an `IDENT` column is included. Times such as list `UPDATED-AT`/`CREATED-AT` and `graph info` `Created at` are shown in human-friendly relative form. Errors include error codes and may include a `Hint:` line. Use `--output json|edn` for structured output.
 - `show` human output prints the `:db/id` as the first column followed by a tree:
 
@@ -110,6 +113,8 @@ Examples:
 
 ```bash
 node ./static/logseq-cli.js graph create --repo demo
+node ./static/logseq-cli.js graph export --type edn --output /tmp/demo.edn --repo demo
+node ./static/logseq-cli.js graph import --type edn --input /tmp/demo.edn --repo demo-import
 node ./static/logseq-cli.js add block --page TestPage --content "hello world"
 node ./static/logseq-cli.js search --text "hello"
 node ./static/logseq-cli.js show --page-name TestPage --format json --output json
