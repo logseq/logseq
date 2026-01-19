@@ -360,7 +360,7 @@ independent of format as format specific heading characters are stripped"
 
 (defn delete-files
   [files]
-  (mapv (fn [path] [:db.fn/retractEntity [:file/path path]]) files))
+  (mapv (fn [path] [:db/retractEntity [:file/path path]]) files))
 
 (defn whiteboard-page?
   "Given a page entity, page object or page name, check if it is a whiteboard page"

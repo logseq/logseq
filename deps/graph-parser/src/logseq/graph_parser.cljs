@@ -15,7 +15,7 @@
   (mapcat (fn [{uuid' :block/uuid eid :db/id}]
             (if (and uuid' (contains? retain-uuids uuid'))
               (map (fn [attr] [:db.fn/retractAttribute eid attr]) file-schema/retract-attributes)
-              (when eid [[:db.fn/retractEntity eid]])))
+              (when eid [[:db/retractEntity eid]])))
           blocks))
 
 (defn- get-file-page
