@@ -195,8 +195,8 @@
 (defn- reverse-tx-data
   [tx-data]
   (->> tx-data
-       (map (fn [[e a v _t added]]
-              [(if added :db/retract :db/add) e a v]))))
+       (map (fn [[e a v t added]]
+              [(if added :db/retract :db/add) e a v t]))))
 
 (defn- parse-message [raw]
   (try
@@ -574,10 +574,11 @@
     (let [tx-data (keep-last-update tx-data*)
           local-txs (pending-txs repo)
           reversed-tx-data (->> local-txs
-                                (mapcat :reversed-tx)
-                                reverse)
+                                reverse
+                                (mapcat :reversed-tx))
           has-local-changes? (seq reversed-tx-data)
           *remote-tx-report (atom nil)
+          *reversed-tx-report (atom nil)
           *remote-deleted-ids (atom #{})
           tx-report
           (ldb/transact-with-temp-conn!
@@ -591,7 +592,8 @@
                    db @temp-conn
 
                    reversed-tx-report (when has-local-changes?
-                                        (ldb/transact! temp-conn reversed-tx-data tx-meta))
+                                        (ldb/transact! temp-conn (keep-last-update reversed-tx-data) tx-meta))
+                   _ (reset! *reversed-tx-report reversed-tx-report)
                    ;; 2. transact remote tx-data
                    remote-deleted-blocks (->> tx-data
                                               (keep (fn [item]
@@ -605,11 +607,10 @@
                                                                        (contains? remote-deleted-block-ids (get-lookup-id (last item))))))
                                                          seq)]
                                         (ldb/transact! temp-conn tx-data tx-meta))
-
                                       (ldb/transact! temp-conn tx-data tx-meta))
                    _ (reset! *remote-tx-report remote-tx-report)
-                   remote-received-tx-data (sync-compare/filter-received-tx-data remote-tx-report tx-data)
-                   remote-applied-tx-data (sync-compare/filter-applied-tx-data remote-tx-report)]
+                   remote-received-tx-data (when remote-tx-report (sync-compare/filter-received-tx-data remote-tx-report tx-data))
+                   remote-applied-tx-data (when remote-tx-report (sync-compare/filter-applied-tx-data remote-tx-report))]
                ;; (when (not= remote-received-tx-data remote-applied-tx-data)
                ;;   (prn :diff-tx-data-mismatch
                ;;        (data/diff remote-received-tx-data remote-applied-tx-data))
@@ -647,7 +648,10 @@
       (when has-local-changes?
         (when-let [tx-data (:tx-data tx-report)]
           (let [remote-tx-data-set (set tx-data*)
-                normalized (normalize-tx-data (:db-after tx-report) (:db-before remote-tx-report) tx-data)
+                normalized (normalize-tx-data (:db-after tx-report)
+                                              (or (:db-before remote-tx-report)
+                                                  (:db-after @*reversed-tx-report))
+                                              tx-data)
                 normalized-tx-data (remove remote-tx-data-set normalized)
                 reversed-datoms (reverse-tx-data tx-data)]
            ;; (prn :debug :normalized-tx-data normalized-tx-data)
