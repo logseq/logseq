@@ -143,12 +143,14 @@
                  (assoc :block/alias aliases')
 
                  (:tags properties)
-                 (assoc :block/tags (let [tags (:tags properties)
-                                          tags (if (coll? tags) tags [(str tags)])
-                                          tags (remove string/blank? tags)]
-                                      (map (fn [tag] {:block/name (common-util/page-name-sanity-lc tag)
-                                                      :block/title tag})
-                                           tags))))]
+                 (assoc :block/tags (concat
+                                     (:block/tags page-m)
+                                     (let [tags (:tags properties)
+                                           tags (if (coll? tags) tags [(str tags)])
+                                           tags (remove string/blank? tags)]
+                                       (map (fn [tag] {:block/name (common-util/page-name-sanity-lc tag)
+                                                       :block/title tag})
+                                            tags)))))]
     (update result :block/properties #(apply dissoc % gp-property/editable-linkable-built-in-properties))))
 
 (defn- build-page-map
