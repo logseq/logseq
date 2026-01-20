@@ -96,7 +96,7 @@
                   list-tag-payload (parse-json-output list-tag-result)
                   list-property-result (run-cli ["--repo" "content-graph" "list" "property"] data-dir cfg-path)
                   list-property-payload (parse-json-output list-property-result)
-                  add-block-result (run-cli ["--repo" "content-graph" "add" "block" "--page" "TestPage" "--content" "hello world"] data-dir cfg-path)
+                  add-block-result (run-cli ["--repo" "content-graph" "add" "block" "--target-page-name" "TestPage" "--content" "hello world"] data-dir cfg-path)
                   _ (parse-json-output add-block-result)
                   search-result (run-cli ["--repo" "content-graph" "search" "--text" "hello world"] data-dir cfg-path)
                   search-payload (parse-json-output search-result)
@@ -133,13 +133,13 @@
                   _ (run-cli ["graph" "create" "--repo" "move-graph"] data-dir cfg-path)
                   _ (run-cli ["--repo" "move-graph" "add" "page" "--page" "SourcePage"] data-dir cfg-path)
                   _ (run-cli ["--repo" "move-graph" "add" "page" "--page" "TargetPage"] data-dir cfg-path)
-                  _ (run-cli ["--repo" "move-graph" "add" "block" "--page" "SourcePage" "--content" "Parent Block"] data-dir cfg-path)
+                  _ (run-cli ["--repo" "move-graph" "add" "block" "--target-page-name" "SourcePage" "--content" "Parent Block"] data-dir cfg-path)
                   source-show (run-cli ["--repo" "move-graph" "show" "--page-name" "SourcePage" "--format" "json"] data-dir cfg-path)
                   source-payload (parse-json-output source-show)
                   parent-node (find-block-by-title (get-in source-payload [:data :root]) "Parent Block")
                   parent-uuid (or (:block/uuid parent-node) (:uuid parent-node))
-                  _ (run-cli ["--repo" "move-graph" "add" "block" "--parent" (str parent-uuid) "--content" "Child Block"] data-dir cfg-path)
-                  move-result (run-cli ["--repo" "move-graph" "move" "--uuid" (str parent-uuid) "--page-name" "TargetPage"] data-dir cfg-path)
+                  _ (run-cli ["--repo" "move-graph" "add" "block" "--target-uuid" (str parent-uuid) "--content" "Child Block"] data-dir cfg-path)
+                  move-result (run-cli ["--repo" "move-graph" "move" "--uuid" (str parent-uuid) "--target-page-name" "TargetPage"] data-dir cfg-path)
                   move-payload (parse-json-output move-result)
                   target-show (run-cli ["--repo" "move-graph" "show" "--page-name" "TargetPage" "--format" "json"] data-dir cfg-path)
                   target-payload (parse-json-output target-show)
@@ -151,6 +151,34 @@
             (is (some? parent-uuid))
             (is (some? moved-node))
             (is (some? child-node))
+            (is (= "ok" (:status stop-payload)))
+            (done))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))
+                     (done)))))))
+
+(deftest test-cli-add-block-pos-ordering
+  (async done
+    (let [data-dir (node-helper/create-tmp-dir "db-worker-add-pos")]
+      (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                  _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                  _ (run-cli ["graph" "create" "--repo" "add-pos-graph"] data-dir cfg-path)
+                  _ (run-cli ["--repo" "add-pos-graph" "add" "page" "--page" "PosPage"] data-dir cfg-path)
+                  _ (run-cli ["--repo" "add-pos-graph" "add" "block" "--target-page-name" "PosPage" "--content" "Parent"] data-dir cfg-path)
+                  parent-show (run-cli ["--repo" "add-pos-graph" "show" "--page-name" "PosPage" "--format" "json"] data-dir cfg-path)
+                  parent-payload (parse-json-output parent-show)
+                  parent-node (find-block-by-title (get-in parent-payload [:data :root]) "Parent")
+                  parent-uuid (or (:block/uuid parent-node) (:uuid parent-node))
+                  _ (run-cli ["--repo" "add-pos-graph" "add" "block" "--target-uuid" (str parent-uuid) "--pos" "first-child" "--content" "First"] data-dir cfg-path)
+                  _ (run-cli ["--repo" "add-pos-graph" "add" "block" "--target-uuid" (str parent-uuid) "--pos" "last-child" "--content" "Last"] data-dir cfg-path)
+                  final-show (run-cli ["--repo" "add-pos-graph" "show" "--page-name" "PosPage" "--format" "json"] data-dir cfg-path)
+                  final-payload (parse-json-output final-show)
+                  final-parent (find-block-by-title (get-in final-payload [:data :root]) "Parent")
+                  child-titles (map node-title (node-children final-parent))
+                  stop-result (run-cli ["server" "stop" "--repo" "add-pos-graph"] data-dir cfg-path)
+                  stop-payload (parse-json-output stop-result)]
+            (is (some? parent-uuid))
+            (is (= ["First" "Last"] (vec child-titles)))
             (is (= "ok" (:status stop-payload)))
             (done))
           (p/catch (fn [e]
@@ -268,7 +296,7 @@
                   export-path (node-path/join (node-helper/create-tmp-dir "exports") "graph.edn")
                   _ (run-cli ["graph" "create" "--repo" export-graph] data-dir cfg-path)
                   _ (run-cli ["--repo" export-graph "add" "page" "--page" "ExportPage"] data-dir cfg-path)
-                  _ (run-cli ["--repo" export-graph "add" "block" "--page" "ExportPage" "--content" "Export content"] data-dir cfg-path)
+                  _ (run-cli ["--repo" export-graph "add" "block" "--target-page-name" "ExportPage" "--content" "Export content"] data-dir cfg-path)
                   export-result (run-cli ["--repo" export-graph
                                           "graph" "export"
                                           "--type" "edn"
@@ -307,7 +335,7 @@
                   export-path (node-path/join (node-helper/create-tmp-dir "exports") "graph.sqlite")
                   _ (run-cli ["graph" "create" "--repo" export-graph] data-dir cfg-path)
                   _ (run-cli ["--repo" export-graph "add" "page" "--page" "SQLiteExportPage"] data-dir cfg-path)
-                  _ (run-cli ["--repo" export-graph "add" "block" "--page" "SQLiteExportPage" "--content" "SQLite export content"] data-dir cfg-path)
+                  _ (run-cli ["--repo" export-graph "add" "block" "--target-page-name" "SQLiteExportPage" "--content" "SQLite export content"] data-dir cfg-path)
                   export-result (run-cli ["--repo" export-graph
                                           "graph" "export"
                                           "--type" "sqlite"
