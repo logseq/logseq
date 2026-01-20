@@ -40,7 +40,7 @@
   [:db/id
    :block/uuid
    :block/title
-   :block/marker
+   {:logseq.property/status [:db/ident :block/name :block/title]}
    :block/order
    {:block/parent [:db/id]}
    {:block/tags [:db/id :block/name :block/title :block/uuid]}])
@@ -49,7 +49,7 @@
   [:db/id
    :block/uuid
    :block/title
-   :block/marker
+   {:logseq.property/status [:db/ident :block/name :block/title]}
    {:block/tags [:db/id :block/name :block/title :block/uuid]}
    {:block/page [:db/id :block/name :block/title :block/uuid]}
    {:block/parent [:db/id
@@ -86,13 +86,32 @@
     (when (seq labels)
       (string/join " " (map #(str "#" %) labels)))))
 
+(defn- status-from-ident
+  [ident]
+  (let [name* (name ident)
+        parts (string/split name* #"\.")
+        status (or (last parts) name*)]
+    (string/upper-case status)))
+
+(defn- status-label
+  [node]
+  (let [status (:logseq.property/status node)]
+    (cond
+      (string? status) (when (seq status) status)
+      (keyword? status) (status-from-ident status)
+      (map? status) (or (:block/title status)
+                        (:block/name status)
+                        (when-let [ident (:db/ident status)]
+                          (status-from-ident ident)))
+      :else nil)))
+
 (defn- block-label
   [node]
   (let [title (:block/title node)
-        marker (:block/marker node)
+        status (status-label node)
         uuid->label (:uuid->label node)
         base (cond
-               (and title (seq marker)) (str marker " " title)
+               (and title (seq status)) (str status " " title)
                title title
                (:block/name node) (:block/name node)
                (:block/uuid node) (some-> (:block/uuid node) str))
@@ -121,15 +140,22 @@
                                ref-ids))
                    [])]
     (let [blocks (vec (remove nil? pulled))
+          page-lookup-key (fn [value]
+                            (cond
+                              (map? value) (or (:db/id value)
+                                               (when-let [uuid (:block/uuid value)]
+                                                 [:block/uuid uuid]))
+                              (number? value) value
+                              (uuid? value) [:block/uuid value]
+                              (and (string? value) (common-util/uuid-string? value)) [:block/uuid (uuid value)]
+                              :else nil))
           page-id-from (fn [block]
                          (let [page (:block/page block)
                                parent (:block/parent block)
                                parent-page (:block/page parent)]
-                           (or (when (map? page) (:db/id page))
-                               (when (number? page) page)
-                               (when (map? parent-page) (:db/id parent-page))
-                               (when (number? parent-page) parent-page)
-                               (when (map? parent) (:db/id parent)))))
+                           (or (page-lookup-key page)
+                               (page-lookup-key parent-page)
+                               (page-lookup-key parent))))
           page-ids (->> blocks
                         (keep page-id-from)
                         distinct
@@ -257,7 +283,8 @@
     (cond
       (some? id)
       (p/let [entity (transport/invoke config :thread-api/pull false
-                                       [repo [:db/id :block/name :block/uuid :block/title :block/marker
+                                       [repo [:db/id :block/name :block/uuid :block/title
+                                              {:logseq.property/status [:db/ident :block/name :block/title]}
                                               {:block/page [:db/id :block/title]}
                                               {:block/tags [:db/id :block/name :block/title :block/uuid]}] id])]
         (if-let [page-id (get-in entity [:block/page :db/id])]
@@ -274,14 +301,16 @@
       (if-not (common-util/uuid-string? uuid-str)
         (p/rejected (ex-info "block must be a uuid" {:code :invalid-block}))
         (p/let [entity (transport/invoke config :thread-api/pull false
-                                         [repo [:db/id :block/name :block/uuid :block/title :block/marker
+                                         [repo [:db/id :block/name :block/uuid :block/title
+                                                {:logseq.property/status [:db/ident :block/name :block/title]}
                                                 {:block/page [:db/id :block/title]}
                                                 {:block/tags [:db/id :block/name :block/title :block/uuid]}]
                                           [:block/uuid (uuid uuid-str)]])
                 entity (if (:db/id entity)
                          entity
                          (transport/invoke config :thread-api/pull false
-                                           [repo [:db/id :block/name :block/uuid :block/title :block/marker
+                                           [repo [:db/id :block/name :block/uuid :block/title
+                                                  {:logseq.property/status [:db/ident :block/name :block/title]}
                                                   {:block/page [:db/id :block/title]}
                                                   {:block/tags [:db/id :block/name :block/title :block/uuid]}]
                                             [:block/uuid uuid-str]]))]
@@ -297,7 +326,8 @@
 
       (seq page-name)
       (p/let [page-entity (transport/invoke config :thread-api/pull false
-                                            [repo [:db/id :block/uuid :block/title :block/marker
+                                            [repo [:db/id :block/uuid :block/title
+                                                   {:logseq.property/status [:db/ident :block/name :block/title]}
                                                    {:block/tags [:db/id :block/name :block/title :block/uuid]}]
                                              [:block/name page-name]])]
         (if-let [page-id (:db/id page-entity)]
