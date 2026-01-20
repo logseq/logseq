@@ -63,11 +63,11 @@ Inspect and edit commands:
 - `list page [--expand] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list pages
 - `list tag [--expand] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list tags
 - `list property [--expand] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list properties
-- `add block --content <text> [--page <name>] [--parent <uuid>]` - add blocks; defaults to today’s journal page if no page is given
-- `add block --blocks <edn> [--page <name>] [--parent <uuid>]` - insert blocks via EDN vector
-- `add block --blocks-file <path> [--page <name>] [--parent <uuid>]` - insert blocks from an EDN file
+- `add block --content <text> [--target-page-name <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - add blocks; defaults to today’s journal page if no target is given
+- `add block --blocks <edn> [--target-page-name <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - insert blocks via EDN vector
+- `add block --blocks-file <path> [--target-page-name <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - insert blocks from an EDN file
 - `add page --page <name>` - create a page
-- `move --id <id>|--uuid <uuid> --target-id <id>|--target-uuid <uuid>|--page-name <name> [--pos first-child|last-child|sibling]` - move a block and its children (defaults to first-child)
+- `move --id <id>|--uuid <uuid> --target-id <id>|--target-uuid <uuid>|--target-page-name <name> [--pos first-child|last-child|sibling]` - move a block and its children (defaults to first-child)
 - `remove block --block <uuid>` - remove a block and its children
 - `remove page --page <name>` - remove a page and its children
 - `search --text <query> [--type page|block|tag|property|all] [--include-content] [--limit <n>]` - search across pages, blocks, tags, and properties
@@ -117,8 +117,8 @@ Examples:
 node ./static/logseq-cli.js graph create --repo demo
 node ./static/logseq-cli.js graph export --type edn --output /tmp/demo.edn --repo demo
 node ./static/logseq-cli.js graph import --type edn --input /tmp/demo.edn --repo demo-import
-node ./static/logseq-cli.js add block --page TestPage --content "hello world"
-node ./static/logseq-cli.js move --uuid <uuid> --page-name TargetPage
+node ./static/logseq-cli.js add block --target-page-name TestPage --content "hello world"
+node ./static/logseq-cli.js move --uuid <uuid> --target-page-name TargetPage
 node ./static/logseq-cli.js search --text "hello"
 node ./static/logseq-cli.js show --page-name TestPage --format json --output json
 node ./static/logseq-cli.js server list
