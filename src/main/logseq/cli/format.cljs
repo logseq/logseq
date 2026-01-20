@@ -218,6 +218,10 @@
   [{:keys [repo block]}]
   (str "Removed block: " block " (repo: " repo ")"))
 
+(defn- format-move-block
+  [{:keys [repo source target]}]
+  (str "Moved block: " source " -> " target " (repo: " repo ")"))
+
 (defn- format-graph-export
   [{:keys [export-type output]}]
   (str "Exported " export-type " to " output))
@@ -256,6 +260,7 @@
         :add-page (format-add-page context)
         :remove-page (format-remove-page context)
         :remove-block (format-remove-block context)
+        :move-block (format-move-block context)
         :graph-export (format-graph-export context)
         :graph-import (format-graph-import context)
         :search (format-search-results (:results data))

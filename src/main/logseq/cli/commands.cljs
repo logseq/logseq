@@ -6,6 +6,7 @@
             [logseq.cli.command.core :as command-core]
             [logseq.cli.command.graph :as graph-command]
             [logseq.cli.command.list :as list-command]
+            [logseq.cli.command.move :as move-command]
             [logseq.cli.command.remove :as remove-command]
             [logseq.cli.command.search :as search-command]
             [logseq.cli.command.server :as server-command]
@@ -44,6 +45,13 @@
   {:ok? false
    :error {:code :missing-target
            :message "block or page is required"}
+   :summary summary})
+
+(defn- missing-source-result
+  [summary]
+  {:ok? false
+   :error {:code :missing-source
+           :message "source block is required"}
    :summary summary})
 
 (defn- missing-page-name-result
@@ -90,6 +98,7 @@
                server-command/entries
                list-command/entries
                add-command/entries
+               move-command/entries
                remove-command/entries
                search-command/entries
                show-command/entries)))
@@ -112,7 +121,11 @@
                          (seq (:blocks opts))
                          (seq (:blocks-file opts))
                          has-args?)
-        show-targets (filter some? [(:id opts) (:uuid opts) (:page-name opts)])]
+        show-targets (filter some? [(:id opts) (:uuid opts) (:page-name opts)])
+        move-sources (filter some? [(:id opts) (some-> (:uuid opts) string/trim)])
+        move-targets (filter some? [(:target-id opts)
+                                    (some-> (:target-uuid opts) string/trim)
+                                    (some-> (:page-name opts) string/trim)])]
     (cond
       (:help opts)
       (command-core/help-result cmd-summary)
@@ -131,6 +144,15 @@
       (missing-target-result summary)
 
       (and (= command :remove-page) (not (seq (:page opts))))
+      (missing-target-result summary)
+
+      (and (= command :move-block) (move-command/invalid-options? opts))
+      (command-core/invalid-options-result summary (move-command/invalid-options? opts))
+
+      (and (= command :move-block) (empty? move-sources))
+      (missing-source-result summary)
+
+      (and (= command :move-block) (empty? move-targets))
       (missing-target-result summary)
 
       (and (= command :show) (empty? show-targets))
@@ -302,6 +324,9 @@
         :add-page
         (add-command/build-add-page-action options repo)
 
+        :move-block
+        (move-command/build-action options repo)
+
         :remove-block
         (remove-command/build-remove-block-action options repo)
 
@@ -344,6 +369,7 @@
                          :list-property (list-command/execute-list-property action config)
                          :add-block (add-command/execute-add-block action config)
                          :add-page (add-command/execute-add-page action config)
+                         :move-block (move-command/execute-move action config)
                          :remove-block (remove-command/execute-remove action config)
                          :remove-page (remove-command/execute-remove action config)
                          :search (search-command/execute-search action config)
@@ -358,4 +384,4 @@
                                   :message "unknown action"}}))]
         (assoc result
                :command (or (:command action) (:type action))
-               :context (select-keys action [:repo :graph :page :block :blocks])))))
+               :context (select-keys action [:repo :graph :page :block :blocks :source :target])))))
