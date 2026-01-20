@@ -204,27 +204,30 @@
                   "175 └── cccc")
              (tree->text tree-data))))))
 
-(deftest test-tree->text-prefixes-marker
-  (testing "show tree text prefixes markers before block titles"
+(deftest test-tree->text-prefixes-status
+  (testing "show tree text prefixes status before block titles"
     (let [tree->text #'show-command/tree->text
           tree-data {:root {:db/id 1
                             :block/title "Root"
-                            :block/marker "TODO"
+                            :logseq.property/status {:db/ident :logseq.property/status.todo
+                                                     :block/title "TODO"}
                             :block/children [{:db/id 2
                                               :block/title "Child"
-                                              :block/marker "CANCELED"}]}}]
+                                              :logseq.property/status {:db/ident :logseq.property/status.canceled
+                                                                       :block/title "CANCELED"}}]}}]
       (is (= (str "1 TODO Root\n"
                   "2 └── CANCELED Child")
              (tree->text tree-data))))))
 
-(deftest test-tree->text-marker-multiline-alignment
-  (testing "show tree text keeps multiline alignment when marker prefix is present"
+(deftest test-tree->text-status-multiline-alignment
+  (testing "show tree text keeps multiline alignment when status prefix is present"
     (let [tree->text #'show-command/tree->text
           tree-data {:root {:db/id 1
                             :block/title "Root"
                             :block/children [{:db/id 22
                                               :block/title "line1\nline2"
-                                              :block/marker "TODO"}]}}]
+                                              :logseq.property/status {:db/ident :logseq.property/status.todo
+                                                                       :block/title "TODO"}}]}}]
       (is (= (str "1  Root\n"
                   "22 └── TODO line1\n"
                   "       line2")
@@ -238,7 +241,8 @@
                      :linked-references {:count 2
                                          :blocks [{:db/id 10
                                                    :block/title "Ref A"
-                                                   :block/marker "TODO"
+                                                   :logseq.property/status {:db/ident :logseq.property/status.todo
+                                                                            :block/title "TODO"}
                                                    :block/page {:db/id 100
                                                                 :block/title "Page A"}}
                                                   {:db/id 11
