@@ -84,6 +84,21 @@
    [:created_at :int]
    [:updated_at :int]])
 
+(def graph-member-role-schema
+  [:enum "manager" "member"])
+
+(def graph-member-info-schema
+  [:map
+   [:user_id :string]
+   [:graph_id :string]
+   [:role graph-member-role-schema]
+   [:invited_by {:optional true} [:maybe :string]]
+   [:created_at :int]])
+
+(def graph-members-list-response-schema
+  [:map
+   [:members [:sequential graph-member-info-schema]]])
+
 (def graphs-list-response-schema
   [:map
    [:graphs [:sequential graph-info-schema]]])
@@ -103,6 +118,15 @@
   [:map
    [:graph_id :string]
    [:deleted :boolean]])
+
+(def graph-member-create-request-schema
+  [:map
+   [:user_id :string]
+   [:role {:optional true} graph-member-role-schema]])
+
+(def graph-member-update-request-schema
+  [:map
+   [:role graph-member-role-schema]])
 
 (def tx-batch-request-schema
   [:map
@@ -140,6 +164,8 @@
 
 (def http-request-schemas
   {:graphs/create graph-create-request-schema
+   :graph-members/create graph-member-create-request-schema
+   :graph-members/update graph-member-update-request-schema
    :sync/tx-batch tx-batch-request-schema
    :sync/snapshot-import snapshot-import-request-schema})
 
@@ -148,6 +174,10 @@
    :graphs/create graph-create-response-schema
    :graphs/access graph-access-response-schema
    :graphs/delete graph-delete-response-schema
+   :graph-members/list graph-members-list-response-schema
+   :graph-members/create http-ok-response-schema
+   :graph-members/update http-ok-response-schema
+   :graph-members/delete http-ok-response-schema
    :worker/health http-ok-response-schema
    :sync/health http-ok-response-schema
    :sync/pull pull-ok-schema
