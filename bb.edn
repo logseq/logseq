@@ -209,9 +209,6 @@
   lang:validate-translations
   logseq.tasks.lang/validate-translations
 
-  file-sync:integration-tests
-  logseq.tasks.file-sync/integration-tests
-
   ai:check-common-errors
   logseq.tasks.common-errors/check-common-errors}
 
