@@ -363,7 +363,7 @@
                     (editor-handler/resize-image! config block-id metadata full-text {:width width'})))
                 (reset! *resizing-image? false))))))])))
 
-(rum/defc video-container
+(rum/defc ^:large-vars/cleanup-todo video-container
   [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text]}]
   (let [asset-width (:logseq.property.asset/width asset-block)
         asset-height (:logseq.property.asset/height asset-block)]
