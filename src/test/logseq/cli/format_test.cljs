@@ -103,7 +103,17 @@
                                                   :page "Home"}
                                         :data {:result {:ok true}}}
                                        {:output-format nil})]
-      (is (= "Removed page: Home (repo: demo-repo)" result)))))
+      (is (= "Removed page: Home (repo: demo-repo)" result))))
+
+  (testing "move block renders a succinct success line"
+    (let [result (format/format-result {:status :ok
+                                        :command :move-block
+                                        :context {:repo "demo-repo"
+                                                  :source "source-uuid"
+                                                  :target "target-uuid"}
+                                        :data {:result {:ok true}}}
+                                       {:output-format nil})]
+      (is (= "Moved block: source-uuid -> target-uuid (repo: demo-repo)" result)))))
 
 (deftest test-human-output-graph-import-export
   (testing "graph export renders a succinct success line"
