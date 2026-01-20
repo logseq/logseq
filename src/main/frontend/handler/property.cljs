@@ -41,7 +41,7 @@
     :logseq.property/exclude-from-graph-view :logseq.property/template-applied-to
     :logseq.property/hide-empty-value :logseq.property.class/hide-from-node
     :logseq.property/page-tags :logseq.property.class/extends
-    :logseq.property.class/title-plural
+    :logseq.property.class/bidirectional-property-title
     :logseq.property.class/enable-bidirectional?
     :logseq.property/publishing-public? :logseq.property.user/avatar
     :logseq.property.user/email :logseq.property.user/name})
