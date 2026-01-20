@@ -120,9 +120,13 @@
    [:deleted :boolean]])
 
 (def graph-member-create-request-schema
-  [:map
-   [:user_id :string]
-   [:role {:optional true} graph-member-role-schema]])
+  [:or
+   [:map
+    [:user_id :string]
+    [:role {:optional true} graph-member-role-schema]]
+   [:map
+    [:email :string]
+    [:role {:optional true} graph-member-role-schema]]])
 
 (def graph-member-update-request-schema
   [:map
