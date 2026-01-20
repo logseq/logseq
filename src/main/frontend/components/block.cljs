@@ -199,6 +199,13 @@
             (on-dimensions (.-naturalWidth img) (.-naturalHeight img))))
     (set! (.-src img) url)))
 
+(defn measure-video! [url on-dimensions]
+  (let [video (js/document.createElement "video")]
+    (.addEventListener video "loadedmetadata"
+                       (fn []
+                         (on-dimensions (.-videoWidth video) (.-videoHeight video))))
+    (set! (.-src video) url)))
+
 (defonce *resizing-image? (atom false))
 (rum/defc ^:large-vars/cleanup-todo asset-container
   [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text]}]
@@ -356,6 +363,160 @@
                     (editor-handler/resize-image! config block-id metadata full-text {:width width'})))
                 (reset! *resizing-image? false))))))])))
 
+(rum/defc video-container
+  [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text]}]
+  (let [asset-width (:logseq.property.asset/width asset-block)
+        asset-height (:logseq.property.asset/height asset-block)]
+    (hooks/use-effect!
+     (fn []
+       (when (:block/uuid asset-block)
+         (when-not (or asset-width asset-height)
+           (measure-video!
+            src
+            (fn [width height]
+              (when (nil? (:logseq.property.asset/width asset-block))
+                (property-handler/set-block-properties! (:block/uuid asset-block)
+                                                        {:logseq.property.asset/width width
+                                                         :logseq.property.asset/height height}))))))
+       (fn []))
+     [])
+    (let [*el-ref (rum/use-ref nil)
+          video-src (fs/asset-path-normalize src)
+          src' (when src
+                 (if (or (string/starts-with? src "/")
+                         (string/starts-with? src "~"))
+                   (str "file://" src)
+                   src))
+          get-blockid #(some-> (rum/deref *el-ref) (.closest "[blockid]") (.getAttribute "blockid") (uuid))]
+      [:div.asset-container
+       {:key "resize-video-container"
+        :on-pointer-down util/stop
+        :ref *el-ref}
+       [:video.rounded-sm.relative
+        (merge
+         {:controls true
+          :src src'
+          :title title}
+         (when (and src' metadata)
+           {:style {:width (:width metadata)
+                    :height (:height metadata)}}))]
+       (when (and (not breadcrumb?)
+                  (not positioned?))
+         [:<>
+          (let [handle-copy!
+                (fn [_e]
+                  (-> (util/copy-image-to-clipboard video-src)
+                      (p/then #(notification/show! "Copied!" :success))
+                      (p/catch (fn [error]
+                                 (js/console.error error)))))
+                handle-delete!
+                (fn [_e]
+                  (when-let [block-id (get-blockid)]
+                    (let [*local-selected? (atom local?)]
+                      (-> (shui/dialog-confirm!
+                           [:div.text-xs.opacity-60.-my-2
+                            (when (and local? (not= (:block/uuid asset-block) block-id))
+                              [:label.flex.gap-1.items-center
+                               (shui/checkbox
+                                {:default-checked @*local-selected?
+                                 :on-checked-change #(reset! *local-selected? %)})
+                               (t :asset/physical-delete)])]
+                           {:title (t :asset/confirm-delete (.toLocaleLowerCase (t :text/video)))
+                            :outside-cancel? true})
+                          (p/then (fn []
+                                    (shui/dialog-close!)
+                                    (editor-handler/delete-asset-of-block!
+                                     {:block-id block-id
+                                      :asset-block asset-block
+                                      :local? local?
+                                      :delete-local? @*local-selected?
+                                      :repo (state/get-current-repo)
+                                      :href src
+                                      :title title
+                                      :full-text full-text})))))))]
+            (when asset-block
+              [:.asset-action-bar {:aria-hidden "true"}
+               (shui/dropdown-menu
+                {:on-pointer-down util/stop}
+                (shui/dropdown-menu-trigger
+                 {:as-child true}
+                 (shui/button
+                  {:variant :outline
+                   :size :icon
+                   :class "h-6 w-6"}
+                  (shui/tabler-icon "dots-vertical")))
+                (shui/dropdown-menu-content
+                 (shui/dropdown-menu-item
+                  {:on-click handle-copy!}
+                  [:span.flex.items-center.gap-1
+                   (ui/icon "copy") (t :asset/copy)])
+                 (when (util/electron?)
+                   (shui/dropdown-menu-item
+                    {:on-click (fn [e]
+                                 (util/stop e)
+                                 (if local?
+                                   (ipc/ipc "openFileInFolder" video-src)
+                                   (js/window.apis.openExternal video-src)))}
+                    [:span.flex.items-center.gap-1
+                     (ui/icon "folder-pin") (t (if local? :asset/show-in-folder :asset/open-in-browser))]))
+                 (when-not config/publishing?
+                   [:<>
+                    (shui/dropdown-menu-separator)
+                    (shui/dropdown-menu-item
+                     {:on-click handle-delete!}
+                     [:span.flex.items-center.gap-1.text-red-700
+                      (ui/icon "trash") (t :asset/delete)])])))]))])])))
+
+(rum/defcs resizable-video <
+  (rum/local nil ::size)
+  {:will-unmount (fn [state]
+                   (reset! *resizing-image? false)
+                   state)}
+  [state config title src metadata full-text local?]
+  (let [breadcrumb? (:breadcrumb? config)
+        positioned? (:property-position config)
+        asset-block (:asset-block config)
+        width (:width metadata)
+        *width (get state ::size)
+        width (or @*width width)
+        metadata' (assoc metadata :width width)
+        resizable? (and (not (mobile-util/native-platform?))
+                        (not breadcrumb?)
+                        (not positioned?))
+        video-container-cp (video-container asset-block src title metadata'
+                                            {:breadcrumb? breadcrumb?
+                                             :positioned? positioned?
+                                             :local? local?
+                                             :full-text full-text})]
+    (if (or (:disable-resize? config)
+            (:table-view? config)
+            (not resizable?))
+      video-container-cp
+      [:div.ls-resize-image.rounded-md
+       video-container-cp
+       (resize-image-handles
+        (fn [k ^js event]
+          (let [dx (.-dx event)
+                ^js target (.-target event)]
+
+            (case k
+              :start
+              (let [c (.closest target ".ls-resize-image")]
+                (reset! *width (.-offsetWidth c))
+                (reset! *resizing-image? true))
+              :move
+              (let [width' (+ @*width dx)]
+                (when (or (> width' 60)
+                          (not (neg? dx)))
+                  (reset! *width width')))
+              :end
+              (let [width' @*width]
+                (when (and width' @*resizing-image?)
+                  (when-let [block-id (or (:block/uuid config)
+                                          (some-> config :block (:block/uuid)))]
+                    (editor-handler/resize-image! config block-id metadata full-text {:width width'})))
+                (reset! *resizing-image? false))))))])))
+
 (rum/defc audio-cp
   ([src] (audio-cp src nil))
   ([src ext]
@@ -436,8 +597,7 @@
           (audio-cp @src ext)
 
           (contains? config/video-formats ext)
-          [:video {:src @src
-                   :controls true}]
+          (resizable-video config title @src metadata full_text true)
 
           (contains? (common-config/img-formats) ext)
           (resizable-image config title @src metadata full_text true)
@@ -937,21 +1097,23 @@
                                               {:path-in-sub-atom [repo (str (:block/uuid block))]})
         asset-type (:logseq.property.asset/type block)
         image? (contains? (common-config/img-formats) (keyword asset-type))
+        video? (contains? config/video-formats (keyword asset-type))
         width (get-in block [:logseq.property.asset/resize-metadata :width])
         asset-width (:logseq.property.asset/width block)
         asset-height (:logseq.property.asset/height block)
-        img-metadata (when image?
-                       (let [width (or width 250 asset-width)
-                             aspect-ratio (when (and asset-width asset-height)
-                                            (/ asset-width asset-height))]
-                         (merge
-                          (when width
-                            {:width width})
-                          (when (and width aspect-ratio)
-                            {:height (/ width aspect-ratio)}))))
+        media-metadata (when (or image? video?)
+                         (let [default-width (if video? 500 250)
+                               width (or width default-width asset-width)
+                               aspect-ratio (when (and asset-width asset-height)
+                                              (/ asset-width asset-height))]
+                           (merge
+                            (when width
+                              {:width width})
+                            (when (and width aspect-ratio)
+                              {:height (/ width aspect-ratio)}))))
         img-placeholder (when image?
                           [:div.img-placeholder.asset-container
-                           {:style img-metadata}])]
+                           {:style media-metadata}])]
     (cond
       (or file-exists? asset-file-write-finished?)
       (asset-link (assoc config
@@ -959,7 +1121,7 @@
                          :image-placeholder img-placeholder)
                   (:block/title block)
                   (path/path-join (str "../" common-config/local-assets-dir) file)
-                  img-metadata
+                  media-metadata
                   nil)
       image?
       img-placeholder)))
