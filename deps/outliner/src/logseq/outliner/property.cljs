@@ -804,7 +804,6 @@
 
           :else
           (let [tx-data (build-closed-value-tx @conn property resolved-value opts)]
-            (prn :debug :tx-data tx-data)
             (ldb/transact! conn tx-data {:outliner-op :save-block})
             (when (seq description)
               (if-let [desc-ent (and id (:logseq.property/description (d/entity db [:block/uuid id])))]
