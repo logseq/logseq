@@ -17,6 +17,7 @@
       (is (string/includes? summary "list"))
       (is (string/includes? summary "add"))
       (is (string/includes? summary "remove"))
+      (is (string/includes? summary "move"))
       (is (string/includes? summary "search"))
       (is (string/includes? summary "show"))
       (is (string/includes? summary "graph"))
@@ -60,6 +61,13 @@
       (is (true? (:help? result)))
       (is (string/includes? summary "remove block"))
       (is (string/includes? summary "remove page"))))
+
+  (testing "move command shows help"
+    (let [result (commands/parse-args ["move" "--help"])
+          summary (:summary result)]
+      (is (true? (:help? result)))
+      (is (string/includes? summary "Usage: logseq move"))
+      (is (string/includes? summary "Command options:"))))
 
   (testing "server group shows subcommands"
     (let [result (commands/parse-args ["server"])
@@ -290,7 +298,25 @@
     (let [result (commands/parse-args ["remove" "page" "--page" "Home"])]
       (is (true? (:ok? result)))
       (is (= :remove-page (:command result)))
-      (is (= "Home" (get-in result [:options :page]))))))
+      (is (= "Home" (get-in result [:options :page])))))
+
+  (testing "move requires source selector"
+    (let [result (commands/parse-args ["move" "--target-id" "10"])]
+      (is (false? (:ok? result)))
+      (is (= :missing-source (get-in result [:error :code])))))
+
+  (testing "move requires target selector"
+    (let [result (commands/parse-args ["move" "--id" "1"])]
+      (is (false? (:ok? result)))
+      (is (= :missing-target (get-in result [:error :code])))))
+
+  (testing "move parses with source and target"
+    (let [result (commands/parse-args ["move" "--uuid" "abc" "--target-uuid" "def" "--pos" "last-child"])]
+      (is (true? (:ok? result)))
+      (is (= :move-block (:command result)))
+      (is (= "abc" (get-in result [:options :uuid])))
+      (is (= "def" (get-in result [:options :target-uuid])))
+      (is (= "last-child" (get-in result [:options :pos]))))))
 
 (deftest test-verb-subcommand-parse-search-show
   (testing "search requires text"
@@ -366,6 +392,7 @@
     (doseq [args [["list" "page" "--wat"]
                   ["add" "block" "--wat"]
                   ["remove" "block" "--wat"]
+                  ["move" "--wat"]
                   ["search" "--wat"]
                   ["show" "--wat"]]]
       (let [result (commands/parse-args args)]
@@ -377,30 +404,12 @@
       (is (true? (:ok? result)))
       (is (= "json" (get-in result [:options :output]))))))
 
-(deftest test-build-action
+(deftest test-build-action-graph
   (testing "graph-list uses list-db"
     (let [parsed {:ok? true :command :graph-list :options {}}
           result (commands/build-action parsed {})]
       (is (true? (:ok? result)))
       (is (= :graph-list (get-in result [:action :type])))))
-
-  (testing "server list builds action"
-    (let [parsed {:ok? true :command :server-list :options {}}
-          result (commands/build-action parsed {})]
-      (is (true? (:ok? result)))
-      (is (= :server-list (get-in result [:action :type])))))
-
-  (testing "server start requires repo"
-    (let [parsed {:ok? true :command :server-start :options {}}
-          result (commands/build-action parsed {})]
-      (is (false? (:ok? result)))
-      (is (= :missing-repo (get-in result [:error :code])))))
-
-  (testing "server stop builds action"
-    (let [parsed {:ok? true :command :server-stop :options {:repo "demo"}}
-          result (commands/build-action parsed {})]
-      (is (true? (:ok? result)))
-      (is (= :server-stop (get-in result [:action :type])))))
 
   (testing "graph-create requires repo name"
     (let [parsed {:ok? true :command :graph-create :options {}}
@@ -434,8 +443,28 @@
                   :options {:type "edn" :input "import.edn"}}
           result (commands/build-action parsed {})]
       (is (false? (:ok? result)))
+      (is (= :missing-repo (get-in result [:error :code]))))))
+
+(deftest test-build-action-server
+  (testing "server list builds action"
+    (let [parsed {:ok? true :command :server-list :options {}}
+          result (commands/build-action parsed {})]
+      (is (true? (:ok? result)))
+      (is (= :server-list (get-in result [:action :type])))))
+
+  (testing "server start requires repo"
+    (let [parsed {:ok? true :command :server-start :options {}}
+          result (commands/build-action parsed {})]
+      (is (false? (:ok? result)))
       (is (= :missing-repo (get-in result [:error :code])))))
 
+  (testing "server stop builds action"
+    (let [parsed {:ok? true :command :server-stop :options {:repo "demo"}}
+          result (commands/build-action parsed {})]
+      (is (true? (:ok? result)))
+      (is (= :server-stop (get-in result [:action :type]))))))
+
+(deftest test-build-action-inspect-edit
   (testing "list page requires repo"
     (let [parsed {:ok? true :command :list-page :options {}}
           result (commands/build-action parsed {})]
@@ -477,6 +506,40 @@
           result (commands/build-action parsed {:repo "demo"})]
       (is (false? (:ok? result)))
       (is (= :missing-target (get-in result [:error :code]))))))
+
+(deftest test-build-action-move
+  (testing "move requires source selector"
+    (let [parsed {:ok? true :command :move-block :options {:target-id 2}}
+          result (commands/build-action parsed {:repo "demo"})]
+      (is (false? (:ok? result)))
+      (is (= :missing-source (get-in result [:error :code])))))
+
+  (testing "move requires target selector"
+    (let [parsed {:ok? true :command :move-block :options {:id 1}}
+          result (commands/build-action parsed {:repo "demo"})]
+      (is (false? (:ok? result)))
+      (is (= :missing-target (get-in result [:error :code]))))))
+
+(deftest test-move-parse-validation
+  (testing "move rejects multiple source selectors"
+    (let [result (commands/parse-args ["move" "--id" "1" "--uuid" "abc" "--target-id" "2"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "move rejects multiple target selectors"
+    (let [result (commands/parse-args ["move" "--id" "1" "--target-id" "2" "--target-uuid" "def"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "move rejects invalid position"
+    (let [result (commands/parse-args ["move" "--id" "1" "--target-id" "2" "--pos" "middle"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "move rejects sibling pos for page target"
+    (let [result (commands/parse-args ["move" "--id" "1" "--page-name" "Home" "--pos" "sibling"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code]))))))
 
 (deftest test-execute-requires-existing-graph
   (async done
