@@ -2,7 +2,7 @@
   "Normalize && denormalize eid for sync"
   (:require [datascript.core :as d]))
 
-(defn- remove-retract-entity-ref
+(defn remove-retract-entity-ref
   [tx-data]
   (let [retracted (-> (keep (fn [[op value]]
                               (when (= op :db/retractEntity)
@@ -11,8 +11,7 @@
         retracted-ids (set (map second retracted))]
     (if (seq retracted)
       (remove (fn [item]
-                (and (= :db/retract (first item))
-                     (= 5 (count item))
+                (and (= 5 (count item))
                      (or
                       (contains? retracted (second item))
                       (contains? retracted-ids (second item))
