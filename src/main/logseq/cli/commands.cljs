@@ -125,7 +125,7 @@
         move-sources (filter some? [(:id opts) (some-> (:uuid opts) string/trim)])
         move-targets (filter some? [(:target-id opts)
                                     (some-> (:target-uuid opts) string/trim)
-                                    (some-> (:page-name opts) string/trim)])]
+                                    (some-> (:target-page-name opts) string/trim)])]
     (cond
       (:help opts)
       (command-core/help-result cmd-summary)
@@ -136,6 +136,9 @@
 
       (and (= command :add-block) (not has-content?))
       (missing-content-result summary)
+
+      (and (= command :add-block) (add-command/invalid-options? opts))
+      (command-core/invalid-options-result summary (add-command/invalid-options? opts))
 
       (and (= command :add-page) (not (seq (:page opts))))
       (missing-page-name-result summary)

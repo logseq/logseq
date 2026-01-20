@@ -119,8 +119,17 @@
                 (or (:block/title node) (:block/name node) (str (:block/uuid node))))
         node-id (fn [node]
                   (or (:db/id node) "-"))
-        id-padding (fn [node]
-                     (apply str (repeat (inc (count (str (node-id node)))) " ")))
+        collect-nodes (fn collect-nodes [node]
+                        (if-let [children (:block/children node)]
+                          (into [node] (mapcat collect-nodes children))
+                          [node]))
+        nodes (collect-nodes root)
+        id-width (apply max (map (fn [node] (count (str (node-id node)))) nodes))
+        pad-id (fn [node]
+                 (let [id-str (str (node-id node))
+                       padding (max 0 (- id-width (count id-str)))]
+                   (str id-str (apply str (repeat padding " ")))))
+        id-padding (apply str (repeat (inc id-width) " "))
         split-lines (fn [value]
                       (string/split (or value "") #"\n"))
         lines (atom [])
@@ -134,17 +143,17 @@
                          rows (split-lines (label child))
                          first-row (first rows)
                          rest-rows (rest rows)
-                         line (str (node-id child) " " prefix branch first-row)]
+                         line (str (pad-id child) " " prefix branch first-row)]
                      (swap! lines conj line)
                      (doseq [row rest-rows]
-                       (swap! lines conj (str (id-padding child) next-prefix row)))
+                       (swap! lines conj (str id-padding next-prefix row)))
                      (walk child next-prefix)))))]
     (let [rows (split-lines (label root))
           first-row (first rows)
           rest-rows (rest rows)]
-      (swap! lines conj (str (node-id root) " " first-row))
+      (swap! lines conj (str (pad-id root) " " first-row))
       (doseq [row rest-rows]
-        (swap! lines conj (str (id-padding root) row))))
+        (swap! lines conj (str id-padding row))))
     (walk root "")
     (string/join "\n" @lines)))
 
