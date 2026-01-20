@@ -166,6 +166,23 @@
                   "4 └── Child B")
              (tree->text tree-data))))))
 
+(deftest test-tree->text-aligns-mixed-id-widths
+  (testing "show tree text aligns glyph column with mixed-width ids"
+    (let [tree->text #'show-command/tree->text
+          tree-data {:root {:db/id 7
+                            :block/title "Root"
+                            :block/children [{:db/id 88
+                                              :block/title "Child A"
+                                              :block/children [{:db/id 3
+                                                                :block/title "Grand"}]}
+                                             {:db/id 1000
+                                              :block/title "Child B"}]}}]
+      (is (= (str "7    Root\n"
+                  "88   ├── Child A\n"
+                  "3    │   └── Grand\n"
+                  "1000 └── Child B")
+             (tree->text tree-data))))))
+
 (deftest test-tree->text-multiline
   (testing "show tree text renders multiline blocks under glyph column"
     (let [tree->text #'show-command/tree->text
@@ -271,6 +288,23 @@
       (is (true? (:ok? result)))
       (is (= :add-block (:command result)))
       (is (= "hello" (get-in result [:options :content])))))
+
+  (testing "add block parses with target selectors and pos"
+    (let [result (commands/parse-args ["add" "block"
+                                       "--content" "hello"
+                                       "--target-uuid" "abc"
+                                       "--pos" "first-child"])]
+      (is (true? (:ok? result)))
+      (is (= :add-block (:command result)))
+      (is (= "abc" (get-in result [:options :target-uuid])))
+      (is (= "first-child" (get-in result [:options :pos])))))
+
+  (testing "add block rejects invalid pos"
+    (let [result (commands/parse-args ["add" "block"
+                                       "--content" "hello"
+                                       "--pos" "middle"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
 
   (testing "add page requires page name"
     (let [result (commands/parse-args ["add" "page"])]
@@ -537,7 +571,12 @@
       (is (= :invalid-options (get-in result [:error :code])))))
 
   (testing "move rejects sibling pos for page target"
-    (let [result (commands/parse-args ["move" "--id" "1" "--page-name" "Home" "--pos" "sibling"])]
+    (let [result (commands/parse-args ["move" "--id" "1" "--target-page-name" "Home" "--pos" "sibling"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "move rejects legacy page-name option"
+    (let [result (commands/parse-args ["move" "--id" "1" "--page-name" "Home"])]
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code]))))))
 
