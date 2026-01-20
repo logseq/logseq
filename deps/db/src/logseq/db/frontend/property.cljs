@@ -186,7 +186,7 @@
                                           :schema {:type :string
                                                    :public? true
                                                    :view-context :class}}
-     :logseq.property.class/enable-bidirectional? {:title "Enable bi-directional properties"
+     :logseq.property.class/enable-bidirectional? {:title "Enable bidirectional properties"
                                                    :schema {:type :checkbox
                                                             :public? true
                                                             :view-context :class}
