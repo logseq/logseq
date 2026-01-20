@@ -271,7 +271,7 @@
                      {:tx-id tx-id
                       :tx (:db-sync/normalized-tx-data ent)
                       :reversed-tx (:db-sync/reversed-tx-data ent)})))
-           (vec)))))
+           vec))))
 
 (defn- remove-pending-txs!
   [repo tx-ids]
@@ -541,10 +541,10 @@
      distinct)))
 
 (defn- delete-nodes!
-  [temp-conn local-deleted-blocks tx-meta]
-  (when (seq local-deleted-blocks)
-    (let [pages (filter ldb/page? local-deleted-blocks)
-          blocks (->> local-deleted-blocks
+  [temp-conn deleted-nodes tx-meta]
+  (when (seq deleted-nodes)
+    (let [pages (filter ldb/page? deleted-nodes)
+          blocks (->> deleted-nodes
                       (keep (fn [block]
                               (d/entity @temp-conn [:block/uuid (:block/uuid block)])))
                       (remove ldb/page?))]
@@ -568,64 +568,65 @@
                                                         cycle-tx-report])
                                       tx-meta)))
 
+(defn- get-reverse-tx-data
+  [local-txs]
+  (let [tx-data (->> local-txs
+                     reverse
+                     (mapcat :reversed-tx))
+        retract-block-ids (->> (keep (fn [[op e a _v _t]]
+                                       (when (and (= op :db/retract) (= :block/uuid a))
+                                         e)) tx-data)
+                               set)
+        tx-data' (if (seq retract-block-ids)
+                   (remove (fn [[_op e _a v]]
+                             (or (contains? retract-block-ids e)
+                                 (contains? retract-block-ids v)))
+                           tx-data)
+                   tx-data)]
+
+    (->>
+     tx-data'
+     (concat (map (fn [id] [:db/retractEntity id]) retract-block-ids))
+     keep-last-update)))
+
 (defn- apply-remote-tx!
   [repo client tx-data* & {:keys [local-tx remote-tx]}]
   (if-let [conn (worker-state/get-datascript-conn repo)]
     (let [tx-data (keep-last-update tx-data*)
           local-txs (pending-txs repo)
-          reversed-tx-data (->> local-txs
-                                reverse
-                                (mapcat :reversed-tx)
-                                db-normalize/replace-attr-retract-with-retract-entity
-                                keep-last-update)
+          reversed-tx-data (get-reverse-tx-data local-txs)
           has-local-changes? (seq reversed-tx-data)
           *remote-tx-report (atom nil)
           *reversed-tx-report (atom nil)
           *remote-deleted-ids (atom #{})
+          *rebase-tx-data (atom [])
           tx-report
-          (ldb/transact-with-temp-conn!
-           conn
-           {:rtc-tx? true}
-           (fn [temp-conn _*batch-tx-data]
-             (let [tx-meta {:rtc-tx? true
-                            :temp-conn? true
-                            :gen-undo-ops? false
-                            :persist-op? false}
-                   db @temp-conn
-                   reversed-tx-report (when has-local-changes?
-                                        (ldb/transact! temp-conn reversed-tx-data (assoc tx-meta :op :reverse)))
-                   _ (reset! *reversed-tx-report reversed-tx-report)
-                   ;; 2. transact remote tx-data
-                   remote-deleted-blocks (->> tx-data
-                                              (keep (fn [item]
-                                                      (when (= :db/retractEntity (first item))
-                                                        (d/entity db (second item))))))
-                   remote-deleted-block-ids (set (map :block/uuid remote-deleted-blocks))
-                   remote-tx-report (let [tx-meta (assoc tx-meta :op :transact-remote-tx-data)]
-                                      (if has-local-changes?
-                                        (let [tx-data (->> tx-data
-                                                           (remove (fn [item]
-                                                                     (or (= :db/retractEntity (first item))
-                                                                         (contains? remote-deleted-block-ids (get-lookup-id (last item))))))
-                                                           seq)]
-                                          (ldb/transact! temp-conn tx-data tx-meta))
-                                        (ldb/transact! temp-conn tx-data tx-meta)))
-                   _ (reset! *remote-tx-report remote-tx-report)
-                   remote-received-tx-data (when remote-tx-report (sync-compare/filter-received-tx-data remote-tx-report tx-data))
-                   remote-applied-tx-data (when remote-tx-report (sync-compare/filter-applied-tx-data remote-tx-report))]
-               ;; (when (not= remote-received-tx-data remote-applied-tx-data)
-               ;;   (prn :diff-tx-data-mismatch
-               ;;        (data/diff remote-received-tx-data remote-applied-tx-data))
-               ;;   (fail-fast :db-sync/compare-tx-data-mismatch
-               ;;              {:repo repo
-               ;;               :tx-data tx-data
-               ;;               :remote-received-tx-data remote-received-tx-data
-               ;;               :remote-applied-tx-data remote-applied-tx-data
-               ;;               :local-tx local-tx
-               ;;               :remote-tx remote-tx
-               ;;               :tempids (:tempids remote-tx-report)}))
-
-               (when has-local-changes?
+          (if has-local-changes?
+            (ldb/transact-with-temp-conn!
+             conn
+             {:rtc-tx? true}
+             (fn [temp-conn _*batch-tx-data]
+               (let [tx-meta {:rtc-tx? true
+                              :temp-conn? true
+                              :gen-undo-ops? false
+                              :persist-op? false}
+                     db @temp-conn
+                     reversed-tx-report (ldb/transact! temp-conn reversed-tx-data (assoc tx-meta :op :reverse))
+                     _ (reset! *reversed-tx-report reversed-tx-report)
+                     ;; 2. transact remote tx-data
+                     remote-deleted-blocks (->> tx-data
+                                                (keep (fn [item]
+                                                        (when (= :db/retractEntity (first item))
+                                                          (d/entity db (second item))))))
+                     remote-deleted-block-ids (set (map :block/uuid remote-deleted-blocks))
+                     remote-tx-report (let [tx-meta (assoc tx-meta :op :transact-remote-tx-data)
+                                            tx-data (->> tx-data
+                                                         (remove (fn [item]
+                                                                   (or (= :db/retractEntity (first item))
+                                                                       (contains? remote-deleted-block-ids (get-lookup-id (last item))))))
+                                                         seq)]
+                                        (ldb/transact! temp-conn tx-data tx-meta))
+                     _ (reset! *remote-tx-report remote-tx-report)]
                  (let [local-deleted-blocks (get-local-deleted-blocks reversed-tx-report reversed-tx-data)
                        _ (when (seq remote-deleted-blocks)
                            (reset! *remote-deleted-ids (set (map :block/uuid remote-deleted-blocks))))
@@ -642,27 +643,31 @@
                        db @temp-conn
                        deleted-nodes (keep (fn [id] (d/entity db [:block/uuid id])) deleted-ids)]
                    (delete-nodes! temp-conn deleted-nodes (assoc tx-meta :op :delete-blocks))
-                   (fix-tx! temp-conn remote-tx-report rebase-tx-report (assoc tx-meta :op :fix))))))
-           {:filter-tx-data (fn [_temp-db tx-data]
-                              (->> tx-data
-                                   db-normalize/replace-attr-retract-with-retract-entity
-                                   keep-last-update))})
+                   (fix-tx! temp-conn remote-tx-report rebase-tx-report (assoc tx-meta :op :fix)))))
+             {:listen-db (fn [{:keys [tx-meta tx-data]}]
+                           (when-not (contains? #{:reverse :transact-remote-tx-data} (:op tx-meta))
+                             (swap! *rebase-tx-data into tx-data)))})
+            (ldb/transact! conn tx-data {:rtc-tx? true}))
           remote-tx-report @*remote-tx-report]
 
       ;; persist rebase tx to client ops
       (when has-local-changes?
-        (when-let [tx-data (:tx-data tx-report)]
+        (when-let [tx-data (seq @*rebase-tx-data)]
           (let [remote-tx-data-set (set tx-data*)
                 normalized (->> tx-data
                                 (normalize-tx-data (:db-after tx-report)
-                                                   (or (:db-before remote-tx-report)
-                                                       (:db-after @*reversed-tx-report))))
+                                                   (or (:db-after remote-tx-report)
+                                                       (:db-after @*reversed-tx-report)))
+                                keep-last-update
+                                (remove (fn [[op _e a]]
+                                          (and (= op :db/retract)
+                                               (contains? #{:block/updated-at :block/created-at :block/title} a)))))
                 normalized-tx-data (remove remote-tx-data-set normalized)
                 reversed-datoms (reverse-tx-data tx-data)]
-           ;; (prn :debug :normalized-tx-data normalized-tx-data)
-           ;; (prn :debug :remote-tx-data remote-tx-data-set)
-           ;; (prn :debug :diff (data/diff remote-tx-data-set
-           ;;                              (set normalized)))
+            ;; (prn :debug :normalized-tx-data normalized-tx-data)
+            ;; (prn :debug :remote-tx-data remote-tx-data-set)
+            ;; (prn :debug :diff (data/diff remote-tx-data-set
+            ;;                              (set normalized)))
             (remove-pending-txs! repo (map :tx-id local-txs))
             (when (seq normalized-tx-data)
               (persist-local-tx! repo normalized-tx-data reversed-datoms {:op :rtc-rebase})))))
@@ -838,6 +843,8 @@
     (when (and db (seq tx-data'))
       (let [normalized (normalize-tx-data db-after db-before tx-data')
             reversed-datoms (reverse-tx-data tx-data)]
+        ;; (prn :debug :tx-data tx-data'
+        ;;      :normalized (normalize-tx-data db-after db-before tx-data'))
         (persist-local-tx! repo normalized reversed-datoms tx-meta)
         (when-let [client @worker-state/*db-sync-client]
           (when (= repo (:repo client))
