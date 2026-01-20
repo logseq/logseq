@@ -160,14 +160,17 @@
   "Pick which node in the cycle to detach.
 
   Preference:
-  1) touched by local rebase
-  2) touched by remote
-  3) first node"
+  1) touched by local rebase (prefer remote value)
+  2) untouched by remote/local (keep remote value)
+  3) touched by remote
+  4) first node"
   [cycle {:keys [local-touched remote-touched]}]
   (let [nodes (vec (distinct (butlast cycle)))
         local?  (fn [e] (contains? (or local-touched #{}) e))
-        remote? (fn [e] (contains? (or remote-touched #{}) e))]
+        remote? (fn [e] (contains? (or remote-touched #{}) e))
+        untouched? (fn [e] (and (not (local? e)) (not (remote? e))))]
     (or (some (fn [e] (when (local? e) e)) nodes)
+        (some (fn [e] (when (untouched? e) e)) nodes)
         (some (fn [e] (when (remote? e) e)) nodes)
         (first nodes))))
 
