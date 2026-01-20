@@ -397,9 +397,7 @@
          {:controls true
           :src src'
           :title title}
-         (when (and src' metadata)
-           {:style {:width (:width metadata)
-                    :height (:height metadata)}}))]
+         metadata)]
        (when (and (not breadcrumb?)
                   (not positioned?))
          [:<>

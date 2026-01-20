@@ -1187,9 +1187,6 @@ html.is-mac {
     }
   }
 
-  video {
-    @apply w-full h-auto;
-  }
 }
 
 .recent-block {
