@@ -18,6 +18,11 @@ class_name = "SyncIndexDO"
 binding = "LOGSEQ_SYNC_ASSETS"
 bucket_name = "logseq-sync-assets-dev"
 
+[[d1_databases]]
+binding = "DB"
+database_name = "logseq-sync-graph-meta-dev"
+database_id = "c020574a-5623-407b-be0c-cd192bab9545"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = [ "SyncDO", "SyncIndexDO" ]
@@ -50,3 +55,8 @@ new_sqlite_classes = [ "SyncDO", "SyncIndexDO" ]
 [[env.staging.r2_buckets]]
 binding = "LOGSEQ_SYNC_ASSETS"
 bucket_name = "logseq-sync-assets-dev"
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "logseq-sync-graph-meta-staging"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
