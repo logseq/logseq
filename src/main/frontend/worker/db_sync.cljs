@@ -10,14 +10,12 @@
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [logseq.db-sync.compare :as sync-compare]
             [logseq.db-sync.cycle :as sync-cycle]
             [logseq.db-sync.malli-schema :as db-sync-schema]
             [logseq.db-sync.order :as sync-order]
             [logseq.db.common.normalize :as db-normalize]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.core :as outliner-core]
-            [logseq.outliner.pipeline :as outliner-pipeline]
             [logseq.outliner.transaction :as outliner-tx]
             [promesa.core :as p]))
 
@@ -327,10 +325,11 @@
                 (let [tx-ids (mapv :tx-id batch)
                       txs (mapcat :tx batch)
                       tx-data (->> txs
+                                   db-normalize/remove-retract-entity-ref
                                    keep-last-update
                                    distinct)]
                   ;; (prn :debug :before-keep-last-update txs)
-                  ;; (prn :debug :upload :tx-data tx-data)
+                  (prn :debug :upload :tx-data tx-data)
                   (when (seq txs)
                     (reset! (:inflight client) tx-ids)
                     (send! ws {:type "tx/batch"
