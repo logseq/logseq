@@ -37,7 +37,195 @@
       nil)))
 
 (def ^:private tree-block-selector
-  [:db/id :block/uuid :block/title :block/order {:block/parent [:db/id]}])
+  [:db/id
+   :block/uuid
+   :block/title
+   :block/marker
+   :block/order
+   {:block/parent [:db/id]}
+   {:block/tags [:db/id :block/name :block/title :block/uuid]}])
+
+(def ^:private linked-ref-selector
+  [:db/id
+   :block/uuid
+   :block/title
+   :block/marker
+   {:block/tags [:db/id :block/name :block/title :block/uuid]}
+   {:block/page [:db/id :block/name :block/title :block/uuid]}
+   {:block/parent [:db/id
+                   :block/name
+                   :block/title
+                   :block/uuid
+                   {:block/page [:db/id :block/name :block/title :block/uuid]}]}])
+
+(declare tree->text)
+
+(def ^:private uuid-ref-pattern #"\[\[([0-9a-fA-F-]{36})\]\]")
+
+(defn- tag-label
+  [tag]
+  (or (:block/title tag)
+      (:block/name tag)
+      (some-> (:block/uuid tag) str)))
+
+(defn- replace-uuid-refs
+  [value uuid->label]
+  (if (and (string? value) (seq uuid->label))
+    (string/replace value uuid-ref-pattern
+                    (fn [[_ id]]
+                      (if-let [label (get uuid->label (string/lower-case id))]
+                        (str "[[" label "]]")
+                        (str "[[" id "]]"))))
+    value))
+
+(defn- tags->suffix
+  [tags]
+  (let [labels (->> tags
+                    (map tag-label)
+                    (remove string/blank?))]
+    (when (seq labels)
+      (string/join " " (map #(str "#" %) labels)))))
+
+(defn- block-label
+  [node]
+  (let [title (:block/title node)
+        marker (:block/marker node)
+        uuid->label (:uuid->label node)
+        base (cond
+               (and title (seq marker)) (str marker " " title)
+               title title
+               (:block/name node) (:block/name node)
+               (:block/uuid node) (some-> (:block/uuid node) str))
+        base (replace-uuid-refs base uuid->label)
+        tags-suffix (tags->suffix (:block/tags node))]
+    (cond
+      (and base tags-suffix) (str base " " tags-suffix)
+      tags-suffix tags-suffix
+      :else base)))
+
+(defn- page-label
+  [block]
+  (let [page (:block/page block)]
+    (or (:block/title page)
+        (:block/name page)
+        (some-> (:block/uuid page) str)
+        (some-> (:block/uuid block) str))))
+
+(defn- fetch-linked-references
+  [config repo root-id]
+  (p/let [refs (transport/invoke config :thread-api/get-block-refs false [repo root-id])
+          ref-ids (vec (keep :db/id refs))
+          pulled (if (seq ref-ids)
+                   (p/all (map (fn [id]
+                                 (transport/invoke config :thread-api/pull false [repo linked-ref-selector id]))
+                               ref-ids))
+                   [])]
+    (let [blocks (vec (remove nil? pulled))
+          page-id-from (fn [block]
+                         (let [page (:block/page block)
+                               parent (:block/parent block)
+                               parent-page (:block/page parent)]
+                           (or (when (map? page) (:db/id page))
+                               (when (number? page) page)
+                               (when (map? parent-page) (:db/id parent-page))
+                               (when (number? parent-page) parent-page)
+                               (when (map? parent) (:db/id parent)))))
+          page-ids (->> blocks
+                        (keep page-id-from)
+                        distinct
+                        vec)]
+      (p/let [pages (if (seq page-ids)
+                      (p/all (map (fn [id]
+                                    (transport/invoke config :thread-api/pull false
+                                                      [repo [:db/id :block/name :block/title :block/uuid] id]))
+                                  page-ids))
+                      [])]
+        (let [page-id->page (zipmap page-ids pages)
+              blocks (mapv (fn [block]
+                             (let [page (:block/page block)
+                                   parent (:block/parent block)
+                                   parent-page (:block/page parent)
+                                   page-id (page-id-from block)
+                                   page (or (when (map? page)
+                                              (select-keys page [:db/id :block/name :block/title :block/uuid]))
+                                            (when (map? parent-page)
+                                              (select-keys parent-page [:db/id :block/name :block/title :block/uuid]))
+                                            (get page-id->page page-id)
+                                            (when (map? parent)
+                                              (select-keys parent [:db/id :block/name :block/title :block/uuid]))
+                                            (when (or (:block/title block) (:block/name block) (:block/uuid block))
+                                              (select-keys block [:db/id :block/name :block/title :block/uuid])))]
+                               (cond-> (dissoc block :block/parent)
+                                 page (assoc :block/page page))))
+                           blocks)]
+          {:count (count blocks)
+           :blocks blocks})))))
+
+(defn- linked-refs->text
+  [blocks uuid->label]
+  (let [page-key (fn [block]
+                   (let [page (:block/page block)]
+                     (or (:db/id page)
+                         (:block/uuid page)
+                         (page-label block))))
+        page-node (fn [block]
+                    (let [page (:block/page block)]
+                      (cond
+                        (map? page) page
+                        (some? page) {:db/id page}
+                        :else {})))
+        groups (->> blocks
+                    (group-by page-key)
+                    (sort-by (fn [[_ page-blocks]]
+                               (page-label (first page-blocks)))))]
+    (string/join
+     "\n\n"
+     (map (fn [[_ page-blocks]]
+            (let [root (page-node (first page-blocks))
+                  root (assoc root :block/children (vec page-blocks))]
+              (tree->text {:root root :uuid->label uuid->label})))
+          groups))))
+
+(defn- extract-uuid-refs
+  [value]
+  (->> (re-seq uuid-ref-pattern (or value ""))
+       (map second)
+       (filter common-util/uuid-string?)
+       distinct))
+
+(defn- collect-uuid-refs
+  [{:keys [root]} linked-refs]
+  (let [collect-nodes (fn collect-nodes [node]
+                        (if-let [children (:block/children node)]
+                          (into [node] (mapcat collect-nodes children))
+                          [node]))
+        nodes (when root (collect-nodes root))
+        ref-blocks (:blocks linked-refs)
+        pages (keep :block/page ref-blocks)
+        texts (->> (concat nodes ref-blocks pages)
+                   (mapcat (fn [node] (keep node [:block/title :block/name])))
+                   (remove string/blank?))]
+    (->> texts
+         (mapcat extract-uuid-refs)
+         distinct
+         vec)))
+
+(defn- fetch-uuid-labels
+  [config repo uuid-strings]
+  (if (seq uuid-strings)
+    (p/let [blocks (p/all (map (fn [uuid-str]
+                                 (transport/invoke config :thread-api/pull false
+                                                   [repo [:block/uuid :block/title :block/name]
+                                                    [:block/uuid (uuid uuid-str)]]))
+                               uuid-strings))]
+      (->> blocks
+           (remove nil?)
+           (map (fn [block]
+                  (let [uuid-str (some-> (:block/uuid block) str)]
+                    [(string/lower-case uuid-str)
+                     (or (:block/title block) (:block/name block) uuid-str)])))
+           (into {})))
+    (p/resolved {})))
 
 (defn- fetch-blocks-for-page
   [config repo page-id]
@@ -69,7 +257,9 @@
     (cond
       (some? id)
       (p/let [entity (transport/invoke config :thread-api/pull false
-                                       [repo [:db/id :block/name :block/uuid :block/title {:block/page [:db/id :block/title]}] id])]
+                                       [repo [:db/id :block/name :block/uuid :block/title :block/marker
+                                              {:block/page [:db/id :block/title]}
+                                              {:block/tags [:db/id :block/name :block/title :block/uuid]}] id])]
         (if-let [page-id (get-in entity [:block/page :db/id])]
           (p/let [blocks (fetch-blocks-for-page config repo page-id)
                   children (build-tree blocks (:db/id entity) max-depth)]
@@ -84,12 +274,16 @@
       (if-not (common-util/uuid-string? uuid-str)
         (p/rejected (ex-info "block must be a uuid" {:code :invalid-block}))
         (p/let [entity (transport/invoke config :thread-api/pull false
-                                         [repo [:db/id :block/name :block/uuid :block/title {:block/page [:db/id :block/title]}]
+                                         [repo [:db/id :block/name :block/uuid :block/title :block/marker
+                                                {:block/page [:db/id :block/title]}
+                                                {:block/tags [:db/id :block/name :block/title :block/uuid]}]
                                           [:block/uuid (uuid uuid-str)]])
                 entity (if (:db/id entity)
                          entity
                          (transport/invoke config :thread-api/pull false
-                                           [repo [:db/id :block/name :block/uuid :block/title {:block/page [:db/id :block/title]}]
+                                           [repo [:db/id :block/name :block/uuid :block/title :block/marker
+                                                  {:block/page [:db/id :block/title]}
+                                                  {:block/tags [:db/id :block/name :block/title :block/uuid]}]
                                             [:block/uuid uuid-str]]))]
           (if-let [page-id (get-in entity [:block/page :db/id])]
             (p/let [blocks (fetch-blocks-for-page config repo page-id)
@@ -103,7 +297,9 @@
 
       (seq page-name)
       (p/let [page-entity (transport/invoke config :thread-api/pull false
-                                            [repo [:db/id :block/uuid :block/title] [:block/name page-name]])]
+                                            [repo [:db/id :block/uuid :block/title :block/marker
+                                                   {:block/tags [:db/id :block/name :block/title :block/uuid]}]
+                                             [:block/name page-name]])]
         (if-let [page-id (:db/id page-entity)]
           (p/let [blocks (fetch-blocks-for-page config repo page-id)
                   children (build-tree blocks page-id max-depth)]
@@ -114,9 +310,9 @@
       (p/rejected (ex-info "block or page required" {:code :missing-target})))))
 
 (defn tree->text
-  [{:keys [root]}]
+  [{:keys [root uuid->label]}]
   (let [label (fn [node]
-                (or (:block/title node) (:block/name node) (str (:block/uuid node))))
+                (or (block-label (assoc node :uuid->label uuid->label)) "-"))
         node-id (fn [node]
                   (or (:db/id node) "-"))
         collect-nodes (fn collect-nodes [node]
@@ -157,6 +353,18 @@
     (walk root "")
     (string/join "\n" @lines)))
 
+(defn- tree->text-with-linked-refs
+  [{:keys [linked-references uuid->label] :as tree-data}]
+  (let [tree-text (tree->text tree-data)
+        refs (:blocks linked-references)
+        count (:count linked-references)]
+    (if (seq refs)
+      (str tree-text
+           "\n\n"
+           "Linked References (" count ")\n"
+           (linked-refs->text refs uuid->label))
+      tree-text)))
+
 (defn build-action
   [options repo]
   (if-not (seq repo)
@@ -182,6 +390,15 @@
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
               tree-data (fetch-tree cfg action)
+              root-id (get-in tree-data [:root :db/id])
+              linked-refs (if root-id
+                            (fetch-linked-references cfg (:repo action) root-id)
+                            {:count 0 :blocks []})
+              uuid-refs (collect-uuid-refs tree-data linked-refs)
+              uuid->label (fetch-uuid-labels cfg (:repo action) uuid-refs)
+              tree-data (assoc tree-data
+                               :linked-references linked-refs
+                               :uuid->label uuid->label)
               format (:format action)]
         (case format
           "edn"
@@ -195,4 +412,4 @@
            :output-format :json}
 
           {:status :ok
-           :data {:message (tree->text tree-data)}}))))
+           :data {:message (tree->text-with-linked-refs tree-data)}}))))
