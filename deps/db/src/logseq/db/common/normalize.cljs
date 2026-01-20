@@ -7,27 +7,31 @@
   (let [retracted (-> (keep (fn [[op value]]
                               (when (= op :db/retractEntity)
                                 value)) tx-data)
-                      set)]
+                      set)
+        retracted-ids (set (map second retracted))]
     (if (seq retracted)
       (remove (fn [item]
                 (and (= :db/retract (first item))
                      (= 5 (count item))
-                     (contains? retracted (nth item 3)))) tx-data)
+                     (or
+                      (contains? retracted (second item))
+                      (contains? retracted-ids (second item))
+                      (contains? retracted (nth item 3))
+                      (contains? retracted-ids (nth item 3))))) tx-data)
       tx-data)))
 
 (defn replace-attr-retract-with-retract-entity-v2
   [normalized-tx-data]
-  (->
-   (map (fn [[op eid a v t]]
-          (cond
-            (and (= op :db/retract) (= a :block/uuid))
-            [:db/retractEntity eid]
-            (and a (some? v))
-            [op eid a v t]
-            :else
-            [op eid]))
-        normalized-tx-data)
-   remove-retract-entity-ref))
+  (->> normalized-tx-data
+       (map (fn [[op eid a v t]]
+              (cond
+                (and (= op :db/retract) (= a :block/uuid))
+                [:db/retractEntity eid]
+                (and a (some? v))
+                [op eid a v t]
+                :else
+                [op eid])))
+       remove-retract-entity-ref))
 
 (defn replace-attr-retract-with-retract-entity
   [tx-data]
@@ -48,6 +52,14 @@
     (if-let [id (:block/uuid entity)]
       [:block/uuid id]
       (:db/ident entity))))
+
+(defn eid->tempid
+  [db e]
+  (when-let [entity (d/entity db e)]
+    (when-let [id (if-let [id (:block/uuid entity)]
+                    id
+                    (:db/ident entity))]
+      (str id))))
 
 (defn- sort-datoms
   "Properties first"
@@ -77,7 +89,7 @@
                   e' (if retract?
                        (eid->lookup db-before e)
                        (or (eid->lookup db-before e)
-                           (- e)))
+                           (eid->tempid db-after e)))
                   v' (if (and (integer? v)
                               (pos? v)
                               (or (= :db.type/ref (:db/valueType (d/entity db-after a)))
@@ -85,7 +97,7 @@
                        (if retract?
                          (eid->lookup db-before v)
                          (or (eid->lookup db-before v)
-                             (- v)))
+                             (eid->tempid db-after v)))
                        v)]
               (when (and (some? e') (some? v'))
                 (if added
