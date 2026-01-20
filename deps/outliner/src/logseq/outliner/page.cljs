@@ -5,6 +5,7 @@
             [datascript.impl.entity :as de]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.namespace :as ns-util]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
@@ -67,9 +68,12 @@
                                         (map (fn [d] [:db/retract (:e d) (:a d)]) datoms))
                                       (map (fn [d] [:db/retractEntity (:e d)])
                                            (d/datoms @conn :avet :logseq.property.history/property (:db/ident page)))))
-                delete-page-tx (concat (db-refs->page page)
-                                       delete-property-tx
-                                       [[:db/retractEntity (:db/id page)]])
+                today-page? (when-let [day (:block/journal-day page)]
+                              (= (date-time-util/ms->journal-day (js/Date.)) day))
+                delete-page-tx (when-not today-page?
+                                 (concat (db-refs->page page)
+                                         delete-property-tx
+                                         [[:db/retractEntity (:db/id page)]]))
                 restore-class-parent-tx (->> (filter ldb/class? (:logseq.property.class/_extends page))
                                              (map (fn [p]
                                                     {:db/id (:db/id p)

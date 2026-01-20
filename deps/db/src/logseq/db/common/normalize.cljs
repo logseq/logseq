@@ -3,9 +3,10 @@
   (:require [datascript.core :as d]))
 
 (defn remove-retract-entity-ref
-  [tx-data]
+  [db tx-data]
   (let [retracted (-> (keep (fn [[op value]]
-                              (when (= op :db/retractEntity)
+                              (when (and (= op :db/retractEntity)
+                                         (nil? (d/entity db value)))
                                 value)) tx-data)
                       set)
         retracted-ids (set (map second retracted))]
@@ -20,7 +21,7 @@
       tx-data)))
 
 (defn replace-attr-retract-with-retract-entity-v2
-  [normalized-tx-data]
+  [db normalized-tx-data]
   (->> normalized-tx-data
        (map (fn [[op eid a v t]]
               (cond
@@ -30,7 +31,7 @@
                 [op eid a v t]
                 :else
                 [op eid])))
-       remove-retract-entity-ref))
+       (remove-retract-entity-ref db)))
 
 (defn replace-attr-retract-with-retract-entity
   [tx-data]
@@ -103,5 +104,5 @@
                   [:db/add e' a v' t]
                   [:db/retract e' a v' t])))
             d)))
-       remove-retract-entity-ref
+       (remove-retract-entity-ref db-after)
        distinct))
