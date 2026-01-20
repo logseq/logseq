@@ -286,6 +286,47 @@
                      (is false (str "unexpected error: " e))
                      (done)))))))
 
+(deftest test-cli-show-linked-references
+  (async done
+    (let [data-dir (node-helper/create-tmp-dir "db-worker-linked-refs")]
+      (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                  _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                  _ (run-cli ["graph" "create" "--repo" "linked-refs-graph"] data-dir cfg-path)
+                  _ (run-cli ["--repo" "linked-refs-graph" "add" "page" "--page" "TargetPage"] data-dir cfg-path)
+                  _ (run-cli ["--repo" "linked-refs-graph" "add" "page" "--page" "SourcePage"] data-dir cfg-path)
+                  list-page-result (run-cli ["--repo" "linked-refs-graph" "list" "page" "--expand"]
+                                            data-dir cfg-path)
+                  list-page-payload (parse-json-output list-page-result)
+                  page-item (some (fn [item]
+                                    (when (= "TargetPage" (or (:block/title item) (:title item)))
+                                      item))
+                                  (get-in list-page-payload [:data :items]))
+                  page-id (or (:db/id page-item) (:id page-item))
+                  blocks-edn (str "[{:block/title \"Ref to TargetPage\" :block/refs [{:db/id " page-id "}]}]")
+                  _ (run-cli ["--repo" "linked-refs-graph" "add" "block" "--target-page-name" "SourcePage"
+                              "--blocks" blocks-edn] data-dir cfg-path)
+                  show-result (run-cli ["--repo" "linked-refs-graph" "show" "--page-name" "TargetPage" "--format" "json"]
+                                       data-dir cfg-path)
+                  show-payload (parse-json-output show-result)
+                  linked (get-in show-payload [:data :linked-references])
+                  ref-block (first (:blocks linked))
+                  stop-result (run-cli ["server" "stop" "--repo" "linked-refs-graph"] data-dir cfg-path)
+                  stop-payload (parse-json-output stop-result)]
+            (is (= "ok" (:status show-payload)))
+            (is (some? page-id))
+            (is (map? linked))
+            (is (pos? (:count linked)))
+            (is (seq (:blocks linked)))
+            (is (some? ref-block))
+            (is (some? (or (:block/uuid ref-block) (:uuid ref-block))))
+            (is (some? (or (get-in ref-block [:page :title])
+                           (get-in ref-block [:page :name]))))
+            (is (= "ok" (:status stop-payload)))
+            (done))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))
+                     (done)))))))
+
 (deftest test-cli-graph-export-import-edn
   (async done
     (let [data-dir (node-helper/create-tmp-dir "db-worker-export-edn")]
