@@ -594,6 +594,9 @@
   (if-let [conn (worker-state/get-datascript-conn repo)]
     (let [tx-data (keep-last-update tx-data*)
           local-txs (pending-txs repo)
+          _ (prn :debug :repo repo
+                 :pending-txs-count (count local-txs)
+                 :pending-txs (map :tx-id local-txs))
           reversed-tx-data (get-reverse-tx-data local-txs)
           has-local-changes? (seq reversed-tx-data)
           *remote-tx-report (atom nil)
@@ -676,9 +679,9 @@
             ;; (prn :debug :remote-tx-data remote-tx-data-set)
             ;; (prn :debug :diff (data/diff remote-tx-data-set
             ;;                              (set normalized)))
-            (remove-pending-txs! repo (map :tx-id local-txs))
             (when (seq normalized-tx-data)
-              (persist-local-tx! repo normalized-tx-data reversed-datoms {:op :rtc-rebase})))))
+              (persist-local-tx! repo normalized-tx-data reversed-datoms {:op :rtc-rebase}))))
+        (remove-pending-txs! repo (map :tx-id local-txs)))
 
       (when tx-report
         (let [asset-uuids (asset-uuids-from-tx (:db-after remote-tx-report) (:tx-data remote-tx-report))]
@@ -845,28 +848,29 @@
 
 (defn enqueue-local-tx!
   [repo {:keys [tx-meta tx-data db-after db-before]}]
-  (let [conn (worker-state/get-datascript-conn repo)
-        db (some-> conn deref)
+  (when-not (:rtc-tx? tx-meta)
+    (let [conn (worker-state/get-datascript-conn repo)
+          db (some-> conn deref)
         ;; FIXME: all ignored properties
-        tx-data' (remove (fn [d] (contains? #{:logseq.property.embedding/hnsw-label-updated-at :block/tx-id} (:a d))) tx-data)]
-    (when (and db (seq tx-data'))
-      (let [normalized (normalize-tx-data db-after db-before tx-data')
-            reversed-datoms (reverse-tx-data tx-data)]
+          tx-data' (remove (fn [d] (contains? #{:logseq.property.embedding/hnsw-label-updated-at :block/tx-id} (:a d))) tx-data)]
+      (when (and db (seq tx-data'))
+        (let [normalized (normalize-tx-data db-after db-before tx-data')
+              reversed-datoms (reverse-tx-data tx-data)]
         ;; (prn :debug :tx-data tx-data'
         ;;      :normalized (normalize-tx-data db-after db-before tx-data'))
-        (persist-local-tx! repo normalized reversed-datoms tx-meta)
-        (when-let [client @worker-state/*db-sync-client]
-          (when (= repo (:repo client))
-            (let [send-queue (:send-queue client)]
-              (swap! send-queue
-                     (fn [prev]
-                       (p/then prev
-                               (fn [_]
-                                 (when-let [current @worker-state/*db-sync-client]
-                                   (when (= repo (:repo current))
-                                     (when-let [ws (:ws current)]
-                                       (when (ws-open? ws)
-                                         (flush-pending! repo current))))))))))))))))
+          (persist-local-tx! repo normalized reversed-datoms tx-meta)
+          (when-let [client @worker-state/*db-sync-client]
+            (when (= repo (:repo client))
+              (let [send-queue (:send-queue client)]
+                (swap! send-queue
+                       (fn [prev]
+                         (p/then prev
+                                 (fn [_]
+                                   (when-let [current @worker-state/*db-sync-client]
+                                     (when (= repo (:repo current))
+                                       (when-let [ws (:ws current)]
+                                         (when (ws-open? ws)
+                                           (flush-pending! repo current)))))))))))))))))
 
 (defn handle-local-tx!
   [repo {:keys [tx-data tx-meta] :as tx-report}]

@@ -156,7 +156,8 @@
       (when (< local-tx server-t)
         (let [tx (->> (server-pull server local-tx)
                       (mapcat :tx))]
-          (prn :debug :apply-remote-tx :repo repo)
+          (prn :debug :apply-remote-tx :repo repo
+               :tx tx)
           (#'db-sync/apply-remote-tx! repo client tx)
           (client-op/update-local-tx repo server-t)
           (reset! progress? true)))
@@ -166,6 +167,7 @@
         (when (and (seq pending) (= local-tx' server-t'))
           (let [tx-data (build-upload-tx conn pending)
                 tx-ids (mapv :tx-id pending)]
+            (prn :debug :upload :repo repo :tx-data tx-data)
             (when (seq tx-data)
               (server-upload! server local-tx' tx-data)
               (#'db-sync/remove-pending-txs! repo tx-ids)
@@ -328,6 +330,7 @@
       (swap! state update :blocks disj (:block/uuid block))
       {:op :delete-block :uuid (:block/uuid block)})))
 
+;; TODO: add tag/property/migrate/undo/redo ops
 (def ^:private op-table
   [{:name :create-page :weight 6 :f op-create-page!}
    {:name :delete-page :weight 2 :f op-delete-page!}
@@ -449,8 +452,9 @@
                          {:repo repo-b :conn conn-b :client client-b :online? true}
                          {:repo repo-c :conn conn-c :client client-c :online? true}]
                 ;; FIXME:
-                ;; run-ops-opts {:pick-op-opts {:disable-ops #{:move-block}}}
-                run-ops-opts {}]
+                run-ops-opts {:pick-op-opts {:disable-ops #{:move-block}}}
+                ;; run-ops-opts {}
+                ]
             (prn :debug :phase-a)
             ;; Phase A: all online
             (dotimes [_ 60]
@@ -464,12 +468,12 @@
             (let [clients-phase-b [{:repo repo-a :conn conn-a :client client-a :online? true}
                                    {:repo repo-b :conn conn-b :client client-b :online? true}
                                    {:repo repo-c :conn conn-c :client client-c :online? false}]]
-              (dotimes [_ 40]
+              (dotimes [_ 100]
                 (let [client (rand-nth! rng (subvec (vec clients-phase-b) 0 2))
                       state (get repo->state (:repo client))]
                   (run-ops! rng (assoc client :base-uuid base-uuid :state state) 1 history run-ops-opts)
                   (sync-loop! server clients-phase-b)))
-              (dotimes [_ 20]
+              (dotimes [_ 100]
                 (run-ops! rng {:client client-c :conn conn-c :base-uuid base-uuid :state state-c} 1 history run-ops-opts)))
 
             ;; Phase C: reconnect C
@@ -481,12 +485,12 @@
             (let [clients-phase-d [{:repo repo-a :conn conn-a :client client-a :online? false}
                                    {:repo repo-b :conn conn-b :client client-b :online? true}
                                    {:repo repo-c :conn conn-c :client client-c :online? true}]]
-              (dotimes [_ 30]
+              (dotimes [_ 100]
                 (let [client (rand-nth! rng (subvec (vec clients-phase-d) 1 3))
                       state (get repo->state (:repo client))]
                   (run-ops! rng (assoc client :base-uuid base-uuid :state state) 1 history run-ops-opts)
                   (sync-loop! server clients-phase-d)))
-              (dotimes [_ 15]
+              (dotimes [_ 100]
                 (run-ops! rng {:conn conn-a :base-uuid base-uuid :state state-a} 1 history run-ops-opts)))
 
             ;; Final sync

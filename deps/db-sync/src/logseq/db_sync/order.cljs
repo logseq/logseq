@@ -5,7 +5,9 @@
 (defn fix-duplicate-orders! [conn tx-data tx-meta]
   (let [db @conn
         updates (->> tx-data
-                     (filter (fn [[e a v _tx added]] (and (= a :block/order) added e v))))
+                     (filter (fn [[e a v _tx added]]
+                               (and (= a :block/order) added e v
+                                    (:block/uuid (d/entity @conn e))))))
         groups (group-by (fn [{:keys [e v]}]
                            (let [parent (:block/parent (d/entity db e))]
                              [(:db/id parent) v]))
