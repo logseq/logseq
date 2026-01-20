@@ -685,7 +685,8 @@
           (when (seq asset-uuids)
             (enqueue-asset-downloads! repo client asset-uuids))))
 
-      (reset! (:inflight client) [])
+      (when-let [*inflight (:inflight client)]
+        (reset! *inflight []))
 
       (reset! *remote-tx-report nil))
     (fail-fast :db-sync/missing-db {:repo repo :op :apply-remote-tx})))
