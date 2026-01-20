@@ -59,17 +59,17 @@
 (defn <d1-run
   [^js db sql-str & args]
   (p/let [^js stmt (.prepare db sql-str)
-          stmt (if (seq args)
-                 (.apply (.-bind stmt) stmt (to-array args))
-                 stmt)]
+          ^js stmt (if (seq args)
+                     (.apply (.-bind stmt) stmt (to-array args))
+                     stmt)]
     (.run stmt)))
 
 (defn <d1-all
   [^js db sql-str & args]
   (p/let [^js stmt (.prepare db sql-str)
-          stmt (if (seq args)
-                 (.apply (.-bind stmt) stmt (to-array args))
-                 stmt)]
+          ^js stmt (if (seq args)
+                     (.apply (.-bind stmt) stmt (to-array args))
+                     stmt)]
     (.all stmt)))
 
 (defn read-json [request]

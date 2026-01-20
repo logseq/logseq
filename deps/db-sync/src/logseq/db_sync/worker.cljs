@@ -7,6 +7,7 @@
             [logseq.common.authorization :as authorization]
             [logseq.db :as ldb]
             [logseq.db-sync.common :as common :refer [cors-headers]]
+            [logseq.db-sync.index :as index]
             [logseq.db-sync.malli-schema :as db-sync-schema]
             [logseq.db-sync.protocol :as protocol]
             [logseq.db-sync.storage :as storage]
@@ -146,18 +147,6 @@
       (when-not (js/isNaN n)
         n))))
 
-(defn- entity-title
-  [db entity-ref]
-  (let [ent (cond
-              (vector? entity-ref) (d/entity db entity-ref)
-              (number? entity-ref) (d/entity db entity-ref)
-              (keyword? entity-ref) (d/entity db [:db/ident entity-ref])
-              :else nil)]
-    (when ent
-      {:uuid (some-> (:block/uuid ent) str)
-       :title (or (:block/title ent)
-                  (:block/name ent))})))
-
 (def ^:private max-asset-size (* 100 1024 1024))
 (def ^:private snapshot-rows-default-limit 500)
 (def ^:private snapshot-rows-max-limit 2000)
@@ -240,7 +229,7 @@
 
       (or (= path "/graphs")
           (string/starts-with? path "/graphs/"))
-      (.fetch (index-stub env) request)
+      (.fetch (index-stub env) (.clone request))
 
       (string/starts-with? path "/assets/")
       (if (= method "OPTIONS")
@@ -530,65 +519,6 @@
       (log/error :db-sync/index-db-missing {:binding "DB"}))
     db))
 
-(defn- <index-init! [db]
-  (p/do!
-   (common/<d1-run db
-                   (str "create table if not exists graphs ("
-                        "graph_id TEXT primary key,"
-                        "graph_name TEXT,"
-                        "user_id TEXT,"
-                        "schema_version TEXT,"
-                        "created_at INTEGER,"
-                        "updated_at INTEGER"
-                        ");"))))
-
-(defn- <index-list [db user-id]
-  (if (string? user-id)
-    (p/let [result (common/<d1-all db
-                                   (str "select graph_id, graph_name, schema_version, created_at, updated_at "
-                                        "from graphs where user_id = ? order by updated_at desc")
-                                   user-id)
-            rows (common/get-sql-rows result)]
-      (mapv (fn [row]
-              {:graph_id (aget row "graph_id")
-               :graph_name (aget row "graph_name")
-               :schema_version (aget row "schema_version")
-               :created_at (aget row "created_at")
-               :updated_at (aget row "updated_at")})
-            rows))
-    []))
-
-(defn- <index-upsert! [db graph-id graph-name user-id schema-version]
-  (p/let [now (common/now-ms)
-          result (common/<d1-run db
-                                 (str "insert into graphs (graph_id, graph_name, user_id, schema_version, created_at, updated_at) "
-                                      "values (?, ?, ?, ?, ?, ?) "
-                                      "on conflict(graph_id) do update set "
-                                      "graph_name = excluded.graph_name, "
-                                      "user_id = excluded.user_id, "
-                                      "schema_version = excluded.schema_version, "
-                                      "updated_at = excluded.updated_at")
-                                 graph-id
-                                 graph-name
-                                 user-id
-                                 schema-version
-                                 now
-                                 now)]
-    result))
-
-(defn- <index-delete! [db graph-id]
-  (common/<d1-run db "delete from graphs where graph_id = ?" graph-id))
-
-(defn- <user-has-access-to-graph? [db graph-id user-id]
-  (when (and (string? graph-id) (string? user-id))
-    (p/let [result (common/<d1-all db
-                                   (str "select graph_id from graphs "
-                                        "where graph_id = ? and user_id = ?")
-                                   graph-id
-                                   user-id)
-            rows (common/get-sql-rows result)]
-      (boolean (seq rows)))))
-
 (defn- graph-path-parts [path]
   (->> (string/split path #"/")
        (remove string/blank?)
@@ -610,8 +540,10 @@
         (error-response "server error" 500)
 
         :else
-        (p/let [_ (<index-init! db)
-                claims (auth-claims request env)]
+        (p/let [_ (index/<index-init! db)
+                claims (auth-claims request env)
+                _ (when claims
+                    (index/<user-upsert! db claims))]
           (cond
             (nil? claims)
             (unauthorized)
@@ -619,7 +551,7 @@
             (and (= method "GET") (= ["graphs"] parts))
             (let [user-id (aget claims "sub")]
               (if (string? user-id)
-                (p/let [graphs (<index-list db user-id)]
+                (p/let [graphs (index/<index-list db user-id)]
                   (json-response :graphs/list {:graphs graphs}))
                 (unauthorized)))
 
@@ -641,7 +573,8 @@
 
                            :else
                            (p/let [{:keys [graph_name schema_version]} body
-                                   _ (<index-upsert! db graph-id graph_name user-id schema_version)]
+                                   _ (index/<index-upsert! db graph-id graph_name user-id schema_version)
+                                   _ (index/<graph-member-upsert! db graph-id user-id "manager" user-id)]
                              (json-response :graphs/create {:graph_id graph-id})))))))
 
             (and (= method "GET")
@@ -655,15 +588,119 @@
                 (unauthorized)
 
                 :else
-                (p/let [owns? (<user-has-access-to-graph? db graph-id user-id)]
+                (p/let [owns? (index/<user-has-access-to-graph? db graph-id user-id)]
                   (if owns?
                     (json-response :graphs/access {:ok true})
                     (forbidden)))))
 
+            (and (= method "GET")
+                 (= 3 (count parts))
+                 (= "graphs" (first parts))
+                 (= "members" (nth parts 2 nil)))
+            (let [graph-id (nth parts 1 nil)
+                  user-id (aget claims "sub")]
+              (cond
+                (not (string? user-id))
+                (unauthorized)
+
+                :else
+                (p/let [can-access? (index/<user-has-access-to-graph? db graph-id user-id)]
+                  (if (not can-access?)
+                    (forbidden)
+                    (p/let [members (index/<graph-members-list db graph-id)]
+                      (json-response :graph-members/list {:members members}))))))
+
+            (and (= method "POST")
+                 (= 3 (count parts))
+                 (= "graphs" (first parts))
+                 (= "members" (nth parts 2 nil)))
+            (let [graph-id (nth parts 1 nil)
+                  user-id (aget claims "sub")]
+              (cond
+                (not (string? user-id))
+                (unauthorized)
+
+                :else
+                (.then (common/read-json request)
+                       (fn [result]
+                         (if (nil? result)
+                           (bad-request "missing body")
+                           (let [body (js->clj result :keywordize-keys true)
+                                 body (coerce-http-request :graph-members/create body)
+                                 member-id (:user_id body)
+                                 role (or (:role body) "member")]
+                             (cond
+                               (nil? body)
+                               (bad-request "invalid body")
+
+                               (not (string? member-id))
+                               (bad-request "invalid user id")
+
+                               :else
+                               (p/let [manager? (index/<user-is-manager? db graph-id user-id)]
+                                 (if (not manager?)
+                                   (forbidden)
+                                   (p/let [_ (index/<graph-member-upsert! db graph-id member-id role user-id)]
+                                     (json-response :graph-members/create {:ok true})))))))))))
+
+            (and (= method "PUT")
+                 (= 4 (count parts))
+                 (= "graphs" (first parts))
+                 (= "members" (nth parts 2 nil)))
+            (let [graph-id (nth parts 1 nil)
+                  member-id (nth parts 3 nil)
+                  user-id (aget claims "sub")]
+              (cond
+                (not (string? user-id))
+                (unauthorized)
+
+                (not (string? member-id))
+                (bad-request "invalid user id")
+
+                :else
+                (.then (common/read-json request)
+                       (fn [result]
+                         (if (nil? result)
+                           (bad-request "missing body")
+                           (let [body (js->clj result :keywordize-keys true)
+                                 body (coerce-http-request :graph-members/update body)
+                                 role (:role body)]
+                             (cond
+                               (nil? body)
+                               (bad-request "invalid body")
+
+                               :else
+                               (p/let [manager? (index/<user-is-manager? db graph-id user-id)]
+                                 (if (not manager?)
+                                   (forbidden)
+                                   (p/let [_ (index/<graph-member-update-role! db graph-id member-id role)]
+                                     (json-response :graph-members/update {:ok true})))))))))))
+
+            (and (= method "DELETE")
+                 (= 4 (count parts))
+                 (= "graphs" (first parts))
+                 (= "members" (nth parts 2 nil)))
+            (let [graph-id (nth parts 1 nil)
+                  member-id (nth parts 3 nil)
+                  user-id (aget claims "sub")]
+              (cond
+                (not (string? user-id))
+                (unauthorized)
+
+                (not (string? member-id))
+                (bad-request "invalid user id")
+
+                :else
+                (p/let [manager? (index/<user-is-manager? db graph-id user-id)]
+                  (if (not manager?)
+                    (forbidden)
+                    (p/let [_ (index/<graph-member-delete! db graph-id member-id)]
+                      (json-response :graph-members/delete {:ok true}))))))
+
             (and (= method "DELETE")
                  (= 2 (count parts))
                  (= "graphs" (first parts)))
-            (let [graph-id (nth parts 1)
+            (let [graph-id (nth parts 1 nil)
                   user-id (aget claims "sub")]
               (cond
                 (not (seq graph-id))
@@ -673,17 +710,16 @@
                 (unauthorized)
 
                 :else
-                (p/let [owns? (<user-has-access-to-graph? db graph-id user-id)]
+                (p/let [owns? (index/<user-has-access-to-graph? db graph-id user-id)]
                   (if (not owns?)
                     (forbidden)
-                    (p/let [_ (<index-delete! db graph-id)]
+                    (p/let [_ (index/<index-delete! db graph-id)]
                       (let [^js namespace (.-LOGSEQ_SYNC_DO (.-env self))
                             do-id (.idFromName namespace graph-id)
                             stub (.get namespace do-id)
                             reset-url (str (.-origin url) "/admin/reset")]
                         (.fetch stub (js/Request. reset-url #js {:method "DELETE"})))
                       (json-response :graphs/delete {:graph_id graph-id :deleted true}))))))
-
             :else
             (not-found))))
       (catch :default error
