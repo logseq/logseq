@@ -182,10 +182,10 @@
                                                  :cardinality :many
                                                  :public? true
                                                  :view-context :never}}
-     :logseq.property.class/title-plural {:title "Plural title"
-                                          :schema {:type :string
-                                                   :public? true
-                                                   :view-context :class}}
+     :logseq.property.class/bidirectional-property-title {:title "Bidirectional property title"
+                                                          :schema {:type :string
+                                                                   :public? true
+                                                                   :view-context :class}}
      :logseq.property.class/enable-bidirectional? {:title "Enable bidirectional properties"
                                                    :schema {:type :checkbox
                                                             :public? true

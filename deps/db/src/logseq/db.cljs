@@ -731,7 +731,7 @@
            (keep (fn [[class-id entities]]
                    (let [class (d/entity db class-id)]
                      (when (true? (:logseq.property.class/enable-bidirectional? class))
-                       (let [custom-title (when-let [custom (:logseq.property.class/title-plural class)]
+                       (let [custom-title (when-let [custom (:logseq.property.class/bidirectional-property-title class)]
                                             (if (string? custom)
                                               custom
                                               (db-property/property-value-content custom)))
