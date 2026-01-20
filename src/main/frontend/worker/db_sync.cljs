@@ -305,9 +305,9 @@
                                          (or (= :db/retractEntity (first item))
                                              (contains? local-deleted-ids (get-lookup-id (last item))))))
                                keep-last-update)]
-    (when (not= tx-data sanitized-tx-data)
-      (prn :debug :tx-data tx-data)
-      (prn :debug :sanitized-tx-data sanitized-tx-data))
+    ;; (when (not= tx-data sanitized-tx-data)
+    ;;   (prn :debug :tx-data tx-data)
+    ;;   (prn :debug :sanitized-tx-data sanitized-tx-data))
     sanitized-tx-data))
 
 (defn- flush-pending!
@@ -329,7 +329,7 @@
                                    keep-last-update
                                    distinct)]
                   ;; (prn :debug :before-keep-last-update txs)
-                  (prn :debug :upload :tx-data tx-data)
+                  ;; (prn :debug :upload :tx-data tx-data)
                   (when (seq txs)
                     (reset! (:inflight client) tx-ids)
                     (send! ws {:type "tx/batch"
@@ -592,11 +592,10 @@
 (defn- apply-remote-tx!
   [repo client tx-data* & {:keys [local-tx remote-tx]}]
   (if-let [conn (worker-state/get-datascript-conn repo)]
-    (let [tx-data (keep-last-update tx-data*)
+    (let [tx-data (->> tx-data*
+                       (db-normalize/remove-retract-entity-ref @conn)
+                       keep-last-update)
           local-txs (pending-txs repo)
-          _ (prn :debug :repo repo
-                 :pending-txs-count (count local-txs)
-                 :pending-txs (map :tx-id local-txs))
           reversed-tx-data (get-reverse-tx-data local-txs)
           has-local-changes? (seq reversed-tx-data)
           *remote-tx-report (atom nil)
