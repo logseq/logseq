@@ -125,6 +125,50 @@
                      (is false (str "unexpected error: " e))
                      (done)))))))
 
+(deftest test-cli-show-linked-references-json
+  (async done
+    (let [data-dir (node-helper/create-tmp-dir "db-worker-linked-refs")]
+      (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                  _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                  _ (run-cli ["graph" "create" "--repo" "linked-refs-graph"] data-dir cfg-path)
+                  _ (run-cli ["--repo" "linked-refs-graph" "add" "page" "--page" "TargetPage"] data-dir cfg-path)
+                  _ (run-cli ["--repo" "linked-refs-graph" "add" "page" "--page" "SourcePage"] data-dir cfg-path)
+                  target-show-before (run-cli ["--repo" "linked-refs-graph" "show" "--page-name" "TargetPage" "--format" "json"] data-dir cfg-path)
+                  target-before-payload (parse-json-output target-show-before)
+                  target-uuid (or (get-in target-before-payload [:data :root :block/uuid])
+                                  (get-in target-before-payload [:data :root :uuid]))
+                  ref-content (str "See [[" target-uuid "]]")
+                  _ (run-cli ["--repo" "linked-refs-graph" "add" "block" "--target-page-name" "SourcePage" "--content" ref-content] data-dir cfg-path)
+                  source-show (run-cli ["--repo" "linked-refs-graph" "show" "--page-name" "SourcePage" "--format" "json"] data-dir cfg-path)
+                  source-payload (parse-json-output source-show)
+                  ref-node (find-block-by-title (get-in source-payload [:data :root]) ref-content)
+                  ref-uuid (or (:block/uuid ref-node) (:uuid ref-node))
+                  target-show (run-cli ["--repo" "linked-refs-graph" "show" "--page-name" "TargetPage" "--format" "json"] data-dir cfg-path)
+                  target-payload (parse-json-output target-show)
+                  linked-refs (get-in target-payload [:data :linked-references])
+                  linked-blocks (:blocks linked-refs)
+                  linked-uuids (set (map (fn [block]
+                                           (or (:block/uuid block) (:uuid block)))
+                                         linked-blocks))
+                  linked-page-titles (set (keep (fn [block]
+                                                  (or (get-in block [:block/page :block/title])
+                                                      (get-in block [:block/page :block/name])
+                                                      (get-in block [:page :title])
+                                                      (get-in block [:page :name])))
+                                                linked-blocks))
+                  stop-result (run-cli ["server" "stop" "--repo" "linked-refs-graph"] data-dir cfg-path)
+                  stop-payload (parse-json-output stop-result)]
+            (is (some? target-uuid))
+            (is (= "ok" (:status target-payload)))
+            (is (some? ref-uuid))
+            (is (contains? linked-uuids ref-uuid))
+            (is (contains? linked-page-titles "SourcePage"))
+            (is (= "ok" (:status stop-payload)))
+            (done))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))
+                     (done)))))))
+
 (deftest test-cli-move-block
   (async done
     (let [data-dir (node-helper/create-tmp-dir "db-worker-move")]
