@@ -30,6 +30,21 @@
   [result]
   (reader/read-string (:output result)))
 
+(defn- node-title
+  [node]
+  (or (:block/title node) (:title node)))
+
+(defn- node-children
+  [node]
+  (or (:block/children node) (:children node)))
+
+(defn- find-block-by-title
+  [node title]
+  (when node
+    (if (= title (node-title node))
+      node
+      (some #(find-block-by-title % title) (node-children node)))))
+
 (deftest test-cli-graph-list
   (async done
     (let [data-dir (node-helper/create-tmp-dir "db-worker")]
@@ -104,6 +119,38 @@
             (is (= "ok" (:status show-payload)))
             (is (contains? (get-in show-payload [:data :root]) :uuid))
             (is (= "ok" (:status remove-page-payload)))
+            (is (= "ok" (:status stop-payload)))
+            (done))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))
+                     (done)))))))
+
+(deftest test-cli-move-block
+  (async done
+    (let [data-dir (node-helper/create-tmp-dir "db-worker-move")]
+      (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                  _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                  _ (run-cli ["graph" "create" "--repo" "move-graph"] data-dir cfg-path)
+                  _ (run-cli ["--repo" "move-graph" "add" "page" "--page" "SourcePage"] data-dir cfg-path)
+                  _ (run-cli ["--repo" "move-graph" "add" "page" "--page" "TargetPage"] data-dir cfg-path)
+                  _ (run-cli ["--repo" "move-graph" "add" "block" "--page" "SourcePage" "--content" "Parent Block"] data-dir cfg-path)
+                  source-show (run-cli ["--repo" "move-graph" "show" "--page-name" "SourcePage" "--format" "json"] data-dir cfg-path)
+                  source-payload (parse-json-output source-show)
+                  parent-node (find-block-by-title (get-in source-payload [:data :root]) "Parent Block")
+                  parent-uuid (or (:block/uuid parent-node) (:uuid parent-node))
+                  _ (run-cli ["--repo" "move-graph" "add" "block" "--parent" (str parent-uuid) "--content" "Child Block"] data-dir cfg-path)
+                  move-result (run-cli ["--repo" "move-graph" "move" "--uuid" (str parent-uuid) "--page-name" "TargetPage"] data-dir cfg-path)
+                  move-payload (parse-json-output move-result)
+                  target-show (run-cli ["--repo" "move-graph" "show" "--page-name" "TargetPage" "--format" "json"] data-dir cfg-path)
+                  target-payload (parse-json-output target-show)
+                  moved-node (find-block-by-title (get-in target-payload [:data :root]) "Parent Block")
+                  child-node (find-block-by-title moved-node "Child Block")
+                  stop-result (run-cli ["server" "stop" "--repo" "move-graph"] data-dir cfg-path)
+                  stop-payload (parse-json-output stop-result)]
+            (is (= "ok" (:status move-payload)))
+            (is (some? parent-uuid))
+            (is (some? moved-node))
+            (is (some? child-node))
             (is (= "ok" (:status stop-payload)))
             (done))
           (p/catch (fn [e]
