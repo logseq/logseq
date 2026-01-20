@@ -31,7 +31,7 @@
                       (get person "id"))
         (is (string? person-uuid))
         (ls-api-call! :editor.upsertBlockProperty person-uuid
-                      "logseq.property.class/title-plural"
+                      "logseq.property.class/bidirectional-property-title"
                       "People")
         (ls-api-call! :editor.upsertBlockProperty person-uuid
                       "logseq.property.class/enable-bidirectional?"
