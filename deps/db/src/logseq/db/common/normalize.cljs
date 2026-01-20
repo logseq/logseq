@@ -9,7 +9,10 @@
                                          (nil? (d/entity db value)))
                                 value)) tx-data)
                       set)
-        retracted-ids (set (map second retracted))]
+        retract-uuids (set (map second retracted))
+        retracted-ids (into retract-uuids
+                            ;; handle temp ids
+                            (map str retract-uuids))]
     (if (seq retracted)
       (remove (fn [item]
                 (and (= 5 (count item))
