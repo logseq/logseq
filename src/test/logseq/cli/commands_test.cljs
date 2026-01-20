@@ -204,6 +204,80 @@
                   "175 └── cccc")
              (tree->text tree-data))))))
 
+(deftest test-tree->text-prefixes-marker
+  (testing "show tree text prefixes markers before block titles"
+    (let [tree->text #'show-command/tree->text
+          tree-data {:root {:db/id 1
+                            :block/title "Root"
+                            :block/marker "TODO"
+                            :block/children [{:db/id 2
+                                              :block/title "Child"
+                                              :block/marker "CANCELED"}]}}]
+      (is (= (str "1 TODO Root\n"
+                  "2 └── CANCELED Child")
+             (tree->text tree-data))))))
+
+(deftest test-tree->text-marker-multiline-alignment
+  (testing "show tree text keeps multiline alignment when marker prefix is present"
+    (let [tree->text #'show-command/tree->text
+          tree-data {:root {:db/id 1
+                            :block/title "Root"
+                            :block/children [{:db/id 22
+                                              :block/title "line1\nline2"
+                                              :block/marker "TODO"}]}}]
+      (is (= (str "1  Root\n"
+                  "22 └── TODO line1\n"
+                  "       line2")
+             (tree->text tree-data))))))
+
+(deftest test-tree->text-linked-references-tree
+  (testing "show tree text renders linked references as trees with db/id in first column"
+    (let [tree->text-with-linked-refs #'show-command/tree->text-with-linked-refs
+          tree-data {:root {:db/id 1
+                            :block/title "Root"}
+                     :linked-references {:count 2
+                                         :blocks [{:db/id 10
+                                                   :block/title "Ref A"
+                                                   :block/marker "TODO"
+                                                   :block/page {:db/id 100
+                                                                :block/title "Page A"}}
+                                                  {:db/id 11
+                                                   :block/title "Ref B"
+                                                   :block/page {:db/id 101
+                                                                :block/title "Page B"}}]}}]
+      (is (= (str "1 Root\n"
+                  "\n"
+                  "Linked References (2)\n"
+                  "100 Page A\n"
+                  "10  └── TODO Ref A\n"
+                  "\n"
+                  "101 Page B\n"
+                  "11  └── Ref B")
+             (tree->text-with-linked-refs tree-data))))))
+
+(deftest test-tree->text-appends-tags
+  (testing "show tree text appends block tags to content"
+    (let [tree->text #'show-command/tree->text
+          tree-data {:root {:db/id 1
+                            :block/title "Root"
+                            :block/children [{:db/id 2
+                                              :block/title "Child"
+                                              :block/tags [{:block/title "RTC"}
+                                                           {:block/name "task"}]}]}}]
+      (is (= (str "1 Root\n"
+                  "2 └── Child #RTC #task")
+             (tree->text tree-data))))))
+
+(deftest test-tree->text-replaces-uuid-refs
+  (testing "show tree text replaces inline [[uuid]] with referenced block content"
+    (let [tree->text #'show-command/tree->text
+          uuid "11111111-1111-1111-1111-111111111111"
+          tree-data {:root {:db/id 1
+                            :block/title (str "See [[" uuid "]]")}
+                     :uuid->label {(string/lower-case uuid) "Target block"}}]
+      (is (= (str "1 See [[Target block]]")
+             (tree->text tree-data))))))
+
 (deftest test-list-subcommand-parse
   (testing "list page parses"
     (let [result (commands/parse-args ["list" "page"
