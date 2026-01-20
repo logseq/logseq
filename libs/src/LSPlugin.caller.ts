@@ -276,6 +276,8 @@ class LSPluginCaller extends EventEmitter {
       classListArray: ['lsp-iframe-sandbox'],
       model: { baseInfo: JSON.parse(JSON.stringify(pl.toJSON())) },
       allow: pl.options.allow,
+      // for optimized postmate message
+      enableMessageChannel: true
     })
 
     let handshake = pt.sendHandshake()
