@@ -306,8 +306,8 @@
                                              (contains? local-deleted-ids (get-lookup-id (last item))))))
                                keep-last-update)]
     (when (not= tx-data sanitized-tx-data)
-      (log/info :db-sync/tx-sanitized
-                {:diff (data/diff tx-data sanitized-tx-data)}))
+      (prn :debug :tx-data tx-data)
+      (prn :debug :sanitized-tx-data sanitized-tx-data))
     sanitized-tx-data))
 
 (defn- flush-pending!
