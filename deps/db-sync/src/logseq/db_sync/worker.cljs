@@ -628,20 +628,27 @@
                            (let [body (js->clj result :keywordize-keys true)
                                  body (coerce-http-request :graph-members/create body)
                                  member-id (:user_id body)
+                                 email (:email body)
                                  role (or (:role body) "member")]
                              (cond
                                (nil? body)
                                (bad-request "invalid body")
 
-                               (not (string? member-id))
-                               (bad-request "invalid user id")
+                               (and (not (string? member-id))
+                                    (not (string? email)))
+                               (bad-request "invalid user")
 
                                :else
-                               (p/let [manager? (index/<user-is-manager? db graph-id user-id)]
+                               (p/let [manager? (index/<user-is-manager? db graph-id user-id)
+                                       resolved-id (if (string? member-id)
+                                                     (p/resolved member-id)
+                                                     (index/<user-id-by-email db email))]
                                  (if (not manager?)
                                    (forbidden)
-                                   (p/let [_ (index/<graph-member-upsert! db graph-id member-id role user-id)]
-                                     (json-response :graph-members/create {:ok true})))))))))))
+                                   (if-not (string? resolved-id)
+                                     (bad-request "user not found")
+                                     (p/let [_ (index/<graph-member-upsert! db graph-id resolved-id role user-id)]
+                                       (json-response :graph-members/create {:ok true}))))))))))))
 
             (and (= method "PUT")
                  (= 4 (count parts))

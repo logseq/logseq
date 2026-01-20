@@ -2,8 +2,8 @@
   "Dispatch RTC calls between legacy RTC and db-sync implementations."
   (:require [frontend.config :as config]
             [frontend.db :as db]
-            [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.handler.db-based.db-sync :as db-sync-handler]
+            [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.state :as state]
             [logseq.db :as ldb]
             [promesa.core :as p]))
@@ -65,4 +65,6 @@
     (rtc-handler/<get-remote-graphs)))
 
 (defn <rtc-invite-email [graph-uuid email]
-  (rtc-handler/<rtc-invite-email graph-uuid email))
+  (if (db-sync-enabled?)
+    (db-sync-handler/<rtc-invite-email graph-uuid email)
+    (rtc-handler/<rtc-invite-email graph-uuid email)))

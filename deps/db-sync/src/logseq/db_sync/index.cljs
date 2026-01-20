@@ -97,6 +97,16 @@
                         email-verified
                         username)))))
 
+(defn <user-id-by-email [db email]
+  (when (string? email)
+    (p/let [result (common/<d1-all db
+                                   "select id from users where email = ?"
+                                   email)
+            rows (common/get-sql-rows result)
+            row (first rows)]
+      (when row
+        (aget row "id")))))
+
 (defn <graph-member-upsert! [db graph-id user-id role invited-by]
   (let [now (common/now-ms)]
     (common/<d1-run db

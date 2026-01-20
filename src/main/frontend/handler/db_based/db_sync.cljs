@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]
+            [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
@@ -155,7 +156,7 @@
     (-> (if (and graph-uuid base)
           (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
                   graph (str config/db-version-prefix graph-name)]
-              (p/loop [after -1           ; root addr is 0
+            (p/loop [after -1           ; root addr is 0
                      first-batch? true]
               (p/let [pull-resp (fetch-json (str base "/sync/" graph-uuid "/pull")
                                             {:method "GET"}
@@ -214,3 +215,35 @@
           (p/finally
             (fn []
               (state/set-state! :rtc/loading-graphs? false)))))))
+
+(defn <rtc-invite-email
+  [graph-uuid email]
+  (let [base (http-base)
+        graph-uuid (str graph-uuid)]
+    (if (and base (string? graph-uuid) (string? email))
+      (->
+       (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
+               body (coerce-http-request :graph-members/create
+                                         {:email email
+                                          :role "member"})
+               _ (when (nil? body)
+                   (throw (ex-info "db-sync invalid invite body"
+                                   {:graph-uuid graph-uuid
+                                    :email email})))
+               _ (fetch-json (str base "/graphs/" graph-uuid "/members")
+                             {:method "POST"
+                              :headers {"content-type" "application/json"}
+                              :body (js/JSON.stringify (clj->js body))}
+                             {:response-schema :graph-members/create})]
+         (notification/show! "Invitation sent!" :success))
+       (p/catch (fn [e]
+                  (notification/show! "Something wrong, please try again." :error)
+                  (log/error :db-sync/invite-email-failed
+                             {:error e
+                              :graph-uuid graph-uuid
+                              :email email}))))
+      (p/rejected (ex-info "db-sync missing invite info"
+                           {:type :db-sync/invalid-invite
+                            :graph-uuid graph-uuid
+                            :email email
+                            :base base})))))
