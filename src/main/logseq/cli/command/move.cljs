@@ -14,7 +14,7 @@
    :target-id {:desc "Target block db/id"
                :coerce :long}
    :target-uuid {:desc "Target block UUID"}
-   :page-name {:desc "Target page name"}
+   :target-page-name {:desc "Target page name"}
    :pos {:desc "Position (first-child, last-child, sibling)"}})
 
 (def entries
@@ -29,7 +29,7 @@
         source-selectors (filter some? [(:id opts) (some-> (:uuid opts) string/trim)])
         target-selectors (filter some? [(:target-id opts)
                                         (:target-uuid opts)
-                                        (some-> (:page-name opts) string/trim)])]
+                                        (some-> (:target-page-name opts) string/trim)])]
     (cond
       (and (seq pos) (not (contains? move-positions pos)))
       (str "invalid pos: " (:pos opts))
@@ -38,9 +38,9 @@
       "only one of --id or --uuid is allowed"
 
       (> (count target-selectors) 1)
-      "only one of --target-id, --target-uuid, or --page-name is allowed"
+      "only one of --target-id, --target-uuid, or --target-page-name is allowed"
 
-      (and (= pos "sibling") (seq (some-> (:page-name opts) string/trim)))
+      (and (= pos "sibling") (seq (some-> (:target-page-name opts) string/trim)))
       "--pos sibling is only valid for block targets"
 
       :else
@@ -86,7 +86,7 @@
     (p/rejected (ex-info "source is required" {:code :missing-source}))))
 
 (defn- resolve-target
-  [config repo {:keys [target-id target-uuid page-name]}]
+  [config repo {:keys [target-id target-uuid target-page-name]}]
   (cond
     (some? target-id)
     (p/let [entity (transport/invoke config :thread-api/pull false
@@ -103,10 +103,10 @@
           (ensure-non-page entity "target must be a block" :invalid-target)
           (throw (ex-info "target block not found" {:code :target-not-found})))))
 
-    (seq page-name)
+    (seq target-page-name)
     (p/let [entity (transport/invoke config :thread-api/pull false
                                      [repo [:db/id :block/uuid :block/name :block/title]
-                                      [:block/name page-name]])]
+                                      [:block/name target-page-name]])]
       (if (:db/id entity)
         entity
         (throw (ex-info "page not found" {:code :page-not-found}))))
@@ -132,7 +132,7 @@
           uuid (some-> (:uuid options) string/trim)
           target-id (:target-id options)
           target-uuid (some-> (:target-uuid options) string/trim)
-          page-name (some-> (:page-name options) string/trim)
+          page-name (some-> (:target-page-name options) string/trim)
           pos (some-> (:pos options) string/trim string/lower-case)
           source-label (cond
                          (seq uuid) uuid
@@ -163,7 +163,7 @@
                   :uuid uuid
                   :target-id target-id
                   :target-uuid target-uuid
-                  :page-name page-name
+                  :target-page-name page-name
                   :pos (or pos "first-child")
                   :source source-label
                   :target target-label}}))))
