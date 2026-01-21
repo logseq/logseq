@@ -307,8 +307,10 @@
                                    :GraphName (:graph-name graph)
                                    :GraphSchemaVersion (:schema-version graph)
                                    :GraphUUID (:graph-id graph)
-                                   :rtc-graph? true}
-                                  (dissoc graph :graph-id :graph-name :schema-version)))
+                                   :rtc-graph? true
+                                   :graph<->user-user-type (:role graph)
+                                   :graph<->user-grant-by-user (:invited-by graph)}
+                                  (dissoc graph :graph-id :graph-name :schema-version :role :invited-by)))
                                graphs)]
             (state/set-state! :rtc/graphs result)
             (repo-handler/refresh-repos!)
