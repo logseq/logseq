@@ -5,6 +5,7 @@
             [datascript.core :as d]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.rtc.client-op :as client-op]
+            [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [lambdaisland.glogi :as log]
             [logseq.common.path :as path]
@@ -20,6 +21,40 @@
             [promesa.core :as p]))
 
 (defonce *repo->latest-remote-tx (atom {}))
+
+(defn- normalize-online-users
+  [users]
+  (->> users
+       (keep (fn [{:keys [user_id email username name]}]
+               (when (string? user_id)
+                 (let [display-name (or username name user_id)]
+                   (cond-> {:user/uuid user_id
+                            :user/name display-name}
+                     (string? email) (assoc :user/email email))))))
+       (vec)))
+
+(defn- broadcast-rtc-state!
+  [client]
+  (when client
+    (let [ws-state @(:ws-state client)
+          online-users @(:online-users client)]
+      (shared-service/broadcast-to-clients!
+       :rtc-sync-state
+       {:rtc-state {:ws-state ws-state}
+        :rtc-lock (= :open ws-state)
+        :online-users (or online-users [])}))))
+
+(defn- set-ws-state!
+  [client ws-state]
+  (when-let [*ws-state (:ws-state client)]
+    (reset! *ws-state ws-state)
+    (broadcast-rtc-state! client)))
+
+(defn- update-online-users!
+  [client users]
+  (when-let [*online-users (:online-users client)]
+    (reset! *online-users (normalize-online-users users))
+    (broadcast-rtc-state! client)))
 
 (defn- enabled?
   []
@@ -341,7 +376,9 @@
                 :send-queue (atom (p/resolved nil))
                 :asset-queue (atom (p/resolved nil))
                 :inflight (atom [])
-                :reconnect (atom {:attempt 0 :timer nil})}]
+                :reconnect (atom {:attempt 0 :timer nil})
+                :online-users (atom [])
+                :ws-state (atom :closed)}]
     (reset! worker-state/*db-sync-client client)
     client))
 
@@ -709,6 +746,11 @@
                   (enqueue-asset-sync! repo client)
                   (enqueue-asset-initial-download! repo client)
                   (flush-pending! repo client))
+        "online-users" (let [users (:online-users message)]
+                         (when (and (some? users) (not (sequential? users)))
+                           (fail-fast :db-sync/invalid-field
+                                      {:repo repo :type "online-users" :field :online-users}))
+                         (update-online-users! client (or users [])))
         ;; Upload response
         "tx/batch/ok" (do
                         (require-non-negative remote-tx {:repo repo :type "tx/batch/ok"})
@@ -783,6 +825,8 @@
   (set! (.-onclose ws)
         (fn [_]
           (log/info :db-sync/ws-closed {:repo repo})
+          (update-online-users! client [])
+          (set-ws-state! client :closed)
           (schedule-reconnect! repo client url :close))))
 
 (defn- detach-ws-handlers! [ws]
@@ -799,6 +843,8 @@
     (clear-reconnect-timer! reconnect))
   (when-let [ws (:ws client)]
     (detach-ws-handlers! ws)
+    (update-online-users! client [])
+    (set-ws-state! client :closed)
     (try
       (.close ws)
       (catch :default _
@@ -813,6 +859,7 @@
     (set! (.-onopen ws)
           (fn [_]
             (reset-reconnect! updated)
+            (set-ws-state! updated :open)
             (send! ws {:type "hello" :client repo})
             (enqueue-asset-sync! repo updated)
             (enqueue-asset-initial-download! repo updated)))
@@ -930,11 +977,3 @@
                       (p/recur max-addr false))))))))
         (p/rejected (ex-info "db-sync missing sqlite db"
                              {:repo repo :graph-id graph-id}))))))
-
-(defn get-client-state
-  [repo]
-  (if-let [client @worker-state/*db-sync-client]
-    (if (= repo (:repo client))
-      (ws-open? (:ws client))
-      :not-started)
-    :not-started))

@@ -123,8 +123,11 @@
 
 (defn <graph-members-list [db graph-id]
   (p/let [result (common/<d1-all db
-                                 (str "select user_id, graph_id, role, invited_by, created_at "
-                                      "from graph_members where graph_id = ? order by created_at asc")
+                                 (str "select m.user_id, m.graph_id, m.role, m.invited_by, m.created_at, "
+                                      "u.email, u.username "
+                                      "from graph_members m "
+                                      "left join users u on m.user_id = u.id "
+                                      "where m.graph_id = ? order by m.created_at asc")
                                  graph-id)
           rows (common/get-sql-rows result)]
     (mapv (fn [row]
@@ -132,7 +135,9 @@
              :graph_id (aget row "graph_id")
              :role (aget row "role")
              :invited_by (aget row "invited_by")
-             :created_at (aget row "created_at")})
+             :created_at (aget row "created_at")
+             :email (aget row "email")
+             :username (aget row "username")})
           rows)))
 
 (defn <graph-member-update-role! [db graph-id user-id role]
