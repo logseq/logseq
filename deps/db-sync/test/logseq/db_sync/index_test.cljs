@@ -111,6 +111,16 @@
                              (filter (fn [row] (contains? member-ids (:graph-id row)))))]
       (js-rows (concat owned member-graphs)))
 
+    (string/includes? sql "select graph_id from graphs where graph_name")
+    (let [[graph-name user-id] args
+          rows (->> (:graphs @state)
+                    vals
+                    (filter (fn [row]
+                              (and (= graph-name (:graph-name row))
+                                   (= user-id (:user-id row)))))
+                    (map (fn [row] {:graph-id (:graph-id row)})))]
+      (js-rows rows))
+
     :else
     (js-rows [])))
 
@@ -167,6 +177,28 @@
                            (is (= 1 (:email-verified user)))
                            (is (= "foo" (:username user))))
                          (done)))
+               (p/catch (fn [e]
+                          (is false (str e))
+                          (done)))))))
+
+(deftest graph-name-exists-test
+  (async done
+         (let [state (atom {:executed []
+                            :users {}
+                            :graph-members {}
+                            :graphs {}})
+               db (make-d1 state)]
+           (-> (p/do!
+                (index/<index-upsert! db "graph-1" "alpha" "user-1" "1")
+                (index/<index-upsert! db "graph-2" "beta" "user-2" "1"))
+               (p/then (fn [_]
+                         (p/let [exists? (index/<graph-name-exists? db "alpha" "user-1")
+                                 missing? (index/<graph-name-exists? db "alpha" "user-2")
+                                 other? (index/<graph-name-exists? db "beta" "user-1")]
+                           (is (true? exists?))
+                           (is (false? missing?))
+                           (is (false? other?))
+                           (done))))
                (p/catch (fn [e]
                           (is false (str e))
                           (done)))))))
