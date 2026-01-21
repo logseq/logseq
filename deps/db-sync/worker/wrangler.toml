@@ -35,6 +35,7 @@ name = "logseq-sync"
 COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
 COGNITO_ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
 COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"
+ENABLE_DB_SYNC_LOCAL = "true"
 
 [[env.staging.durable_objects.bindings]]
 name = "LOGSEQ_SYNC_DO"
@@ -51,4 +52,4 @@ bucket_name = "logseq-sync-assets-dev"
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "logseq-sync-graph-meta-staging"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "00325aa2-c805-4693-b599-900a25dcde42"
