@@ -7,3 +7,8 @@ logseq.common.graph/read-directories
 logseq.common.profile/profile-fn!
 logseq.common.profile/*key->call-count
 logseq.common.profile/*key->time-sum
+
+;; API fn
+logseq.common.plural/is-plural?
+logseq.common.plural/is-singular?
+logseq.common.plural/pluralize

@@ -182,6 +182,16 @@
                                                  :cardinality :many
                                                  :public? true
                                                  :view-context :never}}
+     :logseq.property.class/bidirectional-property-title {:title "Bidirectional property title"
+                                                          :schema {:type :string
+                                                                   :public? true
+                                                                   :view-context :class}}
+     :logseq.property.class/enable-bidirectional? {:title "Enable bidirectional properties"
+                                                   :schema {:type :checkbox
+                                                            :public? true
+                                                            :view-context :class}
+                                                   :properties
+                                                   {:logseq.property/description "When enabled, this tag will show reverse nodes that link to the current node via properties."}}
      :logseq.property/hide-empty-value {:title "Hide empty value"
                                         :schema {:type :checkbox
                                                  :public? true
