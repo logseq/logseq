@@ -6,6 +6,9 @@ compatibility_flags = [ "nodejs_compat" ]
 [observability]
 enabled = true
 
+[limits]
+cpu_ms = 120_000
+
 [[durable_objects.bindings]]
 name = "LOGSEQ_SYNC_DO"
 class_name = "SyncDO"
