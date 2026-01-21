@@ -75,6 +75,16 @@
    (common/<d1-run db "delete from graph_members where graph_id = ?" graph-id)
    (common/<d1-run db "delete from graphs where graph_id = ?" graph-id)))
 
+(defn <graph-name-exists?
+  [db graph-name user-id]
+  (when (and (string? graph-name) (string? user-id))
+    (p/let [result (common/<d1-all db
+                                   "select graph_id from graphs where graph_name = ? and user_id = ?"
+                                   graph-name
+                                   user-id)
+            rows (common/get-sql-rows result)]
+      (boolean (seq rows)))))
+
 (defn <user-upsert! [db claims]
   (let [user-id (aget claims "sub")]
     (when (string? user-id)

@@ -923,9 +923,12 @@
 
                            :else
                            (p/let [{:keys [graph-name schema-version]} body
-                                   _ (index/<index-upsert! db graph-id graph-name user-id schema-version)
-                                   _ (index/<graph-member-upsert! db graph-id user-id "manager" user-id)]
-                             (json-response :graphs/create {:graph-id graph-id})))))))
+                                   name-exists? (index/<graph-name-exists? db graph-name user-id)]
+                             (if name-exists?
+                               (bad-request "duplicate graph name")
+                               (p/let [_ (index/<index-upsert! db graph-id graph-name user-id schema-version)
+                                       _ (index/<graph-member-upsert! db graph-id user-id "manager" user-id)]
+                                 (json-response :graphs/create {:graph-id graph-id})))))))))
 
             (and (= method "GET")
                  (= 3 (count parts))
