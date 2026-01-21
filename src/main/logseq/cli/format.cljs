@@ -40,22 +40,35 @@
 
 (defn- render-table
   [headers rows]
-  (let [normalized-rows (mapv (fn [row]
-                                (mapv normalize-cell row))
+  (let [split-lines (fn [value]
+                      (string/split (normalize-cell value) #"\n" -1))
+        normalized-rows (mapv (fn [row]
+                                (mapv split-lines row))
                               rows)
         trim-right (fn [value]
                      (string/replace value #"\s+$" ""))
         widths (mapv (fn [idx header]
-                       (apply max (count header)
-                              (map #(count (nth % idx)) normalized-rows)))
+                       (reduce max
+                               (count header)
+                               (mapcat #(map count (nth % idx)) normalized-rows)))
                      (range (count headers))
                      headers)
         render-row (fn [row]
                      (->> (map pad-right row widths)
                           (string/join "  ")
                           (trim-right)))
+        render-multiline-row (fn [row]
+                               (let [line-count (reduce max 1 (map count row))]
+                                 (mapv (fn [line-idx]
+                                         (->> (map-indexed (fn [col-idx lines]
+                                                            (pad-right (get lines line-idx "")
+                                                                       (nth widths col-idx)))
+                                                          row)
+                                              (string/join "  ")
+                                              (trim-right)))
+                                       (range line-count))))
         lines (cons (render-row headers)
-                    (map render-row normalized-rows))]
+                    (mapcat render-multiline-row normalized-rows))]
     (string/join "\n" lines)))
 
 (defn- format-counted-table
