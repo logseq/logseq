@@ -91,6 +91,56 @@
       (when-not (= coerced invalid-coerce)
         coerced))))
 
+(defn- send! [ws msg]
+  (when (ws-open? ws)
+    (if-let [coerced (coerce-ws-server-message msg)]
+      (.send ws (protocol/encode-message coerced))
+      (do
+        (log/error :db-sync/ws-response-invalid {:message msg})
+        (.send ws (protocol/encode-message {:type "error" :message "server error"}))))))
+
+(defn- broadcast! [^js self sender msg]
+  (let [clients (.getWebSockets (.-state self))]
+    (doseq [ws clients]
+      (when (and (not= ws sender) (ws-open? ws))
+        (send! ws msg)))))
+
+(defn- claims->user
+  [claims]
+  (when claims
+    (let [user-id (aget claims "sub")
+          email (aget claims "email")
+          username (or (aget claims "preferred_username")
+                       (aget claims "cognito:username")
+                       (aget claims "username"))
+          name (aget claims "name")]
+      (when (string? user-id)
+        (cond-> {:user_id user-id}
+          (string? email) (assoc :email email)
+          (string? username) (assoc :username username)
+          (string? name) (assoc :name name))))))
+
+(defn- presence*
+  [^js self]
+  (or (.-presence self)
+      (set! (.-presence self) (atom {}))))
+
+(defn- online-users
+  [^js self]
+  (vec (distinct (vals @(presence* self)))))
+
+(defn- broadcast-online-users!
+  [^js self]
+  (broadcast! self nil {:type "online-users" :online-users (online-users self)}))
+
+(defn- add-presence!
+  [^js self ^js ws user]
+  (swap! (presence* self) assoc ws user))
+
+(defn- remove-presence!
+  [^js self ^js ws]
+  (swap! (presence* self) dissoc ws))
+
 (defn- fail-fast [tag data]
   (log/error tag data)
   (throw (ex-info (name tag) data)))
@@ -101,14 +151,6 @@
       (when-not (= coerced invalid-coerce)
         coerced))
     body))
-
-(defn- send! [ws msg]
-  (when (ws-open? ws)
-    (if-let [coerced (coerce-ws-server-message msg)]
-      (.send ws (protocol/encode-message coerced))
-      (do
-        (log/error :db-sync/ws-response-invalid {:message msg})
-        (.send ws (protocol/encode-message {:type "error" :message "server error"}))))))
 
 (defn- json-response
   ([schema-key data] (json-response schema-key data 200))
@@ -134,12 +176,6 @@
 
 (defn- not-found []
   (error-response "not found" 404))
-
-(defn- broadcast! [^js self sender msg]
-  (let [clients (.getWebSockets (.-state self))]
-    (doseq [ws clients]
-      (when (and (not= ws sender) (ws-open? ws))
-        (send! ws msg)))))
 
 (defn- parse-int [value]
   (when (some? value)
@@ -382,9 +418,15 @@
 (defn- handle-ws [^js self request]
   (let [pair (js/WebSocketPair.)
         client (aget pair 0)
-        server (aget pair 1)]
-    (.acceptWebSocket (.-state self) server)
-    (js/Response. nil #js {:status 101 :webSocket client})))
+        server (aget pair 1)
+        env (.-env self)]
+    (p/let [claims (auth-claims request env)
+            user (claims->user claims)]
+      (.acceptWebSocket (.-state self) server)
+      (when user
+        (add-presence! self server user))
+      (broadcast-online-users! self)
+      (js/Response. nil #js {:status 101 :webSocket client}))))
 
 (defn- strip-sync-prefix [path]
   (if (string/starts-with? path "/sync/")
@@ -508,9 +550,13 @@
                         (log/error :db-sync/ws-error e)
                         (js/console.error e)
                         (send! ws {:type "error" :message "server error"}))))
-  (webSocketClose [_this _ws _code _reason]
+  (webSocketClose [this ws _code _reason]
+                  (remove-presence! this ws)
+                  (broadcast-online-users! this)
                   (log/info :db-sync/ws-closed true))
-  (webSocketError [_this _ws error]
+  (webSocketError [this ws error]
+                  (remove-presence! this ws)
+                  (broadcast-online-users! this)
                   (log/error :db-sync/ws-error {:error error})))
 
 (defn- index-db [^js self]
