@@ -1,0 +1,11 @@
+yarn run v1.22.22
+$ clojure -M:test compile test
+[:test] Compiling ...
+[:test] Build completed. (831 files, 25 compiled, 0 warnings, 6.94s)
+Done in 10.38s.
+yarn run v1.22.22
+$ node static/tests.js -v logseq.db-sync.batch-test/rows-
+:run-background-task :logseq.db.common.entity-plus/reset-immutable-entities-cache!
+:run-background-task :frontend.background-tasks/sync-to-worker-network-online-status
+:run-background-task :frontend.worker.embedding/subscribe-state
+info Visit https://yarnpkg.com/en/docs/cli/run for documentation about this command.
