@@ -273,14 +273,43 @@
              (tree->text tree-data))))))
 
 (deftest test-tree->text-replaces-uuid-refs
-  (testing "show tree text replaces inline [[uuid]] with referenced block content"
+  (testing "show tree text replaces inline [[uuid]] with referenced block content recursively"
     (let [tree->text #'show-command/tree->text
           uuid "11111111-1111-1111-1111-111111111111"
+          nested "22222222-2222-2222-2222-222222222222"
           tree-data {:root {:db/id 1
                             :block/title (str "See [[" uuid "]]")}
-                     :uuid->label {(string/lower-case uuid) "Target block"}}]
-      (is (= (str "1 See [[Target block]]")
+                     :uuid->label {(string/lower-case uuid) (str "Target [[" nested "]]")
+                                   (string/lower-case nested) "Inner"}}]
+      (is (= (str "1 See [[Target [[Inner]]]]")
              (tree->text tree-data))))))
+
+(deftest test-tree->text-uuid-ref-recursion-limit
+  (testing "show tree text limits uuid ref replacement depth"
+    (let [tree->text #'show-command/tree->text
+          uuids ["00000000-0000-0000-0000-000000000001"
+                 "00000000-0000-0000-0000-000000000002"
+                 "00000000-0000-0000-0000-000000000003"
+                 "00000000-0000-0000-0000-000000000004"
+                 "00000000-0000-0000-0000-000000000005"
+                 "00000000-0000-0000-0000-000000000006"
+                 "00000000-0000-0000-0000-000000000007"
+                 "00000000-0000-0000-0000-000000000008"
+                 "00000000-0000-0000-0000-000000000009"
+                 "00000000-0000-0000-0000-000000000010"
+                 "00000000-0000-0000-0000-000000000011"]
+          uuid->label (into {}
+                            (map-indexed (fn [idx id]
+                                           (let [label (if (< idx 10)
+                                                         (str "L" (inc idx) " [[" (nth uuids (inc idx)) "]]")
+                                                         (str "L" (inc idx)))]
+                                             [(string/lower-case id) label]))
+                                         uuids))
+          tree-data {:root {:db/id 1
+                            :block/title (str "Root [[" (first uuids) "]]")}
+                     :uuid->label uuid->label}
+          result (tree->text tree-data)]
+      (is (string/includes? result (str "[[" (nth uuids 10) "]]"))))))
 
 (deftest test-list-subcommand-parse
   (testing "list page parses"
@@ -437,10 +466,10 @@
       (is (= :missing-search-text (get-in result [:error :code])))))
 
   (testing "search parses with text"
-    (let [result (commands/parse-args ["search" "--text" "hello"])]
+    (let [result (commands/parse-args ["search" "hello"])]
       (is (true? (:ok? result)))
       (is (= :search (:command result)))
-      (is (= "hello" (get-in result [:options :text])))))
+      (is (= ["hello"] (:args result)))))
 
   (testing "show requires target"
     (let [result (commands/parse-args ["show"])]
@@ -454,6 +483,11 @@
       (is (= "Home" (get-in result [:options :page-name]))))))
 
 (deftest test-verb-subcommand-parse-graph-import-export
+  (testing "graph create requires --repo even with positional args"
+    (let [result (commands/parse-args ["graph" "create" "demo"])]
+      (is (false? (:ok? result)))
+      (is (= :missing-graph (get-in result [:error :code])))))
+
   (testing "graph export parses with type and output"
     (let [result (commands/parse-args ["graph" "export"
                                        "--type" "edn"
@@ -511,8 +545,16 @@
         (is (false? (:ok? result)))
         (is (= :invalid-options (get-in result [:error :code]))))))
 
+  (testing "search rejects deprecated flags"
+    (doseq [args [["search" "--limit" "10" "hello"]
+                  ["search" "--include-content" "hello"]
+                  ["search" "--text" "hello"]]]
+      (let [result (commands/parse-args args)]
+        (is (false? (:ok? result)))
+        (is (= :invalid-options (get-in result [:error :code]))))))
+
   (testing "verb subcommands accept output option"
-    (let [result (commands/parse-args ["search" "--text" "hello" "--output" "json"])]
+    (let [result (commands/parse-args ["search" "--output" "json" "hello"])]
       (is (true? (:ok? result)))
       (is (= "json" (get-in result [:options :output]))))))
 
@@ -612,6 +654,24 @@
           result (commands/build-action parsed {:repo "demo"})]
       (is (false? (:ok? result)))
       (is (= :missing-search-text (get-in result [:error :code])))))
+
+  (testing "search defaults to all types"
+    (let [parsed {:ok? true :command :search :options {} :args ["hello"]}
+          result (commands/build-action parsed {:repo "demo"})]
+      (is (true? (:ok? result)))
+      (is (= "all" (get-in result [:action :search-type])))))
+
+  (testing "search uses config repo and ignores positional text for repo"
+    (let [parsed {:ok? true :command :search :options {} :args ["hello"]}
+          result (commands/build-action parsed {:repo "demo"})]
+      (is (true? (:ok? result)))
+      (is (= "logseq_db_demo" (get-in result [:action :repo])))))
+
+  (testing "search uses first positional argument"
+    (let [parsed {:ok? true :command :search :options {} :args ["hello" "world"]}
+          result (commands/build-action parsed {:repo "demo"})]
+      (is (true? (:ok? result)))
+      (is (= "hello" (get-in result [:action :text])))))
 
   (testing "show requires target"
     (let [parsed {:ok? true :command :show :options {}}

@@ -41,13 +41,21 @@
             :opts opts
             :args args})}))
 
+(defn- command-usage
+  [cmds spec]
+  (let [base (string/join " " cmds)
+        positional (when (= cmds ["search"]) "<query>")
+        has-options? (seq spec)]
+    (cond-> base
+      positional (str " " positional)
+      has-options? (str " [options]"))))
+
 (defn- format-commands
   [table]
   (let [rows (->> table
                   (filter (comp seq :cmds))
                   (map (fn [{:keys [cmds desc spec]}]
-                         (let [command (str (string/join " " cmds)
-                                            (when (seq spec) " [options]"))]
+                         (let [command (command-usage cmds spec)]
                            {:command command
                             :desc desc}))))
         width (apply max 0 (map (comp count :command) rows))]
@@ -98,7 +106,7 @@
   [{:keys [cmds spec]}]
   (let [command-spec (apply dissoc spec (keys global-spec*))]
     (string/join "\n"
-                 [(str "Usage: logseq " (string/join " " cmds) " [options]")
+                 [(str "Usage: logseq " (command-usage cmds spec))
                   ""
                   "Global options:"
                   (cli/format-opts {:spec global-spec*})
@@ -210,7 +218,6 @@
       (graph->repo graph))))
 
 (defn pick-graph
-  [options command-args config]
+  [options _command-args config]
   (or (:repo options)
-      (first command-args)
       (:repo config)))

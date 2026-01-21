@@ -164,7 +164,7 @@
       (and (= command :show) (> (count show-targets) 1))
       (command-core/invalid-options-result summary "only one of --id, --uuid, or --page-name is allowed")
 
-      (and (= command :search) (not (or (seq (:text opts)) has-args?)))
+      (and (= command :search) (not has-args?))
       (missing-search-result summary)
 
       (and (#{:list-page :list-tag :list-property} command)
