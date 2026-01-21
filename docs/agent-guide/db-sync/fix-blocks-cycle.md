@@ -8,7 +8,7 @@ This document describes the handling of cycles formed between multiple blocks in
 ## What the server returns
 - The reject payload includes:
   - `attr`: the attribute that introduced the cycle (for blocks this is `:block/parent`).
-  - `server_values`: a map of the affected entities to the server’s current value for `attr` (from `logseq.db-sync.cycle/server-values-for`).
+  - `server-values`: a map of the affected entities to the server’s current value for `attr` (from `logseq.db-sync.cycle/server-values-for`).
 - This allows the client to realign its local state to the server’s authoritative values.
 
 ## Client-side reconciliation

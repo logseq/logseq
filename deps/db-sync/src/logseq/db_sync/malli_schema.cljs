@@ -20,14 +20,14 @@
    ["tx/batch"
     [:map
      [:type [:= "tx/batch"]]
-     [:t_before :int]
+     [:t-before :int]
      [:txs :string]]]
    ["ping"
     [:map
      [:type [:= "ping"]]]]])
 
 (def tx-reject-reason-schema
-  [:enum "stale" "cycle" "empty tx data" "invalid tx" "invalid t_before"])
+  [:enum "stale" "cycle" "empty tx data" "invalid tx" "invalid t-before"])
 
 (def tx-reject-schema
   [:map
@@ -38,7 +38,7 @@
 
 (def user-presence-schema
   [:map
-   [:user_id :string]
+   [:user-id :string]
    [:email {:optional true} [:maybe :string]]
    [:username {:optional true} [:maybe :string]]
    [:name {:optional true} [:maybe :string]]])
@@ -91,22 +91,22 @@
 
 (def graph-info-schema
   [:map
-   [:graph_id :string]
-   [:graph_name :string]
-   [:schema_version {:optional true} [:maybe :string]]
-   [:created_at :int]
-   [:updated_at :int]])
+   [:graph-id :string]
+   [:graph-name :string]
+   [:schema-version {:optional true} [:maybe :string]]
+   [:created-at :int]
+   [:updated-at :int]])
 
 (def graph-member-role-schema
   [:enum "manager" "member"])
 
 (def graph-member-info-schema
   [:map
-   [:user_id :string]
-   [:graph_id :string]
+   [:user-id :string]
+   [:graph-id :string]
    [:role graph-member-role-schema]
-   [:invited_by {:optional true} [:maybe :string]]
-   [:created_at :int]
+   [:invited-by {:optional true} [:maybe :string]]
+   [:created-at :int]
    [:email {:optional true} [:maybe :string]]
    [:username {:optional true} [:maybe :string]]])
 
@@ -120,24 +120,24 @@
 
 (def graph-create-request-schema
   [:map
-   [:graph_name :string]
-   [:schema_version {:optional true} [:maybe :string]]])
+   [:graph-name :string]
+   [:schema-version {:optional true} [:maybe :string]]])
 
 (def graph-create-response-schema
   [:map
-   [:graph_id :string]])
+   [:graph-id :string]])
 
 (def graph-access-response-schema http-ok-response-schema)
 
 (def graph-delete-response-schema
   [:map
-   [:graph_id :string]
+   [:graph-id :string]
    [:deleted :boolean]])
 
 (def graph-member-create-request-schema
   [:or
    [:map
-    [:user_id :string]
+    [:user-id :string]
     [:role {:optional true} graph-member-role-schema]]
    [:map
     [:email :string]
@@ -149,7 +149,7 @@
 
 (def tx-batch-request-schema
   [:map
-   [:t_before :int]
+   [:t-before :int]
    [:txs :string]])
 
 (def snapshot-row-schema
@@ -163,7 +163,7 @@
 (def snapshot-rows-response-schema
   [:map
    [:rows [:sequential snapshot-row-schema]]
-   [:last_addr :int]
+   [:last-addr :int]
    [:done :boolean]])
 
 (def snapshot-import-request-schema
