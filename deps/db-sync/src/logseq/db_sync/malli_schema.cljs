@@ -94,16 +94,18 @@
   [:map
    [:ok :boolean]])
 
+(def graph-member-role-schema
+  [:enum "manager" "member"])
+
 (def graph-info-schema
   [:map
    [:graph-id :string]
    [:graph-name :string]
    [:schema-version {:optional true} [:maybe :string]]
+   [:role {:optional true} [:maybe graph-member-role-schema]]
+   [:invited-by {:optional true} [:maybe :string]]
    [:created-at :int]
    [:updated-at :int]])
-
-(def graph-member-role-schema
-  [:enum "manager" "member"])
 
 (def graph-member-info-schema
   [:map
