@@ -20,6 +20,10 @@ This module is intended to be consumed by the Logseq app and the publishing work
 ## Dev
 
 Keep this module aligned with the main repo's linting and testing conventions.
+Most of the same linters are used, with configurations that are specific to this
+library. See [this library's CI file](/.github/workflows/deps-publish.yml) for
+linting examples.
+
 
 ### Local Testing
 
