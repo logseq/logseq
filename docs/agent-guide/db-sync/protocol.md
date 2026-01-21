@@ -9,6 +9,8 @@
 ## Client -> Server
 - `{"type":"hello","client":"<repo-id>"}`
   - Initial handshake from client.
+- `{"type":"presence","editing-block-uuid":"<uuid|null>"}`
+  - Update current editing block for presence (omit or null to clear).
 - `{"type":"pull","since":<t>}`
   - Request txs after `since` (defaults to 0).
 - `{"type":"tx/batch","t-before":<t>,"txs":["<tx-transit>", ...]}`
@@ -21,6 +23,7 @@
   - Server hello with current t.
 - `{"type":"online-users","online-users":[{"user-id":"...","email":"...","username":"...","name":"..."}...]}`
   - Presence update with currently online users (fields may be omitted).
+  - Optional `editing-block-uuid` indicates the block the user is editing.
 - `{"type":"pull/ok","t":<t>,"txs":[{"t":<t>,"tx":"<tx-transit>"}...]}`
   - Pull response with txs.
 - `{"type":"tx/batch/ok","t":<t>}`

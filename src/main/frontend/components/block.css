@@ -195,6 +195,7 @@
 
 .block-control-wrap, .ls-page-title .property-value .block-control-wrap {
   @apply h-[24px];
+  @apply relative;
 
   &.is-order-list {
     @apply mr-0 pr-0;
@@ -226,6 +227,12 @@
   &.bullet-hidden {
     padding-right: 2px;
   }
+}
+
+.block-editing-avatar-wrap {
+  @apply absolute top-1/2 -translate-y-1/2 pointer-events-none;
+  left: 2px;
+  z-index: 2;
 }
 
 .ls-page-title .block-control-wrap {

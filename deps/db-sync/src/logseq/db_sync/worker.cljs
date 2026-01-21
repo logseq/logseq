@@ -162,6 +162,20 @@
   [^js self ^js ws user]
   (swap! (presence* self) assoc ws user))
 
+(defn- update-presence!
+  [^js self ^js ws {:keys [editing-block-uuid] :as updates}]
+  (swap! (presence* self)
+         (fn [presence]
+           (if-let [user (get presence ws)]
+             (let [user' (if (contains? updates :editing-block-uuid)
+                           (if (and (string? editing-block-uuid)
+                                    (not (string/blank? editing-block-uuid)))
+                             (assoc user :editing-block-uuid editing-block-uuid)
+                             (dissoc user :editing-block-uuid))
+                           user)]
+               (assoc presence ws user'))
+             presence))))
+
 (defn- remove-presence!
   [^js self ^js ws]
   (swap! (presence* self) dissoc ws))
@@ -419,6 +433,11 @@
 
         "ping"
         (send! ws {:type "pong"})
+
+        "presence"
+        (let [editing-block-uuid (:editing-block-uuid message)]
+          (update-presence! self ws {:editing-block-uuid editing-block-uuid})
+          (broadcast-online-users! self))
 
         "pull"
         (let [raw-since (:since message)
