@@ -11,15 +11,15 @@
   - Initial handshake from client.
 - `{"type":"pull","since":<t>}`
   - Request txs after `since` (defaults to 0).
-- `{"type":"tx/batch","t_before":<t>,"txs":["<tx-transit>", ...]}`
-  - Upload a batch of txs based on `t_before` (required).
+- `{"type":"tx/batch","t-before":<t>,"txs":["<tx-transit>", ...]}`
+  - Upload a batch of txs based on `t-before` (required).
 - `{"type":"ping"}`
   - Optional keepalive; server replies `pong`.
 
 ## Server -> Client
 - `{"type":"hello","t":<t>}`
   - Server hello with current t.
-- `{"type":"online-users","online-users":[{"user_id":"...","email":"...","username":"...","name":"..."}...]}`
+- `{"type":"online-users","online-users":[{"user-id":"...","email":"...","username":"...","name":"..."}...]}`
   - Presence update with currently online users (fields may be omitted).
 - `{"type":"pull/ok","t":<t>,"txs":[{"t":<t>,"tx":"<tx-transit>"}...]}`
   - Pull response with txs.
@@ -29,9 +29,9 @@
   - Broadcast that server state advanced; client should pull.
 - `{"type":"tx/reject","reason":"stale","t":<t>}`
   - Client tx is based on stale t.
-- `{"type":"tx/reject","reason":"cycle","data":"<transit {:attr <kw> :server_values ...}>"}`
+- `{"type":"tx/reject","reason":"cycle","data":"<transit {:attr <kw> :server-values ...}>"}`
   - Cycle detected with server values.
-- `{"type":"tx/reject","reason":"empty tx data"|"invalid tx"|"invalid t_before"}`
+- `{"type":"tx/reject","reason":"empty tx data"|"invalid tx"|"invalid t-before"}`
   - Invalid batch.
 - `{"type":"pong"}`
   - Keepalive response.
@@ -49,15 +49,15 @@
 
 ### Graphs (index DO)
 - `GET /graphs`
-  - List graphs the user owns. Response: `{"graphs":[{graph_id, graph_name, schema_version?, created_at, updated_at}...]}`.
+  - List graphs the user owns. Response: `{"graphs":[{graph-id, graph-name, schema-version?, created-at, updated-at}...]}`.
 - `POST /graphs`
-  - Create graph. Body: `{"graph_name":"...","schema_version":"<major>"}` (schema_version optional). Response: `{"graph_id":"..."}`.
+  - Create graph. Body: `{"graph-name":"...","schema-version":"<major>"}` (schema-version optional). Response: `{"graph-id":"..."}`.
 - `GET /graphs/:graph-id/access`
   - Access check. Response: `{"ok":true}`, `401` (unauthorized), `403` (forbidden), or `404` (not found).
 - `GET /graphs/:graph-id/members`
-  - Graph members list. Response: `{"members":[{user_id, graph_id, role, invited_by, created_at, email?, username?}...]}`.
+  - Graph members list. Response: `{"members":[{user-id, graph-id, role, invited-by, created-at, email?, username?}...]}`.
 - `DELETE /graphs/:graph-id`
-  - Delete graph and reset data. Response: `{"graph_id":"...","deleted":true}` or `400` (missing graph id).
+  - Delete graph and reset data. Response: `{"graph-id":"...","deleted":true}` or `400` (missing graph id).
 
 ### Sync (per-graph DO, via `/sync/:graph-id/...`)
 - `GET /sync/:graph-id/health`
@@ -66,11 +66,11 @@
   - Same as WS pull. Response: `{"type":"pull/ok","t":<t>,"txs":[{"t":<t>,"tx":"<tx-transit>"}...]}`.
   - Error response (400): `{"error":"invalid since"}`.
 - `POST /sync/:graph-id/tx/batch`
-  - Same as WS tx/batch. Body: `{"t_before":<t>,"txs":["<tx-transit>", ...]}`.
+  - Same as WS tx/batch. Body: `{"t-before":<t>,"txs":["<tx-transit>", ...]}`.
   - Response: `{"type":"tx/batch/ok","t":<t>}` or `{"type":"tx/reject","reason":...}`.
   - Error response (400): `{"error":"missing body"|"invalid tx"}`.
 - `GET /sync/:graph-id/snapshot/rows?after=<addr>&limit=<n>`
-  - Pull sqlite kvs rows. Response: `{"rows":[{"addr":<addr>,"content":"<transit>","addresses":<json|null>}...],"last_addr":<addr>,"done":true|false}`.
+  - Pull sqlite kvs rows. Response: `{"rows":[{"addr":<addr>,"content":"<transit>","addresses":<json|null>}...],"last-addr":<addr>,"done":true|false}`.
 - `POST /sync/:graph-id/snapshot/import`
   - Import sqlite kvs rows. Body: `{"reset":true|false,"rows":[[addr,content,addresses]...]}`.
   - Response: `{"ok":true,"count":<n>}`.

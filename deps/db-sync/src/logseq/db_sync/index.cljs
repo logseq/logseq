@@ -44,11 +44,11 @@
                                    user-id)
             rows (common/get-sql-rows result)]
       (mapv (fn [row]
-              {:graph_id (aget row "graph_id")
-               :graph_name (aget row "graph_name")
-               :schema_version (aget row "schema_version")
-               :created_at (aget row "created_at")
-               :updated_at (aget row "updated_at")})
+              {:graph-id (aget row "graph_id")
+               :graph-name (aget row "graph_name")
+               :schema-version (aget row "schema_version")
+               :created-at (aget row "created_at")
+               :updated-at (aget row "updated_at")})
             rows))
     []))
 
@@ -131,11 +131,11 @@
                                  graph-id)
           rows (common/get-sql-rows result)]
     (mapv (fn [row]
-            {:user_id (aget row "user_id")
-             :graph_id (aget row "graph_id")
+            {:user-id (aget row "user_id")
+             :graph-id (aget row "graph_id")
              :role (aget row "role")
-             :invited_by (aget row "invited_by")
-             :created_at (aget row "created_at")
+             :invited-by (aget row "invited_by")
+             :created-at (aget row "created_at")
              :email (aget row "email")
              :username (aget row "username")})
           rows)))

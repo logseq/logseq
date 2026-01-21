@@ -20,7 +20,7 @@ echo
 
 curl -sS -X POST "${SYNC_BASE}/tx" \
   -H "content-type: application/json" \
-  --data-binary '{"t_before":0,"tx":"[]"}'
+  --data-binary '{"t-before":0,"tx":"[]"}'
 
 echo
 
