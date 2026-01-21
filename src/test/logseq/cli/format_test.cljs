@@ -171,7 +171,7 @@
                                                           :created-at 1}
                                                          {:type "block"
                                                           :db/id 102
-                                                          :content "Note"
+                                                          :content "Note line 1\nNote line 2"
                                                           :uuid "u2"
                                                           :updated-at 4
                                                           :created-at 2}
@@ -186,7 +186,8 @@
                                        {:output-format nil})]
       (is (= (str "ID   TITLE\n"
                   "101  Alpha\n"
-                  "102  Note\n"
+                  "102  Note line 1\n"
+                  "     Note line 2\n"
                   "103  Taggy\n"
                   "104  Prop\n"
                   "Count: 4")
