@@ -71,7 +71,7 @@
     :missing-graph "Use --repo <name>"
     :missing-repo "Use --repo <name>"
     :missing-content "Use --content or pass content as args"
-    :missing-search-text "Provide search text or --text"
+    :missing-search-text "Provide search text as a positional argument"
     nil))
 
 (defn- format-error
@@ -166,13 +166,10 @@
 (defn- format-search-results
   [results]
   (format-counted-table
-   ["TYPE" "TITLE/CONTENT" "UUID" "UPDATED-AT" "CREATED-AT"]
+   ["ID" "TITLE"]
    (mapv (fn [item]
-           [(:type item)
-            (or (:title item) (:content item))
-            (:uuid item)
-            (:updated-at item)
-            (:created-at item)])
+           [(:db/id item)
+            (or (:title item) (:content item))])
          (or results []))))
 
 (defn- format-graph-info

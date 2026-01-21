@@ -61,6 +61,7 @@
 (declare tree->text)
 
 (def ^:private uuid-ref-pattern #"\[\[([0-9a-fA-F-]{36})\]\]")
+(def ^:private uuid-ref-max-depth 10)
 
 (defn- tag-label
   [tag]
@@ -68,7 +69,7 @@
       (:block/name tag)
       (some-> (:block/uuid tag) str)))
 
-(defn- replace-uuid-refs
+(defn- replace-uuid-refs-once
   [value uuid->label]
   (if (and (string? value) (seq uuid->label))
     (string/replace value uuid-ref-pattern
@@ -77,6 +78,17 @@
                         (str "[[" label "]]")
                         (str "[[" id "]]"))))
     value))
+
+(defn- replace-uuid-refs
+  [value uuid->label]
+  (loop [current value
+         remaining uuid-ref-max-depth]
+    (if (or (not (string? current)) (zero? remaining) (empty? uuid->label))
+      current
+      (let [next (replace-uuid-refs-once current uuid->label)]
+        (if (= next current)
+          current
+          (recur next (dec remaining)))))))
 
 (defn- tags->suffix
   [tags]
@@ -121,6 +133,29 @@
       (and base tags-suffix) (str base " " tags-suffix)
       tags-suffix tags-suffix
       :else base)))
+
+(defn- resolve-uuid-refs-in-node
+  [node uuid->label]
+  (cond-> node
+    (:block/title node) (update :block/title replace-uuid-refs uuid->label)
+    (:block/name node) (update :block/name replace-uuid-refs uuid->label)
+    (:block/children node) (update :block/children (fn [children]
+                                                     (mapv #(resolve-uuid-refs-in-node % uuid->label) children)))
+    (:block/page node) (update :block/page (fn [page]
+                                             (if (map? page)
+                                               (resolve-uuid-refs-in-node page uuid->label)
+                                               page)))
+    (:block/tags node) (update :block/tags (fn [tags]
+                                             (mapv #(resolve-uuid-refs-in-node % uuid->label) tags)))))
+
+(defn- resolve-uuid-refs-in-tree-data
+  [{:keys [linked-references] :as tree-data} uuid->label]
+  (let [resolve-node #(resolve-uuid-refs-in-node % uuid->label)]
+    (cond-> (update tree-data :root resolve-node)
+      (seq (:blocks linked-references))
+      (update :linked-references
+              (fn [refs]
+                (update refs :blocks #(mapv resolve-node %)))))))
 
 (defn- page-label
   [block]
@@ -429,6 +464,7 @@
               tree-data (assoc tree-data
                                :linked-references linked-refs
                                :uuid->label uuid->label)
+              tree-data (resolve-uuid-refs-in-tree-data tree-data uuid->label)
               format (:format action)]
         (case format
           "edn"
