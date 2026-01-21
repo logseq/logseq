@@ -338,6 +338,7 @@
                        [:logseq.kv/db-type
                         :logseq.kv/schema-version
                         :logseq.kv/graph-uuid
+                        :logseq.kv/local-graph-uuid
                         :logseq.kv/graph-rtc-e2ee?
                         :logseq.kv/latest-code-lang
                         :logseq.kv/graph-backup-folder
