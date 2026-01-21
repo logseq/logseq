@@ -157,29 +157,18 @@
    [:t-before :int]
    [:txs :string]])
 
-(def snapshot-row-schema
-  [:or
-   [:tuple :int :string [:maybe :any]]
-   [:map
-    [:addr :int]
-    [:content :string]
-    [:addresses {:optional true} :any]]])
-
-(def snapshot-rows-response-schema
-  [:map
-   [:rows [:sequential snapshot-row-schema]]
-   [:last-addr :int]
-   [:done :boolean]])
-
-(def snapshot-import-request-schema
-  [:map
-   [:reset {:optional true} :boolean]
-   [:rows [:sequential [:tuple :int :string [:maybe :any]]]]])
-
-(def snapshot-import-response-schema
+(def snapshot-download-response-schema
   [:map
    [:ok :boolean]
-   [:count :int]])
+   [:key :string]
+   [:url :string]
+   [:content-encoding {:optional true} [:maybe :string]]])
+
+(def snapshot-upload-response-schema
+  [:map
+   [:ok :boolean]
+   [:count :int]
+   [:key :string]])
 
 (def asset-get-response-schema
   [:or
@@ -190,8 +179,7 @@
   {:graphs/create graph-create-request-schema
    :graph-members/create graph-member-create-request-schema
    :graph-members/update graph-member-update-request-schema
-   :sync/tx-batch tx-batch-request-schema
-   :sync/snapshot-import snapshot-import-request-schema})
+   :sync/tx-batch tx-batch-request-schema})
 
 (def http-response-schemas
   {:graphs/list graphs-list-response-schema
@@ -206,8 +194,8 @@
    :sync/health http-ok-response-schema
    :sync/pull pull-ok-schema
    :sync/tx-batch [:or tx-batch-ok-schema tx-reject-schema http-error-response-schema]
-   :sync/snapshot-rows snapshot-rows-response-schema
-   :sync/snapshot-import snapshot-import-response-schema
+   :sync/snapshot-download snapshot-download-response-schema
+   :sync/snapshot-upload snapshot-upload-response-schema
    :sync/admin-reset http-ok-response-schema
    :assets/get asset-get-response-schema
    :assets/put http-ok-response-schema
