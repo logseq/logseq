@@ -26,10 +26,6 @@ database_id = "c020574a-5623-407b-be0c-cd192bab9545"
 tag = "v1"
 new_sqlite_classes = [ "SyncDO" ]
 
-[[migrations]]
-tag = "v2"
-deleted_classes = ["SyncIndexDO"]
-
 [vars]
 COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
 COGNITO_ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"

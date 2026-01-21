@@ -6,6 +6,7 @@
             [lambdaisland.glogi.console :as glogi-console]
             [logseq.common.authorization :as authorization]
             [logseq.db :as ldb]
+            [logseq.db-sync.batch :as batch]
             [logseq.db-sync.common :as common :refer [cors-headers]]
             [logseq.db-sync.index :as index]
             [logseq.db-sync.malli-schema :as db-sync-schema]
@@ -254,13 +255,8 @@
 (defn- import-snapshot-rows!
   [sql table rows]
   (when (seq rows)
-    (doseq [[addr content addresses] rows]
-      (common/sql-exec sql
-                       (str "insert into " table " (addr, content, addresses) values (?, ?, ?)"
-                            " on conflict(addr) do update set content = excluded.content, addresses = excluded.addresses")
-                       addr
-                       content
-                       addresses))))
+    (doseq [{:keys [sql args]} (batch/rows->insert-batches table rows nil)]
+      (apply common/sql-exec sql sql args))))
 
 (defn- finalize-import!
   [^js self reset?]
