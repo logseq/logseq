@@ -322,6 +322,9 @@
 (defmethod handle :rtc/sync-state [[_ state]]
   (state/update-state! :rtc/state (fn [old] (merge old state))))
 
+(defmethod handle :rtc/presence-update [[_ {:keys [editing-block-uuid]}]]
+  (rtc-handler/<rtc-update-presence! editing-block-uuid))
+
 (defmethod handle :rtc/log [[_ data]]
   (state/set-state! :rtc/log data))
 

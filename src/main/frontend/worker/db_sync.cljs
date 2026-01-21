@@ -51,12 +51,15 @@
 (defn- normalize-online-users
   [users]
   (->> users
-       (keep (fn [{:keys [user-id email username name]}]
+       (keep (fn [{:keys [user-id email username name editing-block-uuid]}]
                (when (string? user-id)
                  (let [display-name (or username name user-id)]
                    (cond-> {:user/uuid user-id
                             :user/name display-name}
-                     (string? email) (assoc :user/email email))))))
+                     (string? email) (assoc :user/email email)
+                     (and (string? editing-block-uuid)
+                          (not (string/blank? editing-block-uuid)))
+                     (assoc :user/editing-block-uuid editing-block-uuid))))))
        (vec)))
 
 (defn- broadcast-rtc-state!
@@ -244,6 +247,13 @@
     (if-let [coerced (coerce-ws-client-message message)]
       (.send ws (js/JSON.stringify (clj->js coerced)))
       (log/error :db-sync/ws-request-invalid {:message message}))))
+
+(defn update-presence!
+  [editing-block-uuid]
+  (when-let [client @worker-state/*db-sync-client]
+    (when-let [ws (:ws client)]
+      (send! ws {:type "presence"
+                 :editing-block-uuid editing-block-uuid}))))
 
 (defn- remove-ignored-attrs
   [tx-data]
