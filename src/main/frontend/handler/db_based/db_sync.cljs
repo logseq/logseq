@@ -30,7 +30,60 @@
   (or config/db-sync-http-base
       (ws->http-base config/db-sync-ws-url)))
 
-(def ^:private snapshot-rows-limit 2000)
+(def ^:private snapshot-text-decoder (js/TextDecoder.))
+
+(defn- ->uint8 [data]
+  (cond
+    (instance? js/Uint8Array data) data
+    (instance? js/ArrayBuffer data) (js/Uint8Array. data)
+    (string? data) (.encode (js/TextEncoder.) data)
+    :else (js/Uint8Array. data)))
+
+(defn- decode-snapshot-rows [bytes]
+  (sqlite-util/read-transit-str (.decode snapshot-text-decoder (->uint8 bytes))))
+
+(defn- frame-len [^js data offset]
+  (let [view (js/DataView. (.-buffer data) offset 4)]
+    (.getUint32 view 0 false)))
+
+(defn- concat-bytes
+  [^js a ^js b]
+  (cond
+    (nil? a) b
+    (nil? b) a
+    :else
+    (let [out (js/Uint8Array. (+ (.-byteLength a) (.-byteLength b)))]
+      (.set out a 0)
+      (.set out b (.-byteLength a))
+      out)))
+
+(defn- parse-framed-chunk
+  [buffer chunk]
+  (let [data (concat-bytes buffer chunk)
+        total (.-byteLength data)]
+    (loop [offset 0
+           rows []]
+      (if (< (- total offset) 4)
+        {:rows rows
+         :buffer (when (< offset total)
+                   (.slice data offset total))}
+        (let [len (frame-len data offset)
+              next-offset (+ offset 4 len)]
+          (if (<= next-offset total)
+            (let [payload (.slice data (+ offset 4) next-offset)
+                  decoded (decode-snapshot-rows payload)]
+              (recur next-offset (into rows decoded)))
+            {:rows rows
+             :buffer (.slice data offset total)}))))))
+
+(defn- finalize-framed-buffer
+  [buffer]
+  (if (or (nil? buffer) (zero? (.-byteLength buffer)))
+    []
+    (let [{:keys [rows buffer]} (parse-framed-chunk nil buffer)]
+      (if (and (seq rows) (or (nil? buffer) (zero? (.-byteLength buffer))))
+        rows
+        (throw (ex-info "incomplete framed buffer" {:buffer buffer :rows rows}))))))
 
 (defn- auth-headers []
   (when-let [token (state/get-auth-id-token)]
@@ -176,31 +229,57 @@
   (state/set-state! :rtc/downloading-graph-uuid graph-uuid)
   (let [base (http-base)]
     (-> (if (and graph-uuid base)
-          (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
-                  graph (str config/db-version-prefix graph-name)]
-            (p/loop [after -1           ; root addr is 0
-                     first-batch? true]
-              (p/let [pull-resp (fetch-json (str base "/sync/" graph-uuid "/pull")
-                                            {:method "GET"}
-                                            {:response-schema :sync/pull})
-                      remote-tx (:t pull-resp)
-                      _ (when-not (integer? remote-tx)
-                          (throw (ex-info "non-integer remote-tx when downloading graph"
-                                          {:graph graph-name
-                                           :remote-tx remote-tx})))
-                      resp (fetch-json (str base "/sync/" graph-uuid "/snapshot/rows"
-                                            "?after=" after "&limit=" snapshot-rows-limit)
-                                       {:method "GET"}
-                                       {:response-schema :sync/snapshot-rows})
-                      rows (:rows resp)
-                      done? (true? (:done resp))
-                      last-addr (or (:last-addr resp) after)]
-                (p/do!
-                 (state/<invoke-db-worker :thread-api/db-sync-import-kvs-rows
-                                          graph rows first-batch?)
-                 (if done?
-                   (state/<invoke-db-worker :thread-api/db-sync-finalize-kvs-import graph remote-tx)
-                   (p/recur last-addr false))))))
+          (let [download-url* (atom nil)]
+            (-> (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
+                        graph (str config/db-version-prefix graph-name)
+                        pull-resp (fetch-json (str base "/sync/" graph-uuid "/pull")
+                                              {:method "GET"}
+                                              {:response-schema :sync/pull})
+                        remote-tx (:t pull-resp)
+                        _ (when-not (integer? remote-tx)
+                            (throw (ex-info "non-integer remote-tx when downloading graph"
+                                            {:graph graph-name
+                                             :remote-tx remote-tx})))
+                        download-resp (fetch-json (str base "/sync/" graph-uuid "/snapshot/download")
+                                                  {:method "GET"}
+                                                  {:response-schema :sync/snapshot-download})
+                        download-url (:url download-resp)
+                        _ (reset! download-url* download-url)
+                        _ (when-not (string? download-url)
+                            (throw (ex-info "missing snapshot download url"
+                                            {:graph graph-name
+                                             :response download-resp})))
+                        resp (js/fetch download-url (clj->js (with-auth-headers {:method "GET"})))]
+                  (when-not (.-ok resp)
+                    (throw (ex-info "snapshot download failed"
+                                    {:graph graph-name
+                                     :status (.-status resp)})))
+                  (when-not (.-body resp)
+                    (throw (ex-info "snapshot download missing body"
+                                    {:graph graph-name})))
+                  (p/let [reader (.getReader (.-body resp))]
+                    (p/loop [buffer nil
+                             total 0
+                             total-rows []]
+                      (p/let [chunk (.read reader)]
+                        (if (.-done chunk)
+                          (let [rows (finalize-framed-buffer buffer)
+                                total' (+ total (count rows))
+                                total-rows' (into total-rows rows)]
+                            (when (seq total-rows')
+                              (p/do!
+                               (state/<invoke-db-worker :thread-api/db-sync-import-kvs-rows
+                                                        graph total-rows' true)
+                               (state/<invoke-db-worker :thread-api/db-sync-finalize-kvs-import graph remote-tx)))
+                            total')
+                          (let [value (.-value chunk)
+                                {:keys [rows buffer]} (parse-framed-chunk buffer value)
+                                total' (+ total (count rows))]
+                            (p/recur buffer total' (into total-rows rows))))))))
+                (p/finally
+                  (fn []
+                    (when-let [download-url @download-url*]
+                      (js/fetch download-url (clj->js (with-auth-headers {:method "DELETE"}))))))))
           (p/rejected (ex-info "db-sync missing graph info"
                                {:type :db-sync/invalid-graph
                                 :graph-uuid graph-uuid
