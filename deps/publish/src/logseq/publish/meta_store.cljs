@@ -104,7 +104,7 @@
            "content_hash" (get data "content_hash")
            "content_length" (get data "content_length"))))
 
-(defn do-fetch [^js self request]
+(defn ^:large-vars/cleanup-todo do-fetch [^js self request]
   (let [sql (.-sql self)]
     (init-schema! sql)
     (cond
