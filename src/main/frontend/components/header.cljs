@@ -66,23 +66,9 @@
                    state)}
   [state]
   (let [rtc-graph-id (ldb/get-graph-rtc-uuid (db/get-db))
-        repo (state/get-current-repo)
         online-users @(::online-users state)]
     (when rtc-graph-id
       [:div.rtc-collaborators.flex.gap-1.text-sm.bg-gray-01.items-center
-       (when config/db-sync-enabled?
-         (shui/button-ghost-icon
-          :terminal
-          {:title "DB Sync state"
-           :on-click (fn [e]
-                       (p/let [client-state (state/<invoke-db-worker :thread-api/db-sync-state repo)]
-                         (let [state-label (if client-state (name client-state) "unknown")]
-                           (shui/popup-show!
-                            (.-target e)
-                            [:div.p-2.text-sm
-                             [:div.font-medium "DB Sync"]
-                             [:div.mt-1 (str "State: " state-label)]]
-                            {:align :start}))))}))
        (shui/button-ghost-icon :user-plus
                                {:on-click #(shui/dialog-open!
                                             (fn []

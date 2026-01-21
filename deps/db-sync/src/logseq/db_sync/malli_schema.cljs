@@ -36,6 +36,18 @@
    [:t {:optional true} :int]
    [:data {:optional true} :string]])
 
+(def user-presence-schema
+  [:map
+   [:user_id :string]
+   [:email {:optional true} [:maybe :string]]
+   [:username {:optional true} [:maybe :string]]
+   [:name {:optional true} [:maybe :string]]])
+
+(def online-users-schema
+  [:map
+   [:type [:= "online-users"]]
+   [:online-users [:sequential user-presence-schema]]])
+
 (def pull-ok-schema
   [:map
    [:type [:= "pull/ok"]]
@@ -53,6 +65,7 @@
     [:map
      [:type [:= "hello"]]
      [:t :int]]]
+   ["online-users" online-users-schema]
    ["pull/ok" pull-ok-schema]
    ["tx/batch/ok" tx-batch-ok-schema]
    ["changed"
@@ -93,7 +106,9 @@
    [:graph_id :string]
    [:role graph-member-role-schema]
    [:invited_by {:optional true} [:maybe :string]]
-   [:created_at :int]])
+   [:created_at :int]
+   [:email {:optional true} [:maybe :string]]
+   [:username {:optional true} [:maybe :string]]])
 
 (def graph-members-list-response-schema
   [:map

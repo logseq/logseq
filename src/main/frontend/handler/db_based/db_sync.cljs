@@ -104,7 +104,25 @@
 
 (defn <rtc-get-users-info
   []
-  (p/resolved nil))
+  (when-let [graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]
+    (let [base (http-base)
+          repo (state/get-current-repo)]
+      (if base
+        (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
+                resp (fetch-json (str base "/graphs/" graph-uuid "/members")
+                                 {:method "GET"}
+                                 {:response-schema :graph-members/list})
+                members (:members resp)
+                users (mapv (fn [{:keys [user_id role email username]}]
+                              (let [name (or username email user_id)
+                                    user-type (some-> role keyword)]
+                                (cond-> {:user/uuid user_id
+                                         :user/name name
+                                         :graph<->user/user-type user-type}
+                                  (string? email) (assoc :user/email email))))
+                            members)]
+          (state/set-state! :rtc/users-info {repo users}))
+        (p/resolved nil)))))
 
 (defn <rtc-create-graph!
   [repo]

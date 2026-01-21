@@ -19,6 +19,8 @@
 ## Server -> Client
 - `{"type":"hello","t":<t>}`
   - Server hello with current t.
+- `{"type":"online-users","online-users":[{"user_id":"...","email":"...","username":"...","name":"..."}...]}`
+  - Presence update with currently online users (fields may be omitted).
 - `{"type":"pull/ok","t":<t>,"txs":[{"t":<t>,"tx":"<tx-transit>"}...]}`
   - Pull response with txs.
 - `{"type":"tx/batch/ok","t":<t>}`
@@ -52,6 +54,8 @@
   - Create graph. Body: `{"graph_name":"...","schema_version":"<major>"}` (schema_version optional). Response: `{"graph_id":"..."}`.
 - `GET /graphs/:graph-id/access`
   - Access check. Response: `{"ok":true}`, `401` (unauthorized), `403` (forbidden), or `404` (not found).
+- `GET /graphs/:graph-id/members`
+  - Graph members list. Response: `{"members":[{user_id, graph_id, role, invited_by, created_at, email?, username?}...]}`.
 - `DELETE /graphs/:graph-id`
   - Delete graph and reset data. Response: `{"graph_id":"...","deleted":true}` or `400` (missing graph id).
 

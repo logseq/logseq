@@ -16,6 +16,7 @@
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.db-metadata :as worker-db-metadata]
+            [frontend.worker.db-sync :as db-sync]
             [frontend.worker.db.fix :as db-fix]
             [frontend.worker.db.migrate :as db-migrate]
             [frontend.worker.db.validate :as worker-db-validate]
@@ -34,7 +35,6 @@
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.thread-atom]
-            [frontend.worker.db-sync :as db-sync]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [lambdaisland.glogi.console :as glogi-console]
@@ -428,10 +428,6 @@
 (def-thread-api :thread-api/db-sync-upload-graph
   [repo]
   (db-sync/upload-graph! repo))
-
-(def-thread-api :thread-api/db-sync-state
-  [repo]
-  (db-sync/get-client-state repo))
 
 (def-thread-api :thread-api/set-infer-worker-proxy
   [infer-worker-proxy]
