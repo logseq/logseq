@@ -11,8 +11,7 @@
   com.lambdaisland/glogi                {:git/url "https://github.com/lambdaisland/glogi"
                                          :git/sha "30328a045141717aadbbb693465aed55f0904976"}
   logseq/common                         {:local/root "../common"}
-  logseq/db                             {:local/root "../db"}
-  logseq/outliner                       {:local/root "../outliner"}}
+  logseq/db                             {:local/root "../db"}}
  :aliases
  {:cljs {:extra-deps {org.clojure/tools.namespace      {:mvn/version "0.2.11"}
                       cider/cider-nrepl                {:mvn/version "0.55.1"}

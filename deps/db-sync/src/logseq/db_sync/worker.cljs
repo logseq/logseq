@@ -1,7 +1,6 @@
 (ns logseq.db-sync.worker
   (:require ["cloudflare:workers" :refer [DurableObject]]
             [clojure.string :as string]
-            [datascript.core :as d]
             [lambdaisland.glogi :as log]
             [lambdaisland.glogi.console :as glogi-console]
             [logseq.common.authorization :as authorization]

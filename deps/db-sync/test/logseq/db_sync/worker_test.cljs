@@ -23,7 +23,7 @@
                         :block/parent [:block/uuid parent]
                         :block/order order-b}])
     (let [tx [[:db/add [:block/uuid block-b] :block/order order-a]]
-          _ (sync-order/fix-duplicate-orders! @conn tx {})
+          _ (sync-order/fix-duplicate-orders! conn tx {})
           order-a' (:block/order (d/entity @conn [:block/uuid block-a]))
           order-b' (:block/order (d/entity @conn [:block/uuid block-b]))]
       (is (= order-a order-a'))
