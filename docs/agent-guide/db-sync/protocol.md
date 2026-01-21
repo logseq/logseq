@@ -72,12 +72,15 @@
   - Same as WS tx/batch. Body: `{"t-before":<t>,"txs":["<tx-transit>", ...]}`.
   - Response: `{"type":"tx/batch/ok","t":<t>}` or `{"type":"tx/reject","reason":...}`.
   - Error response (400): `{"error":"missing body"|"invalid tx"}`.
-- `GET /sync/:graph-id/snapshot/rows?after=<addr>&limit=<n>`
-  - Pull sqlite kvs rows. Response: `{"rows":[{"addr":<addr>,"content":"<transit>","addresses":<json|null>}...],"last-addr":<addr>,"done":true|false}`.
-- `POST /sync/:graph-id/snapshot/import`
-  - Import sqlite kvs rows. Body: `{"reset":true|false,"rows":[[addr,content,addresses]...]}`.
-  - Response: `{"ok":true,"count":<n>}`.
-  - Error response (400): `{"error":"missing body"|"invalid body"}`.
+- `GET /sync/:graph-id/snapshot/download`
+  - Build a snapshot file in R2 and return a download URL.
+  - Response: `{"ok":true,"key":"<graph-id>/<uuid>.snapshot","url":"<origin>/assets/:graph-id/<uuid>.snapshot","content-encoding":"gzip"}`.
+  - The snapshot file is a framed Transit JSON stream of kvs rows, optionally gzip-compressed.
+- `POST /sync/:graph-id/snapshot/upload?reset=true|false`
+  - Upload a snapshot stream (framed Transit JSON, optionally gzip-compressed). The server imports rows into kvs.
+  - Request body: binary stream; headers should include `content-type: application/transit+json` and `content-encoding: gzip` when compressed.
+  - Response: `{"ok":true,"count":<n>,"key":"<graph-id>/<uuid>.snapshot"}`.
+  - Error response (400): `{"error":"missing body"|"missing graph id"}`.
 - `DELETE /sync/:graph-id/admin/reset`
   - Drop/recreate per-graph tables. Response: `{"ok":true}`.
 

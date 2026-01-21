@@ -1,5 +1,6 @@
 (ns logseq.db-sync.worker
   (:require ["cloudflare:workers" :refer [DurableObject]]
+            [cljs-bean.core :as bean]
             [clojure.string :as string]
             [lambdaisland.glogi :as log]
             [lambdaisland.glogi.console :as glogi-console]
@@ -9,6 +10,7 @@
             [logseq.db-sync.index :as index]
             [logseq.db-sync.malli-schema :as db-sync-schema]
             [logseq.db-sync.protocol :as protocol]
+            [logseq.db-sync.snapshot :as snapshot]
             [logseq.db-sync.storage :as storage]
             [promesa.core :as p]
             [shadow.cljs.modern :refer (defclass)]))
@@ -223,8 +225,12 @@
         n))))
 
 (def ^:private max-asset-size (* 100 1024 1024))
-(def ^:private snapshot-rows-default-limit 500)
-(def ^:private snapshot-rows-max-limit 2000)
+(def ^:private snapshot-download-batch-size 500)
+(def ^:private snapshot-cache-control "private, max-age=300")
+(def ^:private snapshot-content-type "application/transit+json")
+(def ^:private snapshot-content-encoding "gzip")
+;; 10m
+(def ^:private snapshot-multipart-part-size (* 10 1024 1024))
 
 (defn- fetch-kvs-rows
   [sql after limit]
@@ -234,14 +240,216 @@
                     after
                     limit)))
 
-(defn- snapshot-row->map [row]
+(defn- snapshot-row->tuple [row]
   (if (array? row)
-    {:addr (aget row 0)
-     :content (aget row 1)
-     :addresses (aget row 2)}
-    {:addr (aget row "addr")
-     :content (aget row "content")
-     :addresses (aget row "addresses")}))
+    [(aget row 0) (aget row 1) (aget row 2)]
+    [(aget row "addr") (aget row "content") (aget row "addresses")]))
+
+(defn- ensure-import-table! [sql]
+  (common/sql-exec sql "drop table if exists kvs_import")
+  (common/sql-exec sql "create table if not exists kvs_import (addr INTEGER primary key, content TEXT, addresses JSON)"))
+
+(defn- import-snapshot-rows!
+  [sql table rows]
+  (when (seq rows)
+    (doseq [[addr content addresses] rows]
+      (common/sql-exec sql
+                       (str "insert into " table " (addr, content, addresses) values (?, ?, ?)"
+                            " on conflict(addr) do update set content = excluded.content, addresses = excluded.addresses")
+                       addr
+                       content
+                       addresses))))
+
+(defn- finalize-import!
+  [^js self reset?]
+  (let [sql (.-sql self)
+        state (.-state self)]
+    (ensure-schema! self)
+    (if (and state (.-storage state) (.-transactionSync (.-storage state)))
+      (.transactionSync (.-storage state)
+                        (fn []
+                          (if reset?
+                            (do
+                              (common/sql-exec sql "delete from kvs")
+                              (common/sql-exec sql "insert into kvs (addr, content, addresses) select addr, content, addresses from kvs_import")
+                              (common/sql-exec sql "delete from tx_log")
+                              (common/sql-exec sql "delete from sync_meta")
+                              (storage/set-t! sql 0))
+                            (do
+                              (common/sql-exec sql "delete from kvs where addr in (select addr from kvs_import)")
+                              (common/sql-exec sql "insert into kvs (addr, content, addresses) select addr, content, addresses from kvs_import")))
+                          (common/sql-exec sql "drop table if exists kvs_import")))
+      (do
+        (log/error :db-sync/transaction-missing {:reset reset?})
+        (throw (ex-info "missing durable object transaction" {:reset reset?}))))
+    (set! (.-conn self) (storage/open-conn sql))))
+
+(defn- graph-id-from-request [request]
+  (let [header-id (.get (.-headers request) "x-graph-id")
+        url (js/URL. (.-url request))
+        param-id (.get (.-searchParams url) "graph-id")]
+    (when (seq (or header-id param-id))
+      (or header-id param-id))))
+
+(defn- snapshot-key [graph-id snapshot-id]
+  (str graph-id "/" snapshot-id ".snapshot"))
+
+(defn- snapshot-url [request graph-id snapshot-id]
+  (let [url (js/URL. (.-url request))]
+    (str (.-origin url) "/assets/" graph-id "/" snapshot-id ".snapshot")))
+
+(defn- maybe-compress-stream [stream]
+  (if (exists? js/CompressionStream)
+    (.pipeThrough stream (js/CompressionStream. "gzip"))
+    stream))
+
+(defn- maybe-decompress-stream [stream encoding]
+  (if (and (= encoding snapshot-content-encoding) (exists? js/DecompressionStream))
+    (.pipeThrough stream (js/DecompressionStream. "gzip"))
+    stream))
+
+(defn- ->uint8 [data]
+  (cond
+    (instance? js/Uint8Array data) data
+    (instance? js/ArrayBuffer data) (js/Uint8Array. data)
+    :else (js/Uint8Array. data)))
+
+(defn- concat-uint8 [^js a ^js b]
+  (cond
+    (nil? a) b
+    (nil? b) a
+    :else
+    (let [out (js/Uint8Array. (+ (.-byteLength a) (.-byteLength b)))]
+      (.set out a 0)
+      (.set out b (.-byteLength a))
+      out)))
+
+(defn- snapshot-export-stream [^js self]
+  (let [sql (.-sql self)
+        state (volatile! {:after -1 :done? false})]
+    (js/ReadableStream.
+     #js {:pull (fn [controller]
+                  (p/let [{:keys [after done?]} @state]
+                    (if done?
+                      (.close controller)
+                      (let [rows (fetch-kvs-rows sql after snapshot-download-batch-size)
+                            rows (mapv snapshot-row->tuple rows)
+                            last-addr (if (seq rows)
+                                        (apply max (map first rows))
+                                        after)
+                            done? (< (count rows) snapshot-download-batch-size)]
+                        (when (seq rows)
+                          (let [payload (snapshot/encode-rows rows)
+                                framed (snapshot/frame-bytes payload)]
+                            (.enqueue controller framed)))
+                        (vswap! state assoc :after last-addr :done? done?)))))})))
+
+(defn- upload-multipart!
+  [^js bucket key stream opts]
+  (p/let [^js upload (.createMultipartUpload bucket key opts)]
+    (let [reader (.getReader stream)]
+      (-> (p/loop [buffer nil
+                   part-number 1
+                   parts []]
+            (p/let [chunk (.read reader)]
+              (if (.-done chunk)
+                (cond
+                  (and buffer (pos? (.-byteLength buffer)))
+                  (p/let [^js resp (.uploadPart upload part-number buffer)
+                          parts (conj parts {:partNumber part-number :etag (.-etag resp)})]
+                    (p/let [_ (.complete upload (clj->js parts))]
+                      {:ok true}))
+
+                  (seq parts)
+                  (p/let [_ (.complete upload (clj->js parts))]
+                    {:ok true})
+
+                  :else
+                  (p/let [_ (.abort upload)]
+                    (.put bucket key (js/Uint8Array. 0) opts)))
+                (let [value (.-value chunk)
+                      buffer (concat-uint8 buffer (->uint8 value))]
+                  (if (>= (.-byteLength buffer) snapshot-multipart-part-size)
+                    (let [part (.slice buffer 0 snapshot-multipart-part-size)
+                          rest-parts (.slice buffer snapshot-multipart-part-size (.-byteLength buffer))]
+                      (p/let [^js resp (.uploadPart upload part-number part)
+                              parts (conj parts {:partNumber part-number :etag (.-etag resp)})]
+                        (p/recur rest-parts (inc part-number) parts)))
+                    (p/recur buffer part-number parts))))))
+          (p/catch (fn [error]
+                     (.abort upload)
+                     (throw error)))))))
+
+(defn- snapshot-export-length [^js self]
+  (let [sql (.-sql self)]
+    (p/loop [after -1
+             total 0]
+      (let [rows (fetch-kvs-rows sql after snapshot-download-batch-size)]
+        (if (empty? rows)
+          total
+          (let [rows (mapv snapshot-row->tuple rows)
+                payload (snapshot/encode-rows rows)
+                total (+ total 4 (.-byteLength payload))
+                last-addr (apply max (map first rows))
+                done? (< (count rows) snapshot-download-batch-size)]
+            (if done?
+              total
+              (p/recur last-addr total))))))))
+
+(defn- snapshot-export-fixed-length [^js self]
+  (p/let [length (snapshot-export-length self)
+          stream (snapshot-export-stream self)]
+    (if (exists? js/FixedLengthStream)
+      (let [^js fixed (js/FixedLengthStream. length)
+            readable (.-readable fixed)
+            writable (.-writable fixed)
+            reader (.getReader stream)
+            writer (.getWriter writable)]
+        (p/let [_ (p/loop []
+                    (p/let [chunk (.read reader)]
+                      (if (.-done chunk)
+                        (.close writer)
+                        (p/let [_ (.write writer (.-value chunk))]
+                          (p/recur)))))]
+          readable))
+      (p/let [resp (js/Response. stream)
+              buf (.arrayBuffer resp)]
+        buf))))
+
+(declare import-snapshot!)
+(defn- import-snapshot-stream! [^js self stream reset?]
+  (let [reader (.getReader stream)
+        reset-pending? (volatile! reset?)
+        total-count (volatile! 0)]
+    (ensure-import-table! (.-sql self))
+    (p/let [buffer nil]
+      (p/catch
+       (p/loop [buffer buffer]
+         (p/let [chunk (.read reader)]
+           (if (.-done chunk)
+             (let [rows (snapshot/finalize-framed-buffer buffer)
+                   rows-count (count rows)
+                   reset? (and @reset-pending? true)]
+               (when (or reset? (seq rows))
+                 (import-snapshot! self rows reset?)
+                 (vreset! reset-pending? false))
+               (vswap! total-count + rows-count)
+               (finalize-import! self reset?)
+               @total-count)
+             (let [value (.-value chunk)
+                   {:keys [rows buffer]} (snapshot/parse-framed-chunk buffer value)
+                   rows-count (count rows)
+                   reset? (and @reset-pending? (seq rows))]
+               (when (seq rows)
+                 (import-snapshot! self rows (true? reset?))
+                 (vreset! reset-pending? false))
+               (vswap! total-count + rows-count)
+               (p/recur buffer)))))
+       (fn [error]
+         (try
+           (common/sql-exec (.-sql self) "drop table if exists kvs_import")
+           (catch :default _))
+         (throw error))))))
 
 (defn- handle-assets [request ^js env]
   (let [url (js/URL. (.-url request))
@@ -262,13 +470,26 @@
                      (fn [^js obj]
                        (if (nil? obj)
                          (error-response "not found" 404)
-                         (let [content-type (or (.-contentType (.-httpMetadata obj))
-                                                "application/octet-stream")]
+                         (let [metadata (.-httpMetadata obj)
+                               content-type (or (.-contentType metadata)
+                                                "application/octet-stream")
+                               content-encoding (.-contentEncoding metadata)
+                               cache-control (.-cacheControl metadata)
+                               headers (cond-> {"content-type" content-type
+                                                "x-asset-type" asset-type}
+                                         (and (string? content-encoding)
+                                              (not= content-encoding "null")
+                                              (pos? (.-length content-encoding)))
+                                         (assoc "content-encoding" content-encoding)
+                                         (and (string? cache-control)
+                                              (pos? (.-length cache-control)))
+                                         (assoc "cache-control" cache-control)
+                                         true
+                                         (bean/->js))]
                            (js/Response. (.-body obj)
                                          #js {:status 200
                                               :headers (js/Object.assign
-                                                        #js {"content-type" content-type
-                                                             "x-asset-type" asset-type}
+                                                        headers
                                                         (cors-headers))})))))
 
               "PUT"
@@ -330,7 +551,7 @@
             tail (if (neg? slash-idx)
                    "/"
                    (subs rest-path slash-idx))
-            new-url (str (.-origin url) tail (.-search url))]
+            new-url (js/URL. (str (.-origin url) tail (.-search url)))]
         (if (seq graph-id)
           (if (= method "OPTIONS")
             (common/options-response)
@@ -341,8 +562,10 @@
                       stub (.get namespace do-id)]
                   (if (common/upgrade-request? request)
                     (.fetch stub request)
-                    (let [rewritten (js/Request. new-url request)]
-                      (.fetch stub rewritten))))
+                    (do
+                      (.set (.-searchParams new-url) "graph-id" graph-id)
+                      (let [rewritten (js/Request. (.toString new-url) request)]
+                        (.fetch stub rewritten)))))
                 access-resp)))
           (bad-request "missing graph id")))
 
@@ -370,25 +593,10 @@
 ;;      :t (t-now self)
 ;;      :datoms (common/write-transit datoms)}))
 
-(defn- import-snapshot! [^js self rows reset?]
+(defn- import-snapshot! [^js self rows _reset?]
   (let [sql (.-sql self)]
     (ensure-schema! self)
-    (when reset?
-      (common/sql-exec sql "delete from kvs")
-      (common/sql-exec sql "delete from tx_log")
-      (common/sql-exec sql "delete from sync_meta")
-      (storage/init-schema! sql)
-      (set! (.-schema-ready self) true)
-      (storage/set-t! sql 0))
-    (when (seq rows)
-      (doseq [[addr content addresses] rows]
-        (common/sql-exec sql
-                         (str "insert into kvs (addr, content, addresses) values (?, ?, ?)"
-                              " on conflict(addr) do update set content = excluded.content, addresses = excluded.addresses")
-                         addr
-                         content
-                         addresses)))
-    (set! (.-conn self) (storage/open-conn sql))))
+    (import-snapshot-rows! sql "kvs_import" rows)))
 
 (defn- apply-tx! [^js self sender txs]
   (let [sql (.-sql self)]
@@ -512,22 +720,36 @@
             ;; (and (= method "GET") (= path "/snapshot"))
             ;; (common/json-response (snapshot-response self))
 
-            (and (= method "GET") (= path "/snapshot/rows"))
-            (let [after (or (parse-int (.get (.-searchParams url) "after")) -1)
-                  limit (or (parse-int (.get (.-searchParams url) "limit"))
-                            snapshot-rows-default-limit)
-                  limit (-> limit
-                            (max 1)
-                            (min snapshot-rows-max-limit))
-                  rows (fetch-kvs-rows (.-sql self) after limit)
-                  rows (mapv snapshot-row->map rows)
-                  last-addr (if (seq rows)
-                              (apply max (map :addr rows))
-                              after)
-                  done? (< (count rows) limit)]
-              (json-response :sync/snapshot-rows {:rows rows
-                                                  :last-addr last-addr
-                                                  :done done?}))
+            (and (= method "GET") (= path "/snapshot/download"))
+            (let [graph-id (graph-id-from-request request)
+                  ^js bucket (.-LOGSEQ_SYNC_ASSETS (.-env self))]
+              (cond
+                (not (seq graph-id))
+                (bad-request "missing graph id")
+
+                (nil? bucket)
+                (error-response "missing assets bucket" 500)
+
+                :else
+                (p/let [snapshot-id (str (random-uuid))
+                        key (snapshot-key graph-id snapshot-id)
+                        stream (snapshot-export-stream self)
+                        multipart? (and (some? (.-createMultipartUpload bucket))
+                                        (fn? (.-createMultipartUpload bucket)))
+                        opts #js {:httpMetadata #js {:contentType snapshot-content-type
+                                                     :contentEncoding nil
+                                                     :cacheControl snapshot-cache-control}
+                                  :customMetadata #js {:purpose "snapshot"
+                                                       :created-at (str (common/now-ms))}}
+                        _ (if multipart?
+                            (upload-multipart! bucket key stream opts)
+                            (p/let [body (snapshot-export-fixed-length self)]
+                              (.put bucket key body opts)))
+                        url (snapshot-url request graph-id snapshot-id)]
+                  (json-response :sync/snapshot-download {:ok true
+                                                          :key key
+                                                          :url url
+                                                          :content-encoding nil}))))
 
             (and (= method "DELETE") (= path "/admin/reset"))
             (do
@@ -554,19 +776,54 @@
                                (json-response :sync/tx-batch (handle-tx-batch! self nil txs t-before))
                                (bad-request "invalid tx"))))))))
 
-            (and (= method "POST") (= path "/snapshot/import"))
-            (.then (common/read-json request)
-                   (fn [result]
-                     (if (nil? result)
-                       (bad-request "missing body")
-                       (let [body (js->clj result :keywordize-keys true)
-                             body (coerce-http-request :sync/snapshot-import body)]
-                         (if (nil? body)
-                           (bad-request "invalid body")
-                           (let [{:keys [rows reset]} body]
-                             (import-snapshot! self rows reset)
-                             (json-response :sync/snapshot-import {:ok true
-                                                                   :count (count rows)})))))))
+            (and (= method "POST") (= path "/snapshot/upload"))
+            (let [graph-id (graph-id-from-request request)
+                  ^js bucket (.-LOGSEQ_SYNC_ASSETS (.-env self))
+                  reset-param (.get (.-searchParams url) "reset")
+                  reset? (if (nil? reset-param)
+                           true
+                           (not (contains? #{"false" "0"} reset-param)))]
+              (cond
+                (not (seq graph-id))
+                (bad-request "missing graph id")
+
+                (nil? bucket)
+                (error-response "missing assets bucket" 500)
+
+                (nil? (.-body request))
+                (bad-request "missing body")
+
+                :else
+                (p/let [snapshot-id (str (random-uuid))
+                        key (snapshot-key graph-id snapshot-id)
+                        req-encoding (.get (.-headers request) "content-encoding")
+                        _ (.put bucket key
+                                (.-body request)
+                                #js {:httpMetadata #js {:contentType snapshot-content-type
+                                                        :contentEncoding req-encoding
+                                                        :cacheControl snapshot-cache-control}
+                                     :customMetadata #js {:purpose "snapshot"
+                                                          :created-at (str (common/now-ms))}})
+                        ^js obj (.get bucket key)]
+                  (if (nil? obj)
+                    (error-response "snapshot missing" 500)
+                    (p/catch
+                     (let [metadata (.-httpMetadata obj)
+                           encoding (or (.-contentEncoding metadata) req-encoding)
+                           stream (.-body obj)]
+                       (if (and (= encoding snapshot-content-encoding)
+                                (not (exists? js/DecompressionStream)))
+                         (p/let [_ (.delete bucket key)]
+                           (error-response "gzip not supported" 500))
+                         (p/let [stream (maybe-decompress-stream stream encoding)
+                                 count (import-snapshot-stream! self stream reset?)
+                                 _ (.delete bucket key)]
+                           (json-response :sync/snapshot-upload {:ok true
+                                                                 :count count
+                                                                 :key key}))))
+                     (fn [error]
+                       (p/let [_ (.delete bucket key)]
+                         (throw error))))))))
 
             :else
             (not-found))))

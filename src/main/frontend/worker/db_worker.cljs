@@ -124,7 +124,7 @@
 
 (defn- rows->sqlite-binds
   [rows]
-  (mapv (fn [{:keys [addr content addresses]}]
+  (mapv (fn [[addr content addresses]]
           #js {:$addr addr
                :$content content
                :$addresses addresses})
