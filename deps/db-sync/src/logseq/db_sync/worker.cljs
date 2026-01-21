@@ -162,7 +162,8 @@
 
 (defn- add-presence!
   [^js self ^js ws user]
-  (swap! (presence* self) assoc ws user))
+  (swap! (presence* self) assoc ws user)
+  (.serializeAttachment ws (clj->js user)))
 
 (defn- update-presence!
   [^js self ^js ws {:keys [editing-block-uuid] :as updates}]
@@ -175,6 +176,7 @@
                              (assoc user :editing-block-uuid editing-block-uuid)
                              (dissoc user :editing-block-uuid))
                            user)]
+               (.serializeAttachment ws (clj->js user'))
                (assoc presence ws user'))
              presence))))
 
@@ -840,7 +842,15 @@
                (set! (.-env this) env)
                (set! (.-sql this) (.-sql ^js (.-storage state)))
                (set! (.-conn this) nil)
-               (set! (.-schema-ready this) false))
+               (set! (.-schema-ready this) false)
+               (let [presence (presence* this)
+                     sockets (.getWebSockets state)]
+                 (doseq [^js ws sockets]
+                   (when-let [attachment (.deserializeAttachment ws)]
+                     (swap! presence assoc ws (js->clj attachment :keywordize-keys true))))
+                 (.setWebSocketAutoResponse
+                  state
+                  (js/WebSocketRequestResponsePair. "ping" "pong"))))
 
   Object
   (fetch [this request]
