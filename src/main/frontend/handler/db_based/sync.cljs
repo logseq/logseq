@@ -31,6 +31,12 @@
     (db-sync-handler/<rtc-stop!)
     (rtc-handler/<rtc-stop!)))
 
+(defn <rtc-update-presence!
+  [editing-block-uuid]
+  (if (db-sync-enabled?)
+    (db-sync-handler/<rtc-update-presence! editing-block-uuid)
+    (rtc-handler/<rtc-update-presence! editing-block-uuid)))
+
 (defn <rtc-branch-graph! [repo]
   (rtc-handler/<rtc-branch-graph! repo))
 

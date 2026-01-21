@@ -51,6 +51,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.user :as user-handler]
             [frontend.mixins :as mixins]
             [frontend.mobile.haptics :as haptics]
             [frontend.mobile.intent :as mobile-intent]
@@ -81,6 +82,7 @@
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
+            [logseq.shui.util :as shui-util]
             [medley.core :as medley]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -1737,12 +1739,48 @@
   [block]
   (string/blank? (:block/title block)))
 
+(defn- user-initials
+  [user-name]
+  (when (string? user-name)
+    (let [name (string/trim user-name)]
+      (when-not (string/blank? name)
+        (-> name (subs 0 (min 2 (count name))) string/upper-case)))))
+
+(defn- editing-user-for-block
+  [block-uuid online-users current-user-uuid]
+  (when (and block-uuid (seq online-users))
+    (some (fn [{:user/keys [editing-block-uuid uuid] :as user}]
+            (when (and (string? editing-block-uuid)
+                       (= editing-block-uuid (str block-uuid))
+                       (not= uuid current-user-uuid))
+              user))
+          online-users)))
+
+(defn- editing-user-avatar
+  [{:user/keys [name uuid]}]
+  (let [user-name (or name uuid)
+        initials (user-initials user-name)
+        color (when uuid (shui-util/uuid-color uuid))]
+    (when initials
+      [:span.block-editing-avatar-wrap
+       (shui/avatar
+        {:class "block-editing-avatar w-4 h-4 flex-none"
+         :title user-name}
+        (shui/avatar-fallback
+         {:style {:background-color (when color (str color "50"))
+                  :font-size 9}}
+         initials))])))
+
 (rum/defcs ^:large-vars/cleanup-todo block-control < rum/reactive
   (rum/local false ::dragging?)
   [state config block {:keys [uuid block-id collapsed? *control-show? edit? selected? top? bottom?]}]
   (let [*bullet-dragging? (::dragging? state)
         doc-mode? (state/sub :document/mode?)
         control-show? (util/react *control-show?)
+        rtc-state (state/sub :rtc/state)
+        online-users (:online-users rtc-state)
+        current-user-uuid (user-handler/user-uuid)
+        editing-user (editing-user-for-block uuid online-users current-user-uuid)
         ref? (:ref? config)
         empty-content? (block-content-empty? block)
         fold-button-right? (state/enable-fold-button-right?)
@@ -1767,6 +1805,8 @@
                                 :is-with-icon with-icon?
                                 :bullet-closed collapsed?
                                 :bullet-hidden (:hide-bullet? config)}])}
+     (when (and (not page-title?) editing-user)
+       (editing-user-avatar editing-user))
      (when (and (or (not fold-button-right?) collapsable? collapsed?)
                 (not (:table? config)))
        [:a.block-control

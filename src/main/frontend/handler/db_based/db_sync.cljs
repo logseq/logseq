@@ -102,6 +102,10 @@
   (log/info :db-sync/stop true)
   (state/<invoke-db-worker :thread-api/db-sync-stop))
 
+(defn <rtc-update-presence!
+  [editing-block-uuid]
+  (state/<invoke-db-worker :thread-api/db-sync-update-presence editing-block-uuid))
+
 (defn <rtc-get-users-info
   []
   (when-let [graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]

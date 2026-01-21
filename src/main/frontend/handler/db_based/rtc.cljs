@@ -60,6 +60,10 @@
   []
   (state/<invoke-db-worker :thread-api/rtc-stop))
 
+(defn <rtc-update-presence!
+  [_editing-block-uuid]
+  (p/resolved nil))
+
 (defn <rtc-branch-graph!
   [repo]
   (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)

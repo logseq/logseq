@@ -425,6 +425,10 @@
   []
   (db-sync/stop!))
 
+(def-thread-api :thread-api/db-sync-update-presence
+  [editing-block-uuid]
+  (db-sync/update-presence! editing-block-uuid))
+
 (def-thread-api :thread-api/db-sync-upload-graph
   [repo]
   (db-sync/upload-graph! repo))

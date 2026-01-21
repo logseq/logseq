@@ -229,3 +229,24 @@
              nil
              [[:db/add (:db/id child1) :block/title "same"]])
             (is (= 1 (count (#'db-sync/pending-txs test-repo))))))))))
+
+(deftest normalize-online-users-include-editing-block-test
+  (testing "online user normalization preserves editing block info"
+    (let [result (#'db-sync/normalize-online-users
+                  [{:user-id "user-1"
+                    :name "Jane"
+                    :editing-block-uuid "block-1"}])]
+      (is (= [{:user/uuid "user-1"
+               :user/name "Jane"
+               :user/editing-block-uuid "block-1"}]
+             result)))))
+
+(deftest normalize-online-users-omit-empty-editing-block-test
+  (testing "online user normalization drops empty editing block info"
+    (let [result (#'db-sync/normalize-online-users
+                  [{:user-id "user-1"
+                    :name "Jane"
+                    :editing-block-uuid nil}])]
+      (is (= [{:user/uuid "user-1"
+               :user/name "Jane"}]
+             result)))))
