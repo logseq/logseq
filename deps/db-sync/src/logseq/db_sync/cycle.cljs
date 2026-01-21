@@ -161,8 +161,8 @@
 
   Preference:
   1) touched by local rebase (prefer remote value)
-  2) untouched by remote/local (keep remote value)
-  3) touched by remote
+  2) touched by remote (detach the remote-changed edge)
+  3) untouched by remote/local
   4) first node"
   [cycle {:keys [local-touched remote-touched]}]
   (let [nodes (vec (distinct (butlast cycle)))
@@ -170,8 +170,8 @@
         remote? (fn [e] (contains? (or remote-touched #{}) e))
         untouched? (fn [e] (and (not (local? e)) (not (remote? e))))]
     (or (some (fn [e] (when (local? e) e)) nodes)
-        (some (fn [e] (when (untouched? e) e)) nodes)
         (some (fn [e] (when (remote? e) e)) nodes)
+        (some (fn [e] (when (untouched? e) e)) nodes)
         (first nodes))))
 
 (defn- break-cycle-edge!
