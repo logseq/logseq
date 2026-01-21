@@ -108,8 +108,16 @@
                           set)
           member-graphs (->> (:graphs @state)
                              vals
-                             (filter (fn [row] (contains? member-ids (:graph-id row)))))]
-      (js-rows (concat owned member-graphs)))
+                             (filter (fn [row] (contains? member-ids (:graph-id row)))))
+          rows (concat owned member-graphs)
+          rows (map (fn [row]
+                      (let [member (get-in @state [:graph-members [user-id (:graph-id row)]])]
+                        (cond-> row
+                          member
+                          (assoc :role (:role member)
+                                 :invited-by (:invited-by member)))))
+                    rows)]
+      (js-rows rows))
 
     (string/includes? sql "select graph_id from graphs where graph_name")
     (let [[graph-name user-id] args
@@ -198,6 +206,31 @@
                            (is (true? exists?))
                            (is (false? missing?))
                            (is (false? other?))
+                           (done))))
+               (p/catch (fn [e]
+                          (is false (str e))
+                          (done)))))))
+
+(deftest graph-list-includes-role-and-invited-by-test
+  (async done
+         (let [state (atom {:executed []
+                            :users {}
+                            :graph-members {}
+                            :graphs {}})
+               db (make-d1 state)]
+           (-> (p/do!
+                (index/<index-upsert! db "graph-1" "alpha" "user-1" "1")
+                (index/<graph-member-upsert! db "graph-1" "user-1" "manager" "user-2")
+                (index/<index-upsert! db "graph-2" "beta" "user-2" "1")
+                (index/<graph-member-upsert! db "graph-2" "user-1" "member" "user-2"))
+               (p/then (fn [_]
+                         (p/let [graphs (index/<index-list db "user-1")
+                                 alpha (first (filter (fn [g] (= "graph-1" (:graph-id g))) graphs))
+                                 beta (first (filter (fn [g] (= "graph-2" (:graph-id g))) graphs))]
+                           (is (= "manager" (:role alpha)))
+                           (is (= "user-2" (:invited-by alpha)))
+                           (is (= "member" (:role beta)))
+                           (is (= "user-2" (:invited-by beta)))
                            (done))))
                (p/catch (fn [e]
                           (is false (str e))

@@ -34,7 +34,8 @@
 (defn <index-list [db user-id]
   (if (string? user-id)
     (p/let [result (common/<d1-all db
-                                   (str "select g.graph_id, g.graph_name, g.schema_version, g.created_at, g.updated_at "
+                                   (str "select g.graph_id, g.graph_name, g.schema_version, g.created_at, g.updated_at, "
+                                        "m.role, m.invited_by "
                                         "from graphs g "
                                         "left join graph_members m on g.graph_id = m.graph_id and m.user_id = ? "
                                         "where g.user_id = ? or m.user_id = ? "
@@ -47,6 +48,8 @@
               {:graph-id (aget row "graph_id")
                :graph-name (aget row "graph_name")
                :schema-version (aget row "schema_version")
+               :role (aget row "role")
+               :invited-by (aget row "invited_by")
                :created-at (aget row "created_at")
                :updated-at (aget row "updated_at")})
             rows))
