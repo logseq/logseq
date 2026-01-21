@@ -7,7 +7,7 @@ on:
     branches: [master]
     paths:
       - 'deps/cli/**'
-      - '.github/workflows/cli.yml'
+      - '.github/workflows/deps-cli.yml'
       - '!deps/cli/**.md'
       # Deps that logseq/cli depends on should trigger this workflow
       - 'deps/outliner/**'
@@ -18,7 +18,7 @@ on:
     branches: [master]
     paths:
       - 'deps/cli/**'
-      - '.github/workflows/cli.yml'
+      - '.github/workflows/deps-cli.yml'
       - '!deps/cli/**.md'
       # Deps that logseq/cli depends on should trigger this workflow
       - 'deps/outliner/**'

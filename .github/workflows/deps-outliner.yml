@@ -1,26 +1,36 @@
-name: logseq/common CI
+name: logseq/outliner CI
 
 on:
-  # Path filters ensure jobs only kick off if a change is made to common
+  # Path filters ensure jobs only kick off if a change is made to outliner or
+  # its local dependencies
   push:
     branches: [master]
     paths:
+      - 'deps/outliner/**'
+      - '.github/workflows/deps-outliner.yml'
+      - '!deps/outliner/**.md'
+      # Deps that logseq/outliner depends on should trigger this workflow
+      - 'deps/graph-parser/**'
+      - 'deps/db/**'
       - 'deps/common/**'
-      - '.github/workflows/logseq-common.yml'
-      - '!deps/common/**.md'
   pull_request:
     branches: [master]
     paths:
+      - 'deps/outliner/**'
+      - '.github/workflows/deps-outliner.yml'
+      - '!deps/outliner/**.md'
+      # Deps that logseq/outliner depends on should trigger this workflow
+      - 'deps/graph-parser/**'
+      - 'deps/db/**'
       - 'deps/common/**'
-      - '.github/workflows/logseq-common.yml'
-      - '!deps/common/**.md'
 
 defaults:
   run:
-    working-directory: deps/common
+    working-directory: deps/outliner
 
 env:
   CLOJURE_VERSION: '1.11.1.1413'
+  # This is the same as 1.8.
   JAVA_VERSION: '11'
   # This is the latest node version we can run.
   NODE_VERSION: '22'
@@ -39,7 +49,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'yarn'
-          cache-dependency-path: deps/publishing/yarn.lock
+          cache-dependency-path: deps/outliner/yarn.lock
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -47,6 +57,7 @@ jobs:
           distribution: 'zulu'
           java-version: ${{ env.JAVA_VERSION }}
 
+      # Clojure needed for bb step
       - name: Set up Clojure
         uses: DeLaGuardo/setup-clojure@10.1
         with:
@@ -62,23 +73,6 @@ jobs:
       # In this job because it depends on an npm package
       - name: Load namespaces into nbb-logseq
         run: bb test:load-all-namespaces-with-nbb .
-
-      - name: Clojure cache
-        uses: actions/cache@v4
-        id: clojure-deps
-        with:
-          path: |
-            ~/.m2/repository
-            ~/.gitlibs
-          key: ${{ runner.os }}-clojure-deps-${{ hashFiles('deps.edn') }}
-          restore-keys: ${{ runner.os }}-clojure-deps-
-
-      - name: Fetch Clojure deps
-        if: steps.clojure-deps.outputs.cache-hit != 'true'
-        run: clojure -A:test -P
-
-      - name: Run ClojureScript tests
-        run: clojure -M:test
 
   lint:
     runs-on: ubuntu-latest
@@ -110,3 +104,6 @@ jobs:
 
       - name: Lint for namespaces that aren't documented
         run: bb lint:ns-docstrings
+
+      - name: Lint for public vars that are private based on usage
+        run: bb lint:minimize-public-vars
