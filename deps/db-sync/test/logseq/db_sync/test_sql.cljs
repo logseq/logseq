@@ -1,10 +1,16 @@
 (ns logseq.db-sync.test-sql
   (:require [clojure.string :as string]))
 
+(defn- js-key [k]
+  (cond
+    (keyword? k) (string/replace (name k) "-" "_")
+    (string? k) k
+    :else (str k)))
+
 (defn- js-row [m]
   (let [o (js-obj)]
     (doseq [[k v] m]
-      (aset o (name k) v))
+      (aset o (js-key k) v))
     o))
 
 (defn- js-rows [rows]
@@ -17,7 +23,7 @@
                  (cond
                    (string/includes? sql "insert into tx_log")
                    (let [[t tx created-at] args]
-                     (swap! state update :tx-log assoc t {:t t :tx tx :created_at created-at})
+                     (swap! state update :tx-log assoc t {:t t :tx tx :created-at created-at})
                      nil)
 
                    (string/includes? sql "select t, tx from tx_log")

@@ -7,6 +7,7 @@
 
 (def ^:private jwks-ttl-ms (* 6 60 60 1000))
 (def ^:private token-ttl-ms (* 60 60 1000))
+(def ^:private token-capacity 200)
 
 (defonce ^:private *jwks-cache (atom {:url nil :keys nil :fetched-at 0}))
 (defonce ^:private *token-cache (atom {}))
@@ -27,7 +28,7 @@
   (let [exp (aget payload "exp")]
     (when (number? exp)
       (swap! *token-cache assoc token {:payload payload :exp exp :cached-at now-ms}))
-    (when (> (count @*token-cache) 2000)
+    (when (> (count @*token-cache) token-capacity)
       (swap! *token-cache
              (fn [cache]
                (into {}

@@ -141,7 +141,7 @@
                        (aget claims "username"))
           name (aget claims "name")]
       (when (string? user-id)
-        (cond-> {:user_id user-id}
+        (cond-> {:user-id user-id}
           (string? email) (assoc :email email)
           (string? username) (assoc :username username)
           (string? name) (assoc :name name))))))
@@ -393,7 +393,7 @@
     (cond
       (or (not (number? t-before)) (neg? t-before))
       {:type "tx/reject"
-       :reason "invalid t_before"}
+       :reason "invalid t-before"}
 
       (not= t-before current-t)
       {:type "tx/reject"
@@ -433,7 +433,7 @@
 
         "tx/batch"
         (let [txs (:txs message)
-              t-before (parse-int (:t_before message))]
+              t-before (parse-int (:t-before message))]
           (if (string? txs)
             (send! ws (handle-tx-batch! self ws txs t-before))
             (send! ws {:type "tx/reject" :reason "invalid tx"})))
@@ -508,7 +508,7 @@
                               after)
                   done? (< (count rows) limit)]
               (json-response :sync/snapshot-rows {:rows rows
-                                                  :last_addr last-addr
+                                                  :last-addr last-addr
                                                   :done done?}))
 
             (and (= method "DELETE") (= path "/admin/reset"))
@@ -530,8 +530,8 @@
                              body (coerce-http-request :sync/tx-batch body)]
                          (if (nil? body)
                            (bad-request "invalid tx")
-                           (let [{:keys [txs t_before]} body
-                                 t-before (parse-int t_before)]
+                           (let [{:keys [txs t-before]} body
+                                 t-before (parse-int t-before)]
                              (if (string? txs)
                                (json-response :sync/tx-batch (handle-tx-batch! self nil txs t-before))
                                (bad-request "invalid tx"))))))))
@@ -647,10 +647,10 @@
                            (bad-request "invalid body")
 
                            :else
-                           (p/let [{:keys [graph_name schema_version]} body
-                                   _ (index/<index-upsert! db graph-id graph_name user-id schema_version)
+                           (p/let [{:keys [graph-name schema-version]} body
+                                   _ (index/<index-upsert! db graph-id graph-name user-id schema-version)
                                    _ (index/<graph-member-upsert! db graph-id user-id "manager" user-id)]
-                             (json-response :graphs/create {:graph_id graph-id})))))))
+                             (json-response :graphs/create {:graph-id graph-id})))))))
 
             (and (= method "GET")
                  (= 3 (count parts))
@@ -702,7 +702,7 @@
                            (bad-request "missing body")
                            (let [body (js->clj result :keywordize-keys true)
                                  body (coerce-http-request :graph-members/create body)
-                                 member-id (:user_id body)
+                                 member-id (:user-id body)
                                  email (:email body)
                                  role (or (:role body) "member")]
                              (cond
@@ -801,7 +801,7 @@
                             stub (.get namespace do-id)
                             reset-url (str (.-origin url) "/admin/reset")]
                         (.fetch stub (js/Request. reset-url #js {:method "DELETE"})))
-                      (json-response :graphs/delete {:graph_id graph-id :deleted true}))))))
+                      (json-response :graphs/delete {:graph-id graph-id :deleted true}))))))
             :else
             (not-found))))
       (catch :default error

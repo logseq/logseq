@@ -4,10 +4,16 @@
             [logseq.db-sync.index :as index]
             [promesa.core :as p]))
 
+(defn- js-key [k]
+  (cond
+    (keyword? k) (string/replace (name k) "-" "_")
+    (string? k) k
+    :else (str k)))
+
 (defn- js-row [m]
   (let [o (js-obj)]
     (doseq [[k v] m]
-      (aset o (name k) v))
+      (aset o (js-key k) v))
     o))
 
 (defn- js-rows [rows]
@@ -23,7 +29,7 @@
     (let [[user-id email email-verified username] args]
       (swap! state update :users assoc user-id {:id user-id
                                                 :email email
-                                                :email_verified email-verified
+                                                :email-verified email-verified
                                                 :username username}))
 
     (string/includes? sql "insert into graph_members")
@@ -32,21 +38,21 @@
              (fn [members]
                (let [k [user-id graph-id]
                      existing (get members k)
-                     created-at (or (:created_at existing) created-at)]
-                 (assoc members k {:user_id user-id
-                                   :graph_id graph-id
+                     created-at (or (:created-at existing) created-at)]
+                 (assoc members k {:user-id user-id
+                                   :graph-id graph-id
                                    :role role
-                                   :invited_by invited-by
-                                   :created_at created-at})))))
+                                   :invited-by invited-by
+                                   :created-at created-at})))))
 
     (string/includes? sql "insert into graphs")
     (let [[graph-id graph-name user-id schema-version created-at updated-at] args]
-      (swap! state update :graphs assoc graph-id {:graph_id graph-id
-                                                  :graph_name graph-name
-                                                  :user_id user-id
-                                                  :schema_version schema-version
-                                                  :created_at created-at
-                                                  :updated_at updated-at}))
+      (swap! state update :graphs assoc graph-id {:graph-id graph-id
+                                                  :graph-name graph-name
+                                                  :user-id user-id
+                                                  :schema-version schema-version
+                                                  :created-at created-at
+                                                  :updated-at updated-at}))
 
     (string/includes? sql "update graph_members set role")
     (let [[role graph-id user-id] args]
@@ -65,7 +71,7 @@
 
 (defn- union-access-rows [state sql args]
   (let [[graph-id user-id] args
-        graph-owner-id (get-in @state [:graphs graph-id :user_id])
+        graph-owner-id (get-in @state [:graphs graph-id :user-id])
         member (get-in @state [:graph-members [user-id graph-id]])
         manager-required? (string/includes? sql "role = 'manager'")
         has-access? (or (= graph-owner-id user-id)
@@ -73,7 +79,7 @@
                              (or (not manager-required?)
                                  (= "manager" (:role member)))))]
     (if has-access?
-      (js-rows [{:graph_id graph-id}])
+      (js-rows [{:graph-id graph-id}])
       (js-rows []))))
 
 (defn- all-sql [state sql args]
@@ -83,8 +89,8 @@
     (let [graph-id (first args)
           members (->> (:graph-members @state)
                        vals
-                       (filter (fn [row] (= graph-id (:graph_id row))))
-                       (sort-by :created_at))]
+                       (filter (fn [row] (= graph-id (:graph-id row))))
+                       (sort-by :created-at))]
       (js-rows members))
 
     (string/includes? sql "union select graph_id from graph_members")
@@ -94,15 +100,15 @@
     (let [[user-id] args
           owned (->> (:graphs @state)
                      vals
-                     (filter (fn [row] (= user-id (:user_id row)))))
+                     (filter (fn [row] (= user-id (:user-id row)))))
           member-ids (->> (:graph-members @state)
                           vals
-                          (filter (fn [row] (= user-id (:user_id row))))
-                          (map :graph_id)
+                          (filter (fn [row] (= user-id (:user-id row))))
+                          (map :graph-id)
                           set)
           member-graphs (->> (:graphs @state)
                              vals
-                             (filter (fn [row] (contains? member-ids (:graph_id row)))))]
+                             (filter (fn [row] (contains? member-ids (:graph-id row)))))]
       (js-rows (concat owned member-graphs)))
 
     :else
@@ -158,7 +164,7 @@
                (p/then (fn [_]
                          (let [user (get-in @state [:users "user-1"])]
                            (is (= "foo@test.com" (:email user)))
-                           (is (= 1 (:email_verified user)))
+                           (is (= 1 (:email-verified user)))
                            (is (= "foo" (:username user))))
                          (done)))
                (p/catch (fn [e]
@@ -176,7 +182,7 @@
                (p/then (fn [_]
                          (let [member (get-in @state [:graph-members ["user-2" "graph-1"]])]
                            (is (= "member" (:role member)))
-                           (is (= "user-1" (:invited_by member))))
+                           (is (= "user-1" (:invited-by member))))
                          (done)))
                (p/catch (fn [e]
                           (is false (str e))

@@ -34,7 +34,7 @@ This guide helps AI agents implement and review db-sync features consistently ac
 - Server-side validation of client input should not throw. Respond with `tx/reject` or `400` errors for:
   - tx payload type mismatch (e.g., `:txs` not a sequence of strings).
   - Invalid graph identity (missing/empty graph id or uuid in sync path).
-  - Invalid or negative `t`/`t_before` values.
+  - Invalid or negative `t`/`t-before` values.
 - Do not silently recover or drop messages for bug cases; surface them via exceptions.
 
 ## HTTP API (Bootstrap + Assets)

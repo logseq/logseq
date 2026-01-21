@@ -51,10 +51,10 @@
 (defn- normalize-online-users
   [users]
   (->> users
-       (keep (fn [{:keys [user_id email username name]}]
-               (when (string? user_id)
-                 (let [display-name (or username name user_id)]
-                   (cond-> {:user/uuid user_id
+       (keep (fn [{:keys [user-id email username name]}]
+               (when (string? user-id)
+                 (let [display-name (or username name user-id)]
+                   (cond-> {:user/uuid user-id
                             :user/name display-name}
                      (string? email) (assoc :user/email email))))))
        (vec)))
@@ -403,7 +403,7 @@
                   (when (seq txs)
                     (reset! (:inflight client) tx-ids)
                     (send! ws {:type "tx/batch"
-                               :t_before local-tx
+                               :t-before local-tx
                                :txs (sqlite-util/write-transit-str tx-data)})))))))))))
 
 (defn- ensure-client-state! [repo]

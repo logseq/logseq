@@ -20,6 +20,7 @@
 - ClojureScript keywords are defined via `logseq.common.defkeywords/defkeyword`; use existing keywords and add new ones in the shared definitions.
 - Follow existing namespace and file layout; keep related workers and RTC code in their dedicated directories.
 - Prefer concise, imperative commit subjects aligned with existing history (examples: `fix: download`, `enhance(rtc): ...`).
+- Clojure map keyword name should prefer `-` instead of `_`, e.g. `:user-id` instead of `:user_id`.
 
 ## Testing Guidelines
 - Unit tests live in `src/test/` and should be runnable via `bb dev:lint-and-test`.

@@ -113,10 +113,10 @@
                                  {:method "GET"}
                                  {:response-schema :graph-members/list})
                 members (:members resp)
-                users (mapv (fn [{:keys [user_id role email username]}]
-                              (let [name (or username email user_id)
+                users (mapv (fn [{:keys [user-id role email username]}]
+                              (let [name (or username email user-id)
                                     user-type (some-> role keyword)]
-                                (cond-> {:user/uuid user_id
+                                (cond-> {:user/uuid user-id
                                          :user/name name
                                          :graph<->user/user-type user-type}
                                   (string? email) (assoc :user/email email))))
@@ -131,8 +131,8 @@
     (if base
       (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
               body (coerce-http-request :graphs/create
-                                        {:graph_name (string/replace repo config/db-version-prefix "")
-                                         :schema_version schema-version})
+                                        {:graph-name (string/replace repo config/db-version-prefix "")
+                                         :schema-version schema-version})
               result (if (nil? body)
                        (p/rejected (ex-info "db-sync invalid create-graph body"
                                             {:repo repo}))
@@ -141,7 +141,7 @@
                                     :headers {"content-type" "application/json"}
                                     :body (js/JSON.stringify (clj->js body))}
                                    {:response-schema :graphs/create}))
-              graph-id (:graph_id result)]
+              graph-id (:graph-id result)]
         (if graph-id
           (p/do!
            (ldb/transact! repo [(sqlite-util/kv :logseq.kv/db-type "db")
@@ -190,7 +190,7 @@
                                        {:response-schema :sync/snapshot-rows})
                       rows (:rows resp)
                       done? (true? (:done resp))
-                      last-addr (or (:last_addr resp) after)]
+                      last-addr (or (:last-addr resp) after)]
                 (p/do!
                  (state/<invoke-db-worker :thread-api/db-sync-import-kvs-rows
                                           graph rows first-batch?)
@@ -220,12 +220,12 @@
                   graphs (:graphs resp)
                   result (mapv (fn [graph]
                                  (merge
-                                  {:url (str config/db-version-prefix (:graph_name graph))
-                                   :GraphName (:graph_name graph)
-                                   :GraphSchemaVersion (:schema_version graph)
-                                   :GraphUUID (:graph_id graph)
+                                  {:url (str config/db-version-prefix (:graph-name graph))
+                                   :GraphName (:graph-name graph)
+                                   :GraphSchemaVersion (:schema-version graph)
+                                   :GraphUUID (:graph-id graph)
                                    :rtc-graph? true}
-                                  (dissoc graph :graph_id :graph_name :schema_version)))
+                                  (dissoc graph :graph-id :graph-name :schema-version)))
                                graphs)]
             (state/set-state! :rtc/graphs result)
             (repo-handler/refresh-repos!)
