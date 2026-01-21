@@ -129,6 +129,9 @@
 
 (def ^:private max-asset-size (* 100 1024 1024))
 (def ^:private upload-kvs-batch-size 2000)
+(def ^:private snapshot-content-type "application/transit+json")
+(def ^:private snapshot-content-encoding "gzip")
+(def ^:private snapshot-text-encoder (js/TextEncoder.))
 (def ^:private reconnect-base-delay-ms 1000)
 (def ^:private reconnect-max-delay-ms 30000)
 (def ^:private reconnect-jitter-ms 250)
@@ -996,43 +999,85 @@
 (defn- normalize-snapshot-rows [rows]
   (mapv (fn [row] (vec row)) (array-seq rows)))
 
+(defn- encode-snapshot-rows [rows]
+  (.encode snapshot-text-encoder (sqlite-util/write-transit-str rows)))
+
+(defn- frame-bytes [^js bytes]
+  (let [len (.-byteLength bytes)
+        out (js/Uint8Array. (+ 4 len))
+        view (js/DataView. (.-buffer out))]
+    (.setUint32 view 0 len false)
+    (.set out bytes 4)
+    out))
+
+(defn- snapshot-upload-stream [db]
+  (let [state (volatile! {:after -1 :done? false})]
+    (js/ReadableStream.
+     #js {:pull (fn [controller]
+                  (p/let [{:keys [after done?]} @state]
+                    (if done?
+                      (.close controller)
+                      (let [rows (fetch-kvs-rows db after upload-kvs-batch-size)]
+                        (if (empty? rows)
+                          (.close controller)
+                          (let [rows (normalize-snapshot-rows rows)
+                                last-addr (apply max (map first rows))
+                                done? (< (count rows) upload-kvs-batch-size)
+                                payload (encode-snapshot-rows rows)
+                                framed (frame-bytes payload)]
+                            (.enqueue controller framed)
+                            (vswap! state assoc :after last-addr :done? done?)))))))})))
+
+(defn- maybe-compress-stream [stream]
+  (if (exists? js/CompressionStream)
+    (.pipeThrough stream (js/CompressionStream. "gzip"))
+    stream))
+
+(defn- should-buffer-snapshot-upload?
+  [base]
+  (when (string? base)
+    (try
+      (let [url (js/URL. base)
+            host (.-hostname url)]
+        (and (= "http:" (.-protocol url))
+             (contains? #{"localhost" "127.0.0.1"} host)))
+      (catch :default _
+        false))))
+
+(defn- <buffer-stream
+  [stream]
+  (p/let [resp (js/Response. stream)
+          buf (.arrayBuffer resp)]
+    buf))
+
 (defn upload-graph!
   [repo]
   (let [base (http-base-url)
         graph-id (get-graph-id repo)]
-    (if-not (and (seq base) (seq graph-id))
-      (p/rejected (ex-info "db-sync missing upload info"
-                           {:repo repo :base base :graph-id graph-id}))
+    (if (and (seq base) (seq graph-id))
       (if-let [db (worker-state/get-sqlite-conn repo :db)]
         (do
           (ensure-client-graph-uuid! repo graph-id)
-          (p/loop [last-addr -1
-                   first-batch? true]
-            (let [rows (fetch-kvs-rows db last-addr upload-kvs-batch-size)]
-              (if (empty? rows)
-                (let [body (coerce-http-request :sync/snapshot-import {:reset false :rows []})]
-                  (if (nil? body)
-                    (p/rejected (ex-info "db-sync invalid snapshot body"
-                                         {:repo repo :graph-id graph-id}))
-                    (p/let [_ (fetch-json (str base "/sync/" graph-id "/snapshot/import")
-                                          {:method "POST"
-                                           :headers {"content-type" "application/json"}
-                                           :body (js/JSON.stringify (clj->js body))}
-                                          {:response-schema :sync/snapshot-import})]
-                      (client-op/add-all-exists-asset-as-ops repo)
-                      {:graph-id graph-id})))
-                (let [max-addr (apply max (map first rows))
-                      rows (normalize-snapshot-rows rows)
-                      body (coerce-http-request :sync/snapshot-import {:reset first-batch?
-                                                                       :rows rows})]
-                  (if (nil? body)
-                    (p/rejected (ex-info "db-sync invalid snapshot body"
-                                         {:repo repo :graph-id graph-id}))
-                    (p/let [_ (fetch-json (str base "/sync/" graph-id "/snapshot/import")
-                                          {:method "POST"
-                                           :headers {"content-type" "application/json"}
-                                           :body (js/JSON.stringify (clj->js body))}
-                                          {:response-schema :sync/snapshot-import})]
-                      (p/recur max-addr false))))))))
+          (let [stream (snapshot-upload-stream db)
+                use-compression? (exists? js/CompressionStream)
+                body (if use-compression? (maybe-compress-stream stream) stream)
+                headers (cond-> {"content-type" snapshot-content-type}
+                          use-compression? (assoc "content-encoding" snapshot-content-encoding))
+                upload-url (str base "/sync/" graph-id "/snapshot/upload?reset=true")
+                upload-opts {:method "POST"
+                             :headers headers
+                             :body body
+                             :duplex "half"}
+                fallback? (should-buffer-snapshot-upload? base)
+                do-upload (fn [opts]
+                            (fetch-json upload-url opts {:response-schema :sync/snapshot-upload}))]
+            (p/let [_ (if fallback?
+                        (p/let [buf (<buffer-stream body)]
+                          (do-upload (assoc upload-opts :body buf)))
+                        (do-upload upload-opts))]
+              (client-op/add-all-exists-asset-as-ops repo)
+              {:graph-id graph-id})))
         (p/rejected (ex-info "db-sync missing sqlite db"
-                             {:repo repo :graph-id graph-id}))))))
+                             {:repo repo :graph-id graph-id})))
+      (p/rejected (ex-info "db-sync missing upload info"
+                           {:repo repo :base base :graph-id graph-id})))))
