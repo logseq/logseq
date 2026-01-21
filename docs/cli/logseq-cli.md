@@ -70,7 +70,7 @@ Inspect and edit commands:
 - `move --id <id>|--uuid <uuid> --target-id <id>|--target-uuid <uuid>|--target-page-name <name> [--pos first-child|last-child|sibling]` - move a block and its children (defaults to first-child)
 - `remove block --block <uuid>` - remove a block and its children
 - `remove page --page <name>` - remove a page and its children
-- `search --text <query> [--type page|block|tag|property|all] [--include-content] [--limit <n>]` - search across pages, blocks, tags, and properties
+- `search <query> [--type page|block|tag|property|all] [--tag <name>] [--case-sensitive] [--sort updated-at|created-at] [--order asc|desc]` - search across pages, blocks, tags, and properties (query is positional)
 - `show --page-name <name> [--format text|json|edn] [--level <n>]` - show page tree
 - `show --uuid <uuid> [--format text|json|edn] [--level <n>]` - show block tree
 - `show --id <id> [--format text|json|edn] [--level <n>]` - show block tree by db/id
@@ -87,7 +87,7 @@ Subcommands:
   move [options]           Move block
   remove block [options]   Remove block
   remove page [options]    Remove page
-  search [options]         Search graph
+  search <query> [options] Search graph
   show [options]           Show tree
 ```
 
@@ -97,7 +97,8 @@ Options grouping:
 Output formats:
 - Global `--output <human|json|edn>` (also accepted per subcommand)
 - For `graph export`, `--output` refers to the destination file path. Output formatting is controlled via `:output-format` in config or `LOGSEQ_CLI_OUTPUT`.
-- Human output is plain text. List/search commands render tables with a final `Count: N` line. For list subcommands, the ID column uses `:db/id` (not UUID). If `:db/ident` exists, an `IDENT` column is included. Times such as list `UPDATED-AT`/`CREATED-AT` and `graph info` `Created at` are shown in human-friendly relative form. Errors include error codes and may include a `Hint:` line. Use `--output json|edn` for structured output.
+- Human output is plain text. List/search commands render tables with a final `Count: N` line. For list and search subcommands, the ID column uses `:db/id` (not UUID). If `:db/ident` exists, an `IDENT` column is included. Search table columns are `ID` and `TITLE`. Times such as list `UPDATED-AT`/`CREATED-AT` and `graph info` `Created at` are shown in human-friendly relative form. Errors include error codes and may include a `Hint:` line. Use `--output json|edn` for structured output.
+- Show and search outputs resolve block reference UUIDs inside text, replacing `[[<uuid>]]` with the referenced block content. Nested references are resolved recursively up to 10 levels to avoid excessive expansion. For example: `[[<uuid1>]]` → `[[some text [[<uuid2>]]]]` and then `<uuid2>` is also replaced.
 - `show` human output prints the `:db/id` as the first column followed by a tree:
 
 ```
@@ -119,7 +120,7 @@ node ./static/logseq-cli.js graph export --type edn --output /tmp/demo.edn --rep
 node ./static/logseq-cli.js graph import --type edn --input /tmp/demo.edn --repo demo-import
 node ./static/logseq-cli.js add block --target-page-name TestPage --content "hello world"
 node ./static/logseq-cli.js move --uuid <uuid> --target-page-name TargetPage
-node ./static/logseq-cli.js search --text "hello"
+node ./static/logseq-cli.js search "hello"
 node ./static/logseq-cli.js show --page-name TestPage --format json --output json
 node ./static/logseq-cli.js server list
 ```
