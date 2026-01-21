@@ -584,7 +584,6 @@
                                  (= existing-value v'))]
             (throw-error-if-self-value block v' ref?)
 
-            (prn :debug :value-matches? value-matches?)
             (when-not value-matches?
               (raw-set-block-property! conn block property v'))))))))
 

@@ -341,6 +341,48 @@
         (:block/title property)]
        (property-key-title block property class-schema?))]))
 
+(defn- bidirectional-property-icon-cp
+  [property]
+  (if-let [icon (:logseq.property/icon property)]
+    (icon-component/icon icon {:size 15 :color? true})
+    (ui/icon "letter-b" {:class "opacity-50" :size 15})))
+
+(rum/defcs bidirectional-values-cp < rum/static
+  {:init (fn [state]
+           (assoc state ::container-id (state/get-next-container-id)))}
+  [state entities]
+  (let [blocks-container (state/get-component :block/blocks-container)
+        container-id (::container-id state)
+        config {:id (str "bidirectional-" container-id)
+                :container-id container-id
+                :editor-box (state/get-component :editor/box)
+                :default-collapsed? true
+                :ref? true}]
+    (if (and blocks-container (seq entities))
+      [:div.property-block-container.content.w-full
+       (blocks-container config entities)]
+      [:span.opacity-60 "Empty"])))
+
+(rum/defc bidirectional-properties-section < rum/static
+  [bidirectional-properties]
+  (when (seq bidirectional-properties)
+    (for [{:keys [class title entities]} bidirectional-properties]
+      [:div.property-pair.items-start {:key (str "bidirectional-" title)}
+       [:div.property-key
+        [:div.property-key-inner
+         [:div.property-icon
+          (bidirectional-property-icon-cp class)]
+         (if class
+           [:a.property-k.flex.select-none.w-full.jtrigger
+            {:on-click (fn [e]
+                         (util/stop e)
+                         (route-handler/redirect-to-page! (:block/uuid class)))}
+            title]
+           [:div.property-k.flex.select-none.w-full title])]]
+       [:div.ls-block.property-value-container.flex.flex-row.gap-1.items-start
+        [:div.property-value.flex.flex-1
+         (bidirectional-values-cp entities)]]])))
+
 (rum/defcs ^:large-vars/cleanup-todo property-input < rum/reactive
   (rum/local false ::show-new-property-config?)
   (rum/local false ::show-class-select?)
@@ -584,7 +626,18 @@
      [:div.mt-1
       (properties-section block hidden-properties opts)]]))
 
+(rum/defc load-bidirectional-properties < rum/static
+  [block root-block? set-bidirectional-properties!]
+  (hooks/use-effect!
+   (fn []
+     (when (and root-block? (:db/id block))
+       (p/let [result (db-async/<get-bidirectional-properties (:db/id block))]
+         (set-bidirectional-properties! result)))
+     (fn []))
+   [root-block? (:db/id block)]))
+
 (rum/defcs ^:large-vars/cleanup-todo properties-area < rum/reactive db-mixins/query
+  (rum/local nil ::bidirectional-properties)
   {:init (fn [state]
            (let [target-block (first (:rum/args state))
                  block (resolve-linked-block-if-exists target-block)]
@@ -592,7 +645,9 @@
                     ::id (str (random-uuid))
                     ::block block)))}
   [state _target-block {:keys [page-title? journal-page? sidebar-properties? tag-dialog?] :as opts}]
-  (let [id (::id state)
+  (let [*bidirectional-properties (::bidirectional-properties state)
+        bidirectional-properties @*bidirectional-properties
+        id (::id state)
         db-id (:db/id (::block state))
         block (db/sub-block db-id)
         show-properties? (or sidebar-properties? tag-dialog?)
@@ -600,7 +655,11 @@
                                             (and show?
                                                  (or (= mode :global)
                                                      (and (set? ids) (contains? ids (:block/uuid block))))))
-        properties (:block/properties block)
+        properties (cond-> (:block/properties block)
+                     (and (ldb/class? block)
+                          (not (ldb/built-in? block)))
+                     (assoc :logseq.property.class/enable-bidirectional?
+                            (:logseq.property.class/enable-bidirectional? block)))
         remove-built-in-or-other-position-properties
         (fn [properties show-in-hidden-properties?]
           (remove (fn [property]
@@ -682,48 +741,53 @@
                            (state/get-current-page))
                         (and (= (str (:block/uuid block)) (:id opts))
                              (not (entity-util/page? block))))]
-    (cond
-      (and (empty? full-properties) (seq hidden-properties) (not root-block?) (not sidebar-properties?))
-      nil
+    [:<>
+     (load-bidirectional-properties block root-block? #(reset! *bidirectional-properties %))
+     (let [has-bidirectional-properties? (seq bidirectional-properties)]
+       (cond
+         (and (empty? full-properties) (seq hidden-properties) (not root-block?) (not sidebar-properties?)
+              (not has-bidirectional-properties?))
+         nil
 
-      (and (empty? full-properties) (empty? hidden-properties))
-      (when show-properties?
-        (rum/with-key (new-property block opts) (str id "-add-property")))
+         (and (empty? full-properties) (empty? hidden-properties) (not has-bidirectional-properties?))
+         (when show-properties?
+           (rum/with-key (new-property block opts) (str id "-add-property")))
 
-      :else
-      (let [remove-properties #{:logseq.property/icon :logseq.property/query}
-            properties' (->> (remove (fn [[k _v]] (contains? remove-properties k))
-                                     full-properties)
-                             (remove (fn [[k _v]] (= k :logseq.property.class/properties))))
-            page? (entity-util/page? block)
-            class? (entity-util/class? block)]
-        [:div.ls-properties-area
-         {:id id
-          :class (util/classnames [{:ls-page-properties page?}])
-          :tab-index 0}
-         [:<>
-          (properties-section block properties' opts)
+         :else
+         (let [remove-properties #{:logseq.property/icon :logseq.property/query}
+               properties' (->> (remove (fn [[k _v]] (contains? remove-properties k))
+                                        full-properties)
+                                (remove (fn [[k _v]] (= k :logseq.property.class/properties))))
+               page? (entity-util/page? block)
+               class? (entity-util/class? block)]
+           [:div.ls-properties-area
+            {:id id
+             :class (util/classnames [{:ls-page-properties page?}])
+             :tab-index 0}
+            [:<>
+             (properties-section block properties' opts)
+             (bidirectional-properties-section bidirectional-properties)
 
-          (when-not class?
-            (hidden-properties-cp block hidden-properties
-                                  (assoc opts :root-block? root-block?)))
+             (when-not class?
+               (hidden-properties-cp block hidden-properties
+                                     (assoc opts :root-block? root-block?)))
 
-          (when (and page? (not class?))
-            (rum/with-key (new-property block opts) (str id "-add-property")))
+             (when (and page? (not class?))
+               (rum/with-key (new-property block opts) (str id "-add-property")))
 
-          (when class?
-            (let [properties (->> (:logseq.property.class/properties block)
-                                  (map (fn [e] [(:db/ident e)])))
-                  opts' (assoc opts :class-schema? true)]
-              [:div.flex.flex-col.gap-1
-               [:div {:style {:font-size 15}}
-                [:div.property-pair
-                 [:div.property-key.text-sm
-                  (property-key-cp block (db/entity :logseq.property.class/properties) {})]]
-                [:div.text-muted-foreground {:style {:margin-left 26}}
-                 "Tag properties are inherited by all nodes using the tag. For example, each #Task node inherits 'Status' and 'Priority'."]]
-               [:div.ml-4
-                (properties-section block properties opts')
-                (hidden-properties-cp block hidden-properties
-                                      (assoc opts :root-block? root-block?))
-                (rum/with-key (new-property block opts') (str id "-class-add-property"))]]))]]))))
+             (when class?
+               (let [properties (->> (:logseq.property.class/properties block)
+                                     (map (fn [e] [(:db/ident e)])))
+                     opts' (assoc opts :class-schema? true)]
+                 [:div.flex.flex-col.gap-1
+                  [:div {:style {:font-size 15}}
+                   [:div.property-pair
+                    [:div.property-key.text-sm
+                     (property-key-cp block (db/entity :logseq.property.class/properties) {})]]
+                   [:div.text-muted-foreground {:style {:margin-left 26}}
+                    "Tag properties are inherited by all nodes using the tag. For example, each #Task node inherits 'Status' and 'Priority'."]]
+                  [:div.ml-4
+                   (properties-section block properties opts')
+                   (hidden-properties-cp block hidden-properties
+                                         (assoc opts :root-block? root-block?))
+                   (rum/with-key (new-property block opts') (str id "-class-add-property"))]]))]])))]))
