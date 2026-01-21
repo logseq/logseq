@@ -21,10 +21,28 @@
     (subs auth-header 7)))
 
 (defn- token-from-request [request]
-  (js/console.dir request)
   (or (bearer-token (.get (.-headers request) "authorization"))
       (let [url (js/URL. (.-url request))]
         (.get (.-searchParams url) "token"))))
+
+(defn- decode-jwt-part [part]
+  (let [pad (if (pos? (mod (count part) 4))
+              (apply str (repeat (- 4 (mod (count part) 4)) "="))
+              "")
+        base64 (-> (str part pad)
+                   (string/replace "-" "+")
+                   (string/replace "_" "/"))
+        raw (js/atob base64)]
+    (js/JSON.parse raw)))
+
+(defn- unsafe-jwt-claims [token]
+  (try
+    (when (string? token)
+      (let [parts (string/split token #"\.")]
+        (when (= 3 (count parts))
+          (decode-jwt-part (nth parts 1)))))
+    (catch :default _
+      nil)))
 
 (defn- auth-claims [request env]
   (let [token (token-from-request request)]
@@ -32,20 +50,17 @@
       (.catch (authorization/verify-jwt token env) (fn [_] nil))
       (js/Promise.resolve nil))))
 
-(defn- index-stub [^js env]
-  (let [^js namespace (.-LOGSEQ_SYNC_INDEX_DO env)
-        do-id (.idFromName namespace "index")]
-    (.get namespace do-id)))
+(declare handle-index-fetch)
 
 (defn- graph-access-response [request env graph-id]
   (let [token (token-from-request request)
         url (js/URL. (.-url request))
         access-url (str (.-origin url) "/graphs/" graph-id "/access")
-        headers (js/Headers. (.-headers request))]
+        headers (js/Headers. (.-headers request))
+        index-self #js {:env env :d1 (aget env "DB")}]
     (when (string? token)
       (.set headers "authorization" (str "Bearer " token)))
-    (.fetch (index-stub env)
-            (js/Request. access-url #js {:method "GET" :headers headers}))))
+    (handle-index-fetch index-self (js/Request. access-url #js {:method "GET" :headers headers}))))
 
 (defn- parse-asset-path [path]
   (let [prefix "/assets/"]
@@ -63,7 +78,18 @@
            :asset-type asset-type
            :key (str graph-id "/" asset-uuid "." asset-type)})))))
 
+(defn- ensure-schema! [^js self]
+  (when-not (true? (.-schema-ready self))
+    (storage/init-schema! (.-sql self))
+    (set! (.-schema-ready self) true)))
+
+(defn- ensure-conn! [^js self]
+  (ensure-schema! self)
+  (when-not (.-conn self)
+    (set! (.-conn self) (storage/open-conn (.-sql self)))))
+
 (defn- t-now [^js self]
+  (ensure-schema! self)
   (storage/get-t (.-sql self)))
 
 (defn- ws-open? [ws]
@@ -265,7 +291,7 @@
 
       (or (= path "/graphs")
           (string/starts-with? path "/graphs/"))
-      (.fetch (index-stub env) (.clone request))
+      (handle-index-fetch #js {:env env :d1 (aget env "DB")} request)
 
       (string/starts-with? path "/assets/")
       (if (= method "OPTIONS")
@@ -333,12 +359,13 @@
 
 (defn- import-snapshot! [^js self rows reset?]
   (let [sql (.-sql self)]
-    (storage/init-schema! sql)
+    (ensure-schema! self)
     (when reset?
       (common/sql-exec sql "delete from kvs")
       (common/sql-exec sql "delete from tx_log")
       (common/sql-exec sql "delete from sync_meta")
       (storage/init-schema! sql)
+      (set! (.-schema-ready self) true)
       (storage/set-t! sql 0))
     (when (seq rows)
       (doseq [[addr content addresses] rows]
@@ -351,13 +378,11 @@
     (set! (.-conn self) (storage/open-conn sql))))
 
 (defn- apply-tx! [^js self sender txs]
-  (let [sql (.-sql self)
-        conn (.-conn self)]
-    (when-not conn
-      (fail-fast :db-sync/missing-db {:op :apply-tx}))
-    (let [tx-data (protocol/transit->tx txs)]
+  (let [sql (.-sql self)]
+    (ensure-conn! self)
+    (let [conn (.-conn self)
+          tx-data (protocol/transit->tx txs)]
       (ldb/transact! conn tx-data {:op :apply-client-tx})
-      (prn :debug :finished-db-transact)
       (let [new-t (storage/get-t sql)]
         ;; FIXME: no need to broadcast if client tx is less than remote tx
         (broadcast! self sender {:type "changed" :t new-t})
@@ -419,14 +444,15 @@
   (let [pair (js/WebSocketPair.)
         client (aget pair 0)
         server (aget pair 1)
-        env (.-env self)]
-    (p/let [claims (auth-claims request env)
-            user (claims->user claims)]
-      (.acceptWebSocket (.-state self) server)
+        state (.-state self)]
+    (.acceptWebSocket state server)
+    (let [token (token-from-request request)
+          claims (unsafe-jwt-claims token)
+          user (claims->user claims)]
       (when user
         (add-presence! self server user))
-      (broadcast-online-users! self)
-      (js/Response. nil #js {:status 101 :webSocket client}))))
+      (broadcast-online-users! self))
+    (js/Response. nil #js {:status 101 :webSocket client})))
 
 (defn- strip-sync-prefix [path]
   (if (string/starts-with? path "/sync/")
@@ -491,6 +517,8 @@
               (common/sql-exec (.-sql self) "drop table if exists tx_log")
               (common/sql-exec (.-sql self) "drop table if exists sync_meta")
               (storage/init-schema! (.-sql self))
+              (set! (.-schema-ready self) true)
+              (set! (.-conn self) nil)
               (json-response :sync/admin-reset {:ok true}))
 
             (and (= method "POST") (= path "/tx/batch"))
@@ -536,7 +564,8 @@
                (set! (.-state this) state)
                (set! (.-env this) env)
                (set! (.-sql this) (.-sql ^js (.-storage state)))
-               (set! (.-conn this) (storage/open-conn (.-sql this))))
+               (set! (.-conn this) nil)
+               (set! (.-schema-ready this) false))
 
   Object
   (fetch [this request]
@@ -778,16 +807,3 @@
       (catch :default error
         (log/error :db-sync/index-error error)
         (error-response "server error" 500)))))
-
-(defclass SyncIndexDO
-  (extends DurableObject)
-
-  (constructor [this ^js state env]
-               (super state env)
-               (set! (.-state this) state)
-               (set! (.-env this) env)
-               (set! (.-d1 this) (aget env "DB")))
-
-  Object
-  (fetch [this request]
-         (handle-index-fetch this request)))

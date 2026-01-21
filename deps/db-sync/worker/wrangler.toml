@@ -10,10 +10,6 @@ enabled = true
 name = "LOGSEQ_SYNC_DO"
 class_name = "SyncDO"
 
-[[durable_objects.bindings]]
-name = "LOGSEQ_SYNC_INDEX_DO"
-class_name = "SyncIndexDO"
-
 [[r2_buckets]]
 binding = "LOGSEQ_SYNC_ASSETS"
 bucket_name = "logseq-sync-assets-dev"
@@ -24,8 +20,8 @@ database_name = "logseq-sync-graph-meta-dev"
 database_id = "c020574a-5623-407b-be0c-cd192bab9545"
 
 [[migrations]]
-tag = "v1"
-new_sqlite_classes = [ "SyncDO", "SyncIndexDO" ]
+tag = "v2"
+new_sqlite_classes = [ "SyncDO" ]
 
 [vars]
 COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
@@ -44,13 +40,9 @@ COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"
 name = "LOGSEQ_SYNC_DO"
 class_name = "SyncDO"
 
-[[env.staging.durable_objects.bindings]]
-name = "LOGSEQ_SYNC_INDEX_DO"
-class_name = "SyncIndexDO"
-
 [[env.staging.migrations]]
-tag = "v1"
-new_sqlite_classes = [ "SyncDO", "SyncIndexDO" ]
+tag = "v2"
+new_sqlite_classes = [ "SyncDO" ]
 
 [[env.staging.r2_buckets]]
 binding = "LOGSEQ_SYNC_ASSETS"

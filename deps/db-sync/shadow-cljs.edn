@@ -6,8 +6,7 @@
  {:db-sync {:target :esm
             :output-dir "worker/dist/worker"
             :modules {:main {:exports {default logseq.db-sync.worker/worker
-                                       SyncDO logseq.db-sync.worker/SyncDO
-                                       SyncIndexDO logseq.db-sync.worker/SyncIndexDO}}}
+                                       SyncDO logseq.db-sync.worker/SyncDO}}}
             :js-options {:js-provider :import}
             :closure-defines {shadow.cljs.devtools.client.env/enabled false}
             :devtools {:enabled false}}
