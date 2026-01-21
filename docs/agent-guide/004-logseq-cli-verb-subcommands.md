@@ -103,16 +103,15 @@ List block is removed to avoid overlap with search.
 
 ## Search options detail
 
-Search has no subcommands and searches across pages, blocks, tags, and properties by default.
+Search has no subcommands and searches across pages, blocks, tags, and properties by default. Human output columns are `ID` (db/id) and `TITLE`.
+Search and show outputs resolve block reference UUIDs in text. Nested references are resolved recursively up to 10 levels (e.g., `[[<uuid1>]]` → `[[some text [[<uuid2>]]]]`, then `<uuid2>` is also replaced).
 
 | Option | Purpose | Notes |
 | --- | --- | --- |
-| --text QUERY | Search text | Required unless positional args are used. |
+| QUERY | Search text | Required positional argument. |
 | --type page|block|tag|property|all | Restrict types | Default is all. |
 | --tag NAME | Restrict to a specific tag | Tag is a class page, e.g. Page, Asset, Task. |
-| --limit N | Limit results | Apply after merging type results. |
 | --case-sensitive | Case sensitive search | Default is case-insensitive. |
-| --include-content | Search block content, not just title | Requires query expansion. |
 | --sort updated-at|created-at | Sort results | Default is relevance or stable order. |
 | --order asc|desc | Sort direction | Defaults to desc for time sorts. |
 
@@ -133,7 +132,7 @@ Show has no subcommands and returns the block tree for a page or block.
 1. Review current CLI command parsing and action routing in src/main/logseq/cli/commands.cljs to map block group behavior to verb-first commands.
 2. Add failing unit tests in src/test/logseq/cli/commands_test.cljs for verb-first help output and parse behavior for list, add, remove, search, and show.
 3. Add failing unit tests that assert list subtype option parsing and validation for list page, list tag, and list property.
-4. Add failing unit tests that assert search defaults to all types and respects --type and --include-content options.
+4. Add failing unit tests that assert search defaults to all types and respects --type and positional text.
 5. Add failing unit tests that assert show accepts --page-name, --uuid, or --id and rejects missing targets.
 6. Run bb dev:test -v logseq.cli.commands-test/test-parse-args and confirm failures are about the new verbs and options.
 7. Update src/main/logseq/cli/commands.cljs to replace block subcommands with verb-first entries and to add list subcommand group.
@@ -142,7 +141,7 @@ Show has no subcommands and returns the block tree for a page or block.
 10. Add list option specs in src/main/logseq/cli/commands.cljs and update validation to enforce required args and mutually exclusive flags.
 11. Implement list actions in src/main/logseq/cli/commands.cljs that call existing thread-apis for pages, tags, and properties.
 12. Implement add page using thread-api/apply-outliner-ops with :create-page in src/main/logseq/cli/commands.cljs.
-13. Update search logic in src/main/logseq/cli/commands.cljs to query all resource types and honor --type, --tag, --sort, and --include-content.
+13. Update search logic in src/main/logseq/cli/commands.cljs to query all resource types and honor --type, --tag, --sort, and --order.
 14. Update show logic in src/main/logseq/cli/commands.cljs to support --id, --uuid, --page-name, and --level.
 15. Add failing integration tests in src/test/logseq/cli/integration_test.cljs for list page, list tag, list property, add page, remove page, search all, and show.
 16. Run bb dev:test -v logseq.cli.integration-test/test-cli-list-and-search and confirm failures before implementation.

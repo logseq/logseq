@@ -43,7 +43,7 @@ The CLI will expose these subcommands and shared output controls.
 | graph info | Graph metadata | human, json, edn | Replaces graph-info |
 | block add | Add blocks | human, json, edn | Replaces add |
 | block remove | Remove block or page | human, json, edn | Replaces remove |
-| block search | Search blocks | human, json, edn | Replaces search |
+| search | Search graph | human, json, edn | Replaces search |
 | block tree | Show tree | human, json, edn | Replaces tree |
 
 The plan assumes a single global output flag that defaults to human, and each subcommand may also accept it.
@@ -74,7 +74,7 @@ Each subcommand uses a nested path and its own options.
 | graph info | none | --repo GRAPH, --output | Shows metadata, defaults to config repo if omitted. |
 | block add | none | --content TEXT, --blocks EDN, --blocks-file PATH, --page PAGE, --parent UUID, --output | Content source is required, with file and text variants. |
 | block remove | none | --block UUID, --page PAGE, --output | One of block or page is required. |
-| block search | none | --text TEXT, --limit N, --output | Search text is required. |
+| search | QUERY | --type page|block|tag|property|all, --tag NAME, --case-sensitive, --sort updated-at|created-at, --order asc|desc, --output | Search text is positional and required. Human output columns: ID (db/id), TITLE. Block reference UUIDs in text are resolved recursively up to 10 levels. |
 | block tree | none | --block UUID, --page PAGE, --format FORMAT, --output | One of block or page is required, and format controls tree rendering. |
 
 ## Plan

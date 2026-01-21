@@ -164,27 +164,31 @@
     (let [result (format/format-result {:status :ok
                                         :command :search
                                         :data {:results [{:type "page"
-                                                         :title "Alpha"
-                                                         :uuid "u1"
-                                                         :updated-at 3
-                                                         :created-at 1}
-                                                        {:type "block"
-                                                         :content "Note"
-                                                         :uuid "u2"
-                                                         :updated-at 4
-                                                         :created-at 2}
-                                                        {:type "tag"
-                                                         :title "Taggy"
-                                                         :uuid "u3"}
-                                                        {:type "property"
-                                                         :title "Prop"
-                                                         :uuid "u4"}]}}
+                                                          :db/id 101
+                                                          :title "Alpha"
+                                                          :uuid "u1"
+                                                          :updated-at 3
+                                                          :created-at 1}
+                                                         {:type "block"
+                                                          :db/id 102
+                                                          :content "Note"
+                                                          :uuid "u2"
+                                                          :updated-at 4
+                                                          :created-at 2}
+                                                         {:type "tag"
+                                                          :db/id 103
+                                                          :title "Taggy"
+                                                          :uuid "u3"}
+                                                         {:type "property"
+                                                          :db/id 104
+                                                          :title "Prop"
+                                                          :uuid "u4"}]}}
                                        {:output-format nil})]
-      (is (= (str "TYPE      TITLE/CONTENT  UUID  UPDATED-AT  CREATED-AT\n"
-                  "page      Alpha          u1    3           1\n"
-                  "block     Note           u2    4           2\n"
-                  "tag       Taggy          u3    -           -\n"
-                  "property  Prop           u4    -           -\n"
+      (is (= (str "ID   TITLE\n"
+                  "101  Alpha\n"
+                  "102  Note\n"
+                  "103  Taggy\n"
+                  "104  Prop\n"
                   "Count: 4")
              result))))
 
@@ -204,4 +208,14 @@
                                        {:output-format nil})]
       (is (= (str "Error (missing-graph): graph name is required\n"
                   "Hint: Use --repo <name>")
+             result))))
+
+  (testing "missing search text hints use positional argument"
+    (let [result (format/format-result {:status :error
+                                        :command :search
+                                        :error {:code :missing-search-text
+                                                :message "search text is required"}}
+                                       {:output-format nil})]
+      (is (= (str "Error (missing-search-text): search text is required\n"
+                  "Hint: Provide search text as a positional argument")
              result)))))

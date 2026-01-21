@@ -34,6 +34,10 @@
   [node]
   (or (:block/title node) (:title node)))
 
+(defn- node-uuid
+  [node]
+  (or (:block/uuid node) (:uuid node)))
+
 (defn- node-children
   [node]
   (or (:block/children node) (:children node)))
@@ -44,6 +48,7 @@
     (if (= title (node-title node))
       node
       (some #(find-block-by-title % title) (node-children node)))))
+
 
 (deftest test-cli-graph-list
   (async done
@@ -96,9 +101,10 @@
                   list-tag-payload (parse-json-output list-tag-result)
                   list-property-result (run-cli ["--repo" "content-graph" "list" "property"] data-dir cfg-path)
                   list-property-payload (parse-json-output list-property-result)
-                  add-block-result (run-cli ["--repo" "content-graph" "add" "block" "--target-page-name" "TestPage" "--content" "hello world"] data-dir cfg-path)
-                  _ (parse-json-output add-block-result)
-                  search-result (run-cli ["--repo" "content-graph" "search" "--text" "hello world"] data-dir cfg-path)
+                  add-block-result (run-cli ["--repo" "content-graph" "add" "block" "--target-page-name" "TestPage" "--content" "Test block"] data-dir cfg-path)
+                  add-block-payload (parse-json-output add-block-result)
+                  _ (p/delay 100)
+                  search-result (run-cli ["--repo" "content-graph" "search" "t"] data-dir cfg-path)
                   search-payload (parse-json-output search-result)
                   show-result (run-cli ["--repo" "content-graph" "show" "--page-name" "TestPage" "--format" "json"] data-dir cfg-path)
                   show-payload (parse-json-output show-result)
@@ -108,6 +114,7 @@
                   stop-payload (parse-json-output stop-result)]
             (is (= 0 (:exit-code add-page-result)))
             (is (= "ok" (:status add-page-payload)))
+            (is (= "ok" (:status add-block-payload)))
             (is (= "ok" (:status list-page-payload)))
             (is (vector? (get-in list-page-payload [:data :items])))
             (is (= "ok" (:status list-tag-payload)))
@@ -116,9 +123,56 @@
             (is (vector? (get-in list-property-payload [:data :items])))
             (is (= "ok" (:status search-payload)))
             (is (vector? (get-in search-payload [:data :results])))
+            (let [types (set (map :type (get-in search-payload [:data :results])))]
+              (is (contains? types "page"))
+              (is (contains? types "block"))
+              (is (contains? types "tag"))
+              (is (contains? types "property")))
             (is (= "ok" (:status show-payload)))
             (is (contains? (get-in show-payload [:data :root]) :uuid))
             (is (= "ok" (:status remove-page-payload)))
+            (is (= "ok" (:status stop-payload)))
+            (done))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))
+                     (done)))))))
+
+(deftest test-cli-show-search-resolve-nested-uuid-refs
+  (async done
+    (let [data-dir (node-helper/create-tmp-dir "db-worker-nested-refs")]
+      (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                  _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                  _ (run-cli ["graph" "create" "--repo" "nested-refs"] data-dir cfg-path)
+                  _ (run-cli ["--repo" "nested-refs" "add" "page" "--page" "NestedPage"] data-dir cfg-path)
+                  _ (run-cli ["--repo" "nested-refs" "add" "block" "--target-page-name" "NestedPage" "--content" "Inner"] data-dir cfg-path)
+                  show-inner (run-cli ["--repo" "nested-refs" "show" "--page-name" "NestedPage" "--format" "json"] data-dir cfg-path)
+                  show-inner-payload (parse-json-output show-inner)
+                  inner-node (find-block-by-title (get-in show-inner-payload [:data :root]) "Inner")
+                  inner-uuid (node-uuid inner-node)
+                  _ (run-cli ["--repo" "nested-refs" "add" "block" "--target-page-name" "NestedPage"
+                              "--content" (str "See [[" inner-uuid "]]")] data-dir cfg-path)
+                  show-middle (run-cli ["--repo" "nested-refs" "show" "--page-name" "NestedPage" "--format" "json"] data-dir cfg-path)
+                  show-middle-payload (parse-json-output show-middle)
+                  middle-node (find-block-by-title (get-in show-middle-payload [:data :root]) "See [[Inner]]")
+                  middle-uuid (node-uuid middle-node)
+                  _ (run-cli ["--repo" "nested-refs" "add" "block" "--target-page-name" "NestedPage"
+                              "--content" (str "Outer [[" middle-uuid "]]")] data-dir cfg-path)
+                  show-outer (run-cli ["--repo" "nested-refs" "show" "--page-name" "NestedPage" "--format" "json"] data-dir cfg-path)
+                  show-outer-payload (parse-json-output show-outer)
+                  outer-node (find-block-by-title (get-in show-outer-payload [:data :root]) "Outer [[See [[Inner]]]]")
+                  search-result (run-cli ["--repo" "nested-refs" "search" "Outer"] data-dir cfg-path)
+                  search-payload (parse-json-output search-result)
+                  search-item (some (fn [item]
+                                      (when (and (string? (:content item))
+                                                 (string/includes? (:content item) "Outer"))
+                                        item))
+                                    (get-in search-payload [:data :results]))
+                  stop-result (run-cli ["server" "stop" "--repo" "nested-refs"] data-dir cfg-path)
+                  stop-payload (parse-json-output stop-result)]
+            (is (some? inner-uuid))
+            (is (some? middle-uuid))
+            (is (some? outer-node))
+            (is (= "Outer [[See [[Inner]]]]" (:content search-item)))
             (is (= "ok" (:status stop-payload)))
             (done))
           (p/catch (fn [e]

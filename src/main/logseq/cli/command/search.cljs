@@ -1,21 +1,18 @@
 (ns logseq.cli.command.search
   "Search-related CLI commands."
-  (:require [clojure.string :as string]
+  (:require [clojure.set :as set]
+            [clojure.string :as string]
             [logseq.cli.command.core :as core]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
+            [logseq.common.util :as common-util]
             [promesa.core :as p]))
 
 (def ^:private search-spec
-  {:text {:desc "Search text"}
-   :type {:desc "Search types (page, block, tag, property, all)"}
+  {:type {:desc "Search types (page, block, tag, property, all)"}
    :tag {:desc "Restrict to a specific tag"}
-   :limit {:desc "Limit results"
-           :coerce :long}
    :case-sensitive {:desc "Case sensitive search"
                     :coerce :boolean}
-   :include-content {:desc "Search block content"
-                     :coerce :boolean}
    :sort {:desc "Sort field (updated-at, created-at)"}
    :order {:desc "Sort order (asc, desc)"}})
 
@@ -24,6 +21,9 @@
 
 (def ^:private search-types
   #{"page" "block" "tag" "property" "all"})
+
+(def ^:private uuid-ref-pattern #"\[\[([0-9a-fA-F-]{36})\]\]")
+(def ^:private uuid-ref-max-depth 10)
 
 (defn invalid-options?
   [opts]
@@ -49,17 +49,15 @@
     {:ok? false
      :error {:code :missing-repo
              :message "repo is required for search"}}
-    (let [text (or (:text options) (string/join " " args))]
+    (let [text (some-> (first args) string/trim)]
       (if (seq text)
         {:ok? true
          :action {:type :search
                   :repo repo
                   :text text
-                  :search-type (:type options)
+                  :search-type (or (:type options) "all")
                   :tag (:tag options)
-                  :limit (:limit options)
                   :case-sensitive (:case-sensitive options)
-                  :include-content (:include-content options)
                   :sort (:sort options)
                   :order (:order options)}}
         {:ok? false
@@ -86,68 +84,170 @@
                   [?e :block/uuid ?uuid]
                   [(get-else $ ?e :block/updated-at 0) ?updated]
                   [(get-else $ ?e :block/created-at 0) ?created]
-                  [(clojure.string/includes? (clojure.string/lower-case ?title) ?q)]])
+                  [(clojure.string/includes? ?name ?q)]])
         q* (if case-sensitive? text (string/lower-case text))]
     (transport/invoke cfg :thread-api/q false [repo [query q*]])))
 
-#_{:clj-kondo/ignore [:aliased-namespace-symbol]}
 (defn- query-blocks
-  [cfg repo text case-sensitive? tag include-content?]
-  (let [has-tag? (seq tag)
-        content-attr (if include-content? :block/content :block/title)
+  [cfg repo text case-sensitive? tag]
+  (let [q* (if case-sensitive? text (string/lower-case text))
+        tag-name (some-> tag string/lower-case)
         query (cond
-                (and case-sensitive? has-tag?)
-                `[:find ?e ?value ?uuid ?updated ?created
+                (and case-sensitive? (seq tag-name))
+                '[:find ?e ?title ?uuid ?updated ?created
                   :in $ ?q ?tag-name
                   :where
-                  [?tag :block/name ?tag-name]
-                  [?e :block/tags ?tag]
-                  [?e ~content-attr ?value]
-                  [(missing? $ ?e :block/name)]
+                  [?e :block/title ?title]
+                  [?e :block/page ?page]
                   [?e :block/uuid ?uuid]
                   [(get-else $ ?e :block/updated-at 0) ?updated]
                   [(get-else $ ?e :block/created-at 0) ?created]
-                  [(clojure.string/includes? ?value ?q)]]
+                  [(clojure.string/includes? ?title ?q)]
+                  [?tag :block/name ?tag-name]
+                  [?e :block/tags ?tag]]
 
                 case-sensitive?
-                `[:find ?e ?value ?uuid ?updated ?created
+                '[:find ?e ?title ?uuid ?updated ?created
                   :in $ ?q
                   :where
-                  [?e ~content-attr ?value]
-                  [(missing? $ ?e :block/name)]
+                  [?e :block/title ?title]
+                  [?e :block/page ?page]
                   [?e :block/uuid ?uuid]
                   [(get-else $ ?e :block/updated-at 0) ?updated]
                   [(get-else $ ?e :block/created-at 0) ?created]
-                  [(clojure.string/includes? ?value ?q)]]
+                  [(clojure.string/includes? ?title ?q)]]
 
-                has-tag?
-                `[:find ?e ?value ?uuid ?updated ?created
-                  :in $ ?q ?tag-name
+                (seq tag-name)
+                '[:find ?e ?title ?uuid ?updated ?created
+                  :in $ ?tag-name
                   :where
-                  [?tag :block/name ?tag-name]
-                  [?e :block/tags ?tag]
-                  [?e ~content-attr ?value]
-                  [(missing? $ ?e :block/name)]
+                  [?e :block/title ?title]
+                  [?e :block/page ?page]
                   [?e :block/uuid ?uuid]
                   [(get-else $ ?e :block/updated-at 0) ?updated]
                   [(get-else $ ?e :block/created-at 0) ?created]
-                  [(clojure.string/includes? (clojure.string/lower-case ?value) ?q)]]
+                  [?tag :block/name ?tag-name]
+                  [?e :block/tags ?tag]]
 
                 :else
-                `[:find ?e ?value ?uuid ?updated ?created
-                  :in $ ?q
+                '[:find ?e ?title ?uuid ?updated ?created
                   :where
-                  [?e ~content-attr ?value]
-                  [(missing? $ ?e :block/name)]
+                  [?e :block/title ?title]
+                  [?e :block/page ?page]
                   [?e :block/uuid ?uuid]
                   [(get-else $ ?e :block/updated-at 0) ?updated]
-                  [(get-else $ ?e :block/created-at 0) ?created]
-                  [(clojure.string/includes? (clojure.string/lower-case ?value) ?q)]])
-        q* (if case-sensitive? text (string/lower-case text))
-        tag-name (some-> tag string/lower-case)]
-    (if has-tag?
-      (transport/invoke cfg :thread-api/q false [repo [query q* tag-name]])
-      (transport/invoke cfg :thread-api/q false [repo [query q*]]))))
+                  [(get-else $ ?e :block/created-at 0) ?created]])
+        query-args (cond
+                     (and case-sensitive? (seq tag-name))
+                     [repo [query q* tag-name]]
+
+                     case-sensitive?
+                     [repo [query q*]]
+
+                     (seq tag-name)
+                     [repo [query tag-name]]
+
+                     :else
+                     [repo [query]])
+        matches-text? (fn [title]
+                        (when (string? title)
+                          (if case-sensitive?
+                            (string/includes? title q*)
+                            (string/includes? (string/lower-case title) q*))))]
+    (-> (p/let [rows (transport/invoke cfg :thread-api/q false query-args)]
+          (->> (or rows [])
+               (filter (fn [[_ title _ _ _]]
+                         (matches-text? title)))
+               (mapv (fn [[id title uuid updated created]]
+                       {:type "block"
+                        :db/id id
+                        :content title
+                        :uuid (str uuid)
+                        :updated-at updated
+                        :created-at created}))))
+        (p/catch (fn [_]
+                   [])))))
+
+(defn- replace-uuid-refs-once
+  [value uuid->label]
+  (if (and (string? value) (seq uuid->label))
+    (string/replace value uuid-ref-pattern
+                    (fn [[_ id]]
+                      (if-let [label (get uuid->label (string/lower-case id))]
+                        (str "[[" label "]]")
+                        (str "[[" id "]]"))))
+    value))
+
+(defn- replace-uuid-refs
+  [value uuid->label]
+  (loop [current value
+         remaining uuid-ref-max-depth]
+    (if (or (not (string? current)) (zero? remaining) (empty? uuid->label))
+      current
+      (let [next (replace-uuid-refs-once current uuid->label)]
+        (if (= next current)
+          current
+          (recur next (dec remaining)))))))
+
+(defn- extract-uuid-refs
+  [value]
+  (->> (re-seq uuid-ref-pattern (or value ""))
+       (map second)
+       (filter common-util/uuid-string?)
+       (map string/lower-case)
+       distinct))
+
+(defn- collect-uuid-refs
+  [results]
+  (->> results
+       (mapcat (fn [item] (keep item [:title :content])))
+       (remove string/blank?)
+       (mapcat extract-uuid-refs)
+       distinct
+       vec))
+
+(defn- fetch-uuid-labels
+  [config repo uuid-strings]
+  (if (seq uuid-strings)
+    (p/let [blocks (p/all (map (fn [uuid-str]
+                                 (transport/invoke config :thread-api/pull false
+                                                   [repo [:block/uuid :block/title :block/name]
+                                                    [:block/uuid (uuid uuid-str)]]))
+                               uuid-strings))]
+      (->> blocks
+           (remove nil?)
+           (map (fn [block]
+                  (let [uuid-str (some-> (:block/uuid block) str)]
+                    [(string/lower-case uuid-str)
+                     (or (:block/title block) (:block/name block) uuid-str)])))
+           (into {})))
+    (p/resolved {})))
+
+(defn- fetch-uuid-labels-recursive
+  [config repo uuid-strings]
+  (p/loop [pending (set (map string/lower-case uuid-strings))
+           seen #{}
+           labels {}
+           remaining uuid-ref-max-depth]
+    (if (or (empty? pending) (zero? remaining))
+      labels
+      (p/let [fetched (fetch-uuid-labels config repo pending)
+              next-labels (merge labels fetched)
+              next-seen (into seen (keys fetched))
+              nested-refs (->> (vals fetched)
+                               (mapcat extract-uuid-refs)
+                               (remove next-seen)
+                               set)
+              next-pending (set/difference nested-refs next-seen)]
+        (p/recur next-pending next-seen next-labels (dec remaining))))))
+
+(defn- resolve-uuid-refs-in-results
+  [results uuid->label]
+  (mapv (fn [item]
+          (cond-> item
+            (:title item) (update :title replace-uuid-refs uuid->label)
+            (:content item) (update :content replace-uuid-refs uuid->label)))
+        (or results [])))
 
 (defn- normalize-search-types
   [type]
@@ -183,17 +283,8 @@
                                         :updated-at updated
                                         :created-at created})
                                      rows)))
-              include-content? (boolean (:include-content action))
               block-results (when (some #{:block} types)
-                              (p/let [rows (query-blocks cfg (:repo action) text case-sensitive? tag include-content?)]
-                                (mapv (fn [[id content uuid updated created]]
-                                        {:type "block"
-                                         :db/id id
-                                         :content content
-                                         :uuid (str uuid)
-                                         :updated-at updated
-                                         :created-at created})
-                                      rows)))
+                              (query-blocks cfg (:repo action) text case-sensitive? tag))
               tag-results (when (some #{:tag} types)
                             (p/let [items (transport/invoke cfg :thread-api/api-list-tags false
                                                             [(:repo action) {:expand true :include-built-in true}])
@@ -206,6 +297,7 @@
                                                  (string/includes? (string/lower-case title) q*)))))
                                    (mapv (fn [item]
                                            {:type "tag"
+                                            :db/id (:db/id item)
                                             :title (:block/title item)
                                             :uuid (:block/uuid item)})))))
               property-results (when (some #{:property} types)
@@ -220,6 +312,7 @@
                                                       (string/includes? (string/lower-case title) q*)))))
                                         (mapv (fn [item]
                                                 {:type "property"
+                                                 :db/id (:db/id item)
                                                  :title (:block/title item)
                                                  :uuid (:block/uuid item)})))))
               results (->> (concat (or page-results [])
@@ -235,6 +328,8 @@
                               (cond-> (= order "desc") reverse)
                               vec))
                        results)
-              limited (if (some? (:limit action)) (vec (take (:limit action) sorted)) sorted)]
+              uuid-refs (collect-uuid-refs sorted)
+              uuid->label (fetch-uuid-labels-recursive cfg (:repo action) uuid-refs)
+              resolved (resolve-uuid-refs-in-results sorted uuid->label)]
         {:status :ok
-         :data {:results limited}})))
+         :data {:results resolved}})))
