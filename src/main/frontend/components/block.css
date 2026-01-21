@@ -231,7 +231,7 @@
 
 .block-editing-avatar-wrap {
   @apply absolute top-1/2 -translate-y-1/2 pointer-events-none;
-  left: 2px;
+  left: 6px;
   z-index: 2;
 }
 

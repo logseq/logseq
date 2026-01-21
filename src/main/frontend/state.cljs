@@ -1251,7 +1251,9 @@ Similar to re-frame subscriptions"
     (set-state! :editor/editing? nil)
     (set-state! :editor/block nil))
   (when clear-editing-block?
-    (pub-event! [:rtc/presence-update {:editing-block-uuid nil}]))
+    (let [online-users (some-> @state :rtc/state deref :online-users)]
+      (when (and (coll? online-users) (> (count online-users) 1))
+        (pub-event! [:rtc/presence-update {:editing-block-uuid nil}]))))
   (set-state! :editor/start-pos nil)
   (clear-editor-last-pos!)
   (clear-cursor-range!)
@@ -1808,8 +1810,10 @@ Similar to re-frame subscriptions"
         (set-state! :editor/last-key-code nil)
         (set-state! :editor/set-timestamp-block nil)
         (set-state! :editor/cursor-range cursor-range)
-        (when-let [block-uuid (:block/uuid block)]
-          (pub-event! [:rtc/presence-update {:editing-block-uuid (str block-uuid)}]))
+        (let [online-users (some-> @state :rtc/state deref :online-users)]
+          (when (and (coll? online-users) (> (count online-users) 1))
+            (when-let [block-uuid (:block/uuid block)]
+              (pub-event! [:rtc/presence-update {:editing-block-uuid (str block-uuid)}]))))
         (when (= :code (:logseq.property.node/display-type (d/entity db (:db/id block))))
           (pub-event! [:editor/focus-code-editor block block-element]))
         (when-let [input (gdom/getElement edit-input-id)]
