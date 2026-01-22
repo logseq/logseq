@@ -27,7 +27,7 @@ See the frontend for example usage.
 This follows the practices that [the Logseq frontend
 follows](/docs/dev-practices.md). Most of the same linters are used, with
 configurations that are specific to this library. See [this library's CI
-file](/.github/workflows/db.yml) for linting examples.
+file](/.github/workflows/deps-db.yml) for linting examples.
 
 ### Setup
 

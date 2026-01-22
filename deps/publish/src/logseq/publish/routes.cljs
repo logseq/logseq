@@ -12,7 +12,8 @@
 (def publish-css (resource/inline "logseq/publish/publish.css"))
 (def publish-js (resource/inline "logseq/publish/publish.js"))
 (def tabler-ext-js (resource/inline "js/tabler.ext.js"))
-(def tabler-extension-css (resource/inline "css/tabler-extension.css"))
+;; Should this be used?
+;; (def tabler-extension-css (resource/inline "css/tabler-extension.css"))
 
 (defn- request-password
   [request]
@@ -461,8 +462,8 @@
                               (js-await [meta (.json meta-resp)
                                          owner-sub (aget meta "owner_sub")
                                          subject (aget claims "sub")]
-                                        (if (and (or (string/blank? owner-sub)
-                                                     (not= owner-sub subject)))
+                                        (if (or (string/blank? owner-sub)
+                                                (not= owner-sub subject))
                                           (publish-common/forbidden)
                                           (js-await [page-resp (.fetch page-stub (str "https://publish/pages/" graph-uuid "/" page-uuid)
                                                                        #js {:method "DELETE"})
@@ -599,7 +600,7 @@
                                                          (publish-render/render-page-html transit page-uuid refs-json tagged-nodes)
                                                          #js {:headers headers})))))))))))))
 
-(defn handle-fetch [request env]
+(defn ^:large-vars/cleanup-todo handle-fetch [request env]
   (let [url (js/URL. (.-url request))
         path (.-pathname url)
         method (.-method request)]

@@ -1131,6 +1131,10 @@ html.is-mac {
   .block-tags {
     margin-top: 17px;
   }
+
+  .ls-properties-area .block-tags {
+    margin-top: 0;
+  }
 }
 
 .ls-page-title .ls-properties-area {
