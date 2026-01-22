@@ -274,7 +274,6 @@
                             (throw (ex-info "missing snapshot download url"
                                             {:graph graph-name
                                              :response download-resp})))
-                        e2ee? (fetch-graph-e2ee? base (str graph-uuid))
                         resp (js/fetch download-url (clj->js (with-auth-headers {:method "GET"})))]
                   (when-not (.-ok resp)
                     (throw (ex-info "snapshot download failed"
@@ -295,7 +294,7 @@
                             (when (seq total-rows')
                               (p/do!
                                (state/<invoke-db-worker :thread-api/db-sync-import-kvs-rows
-                                                        graph total-rows' true graph-uuid e2ee?)
+                                                        graph total-rows' true graph-uuid)
                                (state/<invoke-db-worker :thread-api/db-sync-finalize-kvs-import graph remote-tx)))
                             total')
                           (let [value (.-value chunk)
