@@ -6,7 +6,7 @@
             [frontend.test.helper :as test-helper]
             [logseq.api.block :as api-block]))
 
-(use-fixtures :each {:before test-helper/start-test-db!
+(use-fixtures :each {:before #(test-helper/start-test-db! {:build-init-data? false})
                      :after test-helper/destroy-test-db!})
 
 (deftest get-block

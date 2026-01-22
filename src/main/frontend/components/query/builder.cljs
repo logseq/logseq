@@ -302,9 +302,6 @@
          (map name filters-and-ops)
          (fn [{:keys [value]}]
            (cond
-             (= value "all page tags")
-             (append-tree! *tree opts loc [:all-page-tags])
-
              (operator? value)
              (append-tree! *tree opts loc [(keyword value)])
 
@@ -348,7 +345,7 @@
       (= (keyword f) :page-ref)
       (ref/->page-ref (uuid->page-title (second clause)))
 
-      (contains? #{:tags :page-tags} (keyword f))
+      (contains? #{:tags} (keyword f))
       (cond
         (string? (second clause))
         (str "#" (uuid->page-title (second clause)))
@@ -357,7 +354,7 @@
         :else
         (str "#" (uuid->page-title (second (second clause)))))
 
-      (contains? #{:property :private-property :page-property} (keyword f))
+      (contains? #{:property :private-property} (keyword f))
       (str (if (qualified-keyword? (second clause))
              (:block/title (db/entity (second clause)))
              (some-> (second clause) name))
@@ -412,7 +409,7 @@
       (str (name f) ": "
            (string/join " | " (rest clause)))
 
-      (contains? #{:page :task :namespace} (keyword f))
+      (contains? #{:page :task} (keyword f))
       (str (name f) ": " (if (vector? (second clause))
                            (second (second clause))
                            (second clause)))
@@ -568,7 +565,7 @@
              (assoc state ::tree *tree)))
    :will-mount (fn [state]
                  (let [q-str (get-q (first (:rum/args state)))
-                       blocks-query? (:blocks? (query-dsl/parse-query q-str))
+                       blocks-query? (:blocks? (query-dsl/parse-query q-str (db/get-db)))
                        find-mode (cond
                                    blocks-query?
                                    :block

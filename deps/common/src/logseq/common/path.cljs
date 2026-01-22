@@ -51,17 +51,6 @@
   [path]
   (second (split-ext path)))
 
-(defn safe-filename?
-  "Safe filename on all platforms"
-  [fname]
-  (and (not (string/blank? fname))
-       (< (count fname) 255)
-       (not (or (re-find #"[\/?<>\\:*|\"]" fname)
-                (re-find #"^\.+$" fname)
-                (re-find #"[\. ]$" fname)
-                (re-find #"(?i)^(COM[0-9]|CON|LPT[0-9]|NUL|PRN|AUX|com[0-9]|con|lpt[0-9]|nul|prn|aux)\..+" fname)
-                (re-find #"[\u0000-\u001f\u0080-\u009f]" fname)))))
-
 (defn- path-join-internal
   "Joins the given path segments into a single path, handling relative paths,
   '..' and '.' normalization."
@@ -253,31 +242,6 @@
         (js/console.error "unhandled trim-base" base-path sub-path)
         nil))))
 
-(defn relative-path
-  "Get relative path from base path.
-   Works for both path and URL."
-  [base-path sub-path]
-  (let [base-path (path-normalize base-path)
-        sub-path (path-normalize sub-path)
-        is-url? (is-file-url? base-path)]
-    (if (string/starts-with? sub-path base-path)
-      (if is-url?
-        (safe-decode-uri-component (string/replace (subs sub-path (count base-path)) #"^/+", ""))
-        (string/replace (subs sub-path (count base-path)) #"^/+", ""))
-      ;; append as many ..
-      ;; NOTE: This is a buggy impl, relative-path is different when base-path is a file or a dir
-      (let [base-segs (string/split base-path #"/" -1)
-            path-segs (string/split sub-path #"/" -1)
-            common-segs (take-while #(= (first %) (second %)) (map vector base-segs path-segs))
-            base-segs (drop (count common-segs) base-segs)
-            remain-segs (drop (count common-segs) path-segs)
-            base-prefix (apply str (repeat (max 0 (dec (count base-segs))) "../"))]
-        (js/console.error (js/Error. "buggy relative-path") base-path sub-path)
-        #_{:clj-kondo/ignore [:path-invalid-construct/string-join]}
-        (if is-url?
-          (safe-decode-uri-component (str base-prefix (string/join "/" remain-segs)))
-          (str base-prefix (string/join "/" remain-segs)))))))
-
 (defn parent
   "Parent, containing directory"
   [path]
@@ -286,44 +250,11 @@
     (path-normalize (str path "/.."))
     nil))
 
-(defn resolve-relative-path
-  "Assume current-path is a file"
-  [current-path rel-path]
-  (if-let [base-dir (parent current-path)]
-    (path-join base-dir rel-path)
-    rel-path))
-
-(defn get-relative-path
-  "Assume current-path is a file, and target-path is a file or directory.
-   Return relative path from current-path to target-path.
-   Works for both path and URL. Also works for relative path.
-   The opposite operation is `resolve-relative-path`"
-  [current-path target-path]
-  (let [base-path (parent current-path)
-        sub-path (path-normalize target-path)
-        is-url? (is-file-url? base-path)
-        base-segs (if base-path
-                    (string/split base-path #"/" -1)
-                    [])
-        path-segs (string/split sub-path #"/" -1)
-        common-segs (take-while #(= (first %) (second %)) (map vector base-segs path-segs))
-        base-segs (drop (count common-segs) base-segs)
-        remain-segs (drop (count common-segs) path-segs)
-        base-prefix (apply str (repeat (max 0 (count base-segs)) "../"))]
-    #_{:clj-kondo/ignore [:path-invalid-construct/string-join]}
-    (if is-url?
-      (safe-decode-uri-component (str base-prefix (string/join "/" remain-segs)))
-      (str base-prefix (string/join "/" remain-segs)))))
-
 ;; compat
 (defn basename
   [path]
   (let [path (string/replace path #"/+$" "")]
     (filename path)))
-
-(defn dirname
-  [path]
-  (parent path))
 
 (defn absolute?
   "Whether path `p` is absolute."

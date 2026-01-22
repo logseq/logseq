@@ -21,8 +21,7 @@
 
 (defn- validate-graph [graph options]
   (if (fs/existsSync (cli-util/get-graph-path graph))
-    (let [conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))
-          _ (cli-util/ensure-db-graph-for-command @conn)]
+    (let [conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))]
       (validate-db @conn graph options))
     (cli-util/error "Graph" (pr-str graph) "does not exist")))
 

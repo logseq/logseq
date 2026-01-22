@@ -194,10 +194,6 @@
      (p/do!
       (.setStyle StatusBar (clj->js {:style (.-Dark Style)})))))
 
-(defn find-first
-  [pred coll]
-  (first (filter pred coll)))
-
 (defn find-index
   "Find first index of an element in list"
   [pred-or-val coll]
@@ -367,22 +363,6 @@
            before-last-newline-length (or last-newline-pos -1)
            last-newline-content (subs s (inc before-last-newline-length) from-newline-index)]
        (.countGraphemes splitter last-newline-content))))
-
-#?(:cljs
-   (defn get-text-range
-     "Return the substring of the first grapheme-num characters of s if first-line? is true,
-      otherwise return the substring of s before the last \n and the first grapheme-num characters.
-
-      grapheme-num treats multi-char as 1, like emoji characters"
-     [s grapheme-num first-line?]
-     (let [newline-pos (if first-line?
-                         0
-                         (inc (or (string/last-index-of s \newline) -1)))
-           ^js splitter (GraphemeSplitter.)
-           ^js newline-graphemes (.splitGraphemes splitter (subs s newline-pos))
-           ^js newline-graphemes (.slice newline-graphemes 0 grapheme-num)
-           content (.join newline-graphemes "")]
-       (subs s 0 (+ newline-pos (count content))))))
 
 #?(:cljs
    (defn stop [e]
@@ -1010,18 +990,6 @@
             ret# ~expr]
         {:result ret#
          :time (- (cljs.core/system-time) start#)})))
-
-;; TODO: profile and profileEnd
-
-(comment
-  (= (get-relative-path "journals/2020_11_18.org" "pages/grant_ideas.org")
-     "../pages/grant_ideas.org")
-
-  (= (get-relative-path "journals/2020_11_18.org" "journals/2020_11_19.org")
-     "./2020_11_19.org")
-
-  (= (get-relative-path "a/b/c/d/g.org" "a/b/c/e/f.org")
-     "../e/f.org"))
 
 (defn keyname [key] (str (namespace key) "/" (name key)))
 

@@ -4,18 +4,11 @@
 
 (def left-braces "Opening characters for macro" "{{")
 (def right-braces "Closing characters for macro" "}}")
-(def query-macro (str left-braces "query"))
 
 (defn macro?
   [*s]
   (when-let [s (and (string? *s) (string/trim *s))]
     (and (string/starts-with? s left-braces) (string/ends-with? s right-braces))))
-
-(defn query-macro?
-  [s]
-  (and (string? s)
-       (string/includes? s (str query-macro " "))
-       (not (string/includes? s (str "`" query-macro)))))
 
 (defn macro-subs
   [macro-content arguments]
