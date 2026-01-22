@@ -255,8 +255,10 @@
 (defn- import-snapshot-rows!
   [sql table rows]
   (when (seq rows)
-    (doseq [{:keys [sql args]} (batch/rows->insert-batches table rows nil)]
-      (apply common/sql-exec sql sql args))))
+    (doseq [batch (batch/rows->insert-batches table rows nil)]
+      (let [sql-str (:sql batch)
+            args (:args batch)]
+        (apply common/sql-exec sql sql-str args)))))
 
 (defn- finalize-import!
   [^js self reset?]
@@ -592,6 +594,7 @@
 ;;      :datoms (common/write-transit datoms)}))
 
 (defn- import-snapshot! [^js self rows _reset?]
+  (prn :debug :rows-count (count rows))
   (let [sql (.-sql self)]
     (ensure-schema! self)
     (import-snapshot-rows! sql "kvs_import" rows)))
