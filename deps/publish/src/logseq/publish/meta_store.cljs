@@ -1,4 +1,5 @@
 (ns logseq.publish.meta-store
+  "Handles storing Durable Object in SQLite"
   (:require [clojure.string :as string]
             [logseq.publish.common :as publish-common])
   (:require-macros [logseq.publish.async :refer [js-await]]))
