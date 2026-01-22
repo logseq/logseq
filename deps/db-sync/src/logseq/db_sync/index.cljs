@@ -21,6 +21,14 @@
                         "username TEXT"
                         ");"))
    (common/<d1-run db
+                   (str "create table if not exists user_rsa_keys ("
+                        "user_id TEXT primary key,"
+                        "public_key TEXT,"
+                        "encrypted_private_key TEXT,"
+                        "created_at INTEGER,"
+                        "updated_at INTEGER"
+                        ");"))
+   (common/<d1-run db
                    (str "create table if not exists graph_members ("
                         "user_id TEXT,"
                         "graph_id TEXT,"
@@ -29,6 +37,15 @@
                         "created_at INTEGER,"
                         "primary key (user_id, graph_id),"
                         "check (role in ('manager', 'member'))"
+                        ");"))
+   (common/<d1-run db
+                   (str "create table if not exists graph_aes_keys ("
+                        "graph_id TEXT,"
+                        "user_id TEXT,"
+                        "encrypted_aes_key TEXT,"
+                        "created_at INTEGER,"
+                        "updated_at INTEGER,"
+                        "primary key (graph_id, user_id)"
                         ");"))))
 
 (defn <index-list [db user-id]
@@ -119,6 +136,76 @@
             row (first rows)]
       (when row
         (aget row "id")))))
+
+(defn <user-rsa-key-pair-upsert!
+  [db user-id public-key encrypted-private-key]
+  (when (string? user-id)
+    (let [now (common/now-ms)]
+      (common/<d1-run db
+                      (str "insert into user_rsa_keys (user_id, public_key, encrypted_private_key, created_at, updated_at) "
+                           "values (?, ?, ?, ?, ?) "
+                           "on conflict(user_id) do update set "
+                           "public_key = excluded.public_key, "
+                           "encrypted_private_key = excluded.encrypted_private_key, "
+                           "updated_at = excluded.updated_at")
+                      user-id
+                      public-key
+                      encrypted-private-key
+                      now
+                      now))))
+
+(defn <user-rsa-key-pair
+  [db user-id]
+  (when (string? user-id)
+    (p/let [result (common/<d1-all db
+                                   "select public_key, encrypted_private_key from user_rsa_keys where user_id = ?"
+                                   user-id)
+            rows (common/get-sql-rows result)
+            row (first rows)]
+      (when row
+        {:public-key (aget row "public_key")
+         :encrypted-private-key (aget row "encrypted_private_key")}))))
+
+(defn <user-rsa-public-key-by-email
+  [db email]
+  (when (string? email)
+    (p/let [result (common/<d1-all db
+                                   (str "select k.public_key from user_rsa_keys k "
+                                        "left join users u on k.user_id = u.id "
+                                        "where u.email = ?")
+                                   email)
+            rows (common/get-sql-rows result)
+            row (first rows)]
+      (when row
+        (aget row "public_key")))))
+
+(defn <graph-encrypted-aes-key-upsert!
+  [db graph-id user-id encrypted-aes-key]
+  (when (and (string? graph-id) (string? user-id))
+    (let [now (common/now-ms)]
+      (common/<d1-run db
+                      (str "insert into graph_aes_keys (graph_id, user_id, encrypted_aes_key, created_at, updated_at) "
+                           "values (?, ?, ?, ?, ?) "
+                           "on conflict(graph_id, user_id) do update set "
+                           "encrypted_aes_key = excluded.encrypted_aes_key, "
+                           "updated_at = excluded.updated_at")
+                      graph-id
+                      user-id
+                      encrypted-aes-key
+                      now
+                      now))))
+
+(defn <graph-encrypted-aes-key
+  [db graph-id user-id]
+  (when (and (string? graph-id) (string? user-id))
+    (p/let [result (common/<d1-all db
+                                   "select encrypted_aes_key from graph_aes_keys where graph_id = ? and user_id = ?"
+                                   graph-id
+                                   user-id)
+            rows (common/get-sql-rows result)
+            row (first rows)]
+      (when row
+        (aget row "encrypted_aes_key")))))
 
 (defn <graph-member-upsert! [db graph-id user-id role invited-by]
   (let [now (common/now-ms)]
