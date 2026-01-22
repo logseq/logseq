@@ -42,6 +42,18 @@
 (defn- decode-snapshot-rows [bytes]
   (sqlite-util/read-transit-str (.decode snapshot-text-decoder (->uint8 bytes))))
 
+(defn- snapshot-rows-e2ee?
+  [rows]
+  (boolean
+   (some (fn [[_ content _]]
+           (try
+             (let [data (sqlite-util/read-transit-str content)]
+               (and (map? data)
+                    (= :logseq.kv/graph-rtc-e2ee? (:db/ident data))))
+             (catch :default _
+               false)))
+         rows)))
+
 (defn- frame-len [^js data offset]
   (let [view (js/DataView. (.-buffer data) offset 4)]
     (.getUint32 view 0 false)))
@@ -267,10 +279,11 @@
                                 total' (+ total (count rows))
                                 total-rows' (into total-rows rows)]
                             (when (seq total-rows')
-                              (p/do!
-                               (state/<invoke-db-worker :thread-api/db-sync-import-kvs-rows
-                                                        graph total-rows' true)
-                               (state/<invoke-db-worker :thread-api/db-sync-finalize-kvs-import graph remote-tx)))
+                              (let [e2ee? (snapshot-rows-e2ee? total-rows')]
+                                (p/do!
+                                 (state/<invoke-db-worker :thread-api/db-sync-import-kvs-rows
+                                                          graph total-rows' true graph-uuid e2ee?)
+                                 (state/<invoke-db-worker :thread-api/db-sync-finalize-kvs-import graph remote-tx))))
                             total')
                           (let [value (.-value chunk)
                                 {:keys [rows buffer]} (parse-framed-chunk buffer value)
@@ -337,7 +350,12 @@
                              {:method "POST"
                               :headers {"content-type" "application/json"}
                               :body (js/JSON.stringify (clj->js body))}
-                             {:response-schema :graph-members/create})]
+                             {:response-schema :graph-members/create})
+               repo (state/get-current-repo)
+               e2ee? (ldb/get-graph-rtc-e2ee? (db/get-db))
+               _ (when (and repo e2ee?)
+                   (state/<invoke-db-worker :thread-api/db-sync-grant-graph-access
+                                            repo graph-uuid email))]
          (notification/show! "Invitation sent!" :success))
        (p/catch (fn [e]
                   (notification/show! "Something wrong, please try again." :error)

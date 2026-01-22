@@ -25,6 +25,22 @@
 (defn- run-sql! [state sql args]
   (record-exec! state sql)
   (cond
+    (string/includes? sql "insert into user_rsa_keys")
+    (let [[user-id public-key encrypted-private-key created-at updated-at] args]
+      (swap! state update :user-keys assoc user-id {:user-id user-id
+                                                    :public-key public-key
+                                                    :encrypted-private-key encrypted-private-key
+                                                    :created-at created-at
+                                                    :updated-at updated-at}))
+
+    (string/includes? sql "insert into graph_aes_keys")
+    (let [[graph-id user-id encrypted-aes-key created-at updated-at] args]
+      (swap! state update :graph-keys assoc [graph-id user-id] {:graph-id graph-id
+                                                                :user-id user-id
+                                                                :encrypted-aes-key encrypted-aes-key
+                                                                :created-at created-at
+                                                                :updated-at updated-at}))
+
     (string/includes? sql "insert into users")
     (let [[user-id email email-verified username] args]
       (swap! state update :users assoc user-id {:id user-id
@@ -85,6 +101,30 @@
 (defn- all-sql [state sql args]
   (record-exec! state sql)
   (cond
+    (string/includes? sql "from user_rsa_keys")
+    (if (string/includes? sql "left join users")
+      (let [[email] args
+            user-id (some (fn [[_ row]]
+                            (when (= email (:email row))
+                              (:id row)))
+                          (:users @state))
+            row (when user-id (get-in @state [:user-keys user-id]))]
+        (if row
+          (js-rows [row])
+          (js-rows [])))
+      (let [[user-id] args
+            row (get-in @state [:user-keys user-id])]
+        (if row
+          (js-rows [row])
+          (js-rows []))))
+
+    (string/includes? sql "from graph_aes_keys")
+    (let [[graph-id user-id] args
+          row (get-in @state [:graph-keys [graph-id user-id]])]
+      (if row
+        (js-rows [row])
+        (js-rows [])))
+
     (string/includes? sql "from graph_members where graph_id")
     (let [graph-id (first args)
           members (->> (:graph-members @state)
@@ -154,6 +194,8 @@
   (async done
          (let [state (atom {:executed []
                             :users {}
+                            :user-keys {}
+                            :graph-keys {}
                             :graph-members {}
                             :graphs {}})
                db (make-d1 state)]
@@ -161,7 +203,9 @@
                (p/then (fn [_]
                          (let [sqls (:executed @state)]
                            (is (some #(string/includes? % "create table if not exists users") sqls))
-                           (is (some #(string/includes? % "create table if not exists graph_members") sqls)))
+                           (is (some #(string/includes? % "create table if not exists graph_members") sqls))
+                           (is (some #(string/includes? % "create table if not exists user_rsa_keys") sqls))
+                           (is (some #(string/includes? % "create table if not exists graph_aes_keys") sqls)))
                          (done)))
                (p/catch (fn [e]
                           (is false (str e))
@@ -171,6 +215,8 @@
   (async done
          (let [state (atom {:executed []
                             :users {}
+                            :user-keys {}
+                            :graph-keys {}
                             :graph-members {}
                             :graphs {}})
                db (make-d1 state)
@@ -193,6 +239,8 @@
   (async done
          (let [state (atom {:executed []
                             :users {}
+                            :user-keys {}
+                            :graph-keys {}
                             :graph-members {}
                             :graphs {}})
                db (make-d1 state)]
@@ -215,6 +263,8 @@
   (async done
          (let [state (atom {:executed []
                             :users {}
+                            :user-keys {}
+                            :graph-keys {}
                             :graph-members {}
                             :graphs {}})
                db (make-d1 state)]
@@ -240,6 +290,8 @@
   (async done
          (let [state (atom {:executed []
                             :users {}
+                            :user-keys {}
+                            :graph-keys {}
                             :graph-members {}
                             :graphs {}})
                db (make-d1 state)]
@@ -249,6 +301,71 @@
                            (is (= "member" (:role member)))
                            (is (= "user-1" (:invited-by member))))
                          (done)))
+               (p/catch (fn [e]
+                          (is false (str e))
+                          (done)))))))
+
+(deftest e2ee-user-rsa-key-pair-upsert-test
+  (async done
+         (let [state (atom {:executed []
+                            :users {}
+                            :user-keys {}
+                            :graph-keys {}
+                            :graph-members {}
+                            :graphs {}})
+               db (make-d1 state)]
+           (-> (p/do!
+                (index/<user-rsa-key-pair-upsert! db "user-1" "public-1" "private-1")
+                (index/<user-rsa-key-pair-upsert! db "user-1" "public-2" "private-2"))
+               (p/then (fn [_]
+                         (p/let [pair (index/<user-rsa-key-pair db "user-1")]
+                           (is (= "public-2" (:public-key pair)))
+                           (is (= "private-2" (:encrypted-private-key pair)))
+                           (done))))
+               (p/catch (fn [e]
+                          (is false (str e))
+                          (done)))))))
+
+(deftest e2ee-user-public-key-by-email-test
+  (async done
+         (let [state (atom {:executed []
+                            :users {}
+                            :user-keys {}
+                            :graph-keys {}
+                            :graph-members {}
+                            :graphs {}})
+               db (make-d1 state)
+               claims #js {"sub" "user-1"
+                           "email" "foo@test.com"
+                           "email_verified" true
+                           "cognito:username" "foo"}]
+           (-> (p/do!
+                (index/<user-upsert! db claims)
+                (index/<user-rsa-key-pair-upsert! db "user-1" "public-1" "private-1"))
+               (p/then (fn [_]
+                         (p/let [public-key (index/<user-rsa-public-key-by-email db "foo@test.com")]
+                           (is (= "public-1" public-key))
+                           (done))))
+               (p/catch (fn [e]
+                          (is false (str e))
+                          (done)))))))
+
+(deftest e2ee-graph-aes-key-upsert-test
+  (async done
+         (let [state (atom {:executed []
+                            :users {}
+                            :user-keys {}
+                            :graph-keys {}
+                            :graph-members {}
+                            :graphs {}})
+               db (make-d1 state)]
+           (-> (p/do!
+                (index/<graph-encrypted-aes-key-upsert! db "graph-1" "user-1" "aes-1")
+                (index/<graph-encrypted-aes-key-upsert! db "graph-1" "user-1" "aes-2"))
+               (p/then (fn [_]
+                         (p/let [aes-key (index/<graph-encrypted-aes-key db "graph-1" "user-1")]
+                           (is (= "aes-2" aes-key))
+                           (done))))
                (p/catch (fn [e]
                           (is false (str e))
                           (done)))))))

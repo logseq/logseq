@@ -429,6 +429,14 @@
   [editing-block-uuid]
   (db-sync/update-presence! editing-block-uuid))
 
+(def-thread-api :thread-api/db-sync-grant-graph-access
+  [repo graph-id target-email]
+  (db-sync/grant-graph-access! repo graph-id target-email))
+
+(def-thread-api :thread-api/db-sync-ensure-user-rsa-keys
+  []
+  (db-sync/ensure-user-rsa-keys!))
+
 (def-thread-api :thread-api/db-sync-upload-graph
   [repo]
   (db-sync/upload-graph! repo))
@@ -607,12 +615,15 @@
   nil)
 
 (def-thread-api :thread-api/db-sync-import-kvs-rows
-  [repo rows reset?]
+  [repo rows reset? graph-id e2ee?]
   (p/let [_ (when reset?
               (close-db! repo))
+          rows* (if (true? e2ee?)
+                  (db-sync/<decrypt-kvs-rows repo graph-id rows e2ee?)
+                  (p/resolved rows))
           db (ensure-db-sync-import-db! repo reset?)]
-    (when (seq rows)
-      (upsert-addr-content! db (rows->sqlite-binds rows)))
+    (when (seq rows*)
+      (upsert-addr-content! db (rows->sqlite-binds rows*)))
     nil))
 
 (def-thread-api :thread-api/db-sync-finalize-kvs-import

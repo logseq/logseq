@@ -469,17 +469,12 @@
              db-name (util/trim-safe (.-value (rum/deref input-ref)))]
          (when (and cloud? refresh-token token user-uuid
                     (not e2ee-rsa-key-ensured?))
-           (p/do!
-            (state/<invoke-db-worker :thread-api/init-user-rsa-key-pair
-                                     token
-                                     refresh-token
-                                     user-uuid))
-           (-> (p/let [rsa-key-pair (state/<invoke-db-worker :thread-api/get-user-rsa-key-pair token user-uuid)]
+           (-> (p/let [rsa-key-pair (state/<invoke-db-worker :thread-api/db-sync-ensure-user-rsa-keys)]
                  (set-e2ee-rsa-key-ensured? (some? rsa-key-pair))
                  (when rsa-key-pair
                    (when db-name (new-db-f db-name))))
                (p/catch (fn [e]
-                          (log/error :get-user-rsa-key-pair e)
+                          (log/error :db-sync/ensure-user-rsa-keys-failed e)
                           e))))))
      [cloud?])
 

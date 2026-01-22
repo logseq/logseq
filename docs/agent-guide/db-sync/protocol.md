@@ -62,6 +62,24 @@
 - `DELETE /graphs/:graph-id`
   - Delete graph and reset data. Response: `{"graph-id":"...","deleted":true}` or `400` (missing graph id).
 
+### E2EE (index DO)
+- `GET /e2ee/user-keys`
+  - Fetch current user's RSA key pair. Response: `{"public-key":"<transit>","encrypted-private-key":"<transit>"}` or `{}` when missing.
+- `POST /e2ee/user-keys`
+  - Upsert current user's RSA key pair. Body: `{"public-key":"<transit>","encrypted-private-key":"<transit>","reset-private-key":false?}`.
+  - Response mirrors the stored keys: `{"public-key":"<transit>","encrypted-private-key":"<transit>"}`.
+- `GET /e2ee/user-public-key?email=<email>`
+  - Fetch a user's RSA public key by email. Response: `{"public-key":"<transit>"}` or `{}` when missing.
+- `GET /e2ee/graphs/:graph-id/aes-key`
+  - Fetch current user's encrypted graph AES key. Response: `{"encrypted-aes-key":"<transit>"}` or `{}` when missing.
+- `POST /e2ee/graphs/:graph-id/aes-key`
+  - Upsert current user's encrypted graph AES key. Body: `{"encrypted-aes-key":"<transit>"}`.
+  - Response: `{"encrypted-aes-key":"<transit>"}`.
+- `POST /e2ee/graphs/:graph-id/grant-access`
+  - Manager-only. Upsert encrypted graph AES keys for members.
+  - Body: `{"target-user-email+encrypted-aes-key-coll":[{"user/email":"<email>","encrypted-aes-key":"<transit>"}...]}`.
+  - Response: `{"ok":true,"missing-users":["<email>", ...]?}`.
+
 ### Sync (per-graph DO, via `/sync/:graph-id/...`)
 - `GET /sync/:graph-id/health`
   - Health check. Response: `{"ok":true}`.

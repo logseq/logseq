@@ -1,11 +1,14 @@
 (ns frontend.worker.db-sync-test
-  (:require [cljs.test :refer [deftest is testing run-test]]
+  (:require [cljs.test :refer [deftest is testing run-test async]]
             [datascript.core :as d]
+            [frontend.common.crypt :as crypt]
             [frontend.worker.db-sync :as db-sync]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.state :as worker-state]
+            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.test.helper :as db-test]
-            [logseq.outliner.core :as outliner-core]))
+            [logseq.outliner.core :as outliner-core]
+            [promesa.core :as p]))
 
 (def ^:private test-repo "test-db-sync-repo")
 
@@ -62,6 +65,64 @@
             (is (some? page'))
             (is (= (:db/id child1') (:db/id (:block/parent parent'))))
             (is (= (:db/id page') (:db/id (:block/parent child1'))))))))))
+
+(deftest encrypt-decrypt-tx-data-test
+  (async done
+         (-> (p/let [aes-key (crypt/<generate-aes-key)
+                     tx-data [[:db/add 1 :block/title "hello"]
+                              [:db/add 2 :block/name "page"]
+                              [:db/add 3 :block/uuid (random-uuid)]]
+                     encrypted (#'db-sync/encrypt-tx-data aes-key tx-data)]
+               (is (not= tx-data encrypted))
+               (is (string? (nth (first encrypted) 3)))
+               (is (= (nth (second encrypted) 3)
+                      "page"))
+               (p/let [decrypted (#'db-sync/decrypt-tx-data aes-key encrypted)]
+                 (is (= tx-data decrypted))
+                 (done)))
+             (p/catch (fn [e]
+                        (is false (str e))
+                        (done))))))
+
+(deftest encrypt-decrypt-snapshot-rows-test
+  (async done
+         (-> (p/let [aes-key (crypt/<generate-aes-key)
+                     content (sqlite-util/write-transit-str {:db/id 1
+                                                             :block/title "hello"
+                                                             :block/name "page"})
+                     rows [[1 content nil]]
+                     encrypted (#'db-sync/encrypt-snapshot-rows aes-key rows)]
+               (is (not= rows encrypted))
+               (let [[_ content* _] (first encrypted)]
+                 (is (string? content*))
+                 (is (not= content content*)))
+               (p/let [decrypted (#'db-sync/decrypt-snapshot-rows aes-key encrypted)]
+                 (is (= rows decrypted))
+                 (done)))
+             (p/catch (fn [e]
+                        (is false (str e))
+                        (done))))))
+
+(deftest ensure-user-rsa-keys-test
+  (async done
+         (let [upload-called (atom nil)]
+           (with-redefs [db-sync/e2ee-base (fn [] "http://base")
+                         db-sync/<fetch-user-rsa-key-pair-raw (fn [_] (p/resolved {}))
+                         db-sync/<upload-user-rsa-key-pair! (fn [_ public-key encrypted-private-key]
+                                                              (reset! upload-called [public-key encrypted-private-key])
+                                                              (p/resolved {:public-key public-key
+                                                                           :encrypted-private-key encrypted-private-key}))
+                         crypt/<generate-rsa-key-pair (fn [] (p/resolved #js {:publicKey :pub :privateKey :priv}))
+                         crypt/<export-public-key (fn [_] (p/resolved :pub-export))
+                         crypt/<encrypt-private-key (fn [_ _] (p/resolved :priv-encrypted))
+                         worker-state/<invoke-main-thread (fn [_] (p/resolved {:password "pw"}))]
+             (-> (p/let [resp (db-sync/ensure-user-rsa-keys!)]
+                   (is (map? resp))
+                   (is (= 2 (count @upload-called)))
+                   (done))
+                 (p/catch (fn [e]
+                            (is false (str e))
+                            (done))))))))
 
 (deftest two-children-cycle-test
   (testing "cycle from remote sync overwrite client (2 children)"

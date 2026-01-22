@@ -501,6 +501,9 @@
           (string/starts-with? path "/graphs/"))
       (handle-index-fetch #js {:env env :d1 (aget env "DB")} request)
 
+      (string/starts-with? path "/e2ee")
+      (handle-index-fetch #js {:env env :d1 (aget env "DB")} request)
+
       (string/starts-with? path "/assets/")
       (if (= method "OPTIONS")
         (handle-assets request env)
@@ -1016,6 +1019,133 @@
                     (forbidden)
                     (p/let [_ (index/<graph-member-delete! db graph-id member-id)]
                       (json-response :graph-members/delete {:ok true}))))))
+
+            (and (= method "GET")
+                 (= ["e2ee" "user-keys"] parts))
+            (let [user-id (aget claims "sub")]
+              (if (string? user-id)
+                (p/let [pair (index/<user-rsa-key-pair db user-id)]
+                  (json-response :e2ee/user-keys (or pair {})))
+                (unauthorized)))
+
+            (and (= method "POST")
+                 (= ["e2ee" "user-keys"] parts))
+            (.then (common/read-json request)
+                   (fn [result]
+                     (if (nil? result)
+                       (bad-request "missing body")
+                       (let [body (js->clj result :keywordize-keys true)
+                             body (coerce-http-request :e2ee/user-keys body)
+                             user-id (aget claims "sub")]
+                         (cond
+                           (not (string? user-id))
+                           (unauthorized)
+
+                           (nil? body)
+                           (bad-request "invalid body")
+
+                           :else
+                           (let [{:keys [public-key encrypted-private-key]} body]
+                             (p/let [_ (index/<user-rsa-key-pair-upsert! db user-id public-key encrypted-private-key)]
+                               (json-response :e2ee/user-keys {:public-key public-key
+                                                               :encrypted-private-key encrypted-private-key}))))))))
+
+            (and (= method "GET")
+                 (= ["e2ee" "user-public-key"] parts))
+            (let [email (.get (.-searchParams url) "email")]
+              (p/let [public-key (index/<user-rsa-public-key-by-email db email)]
+                (json-response :e2ee/user-public-key
+                               (cond-> {}
+                                 (some? public-key)
+                                 (assoc :public-key public-key)))))
+
+            (and (= method "GET")
+                 (= 4 (count parts))
+                 (= "e2ee" (first parts))
+                 (= "graphs" (nth parts 1))
+                 (= "aes-key" (nth parts 3)))
+            (let [graph-id (nth parts 2)
+                  user-id (aget claims "sub")]
+              (cond
+                (not (string? user-id))
+                (unauthorized)
+
+                :else
+                (p/let [access? (index/<user-has-access-to-graph? db graph-id user-id)]
+                  (if (not access?)
+                    (forbidden)
+                    (p/let [encrypted-aes-key (index/<graph-encrypted-aes-key db graph-id user-id)]
+                      (json-response :e2ee/graph-aes-key (cond-> {}
+                                                           (some? encrypted-aes-key)
+                                                           (assoc :encrypted-aes-key encrypted-aes-key))))))))
+
+            (and (= method "POST")
+                 (= 4 (count parts))
+                 (= "e2ee" (first parts))
+                 (= "graphs" (nth parts 1))
+                 (= "aes-key" (nth parts 3)))
+            (let [graph-id (nth parts 2)
+                  user-id (aget claims "sub")]
+              (cond
+                (not (string? user-id))
+                (unauthorized)
+
+                :else
+                (.then (common/read-json request)
+                       (fn [result]
+                         (if (nil? result)
+                           (bad-request "missing body")
+                           (let [body (js->clj result :keywordize-keys true)
+                                 body (coerce-http-request :e2ee/graph-aes-key body)]
+                             (if (nil? body)
+                               (bad-request "invalid body")
+                               (p/let [access? (index/<user-has-access-to-graph? db graph-id user-id)]
+                                 (if (not access?)
+                                   (forbidden)
+                                   (let [{:keys [encrypted-aes-key]} body]
+                                     (p/let [_ (index/<graph-encrypted-aes-key-upsert! db graph-id user-id encrypted-aes-key)]
+                                       (json-response :e2ee/graph-aes-key {:encrypted-aes-key encrypted-aes-key}))))))))))))
+
+            (and (= method "POST")
+                 (= 4 (count parts))
+                 (= "e2ee" (first parts))
+                 (= "graphs" (nth parts 1))
+                 (= "grant-access" (nth parts 3)))
+            (let [graph-id (nth parts 2)
+                  user-id (aget claims "sub")]
+              (cond
+                (not (string? user-id))
+                (unauthorized)
+
+                :else
+                (.then (common/read-json request)
+                       (fn [result]
+                         (if (nil? result)
+                           (bad-request "missing body")
+                           (let [body (js->clj result :keywordize-keys true)
+                                 body (coerce-http-request :e2ee/grant-access body)]
+                             (if (nil? body)
+                               (bad-request "invalid body")
+                               (p/let [manager? (index/<user-is-manager? db graph-id user-id)]
+                                 (if (not manager?)
+                                   (forbidden)
+                                   (let [entries (:target-user-email+encrypted-aes-key-coll body)
+                                         missing (atom [])]
+                                     (p/let [_ (p/all
+                                                (map (fn [entry]
+                                                       (let [email (:user/email entry)
+                                                             encrypted-aes-key (:encrypted-aes-key entry)]
+                                                         (p/let [target-user-id (index/<user-id-by-email db email)
+                                                                 access? (and target-user-id
+                                                                              (index/<user-has-access-to-graph? db graph-id target-user-id))]
+                                                           (if (and target-user-id access?)
+                                                             (index/<graph-encrypted-aes-key-upsert! db graph-id target-user-id encrypted-aes-key)
+                                                             (swap! missing conj email)))))
+                                                     entries))]
+                                       (json-response :e2ee/grant-access
+                                                      (cond-> {:ok true}
+                                                        (seq @missing)
+                                                        (assoc :missing-users @missing))))))))))))))
 
             (and (= method "DELETE")
                  (= 2 (count parts))
