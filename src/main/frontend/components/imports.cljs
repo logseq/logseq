@@ -70,10 +70,13 @@
   (state/pub-event! [:graph/sync-context])
   (notification/show! "Import finished!" :success)
   (shui/dialog-close! :import-indicator)
-  (route-handler/redirect-to-home!)
-  (if util/web-platform?
-    (js/window.location.reload)
-    (js/setTimeout ui-handler/re-render-root! 500)))
+  (if (util/electron?)
+    (ipc/ipc :window-reload)
+    (do
+      (route-handler/redirect-to-home!)
+      (if util/web-platform?
+        (js/window.location.reload)
+        (js/setTimeout ui-handler/re-render-root! 500)))))
 
 (defn- lsq-import-handler
   [e & {:keys [sqlite? debug-transit? graph-name db-edn?]}]
@@ -381,6 +384,8 @@
     (state/set-state! :graph/importing nil)
     (state/set-state! :graph/importing-state nil)
     (validate-imported-data @db-conn import-state files)
+    (when-let [conn (db/get-db repo false)]
+      (d/reset-conn! conn (d/empty-db (:schema @conn))))
     (state/pub-event! [:graph/ready (state/get-current-repo)])
     (finished-cb)))
 
