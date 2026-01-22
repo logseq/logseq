@@ -25,8 +25,6 @@
 ;; when it launches (when pro plan launches) it should be removed
 (def ENABLE-SETTINGS-ACCOUNT-TAB false)
 
-;; (def PUBLISH-API-BASE "http://localhost:8787")
-
 (if ENABLE-FILE-SYNC-PRODUCTION
   (do (def LOGIN-URL
         "https://logseq-prod.auth.us-east-1.amazoncognito.com/login?client_id=3c7np6bjtb4r1k1bi9i049ops5&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
@@ -49,6 +47,9 @@
       (def IDENTITY-POOL-ID "us-east-2:cc7d2ad3-84d0-4faf-98fe-628f6b52c0a5")
       (def OAUTH-DOMAIN "logseq-test2.auth.us-east-2.amazoncognito.com")
       (def PUBLISH-API-BASE "https://logseq-publish-staging.logseq.workers.dev")))
+
+;; Enable for local development
+;; (def PUBLISH-API-BASE "http://localhost:8787")
 
 (goog-define ENABLE-RTC-SYNC-PRODUCTION false)
 (if ENABLE-RTC-SYNC-PRODUCTION

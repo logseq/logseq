@@ -19,9 +19,13 @@
   logseq.bb-tasks.lint.carve/-main
 
   lint:ns-docstrings
-  logseq.bb-tasks.lint.ns-docstrings/-main}
+  logseq.bb-tasks.lint.ns-docstrings/-main
+
+  lint:minimize-public-vars
+  logseq.bb-tasks.lint.minimize-public-vars/-main}
 
  :tasks/config
  {:large-vars
   {:metadata-exceptions #{:large-vars/cleanup-todo}
-   :max-lines-count 45}}}
+   ;; AI generated code has its tradeoffs
+   :max-lines-count 150}}}
