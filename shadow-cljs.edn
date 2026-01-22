@@ -86,7 +86,7 @@
                          :loader-mode :eval}}
 
   :db-worker-node {:target :node-script
-                   :output-to "static/db-worker-node.js"
+                   :output-to "dist/db-worker-node.js"
                    :main frontend.worker.db-worker-node/main
                    :compiler-options {:infer-externs :auto
                                       :source-map true
@@ -96,7 +96,7 @@
                                                  :redef false}}}
 
   :logseq-cli {:target :node-script
-               :output-to "static/logseq-cli.js"
+               :output-to "dist/logseq-cli.js"
                :main logseq.cli.main/main
                :compiler-options {:infer-externs :auto
                                   :source-map true

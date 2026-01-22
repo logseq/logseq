@@ -23,7 +23,7 @@
 
 ## db-worker-node
 - Build: `clojure -M:cljs compile db-worker-node`
-- Run: `node ./static/db-worker-node.js` (default port 9101)
+- Run: `node ./dist/db-worker-node.js` (default port 9101)
 
 ## Common used cljs keywords
 - All commonly used ClojureScript keywords are defined using `logseq.common.defkeywords/defkeyword`.
