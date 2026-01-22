@@ -159,6 +159,43 @@
    [:t-before :int]
    [:txs :string]])
 
+(def e2ee-user-key-request-schema
+  [:map
+   [:public-key :string]
+   [:encrypted-private-key :string]
+   [:reset-private-key {:optional true} :boolean]])
+
+(def e2ee-user-key-response-schema
+  [:map
+   [:public-key {:optional true} [:maybe :string]]
+   [:encrypted-private-key {:optional true} [:maybe :string]]])
+
+(def e2ee-user-public-key-response-schema
+  [:map
+   [:public-key {:optional true} [:maybe :string]]])
+
+(def e2ee-graph-aes-key-request-schema
+  [:map
+   [:encrypted-aes-key :string]])
+
+(def e2ee-graph-aes-key-response-schema
+  [:map
+   [:encrypted-aes-key {:optional true} [:maybe :string]]])
+
+(def e2ee-grant-access-entry-schema
+  [:map
+   [:user/email :string]
+   [:encrypted-aes-key :string]])
+
+(def e2ee-grant-access-request-schema
+  [:map
+   [:target-user-email+encrypted-aes-key-coll [:sequential e2ee-grant-access-entry-schema]]])
+
+(def e2ee-grant-access-response-schema
+  [:map
+   [:ok :boolean]
+   [:missing-users {:optional true} [:sequential :string]]])
+
 (def snapshot-download-response-schema
   [:map
    [:ok :boolean]
@@ -180,7 +217,10 @@
   {:graphs/create graph-create-request-schema
    :graph-members/create graph-member-create-request-schema
    :graph-members/update graph-member-update-request-schema
-   :sync/tx-batch tx-batch-request-schema})
+   :sync/tx-batch tx-batch-request-schema
+   :e2ee/user-keys e2ee-user-key-request-schema
+   :e2ee/graph-aes-key e2ee-graph-aes-key-request-schema
+   :e2ee/grant-access e2ee-grant-access-request-schema})
 
 (def http-response-schemas
   {:graphs/list graphs-list-response-schema
@@ -198,6 +238,10 @@
    :sync/snapshot-download snapshot-download-response-schema
    :sync/snapshot-upload snapshot-upload-response-schema
    :sync/admin-reset http-ok-response-schema
+   :e2ee/user-keys e2ee-user-key-response-schema
+   :e2ee/user-public-key e2ee-user-public-key-response-schema
+   :e2ee/graph-aes-key e2ee-graph-aes-key-response-schema
+   :e2ee/grant-access e2ee-grant-access-response-schema
    :assets/get asset-get-response-schema
    :assets/put http-ok-response-schema
    :assets/delete http-ok-response-schema
