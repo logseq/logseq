@@ -97,6 +97,5 @@ jobs:
       - name: Lint for vars that are too large
         run: bb lint:large-vars
 
-      # TODO: Add docstrings
-      # - name: Lint for namespaces that aren't documented
-      #   run: bb lint:ns-docstrings
+      - name: Lint for namespaces that aren't documented
+        run: bb lint:ns-docstrings

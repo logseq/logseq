@@ -34,6 +34,12 @@ metadata in a Durable Object backed by SQLite.
   - Deletes all pages for a graph
 - `GET /pages`
   - Lists metadata entries (from the index DO)
+- `GET /tag/:tag-name`
+  - List all pages tagged with `:tag-name`
+- `GET /ref/:page-name`
+  - List all pages that reference `:page-name`
+- `GET /user/:user-name`
+  - List all pages for `:user-name`
 
 ### Notes
 
