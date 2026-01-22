@@ -106,6 +106,18 @@
     (assoc opts :headers (merge (or (:headers opts) {}) auth))
     opts))
 
+(declare fetch-json)
+
+(defn- fetch-graph-e2ee?
+  [base graph-uuid]
+  (if-not (and (string? base) (string? graph-uuid))
+    false
+    (p/let [resp (fetch-json (str base "/e2ee/graphs/" graph-uuid "/aes-key")
+                             {:method "GET"}
+                             {:response-schema :e2ee/graph-aes-key})
+            encrypted-aes-key (:encrypted-aes-key resp)]
+      (boolean (string? encrypted-aes-key)))))
+
 (declare coerce-http-response)
 
 (defn- fetch-json
@@ -214,7 +226,8 @@
         (if graph-id
           (p/do!
            (ldb/transact! repo [(sqlite-util/kv :logseq.kv/db-type "db")
-                                (sqlite-util/kv :logseq.kv/graph-uuid (uuid graph-id))])
+                                (sqlite-util/kv :logseq.kv/graph-uuid (uuid graph-id))
+                                (sqlite-util/kv :logseq.kv/graph-rtc-e2ee? true)])
            graph-id)
           (p/rejected (ex-info "db-sync missing graph id in create response"
                                {:type :db-sync/invalid-graph
@@ -261,6 +274,7 @@
                             (throw (ex-info "missing snapshot download url"
                                             {:graph graph-name
                                              :response download-resp})))
+                        e2ee? (fetch-graph-e2ee? base (str graph-uuid))
                         resp (js/fetch download-url (clj->js (with-auth-headers {:method "GET"})))]
                   (when-not (.-ok resp)
                     (throw (ex-info "snapshot download failed"
@@ -279,11 +293,10 @@
                                 total' (+ total (count rows))
                                 total-rows' (into total-rows rows)]
                             (when (seq total-rows')
-                              (let [e2ee? (snapshot-rows-e2ee? total-rows')]
-                                (p/do!
-                                 (state/<invoke-db-worker :thread-api/db-sync-import-kvs-rows
-                                                          graph total-rows' true graph-uuid e2ee?)
-                                 (state/<invoke-db-worker :thread-api/db-sync-finalize-kvs-import graph remote-tx))))
+                              (p/do!
+                               (state/<invoke-db-worker :thread-api/db-sync-import-kvs-rows
+                                                        graph total-rows' true graph-uuid e2ee?)
+                               (state/<invoke-db-worker :thread-api/db-sync-finalize-kvs-import graph remote-tx)))
                             total')
                           (let [value (.-value chunk)
                                 {:keys [rows buffer]} (parse-framed-chunk buffer value)

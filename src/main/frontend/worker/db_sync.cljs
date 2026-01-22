@@ -492,7 +492,7 @@
 
 (defn <decrypt-kvs-rows
   [repo graph-id rows e2ee?]
-  (if-not (true? e2ee?)
+  (if-not e2ee?
     (p/resolved rows)
     (p/let [aes-key (<fetch-graph-aes-key-for-download repo graph-id)
             _ (when (nil? aes-key)
@@ -551,6 +551,22 @@
           (if decrypted
             (ldb/read-transit-str decrypted)
             value))))))
+
+(defn- <encrypt-keys-attrs
+  [aes-key keys]
+  (p/all (mapv (fn [[e a v t]]
+                 (if (contains? rtc-const/encrypt-attr-set a)
+                   (p/let [v' (<encrypt-text-value aes-key v)]
+                     [e a v' t])
+                   [e a v t])) keys)))
+
+(defn- <decrypt-keys-attrs
+  [aes-key keys]
+  (p/all (mapv (fn [[e a v t]]
+                 (if (contains? rtc-const/encrypt-attr-set a)
+                   (p/let [v' (<decrypt-text-value aes-key v)]
+                     [e a v' t])
+                   [e a v t])) keys)))
 
 (defn- encrypt-tx-item
   [aes-key item]
@@ -622,7 +638,8 @@
                    (mapv (fn [[addr content addresses]]
                            (let [data (try-read-transit content)]
                              (if (and (not= data invalid-transit) (map? data))
-                               (p/let [data' (crypt/<encrypt-map aes-key rtc-const/encrypt-attr-set data)
+                               (p/let [keys' (<encrypt-keys-attrs aes-key (:keys data))
+                                       data' (assoc data :keys keys')
                                        content' (ldb/write-transit-str data')]
                                  [addr content' addresses])
                                (p/resolved [addr content addresses]))))
@@ -637,12 +654,14 @@
                    (mapv (fn [[addr content addresses]]
                            (let [data (try-read-transit content)]
                              (if (and (not= data invalid-transit) (map? data))
-                               (p/let [data' (crypt/<decrypt-map aes-key rtc-const/encrypt-attr-set data)
+                               (p/let [keys (<decrypt-keys-attrs aes-key (:keys data))
+                                       data' (assoc data :keys keys)
                                        content' (ldb/write-transit-str data')]
                                  [addr content' addresses])
                                (p/resolved [addr content addresses]))))
                          rows))]
       (vec items))))
+
 (defn- require-asset-field
   [repo field value context]
   (when (or (nil? value) (and (string? value) (string/blank? value)))

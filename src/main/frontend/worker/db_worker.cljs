@@ -618,9 +618,7 @@
   [repo rows reset? graph-id e2ee?]
   (p/let [_ (when reset?
               (close-db! repo))
-          rows* (if (true? e2ee?)
-                  (db-sync/<decrypt-kvs-rows repo graph-id rows e2ee?)
-                  (p/resolved rows))
+          rows* (db-sync/<decrypt-kvs-rows repo graph-id rows e2ee?)
           db (ensure-db-sync-import-db! repo reset?)]
     (when (seq rows*)
       (upsert-addr-content! db (rows->sqlite-binds rows*)))
