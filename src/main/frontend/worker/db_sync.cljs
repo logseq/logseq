@@ -1077,9 +1077,8 @@
             (let [rows (fetch-kvs-rows db last-addr upload-kvs-batch-size)]
               (if (empty? rows)
                 (do
-                  (when-let [client @worker-state/*db-sync-client]
-                    (when (= repo (:repo client))
-                      (set-rtc-state! client :remote-tx 0)))
+                  (client-op/remove-local-tx repo)
+                  (client-op/update-local-tx repo 0)
                   (client-op/add-all-exists-asset-as-ops repo)
                   {:graph-id graph-id})
                 (let [max-addr (apply max (map first rows))
