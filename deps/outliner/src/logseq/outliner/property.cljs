@@ -699,7 +699,7 @@
   (let [block (d/entity db eid)]
     (->>
      (concat
-      (map (fn [ident] (d/entity db ident)) (keys (:block/properties block)))
+      (map (fn [ident] (d/entity db ident)) (keys (entity-plus/lookup-kv-then-entity block :block/properties)))
       (:classes-properties (get-block-classes-properties db eid)))
      (common-util/distinct-by :db/id))))
 

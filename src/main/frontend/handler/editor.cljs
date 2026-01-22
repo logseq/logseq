@@ -52,7 +52,6 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
-            [logseq.db.file-based.schema :as file-schema]
             [logseq.db.frontend.asset :as db-asset]
             [logseq.db.frontend.db :as db-db]
             [logseq.db.frontend.property :as db-property]
@@ -86,12 +85,12 @@
 (defn set-block-own-order-list-type!
   [block type]
   (when-let [uuid (:block/uuid block)]
-    (property-handler/set-block-property! uuid (pu/get-pid :logseq.property/order-list-type) (name type))))
+    (property-handler/set-block-property! uuid :logseq.property/order-list-type (name type))))
 
 (defn remove-block-own-order-list-type!
   [block]
   (when-let [uuid (:block/uuid block)]
-    (property-handler/remove-block-property! uuid (pu/get-pid :logseq.property/order-list-type))))
+    (property-handler/remove-block-property! uuid :logseq.property/order-list-type)))
 
 (defn own-order-number-list?
   [block]
@@ -107,7 +106,7 @@
   (when (seq blocks)
     (let [has-ordered?    (some own-order-number-list? blocks)
           blocks-uuids    (some->> blocks (map :block/uuid) (remove nil?))
-          order-list-prop (pu/get-pid :logseq.property/order-list-type)]
+          order-list-prop :logseq.property/order-list-type]
       (if has-ordered?
         (property-handler/batch-remove-block-property! blocks-uuids order-list-prop)
         (property-handler/batch-set-block-property! blocks-uuids order-list-prop "number")))))
@@ -356,6 +355,10 @@
                                                                            :keep-uuid? true})]
       [result sibling? prev-block])))
 
+;; This used to be a list of file attributes. Unclear if remaining ones should be removed
+(def retract-attributes
+  #{:block/tags :block/alias :block/properties :block/warning})
+
 (defn insert-new-block-aux!
   [config
    {:block/keys [uuid]
@@ -367,7 +370,7 @@
         selection-end (util/get-selection-end input)
         [fst-block-text snd-block-text] (compute-fst-snd-block-text value selection-start selection-end)
         current-block (assoc block :block/title fst-block-text)
-        current-block (apply dissoc current-block file-schema/retract-attributes)
+        current-block (apply dissoc current-block retract-attributes)
         new-m {:block/uuid (db/new-block-id)
                :block/title snd-block-text}
         next-block (-> (merge (select-keys block [:block/parent :block/format :block/page])
@@ -1232,7 +1235,7 @@
     (when (and (:db/id entity) (not (ldb/built-in? entity)))
       (let [value (string/trim value)]
         ;; FIXME: somehow frontend.components.editor's will-unmount event will loop forever
-        ;; maybe we shouldn't save the block/file in "will-unmount" event?
+        ;; maybe we shouldn't save in "will-unmount" event?
         (save-block-if-changed! block value opts)))))
 
 (defn save-block!
@@ -1642,7 +1645,6 @@
         label (or label "")]
     (case (keyword format)
       :markdown (util/format "[%s](%s)" label link)
-      :org (util/format "[[%s][%s]]" link label)
       nil)))
 
 (defn- get-image-link
@@ -1650,8 +1652,7 @@
   (let [link (or link "")
         label (or label "")]
     (case (keyword format)
-      :markdown (util/format "![%s](%s)" label link)
-      :org (util/format "[[%s]]"))))
+      :markdown (util/format "![%s](%s)" label link))))
 
 (defn handle-command-input-close [id]
   (state/set-editor-show-input! nil)
@@ -1813,7 +1814,7 @@
         (if content-update-fn
           (content-update-fn (:block/title block))
           (:block/title block))]
-    (merge (apply dissoc block (conj (if-not keep-uuid? [:block/_refs] []) :block/pre-block? :block/meta))
+    (merge (apply dissoc block (conj (if-not keep-uuid? [:block/_refs] [])))
            {:block/page {:db/id (:db/id page)}
             :block/title new-content})))
 

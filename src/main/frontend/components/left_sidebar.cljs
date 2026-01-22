@@ -1,7 +1,6 @@
 (ns frontend.components.left-sidebar
   "App left sidebar"
   (:require [clojure.string :as string]
-            [electron.ipc :as ipc]
             [frontend.components.block :as block]
             [frontend.components.dnd :as dnd-component]
             [frontend.components.icon :as icon]
@@ -22,7 +21,6 @@
             [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [frontend.util.page :as page-util]
             [goog.object :as gobj]
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
@@ -49,8 +47,6 @@
           icon (icon/get-node-icon-cp page {:size 16})
           title (:block/title page)
           untitled? (db-model/untitled-page? title)
-          name (:block/name page)
-          file-rpath (when (util/electron?) (page-util/get-page-file-rpath name))
           ctx-icon #(shui/tabler-icon %1 {:class "scale-90 pr-1 opacity-80"})
           open-in-sidebar #(state/sidebar-add-block!
                             (state/get-current-repo)
@@ -70,20 +66,6 @@
                                                     (some-> binding
                                                             (first)
                                                             (shortcut-utils/decorate-binding))))))
-                              (when-let [page-fpath (and (util/electron?) file-rpath
-                                                         (config/get-repo-fpath (state/get-current-repo) file-rpath))]
-                                [:<>
-                                 (x-menu-item
-                                  {:key "open-in-folder"
-                                   :on-click #(ipc/ipc :openFileInFolder page-fpath)}
-                                  (ctx-icon "folder")
-                                  (t :page/open-in-finder))
-
-                                 (x-menu-item
-                                  {:key "open with default app"
-                                   :on-click #(js/window.apis.openPath page-fpath)}
-                                  (ctx-icon "file")
-                                  (t :page/open-with-default-app))])
                               (x-menu-item
                                {:key "open in sidebar"
                                 :on-click open-in-sidebar}

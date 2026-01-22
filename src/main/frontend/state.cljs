@@ -82,7 +82,6 @@
       :network/online?         true
       :me                      nil
       :git/current-repo        current-graph
-      :draw?                   false
       :db/restoring?           nil
 
       :search/q                              ""
@@ -148,7 +147,6 @@
       :editor/start-pos                      (atom nil)
       :editor/async-unsaved-chars            (atom nil)
       :editor/hidden-editors                 #{} ;; page names
-      :editor/draw-mode?                     false
 
       :editor/action                         (atom nil)
       :editor/action-data                    nil
@@ -333,13 +331,7 @@
 (def common-default-config
   "Common default config for a user's repo config"
   {:feature/enable-search-remove-accents? true
-   :ui/auto-expand-block-refs? true
-
-   ;; For flushing the settings of old versions. Don't bump this value.
-   ;; There are only two kinds of graph, one is not upgraded (:legacy) and one is upgraded (:triple-lowbar)
-   ;; For not upgraded graphs, the config will have no key `:file/name-format`
-   ;; Then the default value is applied
-   :file/name-format :legacy})
+   :ui/auto-expand-block-refs? true})
 
 (def db-default-config
   "Default repo config for DB graphs"
@@ -461,42 +453,15 @@ should be done through this fn in order to get global config and config defaults
   []
   (some? (:page (get-default-home))))
 
+;; TODO: Move or remove as this is no longer stateful
 (defn get-preferred-format
-  ([]
-   (get-preferred-format (get-current-repo)))
-  ([repo-url]
-   (keyword
-    (or
-     (common-config/get-preferred-format (get-config repo-url))
-     (get-in @state [:me :preferred_format] "markdown")))))
+  [& _args]
+  :markdown)
 
 (defn markdown?
   []
   (= (keyword (get-preferred-format))
      :markdown))
-
-(defn get-pages-directory
-  []
-  (or
-   (when-let [repo (get-current-repo)]
-     (:pages-directory (get-config repo)))
-   "pages"))
-
-(defn get-journals-directory
-  []
-  (or
-   (when-let [repo (get-current-repo)]
-     (:journals-directory (get-config repo)))
-   "journals"))
-
-(defn org-mode-file-link?
-  [repo]
-  (:org-mode/insert-file-link? (get-config repo)))
-
-(defn get-journal-file-name-format
-  []
-  (when-let [repo (get-current-repo)]
-    (:journal/file-name-format (get-config repo))))
 
 (defn get-date-formatter
   []
@@ -618,10 +583,6 @@ Similar to re-frame subscriptions"
 (defn scheduled-deadlines-disabled?
   []
   (true? (:feature/disable-scheduled-and-deadline-query? (sub-config))))
-
-(defn enable-timetracking?
-  []
-  (not (false? (:feature/enable-timetracking? (sub-config)))))
 
 (defn enable-fold-button-right?
   []
@@ -1977,13 +1938,6 @@ Similar to re-frame subscriptions"
 
 (defn get-auth-refresh-token []
   (:auth/refresh-token @state))
-
-(defn set-parsing-state!
-  "Leave for tests"
-  [m]
-  (update-state! [:graph/parsing-state (get-current-repo)]
-                 (if (fn? m) m
-                     (fn [old-value] (merge old-value m)))))
 
 (defn http-proxy-enabled-or-val? []
   (when-let [{:keys [type protocol host port] :as agent-opts} (sub [:electron/user-cfgs :settings/agent])]

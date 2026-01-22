@@ -26,7 +26,7 @@
   ;; (prn :debug
   ;;      :tx-meta tx-meta
   ;;      :tx-data tx-data)
-  (let [{:keys [from-disk? new-graph? initial-pages? end?]} tx-meta
+  (let [{:keys [initial-pages? end?]} tx-meta
         tx-report {:tx-meta tx-meta
                    :tx-data tx-data}]
     (when (= repo (state/get-current-repo))
@@ -49,11 +49,6 @@
             (when end?
               (state/pub-event! [:init/commands])
               (ui-handler/re-render-root!)))
-
-          (or from-disk? new-graph?)
-          (do
-            (d/transact! conn tx-data tx-meta)
-            (ui-handler/re-render-root!))
 
           :else
           (do
@@ -102,7 +97,7 @@
                                     :tx-meta (:tx-meta tx-report)}])))))))
 
     (when (= (:outliner-op tx-meta) :delete-page)
-      (state/pub-event! [:page/deleted repo (:deleted-page tx-meta) (:file-path tx-meta) tx-meta]))
+      (state/pub-event! [:page/deleted (:deleted-page tx-meta) tx-meta]))
 
     (when (= (:outliner-op tx-meta) :rename-page)
       (state/pub-event! [:page/renamed repo (:data tx-meta)]))))
