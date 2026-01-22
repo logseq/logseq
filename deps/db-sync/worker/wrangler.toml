@@ -38,7 +38,6 @@ name = "logseq-sync"
 COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
 COGNITO_ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
 COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"
-ENABLE_DB_SYNC_LOCAL = "true"
 
 [[env.staging.durable_objects.bindings]]
 name = "LOGSEQ_SYNC_DO"

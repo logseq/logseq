@@ -1,7 +1,7 @@
 (ns logseq.db-sync.batch
   (:require [clojure.string :as string]))
 
-(def ^:private max-sql-params 999)
+(def ^:private max-sql-params 99)
 (def ^:private row-param-count 3)
 
 (defn rows->insert-batches
