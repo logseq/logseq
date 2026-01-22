@@ -1188,6 +1188,10 @@ html.is-mac {
   }
 }
 
+.property-value .ls-resize-image {
+  max-width: 35%;
+}
+
 .recent-block {
   transition: background-color 0.2s cubic-bezier(0, 1, 0, 1);
   background-color: var(--ls-secondary-background-color, var(--rx-gray-03));
