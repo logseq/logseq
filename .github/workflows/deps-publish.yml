@@ -1,33 +1,42 @@
-name: logseq/common CI
+name: logseq/publish CI
 
 on:
-  # Path filters ensure jobs only kick off if a change is made to common
+  # Path filters ensure jobs only kick off if a change is made to publish or
+  # its local dependencies
   push:
     branches: [master]
     paths:
+      - 'deps/publish/**'
+      - '.github/workflows/deps-publish.yml'
+      - '!deps/publish/**.md'
+      # Deps that logseq/publish depends on should trigger this workflow
+      - 'deps/graph-parser/**'
+      - 'deps/db/**'
       - 'deps/common/**'
-      - '.github/workflows/logseq-common.yml'
-      - '!deps/common/**.md'
   pull_request:
     branches: [master]
     paths:
+      - 'deps/publish/**'
+      - '.github/workflows/deps-publish.yml'
+      - '!deps/publish/**.md'
+      # Deps that logseq/publish depends on should trigger this workflow
+      - 'deps/graph-parser/**'
+      - 'deps/db/**'
       - 'deps/common/**'
-      - '.github/workflows/logseq-common.yml'
-      - '!deps/common/**.md'
 
 defaults:
   run:
-    working-directory: deps/common
+    working-directory: deps/publish
 
 env:
   CLOJURE_VERSION: '1.11.1.1413'
-  JAVA_VERSION: '11'
+  JAVA_VERSION: '21'
   # This is the latest node version we can run.
   NODE_VERSION: '22'
   BABASHKA_VERSION: '1.0.168'
 
 jobs:
-  test:
+  test-release:
     runs-on: ubuntu-latest
 
     steps:
@@ -39,7 +48,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'yarn'
-          cache-dependency-path: deps/publishing/yarn.lock
+          cache-dependency-path: deps/publish/yarn.lock
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -47,6 +56,7 @@ jobs:
           distribution: 'zulu'
           java-version: ${{ env.JAVA_VERSION }}
 
+      # Clojure needed for bb step
       - name: Set up Clojure
         uses: DeLaGuardo/setup-clojure@10.1
         with:
@@ -56,29 +66,8 @@ jobs:
       - name: Fetch yarn deps
         run: yarn install --frozen-lockfile
 
-      - name: Run nbb-logseq tests
-        run: yarn test
-
-      # In this job because it depends on an npm package
-      - name: Load namespaces into nbb-logseq
-        run: bb test:load-all-namespaces-with-nbb .
-
-      - name: Clojure cache
-        uses: actions/cache@v4
-        id: clojure-deps
-        with:
-          path: |
-            ~/.m2/repository
-            ~/.gitlibs
-          key: ${{ runner.os }}-clojure-deps-${{ hashFiles('deps.edn') }}
-          restore-keys: ${{ runner.os }}-clojure-deps-
-
-      - name: Fetch Clojure deps
-        if: steps.clojure-deps.outputs.cache-hit != 'true'
-        run: clojure -A:test -P
-
-      - name: Run ClojureScript tests
-        run: clojure -M:test
+      - name: Build release asset
+        run: yarn release
 
   lint:
     runs-on: ubuntu-latest
@@ -100,7 +89,7 @@ jobs:
           bb: ${{ env.BABASHKA_VERSION }}
 
       - name: Run clj-kondo lint
-        run: clojure -M:clj-kondo --lint src test
+        run: clojure -M:clj-kondo --lint src
 
       - name: Carve lint for unused vars
         run: bb lint:carve
@@ -108,5 +97,6 @@ jobs:
       - name: Lint for vars that are too large
         run: bb lint:large-vars
 
-      - name: Lint for namespaces that aren't documented
-        run: bb lint:ns-docstrings
+      # TODO: Add docstrings
+      # - name: Lint for namespaces that aren't documented
+      #   run: bb lint:ns-docstrings

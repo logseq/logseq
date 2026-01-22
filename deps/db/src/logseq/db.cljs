@@ -9,6 +9,7 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.common.config :as common-config]
+            [logseq.common.plural :as common-plural]
             [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
             [logseq.db.common.delete-blocks :as delete-blocks] ;; Load entity extensions
@@ -677,3 +678,69 @@
           (recur (:block/parent parent)))))))
 
 (def get-class-title-with-extends db-db/get-class-title-with-extends)
+
+(defn- bidirectional-property-attr?
+  [db attr]
+  (when (qualified-keyword? attr)
+    (let [attr-ns (namespace attr)]
+      (and (or (db-property/user-property-namespace? attr-ns)
+               (db-property/plugin-property? attr))
+           (when-let [property (d/entity db attr)]
+             (= :db.type/ref (:db/valueType property)))))))
+
+(defn- get-ea-by-v
+  [db v]
+  (d/q '[:find ?e ?a
+         :in $ ?v
+         :where
+         [?e ?a ?v]
+         [?ea :db/ident ?a]
+         [?ea :logseq.property/classes]]
+       db
+       v))
+
+(defn get-bidirectional-properties
+  "Given a target entity id, returns a seq of maps with:
+   * :class - class entity
+   * :title - pluralized class title
+   * :entities - node entities that reference the target via ref properties"
+  [db target-id]
+  (when (and db target-id (d/entity db target-id))
+    (let [add-entity
+          (fn [acc class-id entity]
+            (if class-id
+              (update acc class-id (fnil conj #{}) entity)
+              acc))]
+      (->> (get-ea-by-v db target-id)
+           (keep (fn [[e a]]
+                   (when (bidirectional-property-attr? db a)
+                     (when-let [entity (d/entity db e)]
+                       (when (and (not= (:db/id entity) target-id)
+                                  (not (entity-util/class? entity))
+                                  (not (entity-util/property? entity)))
+                         (let [classes (filter entity-util/class? (:block/tags entity))]
+                           (when (seq classes)
+                             (keep (fn [class-ent]
+                                     (when-not (built-in? class-ent)
+                                       [(:db/id class-ent) entity]))
+                                   classes))))))))
+           (mapcat identity)
+           (reduce (fn [acc [class-ent entity]]
+                     (add-entity acc class-ent entity))
+                   {})
+           (keep (fn [[class-id entities]]
+                   (let [class (d/entity db class-id)]
+                     (when (true? (:logseq.property.class/enable-bidirectional? class))
+                       (let [custom-title (when-let [custom (:logseq.property.class/bidirectional-property-title class)]
+                                            (if (string? custom)
+                                              custom
+                                              (db-property/property-value-content custom)))
+                             title (if (string/blank? custom-title)
+                                     (common-plural/plural (:block/title class))
+                                     custom-title)]
+                         {:title title
+                          :class (-> (into {} class)
+                                     (assoc :db/id (:db/id class)))
+                          :entities (->> entities
+                                         (sort-by :block/created-at))})))))
+           (sort-by (comp :block/created-at :class))))))

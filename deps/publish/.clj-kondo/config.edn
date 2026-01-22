@@ -1,0 +1,18 @@
+{:linters
+ {:aliased-namespace-symbol {:level :warning}
+  :namespace-name-mismatch {:level :warning}
+  :used-underscored-binding {:level :warning}
+  :shadowed-var {:level :warning
+                 :exclude [meta name key keys uuid type]}
+
+  :consistent-alias
+  {:aliases {clojure.pprint pprint
+             clojure.string string
+             datascript.core d
+             datascript.transit dt
+             logseq.publish.common publish-common
+             logseq.publish.model publish-model}}}
+ :lint-as {logseq.publish.async/js-await clojure.core/let
+           shadow.cljs.modern/defclass clj-kondo.lint-as/def-catch-all}
+ :skip-comments true
+ :output {:progress true}}

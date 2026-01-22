@@ -1,30 +1,32 @@
-name: logseq/publishing CI
+name: logseq/outliner CI
 
 on:
-  # Path filters ensure jobs only kick off if a change is made to publishing or
+  # Path filters ensure jobs only kick off if a change is made to outliner or
   # its local dependencies
   push:
     branches: [master]
     paths:
-      - 'deps/publishing/**'
-      - '.github/workflows/publishing.yml'
-      - '!deps/publishing/**.md'
-      # Deps that logseq/publishing depends on should trigger this workflow
+      - 'deps/outliner/**'
+      - '.github/workflows/deps-outliner.yml'
+      - '!deps/outliner/**.md'
+      # Deps that logseq/outliner depends on should trigger this workflow
+      - 'deps/graph-parser/**'
       - 'deps/db/**'
       - 'deps/common/**'
   pull_request:
     branches: [master]
     paths:
-      - 'deps/publishing/**'
-      - '.github/workflows/publishing.yml'
-      - '!deps/publishing/**.md'
-      # Deps that logseq/publishing depends on should trigger this workflow
+      - 'deps/outliner/**'
+      - '.github/workflows/deps-outliner.yml'
+      - '!deps/outliner/**.md'
+      # Deps that logseq/outliner depends on should trigger this workflow
+      - 'deps/graph-parser/**'
       - 'deps/db/**'
       - 'deps/common/**'
 
 defaults:
   run:
-    working-directory: deps/publishing
+    working-directory: deps/outliner
 
 env:
   CLOJURE_VERSION: '1.11.1.1413'
@@ -47,7 +49,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'yarn'
-          cache-dependency-path: deps/publishing/yarn.lock
+          cache-dependency-path: deps/outliner/yarn.lock
 
       - name: Set up Java
         uses: actions/setup-java@v4
