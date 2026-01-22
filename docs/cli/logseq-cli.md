@@ -15,7 +15,7 @@ clojure -M:cljs compile logseq-cli
 ## Run the CLI
 
 ```bash
-node ./static/logseq-cli.js graph list
+node ./dist/logseq.js graph list
 
 If installed globally, run:
 
@@ -115,12 +115,12 @@ id8 └── b8
 Examples:
 
 ```bash
-node ./static/logseq-cli.js graph create --repo demo
-node ./static/logseq-cli.js graph export --type edn --output /tmp/demo.edn --repo demo
-node ./static/logseq-cli.js graph import --type edn --input /tmp/demo.edn --repo demo-import
-node ./static/logseq-cli.js add block --target-page-name TestPage --content "hello world"
-node ./static/logseq-cli.js move --uuid <uuid> --target-page-name TargetPage
-node ./static/logseq-cli.js search "hello"
-node ./static/logseq-cli.js show --page-name TestPage --format json --output json
-node ./static/logseq-cli.js server list
+node ./dist/logseq.js graph create --repo demo
+node ./dist/logseq.js graph export --type edn --output /tmp/demo.edn --repo demo
+node ./dist/logseq.js graph import --type edn --input /tmp/demo.edn --repo demo-import
+node ./dist/logseq.js add block --target-page-name TestPage --content "hello world"
+node ./dist/logseq.js move --uuid <uuid> --target-page-name TargetPage
+node ./dist/logseq.js search "hello"
+node ./dist/logseq.js show --page-name TestPage --format json --output json
+node ./dist/logseq.js server list
 ```
