@@ -72,12 +72,12 @@
                      tx-data [[:db/add 1 :block/title "hello"]
                               [:db/add 2 :block/name "page"]
                               [:db/add 3 :block/uuid (random-uuid)]]
-                     encrypted (#'db-sync/encrypt-tx-data aes-key tx-data)]
+                     encrypted (#'db-sync/<encrypt-tx-data aes-key tx-data)]
                (is (not= tx-data encrypted))
                (is (string? (nth (first encrypted) 3)))
                (is (= (nth (second encrypted) 3)
                       "page"))
-               (p/let [decrypted (#'db-sync/decrypt-tx-data aes-key encrypted)]
+               (p/let [decrypted (#'db-sync/<decrypt-tx-data aes-key encrypted)]
                  (is (= tx-data decrypted))
                  (done)))
              (p/catch (fn [e]
@@ -91,12 +91,12 @@
                                                              :block/title "hello"
                                                              :block/name "page"})
                      rows [[1 content nil]]
-                     encrypted (#'db-sync/encrypt-snapshot-rows aes-key rows)]
+                     encrypted (#'db-sync/<encrypt-snapshot-rows aes-key rows)]
                (is (not= rows encrypted))
                (let [[_ content* _] (first encrypted)]
                  (is (string? content*))
                  (is (not= content content*)))
-               (p/let [decrypted (#'db-sync/decrypt-snapshot-rows aes-key encrypted)]
+               (p/let [decrypted (#'db-sync/<decrypt-snapshot-rows aes-key encrypted)]
                  (is (= rows decrypted))
                  (done)))
              (p/catch (fn [e]
