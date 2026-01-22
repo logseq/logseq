@@ -90,7 +90,7 @@
                 (when-let [query (:logseq.property/query cards)]
                   (when-not (string/blank? (:block/title query))
                     (:block/title query))))
-        result (query-dsl/parse query {:db-graph? true})
+        result (query-dsl/parse query (db/get-db) {})
         card-tag-id (:db/id (db/entity :logseq.class/Card))
         card-tag-children-ids (db-model/get-structured-children repo card-tag-id)
         card-ids (cons card-tag-id card-tag-children-ids)

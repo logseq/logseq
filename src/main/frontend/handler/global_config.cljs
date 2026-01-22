@@ -21,11 +21,6 @@
   []
   (path/path-join @root-dir "config"))
 
-(defn safe-global-config-dir
-  "Fetch config dir in a general context, not just for global config"
-  []
-  (when @root-dir (global-config-dir)))
-
 (defn global-config-path
   "Fetch config path in a global config context"
   []
@@ -68,16 +63,14 @@
                      (rewrite/dissoc result (first ks))
                      (rewrite/assoc-in result ks v))
         new-str-content (str new-result)]
-    (fs/write-plain-text-file! nil nil (global-config-path) new-str-content {:skip-compare? true})
+    (fs/write-file! (global-config-path) new-str-content)
     (state/set-global-config! (rewrite/sexpr new-result) new-str-content)))
 
 (defn start
-  "This component has four responsibilities on start:
+  "This component has three responsibilities on start:
 - Fetch root-dir for later use with config paths
 - Manage ui state of global config
-- Create a global config dir and file if it doesn't exist
-- Start a file watcher for global config dir if it's not already started.
-  Watcher ensures client db is seeded with correct file data."
+- Create a global config dir and file if it doesn't exist"
   [{:keys [repo]}]
   (-> (p/do!
        (p/let [root-dir' (ipc/ipc "getLogseqDotDirRoot")]

@@ -57,6 +57,13 @@
     (medley/find-first #(= name (:name (second %1)))
                        (medley/indexed alias-dirs))))
 
+(defn get-area-block-asset-url
+  "Returns asset url for an area block used by pdf assets. This lives in this ns
+  because it is used by this dep and needs to be independent from the frontend app"
+  [block]
+  (when-let [image (:logseq.property.pdf/hl-image block)]
+    (str "./assets/" (:block/uuid image) ".png")))
+
 (defn resolve-asset-real-path-url
   [repo rpath]
   (when-let [rpath (and (string? rpath)
@@ -121,7 +128,8 @@
    If path is relative path, return blob url or file url according to environment."
   ([path] (<make-asset-url path (try (js/URL. path) (catch :default _ nil))))
   ([path ^js js-url]
-   ;; path start with "/assets"(editor) or compatible for "../assets"(whiteboards)
+   ;; path start with "/assets"(editor)
+   ;; TODO: Remove compatible for "../assets" related to whiteboards?
    (if config/publishing?
      ;; Relative path needed since assets are not under '/' if published graph is not under '/'
      (string/replace-first path #"^/" "")
