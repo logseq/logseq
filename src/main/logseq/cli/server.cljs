@@ -6,6 +6,7 @@
             ["os" :as os]
             ["path" :as node-path]
             [clojure.string :as string]
+            [logseq.cli.command.core :as command-core]
             [frontend.worker-common.util :as worker-util]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]))
@@ -18,12 +19,11 @@
 
 (defn resolve-data-dir
   [config]
-  (expand-home (or (:data-dir config) "~/.logseq/db-worker")))
+  (expand-home (or (:data-dir config) "~/.logseq/cli-graphs")))
 
 (defn- repo-dir
   [data-dir repo]
-  (let [pool-name (worker-util/get-pool-name repo)]
-    (node-path/join data-dir (str "." pool-name))))
+  (node-path/join data-dir (worker-util/encode-graph-dir-name repo)))
 
 (defn lock-path
   [data-dir repo]
@@ -286,17 +286,12 @@
 (defn list-graphs
   [config]
   (let [data-dir (resolve-data-dir config)
-        db-dir-prefix ".logseq-pool-"
         entries (when (fs/existsSync data-dir)
                   (fs/readdirSync data-dir #js {:withFileTypes true}))]
     (->> entries
          (filter #(.isDirectory ^js %))
          (map (fn [^js dirent]
-                (.-name dirent)))
-         (filter #(string/starts-with? % db-dir-prefix))
-         (map (fn [dir-name]
-                (-> dir-name
-                    (string/replace-first db-dir-prefix "")
-                    (string/replace "+3A+" ":")
-                    (string/replace "++" "/"))))
+                (worker-util/decode-graph-dir-name (.-name dirent))))
+         (filter some?)
+         (map command-core/repo->graph)
          (vec))))

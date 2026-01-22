@@ -30,7 +30,7 @@
 
 (defn- repo-dir
   [data-dir pool-name]
-  (node-path/join data-dir (str "." pool-name)))
+  (node-path/join data-dir pool-name))
 
 (defn- pool-path
   [^js pool path]
@@ -52,25 +52,20 @@
 
 (defn- list-graphs
   [data-dir]
-  (let [dir? #(and % (.isDirectory %))
-        db-dir-prefix ".logseq-pool-"]
+  (let [dir? #(and % (.isDirectory %))]
     (p/let [entries (fs/readdir data-dir #js {:withFileTypes true})
             db-dirs (->> entries
-                         (filter dir?)
-                         (filter (fn [dirent]
-                                   (string/starts-with? (.-name dirent) db-dir-prefix))))
+                         (filter dir?))
             graph-names (map (fn [dirent]
-                               (-> (.-name dirent)
-                                   (string/replace-first db-dir-prefix "")
-                                   ;; TODO: DRY
-                                   (string/replace "+3A+" ":")
-                                   (string/replace "++" "/")))
+                               (worker-util/decode-graph-dir-name (.-name dirent)))
                              db-dirs)]
-      (vec graph-names))))
+      (->> graph-names
+           (filter some?)
+           (vec)))))
 
 (defn- db-exists?
   [data-dir graph]
-  (p/let [pool-name (worker-util/get-pool-name graph)
+  (p/let [pool-name (worker-util/encode-graph-dir-name graph)
           db-path (node-path/join (repo-dir data-dir pool-name) "db.sqlite")]
     (-> (fs/stat db-path)
         (p/then (fn [_] true))
@@ -191,7 +186,7 @@
 
 (defn node-platform
   [{:keys [data-dir event-fn]}]
-  (let [data-dir (expand-home (or data-dir "~/.logseq/db-worker"))
+  (let [data-dir (expand-home (or data-dir "~/.logseq/cli-graphs"))
         kv (kv-store data-dir)]
     (p/do!
      (ensure-dir! data-dir)
