@@ -1,13 +1,11 @@
 (ns frontend.worker.db-worker-node-test
   (:require ["http" :as http]
             [cljs.test :refer [async deftest is]]
-            [clojure.string :as string]
             [frontend.test.node-helper :as node-helper]
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.db-worker-node :as db-worker-node]
             [goog.object :as gobj]
             [logseq.db :as ldb]
-            [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]
             ["fs" :as fs]
             ["path" :as node-path]))
@@ -75,8 +73,7 @@
 
 (defn- lock-path
   [data-dir repo]
-  (let [pool-name (worker-util/get-pool-name repo)
-        repo-dir (node-path/join data-dir (str "." pool-name))]
+  (let [repo-dir (node-path/join data-dir (worker-util/encode-graph-dir-name repo))]
     (node-path/join repo-dir "db-worker.lock")))
 
 (defn- pad2
@@ -93,8 +90,7 @@
 
 (defn- log-path
   [data-dir repo]
-  (let [pool-name (worker-util/get-pool-name repo)
-        repo-dir (node-path/join data-dir (str "." pool-name))
+  (let [repo-dir (node-path/join data-dir (worker-util/encode-graph-dir-name repo))
         date-str (yyyymmdd (js/Date.))]
     (node-path/join repo-dir (str "db-worker-node-" date-str ".log"))))
 
@@ -144,8 +140,7 @@
   (let [enforce-log-retention! #'db-worker-node/enforce-log-retention!
         data-dir (node-helper/create-tmp-dir "db-worker-log-retention")
         repo (str "logseq_db_log_retention_" (subs (str (random-uuid)) 0 8))
-        pool-name (worker-util/get-pool-name repo)
-        repo-dir (node-path/join data-dir (str "." pool-name))
+        repo-dir (node-path/join data-dir (worker-util/encode-graph-dir-name repo))
         days ["20240101" "20240102" "20240103" "20240104" "20240105"
               "20240106" "20240107" "20240108" "20240109"]
         make-log (fn [day]
@@ -222,11 +217,7 @@
                   dbs (invoke host port "thread-api/list-db" [])
                   _ (do
                       (println "[db-worker-node-test] list-db" dbs)
-                      (let [prefix sqlite-util/db-version-prefix
-                            expected-name (if (string/starts-with? repo prefix)
-                                            (subs repo (count prefix))
-                                            repo)]
-                        (is (some #(= expected-name (:name %)) dbs))))
+                      (is (some #(= repo (:name %)) dbs)))
                   lock-file (lock-path data-dir repo)
                   _ (is (fs/existsSync lock-file))
                   lock-contents (js/JSON.parse (.toString (fs/readFileSync lock-file) "utf8"))
