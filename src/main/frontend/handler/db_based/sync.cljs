@@ -1,11 +1,9 @@
 (ns frontend.handler.db-based.sync
   "Dispatch RTC calls between legacy RTC and db-sync implementations."
   (:require [frontend.config :as config]
-            [frontend.db :as db]
             [frontend.handler.db-based.db-sync :as db-sync-handler]
             [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.state :as state]
-            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 (defn- db-sync-enabled? []
