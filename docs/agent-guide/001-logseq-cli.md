@@ -12,7 +12,7 @@ Related: Relates to docs/agent-guide/task--basic-logseq-cli.md and docs/agent-gu
 ## Problem statement
 
 We need a new Logseq CLI that is independent of any existing CLI code in the repo.
-The CLI must run in Node.js, be written in ClojureScript, and connect to the db-worker-node server started from static/db-worker-node.js.
+The CLI must run in Node.js, be written in ClojureScript, and connect to the db-worker-node server started from dist/db-worker-node.js.
 The CLI should provide a stable interface for scripting and troubleshooting, and it should be easy to extend with new commands.
 
 ## Testing Plan

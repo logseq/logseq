@@ -65,7 +65,7 @@ Key changes:
   2. If lock file exists, read port/pid; probe `/healthz` + `/readyz`.
   3. If healthy, reuse existing server; build the connection URL from localhost and the lock file port.
   4. If unhealthy or stale, attempt to spawn a new server; if db-worker-node cannot handle the lock situation, CLI repairs the lock then retries.
-  5. Spawn via `child_process.spawn`: `node ./static/db-worker-node.js --repo <repo> --data-dir <...>`.
+  5. Spawn via `child_process.spawn`: `node ./dist/db-worker-node.js --repo <repo> --data-dir <...>`.
   6. Resolve actual port from the lock file written by db-worker-node.
 - **Connection URL**: derived from the repo lock file; host is always localhost and the port is always discovered from the lock file.
 
