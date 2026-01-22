@@ -1050,6 +1050,20 @@
           buf (.arrayBuffer resp)]
     buf))
 
+(defn- <snapshot-upload-body
+  [rows]
+  (let [frame (frame-bytes (encode-snapshot-rows rows))
+        stream (js/ReadableStream.
+                #js {:start (fn [controller]
+                              (.enqueue controller frame)
+                              (.close controller))})
+        use-compression? (exists? js/CompressionStream)
+        body (if use-compression? (maybe-compress-stream stream) stream)]
+    (if use-compression?
+      (p/let [buf (<buffer-stream body)]
+        {:body buf :encoding snapshot-content-encoding})
+      (p/resolved {:body frame :encoding nil}))))
+
 (defn upload-graph!
   [repo]
   (let [base (http-base-url)
@@ -1058,25 +1072,28 @@
       (if-let [db (worker-state/get-sqlite-conn repo :db)]
         (do
           (ensure-client-graph-uuid! repo graph-id)
-          (let [stream (snapshot-upload-stream db)
-                use-compression? (exists? js/CompressionStream)
-                body (if use-compression? (maybe-compress-stream stream) stream)
-                headers (cond-> {"content-type" snapshot-content-type}
-                          use-compression? (assoc "content-encoding" snapshot-content-encoding))
-                upload-url (str base "/sync/" graph-id "/snapshot/upload?reset=true")
-                upload-opts {:method "POST"
-                             :headers headers
-                             :body body
-                             :duplex "half"}
-                fallback? (should-buffer-snapshot-upload? base)
-                do-upload (fn [opts]
-                            (fetch-json upload-url opts {:response-schema :sync/snapshot-upload}))]
-            (p/let [_ (if fallback?
-                        (p/let [buf (<buffer-stream body)]
-                          (do-upload (assoc upload-opts :body buf)))
-                        (do-upload upload-opts))]
-              (client-op/add-all-exists-asset-as-ops repo)
-              {:graph-id graph-id})))
+          (p/loop [last-addr -1
+                   first-batch? true]
+            (let [rows (fetch-kvs-rows db last-addr upload-kvs-batch-size)]
+              (if (empty? rows)
+                (do
+                  (when-let [client @worker-state/*db-sync-client]
+                    (when (= repo (:repo client))
+                      (set-rtc-state! client :remote-tx 0)))
+                  (client-op/add-all-exists-asset-as-ops repo)
+                  {:graph-id graph-id})
+                (let [max-addr (apply max (map first rows))
+                      rows (normalize-snapshot-rows rows)
+                      upload-url (str base "/sync/" graph-id "/snapshot/upload?reset=" (if first-batch? "true" "false"))]
+                  (p/let [{:keys [body encoding]} (<snapshot-upload-body rows)
+                          headers (cond-> {"content-type" snapshot-content-type}
+                                    (string? encoding) (assoc "content-encoding" encoding))
+                          _ (fetch-json upload-url
+                                        {:method "POST"
+                                         :headers headers
+                                         :body body}
+                                        {:response-schema :sync/snapshot-upload})]
+                    (p/recur max-addr false)))))))
         (p/rejected (ex-info "db-sync missing sqlite db"
                              {:repo repo :graph-id graph-id})))
       (p/rejected (ex-info "db-sync missing upload info"

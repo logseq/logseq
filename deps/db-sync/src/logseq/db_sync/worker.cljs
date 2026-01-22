@@ -248,10 +248,6 @@
     [(aget row 0) (aget row 1) (aget row 2)]
     [(aget row "addr") (aget row "content") (aget row "addresses")]))
 
-(defn- ensure-import-table! [sql]
-  (common/sql-exec sql "drop table if exists kvs_import")
-  (common/sql-exec sql "create table if not exists kvs_import (addr INTEGER primary key, content TEXT, addresses JSON)"))
-
 (defn- import-snapshot-rows!
   [sql table rows]
   (when (seq rows)
@@ -260,29 +256,12 @@
             args (:args batch)]
         (apply common/sql-exec sql sql-str args)))))
 
-(defn- finalize-import!
-  [^js self reset?]
-  (let [sql (.-sql self)
-        state (.-state self)]
-    (ensure-schema! self)
-    (if (and state (.-storage state) (.-transactionSync (.-storage state)))
-      (.transactionSync (.-storage state)
-                        (fn []
-                          (if reset?
-                            (do
-                              (common/sql-exec sql "delete from kvs")
-                              (common/sql-exec sql "insert into kvs (addr, content, addresses) select addr, content, addresses from kvs_import")
-                              (common/sql-exec sql "delete from tx_log")
-                              (common/sql-exec sql "delete from sync_meta")
-                              (storage/set-t! sql 0))
-                            (do
-                              (common/sql-exec sql "delete from kvs where addr in (select addr from kvs_import)")
-                              (common/sql-exec sql "insert into kvs (addr, content, addresses) select addr, content, addresses from kvs_import")))
-                          (common/sql-exec sql "drop table if exists kvs_import")))
-      (do
-        (log/error :db-sync/transaction-missing {:reset reset?})
-        (throw (ex-info "missing durable object transaction" {:reset reset?}))))
-    (set! (.-conn self) (storage/open-conn sql))))
+(defn- reset-import!
+  [sql]
+  (common/sql-exec sql "delete from kvs")
+  (common/sql-exec sql "delete from tx_log")
+  (common/sql-exec sql "delete from sync_meta")
+  (storage/set-t! sql 0))
 
 (defn- graph-id-from-request [request]
   (let [header-id (.get (.-headers request) "x-graph-id")
@@ -421,7 +400,6 @@
   (let [reader (.getReader stream)
         reset-pending? (volatile! reset?)
         total-count (volatile! 0)]
-    (ensure-import-table! (.-sql self))
     (p/let [buffer nil]
       (p/catch
        (p/loop [buffer buffer]
@@ -434,7 +412,6 @@
                  (import-snapshot! self rows reset?)
                  (vreset! reset-pending? false))
                (vswap! total-count + rows-count)
-               (finalize-import! self reset?)
                @total-count)
              (let [value (.-value chunk)
                    {:keys [rows buffer]} (snapshot/parse-framed-chunk buffer value)
@@ -446,9 +423,6 @@
                (vswap! total-count + rows-count)
                (p/recur buffer)))))
        (fn [error]
-         (try
-           (common/sql-exec (.-sql self) "drop table if exists kvs_import")
-           (catch :default _))
          (throw error))))))
 
 (defn- handle-assets [request ^js env]
@@ -593,11 +567,12 @@
 ;;      :t (t-now self)
 ;;      :datoms (common/write-transit datoms)}))
 
-(defn- import-snapshot! [^js self rows _reset?]
-  (prn :debug :rows-count (count rows))
+(defn- import-snapshot! [^js self rows reset?]
   (let [sql (.-sql self)]
     (ensure-schema! self)
-    (import-snapshot-rows! sql "kvs_import" rows)))
+    (when reset?
+      (reset-import! sql))
+    (import-snapshot-rows! sql "kvs" rows)))
 
 (defn- apply-tx! [^js self sender txs]
   (let [sql (.-sql self)]
@@ -779,52 +754,28 @@
 
             (and (= method "POST") (= path "/snapshot/upload"))
             (let [graph-id (graph-id-from-request request)
-                  ^js bucket (.-LOGSEQ_SYNC_ASSETS (.-env self))
                   reset-param (.get (.-searchParams url) "reset")
                   reset? (if (nil? reset-param)
                            true
-                           (not (contains? #{"false" "0"} reset-param)))]
+                           (not (contains? #{"false" "0"} reset-param)))
+                  req-encoding (.get (.-headers request) "content-encoding")]
               (cond
                 (not (seq graph-id))
                 (bad-request "missing graph id")
-
-                (nil? bucket)
-                (error-response "missing assets bucket" 500)
 
                 (nil? (.-body request))
                 (bad-request "missing body")
 
                 :else
-                (p/let [snapshot-id (str (random-uuid))
-                        key (snapshot-key graph-id snapshot-id)
-                        req-encoding (.get (.-headers request) "content-encoding")
-                        _ (.put bucket key
-                                (.-body request)
-                                #js {:httpMetadata #js {:contentType snapshot-content-type
-                                                        :contentEncoding req-encoding
-                                                        :cacheControl snapshot-cache-control}
-                                     :customMetadata #js {:purpose "snapshot"
-                                                          :created-at (str (common/now-ms))}})
-                        ^js obj (.get bucket key)]
-                  (if (nil? obj)
-                    (error-response "snapshot missing" 500)
-                    (p/catch
-                     (let [metadata (.-httpMetadata obj)
-                           encoding (or (.-contentEncoding metadata) req-encoding)
-                           stream (.-body obj)]
-                       (if (and (= encoding snapshot-content-encoding)
-                                (not (exists? js/DecompressionStream)))
-                         (p/let [_ (.delete bucket key)]
-                           (error-response "gzip not supported" 500))
-                         (p/let [stream (maybe-decompress-stream stream encoding)
-                                 count (import-snapshot-stream! self stream reset?)
-                                 _ (.delete bucket key)]
-                           (json-response :sync/snapshot-upload {:ok true
-                                                                 :count count
-                                                                 :key key}))))
-                     (fn [error]
-                       (p/let [_ (.delete bucket key)]
-                         (throw error))))))))
+                (let [stream (.-body request)
+                      encoding (or req-encoding "")]
+                  (if (and (= encoding snapshot-content-encoding)
+                           (not (exists? js/DecompressionStream)))
+                    (error-response "gzip not supported" 500)
+                    (p/let [stream (maybe-decompress-stream stream encoding)
+                            count (import-snapshot-stream! self stream reset?)]
+                      (json-response :sync/snapshot-upload {:ok true
+                                                            :count count}))))))
 
             :else
             (not-found))))

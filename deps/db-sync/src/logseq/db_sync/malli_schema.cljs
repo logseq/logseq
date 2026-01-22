@@ -169,8 +169,7 @@
 (def snapshot-upload-response-schema
   [:map
    [:ok :boolean]
-   [:count :int]
-   [:key :string]])
+   [:count :int]])
 
 (def asset-get-response-schema
   [:or
