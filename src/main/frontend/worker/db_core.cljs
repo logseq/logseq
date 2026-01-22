@@ -68,6 +68,12 @@
   []
   (= :node (platform/env-flag (platform/current) :runtime)))
 
+(defn- storage-pool-name
+  [graph]
+  (if (node-runtime?)
+    (worker-util/encode-graph-dir-name graph)
+    (worker-util/get-pool-name graph)))
+
 (defn- get-storage-pool
   [graph]
   (if (node-runtime?)
@@ -91,7 +97,7 @@
   (when-not @*publishing?
     (or (get-storage-pool graph)
         (p/let [storage (platform/storage (platform/current))
-                ^js pool ((:install-opfs-pool storage) @*sqlite (worker-util/get-pool-name graph))]
+                ^js pool ((:install-opfs-pool storage) @*sqlite (storage-pool-name graph))]
           (remember-storage-pool! graph pool)
           pool))))
 
