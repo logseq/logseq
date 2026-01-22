@@ -1,7 +1,6 @@
 (ns frontend.components.cmdk.core
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [electron.ipc :as ipc]
             [frontend.components.block :as block]
             [frontend.components.cmdk.list-item :as list-item]
             [frontend.components.icon :as icon-component]
@@ -30,7 +29,6 @@
             [goog.functions :as gfun]
             [goog.object :as gobj]
             [goog.userAgent]
-            [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
             [logseq.db :as ldb]
@@ -340,17 +338,7 @@
   (let [!input (::input state)
         !results (::results state)]
     (swap! !results assoc-in [group :status] :loading)
-    (p/let [files* (search/file-search @!input 99)
-            files (remove
-                   (fn [f]
-                     (and
-                      f
-                      (string/ends-with? f ".edn")
-                      (or (string/starts-with? f "whiteboards/")
-                          (string/starts-with? f "assets/")
-                          (string/starts-with? f "logseq/version-files")
-                          (contains? #{"logseq/metadata.edn" "logseq/pages-metadata.edn" "logseq/graphs-txid.edn"} f))))
-                   files*)
+    (p/let [files (search/file-search @!input 99)
             items (map
                    (fn [file]
                      (hash-map :icon "file"
@@ -498,15 +486,8 @@
 
 (defn- open-file
   [file-path]
-  (if (or (string/ends-with? file-path ".edn")
-          (string/ends-with? file-path ".js")
-          (string/ends-with? file-path ".css"))
-    (route-handler/redirect! {:to :file
-                              :path-params {:path file-path}})
-    ;; open this file in directory
-    (when (util/electron?)
-      (let [file-fpath (path/path-join (config/get-repo-dir (state/get-current-repo)) file-path)]
-        (ipc/ipc "openFileInFolder" file-fpath)))))
+  (route-handler/redirect! {:to :file
+                            :path-params {:path file-path}}))
 
 (defn- page-item?
   [item]
@@ -743,8 +724,7 @@
 
 (defn- open-current-item-link
   "Opens a link for the current item if a page or block. For pages, opens the
-  first :url property if a db graph or for file graphs opens first property
-  value with a url. For blocks, opens the first url found in the block content"
+  first :url property"
   [state]
   (let [item (some-> state state->highlighted-item)
         repo (state/get-current-repo)]

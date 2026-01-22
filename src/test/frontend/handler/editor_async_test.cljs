@@ -51,11 +51,12 @@
 
 (deftest-async delete-block-async!
   (testing "backspace deletes empty block"
-    (load-test-files [{:file/path "pages/page1.md"
-                       :file/content "\n
-- b1
-- b2
--"}])
+    (load-test-files
+     [{:page {:block/title "page1"}
+       :blocks
+       [{:block/title "b1"}
+        {:block/title "b2"}
+        {:block/title ""}]}])
     (p/let [conn (db/get-db test-helper/test-db false)
             block (->> (d/q '[:find (pull ?b [*])
                               :where [?b :block/title ""]
@@ -69,7 +70,7 @@
                                                                    :where
                                                                    [?b :block/parent]
                                                                    [?b :block/title]
-                                                                   [(missing? $ ?b :block/pre-block?)]]
+                                                                   [(missing? $ ?b :logseq.property/built-in?)]]
                                                                  @conn)
                                                             (map (comp :block/title first)))]
                                     (is (= ["b1" "b2"] updated-blocks) "Block is deleted")))})))
@@ -77,11 +78,6 @@
   (testing "backspace deletes empty block in embedded context"
     ;; testing embed at this layer doesn't require an embed block since
     ;; delete-block handles all the embed setup
-    (load-test-files [{:file/path "pages/page1.md"
-                       :file/content "\n
-- b1
-- b2
--"}])
     (p/let [conn (db/get-db test-helper/test-db false)
             block (->> (d/q '[:find (pull ?b [*])
                               :where [?b :block/title ""]
@@ -96,7 +92,7 @@
                                                                    :where
                                                                    [?b :block/parent]
                                                                    [?b :block/title]
-                                                                   [(missing? $ ?b :block/pre-block?)]]
+                                                                   [(missing? $ ?b :logseq.property/built-in?)]]
                                                                  @conn)
                                                             (map (comp :block/title first)))]
                                     (is (= ["b1" "b2"] updated-blocks) "Block is deleted")))}))))

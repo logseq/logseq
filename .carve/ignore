@@ -13,8 +13,6 @@ frontend.debug/print
 frontend.extensions.code/editor
 ;; Referenced in commented TODO
 frontend.extensions.pdf.utils/get-page-bounding
-;; For repl
-logseq.graph-parser.mldoc/ast-export-markdown
 ;; Protocol fn wrapper that could be used
 frontend.fs/readdir
 ;; Referenced in TODO
@@ -46,13 +44,9 @@ frontend.components.repo/add-repo
 frontend.util/trace!
 ;; Repl fn
 frontend.util.pool/terminate-pool!
-;; Repl fn
-frontend.handler.file-based.property.util/add-page-properties
 ;; Test runners used by shadow
 frontend.test.node-test-runner/main
 frontend.test.frontend-node-test-runner/main
-;; Test runner for nbb
-logseq.graph-parser.nbb-test-runner/run-tests
 ;; For debugging
 frontend.fs.sync/debug-print-sync-events-loop
 frontend.fs.sync/stop-debug-print-sync-events-loop

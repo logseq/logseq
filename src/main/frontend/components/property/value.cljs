@@ -769,7 +769,7 @@
                                 :label label
                                 :value id
                                 :disabled? (and tags? (contains?
-                                                       (set/union #{:logseq.class/Journal :logseq.class/Whiteboard}
+                                                       (set/union #{:logseq.class/Journal}
                                                                   (set/difference ldb/internal-tags #{:logseq.class/Page}))
                                                        (:db/ident node)))))) nodes)
         classes' (remove (fn [class] (= :logseq.class/Root (:db/ident class))) classes)

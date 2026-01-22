@@ -78,18 +78,6 @@
    :cards/toggle-answers                    {:binding "s"
                                              :fn      srs/toggle-answers}
 
-   :cards/next-card                         {:binding "n"
-                                             :fn      srs/next-card}
-
-   :cards/forgotten                         {:binding "f"
-                                             :fn      srs/forgotten}
-
-   :cards/remembered                        {:binding "r"
-                                             :fn      srs/remembered}
-
-   :cards/recall                            {:binding "t"
-                                             :fn      srs/recall}
-
    :cards/again                             {:binding "1"
                                              :fn      srs/card-again}
 

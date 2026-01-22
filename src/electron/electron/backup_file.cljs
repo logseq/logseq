@@ -5,7 +5,6 @@
             [clojure.string :as string]))
 
 (def backup-dir "logseq/bak")
-(def version-file-dir "logseq/version-files/local")
 
 (defn- get-backup-dir*
   [repo relative-path bak-dir]
@@ -19,10 +18,6 @@
 (defn get-backup-dir
   [repo relative-path]
   (get-backup-dir* repo relative-path backup-dir))
-
-(defn get-version-file-dir
-  [repo relative-path]
-  (get-backup-dir* repo relative-path version-file-dir))
 
 (defn- truncate-old-versioned-files!
   "reserve the latest `keep-versions` version files"
@@ -143,16 +138,15 @@
          (< (- now-ms latest-backup-ts) min-interval-ms))))
 
 (defn backup-file
-  "backup CONTENT under DIR :backup-dir or :version-file-dir
-  :backup-dir = `backup-dir`
-  :version-file-dir = `version-file-dir`"
+  "backup CONTENT under DIR :backup-dir
+  :backup-dir = `backup-dir`"
   [repo dir relative-path ext content & {:keys [truncate-daily?
                                                 keep-versions backups-dir]
                                          :or {keep-versions 6}}]
   (let [dir* (or backups-dir
+                 ;; TODO: Remove when last usage of backupDbFile event is removed from frontend.fs.node
                  (case dir
-                   :backup-dir (get-backup-dir repo relative-path)
-                   :version-file-dir (get-version-file-dir repo relative-path)))
+                   :backup-dir (get-backup-dir repo relative-path)))
         _ (fs-extra/ensureDirSync dir*)
         new-path (node-path/join dir*
                                  (str (string/replace (.toISOString (js/Date.)) ":" "_")

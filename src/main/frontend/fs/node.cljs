@@ -29,6 +29,7 @@
            (error-handler error)
            (log/error :write-file-failed error))))
 
+      ;; TODO: Remove backupDbFile which is a file graph concept
       (p/let [disk-content (when (not= stat :not-found)
                              (-> (ipc/ipc "readFile" file-fpath)
                                  (p/then bean/->clj)

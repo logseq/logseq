@@ -1,8 +1,7 @@
 (ns frontend.util.page
   "Provides util fns for page blocks"
   (:require [frontend.db :as db]
-            [frontend.state :as state]
-            [frontend.util :as util]))
+            [frontend.state :as state]))
 
 (defn get-current-page-uuid
   "Fetch the current page's uuid with same approach as get-current-page-id"
@@ -16,13 +15,3 @@
   []
   (let [page-name (state/get-current-page)]
     (:db/id (db/get-page page-name))))
-
-(defn get-page-file-rpath
-  "Gets the file path of a page. If no page is given, detects the current page.
-Returns nil if no file path is found or no page is detected or given"
-  ([]
-   (when-let [page-id (get-current-page-id)]
-     (get-in (db/entity page-id) [:block/file :file/path])))
-  ([page-name]
-   (when-let [page-name' (some-> page-name util/page-name-sanity-lc)]
-     (get-in (db/get-page page-name') [:block/file :file/path]))))
