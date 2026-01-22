@@ -318,14 +318,6 @@
 
 (def ^:private invalid-transit ::invalid-transit)
 
-(declare encrypt-snapshot-rows decrypt-snapshot-rows)
-
-(defn- try-read-transit [value]
-  (try
-    (ldb/read-transit-str value)
-    (catch :default _
-      invalid-transit)))
-
 (defn- graph-e2ee?
   [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
@@ -490,16 +482,6 @@
           (swap! *repo->aes-key assoc repo aes-key)
           aes-key)))))
 
-(defn <decrypt-kvs-rows
-  [repo graph-id rows e2ee?]
-  (if-not e2ee?
-    (p/resolved rows)
-    (p/let [aes-key (<fetch-graph-aes-key-for-download repo graph-id)
-            _ (when (nil? aes-key)
-                (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
-            rows* (decrypt-snapshot-rows aes-key rows)]
-      rows*)))
-
 (defn- <grant-graph-access!
   [repo graph-id target-email]
   (if-not (graph-e2ee? repo)
@@ -536,21 +518,59 @@
 
 (defn- <encrypt-text-value
   [aes-key value]
-  (p/let [text (ldb/write-transit-str value)
-          encrypted (crypt/<encrypt-text aes-key text)]
+  (assert (string? value) (str "encrypting value should be a string, value: " value))
+  (p/let [encrypted (crypt/<encrypt-text aes-key (ldb/write-transit-str value))]
     (ldb/write-transit-str encrypted)))
 
 (defn- <decrypt-text-value
   [aes-key value]
-  (if-not (string? value)
-    (p/resolved value)
-    (let [decoded (try-read-transit value)]
-      (if (= decoded invalid-transit)
-        (p/resolved value)
-        (p/let [decrypted (crypt/<decrypt-text-if-encrypted aes-key decoded)]
-          (if decrypted
-            (ldb/read-transit-str decrypted)
-            value))))))
+  (assert (string? value) (str "encrypted value should be a string, value: " value))
+  (let [decoded (ldb/read-transit-str value)]
+    (if (= decoded invalid-transit)
+      (p/resolved value)
+      (p/let [value (crypt/<decrypt-text-if-encrypted aes-key decoded)
+              value' (ldb/read-transit-str value)]
+        value'))))
+
+(defn- encrypt-tx-item
+  [aes-key item]
+  (cond
+    (and (vector? item) (<= 4 (count item)))
+    (let [attr (nth item 2)
+          v (nth item 3)]
+      (if (contains? rtc-const/encrypt-attr-set attr)
+        (p/let [v' (<encrypt-text-value aes-key v)]
+          (assoc item 3 v'))
+        (p/resolved item)))
+
+    :else
+    (p/resolved item)))
+
+(defn- decrypt-tx-item
+  [aes-key item]
+  (cond
+    (and (vector? item) (<= 4 (count item)))
+    (let [attr (nth item 2)
+          v (nth item 3)]
+      (if (contains? rtc-const/encrypt-attr-set attr)
+        (p/let [v' (<decrypt-text-value aes-key v)]
+          (assoc item 3 v'))
+        (p/resolved item)))
+
+    :else
+    (p/resolved item)))
+
+(defn- <encrypt-tx-data
+  [aes-key tx-data]
+  (when (seq tx-data)
+    (p/let [items (p/all (mapv (fn [item] (encrypt-tx-item aes-key item)) tx-data))]
+      (vec items))))
+
+(defn- <decrypt-tx-data
+  [aes-key tx-data]
+  (when (seq tx-data)
+    (p/let [items (p/all (mapv (fn [item] (decrypt-tx-item aes-key item)) tx-data))]
+      (vec items))))
 
 (defn- <encrypt-keys-attrs
   [aes-key keys]
@@ -566,101 +586,50 @@
                  (if (contains? rtc-const/encrypt-attr-set a)
                    (p/let [v' (<decrypt-text-value aes-key v)]
                      [e a v' t])
-                   [e a v t])) keys)))
+                   (p/resolved [e a v t]))) keys)))
 
-(defn- encrypt-tx-item
-  [aes-key item]
-  (cond
-    (and (vector? item) (<= 4 (count item)))
-    (let [attr (nth item 2)
-          v (nth item 3)]
-      (if (and (contains? rtc-const/encrypt-attr-set attr)
-               (string? v))
-        (p/let [v' (<encrypt-text-value aes-key v)]
-          (assoc item 3 v'))
-        (p/resolved item)))
-
-    (map? item)
-    (let [attr (:a item)
-          v (:v item)]
-      (if (and (contains? rtc-const/encrypt-attr-set attr)
-               (string? v))
-        (p/let [v' (<encrypt-text-value aes-key v)]
-          (assoc item :v v'))
-        (p/resolved item)))
-
-    :else
-    (p/resolved item)))
-
-(defn- decrypt-tx-item
-  [aes-key item]
-  (cond
-    (and (vector? item) (<= 4 (count item)))
-    (let [attr (nth item 2)
-          v (nth item 3)]
-      (if (and (contains? rtc-const/encrypt-attr-set attr)
-               (string? v))
-        (p/let [v' (<decrypt-text-value aes-key v)]
-          (assoc item 3 v'))
-        (p/resolved item)))
-
-    (map? item)
-    (let [attr (:a item)
-          v (:v item)]
-      (if (and (contains? rtc-const/encrypt-attr-set attr)
-               (string? v))
-        (p/let [v' (<decrypt-text-value aes-key v)]
-          (assoc item :v v'))
-        (p/resolved item)))
-
-    :else
-    (p/resolved item)))
-
-(defn- encrypt-tx-data
-  [aes-key tx-data]
-  (if-not (seq tx-data)
-    (p/resolved [])
-    (p/let [items (p/all (mapv (fn [item] (encrypt-tx-item aes-key item)) tx-data))]
-      (vec items))))
-
-(defn- decrypt-tx-data
-  [aes-key tx-data]
-  (if-not (seq tx-data)
-    (p/resolved [])
-    (p/let [items (p/all (mapv (fn [item] (decrypt-tx-item aes-key item)) tx-data))]
-      (vec items))))
-
-(defn- encrypt-snapshot-rows
+(defn- <encrypt-snapshot-rows
   [aes-key rows]
   (if-not (seq rows)
     (p/resolved [])
     (p/let [items (p/all
                    (mapv (fn [[addr content addresses]]
-                           (let [data (try-read-transit content)]
-                             (if (and (not= data invalid-transit) (map? data))
-                               (p/let [keys' (<encrypt-keys-attrs aes-key (:keys data))
-                                       data' (assoc data :keys keys')
-                                       content' (ldb/write-transit-str data')]
-                                 [addr content' addresses])
-                               (p/resolved [addr content addresses]))))
+                           (let [data (ldb/read-transit-str content)]
+                             (p/let [keys' (if (map? data) ; node
+                                             (<encrypt-keys-attrs aes-key (:keys data))
+                                             ;; leaf
+                                             (p/let [result (p/all (map #(<encrypt-keys-attrs aes-key %) data))]
+                                               (vec result)))
+                                     data' (if (map? data) (assoc data :keys keys') keys')
+                                     content' (ldb/write-transit-str data')]
+                               [addr content' addresses])))
                          rows))]
       (vec items))))
 
-(defn- decrypt-snapshot-rows
+(defn- <decrypt-snapshot-rows
   [aes-key rows]
   (if-not (seq rows)
     (p/resolved [])
     (p/let [items (p/all
                    (mapv (fn [[addr content addresses]]
-                           (let [data (try-read-transit content)]
-                             (if (and (not= data invalid-transit) (map? data))
-                               (p/let [keys (<decrypt-keys-attrs aes-key (:keys data))
-                                       data' (assoc data :keys keys)
-                                       content' (ldb/write-transit-str data')]
-                                 [addr content' addresses])
-                               (p/resolved [addr content addresses]))))
+                           (let [data (ldb/read-transit-str content)]
+                             (p/let [keys' (if (map? data) ; node
+                                             (<decrypt-keys-attrs aes-key (:keys data))
+                                             ;; leaf
+                                             (p/let [result (p/all (map #(<decrypt-keys-attrs aes-key %) data))]
+                                               (vec result)))
+                                     data' (if (map? data) (assoc data :keys keys') keys')
+                                     content' (ldb/write-transit-str data')]
+                               [addr content' addresses])))
                          rows))]
       (vec items))))
+
+(defn <decrypt-kvs-rows
+  [repo graph-id rows]
+  (p/let [aes-key (<fetch-graph-aes-key-for-download repo graph-id)
+          _ (when (nil? aes-key)
+              (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))]
+    (<decrypt-snapshot-rows aes-key rows)))
 
 (defn- require-asset-field
   [repo field value context]
@@ -767,16 +736,20 @@
                   ;; (prn :debug :before-keep-last-update txs)
                   ;; (prn :debug :upload :tx-data tx-data)
                   (when (seq txs)
-                    (p/let [aes-key (<ensure-graph-aes-key repo (:graph-id client))
-                            _ (when (and (graph-e2ee? repo) (nil? aes-key))
-                                (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
-                            tx-data* (if aes-key
-                                       (encrypt-tx-data aes-key tx-data)
-                                       (p/resolved tx-data))]
-                      (reset! (:inflight client) tx-ids)
-                      (send! ws {:type "tx/batch"
-                                 :t-before local-tx
-                                 :txs (sqlite-util/write-transit-str tx-data*)}))))))))))))
+                    (->
+                     (p/let [aes-key (<ensure-graph-aes-key repo (:graph-id client))
+                             _ (when (and (graph-e2ee? repo) (nil? aes-key))
+                                 (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
+                             tx-data* (if aes-key
+                                        (<encrypt-tx-data aes-key tx-data)
+                                        tx-data)]
+
+                       (reset! (:inflight client) tx-ids)
+                       (send! ws {:type "tx/batch"
+                                  :t-before local-tx
+                                  :txs (sqlite-util/write-transit-str tx-data*)}))
+                     (p/catch (fn [error]
+                                (js/console.error error))))))))))))))
 
 (defn- ensure-client-state! [repo]
   (let [client {:repo repo
@@ -1192,7 +1165,7 @@
                                 _ (when (and (graph-e2ee? repo) (nil? aes-key))
                                     (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
                                 tx* (if aes-key
-                                      (decrypt-tx-data aes-key tx)
+                                      (<decrypt-tx-data aes-key tx)
                                       (p/resolved tx))]
                           (apply-remote-tx! repo client tx*
                                             :local-tx local-tx
@@ -1429,7 +1402,7 @@
                       rows (normalize-snapshot-rows rows)
                       upload-url (str base "/sync/" graph-id "/snapshot/upload?reset=" (if first-batch? "true" "false"))]
                   (p/let [rows* (if aes-key
-                                  (encrypt-snapshot-rows aes-key rows)
+                                  (<encrypt-snapshot-rows aes-key rows)
                                   (p/resolved rows))
                           {:keys [body encoding]} (<snapshot-upload-body rows*)
                           headers (cond-> {"content-type" snapshot-content-type}

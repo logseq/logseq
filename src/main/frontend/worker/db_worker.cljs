@@ -615,10 +615,10 @@
   nil)
 
 (def-thread-api :thread-api/db-sync-import-kvs-rows
-  [repo rows reset? graph-id e2ee?]
+  [repo rows reset? graph-id]
   (p/let [_ (when reset?
               (close-db! repo))
-          rows* (db-sync/<decrypt-kvs-rows repo graph-id rows e2ee?)
+          rows* (db-sync/<decrypt-kvs-rows repo graph-id rows)
           db (ensure-db-sync-import-db! repo reset?)]
     (when (seq rows*)
       (upsert-addr-content! db (rows->sqlite-binds rows*)))
