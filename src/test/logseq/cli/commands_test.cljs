@@ -871,3 +871,16 @@
                        (set! transport/read-input orig-read-input)
                        (set! transport/invoke orig-invoke)
                        (done)))))))
+
+(deftest test-execute-graph-list-strips-db-prefix
+  (async done
+    (let [orig-list-graphs cli-server/list-graphs]
+      (set! cli-server/list-graphs (fn [_] ["logseq_db_demo" "logseq_db_other"]))
+      (-> (p/let [result (commands/execute {:type :graph-list} {})]
+            (is (= :ok (:status result)))
+            (is (= ["demo" "other"] (get-in result [:data :graphs]))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (set! cli-server/list-graphs orig-list-graphs)
+                       (done)))))))

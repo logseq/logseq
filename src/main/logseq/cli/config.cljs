@@ -80,7 +80,7 @@
   (let [defaults {:timeout-ms 10000
                   :retries 0
                   :output-format nil
-                  :data-dir "~/.logseq/db-worker"
+                  :data-dir "~/.logseq/cli-graphs"
                   :config-path (default-config-path)}
         env (env-config)
         config-path (or (:config-path opts)
