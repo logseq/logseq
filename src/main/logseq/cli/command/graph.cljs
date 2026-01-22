@@ -135,7 +135,8 @@
 
 (defn execute-graph-list
   [_action config]
-  (let [graphs (cli-server/list-graphs config)]
+  (let [graphs (->> (cli-server/list-graphs config)
+                    (mapv core/repo->graph))]
     {:status :ok
      :data {:graphs graphs}}))
 
