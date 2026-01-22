@@ -16,12 +16,11 @@
 
 (defn resolve-data-dir
   [data-dir]
-  (expand-home (or data-dir "~/.logseq/db-worker")))
+  (expand-home (or data-dir "~/.logseq/cli-graphs")))
 
 (defn repo-dir
   [data-dir repo]
-  (let [pool-name (worker-util/get-pool-name repo)]
-    (node-path/join data-dir (str "." pool-name))))
+  (node-path/join data-dir (worker-util/encode-graph-dir-name repo)))
 
 (defn lock-path
   [data-dir repo]

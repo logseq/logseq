@@ -1,7 +1,8 @@
 (ns logseq.cli.format
   "Formatting helpers for CLI output."
   (:require [clojure.string :as string]
-            [clojure.walk :as walk]))
+            [clojure.walk :as walk]
+            [logseq.cli.command.core :as command-core]))
 
 (defn- normalize-json
   [value]
@@ -290,9 +291,23 @@
             (= status :ok) (assoc :data data)
             (= status :error) (assoc :error error))))
 
+(defn- normalize-graph-result
+  [result]
+  (walk/postwalk
+   (fn [entry]
+     (if (map? entry)
+       (cond-> entry
+         (string? (:repo entry)) (update :repo command-core/repo->graph)
+         (string? (:graph entry)) (update :graph command-core/repo->graph)
+         (seq (:graphs entry)) (update :graphs (fn [graphs]
+                                                 (mapv command-core/repo->graph graphs))))
+       entry))
+   result))
+
 (defn format-result
   [result {:keys [output-format] :as opts}]
-  (let [format (cond
+  (let [result (normalize-graph-result result)
+        format (cond
                  (= output-format :edn) :edn
                  (= output-format :json) :json
                  :else :human)]

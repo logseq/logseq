@@ -44,7 +44,7 @@ Key changes:
   - Reject `thread-api/create-or-open-db`, `thread-api/unsafe-unlink-db`, etc. when repo differs.
   - Return 409/400 with `:repo-mismatch` error shape.
 - **Lock file**:
-  - Location: inside repo dir (e.g. `~/.logseq/db-worker/.logseq-pool-<graph>/db-worker.lock`).
+  - Location: inside repo dir (e.g. `~/.logseq/cli-graphs/<graph>/db-worker.lock`).
   - Content: JSON `{repo, pid, host, port, startedAt}`.
   - Creation: exclusive create (`fs.open` with `wx`) or atomic temp + rename. If exists, fail with “graph already locked”.
   - Cleanup: delete lock file on stop (`stop!`) and on SIGINT/SIGTERM.
@@ -108,7 +108,7 @@ Implementation notes:
    - Answer: No --repo needed, using 'out-of-band access to data-dir' way
 2. Lock file format and location: confirm cross-platform expectations (Windows paths/permissions).
    - lockfile name:`db-worker.lock`,
-   - Location: inside repo dir (e.g. `~/.logseq/db-worker/.logseq-pool-<graph>/db-worker.lock`).
+   - Location: inside repo dir (e.g. `~/.logseq/cli-graphs/<graph>/db-worker.lock`).
    - only consider linux/macos for now
 3. Who owns lock cleanup and stale lock handling: primarily db-worker-node; CLI only steps in for cases db-worker-node cannot handle.
 4. Add `/v1/shutdown` for graceful stop vs. SIGTERM from CLI?
