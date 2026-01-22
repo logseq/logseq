@@ -150,7 +150,7 @@
   (testing "server status includes repo, status, host, port"
     (let [result (format/format-result {:status :ok
                                         :command :server-status
-                                        :data {:repo "demo-repo"
+                                        :data {:repo "logseq_db_demo-repo"
                                                :status :ready
                                                :host "127.0.0.1"
                                                :port 1234}}
