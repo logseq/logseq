@@ -6,8 +6,8 @@ compatibility_flags = [ "nodejs_compat" ]
 [observability]
 enabled = true
 
-[limits]
-cpu_ms = 120_000
+[placement]
+mode = "smart"
 
 [[durable_objects.bindings]]
 name = "LOGSEQ_SYNC_DO"
