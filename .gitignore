@@ -83,3 +83,5 @@ clj-e2e/e2e-dump
 .projectile
 deps/db-sync/data
 *.map
+/dist/db-worker-node.js
+/dist/logseq-cli.js
