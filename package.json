@@ -4,10 +4,11 @@
     "private": true,
     "main": "static/electron.js",
     "bin": {
-	"logseq": "static/logseq-cli.js"
+        "logseq": "dist/logseq.js"
     },
     "files": [
-	"static/db-worker-node.js"
+        "dist/db-worker-node.js",
+        "dist/logseq-cli.js"
     ],
     "engines": {
         "node": ">=22.20.0"
