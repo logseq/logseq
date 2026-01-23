@@ -3,4 +3,4 @@
 
 const path = require("path");
 
-require(path.resolve(__dirname, "../static/logseq-cli.js"));
+require(path.resolve(__dirname, "../static/db-worker-node.js"));
