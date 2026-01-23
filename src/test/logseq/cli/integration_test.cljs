@@ -488,6 +488,131 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
+(deftest test-cli-show-multi-id
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-multi-id")]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       _ (run-cli ["graph" "create" "--repo" "show-multi-id-graph"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "show-multi-id-graph" "add" "page" "--page" "MultiPage"]
+                                  data-dir cfg-path)
+                       _ (run-cli ["--repo" "show-multi-id-graph" "add" "block"
+                                   "--target-page-name" "MultiPage"
+                                   "--content" "Multi show one"]
+                                  data-dir cfg-path)
+                       _ (run-cli ["--repo" "show-multi-id-graph" "add" "block"
+                                   "--target-page-name" "MultiPage"
+                                   "--content" "Multi show two"]
+                                  data-dir cfg-path)
+                       _ (p/delay 100)
+                       query-text "[:find ?e . :in $ ?title :where [?e :block/title ?title]]"
+                       query-one-result (run-cli ["--repo" "show-multi-id-graph" "query"
+                                                  "--query" query-text
+                                                  "--inputs" (pr-str ["Multi show one"])]
+                                                 data-dir cfg-path)
+                       query-one-payload (parse-json-output query-one-result)
+                       block-one-id (get-in query-one-payload [:data :result])
+                       query-two-result (run-cli ["--repo" "show-multi-id-graph" "query"
+                                                  "--query" query-text
+                                                  "--inputs" (pr-str ["Multi show two"])]
+                                                 data-dir cfg-path)
+                       query-two-payload (parse-json-output query-two-result)
+                       block-two-id (get-in query-two-payload [:data :result])
+                       ids-edn (str "[" block-one-id " " block-two-id "]")
+                       show-text-result (run-cli ["--repo" "show-multi-id-graph" "show"
+                                                  "--id" ids-edn
+                                                  "--format" "text"
+                                                  "--output" "human"]
+                                                 data-dir cfg-path)
+                       output (:output show-text-result)
+                       idx-one (string/index-of output "Multi show one")
+                       idx-two (string/index-of output "Multi show two")
+                       idx-delim (string/index-of output "-----")
+                       show-json-result (run-cli ["--repo" "show-multi-id-graph" "show"
+                                                  "--id" ids-edn
+                                                  "--format" "json"]
+                                                 data-dir cfg-path)
+                       show-json-payload (parse-json-output show-json-result)
+                       show-data (:data show-json-payload)
+                       root-titles (set (map (comp node-title :root) show-data))
+                       stop-result (run-cli ["server" "stop" "--repo" "show-multi-id-graph"]
+                                            data-dir cfg-path)
+                       stop-payload (parse-json-output stop-result)]
+                 (is (= 0 (:exit-code query-one-result)))
+                 (is (= "ok" (:status query-one-payload)))
+                 (is (= 0 (:exit-code query-two-result)))
+                 (is (= "ok" (:status query-two-payload)))
+                 (is (some? block-one-id))
+                 (is (some? block-two-id))
+                 (is (= 0 (:exit-code show-text-result)))
+                 (is (string/includes? output "Multi show one"))
+                 (is (string/includes? output "Multi show two"))
+                 (is (some? idx-delim))
+                 (is (< idx-one idx-delim idx-two))
+                 (is (= 0 (:exit-code show-json-result)))
+                 (is (= "ok" (:status show-json-payload)))
+                 (is (vector? show-data))
+                 (is (= 2 (count show-data)))
+                 (is (contains? root-titles "Multi show one"))
+                 (is (contains? root-titles "Multi show two"))
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
+(deftest test-cli-query-human-output-pipes-to-show
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-query-pipe")]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       _ (run-cli ["graph" "create" "--repo" "query-pipe-graph"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "query-pipe-graph" "add" "page" "--page" "PipePage"]
+                                  data-dir cfg-path)
+                       _ (run-cli ["--repo" "query-pipe-graph" "add" "block"
+                                   "--target-page-name" "PipePage"
+                                   "--content" "Pipe One"]
+                                  data-dir cfg-path)
+                       _ (run-cli ["--repo" "query-pipe-graph" "add" "block"
+                                   "--target-page-name" "PipePage"
+                                   "--content" "Pipe Two"]
+                                  data-dir cfg-path)
+                       _ (p/delay 100)
+                       query-text (str "[:find [?e ...]"
+                                       " :in $ ?q"
+                                       " :where"
+                                       " [?e :block/title ?title]"
+                                       " [(clojure.string/includes? ?title ?q)]]")
+                       query-result (run-cli ["--repo" "query-pipe-graph"
+                                              "--output" "human"
+                                              "query"
+                                              "--query" query-text
+                                              "--inputs" (pr-str ["Pipe"])]
+                                             data-dir cfg-path)
+                       ids-edn (string/trim (:output query-result))
+                       show-json-result (run-cli ["--repo" "query-pipe-graph" "show"
+                                                  "--id" ids-edn
+                                                  "--format" "json"]
+                                                 data-dir cfg-path)
+                       show-json-payload (parse-json-output show-json-result)
+                       show-data (:data show-json-payload)
+                       root-titles (set (map (comp node-title :root) show-data))
+                       stop-result (run-cli ["server" "stop" "--repo" "query-pipe-graph"]
+                                            data-dir cfg-path)
+                       stop-payload (parse-json-output stop-result)]
+                 (is (= 0 (:exit-code query-result)))
+                 (is (seq ids-edn))
+                 (is (= 0 (:exit-code show-json-result)))
+                 (is (= "ok" (:status show-json-payload)))
+                 (is (vector? show-data))
+                 (is (contains? root-titles "Pipe One"))
+                 (is (contains? root-titles "Pipe Two"))
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
 (deftest test-cli-show-linked-references
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-linked-refs")]
