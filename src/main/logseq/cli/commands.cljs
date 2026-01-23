@@ -9,7 +9,6 @@
             [logseq.cli.command.move :as move-command]
             [logseq.cli.command.query :as query-command]
             [logseq.cli.command.remove :as remove-command]
-            [logseq.cli.command.search :as search-command]
             [logseq.cli.command.server :as server-command]
             [logseq.cli.command.show :as show-command]
             [logseq.cli.server :as cli-server]
@@ -83,13 +82,6 @@
            :message "output is required"}
    :summary summary})
 
-(defn- missing-search-result
-  [summary]
-  {:ok? false
-   :error {:code :missing-search-text
-           :message "search text is required"}
-   :summary summary})
-
 (defn- missing-query-result
   [summary]
   {:ok? false
@@ -108,7 +100,6 @@
                add-command/entries
                move-command/entries
                remove-command/entries
-               search-command/entries
                query-command/entries
                show-command/entries)))
 
@@ -173,9 +164,6 @@
       (and (= command :show) (> (count show-targets) 1))
       (command-core/invalid-options-result summary "only one of --id, --uuid, or --page-name is allowed")
 
-      (and (= command :search) (not has-args?))
-      (missing-search-result summary)
-
       (and (= command :query)
            (not (seq (some-> (:query opts) string/trim)))
            (not (seq (some-> (:name opts) string/trim))))
@@ -187,9 +175,6 @@
 
       (and (= command :show) (show-command/invalid-options? opts))
       (command-core/invalid-options-result summary (show-command/invalid-options? opts))
-
-      (and (= command :search) (search-command/invalid-options? opts))
-      (command-core/invalid-options-result summary (search-command/invalid-options? opts))
 
       (and (= command :graph-export) (not (seq (graph-command/normalize-import-export-type (:type opts)))))
       (missing-type-result summary)
@@ -350,9 +335,6 @@
         :remove-page
         (remove-command/build-remove-page-action options repo)
 
-        :search
-        (search-command/build-action options args repo)
-
         :query
         (query-command/build-action options repo config)
 
@@ -395,7 +377,6 @@
                          :move-block (move-command/execute-move action config)
                          :remove-block (remove-command/execute-remove action config)
                          :remove-page (remove-command/execute-remove action config)
-                         :search (search-command/execute-search action config)
                          :query (query-command/execute-query action config)
                          :query-list (query-command/execute-query-list action config)
                          :show (show-command/execute-show action config)

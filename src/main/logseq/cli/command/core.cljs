@@ -44,10 +44,8 @@
 (defn- command-usage
   [cmds spec]
   (let [base (string/join " " cmds)
-        positional (when (= cmds ["search"]) "<query>")
         has-options? (seq spec)]
     (cond-> base
-      positional (str " " positional)
       has-options? (str " [options]"))))
 
 (defn- format-commands
@@ -84,7 +82,7 @@
 (defn top-level-summary
   [table]
   (let [groups [{:title "Graph Inspect and Edit"
-                 :commands #{"list" "add" "remove" "move" "search" "query" "show"}}
+                 :commands #{"list" "add" "remove" "move" "query" "show"}}
                 {:title "Graph Management"
                  :commands #{"graph" "server"}}]
         render-group (fn [{:keys [title commands]}]
