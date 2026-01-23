@@ -1,7 +1,6 @@
 (ns frontend.worker.db-sync
   "Simple db-sync client based on promesa + WebSocket."
   (:require ["/frontend/idbkv" :as idb-keyval]
-            [clojure.data :as data]
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
@@ -1346,12 +1345,12 @@
 (defn- encode-snapshot-rows [rows]
   (.encode snapshot-text-encoder (sqlite-util/write-transit-str rows)))
 
-(defn- frame-bytes [^js bytes]
-  (let [len (.-byteLength bytes)
+(defn- frame-bytes [^js data]
+  (let [len (.-byteLength data)
         out (js/Uint8Array. (+ 4 len))
         view (js/DataView. (.-buffer out))]
     (.setUint32 view 0 len false)
-    (.set out bytes 4)
+    (.set out data 4)
     out))
 
 (defn- maybe-compress-stream [stream]
