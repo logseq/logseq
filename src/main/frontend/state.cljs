@@ -124,7 +124,7 @@
       ;; 2. zoom-in view
       ;; 3. queries
       ;; 4. references
-      ;; graph => {:block-id bool}
+      ;; graph => {container-id {:block-id bool}}
       :ui/collapsed-blocks                   {}
       :ui/sidebar-collapsed-blocks           {}
       :ui/root-component                     nil
@@ -1924,23 +1924,37 @@ Similar to re-frame subscriptions"
     (->> (sub :sidebar/blocks)
          (filter #(= (first %) current-repo)))))
 
+(defn get-current-editor-container-id
+  []
+  @(:editor/container-id @state))
+
+(defn- resolve-container-id
+  [container-id]
+  (or container-id (get-current-editor-container-id) :unknown-container))
+
 (defn toggle-collapsed-block!
-  [block-id]
-  (let [current-repo (get-current-repo)]
-    (update-state! [:ui/collapsed-blocks current-repo block-id] not)))
+  ([block-id] (toggle-collapsed-block! block-id nil))
+  ([block-id container-id]
+   (let [current-repo (get-current-repo)
+         container-id (resolve-container-id container-id)]
+     (update-state! [:ui/collapsed-blocks current-repo container-id block-id] not))))
 
 (defn set-collapsed-block!
-  [block-id value]
-  (let [current-repo (get-current-repo)]
-    (set-state! [:ui/collapsed-blocks current-repo block-id] value)))
+  ([block-id value] (set-collapsed-block! block-id value nil))
+  ([block-id value container-id]
+   (let [current-repo (get-current-repo)
+         container-id (resolve-container-id container-id)]
+     (set-state! [:ui/collapsed-blocks current-repo container-id block-id] value))))
 
 (defn sub-block-collapsed
-  [block-id]
-  (sub [:ui/collapsed-blocks (get-current-repo) block-id]))
+  ([block-id] (sub-block-collapsed block-id nil))
+  ([block-id container-id]
+   (sub [:ui/collapsed-blocks (get-current-repo) (resolve-container-id container-id) block-id])))
 
 (defn get-block-collapsed
-  [block-id]
-  (get-in @state [:ui/collapsed-blocks (get-current-repo) block-id]))
+  ([block-id] (get-block-collapsed block-id nil))
+  ([block-id container-id]
+   (get-in @state [:ui/collapsed-blocks (get-current-repo) (resolve-container-id container-id) block-id])))
 
 (defn get-modal-id
   []
@@ -2047,10 +2061,6 @@ Similar to re-frame subscriptions"
           (swap! (:ui/cached-key->container-id @state) assoc key id)
           id))
     (get-next-container-id)))
-
-(defn get-current-editor-container-id
-  []
-  @(:editor/container-id @state))
 
 (comment
   (defn remove-container-key!

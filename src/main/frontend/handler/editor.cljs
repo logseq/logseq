@@ -3452,6 +3452,7 @@
           (or (:block/_parent block) (:block.temp/has-children? block))
           (integer? (:block-level config))
           (>= (:block-level config) (state/get-ref-open-blocks-level)))
+     (:default-collapsed? config)
      (and (or (:view? config) (:popup? config))
           (or (ldb/page? block)
               (:table-block-title? config))))))
