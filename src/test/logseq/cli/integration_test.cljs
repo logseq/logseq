@@ -168,6 +168,75 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
+(deftest test-cli-query-task-search
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-task-query")]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       create-result (run-cli ["graph" "create" "--repo" "task-query-graph"] data-dir cfg-path)
+                       create-payload (parse-json-output create-result)
+                       _ (run-cli ["--repo" "task-query-graph" "add" "page" "--page" "Tasks"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "task-query-graph"
+                                   "add" "block"
+                                   "--target-page-name" "Tasks"
+                                   "--content" "Task one"
+                                   "--status" "doing"]
+                                  data-dir cfg-path)
+                       _ (run-cli ["--repo" "task-query-graph"
+                                   "add" "block"
+                                   "--target-page-name" "Tasks"
+                                   "--content" "Task two"
+                                   "--status" "doing"]
+                                  data-dir cfg-path)
+                       _ (run-cli ["--repo" "task-query-graph"
+                                   "add" "block"
+                                   "--target-page-name" "Tasks"
+                                   "--content" "Task three"
+                                   "--status" "todo"]
+                                  data-dir cfg-path)
+                       _ (p/delay 100)
+                       list-result (run-cli ["query" "list"] data-dir cfg-path)
+                       list-payload (parse-json-output list-result)
+                       task-entry (some (fn [entry]
+                                          (when (= "task-search" (:name entry)) entry))
+                                        (get-in list-payload [:data :queries]))
+                       query-result (run-cli ["--repo" "task-query-graph"
+                                              "query"
+                                              "--name" "task-search"
+                                              "--inputs" "[:logseq.property/status.doing]"]
+                                             data-dir cfg-path)
+                       query-payload (parse-json-output query-result)
+                       query-nil-result (run-cli ["--repo" "task-query-graph"
+                                                  "query"
+                                                  "--name" "task-search"
+                                                  "--inputs" "[:logseq.property/status.doing nil 1]"]
+                                                 data-dir cfg-path)
+                       query-nil-payload (parse-json-output query-nil-result)
+                       _ (prn :xxxx query-payload)
+                       result (get-in query-payload [:data :result])
+                       nil-result (get-in query-nil-payload [:data :result])
+                       stop-result (run-cli ["server" "stop" "--repo" "task-query-graph"] data-dir cfg-path)
+                       stop-payload (parse-json-output stop-result)]
+                 (is (= "ok" (:status create-payload)))
+                 (is (= "ok" (:status list-payload)))
+                 (is (= [{:name "search-status"}
+                         {:name "?search-title" :default ""}
+                         {:name "?recent-days" :default 0}]
+                        (:inputs task-entry)))
+                 (is (= 0 (:exit-code query-result)))
+                 (is (= "ok" (:status query-payload)))
+                 (is (vector? result))
+                 (is (= 2 (count result)))
+                 (is (= 0 (:exit-code query-nil-result)))
+                 (is (= "ok" (:status query-nil-payload)))
+                 (is (vector? nil-result))
+                 (is (= 2 (count nil-result)))
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
 (deftest test-cli-show-search-resolve-nested-uuid-refs
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-nested-refs")]

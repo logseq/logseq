@@ -75,7 +75,14 @@
           summary (:summary result)]
       (is (true? (:help? result)))
       (is (string/includes? summary "server list"))
-      (is (string/includes? summary "server start")))))
+      (is (string/includes? summary "server start"))))
+
+  (testing "query group shows subcommands"
+    (let [result (commands/parse-args ["query"])
+          summary (:summary result)]
+      (is (true? (:help? result)))
+      (is (string/includes? summary "query list"))
+      (is (string/includes? summary "query [options]")))))
 
 (deftest test-parse-args-help-alignment
   (testing "graph group aligns subcommand columns"
@@ -112,7 +119,7 @@
   (testing "rejects legacy commands"
     (doseq [command ["graph-list" "graph-create" "graph-switch" "graph-remove"
                      "graph-validate" "graph-info" "block" "tree"
-                     "ping" "status" "query" "export"]]
+                     "ping" "status" "export"]]
       (let [result (commands/parse-args [command])]
         (is (false? (:ok? result)))
         (is (= :unknown-command (get-in result [:error :code]))))))
@@ -484,10 +491,10 @@
       (is (= "Home" (get-in result [:options :page-name]))))))
 
 (deftest test-verb-subcommand-parse-query
-  (testing "query requires query option"
+  (testing "query shows group help"
     (let [result (commands/parse-args ["query"])]
-      (is (false? (:ok? result)))
-      (is (= :missing-query (get-in result [:error :code])))))
+      (is (true? (:help? result)))
+      (is (string/includes? (:summary result) "query list"))))
 
   (testing "query parses with query and inputs"
     (let [result (commands/parse-args ["query"

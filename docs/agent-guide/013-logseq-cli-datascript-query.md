@@ -57,7 +57,98 @@ The unit tests will assert that parsing rejects invalid EDN for --inputs, that a
 - Return datascript-query results without transformation.
 - Keep all argument parsing and validation inside query command module using --query and --inputs.
 - Keep db-worker-node changes to zero unless a new worker API is required.
+- Add `custom-queries` to cli.edn for storing pre-defined Datascript queries that the CLI can list and run by name.
+- Add built-in queries that appear in the query list alongside custom queries.
+- Optional inputs should support default values in cli.edn, and built-in queries should ship with reasonable defaults for their optional inputs (required inputs can omit defaults).
+  - `block-search` (search-title)
+    ```
+    [:find [?e ...]
+           :in $ ?search-title
+           :where
+           [?e :block/title ?title]
+           [(clojure.string/lower-case ?title) ?title-lower-case]
+           [(clojure.string/include? ?title-lower-case ?search-title)]]
+    ```
+  - `task-search` (search-status, ?search-title, ?recent-days)
+    ```
+    ;; Modify this query so search-title and recent-days are optional parameters.
+    ;; ?now-ms is injected by the CLI so users don't need to pass it (and should be hidden in query list output).
+    ;; Example: logseq query --name task-search --inputs '["doing"]'
+    [:find [?e ...]
+           :in $ ?search-status ?search-title ?recent-days ?now-ms
+           :where
+           [?e :block/title ?title]
+           [?e :logseq.property/status ?s]
+           [?s :db/ident ?status-ident]
+           [(= ?status-ident ?search-status)]
+           [(clojure.string/lower-case ?title) ?title-lower-case]
+           (or-join [?search-title ?title-lower-case]
+                    [(nil? ?search-title)]
+                    [(clojure.string/blank? ?search-title)]
+                    (and [(clojure.string/lower-case ?search-title) ?search-title-lower-case]
+                         [(clojure.string/include? ?title-lower-case ?search-title-lower-case)]))
+           [(get-else $ ?e :block/updated-at 0) ?updated-at]
+           (or
+            [(nil? ?recent-days)]
+            (and [(number? ?recent-days)]
+                 [(<= ?recent-days 0)])
+            (and [(number? ?recent-days)]
+                 [(>= ?updated-at (- ?now-ms (* ?recent-days 86400000)))]) )]
+    ```
 
+## cli.edn query shape
+
+Represent queries as a map keyed by query name. Keep the query form as EDN data (not a string) so it can be read directly. Optional fields like `:doc` and `:inputs` are included to help with listing and UX. `:inputs` should allow optional inputs to declare default values that are used when the CLI caller omits them. Internal inputs like `?now-ms` should be hidden from `query list` output.
+
+Suggested `:inputs` shapes:
+- `["search-status" "?search-title" "?recent-days"]` (legacy string-only form)
+- `[{:name "search-status"} {:name "?search-title" :default nil} {:name "?recent-days" :default nil}]` (explicit defaults)
+
+Example:
+```
+{:custom-queries
+ {"block-search"
+  {:doc "Find blocks by title substring (case-insensitive)."
+   :inputs ["search-title"]
+   :query [:find [?e ...]
+           :in $ ?search-title
+           :where
+           [?e :block/title ?title]
+           [(clojure.string/lower-case ?title) ?title-lower-case]
+           [(clojure.string/include? ?title-lower-case ?search-title)]]}
+
+  "task-search"
+  {:doc "Find tasks by status, optional title substring, optional recent-days."
+   :inputs [{:name "search-status"}
+            {:name "?search-title" :default nil}
+            {:name "?recent-days" :default nil}
+            ;; ?now-ms is internal; CLI fills it with current ms and query list should hide it.
+            {:name "?now-ms" :default :now-ms}]
+   :query [:find [?e ...]
+           :in $ ?search-status ?search-title ?recent-days ?now-ms
+           :where
+           [?e :block/title ?title]
+           [?e :logseq.property/status ?s]
+           [?s :db/ident ?status-ident]
+           [(= ?status-ident ?search-status)]
+           [(clojure.string/lower-case ?title) ?title-lower-case]
+           (or-join [?search-title ?title-lower-case]
+                    [(nil? ?search-title)]
+                    [(clojure.string/blank? ?search-title)]
+                    (and [(clojure.string/lower-case ?search-title) ?search-title-lower-case]
+                         [(clojure.string/include? ?title-lower-case ?search-title-lower-case)]))
+           [(get-else $ ?e :block/updated-at 0) ?updated-at]
+           (or
+            [(nil? ?recent-days)]
+            (and [(number? ?recent-days)]
+                 [(<= ?recent-days 0)])
+            (and [(number? ?recent-days)]
+                 [(>= ?updated-at (- ?now-ms (* ?recent-days 86400000)))]) )]}}}
+```
+
+Notes:
+- Built-in queries live in code but should be merged into the same map shape when listing or resolving by name.
+- `:inputs` is optional metadata for CLI help. It does not affect execution.
 ## Question
 
 Use --query and --inputs options for the query subcommand.

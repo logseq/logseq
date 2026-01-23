@@ -87,6 +87,7 @@
     :missing-content "Use --content or pass content as args"
     :missing-search-text "Provide search text as a positional argument"
     :missing-query "Use --query <edn>"
+    :unknown-query "Use `logseq query list` to see available queries"
     nil))
 
 (defn- format-error
@@ -191,6 +192,17 @@
   [result]
   (pr-str result))
 
+(defn- format-query-list
+  [queries]
+  (format-counted-table
+   ["NAME" "INPUTS" "SOURCE" "DOC"]
+   (mapv (fn [{:keys [name inputs source doc]}]
+           [name
+            (if (seq inputs) (string/join ", " inputs) "-")
+            (clojure.core/name (or source :custom))
+            (or doc "-")])
+         (or queries []))))
+
 (defn- format-graph-info
   [{:keys [graph logseq.kv/graph-created-at logseq.kv/schema-version]} now-ms]
   (string/join "\n"
@@ -281,6 +293,7 @@
         :graph-import (format-graph-import context)
         :search (format-search-results (:results data))
         :query (format-query-results (:result data))
+        :query-list (format-query-list (:queries data))
         :show (or (:message data) (pr-str data))
         (if (and (map? data) (contains? data :message))
           (:message data)
