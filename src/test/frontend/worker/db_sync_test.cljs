@@ -103,6 +103,39 @@
                         (is false (str e))
                         (done))))))
 
+(deftest encrypt-datoms-test
+  (async done
+         (let [conn (db-test/create-conn-with-blocks
+                     {:pages-and-blocks
+                      [{:page {:block/title "page 1"}
+                        :blocks [{:block/title "parent"}]}]})
+               datoms (vec (d/datoms @conn :eavt))
+               title-datom (first (filter (fn [datom] (= :block/title (:a datom))) datoms))
+               name-datom (first (filter (fn [datom] (= :block/name (:a datom))) datoms))
+               uuid-datom (first (filter (fn [datom] (= :block/uuid (:a datom))) datoms))]
+           (-> (p/let [aes-key (crypt/<generate-aes-key)
+                       tx-data (#'db-sync/<encrypt-datoms aes-key datoms)
+                       title-tx (first (filter (fn [item]
+                                                 (and (= (:e title-datom) (nth item 1))
+                                                      (= :block/title (nth item 2))))
+                                               tx-data))
+                       name-tx (first (filter (fn [item]
+                                                (and (= (:e name-datom) (nth item 1))
+                                                     (= :block/name (nth item 2))))
+                                              tx-data))
+                       uuid-tx (first (filter (fn [item]
+                                                (and (= (:e uuid-datom) (nth item 1))
+                                                     (= :block/uuid (nth item 2))))
+                                              tx-data))]
+                 (is (string? (nth title-tx 3)))
+                 (is (string? (nth name-tx 3)))
+                 (is (not= (:v title-datom) (nth title-tx 3)))
+                 (is (= (:v uuid-datom) (nth uuid-tx 3)))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str e))
+                          (done)))))))
+
 (deftest ensure-user-rsa-keys-test
   (async done
          (let [upload-called (atom nil)]
