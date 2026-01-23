@@ -8,8 +8,7 @@
             [promesa.core :as p]))
 
 (def ^:private show-spec
-  {:id {:desc "Block db/id"
-        :coerce :long}
+  {:id {:desc "Block db/id or EDN vector of ids"}
    :uuid {:desc "Block UUID"}
    :page-name {:desc "Page name"}
    :level {:desc "Limit tree depth"
@@ -22,16 +21,67 @@
 (def ^:private show-formats
   #{"text" "json" "edn"})
 
+(def ^:private multi-id-delimiter "\n================================================================\n")
+
+(defn- valid-id?
+  [value]
+  (and (number? value) (integer? value)))
+
+(defn- parse-id-option
+  [value]
+  (let [invalid (fn [message]
+                  {:ok? false :message message})]
+    (cond
+      (nil? value)
+      {:ok? true :value nil :multi? false}
+
+      (vector? value)
+      (cond
+        (empty? value) (invalid "id vector must contain at least one id")
+        (every? valid-id? value) {:ok? true :value (vec value) :multi? true}
+        :else (invalid "id vector must contain only integers"))
+
+      (valid-id? value)
+      {:ok? true :value [value] :multi? false}
+
+      (string? value)
+      (let [text (string/trim value)]
+        (cond
+          (string/blank? text)
+          (invalid "id is required")
+
+          (string/starts-with? text "[")
+          (let [parsed (common-util/safe-read-string {:log-error? false} text)]
+            (cond
+              (nil? parsed) (invalid "invalid id edn")
+              (not (vector? parsed)) (invalid "id must be a vector")
+              (empty? parsed) (invalid "id vector must contain at least one id")
+              (every? valid-id? parsed) {:ok? true :value (vec parsed) :multi? true}
+              :else (invalid "id vector must contain only integers")))
+
+          (re-matches #"-?\\d+" text)
+          {:ok? true :value [(js/parseInt text 10)] :multi? false}
+
+          :else
+          (invalid "id must be a number or vector of numbers")))
+
+      :else
+      (invalid "id must be a number or vector of numbers"))))
+
 (defn invalid-options?
   [opts]
   (let [format (:format opts)
-        level (:level opts)]
+        level (:level opts)
+        id-result (parse-id-option (:id opts))]
     (cond
       (and (seq format) (not (contains? show-formats (string/lower-case format))))
       (str "invalid format: " format)
 
       (and (some? level) (< level 1))
       "level must be >= 1"
+
+      (and (some? (:id opts)) (not (:ok? id-result)))
+      (:message id-result)
 
       :else
       nil)))
@@ -442,45 +492,119 @@
      :error {:code :missing-repo
              :message "repo is required for show"}}
     (let [format (some-> (:format options) string/lower-case)
+          id-result (parse-id-option (:id options))
+          ids (:value id-result)
+          multi-id? (:multi? id-result)
           targets (filter some? [(:id options) (:uuid options) (:page-name options)])]
       (if (empty? targets)
         {:ok? false
          :error {:code :missing-target
                  :message "block or page is required"}}
-        {:ok? true
-         :action {:type :show
-                  :repo repo
-                  :id (:id options)
-                  :uuid (:uuid options)
-                  :page-name (:page-name options)
-                  :level (:level options)
-                  :format format}}))))
+        (if (and (some? (:id options)) (not (:ok? id-result)))
+          {:ok? false
+           :error {:code :invalid-options
+                   :message (:message id-result)}}
+          {:ok? true
+           :action {:type :show
+                    :repo repo
+                    :id (when (and (seq ids) (not multi-id?)) (first ids))
+                    :ids ids
+                    :multi-id? multi-id?
+                    :uuid (:uuid options)
+                    :page-name (:page-name options)
+                    :level (:level options)
+                    :format format}})))))
+
+(defn- build-tree-data
+  [config action]
+  (p/let [tree-data (fetch-tree config action)
+          root-id (get-in tree-data [:root :db/id])
+          linked-refs (if root-id
+                        (fetch-linked-references config (:repo action) root-id)
+                        {:count 0 :blocks []})
+          uuid-refs (collect-uuid-refs tree-data linked-refs)
+          uuid->label (fetch-uuid-labels config (:repo action) uuid-refs)
+          tree-data (assoc tree-data
+                           :linked-references linked-refs
+                           :uuid->label uuid->label)
+          tree-data (resolve-uuid-refs-in-tree-data tree-data uuid->label)]
+    tree-data))
+
+(defn- multi-id-error-message
+  [id error]
+  (let [data (ex-data error)
+        code (:code data)
+        message (or (:message data) (.-message error) (str error))]
+    (if (= code :block-not-found)
+      (str "Block " id " not found")
+      (str "Block " id ": " message))))
+
+(defn- multi-id-error-entry
+  [id error]
+  (let [data (ex-data error)
+        code (:code data)
+        message (multi-id-error-message id error)
+        error-map (cond-> {:message message}
+                    code (assoc :code code))]
+    {:id id
+     :error error-map}))
 
 (defn execute-show
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
-              tree-data (fetch-tree cfg action)
-              root-id (get-in tree-data [:root :db/id])
-              linked-refs (if root-id
-                            (fetch-linked-references cfg (:repo action) root-id)
-                            {:count 0 :blocks []})
-              uuid-refs (collect-uuid-refs tree-data linked-refs)
-              uuid->label (fetch-uuid-labels cfg (:repo action) uuid-refs)
-              tree-data (assoc tree-data
-                               :linked-references linked-refs
-                               :uuid->label uuid->label)
-              tree-data (resolve-uuid-refs-in-tree-data tree-data uuid->label)
-              format (:format action)]
-        (case format
-          "edn"
-          {:status :ok
-           :data tree-data
-           :output-format :edn}
+              format (:format action)
+              ids (:ids action)
+              multi-id? (:multi-id? action)]
+        (if (and (seq ids) multi-id?)
+          (p/let [results (p/all (map (fn [id]
+                                        (-> (build-tree-data cfg (assoc action :id id))
+                                            (p/then (fn [tree-data]
+                                                      {:ok? true
+                                                       :id id
+                                                       :tree tree-data}))
+                                            (p/catch (fn [error]
+                                                       {:ok? false
+                                                        :id id
+                                                        :error error}))))
+                                      ids))
+                  payload (case format
+                            "edn"
+                            {:status :ok
+                             :data (mapv (fn [{:keys [ok? tree id error]}]
+                                           (if ok?
+                                             tree
+                                             (multi-id-error-entry id error)))
+                                         results)
+                             :output-format :edn}
 
-          "json"
-          {:status :ok
-           :data tree-data
-           :output-format :json}
+                            "json"
+                            {:status :ok
+                             :data (mapv (fn [{:keys [ok? tree id error]}]
+                                           (if ok?
+                                             tree
+                                             (multi-id-error-entry id error)))
+                                         results)
+                             :output-format :json}
 
-          {:status :ok
-           :data {:message (tree->text-with-linked-refs tree-data)}}))))
+                            {:status :ok
+                             :data {:message (string/join multi-id-delimiter
+                                                          (map (fn [{:keys [ok? tree id error]}]
+                                                                 (if ok?
+                                                                   (tree->text-with-linked-refs tree)
+                                                                   (multi-id-error-message id error)))
+                                                               results))}})]
+            payload)
+          (p/let [tree-data (build-tree-data cfg action)]
+            (case format
+              "edn"
+              {:status :ok
+               :data tree-data
+               :output-format :edn}
+
+              "json"
+              {:status :ok
+               :data tree-data
+               :output-format :json}
+
+              {:status :ok
+               :data {:message (tree->text-with-linked-refs tree-data)}}))))))
