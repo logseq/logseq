@@ -206,7 +206,7 @@
                                         :command :query
                                         :data {:result [[1] [2] [3]]}}
                                        {:output-format nil})]
-      (is (= "[[1] [2] [3]]" result)))))
+      (is (= "[[1],[2],[3]]" result)))))
 
 (deftest test-human-output-query-list
   (testing "query list renders a table with count"
