@@ -7,8 +7,9 @@
         "logseq": "dist/logseq.js"
     },
     "files": [
-        "dist/db-worker-node.js",
-        "dist/logseq-cli.js"
+        "dist/logseq.js",
+        "static/db-worker-node.js",
+        "static/logseq-cli.js"
     ],
     "engines": {
         "node": ">=22.20.0"

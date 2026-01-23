@@ -165,7 +165,7 @@
 
 (deftest db-worker-node-parse-args-ignores-host-and-port
   (let [parse-args #'db-worker-node/parse-args
-        result (parse-args #js ["node" "db-worker-node.js"
+        result (parse-args #js ["node" "dist/db-worker-node.js"
                                 "--host" "0.0.0.0"
                                 "--port" "1234"
                                 "--repo" "logseq_db_parse_args"

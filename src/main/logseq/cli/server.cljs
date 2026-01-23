@@ -165,9 +165,9 @@
 
 (defn- spawn-server!
   [{:keys [repo data-dir]}]
-  (let [script (node-path/join js/__dirname "db-worker-node.js")
-        args #js [script "--repo" repo "--data-dir" data-dir]
-        child (.spawn child-process "node" args #js {:detached true
+  (let [script (node-path/join js/__dirname "../dist/db-worker-node.js")
+        args #js ["--repo" repo "--data-dir" data-dir]
+        child (.spawn child-process script args #js {:detached true
                                                      :stdio "ignore"})]
     (.unref child)
     child))

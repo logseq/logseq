@@ -19,6 +19,7 @@
       (is (string/includes? summary "remove"))
       (is (string/includes? summary "move"))
       (is (string/includes? summary "search"))
+      (is (string/includes? summary "query"))
       (is (string/includes? summary "show"))
       (is (string/includes? summary "graph"))
       (is (string/includes? summary "server"))))
@@ -481,6 +482,22 @@
       (is (true? (:ok? result)))
       (is (= :show (:command result)))
       (is (= "Home" (get-in result [:options :page-name]))))))
+
+(deftest test-verb-subcommand-parse-query
+  (testing "query requires query option"
+    (let [result (commands/parse-args ["query"])]
+      (is (false? (:ok? result)))
+      (is (= :missing-query (get-in result [:error :code])))))
+
+  (testing "query parses with query and inputs"
+    (let [result (commands/parse-args ["query"
+                                       "--query" "[:find ?e :where [?e :block/title \"Hello\"]]"
+                                       "--inputs" "[\"Hello\"]"])]
+      (is (true? (:ok? result)))
+      (is (= :query (:command result)))
+      (is (= "[:find ?e :where [?e :block/title \"Hello\"]]"
+             (get-in result [:options :query])))
+      (is (= "[\"Hello\"]" (get-in result [:options :inputs]))))))
 
 (deftest test-verb-subcommand-parse-graph-import-export
   (testing "graph create requires --repo even with positional args"
