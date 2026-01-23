@@ -208,6 +208,20 @@
                                        {:output-format nil})]
       (is (= "[[1] [2] [3]]" result)))))
 
+(deftest test-human-output-query-list
+  (testing "query list renders a table with count"
+    (let [result (format/format-result {:status :ok
+                                        :command :query-list
+                                        :data {:queries [{:name "block-search"
+                                                          :inputs ["search-title"]
+                                                          :doc "Find blocks"
+                                                          :source :built-in}]}}
+                                       {:output-format nil})]
+      (is (= (str "NAME          INPUTS        SOURCE    DOC\n"
+                  "block-search  search-title  built-in  Find blocks\n"
+                  "Count: 1")
+             result)))))
+
 (deftest test-human-output-error-formatting
   (testing "errors include code and hint when available"
     (let [result (format/format-result {:status :error
