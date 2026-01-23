@@ -200,6 +200,14 @@
                                        {:output-format nil})]
       (is (= "Line 1\nLine 2" result)))))
 
+(deftest test-human-output-query
+  (testing "query renders raw result"
+    (let [result (format/format-result {:status :ok
+                                        :command :query
+                                        :data {:result [[1] [2] [3]]}}
+                                       {:output-format nil})]
+      (is (= "[[1] [2] [3]]" result)))))
+
 (deftest test-human-output-error-formatting
   (testing "errors include code and hint when available"
     (let [result (format/format-result {:status :error

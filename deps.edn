@@ -5,7 +5,7 @@
                                          :sha     "5d672bf84ed944414b9f61eeb83808ead7be9127"}
 
   datascript/datascript                 {:git/url "https://github.com/logseq/datascript" ;; fork
-                                         :sha     "ff5a7d5326e2546f40146e4a489343f557519bc3"}
+                                         :sha     "d6305968aa05bd309abd6d764908cf04ea8000b9"}
   ;; datascript/datascript                 {:local/root "../../datascript"}
 
   datascript-transit/datascript-transit {:mvn/version "0.3.0"}
