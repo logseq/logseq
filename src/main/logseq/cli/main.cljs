@@ -12,7 +12,7 @@
   (string/join "\n"
                ["logseq <command> [options]"
                 ""
-                "Commands: list page, list tag, list property, add block, add page, move, remove block, remove page, search, query, show, graph list, graph create, graph switch, graph remove, graph validate, graph info, graph export, graph import, server list, server status, server start, server stop, server restart"
+                "Commands: list page, list tag, list property, add block, add page, move, remove block, remove page, search, query, query list, show, graph list, graph create, graph switch, graph remove, graph validate, graph info, graph export, graph import, server list, server status, server start, server stop, server restart"
                 ""
                 "Options:"
                 summary]))
@@ -47,8 +47,8 @@
            (-> (commands/execute (:action action-result) cfg)
                (p/then (fn [result]
                          (let [opts (cond-> cfg
-                                       (:output-format result)
-                                       (assoc :output-format (:output-format result)))]
+                                      (:output-format result)
+                                      (assoc :output-format (:output-format result)))]
                            {:exit-code 0
                             :output (format/format-result result opts)})))
                (p/catch (fn [error]
@@ -74,4 +74,5 @@
       (p/then (fn [{:keys [exit-code output]}]
                 (when (seq output)
                   (println output))
-                (.exit js/process exit-code)))))
+                (when-not (zero? exit-code)
+                  (.exit js/process exit-code))))))
