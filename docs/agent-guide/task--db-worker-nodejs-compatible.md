@@ -126,7 +126,7 @@ Node runtime must not use OPFS or sqlite-wasm. Instead, use `better-sqlite3` as 
 The db-worker should be runnable as a standalone process for Node.js environments.
 
 ### Entry Point
-- Provide a CLI entry (example: `bin/logseq-db-worker` or `node dist/db-worker-node.js`).
+- Provide a CLI entry (example: `bin/logseq-db-worker` or `./dist/db-worker-node.js`).
 - CLI flags (suggested):
   - Binds to localhost on a random port and records it in the repo lock file.
   - `--data-dir` (path for sqlite files, required or default to `~/.logseq/cli-graphs`)
