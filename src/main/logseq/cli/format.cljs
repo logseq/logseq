@@ -86,7 +86,6 @@
     :missing-graph "Use --repo <name>"
     :missing-repo "Use --repo <name>"
     :missing-content "Use --content or pass content as args"
-    :missing-search-text "Provide search text as a positional argument"
     :missing-query "Use --query <edn>"
     :unknown-query "Use `logseq query list` to see available queries"
     nil))
@@ -179,15 +178,6 @@
             (:port server)
             (:pid server)])
          (or servers []))))
-
-(defn- format-search-results
-  [results]
-  (format-counted-table
-   ["ID" "TITLE"]
-   (mapv (fn [item]
-           [(:db/id item)
-            (or (:title item) (:content item))])
-            (or results []))))
 
 (defn- format-query-results
   [result]
@@ -298,7 +288,6 @@
         :move-block (format-move-block context)
         :graph-export (format-graph-export context)
         :graph-import (format-graph-import context)
-        :search (format-search-results (:results data))
         :query (format-query-results (:result data))
         :query-list (format-query-list (:queries data))
         :show (or (:message data) (pr-str data))
