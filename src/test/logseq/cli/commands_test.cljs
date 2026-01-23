@@ -18,7 +18,6 @@
       (is (string/includes? summary "add"))
       (is (string/includes? summary "remove"))
       (is (string/includes? summary "move"))
-      (is (string/includes? summary "search"))
       (is (string/includes? summary "query"))
       (is (string/includes? summary "show"))
       (is (string/includes? summary "graph"))
@@ -467,18 +466,7 @@
       (is (= "def" (get-in result [:options :target-uuid])))
       (is (= "last-child" (get-in result [:options :pos]))))))
 
-(deftest test-verb-subcommand-parse-search-show
-  (testing "search requires text"
-    (let [result (commands/parse-args ["search"])]
-      (is (false? (:ok? result)))
-      (is (= :missing-search-text (get-in result [:error :code])))))
-
-  (testing "search parses with text"
-    (let [result (commands/parse-args ["search" "hello"])]
-      (is (true? (:ok? result)))
-      (is (= :search (:command result)))
-      (is (= ["hello"] (:args result)))))
-
+(deftest test-verb-subcommand-parse-show
   (testing "show requires target"
     (let [result (commands/parse-args ["show"])]
       (is (false? (:ok? result)))
@@ -574,22 +562,13 @@
                   ["add" "block" "--wat"]
                   ["remove" "block" "--wat"]
                   ["move" "--wat"]
-                  ["search" "--wat"]
                   ["show" "--wat"]]]
       (let [result (commands/parse-args args)]
         (is (false? (:ok? result)))
         (is (= :invalid-options (get-in result [:error :code]))))))
 
-  (testing "search rejects deprecated flags"
-    (doseq [args [["search" "--limit" "10" "hello"]
-                  ["search" "--include-content" "hello"]
-                  ["search" "--text" "hello"]]]
-      (let [result (commands/parse-args args)]
-        (is (false? (:ok? result)))
-        (is (= :invalid-options (get-in result [:error :code]))))))
-
   (testing "verb subcommands accept output option"
-    (let [result (commands/parse-args ["search" "--output" "json" "hello"])]
+    (let [result (commands/parse-args ["show" "--output" "json" "--page-name" "Home"])]
       (is (true? (:ok? result)))
       (is (= "json" (get-in result [:options :output]))))))
 
@@ -684,30 +663,6 @@
       (is (false? (:ok? result)))
       (is (= :missing-target (get-in result [:error :code])))))
 
-  (testing "search requires text"
-    (let [parsed {:ok? true :command :search :options {}}
-          result (commands/build-action parsed {:repo "demo"})]
-      (is (false? (:ok? result)))
-      (is (= :missing-search-text (get-in result [:error :code])))))
-
-  (testing "search defaults to all types"
-    (let [parsed {:ok? true :command :search :options {} :args ["hello"]}
-          result (commands/build-action parsed {:repo "demo"})]
-      (is (true? (:ok? result)))
-      (is (= "all" (get-in result [:action :search-type])))))
-
-  (testing "search uses config repo and ignores positional text for repo"
-    (let [parsed {:ok? true :command :search :options {} :args ["hello"]}
-          result (commands/build-action parsed {:repo "demo"})]
-      (is (true? (:ok? result)))
-      (is (= "logseq_db_demo" (get-in result [:action :repo])))))
-
-  (testing "search uses first positional argument"
-    (let [parsed {:ok? true :command :search :options {} :args ["hello" "world"]}
-          result (commands/build-action parsed {:repo "demo"})]
-      (is (true? (:ok? result)))
-      (is (= "hello" (get-in result [:action :text])))))
-
   (testing "show requires target"
     (let [parsed {:ok? true :command :show :options {}}
           result (commands/build-action parsed {:repo "demo"})]
@@ -765,9 +720,8 @@
          (with-redefs [cli-server/list-graphs (fn [_] [])
                        cli-server/ensure-server! (fn [_ _]
                                                    (throw (ex-info "should not start server" {})))]
-           (-> (p/let [result (commands/execute {:type :search
-                                                 :repo "logseq_db_missing"
-                                                 :text "hello"}
+           (-> (p/let [result (commands/execute {:type :list-page
+                                                 :repo "logseq_db_missing"}
                                                 {})]
                  (is (= :error (:status result)))
                  (is (= :graph-not-exists (get-in result [:error :code])))
