@@ -2,7 +2,8 @@
   "Formatting helpers for CLI output."
   (:require [clojure.string :as string]
             [clojure.walk :as walk]
-            [logseq.cli.command.core :as command-core]))
+            [logseq.cli.command.core :as command-core]
+            [logseq.common.util :as common-util]))
 
 (defn- normalize-json
   [value]
@@ -190,7 +191,12 @@
 
 (defn- format-query-results
   [result]
-  (pr-str result))
+  (let [edn-str (pr-str result)
+        parsed (common-util/safe-read-string {:log-error? false} edn-str)
+        valid? (or (some? parsed) (= "nil" (string/trim edn-str)))]
+    (if valid?
+      (string/replace edn-str " " ",")
+      edn-str)))
 
 (defn- format-query-list
   [queries]
@@ -255,7 +261,8 @@
   (str "Exported " export-type " to " output))
 
 (defn- format-graph-import
-  [{:keys [import-type input]}]
+  [{:keys [import-type input] :as xxx}]
+  (prn :xxx xxx)
   (str "Imported " import-type " from " input))
 
 (defn- format-graph-action
