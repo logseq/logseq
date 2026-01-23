@@ -7,6 +7,7 @@
             [logseq.cli.command.graph :as graph-command]
             [logseq.cli.command.list :as list-command]
             [logseq.cli.command.move :as move-command]
+            [logseq.cli.command.query :as query-command]
             [logseq.cli.command.remove :as remove-command]
             [logseq.cli.command.search :as search-command]
             [logseq.cli.command.server :as server-command]
@@ -89,6 +90,13 @@
            :message "search text is required"}
    :summary summary})
 
+(defn- missing-query-result
+  [summary]
+  {:ok? false
+   :error {:code :missing-query
+           :message "query is required"}
+   :summary summary})
+
 ;; Error helpers are in logseq.cli.command.core.
 
 ;; Command-specific validation and entries are in subcommand namespaces.
@@ -101,6 +109,7 @@
                move-command/entries
                remove-command/entries
                search-command/entries
+               query-command/entries
                show-command/entries)))
 
 ;; Global option parsing lives in logseq.cli.command.core.
@@ -110,7 +119,7 @@
   (string/join " " (cond-> (vec dispatch)
                      wrong-input (conj wrong-input))))
 
-(defn- finalize-command
+(defn- ^:large-vars/cleanup-todo finalize-command
   [summary {:keys [command opts args cmds spec]}]
   (let [opts (command-core/normalize-opts opts)
         args (vec args)
@@ -166,6 +175,9 @@
 
       (and (= command :search) (not has-args?))
       (missing-search-result summary)
+
+      (and (= command :query) (not (seq (some-> (:query opts) string/trim))))
+      (missing-query-result summary)
 
       (and (#{:list-page :list-tag :list-property} command)
            (list-command/invalid-options? command opts))
@@ -339,6 +351,9 @@
         :search
         (search-command/build-action options args repo)
 
+        :query
+        (query-command/build-action options repo)
+
         :show
         (show-command/build-action options repo)
 
@@ -376,6 +391,7 @@
                          :remove-block (remove-command/execute-remove action config)
                          :remove-page (remove-command/execute-remove action config)
                          :search (search-command/execute-search action config)
+                         :query (query-command/execute-query action config)
                          :show (show-command/execute-show action config)
                          :server-list (server-command/execute-list action config)
                          :server-status (server-command/execute-status action config)
