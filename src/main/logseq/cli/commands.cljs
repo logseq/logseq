@@ -176,7 +176,9 @@
       (and (= command :search) (not has-args?))
       (missing-search-result summary)
 
-      (and (= command :query) (not (seq (some-> (:query opts) string/trim))))
+      (and (= command :query)
+           (not (seq (some-> (:query opts) string/trim)))
+           (not (seq (some-> (:name opts) string/trim))))
       (missing-query-result summary)
 
       (and (#{:list-page :list-tag :list-property} command)
@@ -237,7 +239,7 @@
          :error {:code :missing-command
                  :message "missing command"}
            :summary summary})
-      (if (and (= 1 (count args)) (#{"graph" "server" "list" "add" "remove"} (first args)))
+    (if (and (= 1 (count args)) (#{"graph" "server" "list" "add" "remove" "query"} (first args)))
         (command-core/help-result (command-core/group-summary (first args) table))
         (try
           (let [result (cli/dispatch table args {:spec global-spec})]
@@ -352,7 +354,10 @@
         (search-command/build-action options args repo)
 
         :query
-        (query-command/build-action options repo)
+        (query-command/build-action options repo config)
+
+        :query-list
+        (query-command/build-list-action options repo)
 
         :show
         (show-command/build-action options repo)
@@ -392,6 +397,7 @@
                          :remove-page (remove-command/execute-remove action config)
                          :search (search-command/execute-search action config)
                          :query (query-command/execute-query action config)
+                         :query-list (query-command/execute-query-list action config)
                          :show (show-command/execute-show action config)
                          :server-list (server-command/execute-list action config)
                          :server-status (server-command/execute-status action config)
