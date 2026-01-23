@@ -9,6 +9,7 @@
             [logseq.cli.transport :as transport]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
+            [logseq.common.uuid :as common-uuid]
             [promesa.core :as p]))
 
 (def ^:private content-add-spec
@@ -19,7 +20,8 @@
                :coerce :long}
    :target-uuid {:desc "Target block UUID"}
    :target-page-name {:desc "Target page name"}
-   :pos {:desc "Position (first-child, last-child, sibling)"}})
+   :pos {:desc "Position (first-child, last-child, sibling)"}
+   :status {:desc "Task status (todo, doing, done, etc.)"}})
 
 (def ^:private add-page-spec
   {:page {:desc "Page name"}})
@@ -49,6 +51,57 @@
 
 (def ^:private add-positions
   #{"first-child" "last-child" "sibling"})
+
+(def ^:private status-aliases
+  {"todo" :logseq.property/status.todo
+   "doing" :logseq.property/status.doing
+   "done" :logseq.property/status.done
+   "now" :logseq.property/status.doing
+   "later" :logseq.property/status.todo
+   "wait" :logseq.property/status.backlog
+   "waiting" :logseq.property/status.backlog
+   "backlog" :logseq.property/status.backlog
+   "canceled" :logseq.property/status.canceled
+   "cancelled" :logseq.property/status.canceled
+   "in-review" :logseq.property/status.in-review
+   "in_review" :logseq.property/status.in-review
+   "inreview" :logseq.property/status.in-review
+   "in-progress" :logseq.property/status.doing
+   "in progress" :logseq.property/status.doing
+   "inprogress" :logseq.property/status.doing})
+
+(defn- normalize-status
+  [value]
+  (let [text (some-> value string/trim)
+        parsed (when (and (seq text) (string/starts-with? text ":"))
+                 (common-util/safe-read-string {:log-error? false} text))
+        normalized (cond
+                     (qualified-keyword? parsed)
+                     parsed
+
+                     (keyword? parsed)
+                     (get status-aliases (name parsed))
+
+                     (seq text)
+                     (get status-aliases (string/lower-case text))
+
+                     :else nil)]
+    normalized))
+
+(defn- ensure-block-uuids
+  [blocks]
+  (mapv (fn [block]
+          (let [current (:block/uuid block)]
+            (cond
+              (some? current)
+              (update block :block/uuid (fn [value]
+                                          (if (and (string? value) (common-util/uuid-string? value))
+                                            (uuid value)
+                                            value)))
+
+              :else
+              (assoc block :block/uuid (common-uuid/gen-uuid)))))
+        blocks))
 
 (defn invalid-options?
   [opts]
@@ -130,21 +183,34 @@
     {:ok? false
      :error {:code :missing-repo
              :message "repo is required for add"}}
-    (let [blocks-result (read-blocks options args)]
+    (let [blocks-result (read-blocks options args)
+          status-text (some-> (:status options) string/trim)
+          status (when (seq status-text) (normalize-status status-text))]
+      (cond
+        (and (seq status-text) (nil? status))
+        {:ok? false
+         :error {:code :invalid-options
+                 :message (str "invalid status: " status-text)}}
+
+        :else
       (if-not (:ok? blocks-result)
         blocks-result
         (let [vector-result (ensure-blocks (:value blocks-result))]
           (if-not (:ok? vector-result)
             vector-result
-            {:ok? true
-             :action {:type :add-block
-                      :repo repo
-                      :graph (core/repo->graph repo)
-                      :target-id (:target-id options)
-                      :target-uuid (some-> (:target-uuid options) string/trim)
-                      :target-page-name (some-> (:target-page-name options) string/trim)
-                      :pos (or (some-> (:pos options) string/trim string/lower-case) "last-child")
-                      :blocks (:value vector-result)}}))))))
+            (let [blocks (cond-> (:value vector-result)
+                           status
+                           ensure-block-uuids)]
+              {:ok? true
+               :action {:type :add-block
+                        :repo repo
+                        :graph (core/repo->graph repo)
+                        :target-id (:target-id options)
+                        :target-uuid (some-> (:target-uuid options) string/trim)
+                        :target-page-name (some-> (:target-page-name options) string/trim)
+                        :pos (or (some-> (:pos options) string/trim string/lower-case) "last-child")
+                        :status status
+                        :blocks blocks}}))))))))
 
 (defn build-add-page-action
   [options repo]
@@ -167,17 +233,31 @@
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
               target-id (resolve-add-target cfg action)
+              status (:status action)
               pos (:pos action)
               opts (case pos
                      "last-child" {:sibling? false :bottom? true}
                      "sibling" {:sibling? true}
                      {:sibling? false})
+              opts (cond-> opts
+                     status
+                     (assoc :keep-uuid? true))
               ops [[:insert-blocks [(:blocks action)
                                     target-id
                                     (assoc opts :outliner-op :insert-blocks)]]]
-              result (transport/invoke cfg :thread-api/apply-outliner-ops false [(:repo action) ops {}])]
+              _ (transport/invoke cfg :thread-api/apply-outliner-ops false [(:repo action) ops {}])
+              _ (when status
+                  (let [block-ids (->> (:blocks action)
+                                       (map :block/uuid)
+                                       (remove nil?)
+                                       vec)]
+                    (when (seq block-ids)
+                      (transport/invoke cfg :thread-api/apply-outliner-ops false
+                                        [(:repo action)
+                                         [[:batch-set-property [block-ids :logseq.property/status status {}]]]
+                                         {}]))))]
         {:status :ok
-         :data {:result result}})))
+         :data {:result nil}})))
 
 (defn execute-add-page
   [action config]
