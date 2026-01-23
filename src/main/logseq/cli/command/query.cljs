@@ -54,7 +54,7 @@
                            [(identity 0) ?days-ago])
                       (and [(<= ?recent-days 0)]
                            [(identity 0) ?days-ago])
-                     (and [(* ?recent-days 86400000) ?recent-days-ms]
+                      (and [(* ?recent-days 86400000) ?recent-days-ms]
                            [(- ?now-ms ?recent-days-ms) ?days-ago]
                            [(>= ?updated-at ?days-ago)]))]}})
 
@@ -154,6 +154,21 @@
                   (into (vec inputs) (map input-default missing)))
                 inputs)})))
 
+(defn- normalize-task-search-inputs
+  [entry inputs]
+  (if (and entry (= "task-search" (:name entry)) (seq inputs))
+    (let [status (first inputs)
+          normalized (cond
+                       (keyword? status) status
+                       (string? status) (let [text (string/trim status)]
+                                          (if (seq text)
+                                            (keyword "logseq.property"
+                                                     (str "status." (string/lower-case text)))
+                                            status))
+                       :else status)]
+      (assoc (vec inputs) 0 normalized))
+    inputs))
+
 (defn build-action
   [options repo config]
   (if-not (seq repo)
@@ -201,14 +216,17 @@
                          :message "inputs must be a vector"}}
 
                 :else
-                {:ok? true
-                 :action {:type :query
-                          :repo repo
-                          :graph (core/repo->graph repo)
-                          :query (:value query-result)
-                          :inputs (or (:value named-inputs)
-                                      (:value inputs-result)
-                                      [])}}))))))))
+                (let [inputs (normalize-task-search-inputs
+                              (:entry query-result)
+                              (or (:value named-inputs)
+                                  (:value inputs-result)
+                                  []))]
+                  {:ok? true
+                   :action {:type :query
+                            :repo repo
+                            :graph (core/repo->graph repo)
+                            :query (:value query-result)
+                            :inputs inputs}})))))))))
 
 (defn build-list-action
   [_options _repo]

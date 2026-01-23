@@ -159,40 +159,7 @@
                   "Host: 127.0.0.1  Port: 1234")
              result)))))
 
-(deftest test-human-output-search-and-show
-  (testing "search renders a table with count"
-    (let [result (format/format-result {:status :ok
-                                        :command :search
-                                        :data {:results [{:type "page"
-                                                          :db/id 101
-                                                          :title "Alpha"
-                                                          :uuid "u1"
-                                                          :updated-at 3
-                                                          :created-at 1}
-                                                         {:type "block"
-                                                          :db/id 102
-                                                          :content "Note line 1\nNote line 2"
-                                                          :uuid "u2"
-                                                          :updated-at 4
-                                                          :created-at 2}
-                                                         {:type "tag"
-                                                          :db/id 103
-                                                          :title "Taggy"
-                                                          :uuid "u3"}
-                                                         {:type "property"
-                                                          :db/id 104
-                                                          :title "Prop"
-                                                          :uuid "u4"}]}}
-                                       {:output-format nil})]
-      (is (= (str "ID   TITLE\n"
-                  "101  Alpha\n"
-                  "102  Note line 1\n"
-                  "     Note line 2\n"
-                  "103  Taggy\n"
-                  "104  Prop\n"
-                  "Count: 4")
-             result))))
-
+(deftest test-human-output-show
   (testing "show renders text payloads directly"
     (let [result (format/format-result {:status :ok
                                         :command :show
@@ -231,14 +198,4 @@
                                        {:output-format nil})]
       (is (= (str "Error (missing-graph): graph name is required\n"
                   "Hint: Use --repo <name>")
-             result))))
-
-  (testing "missing search text hints use positional argument"
-    (let [result (format/format-result {:status :error
-                                        :command :search
-                                        :error {:code :missing-search-text
-                                                :message "search text is required"}}
-                                       {:output-format nil})]
-      (is (= (str "Error (missing-search-text): search text is required\n"
-                  "Hint: Provide search text as a positional argument")
              result)))))

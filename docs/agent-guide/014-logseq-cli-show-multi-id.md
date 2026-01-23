@@ -12,11 +12,19 @@ We need `--id` to accept `[<id1> <id2> ...]` and print each corresponding block,
 This should align with existing logseq-cli and db-worker-node patterns and preserve existing single-id behavior.
 This also enables a pipeline workflow such as: `logseq query --name task-search --inputs '["todo"]' | xargs logseq show -id`.
 
+## Note on removing `search`
+
+Remove the `search` subcommand. No migration or compatibility work is required.
+
 ## Note on `logseq query` output
 
 `logseq query` output handling:
 1. Validate it is valid EDN.
 2. Replace all spaces with commas.
+
+## Note on `logseq query task-search` inputs
+
+The first `task-search` input `status` should be a string like `"todo"` or `"doing"`, not `:logseq.property/status.todo`.
 
 ## Testing Plan
 
