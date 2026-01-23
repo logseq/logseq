@@ -626,13 +626,22 @@
 
 (def-thread-api :thread-api/db-sync-finalize-kvs-import
   [repo remote-tx]
-  (p/let [^js db (get @*db-sync-import-dbs repo)]
-    (.close db)
-    (swap! *db-sync-import-dbs dissoc repo)
-    ((@thread-api/*thread-apis :thread-api/create-or-open-db) repo {:close-other-db? true})
-    ((@thread-api/*thread-apis :thread-api/export-db) repo)
-    (client-op/update-local-tx repo remote-tx)
-    (shared-service/broadcast-to-clients! :add-repo {:repo repo})))
+  (-> (p/let [^js db (get @*db-sync-import-dbs repo)]
+        (.close db)
+        (swap! *db-sync-import-dbs dissoc repo)
+        ((@thread-api/*thread-apis :thread-api/create-or-open-db) repo {:close-other-db? true})
+        (let [conn (worker-state/get-datascript-conn repo)
+              datoms (d/datoms @conn :eavt)
+              new-conn (d/conn-from-datoms datoms (:schema @conn))
+              new-db (update @new-conn :eavt (fn [^BTSet s]
+                                               (set! (.-storage s) (.-storage (:eavt @conn)))
+                                               s))]
+          (d/reset-conn! conn new-db {:rtc-tx? true}))
+        ((@thread-api/*thread-apis :thread-api/export-db) repo)
+        (client-op/update-local-tx repo remote-tx)
+        (shared-service/broadcast-to-clients! :add-repo {:repo repo}))
+      (p/catch (fn [error]
+                 (js/console.error error)))))
 
 (def-thread-api :thread-api/unsafe-unlink-db
   [repo]
