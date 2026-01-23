@@ -2,6 +2,7 @@
   "Simple db-sync client based on promesa + WebSocket."
   (:require ["/frontend/idbkv" :as idb-keyval]
             [clojure.data :as data]
+            [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.common.crypt :as crypt]
@@ -265,19 +266,27 @@
       (send! ws {:type "presence"
                  :editing-block-uuid editing-block-uuid}))))
 
+(def rtc-ignored-attrs
+  (set/union
+   #{:logseq.property.embedding/hnsw-label-updated-at
+     :block/tx-id
+     ;; FIXME: created-by-ref maybe not exist yet on server or client
+     :logseq.property/created-by-ref}
+   rtc-const/ignore-attrs-when-syncing
+   rtc-const/ignore-entities-when-init-upload))
+
 (defn- remove-ignored-attrs
   [tx-data]
-  (remove (fn [d] (contains? #{:logseq.property.embedding/hnsw-label-updated-at
-                               :block/tx-id
-                               ;; FIXME: created-by-ref maybe not exist yet on server or client
-                               :logseq.property/created-by-ref} (:a d)))
+  (remove (fn [d] (contains? rtc-ignored-attrs (:a d)))
           tx-data))
 
 (defn- normalize-tx-data
   [db-after db-before tx-data]
   (->> tx-data
        remove-ignored-attrs
-       (db-normalize/normalize-tx-data db-after db-before)))
+       (db-normalize/normalize-tx-data db-after db-before)
+       (remove (fn [[_op e]]
+                 (contains? rtc-const/ignore-entities-when-init-upload e)))))
 
 (defn- reverse-tx-data
   [tx-data]
@@ -1296,27 +1305,24 @@
   [repo {:keys [tx-meta tx-data db-after db-before]}]
   (when-not (:rtc-tx? tx-meta)
     (let [conn (worker-state/get-datascript-conn repo)
-          db (some-> conn deref)
-        ;; FIXME: all ignored properties
-          tx-data' (remove (fn [d] (contains? #{:logseq.property.embedding/hnsw-label-updated-at :block/tx-id} (:a d))) tx-data)]
-      (when (and db (seq tx-data'))
-        (let [normalized (normalize-tx-data db-after db-before tx-data')
+          db (some-> conn deref)]
+      (when (and db (seq tx-data))
+        (let [normalized (normalize-tx-data db-after db-before tx-data)
               reversed-datoms (reverse-tx-data tx-data)]
-        ;; (prn :debug :tx-data tx-data'
-        ;;      :normalized (normalize-tx-data db-after db-before tx-data'))
-          (persist-local-tx! repo normalized reversed-datoms tx-meta)
-          (when-let [client @worker-state/*db-sync-client]
-            (when (= repo (:repo client))
-              (let [send-queue (:send-queue client)]
-                (swap! send-queue
-                       (fn [prev]
-                         (p/then prev
-                                 (fn [_]
-                                   (when-let [current @worker-state/*db-sync-client]
-                                     (when (= repo (:repo current))
-                                       (when-let [ws (:ws current)]
-                                         (when (ws-open? ws)
-                                           (flush-pending! repo current)))))))))))))))))
+          (when (seq normalized)
+            (persist-local-tx! repo normalized reversed-datoms tx-meta)
+            (when-let [client @worker-state/*db-sync-client]
+              (when (= repo (:repo client))
+                (let [send-queue (:send-queue client)]
+                  (swap! send-queue
+                         (fn [prev]
+                           (p/then prev
+                                   (fn [_]
+                                     (when-let [current @worker-state/*db-sync-client]
+                                       (when (= repo (:repo current))
+                                         (when-let [ws (:ws current)]
+                                           (when (ws-open? ws)
+                                             (flush-pending! repo current))))))))))))))))))
 
 (defn handle-local-tx!
   [repo {:keys [tx-data tx-meta] :as tx-report}]
