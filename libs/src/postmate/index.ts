@@ -130,6 +130,8 @@ export class ParentAPI {
       }
     }
 
+    // NOTE: older SDKs rely on window.postMessage only, so we must
+    // initially add listener on window (messagePort is not set yet at construction time)
     this.addTransportListener(this.listener)
     if (process.env.NODE_ENV !== 'production') {
       log('Parent: Awaiting event emissions from Child')
@@ -216,7 +218,7 @@ export class ChildAPI {
   private parent: Window
   private readonly parentOrigin: string
   private child: Window
-  private readonly messagePort?: MessagePort
+  private messagePort?: MessagePort
   private readonly listener: (e: any) => void
 
   private addTransportListener(handler: (e: any) => void) {
@@ -305,7 +307,38 @@ export class ChildAPI {
         })
     }
 
+    // Initially add listener on window (messagePort is not set yet at construction time)
     this.addTransportListener(this.listener)
+
+    // Listen for channel ready event to switch transport from window to MessagePort
+    if (!this.messagePort) {
+      const channelReadyHandler = (event: CustomEvent) => {
+        const port = event.detail?.port
+        if (port) {
+          if (process.env.NODE_ENV !== 'production') {
+            log('Child: Switching from window.postMessage to MessagePort')
+          }
+
+          // Step 1: Remove listener from window to avoid duplicate message handling
+          this.child.removeEventListener('message', this.listener, false)
+
+          // Step 2: Update messagePort reference (this affects this.listener validation logic)
+          this.messagePort = port
+
+          // Step 3: Add the same listener to MessagePort (now all communication goes through port)
+          this.messagePort.addEventListener('message', this.listener as any)
+          ;(this.messagePort as any).start?.()
+
+          if (process.env.NODE_ENV !== 'production') {
+            log('Child: Successfully switched to MessagePort. All future messages will use MessageChannel.')
+          }
+
+          // Step 4: Clean up the channel-ready event listener
+          this.child.removeEventListener('postmate:channel-ready', channelReadyHandler as any)
+        }
+      }
+      this.child.addEventListener('postmate:channel-ready', channelReadyHandler as any)
+    }
   }
 
   emit(name: string, data: any) {
@@ -388,26 +421,6 @@ export class Postmate {
       const shouldUseMessageChannel =
         this.enableMessageChannel && runtimeSupportsMessageChannel
 
-      // Prefer MessageChannel if available. We transfer port2 to child.
-      // Important: once a port is transferred, it becomes neutered in this context,
-      // so we must create a fresh channel per handshake attempt.
-      let channel: MessageChannel | null = null
-      let port1: MessagePort | undefined
-      let port2: MessagePort | undefined
-
-      const ensureChannel = () => {
-        if (!shouldUseMessageChannel) return
-        // If we already have an active port from previous run, keep it.
-        if (this.messagePort) return
-        channel = new MessageChannel()
-        port1 = channel.port1
-        port2 = channel.port2
-        this.messagePort = port1
-        ;(port1 as any).start?.()
-      }
-
-      ensureChannel()
-
       const reply = (e: any) => {
         if (!sanitize(e, childOrigin)) return false
         if (e.data.postmate === 'handshake-reply') {
@@ -418,20 +431,36 @@ export class Postmate {
           this.parent.removeEventListener('message', reply, false)
           this.childOrigin = e.origin
 
-          // If child didn't accept/return channel, fallback to window messages.
-          // Note: MessageChannel port is already set on this instance.
-          // Some browsers deliver the transferred port via e.ports.
-          if (e?.ports?.length) {
-            // Prefer the port child returned (if any); otherwise keep existing.
-            const returnedPort = e.ports[0]
-            if (returnedPort) {
-              try {
-                this.messagePort?.close()
-              } catch (err) {
-                // ignore
+          // After successful handshake, establish MessageChannel if enabled and child supports it
+          if (shouldUseMessageChannel) {
+            // Check if child returned a port (child initiated the channel)
+            if (e?.ports?.length) {
+              const returnedPort = e.ports[0]
+              if (returnedPort) {
+                this.messagePort = returnedPort
+                ;(this.messagePort as any).start?.()
+                if (process.env.NODE_ENV !== 'production') {
+                  log('Parent: Using MessageChannel returned by child')
+                }
               }
-              this.messagePort = returnedPort
+            } else if (e.data.acceptsMessageChannel) {
+              // Child signals it accepts MessageChannel, so parent creates and transfers port
+              const channel = new MessageChannel()
+              this.messagePort = channel.port1
               ;(this.messagePort as any).start?.()
+
+              // Send port2 to child in a follow-up message
+              this.child.postMessage(
+                {
+                  postmate: 'setup-channel',
+                  type: messageType,
+                },
+                childOrigin,
+                [channel.port2]
+              )
+              if (process.env.NODE_ENV !== 'production') {
+                log('Parent: Sent MessageChannel port to child')
+              }
             }
           }
 
@@ -456,40 +485,17 @@ export class Postmate {
         if (process.env.NODE_ENV !== 'production') {
           log(`Parent: Sending handshake attempt ${attempt}`, { childOrigin })
         }
-        // port2 can be transferred only once. Create a new channel for retries.
-        if (shouldUseMessageChannel) {
-          // close any previous un-used port before re-creating.
-          if (!this.messagePort || port2 === undefined) {
-            // nothing
-          }
-          if (!port2) {
-            // We already transferred it in a previous attempt; create a fresh pair.
-            try {
-              this.messagePort?.close()
-            } catch (e) {
-              // ignore
-            }
-            this.messagePort = undefined
-            ensureChannel()
-          }
-        }
 
+        // Always use window.postMessage for handshake to maintain backward compatibility
         const payload: any = {
           postmate: 'handshake',
           type: messageType,
           model: this.model,
-          // hint for debugging / future extension
-          channel: port2 ? 1 : 0,
+          // Signal to child that parent supports MessageChannel
           enableMessageChannel: shouldUseMessageChannel ? 1 : 0,
         }
 
-        if (port2) {
-          this.child.postMessage(payload, childOrigin, [port2])
-          // Mark as transferred; next retry needs a new channel.
-          port2 = undefined
-        } else {
-          this.child.postMessage(payload, childOrigin)
-        }
+        this.child.postMessage(payload, childOrigin)
 
         if (attempt === maxHandshakeRequests) {
           clearInterval(responseInterval)
@@ -554,30 +560,29 @@ export class Model {
           }
           this.child.removeEventListener('message', shake, false)
 
-          // Only enable MessagePort transport when parent explicitly opted-in AND actually transferred a port.
+          // Check if parent supports MessageChannel (but don't use it yet during handshake)
           this.enableMessageChannel = !!e.data?.enableMessageChannel
-          const transferredPort = e?.ports?.[0]
-          if (this.enableMessageChannel && transferredPort) {
-            this.messagePort = transferredPort
-            ;(this.messagePort as any).start?.()
-          } else {
-            this.messagePort = undefined
-          }
+          this.parentOrigin = e.origin
 
           if (process.env.NODE_ENV !== 'production') {
             log('Child: Sending handshake reply to Parent')
           }
-          // Reply back. If we want a dedicated child->parent port, we can
-          // create one and transfer it. For now, we only ack and rely on the
-          // transferred port (if any). Keep window reply for compatibility.
+
+          const runtimeSupportsMessageChannel =
+              typeof MessageChannel !== 'undefined' &&
+              typeof (MessageChannel as any) === 'function'
+
+            // Reply using window.postMessage for backward compatibility
+            // Signal whether child accepts MessageChannel for future communication
           ;(e.source as WindowProxy).postMessage(
             {
               postmate: 'handshake-reply',
               type: messageType,
+              // Tell parent if child can accept MessageChannel
+              acceptsMessageChannel: this.enableMessageChannel && runtimeSupportsMessageChannel ? 1 : 0,
             },
             e.origin
           )
-          this.parentOrigin = e.origin
 
           // Extend model with the one provided by the parent
           const defaults = e.data.model
@@ -588,6 +593,34 @@ export class Model {
             if (process.env.NODE_ENV !== 'production') {
               log('Child: Inherited and extended model from Parent')
             }
+          }
+
+          // Set up listener for MessageChannel port if both sides support it
+          if (this.enableMessageChannel && runtimeSupportsMessageChannel) {
+            const setupChannel = (setupEvent: MessageEvent<any>) => {
+              if (
+                setupEvent.data?.postmate === 'setup-channel' &&
+                setupEvent.data?.type === messageType &&
+                setupEvent.origin === this.parentOrigin
+              ) {
+                const transferredPort = setupEvent?.ports?.[0]
+                if (transferredPort) {
+                  this.messagePort = transferredPort
+                  ;(this.messagePort as any).start?.()
+                  if (process.env.NODE_ENV !== 'production') {
+                    log('Child: Received and activated MessageChannel port from parent')
+                  }
+
+                  // Important: Notify the ChildAPI instance (created below) to switch transport
+                  // We'll emit a custom event that ChildAPI can listen to
+                  this.child.dispatchEvent(new CustomEvent('postmate:channel-ready', {
+                    detail: { port: this.messagePort }
+                  }))
+                }
+                this.child.removeEventListener('message', setupChannel, false)
+              }
+            }
+            this.child.addEventListener('message', setupChannel, false)
           }
 
           if (process.env.NODE_ENV !== 'production') {
