@@ -23,32 +23,26 @@
   (let [dir (node-helper/create-tmp-dir)
         cfg-path (node-path/join dir "cli.edn")
         _ (fs/writeFileSync cfg-path
-                            (str "{:auth-token \"file-token\" "
-                                 ":repo \"file-repo\" "
+                            (str "{:repo \"file-repo\" "
                                  ":data-dir \"file-data\" "
                                  ":timeout-ms 111 "
-                                 ":retries 1 "
                                  ":output-format :edn}"))
-        env {"LOGSEQ_DB_WORKER_AUTH_TOKEN" "env-token"
-             "LOGSEQ_CLI_REPO" "env-repo"
+        env {"LOGSEQ_CLI_REPO" "env-repo"
              "LOGSEQ_CLI_DATA_DIR" "env-data"
              "LOGSEQ_CLI_TIMEOUT_MS" "222"
-             "LOGSEQ_CLI_RETRIES" "2"
              "LOGSEQ_CLI_OUTPUT" "json"}
         opts {:config-path cfg-path
-              :auth-token "cli-token"
               :repo "cli-repo"
               :data-dir "cli-data"
               :timeout-ms 333
-              :retries 3
               :output-format :human}
         result (with-env env #(config/resolve-config opts))]
     (is (= cfg-path (:config-path result)))
-    (is (= "cli-token" (:auth-token result)))
     (is (= "cli-repo" (:repo result)))
     (is (= "cli-data" (:data-dir result)))
     (is (= 333 (:timeout-ms result)))
-    (is (= 3 (:retries result)))
+    (is (nil? (:auth-token result)))
+    (is (nil? (:retries result)))
     (is (= :human (:output-format result)))))
 
 (deftest test-env-overrides-file
@@ -91,3 +85,17 @@
         contents (.toString (fs/readFileSync cfg-path) "utf8")
         parsed (reader/read-string contents)]
     (is (= "new" (:repo parsed)))))
+
+(deftest test-update-config-strips-removed-options
+  (let [dir (node-helper/create-tmp-dir "cli")
+        cfg-path (node-path/join dir "cli.edn")
+        _ (fs/writeFileSync cfg-path "{:repo \"old\"}")
+        _ (config/update-config! {:config-path cfg-path}
+                                 {:repo "new"
+                                  :auth-token "secret"
+                                  :retries 2})
+        contents (.toString (fs/readFileSync cfg-path) "utf8")
+        parsed (reader/read-string contents)]
+    (is (= "new" (:repo parsed)))
+    (is (not (contains? parsed :auth-token)))
+    (is (not (contains? parsed :retries)))))
