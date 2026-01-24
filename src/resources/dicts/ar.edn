@@ -10,7 +10,7 @@
  :on-boarding/importing-main-title "استيراد الملاحظات الحالية"
  :on-boarding/importing-main-desc "يمكنك القيام بهذا لاحقاً في التطبيق."
  :on-boarding/importing-title "هل لديك ملاحظات لاستيرادها؟"
- :on-boarding/importing-desc "إذا كانت بتنسيق JSON أو EDN أو Markdown، فإن Logseq يقبلها."
+ :on-boarding/importing-desc "إذا كانت بتنسيق EDN أو Markdown، فإن Logseq يقبلها."
  :on-boarding/importing-sqlite-desc "استيراد ملف SQLite مٌصدر من مخططك في Logseq إلى قاعدة بيانات مخطط جديدة"
  :on-boarding/main-title (fn [] ["مرحباً بك في " [:strong "Logseq!"]])
  :on-boarding/main-desc "أولاً، عليك اختيار مجلد حيث يخزن logseq أفكارك، ملاحظاتك، وخواطرك."
