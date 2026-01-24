@@ -5,6 +5,7 @@
             [logseq.cli.commands :as commands]
             [logseq.cli.config :as config]
             [logseq.cli.format :as format]
+            [logseq.cli.version :as version]
             [promesa.core :as p]))
 
 (defn- usage
@@ -32,6 +33,10 @@
                                                    :error (:error parsed)
                                                    :command (:command parsed)}
                                                   {})})
+
+       (= :version (:command parsed))
+       (p/resolved {:exit-code 0
+                    :output (version/format-version)})
 
        :else
        (let [cfg (config/resolve-config (:options parsed))
