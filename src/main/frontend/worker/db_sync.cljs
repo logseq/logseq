@@ -1182,7 +1182,6 @@
                  (delete-nodes! temp-conn deleted-nodes
                                 (assoc temp-tx-meta :op :delete-blocks))))))
           remote-tx-report @*remote-tx-report]
-
       ;; persist rebase tx to client ops
       (when has-local-changes?
         (when-let [tx-data (seq @*rebase-tx-data)]
@@ -1263,9 +1262,7 @@
                                 tx* (if aes-key
                                       (<decrypt-tx-data aes-key tx)
                                       (p/resolved tx))]
-                          (apply-remote-tx! repo client tx*
-                                            :local-tx local-tx
-                                            :remote-tx remote-tx)
+                          (apply-remote-tx! repo client tx*)
                           (client-op/update-local-tx repo remote-tx)
                           (broadcast-rtc-state! client)
                           (flush-pending! repo client)))))
