@@ -19,7 +19,7 @@ The CLI should provide a stable interface for scripting and troubleshooting, and
 
 I will add an integration test that starts db-worker-node on a test port and verifies the CLI can connect and run a simple graph/content request.
 I will add unit tests for command parsing, configuration precedence, and error formatting.
-I will add unit tests for the client transport layer to ensure timeouts and retries behave correctly.
+I will add unit tests for the client transport layer to ensure timeouts behave correctly.
 I will add unit tests for new graph/content commands (parsing, validation, and request mapping).
 I will add integration tests for graph lifecycle commands and content commands against a real db-worker-node.
 I will follow @test-driven-development for all behavior changes.

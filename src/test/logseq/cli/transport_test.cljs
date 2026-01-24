@@ -1,7 +1,7 @@
 (ns logseq.cli.transport-test
   (:require [cljs.test :refer [deftest is async testing]]
-            [promesa.core :as p]
-            [logseq.cli.transport :as transport]))
+            [logseq.cli.transport :as transport]
+            [promesa.core :as p]))
 
 (def ^:private fs (js/require "fs"))
 (def ^:private os (js/require "os"))
@@ -29,7 +29,7 @@
                     (resolve {:url (str "http://127.0.0.1:" port)
                               :stop! stop!}))))))))
 
-(deftest test-request-retries
+(deftest test-request-does-not-retry
   (async done
     (let [calls (atom 0)]
       (-> (p/let [{:keys [url stop!]} (start-server
@@ -41,15 +41,17 @@
                                                (.end res "boom"))
                                              (do
                                                (.writeHead res 200 #js {"Content-Type" "text/plain"})
-                                               (.end res "ok"))))))
-                 response (transport/request {:method "GET"
-                                              :url (str url "/retry")
-                                              :retries 1
-                                              :timeout-ms 1000})]
-            (is (= 200 (:status response)))
-            (is (= 2 @calls))
-            (p/let [_ (stop!)]
-              (done)))
+                                               (.end res "ok"))))))]
+            (p/catch
+             (transport/request {:method "GET"
+                                 :url (str url "/retry")
+                                 :timeout-ms 1000})
+             (fn [e]
+               (is (= :http-error (-> (ex-data e) :code)))
+               (is (= 500 (-> (ex-data e) :status)))))
+            (is (= 1 @calls))
+            (p/let [_ (stop!)] true))
+          (p/then (fn [_] (done)))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))
                      (done)))))))
@@ -62,12 +64,11 @@
           (p/catch
            (transport/request {:method "GET"
                                :url (str url "/hang")
-                               :timeout-ms 10
-                               :retries 0})
+                               :timeout-ms 10})
            (fn [e]
              (is (= :timeout (-> (ex-data e) :code)))
-             (p/let [_ (stop!)]
-               (done)))))
+             (p/let [_ (stop!)] true))))
+        (p/then (fn [_] (done)))
         (p/catch (fn [e]
                    (is false (str "unexpected error: " e))
                    (done))))))
@@ -84,13 +85,35 @@
                                                                   payload (js/JSON.parse (.toString buf "utf8"))]
                                                               (reset! received (js->clj payload :keywordize-keys true))
                                                               (.writeHead res 200 #js {"Content-Type" "application/json"})
-                                                              (.end res (js/JSON.stringify #js {:result "ok"}))))))))
-                 result (transport/invoke {:base-url url} :thread-api/pull true ["repo" [:block/title]])]
-            (is (= "ok" result))
-            (is (= "thread-api/pull" (:method @received)))
-            (is (= true (:directPass @received)))
-            (p/let [_ (stop!)]
-              (done)))
+                                                              (.end res (js/JSON.stringify #js {:result "ok"}))))))))]
+            (p/let [result (transport/invoke {:base-url url} :thread-api/pull true ["repo" [:block/title]])]
+              (is (= "ok" result))
+              (is (= "thread-api/pull" (:method @received)))
+              (is (= true (:directPass @received)))
+              (p/let [_ (stop!)] true)))
+          (p/then (fn [_] (done)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))
+                     (done)))))))
+
+(deftest test-invoke-does-not-send-auth-header
+  (async done
+    (let [auth-header (atom :unset)]
+      (-> (p/let [{:keys [url stop!]} (start-server
+                                       (fn [^js req ^js res]
+                                         (let [headers (.-headers req)]
+                                           (reset! auth-header (aget headers "authorization")))
+                                         (.writeHead res 200 #js {"Content-Type" "application/json"})
+                                         (.end res (js/JSON.stringify #js {:result "ok"}))))]
+            (p/let [result (transport/invoke {:base-url url
+                                              :auth-token "secret"}
+                                             :thread-api/pull
+                                             true
+                                             ["repo" [:block/title]])]
+              (is (= "ok" result))
+              (is (nil? @auth-header))
+              (p/let [_ (stop!)] true)))
+          (p/then (fn [_] (done)))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))
                      (done)))))))

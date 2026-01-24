@@ -24,3 +24,29 @@
                   (assoc defines-in-config 'frontend.config/REVISION revision))
         (assoc-in [:compiler-options :closure-defines]
                   (assoc defines-in-options 'frontend.config/REVISION revision)))))
+
+(defn- env-or
+  [key fallback]
+  (or (System/getenv key) fallback))
+
+(defn- iso-now
+  []
+  (.format java.time.format.DateTimeFormatter/ISO_INSTANT (java.time.Instant/now)))
+
+(defn logseq-cli-metadata-hook
+  {:shadow.build/stage :configure}
+  [build-state & args]
+  (let [defines-in-config (get-in build-state [:shadow.build/config :closure-defines])
+        defines-in-options (get-in build-state [:compiler-options :closure-defines])
+        revision (env-or "LOGSEQ_REVISION" (or (exec "git" "describe" args) "dev"))
+        build-time (env-or "LOGSEQ_BUILD_TIME" (iso-now))]
+    (prn ::logseq-cli-metadata-hook {:revision revision :build-time build-time})
+    (-> build-state
+        (assoc-in [:shadow.build/config :closure-defines]
+                  (assoc defines-in-config
+                         'logseq.cli.version/REVISION revision
+                         'logseq.cli.version/BUILD_TIME build-time))
+        (assoc-in [:compiler-options :closure-defines]
+                  (assoc defines-in-options
+                         'logseq.cli.version/REVISION revision
+                         'logseq.cli.version/BUILD_TIME build-time)))))
