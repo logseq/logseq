@@ -227,6 +227,104 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
+(deftest test-cli-query-recent-updated
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-recent-updated")]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       _ (run-cli ["graph" "create" "--repo" "recent-updated-graph"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "recent-updated-graph" "add" "page" "--page" "RecentPage"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "recent-updated-graph" "add" "block"
+                                   "--target-page-name" "RecentPage"
+                                   "--content" "Recent block"]
+                                  data-dir cfg-path)
+                       _ (p/delay 100)
+                       list-page-result (run-cli ["--repo" "recent-updated-graph" "list" "page" "--expand"] data-dir cfg-path)
+                       list-page-payload (parse-json-output list-page-result)
+                       page-item (some (fn [item]
+                                         (when (= "RecentPage" (or (:block/title item) (:title item)))
+                                           item))
+                                       (get-in list-page-payload [:data :items]))
+                       page-id (or (:db/id page-item) (:id page-item))
+                       show-result (run-cli ["--repo" "recent-updated-graph"
+                                             "show"
+                                             "--page-name" "RecentPage"
+                                             "--format" "json"]
+                                            data-dir cfg-path)
+                       show-payload (parse-json-output show-result)
+                       show-root (get-in show-payload [:data :root])
+                       block-node (find-block-by-title show-root "Recent block")
+                       block-id (or (:db/id block-node) (:id block-node))
+                       list-result (run-cli ["query" "list"] data-dir cfg-path)
+                       list-payload (parse-json-output list-result)
+                       recent-entry (some (fn [entry]
+                                            (when (= "recent-updated" (:name entry)) entry))
+                                          (get-in list-payload [:data :queries]))
+                       now-ms (js/Date.now)
+                       query-result (run-cli ["--repo" "recent-updated-graph"
+                                              "query"
+                                              "--name" "recent-updated"
+                                              "--inputs" (pr-str [1 now-ms])]
+                                             data-dir cfg-path)
+                       query-payload (parse-json-output query-result)
+                       result (get-in query-payload [:data :result])
+                       future-now-ms (+ now-ms (* 10 86400000))
+                       future-query-result (run-cli ["--repo" "recent-updated-graph"
+                                                     "query"
+                                                     "--name" "recent-updated"
+                                                     "--inputs" (pr-str [1 future-now-ms])]
+                                                    data-dir cfg-path)
+                       future-query-payload (parse-json-output future-query-result)
+                       future-result (get-in future-query-payload [:data :result])
+                       zero-result (run-cli ["--repo" "recent-updated-graph"
+                                             "query"
+                                             "--name" "recent-updated"
+                                             "--inputs" "[0]"]
+                                            data-dir cfg-path)
+                       zero-payload (parse-json-output zero-result)
+                       nil-result (run-cli ["--repo" "recent-updated-graph"
+                                            "query"
+                                            "--name" "recent-updated"
+                                            "--inputs" "[nil]"]
+                                           data-dir cfg-path)
+                       nil-payload (parse-json-output nil-result)
+                       neg-result (run-cli ["--repo" "recent-updated-graph"
+                                            "query"
+                                            "--name" "recent-updated"
+                                            "--inputs" "[-1]"]
+                                           data-dir cfg-path)
+                       neg-payload (parse-json-output neg-result)
+                       stop-result (run-cli ["server" "stop" "--repo" "recent-updated-graph"] data-dir cfg-path)
+                       stop-payload (parse-json-output stop-result)]
+                 (is (= "ok" (:status list-page-payload)))
+                 (is (some? page-id))
+                 (is (some? block-id))
+                 (is (= "ok" (:status list-payload)))
+                 (is (= [{:name "recent-days"}] (:inputs recent-entry)))
+                 (is (= 0 (:exit-code query-result)))
+                 (is (= "ok" (:status query-payload)))
+                 (is (vector? result))
+                 (is (contains? (set result) page-id))
+                 (is (contains? (set result) block-id))
+                 (is (= 0 (:exit-code future-query-result)))
+                 (is (= "ok" (:status future-query-payload)))
+                 (is (vector? future-result))
+                 (is (empty? future-result))
+                 (is (= 1 (:exit-code zero-result)))
+                 (is (= "error" (:status zero-payload)))
+                 (is (= "invalid-options" (get-in zero-payload [:error :code])))
+                 (is (= 1 (:exit-code nil-result)))
+                 (is (= "error" (:status nil-payload)))
+                 (is (= "invalid-options" (get-in nil-payload [:error :code])))
+                 (is (= 1 (:exit-code neg-result)))
+                 (is (= "error" (:status neg-payload)))
+                 (is (= "invalid-options" (get-in neg-payload [:error :code])))
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
 (deftest test-cli-show-resolve-nested-uuid-refs
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-nested-refs")]
@@ -538,6 +636,71 @@
                  (is (= 2 (count show-data)))
                  (is (contains? root-titles "Multi show one"))
                  (is (contains? root-titles "Multi show two"))
+                  (is (= "ok" (:status stop-payload)))
+                  (done))
+                (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
+(deftest test-cli-show-multi-id-filters-contained
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-multi-id-contained")]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       _ (run-cli ["graph" "create" "--repo" "show-multi-id-contained-graph"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "show-multi-id-contained-graph" "add" "page" "--page" "ParentPage"]
+                                  data-dir cfg-path)
+                       _ (run-cli ["--repo" "show-multi-id-contained-graph" "add" "block"
+                                   "--target-page-name" "ParentPage"
+                                   "--content" "Parent Block"]
+                                  data-dir cfg-path)
+                       parent-query (run-cli ["--repo" "show-multi-id-contained-graph" "query"
+                                              "--query" "[:find ?e . :in $ ?title :where [?e :block/title ?title]]"
+                                              "--inputs" (pr-str ["Parent Block"])]
+                                             data-dir cfg-path)
+                       parent-payload (parse-json-output parent-query)
+                       parent-id (get-in parent-payload [:data :result])
+                       show-parent (run-cli ["--repo" "show-multi-id-contained-graph"
+                                             "show"
+                                             "--page-name" "ParentPage"
+                                             "--format" "json"]
+                                            data-dir cfg-path)
+                       show-parent-payload (parse-json-output show-parent)
+                       parent-node (find-block-by-title (get-in show-parent-payload [:data :root]) "Parent Block")
+                       parent-uuid (node-uuid parent-node)
+                       _ (run-cli ["--repo" "show-multi-id-contained-graph" "add" "block"
+                                   "--target-uuid" (str parent-uuid)
+                                   "--content" "Child Block"]
+                                  data-dir cfg-path)
+                       _ (p/delay 100)
+                       show-children (run-cli ["--repo" "show-multi-id-contained-graph"
+                                               "show"
+                                               "--page-name" "ParentPage"
+                                               "--format" "json"]
+                                              data-dir cfg-path)
+                       show-children-payload (parse-json-output show-children)
+                       child-node (find-block-by-title (get-in show-children-payload [:data :root]) "Child Block")
+                       child-id (or (:db/id child-node) (:id child-node))
+                       ids-edn (str "[" parent-id " " child-id "]")
+                       show-json-result (run-cli ["--repo" "show-multi-id-contained-graph" "show"
+                                                  "--id" ids-edn
+                                                  "--format" "json"]
+                                                 data-dir cfg-path)
+                       show-json-payload (parse-json-output show-json-result)
+                       show-data (:data show-json-payload)
+                       root-titles (set (map (comp node-title :root) show-data))
+                       stop-result (run-cli ["server" "stop" "--repo" "show-multi-id-contained-graph"]
+                                            data-dir cfg-path)
+                       stop-payload (parse-json-output stop-result)]
+                 (is (= 0 (:exit-code parent-query)))
+                 (is (some? parent-id))
+                 (is (some? parent-uuid))
+                 (is (some? child-id))
+                 (is (= 0 (:exit-code show-json-result)))
+                 (is (= "ok" (:status show-json-payload)))
+                 (is (vector? show-data))
+                 (is (= 1 (count show-data)))
+                 (is (contains? root-titles "Parent Block"))
                  (is (= "ok" (:status stop-payload)))
                  (done))
                (p/catch (fn [e]
