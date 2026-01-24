@@ -4,17 +4,17 @@
 
 ```typescript
 // DSL Query - Logseq's query language
-const results = await logseq.DB.q('[[page-name]]')
+const results0 = await logseq.DB.q('[[page-name]]')
 const todos = await logseq.DB.q('(task TODO DOING)')
 
 // Datascript Query - Datalog syntax (more powerful)
-const results = await logseq.DB.datascriptQuery(`
+const results1 = await logseq.DB.datascriptQuery(`
   [:find (pull ?b [*])
    :where [?b :block/marker "TODO"]]
 `)
 
 // Query with parameters
-const results = await logseq.DB.datascriptQuery(`
+const results2 = await logseq.DB.datascriptQuery(`
   [:find (pull ?b [*])
    :in $ ?name
    :where
@@ -40,7 +40,7 @@ logseq.DB.onBlockChanged(uuid, (block, txData) => {
 #### 2.1 Basic Structure
 
 ```clojure
-[: find <return-value>    ;; what to return
+[:find <return-value>    ;; what to return
  :in $ <params... >       ;; input parameters ($ = database)
  :where <clauses...>]    ;; query conditions
 ```
@@ -49,20 +49,20 @@ logseq.DB.onBlockChanged(uuid, (block, txData) => {
 
 ```clojure
 ;; Return entity IDs
-[:find ?b : where ...]
+[:find ?b :where ...]
 
 ;; Return multiple values
-[:find ?b ? name :where ...]
+[:find ?b ?name :where ...]
 
 ;; Return full entity (commonly used)
 [:find (pull ?b [*]) :where ...]
 
 ;; Return specific attributes
-[:find (pull ?b [: block/uuid :block/content]) :where ...]
+[:find (pull ?b [:block/uuid :block/content]) :where ...]
 
 ;; Aggregate functions
-[:find (count ? b) :where ...]
-[:find (min ? d) (max ?d) :where ...]
+[:find (count ?b) :where ...]
+[:find (min ?d) (max ?d) :where ...]
 ```
 
 #### 2.3 :where Clause - Data Patterns
@@ -75,7 +75,7 @@ logseq.DB.onBlockChanged(uuid, (block, txData) => {
 
 ;; Multiple conditions (implicit AND)
 [?b :block/marker "TODO"]
-[?b : block/page ?p]
+[?b :block/page ?p]
 [?p :block/journal? true]         ;; all three must be satisfied
 ```
 
@@ -98,7 +98,7 @@ logseq.DB.onBlockChanged(uuid, (block, txData) => {
  :where
  [?b :block/marker ?marker]
  [? p :block/name ?page-name]
- [?b : block/page ?p]]
+ [?b :block/page ?p]]
 
 ;; Collection parameter (match multiple values)
 [:find (pull ?b [*])
@@ -129,7 +129,6 @@ logseq.DB.onBlockChanged(uuid, (block, txData) => {
 | `:block/properties` |     ✅      |    ❌     | Map    | Properties as key-value map         |
 | `:block/tags`       |     ✅      |    ✅     | Ref[]  | Tag references                      |
 | `:block/link`       |     ❌      |    ✅     | Ref    | Link to class/tag in DB Graph       |
-| `:block/tx-id`      |     ❌      |    ✅     | Int    | Transaction ID                      |
 | `:block/created-at` |     ✅      |    ❌     | Int    | Creation timestamp (File Graph)     |
 | `:block/updated-at` |     ✅      |    ❌     | Int    | Update timestamp (File Graph)       |
 
@@ -394,7 +393,7 @@ const results = await logseq.DB.datascriptQuery(`
 [(not= ?v "value")]
 
 ;; String operations
-[(clojure.string/includes? ? s "text")]
+[(clojure.string/includes? ?s "text")]
 [(clojure.string/starts-with? ?s "prefix")]
 [(clojure.string/ends-with? ?s "suffix")]
 [(clojure.string/blank? ?s)]
@@ -418,7 +417,7 @@ const results = await logseq.DB.datascriptQuery(`
 
 ```clojure
 ;; NOT - exclude conditions
-[: find (pull ?b [*])
+[:find (pull ?b [*])
  :where
  [? b :block/marker ? m]
  (not [?b :block/priority "C"])]
@@ -427,7 +426,7 @@ const results = await logseq.DB.datascriptQuery(`
 [:find (pull ?b [*])
  :where
  (or [?b :block/marker "TODO"]
-     [?b : block/marker "DOING"])]
+     [?b :block/marker "DOING"])]
 
 ;; OR with AND (or-join)
 [:find (pull ?b [*])

@@ -6,7 +6,7 @@ on:
     branches: [master]
     paths:
       - 'deps/db/**'
-      - '.github/workflows/db.yml'
+      - '.github/workflows/deps-db.yml'
       - '!deps/db/**.md'
       # Deps that logseq/db depends on should trigger this workflow
       - 'deps/common/**'
@@ -14,7 +14,7 @@ on:
     branches: [master]
     paths:
       - 'deps/db/**'
-      - '.github/workflows/db.yml'
+      - '.github/workflows/deps-db.yml'
       - '!deps/db/**.md'
       # Deps that logseq/db depends on should trigger this workflow
       - 'deps/common/**'

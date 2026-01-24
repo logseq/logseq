@@ -89,17 +89,15 @@ nested keys or positional errors e.g. tuples"
 
 (defn detect-deprecations
   "Detects config keys that will or have been deprecated"
-  [path content {:keys [db-graph?]}]
+  [path content]
   (let [body (try (edn/read-string content)
                   (catch :default _ ::failed-to-detect))
-        warnings (cond->
+        warnings (merge
                   {:editor/command-trigger
                    "is no longer supported. Please use '/' and report bugs on it."
                    :arweave/gateway
                    "is no longer supported."}
-                   db-graph?
-                   (merge
-                    common-config/file-only-config))]
+                  common-config/file-only-config)]
     (cond
       (= body ::failed-to-detect)
       (log/info :msg "Skip deprecation check since config is not valid edn")

@@ -1,4 +1,5 @@
 (ns logseq.publish.render
+  "Renders published content as HTML"
   (:require-macros [hiccups.core])
   (:require [clojure.string :as string]
             [hiccups.runtime]
@@ -712,8 +713,8 @@
         items)))
 
 (defn- block-ast->nodes
-  [ctx block-ast]
-  (let [[type data] block-ast]
+  [ctx block-ast']
+  (let [[type data] block-ast']
     (case type
       "Paragraph"
       (let [children (inline-coll->nodes ctx data)]
@@ -869,7 +870,7 @@
 
 (defn- asset-node [block ctx]
   (let [asset-type (:logseq.property.asset/type block)
-        asset-url (asset-url block ctx)
+        asset-url' (asset-url block ctx)
         external-url (:logseq.property.asset/external-url block)
         title (or (:block/title block) (str asset-type))
         ext (string/lower-case (or asset-type ""))
@@ -888,27 +889,27 @@
                                     width
                                     "w"))))
                       (string/join ", ")))]
-    (when asset-url
+    (when asset-url'
       (cond
         (contains? #{"png" "jpg" "jpeg" "gif" "webp" "svg" "bmp" "avif"} ext)
-        [:img.asset-image (cond-> {:src asset-url :alt title}
+        [:img.asset-image (cond-> {:src asset-url' :alt title}
                             srcset (assoc :srcset srcset :sizes publish-image-sizes-attr))]
 
         (contains? #{"mp4" "webm" "mov"} ext)
-        [:video.asset-video {:src asset-url :controls true}]
+        [:video.asset-video {:src asset-url' :controls true}]
 
         (contains? #{"mp3" "wav" "ogg"} ext)
-        [:audio.asset-audio {:src asset-url :controls true}]
+        [:audio.asset-audio {:src asset-url' :controls true}]
 
         :else
-        [:a.asset-link {:href asset-url :target "_blank"} title]))))
+        [:a.asset-link {:href asset-url' :target "_blank"} title]))))
 
 (defn block-display-node [block ctx depth]
   (let [display-type (:logseq.property.node/display-type block)
-        asset-node (when (:logseq.property.asset/type block)
+        asset-node' (when (:logseq.property.asset/type block)
                      (asset-node block ctx))]
     (case display-type
-      :asset asset-node
+      :asset asset-node'
       :code
       (let [lang (:logseq.property.code/lang block)
             attrs (cond-> {:class "code-block"}
@@ -921,7 +922,7 @@
       :quote
       [:blockquote.quote-block (block-content-nodes block ctx depth)]
 
-      (or asset-node
+      (or asset-node'
           (block-content-nodes block ctx depth)))))
 
 (defn block-content-from-ref [ref ctx]
@@ -1085,7 +1086,7 @@
          distinct
          sort)))
 
-(defn render-page-html
+(defn ^:large-vars/cleanup-todo render-page-html
   [transit page-uuid-str refs-data tagged-nodes]
   (let [payload (publish-common/read-transit-safe transit)
         meta (publish-common/get-publish-meta payload)

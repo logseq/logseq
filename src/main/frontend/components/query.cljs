@@ -111,8 +111,8 @@
         (str result-count (if (> result-count 1) " results" " result"))])]))
 
 (defn- calculate-collapsed?
-  [current-block current-block-uuid {:keys [collapsed?]}]
-  (let [temp-collapsed? (state/sub-block-collapsed current-block-uuid)
+  [current-block current-block-uuid {:keys [collapsed? container-id]}]
+  (let [temp-collapsed? (state/sub-block-collapsed current-block-uuid container-id)
         collapsed?' (if (some? temp-collapsed?)
                       temp-collapsed?
                       (or collapsed?
@@ -185,7 +185,9 @@
                                 (:block/uuid config))
          current-block (db/entity [:block/uuid current-block-uuid])
         ;; Get query result
-         collapsed?' (calculate-collapsed? current-block current-block-uuid {:collapsed? false})
+         collapsed?' (calculate-collapsed? current-block current-block-uuid
+                                           {:collapsed? false
+                                            :container-id (:container-id config)})
          built-in-collapsed? (and collapsed? built-in-query?)
          config' (assoc config
                         :current-block current-block

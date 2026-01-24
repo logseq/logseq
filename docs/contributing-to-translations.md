@@ -59,8 +59,6 @@ $ bb lang:missing es
 |                      :translation-key |                                  :string-to-translate |         :file |
 |---------------------------------------+-------------------------------------------------------+---------------|
 |    :command.editor/toggle-number-list |                                    Toggle number list | dicts/es.edn  |
-|     :command.whiteboard/bring-forward |                                          Move forward | dicts/es.edn  |
-|    :command.whiteboard/bring-to-front |                                         Move to front | dicts/es.edn  |
 ...
 ```
 
@@ -73,8 +71,6 @@ $ bb lang:missing es --copy
 
 ;; For dicts/es.edn
 :command.editor/toggle-number-list "Toggle number list"
-:command.whiteboard/bring-forward "Move forward"
-:command.whiteboard/bring-to-front "Move to front"
 ...
 ```
 

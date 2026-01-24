@@ -4,7 +4,6 @@
             [frontend.db :as db]
             [frontend.modules.outliner.core-test :as outliner-test]
             [frontend.state :as state]
-            [frontend.test.fixtures :as fixtures]
             [frontend.test.helper :as test-helper]
             [frontend.undo-redo :as undo-redo]
             [frontend.worker.db-listener :as worker-db-listener]))
@@ -35,8 +34,8 @@
 
 (use-fixtures :each
   disable-browser-fns
-  fixtures/react-components
-  fixtures/reset-db
+  test-helper/react-components
+  #(test-helper/start-and-destroy-db % {:build-init-data? false})
   listen-db-fixture)
 
 (defn- undo-all!

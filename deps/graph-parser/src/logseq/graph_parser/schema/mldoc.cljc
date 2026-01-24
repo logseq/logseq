@@ -215,6 +215,3 @@
 
 (def block-ast-with-pos-coll-schema
   [:sequential [:cat block-ast-schema [:maybe pos-schema]]])
-
-(def block-ast-coll-schema
-  [:sequential block-ast-schema])

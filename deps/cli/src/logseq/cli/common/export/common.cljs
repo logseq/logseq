@@ -55,21 +55,20 @@
 ;; Global vars that are not explicitly passed in all fns
 ;; These vars must be bound in order to use most fns in this namespace
 (def ^:dynamic *current-db* nil)
-(def ^:dynamic *current-repo* nil)
 ;; Config used by logseq.cli.common.file fns
 (def ^:dynamic *content-config* nil)
 
 ;;; internal utils
 (defn ^:api get-blocks-contents
-  [repo root-block-uuid & {:keys [init-level]
-                           :or {init-level 1}}]
+  [root-block-uuid & {:keys [init-level]
+                      :or {init-level 1}}]
   (let [block (d/entity *current-db* [:block/uuid root-block-uuid])
         link (:block/link block)
         block' (or link block)
         root-id (:block/uuid block')
         blocks (ldb/get-block-and-children *current-db* root-id)
-        tree (otree/blocks->vec-tree repo *current-db* blocks root-id {:link link})]
-    (common-file/tree->file-content *current-repo* *current-db* tree
+        tree (otree/blocks->vec-tree *current-db* blocks root-id {:link link})]
+    (common-file/tree->file-content *current-db* tree
                                     {:init-level init-level :link link}
                                     *content-config*)))
 
@@ -78,25 +77,25 @@
 (defn- block-uuid->ast
   [block-uuid]
   (let [block (into {} (d/entity *current-db* [:block/uuid block-uuid]))
-        content (common-file/tree->file-content *current-repo* *current-db* [block] {:init-level 1} *content-config*)
+        content (common-file/tree->file-content *current-db* [block] {:init-level 1} *content-config*)
         format :markdown]
     (when content
       (removev Properties-block-ast?
                (mapv remove-block-ast-pos
-                     (gp-mldoc/->edn *current-repo* content format))))))
+                     (gp-mldoc/->db-edn content format))))))
 
 (defn- block-uuid->ast-with-children
   [block-uuid]
-  (let [content (get-blocks-contents *current-repo* block-uuid)
+  (let [content (get-blocks-contents block-uuid)
         format :markdown]
     (when content
       (removev Properties-block-ast?
                (mapv remove-block-ast-pos
-                     (gp-mldoc/->edn *current-repo* content format))))))
+                     (gp-mldoc/->db-edn content format))))))
 
 (defn ^:api get-page-content
   [page-uuid]
-  (common-file/block->content *current-repo* *current-db* page-uuid nil *content-config*))
+  (common-file/block->content *current-db* page-uuid nil *content-config*))
 
 (defn- page-name->ast
   [page-name]
@@ -106,7 +105,7 @@
         (let [format :markdown]
           (removev Properties-block-ast?
                    (mapv remove-block-ast-pos
-                         (gp-mldoc/->edn *current-repo* content format))))))))
+                         (gp-mldoc/->db-edn content format))))))))
 
 (defn- update-level-in-block-ast-coll
   [block-ast-coll origin-level]

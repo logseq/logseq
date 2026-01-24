@@ -337,40 +337,42 @@ These tasks are specific to database graphs. For these tasks there is a one time
   $ cd deps/db && yarn install && cd ../outliner && yarn install && cd ../graph-parser && yarn install && cd ../..
 ```
 * `dev:db-cli` - Run a CLI command from deps/db using latest deps/db code
-* `dev:db-query` - Query a DB graph
+* `dev:query` - Query a DB graph
 
   ```sh
-  $ bb dev:db-query woot '[:find (pull ?b [*]) :where (block-content ?b "Dogma")]'
+  $ bb dev:query woot '[:find (pull ?b [*]) :where (block-content ?b "Dogma")]'
   DB contains 833 datoms
-  [{:block/tx-id 536870923, :block/link #:db{:id 100065}, :block/uuid #uuid "65565c26-f972-4400-bce4-a15df488784d", :block/updated-at 1700158508564, :block/order "a0", :block/refs [#:db{:id 100064}], :block/created-at 1700158502056, :block/format :markdown, :block/tags [#:db{:id 100064}], :block/title "Dogma #[[65565c2a-b1c5-4dc8-a0f0-81b786bc5c6d]]", :db/id 100090, :block/parent #:db{:id 100051}, :block/page #:db{:id 100051}}]
+  [{:block/tx-id 536870923, :block/link #:db{:id 100065}, :block/uuid #uuid "65565c26-f972-4400-bce4-a15df488784d", :block/updated-at 1700158508564, :block/order "a0", :block/refs [#:db{:id 100064}], :block/created-at 1700158502056, :block/tags [#:db{:id 100064}], :block/title "Dogma #[[65565c2a-b1c5-4dc8-a0f0-81b786bc5c6d]]", :db/id 100090, :block/parent #:db{:id 100051}, :block/page #:db{:id 100051}}]
   ```
 
-* `dev:db-transact` - Run a `d/transact!` against the queried results of a DB graph
+* `dev:transact` - Run a `d/transact!` against the queried results of a DB graph
 
   ```sh
   # The second arg is a datascript like with db-query. The third arg is a fn that is applied to each query result to generate transact data
-  $ bb dev:db-transact
+  $ bb dev:transact
   Usage: $0 GRAPH-DIR QUERY TRANSACT-FN
 
   # First use the -n flag to see a dry-run of what would happen
-  $ bb dev:db-transact test-db '[:find ?b :where [?b :block/type "object"]]' '(fn [id] (vector :db/retract id :block/type "object"))' -n
-  Would update 16 blocks with the following tx:
-  [[:db/retract 100137 :block/type "object"] [:db/retract 100035 :block/type "object"] [:db/retract 100128 :block/type "object"] [:db/retract 100049 :block/type "object"] [:db/retract 100028 :block/type "object"] [:db/retract 100146 :block/type "object"] [:db/retract 100144 :block/type "object"] [:db/retract 100047 :block/type "object"] [:db/retract 100145 :block/type "object"] [:db/retract 100046 :block/type "object"] [:db/retract 100045 :block/type "object"] [:db/retract 100063 :block/type "object"] [:db/retract 100036 :block/type "object"] [:db/retract 100044 :block/type "object"] [:db/retract 100129 :block/type "object"] [:db/retract 100030 :block/type "object"]]
+  $ bb dev:transact test-db '[:find ?b :where [?b :block/title "say wut"]]' '(fn [id] (vector :db/add id :block/title "say woot!"))' -n
+  Would update 1 blocks with the following tx:
+  [[:db/add 169 :block/title "say woot!"]]
   With the following blocks updated:
-  ...
+  (#:block{:title "say wut"})
 
   # When the transact looks good, run it without the flag
-  $ bb dev:db-transact test-db '[:find ?b :where [?b :block/type "object"]]' '(fn [id] (vector :db/retract id :block/type "object"))'
-  Updated 16 block(s) for graph test-db!
+  $ bb dev:transact test-db '[:find ?b :where [?b :block/title "say wut"]]' '(fn [id] (vector :db/add id :block/title "say woot!"))'
+  Updated 1 block(s) for graph test-db!
   ```
+  
+  Run the dev command `Replace graph with its db.sqlite file` to use the updated graph in the desktop app.
 
-* `dev:db-create` - Create a DB graph given a `sqlite.build` EDN file
+* `dev:create` - Create a DB graph given a `sqlite.build` EDN file
 
   First in Electron, create the name of the graph you want create e.g. `inferred`.
   Then:
 
   ```sh
-  bb dev:db-create inferred deps/db/script/create_graph/inferred.edn
+  bb dev:create inferred deps/db/script/create_graph/inferred.edn
   Generating 11 pages and 0 blocks ...
   Created graph inferred!
   ```
@@ -378,16 +380,16 @@ These tasks are specific to database graphs. For these tasks there is a one time
   Finally, upload this created graph with the dev command: `Replace graph with
   its db.sqlite file`. You'll be switched to the graph and you can use it!
 
-* `dev:db-import` and `dev:db-import-many` - Imports a file graph to DB graph, for one or many graphs
+* `dev:import` and `dev:import-many` - Imports a file graph to DB graph, for one or many graphs
 
   ```sh
   # Import the local test graph with the debug option
-  $ bb dev:db-import deps/graph-parser/test/resources/exporter-test-graph test-file-graph -d
+  $ bb dev:import deps/graph-parser/test/resources/exporter-test-graph test-file-graph -d
   Importing 43 files ...
   ...
 
   # Import and validate multiple file graphs and write them to ./out/
-  $ bb dev:db-import-many /path/to/foo /path/to/bar -d
+  $ bb dev:import-many /path/to/foo /path/to/bar -d
   Importing ./out/foo ...
   Importing 321 files ...
   Valid!
@@ -396,13 +398,13 @@ These tasks are specific to database graphs. For these tasks there is a one time
   Valid!
   ```
 
-* `dev:db-datoms` and `dev:diff-datoms` - Save a db's datoms to file and diff two datom files
+* `dev:datoms` and `dev:diff-datoms` - Save a db's datoms to file and diff two datom files
 
   ```sh
   # Save a current datoms snapshot of a graph
-  $ bb dev:db-datoms woot w2.edn
+  $ bb dev:datoms woot w2.edn
   # After some edits, save another datoms snapshot
-  $ bb dev:db-datoms woot w3.edn
+  $ bb dev:datoms woot w3.edn
 
   # Diff the two datom snapshots
   # This snapshot correctly shows an added block with content "b7" and a property using a closed :default value
@@ -410,15 +412,8 @@ These tasks are specific to database graphs. For these tasks there is a one time
   [[]
   [[162 :block/title "b7" 536871039 true]
     [162 :block/created-at 1703004379103 536871037 true]
-    [162 :block/format :markdown 536871037 true]
     [162 :block/page 149 536871037 true]
     [162 :block/parent 149 536871037 true]
-    [162
-    :block/properties
-    {#uuid "21be4275-bba9-48b8-9351-c9ca27883159"
-      #uuid "6581b09e-8b9c-4dca-a938-c900aedc8275"}
-    536871043
-    true]
     [162 :block/refs 108 536871043 true]
     [162 :block/refs 160 536871043 true]
     [162
@@ -444,16 +439,9 @@ These tasks are specific to database graphs. For these tasks there is a one time
     [nil nil 536871037 536871038]
     [162 :block/title "b7" 536871039 true]
     [162 :block/created-at 1703004379103 536871037 true]
-    [162 :block/format :markdown 536871037 true]
     [162 :block/order "a0" 536871037 true]
     [162 :block/page 149 536871037 true]
     [162 :block/parent 149 536871037 true]
-    [162
-    :block/properties
-    {#uuid "21be4275-bba9-48b8-9351-c9ca27883159"
-      #uuid "6581b09e-8b9c-4dca-a938-c900aedc8275"}
-    536871043
-    true]
     [162 :block/refs 108 536871043 true]
     [162 :block/refs 160 536871043 true]
     [162 :block/tx-id 536871043 536871044 true]
