@@ -56,7 +56,20 @@
                            [(identity 0) ?days-ago])
                       (and [(* ?recent-days 86400000) ?recent-days-ms]
                            [(- ?now-ms ?recent-days-ms) ?days-ago]
-                           [(>= ?updated-at ?days-ago)]))]}})
+                           [(>= ?updated-at ?days-ago)]))]}
+
+   "recent-updated"
+   {:doc "Find entities updated within recent-days."
+    :inputs [{:name "recent-days"}
+             {:name "?now-ms" :default :now-ms}]
+    :query '[:find [?e ...]
+             :in $ ?recent-days ?now-ms
+             :where
+             [?e :block/updated-at ?updated-at]
+             [(missing? $ ?e :logseq.property/built-in?)]
+             [(* ?recent-days 86400000) ?recent-days-ms]
+             [(- ?now-ms ?recent-days-ms) ?days-ago]
+             [(>= ?updated-at ?days-ago)]]}})
 
 (defn- parse-edn
   [label value]
@@ -169,6 +182,19 @@
       (assoc (vec inputs) 0 normalized))
     inputs))
 
+(defn- validate-recent-updated-inputs
+  [entry inputs]
+  (if (and entry
+           (= "recent-updated" (:name entry))
+           (= :built-in (:source entry)))
+    (let [recent-days (first inputs)]
+      (if (and (integer? recent-days) (pos? recent-days))
+        {:ok? true :value inputs}
+        {:ok? false
+         :error {:code :invalid-options
+                 :message "recent-days must be a positive integer"}}))
+    {:ok? true :value inputs}))
+
 (defn build-action
   [options repo config]
   (if-not (seq repo)
@@ -220,13 +246,16 @@
                               (:entry query-result)
                               (or (:value named-inputs)
                                   (:value inputs-result)
-                                  []))]
-                  {:ok? true
-                   :action {:type :query
-                            :repo repo
-                            :graph (core/repo->graph repo)
-                            :query (:value query-result)
-                            :inputs inputs}})))))))))
+                                  []))
+                      validated (validate-recent-updated-inputs (:entry query-result) inputs)]
+                  (if-not (:ok? validated)
+                    validated
+                    {:ok? true
+                     :action {:type :query
+                              :repo repo
+                              :graph (core/repo->graph repo)
+                              :query (:value query-result)
+                              :inputs (:value validated)}}))))))))))
 
 (defn build-list-action
   [_options _repo]
