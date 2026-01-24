@@ -217,6 +217,8 @@
         {:keys [opts args]} (command-core/parse-leading-global-opts raw-args)]
     (if legacy-graph-opt?
       (command-core/invalid-options-result summary "unknown option: --graph")
+    (if (:version opts)
+      (command-core/ok-result :version opts [] summary)
     (if (empty? args)
       (if (:help opts)
         (command-core/help-result summary)
@@ -249,7 +251,7 @@
                 (command-core/cli-error->result summary data)
 
                 :else
-                (command-core/unknown-command-result summary (str "unknown command: " (string/join " " args))))))))))))
+                (command-core/unknown-command-result summary (str "unknown command: " (string/join " " args)))))))))))))
 
 ;; Repo/graph helpers live in logseq.cli.command.core.
 

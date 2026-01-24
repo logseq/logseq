@@ -1,6 +1,7 @@
 (ns frontend.worker.db-worker-node-test
   (:require ["http" :as http]
             [cljs.test :refer [async deftest is]]
+            [clojure.string :as string]
             [frontend.test.node-helper :as node-helper]
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.db-worker-node :as db-worker-node]
@@ -174,6 +175,19 @@
     (is (nil? (:port result)))
     (is (= "logseq_db_parse_args" (:repo result)))
     (is (= "/tmp/db-worker" (:data-dir result)))))
+
+(deftest db-worker-node-parse-args-ignores-auth-token
+  (let [parse-args #'db-worker-node/parse-args
+        result (parse-args #js ["node" "dist/db-worker-node.js"
+                                "--auth-token" "secret"
+                                "--data-dir" "/tmp/db-worker"])]
+    (is (nil? (:auth-token result)))
+    (is (= "/tmp/db-worker" (:data-dir result)))))
+
+(deftest db-worker-node-help-omits-auth-token
+  (let [show-help! #'db-worker-node/show-help!
+        output (with-out-str (show-help!))]
+    (is (not (string/includes? output "--auth-token")))))
 
 (deftest db-worker-node-repo-error-handles-keyword-methods
   (let [repo-error #'db-worker-node/repo-error

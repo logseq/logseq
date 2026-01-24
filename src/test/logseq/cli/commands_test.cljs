@@ -12,6 +12,8 @@
     (let [result (commands/parse-args ["--help"])
           summary (:summary result)]
       (is (true? (:help? result)))
+      (is (not (string/includes? summary "--auth-token")))
+      (is (not (string/includes? summary "--retries")))
       (is (string/includes? summary "Graph Inspect and Edit"))
       (is (string/includes? summary "Graph Management"))
       (is (string/includes? summary "list"))
