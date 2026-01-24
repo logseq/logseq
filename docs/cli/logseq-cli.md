@@ -5,8 +5,12 @@ The Logseq CLI is a Node.js program compiled from ClojureScript that connects to
 ## Build the CLI
 
 ```bash
+LOGSEQ_BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ") \
+LOGSEQ_REVISION=$(git rev-parse --short HEAD) \
 clojure -M:cljs compile logseq-cli
 ```
+
+If `LOGSEQ_BUILD_TIME` or `LOGSEQ_REVISION` are not provided, the CLI prints defaults in `--version` output.
 
 ## db-worker-node lifecycle
 
@@ -16,12 +20,12 @@ clojure -M:cljs compile logseq-cli
 
 ```bash
 node ./dist/logseq.js graph list
+```
 
 If installed globally, run:
 
 ```bash
 logseq graph list
-```
 ```
 
 ## Configuration
@@ -29,11 +33,9 @@ logseq graph list
 Optional configuration file: `~/.logseq/cli.edn`
 
 Supported keys include:
-- `:auth-token`
 - `:repo`
 - `:data-dir`
 - `:timeout-ms`
-- `:retries`
 - `:output-format` (use `:json` or `:edn` for scripting)
 
 CLI flags take precedence over environment variables, which take precedence over the config file.
@@ -94,6 +96,14 @@ Subcommands:
 
 Options grouping:
 - Help output separates **Global options** (apply to all commands) and **Command options** (command-specific flags).
+
+Version output:
+- `logseq --version` prints:
+
+```
+Build time: <timestamp>
+Revision: <commit>
+```
 
 Output formats:
 - Global `--output <human|json|edn>` (also accepted per subcommand)

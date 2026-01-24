@@ -3,12 +3,10 @@
   (:require ["fs" :as fs]
             ["http" :as http]
             ["path" :as node-path]
-            [clojure.string :as string]
             [frontend.worker.db-core :as db-core]
             [frontend.worker.db-worker-node-lock :as db-lock]
             [frontend.worker.platform.node :as platform-node]
             [frontend.worker.state :as worker-state]
-            [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [promesa.core :as p]))
@@ -39,13 +37,6 @@
                           (resolve (.toString buf "utf8")))))
        (.on req "error" reject)))))
 
-(defn- authorized?
-  [^js req auth-token]
-  (if (string/blank? auth-token)
-    true
-    (let [auth (gobj/get (.-headers req) "authorization")]
-      (= auth (str "Bearer " auth-token)))))
-
 (defn- parse-args
   [argv]
   (loop [args (vec (drop 2 argv))
@@ -58,7 +49,6 @@
           "--repo" (recur remaining (assoc opts :repo value))
           "--rtc-ws-url" (recur remaining (assoc opts :rtc-ws-url value))
           "--log-level" (recur remaining (assoc opts :log-level value))
-          "--auth-token" (recur remaining (assoc opts :auth-token value))
           "--help" (recur remaining (assoc opts :help? true))
           (recur remaining opts))))))
 
@@ -171,7 +161,7 @@
                                  {:method qkw})))))
 
 (defn- make-server
-  [proxy {:keys [auth-token bound-repo stop-fn]}]
+  [proxy {:keys [bound-repo stop-fn]}]
   (http/createServer
    (fn [^js req ^js res]
      (let [url (.-url req)
@@ -186,54 +176,48 @@
            (send-text! res 503 "not-ready"))
 
          (= url "/v1/events")
-         (if (authorized? req auth-token)
-           (sse-handler req res)
-           (send-text! res 401 "unauthorized"))
+         (sse-handler req res)
 
          (= url "/v1/invoke")
-         (if (authorized? req auth-token)
-           (if (= method "POST")
-             (-> (p/let [body (<read-body req)
-                         payload (js/JSON.parse body)
-                         {:keys [method directPass argsTransit args]} (js->clj payload :keywordize-keys true)
-                         method-kw (normalize-method-kw method)
-                         method-str (normalize-method-str method)
-                         direct-pass? (boolean directPass)
-                         args' (if direct-pass?
-                                 args
-                                 (or argsTransit args))
-                         args-for-validation (if direct-pass?
-                                               args'
-                                               (if (string? args')
-                                                 (ldb/read-transit-str args')
-                                                 args'))]
-                   (if-let [{:keys [status error]} (repo-error method-kw args-for-validation bound-repo)]
-                     (send-json! res status {:ok false :error error})
-                     (p/let [result (<invoke! proxy method-str method-kw direct-pass? args')]
-                       (send-json! res 200 (if direct-pass?
-                                             {:ok true :result result}
-                                             {:ok true :resultTransit result})))))
-                 (p/catch (fn [e]
-                            (log/error :db-worker-node-http-invoke-failed e)
-                            (send-json! res 500 {:ok false
-                                                 :error (if (instance? js/Error e)
-                                                          {:message (.-message e)
-                                                           :stack (.-stack e)}
-                                                          e)}))))
-             (send-text! res 405 "method-not-allowed"))
-           (send-text! res 401 "unauthorized"))
+         (if (= method "POST")
+           (-> (p/let [body (<read-body req)
+                       payload (js/JSON.parse body)
+                       {:keys [method directPass argsTransit args]} (js->clj payload :keywordize-keys true)
+                       method-kw (normalize-method-kw method)
+                       method-str (normalize-method-str method)
+                       direct-pass? (boolean directPass)
+                       args' (if direct-pass?
+                               args
+                               (or argsTransit args))
+                       args-for-validation (if direct-pass?
+                                             args'
+                                             (if (string? args')
+                                               (ldb/read-transit-str args')
+                                               args'))]
+                 (if-let [{:keys [status error]} (repo-error method-kw args-for-validation bound-repo)]
+                   (send-json! res status {:ok false :error error})
+                   (p/let [result (<invoke! proxy method-str method-kw direct-pass? args')]
+                     (send-json! res 200 (if direct-pass?
+                                           {:ok true :result result}
+                                           {:ok true :resultTransit result})))))
+               (p/catch (fn [e]
+                          (log/error :db-worker-node-http-invoke-failed e)
+                          (send-json! res 500 {:ok false
+                                               :error (if (instance? js/Error e)
+                                                        {:message (.-message e)
+                                                         :stack (.-stack e)}
+                                                        e)}))))
+           (send-text! res 405 "method-not-allowed"))
 
          (= url "/v1/shutdown")
-         (if (authorized? req auth-token)
-           (if (= method "POST")
-             (do
-               (send-json! res 200 {:ok true})
-               (js/setTimeout (fn []
-                                (when stop-fn
-                                  (stop-fn)))
-                              10))
-             (send-text! res 405 "method-not-allowed"))
-           (send-text! res 401 "unauthorized"))
+         (if (= method "POST")
+           (do
+             (send-json! res 200 {:ok true})
+             (js/setTimeout (fn []
+                              (when stop-fn
+                                (stop-fn)))
+                            10))
+           (send-text! res 405 "method-not-allowed"))
 
          :else
          (send-text! res 404 "not-found"))))))
@@ -245,8 +229,7 @@
   (println "  --repo <name>        (required)")
   (println "  --rtc-ws-url <url>   (optional)")
   (println "  --log-level <level>  (default info)")
-  (println "  logs: <data-dir>/<graph-dir>/db-worker-node-YYYYMMDD.log (retains 7)")
-  (println "  --auth-token <token> (optional)"))
+  (println "  logs: <data-dir>/<graph-dir>/db-worker-node-YYYYMMDD.log (retains 7)"))
 
 (defn- pad2
   [value]
@@ -312,7 +295,7 @@
     file-path))
 
 (defn start-daemon!
-  [{:keys [data-dir repo rtc-ws-url auth-token log-level]}]
+  [{:keys [data-dir repo rtc-ws-url log-level]}]
   (let [host "127.0.0.1"
         port 0]
     (if-not (seq repo)
@@ -336,8 +319,7 @@
                             method-str (normalize-method-str method-kw)]
                         (<invoke! proxy method-str method-kw false [repo {}]))]
               (let [stop!* (atom nil)
-                    server (make-server proxy {:auth-token auth-token
-                                               :bound-repo repo
+                    server (make-server proxy {:bound-repo repo
                                                :stop-fn (fn []
                                                           (when-let [stop! @stop!*]
                                                             (stop!)))})]
@@ -380,7 +362,7 @@
 
 (defn main
   []
-  (let [{:keys [data-dir repo rtc-ws-url auth-token help?] :as opts}
+  (let [{:keys [data-dir repo rtc-ws-url help?] :as opts}
         (parse-args (.-argv js/process))]
     (when help?
       (show-help!)
@@ -392,7 +374,6 @@
             (start-daemon! {:data-dir data-dir
                             :repo repo
                             :rtc-ws-url rtc-ws-url
-                            :auth-token auth-token
                             :log-level (:log-level opts)})]
       (log/info :db-worker-node-ready {:host (:host daemon) :port (:port daemon)})
       (let [shutdown (fn []
