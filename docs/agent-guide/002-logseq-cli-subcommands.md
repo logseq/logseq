@@ -55,11 +55,10 @@ Global options apply to all subcommands and are parsed before subcommand options
 | Option | Purpose | Notes |
 | --- | --- | --- |
 | --help | Show help | Available at top level and per subcommand. |
+| --version | Show version | Prints build time and revision. |
 | --config PATH | Config file path | Defaults to ~/.logseq/cli.edn. |
-| --auth-token TOKEN | Auth token | Sent as header. |
 | --repo REPO | Graph name | Used as current repo. |
 | --timeout-ms MS | Request timeout | Integer milliseconds. |
-| --retries N | Retry count | Integer count. |
 | --output FORMAT | Output format | One of human, json, edn. |
 
 Each subcommand uses a nested path and its own options.
