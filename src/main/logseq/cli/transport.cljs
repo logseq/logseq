@@ -16,11 +16,9 @@
     http))
 
 (defn- base-headers
-  [auth-token]
-  (cond-> {"Content-Type" "application/json"
-           "Accept" "application/json"}
-    (seq auth-token)
-    (assoc "Authorization" (str "Bearer " auth-token))))
+  []
+  {"Content-Type" "application/json"
+   "Accept" "application/json"})
 
 (defn- <raw-request
   [{:keys [method url headers body timeout-ms]}]
@@ -58,36 +56,22 @@
        (.on req "response" (fn [_]
                               (js/clearTimeout timeout-id)))))))
 
-(defn- retryable-error?
-  [error]
-  (let [{:keys [code status]} (ex-data error)]
-    (or (= :timeout code)
-        (and (= :http-error code)
-             (>= (or status 0) 500)))))
-
 (defn request
-  [{:keys [method url headers body timeout-ms retries]
-    :or {retries 0}}]
-  (letfn [(attempt-request [attempt]
-            (-> (p/let [response (<raw-request {:method method
-                                                :url url
-                                                :headers headers
-                                                :body body
-                                                :timeout-ms timeout-ms})]
-                  (if (<= 200 (:status response) 299)
-                    response
-                    (throw (ex-info "http request failed"
-                                    {:code :http-error
-                                     :status (:status response)
-                                     :body (:body response)}))))
-                (p/catch (fn [error]
-                           (if (and (< attempt retries) (retryable-error? error))
-                             (attempt-request (inc attempt))
-                             (throw error))))))]
-    (attempt-request 0)))
+  [{:keys [method url headers body timeout-ms]}]
+  (p/let [response (<raw-request {:method method
+                                  :url url
+                                  :headers headers
+                                  :body body
+                                  :timeout-ms timeout-ms})]
+    (if (<= 200 (:status response) 299)
+      response
+      (throw (ex-info "http request failed"
+                      {:code :http-error
+                       :status (:status response)
+                       :body (:body response)})))))
 
 (defn invoke
-  [{:keys [base-url auth-token timeout-ms retries]}
+  [{:keys [base-url timeout-ms]}
    method direct-pass? args]
   (let [url (str (string/replace base-url #"/$" "") "/v1/invoke")
         method* (cond
@@ -105,10 +89,9 @@
         body (js/JSON.stringify (clj->js payload))]
     (p/let [{:keys [body]} (request {:method "POST"
                                     :url url
-                                    :headers (base-headers auth-token)
+                                    :headers (base-headers)
                                     :body body
-                                    :timeout-ms timeout-ms
-                                    :retries retries})
+                                    :timeout-ms timeout-ms})
             {:keys [result resultTransit]} (js->clj (js/JSON.parse body) :keywordize-keys true)]
       (if direct-pass?
         result

@@ -45,7 +45,9 @@
   [{:keys [config-path]} updates]
   (let [path (or config-path (default-config-path))
         current (or (read-config-file path) {})
-        next (merge current updates)]
+        filtered-current (dissoc current :auth-token :retries)
+        filtered-updates (dissoc updates :auth-token :retries)
+        next (merge filtered-current filtered-updates)]
     (ensure-config-dir! path)
     (.writeFileSync fs path (pr-str next))
     next))
@@ -54,9 +56,6 @@
   []
   (let [env (.-env js/process)]
     (cond-> {}
-      (seq (gobj/get env "LOGSEQ_DB_WORKER_AUTH_TOKEN"))
-      (assoc :auth-token (gobj/get env "LOGSEQ_DB_WORKER_AUTH_TOKEN"))
-
       (seq (gobj/get env "LOGSEQ_CLI_REPO"))
       (assoc :repo (gobj/get env "LOGSEQ_CLI_REPO"))
 
@@ -65,9 +64,6 @@
 
       (seq (gobj/get env "LOGSEQ_CLI_TIMEOUT_MS"))
       (assoc :timeout-ms (parse-int (gobj/get env "LOGSEQ_CLI_TIMEOUT_MS")))
-
-      (seq (gobj/get env "LOGSEQ_CLI_RETRIES"))
-      (assoc :retries (parse-int (gobj/get env "LOGSEQ_CLI_RETRIES")))
 
       (seq (gobj/get env "LOGSEQ_CLI_OUTPUT"))
       (assoc :output-format (parse-output-format (gobj/get env "LOGSEQ_CLI_OUTPUT")))
@@ -78,7 +74,6 @@
 (defn resolve-config
   [opts]
   (let [defaults {:timeout-ms 10000
-                  :retries 0
                   :output-format nil
                   :data-dir "~/.logseq/cli-graphs"
                   :config-path (default-config-path)}

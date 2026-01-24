@@ -8,14 +8,13 @@
   {:help {:alias :h
           :desc "Show help"
           :coerce :boolean}
+   :version {:desc "Show version"
+             :coerce :boolean}
    :config {:desc "Path to cli.edn"}
-   :auth-token {:desc "Auth token for db-worker-node"}
    :repo {:desc "Graph name"}
    :data-dir {:desc "Path to db-worker data dir"}
    :timeout-ms {:desc "Request timeout in ms"
                 :coerce :long}
-   :retries {:desc "Retry count for requests"
-             :coerce :long}
    :output {:desc "Output format (human, json, edn)"}})
 
 (defn global-spec

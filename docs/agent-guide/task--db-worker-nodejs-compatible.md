@@ -133,7 +133,6 @@ The db-worker should be runnable as a standalone process for Node.js environment
   - `--repo` (optional: auto-open a repo on boot)
   - `--rtc-ws-url` (optional)
   - `--log-level` (default `info`)
-  - `--auth-token` (optional; bearer token for HTTP)
 
 ### Lifecycle
 1. Initialize platform adapter (Node).
@@ -166,7 +165,6 @@ Event delivery options:
 - Alternatively, provide `WS /v1/events` with the same payload format.
 
 ### Security
-- If `--auth-token` is provided, require `Authorization: Bearer <token>` for all endpoints except `healthz` and `readyz`.
 - Bind to localhost by default.
 
 ## Notes on Compatibility Gaps
