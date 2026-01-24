@@ -176,13 +176,22 @@
      ;; Because UI assumes that the in-memory db has all the data except the last one transaction
      (when (seq tx-data)
 
-       ;; (prn :debug :transact :sync? (= d/transact! (or @*transact-fn d/transact!)) :tx-meta tx-meta)
-       ;; (cljs.pprint/pprint tx-data)
+       (prn :debug :transact :sync? (= d/transact! (or @*transact-fn d/transact!)) :tx-meta tx-meta)
+       (cljs.pprint/pprint tx-data)
        ;; (js/console.trace)
 
        (if-let [transact-fn @*transact-fn]
          (transact-fn repo-or-conn tx-data tx-meta)
          (transact-sync repo-or-conn tx-data tx-meta))))))
+
+(defn remove-conflict-datoms
+  [datoms]
+  (->> datoms
+       (group-by (fn [d] (take 4 d))) ; group by '(e a v tx)
+       (keep (fn [[_eavt same-eavt-datoms]]
+               (first (rseq same-eavt-datoms))))
+       ;; sort by :tx, use nth to make this fn works on both vector and datom
+       (sort-by #(nth % 3))))
 
 (defn transact-with-temp-conn!
   "Validate db and store once for a batch transaction, the `temp` conn can still load data from disk,
@@ -207,9 +216,11 @@
       (vreset! *batch-tx-data nil)
       (when (seq tx-data)
         ;; transact tx-data to `conn` and validate db
-        (let [tx-data' (if (fn? filter-tx-data)
-                         (filter-tx-data temp-after-db tx-data)
-                         tx-data)]
+        (let [tx-data' (->>
+                        (if (fn? filter-tx-data)
+                          (filter-tx-data temp-after-db tx-data)
+                          tx-data)
+                        remove-conflict-datoms)]
           (transact! conn tx-data' tx-meta))))))
 
 (def page? common-entity-util/page?)
