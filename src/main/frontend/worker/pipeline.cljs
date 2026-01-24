@@ -453,19 +453,10 @@
             fix-page-tags-tx-data
             fix-inline-page-tx-data)))
 
-(defn- remove-conflict-datoms
-  [datoms]
-  (->> datoms
-       (group-by (fn [d] (take 4 d))) ; group by '(e a v tx)
-       (keep (fn [[_eavt same-eavt-datoms]]
-               (first (rseq same-eavt-datoms))))
-       ;; sort by :tx, use nth to make this fn works on both vector and datom
-       (sort-by #(nth % 3))))
-
 (defn transact-pipeline
   "Compute extra tx-data and block/refs, should ensure it's a pure function and
   doesn't call `d/transact!` or `ldb/transact!`."
-  [repo {:keys [db-after tx-meta tx-data] :as tx-report}]
+  [repo {:keys [db-after tx-meta _tx-data] :as tx-report}]
   (when-not (:temp-conn? tx-meta)
     (let [extra-tx-data (compute-extra-tx-data tx-report)
           tx-report* (if (seq extra-tx-data)
@@ -495,7 +486,7 @@
           tx-report' (or replace-tx-report tx-report*)
           full-tx-data (-> (concat (:tx-data tx-report*)
                                    (:tx-data replace-tx-report))
-                           remove-conflict-datoms)]
+                           ldb/remove-conflict-datoms)]
       (assoc tx-report'
              :tx-data full-tx-data
              :tx-meta tx-meta
