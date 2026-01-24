@@ -549,6 +549,19 @@
     {:id id
      :error error-map}))
 
+(defn- collect-tree-ids
+  [root]
+  (letfn [(walk [node acc]
+            (let [acc (cond-> acc
+                        (:db/id node) (conj (:db/id node)))]
+              (reduce (fn [memo child]
+                        (walk child memo))
+                      acc
+                      (or (:block/children node) []))))]
+    (if root
+      (walk root #{})
+      #{})))
+
 (defn execute-show
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
@@ -567,6 +580,19 @@
                                                         :id id
                                                         :error error}))))
                                       ids))
+                  ok-results (filter :ok? results)
+                  id->tree-ids (into {}
+                                     (map (fn [{:keys [id tree]}]
+                                            [id (collect-tree-ids (:root tree))]))
+                                     ok-results)
+                  contained? (fn [id]
+                               (some (fn [[other-id tree-ids]]
+                                       (and (not= other-id id)
+                                            (contains? tree-ids id)))
+                                     id->tree-ids))
+                  results (vec (remove (fn [{:keys [ok? id]}]
+                                         (and ok? (contained? id)))
+                                       results))
                   payload (case format
                             "edn"
                             {:status :ok
