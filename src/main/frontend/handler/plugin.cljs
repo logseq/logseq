@@ -782,9 +782,10 @@
   (when (and type (fn? f))
     (when config/lsp-enabled?
       (hook-plugin-app (str :before-command-invoked type) nil))
-    (apply f args)
-    (when config/lsp-enabled?
-      (hook-plugin-app (str :after-command-invoked type) nil))))
+    (let [result (apply f args)]
+      (when config/lsp-enabled?
+        (hook-plugin-app (str :after-command-invoked type) nil))
+      result)))
 
 (defn load-plugin-from-web-url!
   [url]
