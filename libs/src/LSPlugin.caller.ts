@@ -32,6 +32,7 @@ class LSPluginCaller extends EventEmitter {
 
   private _status?: 'pending' | 'timeout'
   private _userModel: any = {}
+  private _syncGCTimer: any = null
 
   private _call?: (
     type: string,
@@ -70,13 +71,12 @@ class LSPluginCaller extends EventEmitter {
     const caller = this
     const isShadowMode = this._pluginLocal != null
 
-    let syncGCTimer: any = 0
     let syncTag = 0
     const syncActors = new Map<number, DeferredActor>()
     const readyDeferred = deferred(1000 * 60)
 
     const model: any = this._extendUserModel({
-      [LSPMSG_READY]: async (baseInfo) => {
+      [LSPMSG_READY]: async (baseInfo: any) => {
         // dynamically setup common msg handler
         model[LSPMSGFn(baseInfo?.pid)] = ({
           type,
@@ -177,7 +177,7 @@ class LSPluginCaller extends EventEmitter {
         }
 
         // actors GC
-        syncGCTimer = setInterval(() => {
+        this._syncGCTimer = setInterval(() => {
           if (syncActors.size > 100) {
             for (const [k, v] of syncActors) {
               if (v.settled) {
@@ -249,7 +249,7 @@ class LSPluginCaller extends EventEmitter {
             ? `${Math.min((left * 100) / vw, 99)}%`
             : `${left}px`
 
-        // 45 is height of headbar
+        // 45 is height of head bar
         top = Math.max(top, 45)
         top =
           typeof vh === 'number'
@@ -420,7 +420,7 @@ class LSPluginCaller extends EventEmitter {
     let root: HTMLElement = null
     if (this._parent) {
       root = this._getSandboxIframeContainer()
-      await this._parent.destroy()
+      this._parent.destroy()
     }
 
     if (this._shadow) {
@@ -428,7 +428,13 @@ class LSPluginCaller extends EventEmitter {
       this._shadow.destroy()
     }
 
-    root?.parentNode.removeChild(root)
+    root?.parentNode?.removeChild(root)
+
+    // clear GC timer
+    if (this._syncGCTimer) {
+      clearInterval(this._syncGCTimer)
+      this._syncGCTimer = null
+    }
   }
 }
 

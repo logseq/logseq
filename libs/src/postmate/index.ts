@@ -64,12 +64,14 @@ export class ParentAPI {
 
   private addTransportListener(handler: (e: any) => void) {
     if (this.messagePort) {
+      console.debug('[DEBUG] Using MessagePort for communication:', this.frame.src)
       // MessagePort delivers MessageEvent too, but without origin/source.
       this.messagePort.addEventListener('message', handler as any)
       // Some browsers require start() when using addEventListener.
       // eslint-disable-next-line @typescript-eslint/no-unused-expressions
       ;(this.messagePort as any).start?.()
     } else {
+      console.debug('[DEBUG] Using postMessage for communication:', this.frame.src)
       this.parent.addEventListener('message', handler, false)
     }
   }
