@@ -234,13 +234,14 @@
   [{:keys [repo page]}]
   (str "Added page: " page " (repo: " repo ")"))
 
-(defn- format-remove-page
-  [{:keys [repo page]}]
-  (str "Removed page: " page " (repo: " repo ")"))
-
-(defn- format-remove-block
-  [{:keys [repo block]}]
-  (str "Removed block: " block " (repo: " repo ")"))
+(defn- format-remove
+  [{:keys [repo page uuid id ids]}]
+  (cond
+    (seq page) (str "Removed page: " page " (repo: " repo ")")
+    (seq uuid) (str "Removed block: " uuid " (repo: " repo ")")
+    (seq ids) (str "Removed blocks: " (count ids) " (repo: " repo ")")
+    (some? id) (str "Removed block: " id " (repo: " repo ")")
+    :else (str "Removed item (repo: " repo ")")))
 
 (defn- format-move-block
   [{:keys [repo source target]}]
@@ -283,8 +284,7 @@
         (:list-tag :list-property) (format-list-tag-or-property (:items data) now-ms)
         :add-block (format-add-block context)
         :add-page (format-add-page context)
-        :remove-page (format-remove-page context)
-        :remove-block (format-remove-block context)
+        :remove (format-remove context)
         :move-block (format-move-block context)
         :graph-export (format-graph-export context)
         :graph-import (format-graph-import context)
