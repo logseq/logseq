@@ -149,8 +149,8 @@ class LSPluginCaller extends EventEmitter {
     this._status = 'pending'
 
     await handshake
-      .then((refParent: ChildAPI) => {
-        this._child = refParent
+      .then((childRefParent: ChildAPI) => {
+        this._child = childRefParent
         this._connected = true
 
         this._call = async (type, payload = {}, actor) => {
@@ -163,7 +163,7 @@ class LSPluginCaller extends EventEmitter {
             debug(`async call #${tag}`)
           }
 
-          refParent.emit(LSPMSGFn(model.baseInfo.id), { type, payload })
+          childRefParent.emit(LSPMSGFn(model.baseInfo.id), { type, payload })
 
           return actor?.promise as Promise<any>
         }
@@ -172,7 +172,7 @@ class LSPluginCaller extends EventEmitter {
           try {
             model[type](payload)
           } catch (e) {
-            debug(`[model method] #${type} not existed`)
+            debug(`call user model(${type}) not exist. #${this._debugTag}`)
           }
         }
 
@@ -293,12 +293,12 @@ class LSPluginCaller extends EventEmitter {
       }, 8 * 1000) // 8 secs
 
       handshake
-        .then((refChild: ParentAPI) => {
-          this._parent = refChild
+        .then((parentRefChild: ParentAPI) => {
+          this._parent = parentRefChild
           this._connected = true
           this.emit('connected')
 
-          refChild.on(LSPMSGFn(pl.id), ({ type, payload }: any) => {
+          parentRefChild.on(LSPMSGFn(pl.id), ({ type, payload }: any) => {
             debug(`[user -> *host] `, type, payload)
 
             this._pluginLocal?.emit(type, payload || {})
@@ -307,7 +307,7 @@ class LSPluginCaller extends EventEmitter {
 
           this._call = async (...args: any) => {
             // parent all will get message before handshake
-            refChild.call(LSPMSGFn(pl.id), {
+            parentRefChild.call(LSPMSGFn(pl.id), {
               type: args[0],
               payload: Object.assign(args[1] || {}, {
                 $$pid: pl.id,
@@ -317,12 +317,12 @@ class LSPluginCaller extends EventEmitter {
 
           this._callUserModel = async (type, ...payloads: any[]) => {
             if (type.startsWith(FLAG_AWAIT)) {
-              return await refChild.get(
+              return await parentRefChild.get(
                 type.replace(FLAG_AWAIT, ''),
                 ...payloads
               )
             } else {
-              refChild.call(type, payloads?.[0])
+              parentRefChild.call(type, payloads?.[0])
             }
           }
 
