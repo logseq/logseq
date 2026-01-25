@@ -57,12 +57,12 @@
       (is (string/includes? summary "add block"))
       (is (string/includes? summary "add page"))))
 
-  (testing "remove group shows subcommands"
-    (let [result (commands/parse-args ["remove"])
+  (testing "remove command shows help"
+    (let [result (commands/parse-args ["remove" "--help"])
           summary (:summary result)]
       (is (true? (:help? result)))
-      (is (string/includes? summary "remove block"))
-      (is (string/includes? summary "remove page"))))
+      (is (string/includes? summary "Usage: logseq remove"))
+      (is (string/includes? summary "Command options:"))))
 
   (testing "move command shows help"
     (let [result (commands/parse-args ["move" "--help"])
@@ -144,6 +144,14 @@
     (let [result (commands/parse-args ["wat"])]
       (is (false? (:ok? result)))
       (is (= :unknown-command (get-in result [:error :code]))))))
+
+(deftest test-parse-args-rejects-legacy-remove-subcommands
+  (testing "rejects legacy remove subcommands"
+    (doseq [args [["remove" "block"]
+                  ["remove" "page"]]]
+      (let [result (commands/parse-args args)]
+        (is (false? (:ok? result)))
+        (is (= :invalid-options (get-in result [:error :code])))))))
 
 (deftest test-parse-args-rejects-graph-option
   (testing "rejects legacy --graph option"
@@ -433,22 +441,43 @@
       (is (= :add-page (:command result)))
       (is (= "Home" (get-in result [:options :page])))))
 
-  (testing "remove block requires target"
-    (let [result (commands/parse-args ["remove" "block"])]
+  (testing "remove requires target"
+    (let [result (commands/parse-args ["remove"])]
       (is (false? (:ok? result)))
       (is (= :missing-target (get-in result [:error :code])))))
 
-  (testing "remove block parses with block"
-    (let [result (commands/parse-args ["remove" "block" "--block" "demo"])]
+  (testing "remove parses with id"
+    (let [result (commands/parse-args ["remove" "--id" "10"])]
       (is (true? (:ok? result)))
-      (is (= :remove-block (:command result)))
-      (is (= "demo" (get-in result [:options :block])))))
+      (is (= :remove (:command result)))
+      (is (= 10 (get-in result [:options :id])))))
 
-  (testing "remove page parses with page"
-    (let [result (commands/parse-args ["remove" "page" "--page" "Home"])]
+  (testing "remove parses with uuid"
+    (let [result (commands/parse-args ["remove" "--uuid" "abc"])]
       (is (true? (:ok? result)))
-      (is (= :remove-page (:command result)))
+      (is (= :remove (:command result)))
+      (is (= "abc" (get-in result [:options :uuid])))))
+
+  (testing "remove parses with page"
+    (let [result (commands/parse-args ["remove" "--page" "Home"])]
+      (is (true? (:ok? result)))
+      (is (= :remove (:command result)))
       (is (= "Home" (get-in result [:options :page])))))
+
+  (testing "remove rejects multiple selectors"
+    (let [result (commands/parse-args ["remove" "--id" "1" "--page" "Home"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "remove rejects empty id vector"
+    (let [result (commands/parse-args ["remove" "--id" "[]"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "remove rejects invalid id vector"
+    (let [result (commands/parse-args ["remove" "--id" "[1 \"no\"]"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
 
   (testing "move requires source selector"
     (let [result (commands/parse-args ["move" "--target-id" "10"])]
@@ -468,17 +497,25 @@
       (is (= "def" (get-in result [:options :target-uuid])))
       (is (= "last-child" (get-in result [:options :pos]))))))
 
+(deftest test-verb-subcommand-parse-move-target-page
+  (testing "move parses with target page"
+    (let [result (commands/parse-args ["move" "--id" "1" "--target-page" "Home"])]
+      (is (true? (:ok? result)))
+      (is (= :move-block (:command result)))
+      (is (= 1 (get-in result [:options :id])))
+      (is (= "Home" (get-in result [:options :target-page]))))))
+
 (deftest test-verb-subcommand-parse-show
   (testing "show requires target"
     (let [result (commands/parse-args ["show"])]
       (is (false? (:ok? result)))
       (is (= :missing-target (get-in result [:error :code])))))
 
-  (testing "show parses with page name"
-    (let [result (commands/parse-args ["show" "--page-name" "Home"])]
+  (testing "show parses with page"
+    (let [result (commands/parse-args ["show" "--page" "Home"])]
       (is (true? (:ok? result)))
       (is (= :show (:command result)))
-      (is (= "Home" (get-in result [:options :page-name])))))
+      (is (= "Home" (get-in result [:options :page])))))
 
   (testing "show parses with id vector"
     (let [result (commands/parse-args ["show" "--id" "[1 2]"])]
@@ -490,6 +527,16 @@
     (let [result (commands/parse-args ["show" "--id" "[1"])]
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code]))))))
+
+  (testing "show rejects legacy page-name option"
+    (let [result (commands/parse-args ["show" "--page-name" "Home"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "show rejects format option"
+    (let [result (commands/parse-args ["show" "--format" "json" "--page" "Home"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
 
 (deftest test-verb-subcommand-parse-query
   (testing "query shows group help"
@@ -562,7 +609,7 @@
   (testing "verb subcommands reject unknown flags"
     (doseq [args [["list" "page" "--wat"]
                   ["add" "block" "--wat"]
-                  ["remove" "block" "--wat"]
+                  ["remove" "--wat"]
                   ["move" "--wat"]
                   ["show" "--wat"]]]
       (let [result (commands/parse-args args)]
@@ -570,7 +617,7 @@
         (is (= :invalid-options (get-in result [:error :code]))))))
 
   (testing "verb subcommands accept output option"
-    (let [result (commands/parse-args ["show" "--output" "json" "--page-name" "Home"])]
+    (let [result (commands/parse-args ["show" "--output" "json" "--page" "Home"])]
       (is (true? (:ok? result)))
       (is (= "json" (get-in result [:options :output]))))))
 
@@ -659,11 +706,18 @@
       (is (false? (:ok? result)))
       (is (= :missing-page-name (get-in result [:error :code])))))
 
-  (testing "remove block requires target"
-    (let [parsed {:ok? true :command :remove-block :options {}}
+  (testing "remove requires target"
+    (let [parsed {:ok? true :command :remove :options {}}
           result (commands/build-action parsed {:repo "demo"})]
       (is (false? (:ok? result)))
       (is (= :missing-target (get-in result [:error :code])))))
+
+  (testing "remove normalizes id vector in build action"
+    (let [parsed {:ok? true :command :remove :options {:id "[1 2]"}}
+          result (commands/build-action parsed {:repo "demo"})]
+      (is (true? (:ok? result)))
+      (is (= :remove (get-in result [:action :type])))
+      (is (= [1 2] (get-in result [:action :ids])))))
 
   (testing "show requires target"
     (let [parsed {:ok? true :command :show :options {}}
@@ -708,12 +762,12 @@
       (is (= :invalid-options (get-in result [:error :code])))))
 
   (testing "move rejects sibling pos for page target"
-    (let [result (commands/parse-args ["move" "--id" "1" "--target-page-name" "Home" "--pos" "sibling"])]
+    (let [result (commands/parse-args ["move" "--id" "1" "--target-page" "Home" "--pos" "sibling"])]
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code])))))
 
-  (testing "move rejects legacy page-name option"
-    (let [result (commands/parse-args ["move" "--id" "1" "--page-name" "Home"])]
+  (testing "move rejects legacy target-page-name option"
+    (let [result (commands/parse-args ["move" "--id" "1" "--target-page-name" "Home"])]
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code]))))))
 

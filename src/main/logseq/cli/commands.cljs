@@ -121,11 +121,14 @@
                          (seq (:blocks opts))
                          (seq (:blocks-file opts))
                          has-args?)
-        show-targets (filter some? [(:id opts) (:uuid opts) (:page-name opts)])
+        show-targets (filter some? [(:id opts) (:uuid opts) (:page opts)])
+        remove-targets (filter some? [(:id opts)
+                                      (some-> (:uuid opts) string/trim)
+                                      (some-> (:page opts) string/trim)])
         move-sources (filter some? [(:id opts) (some-> (:uuid opts) string/trim)])
         move-targets (filter some? [(:target-id opts)
                                     (some-> (:target-uuid opts) string/trim)
-                                    (some-> (:target-page-name opts) string/trim)])]
+                                    (some-> (:target-page opts) string/trim)])]
     (cond
       (:help opts)
       (command-core/help-result cmd-summary)
@@ -143,11 +146,14 @@
       (and (= command :add-page) (not (seq (:page opts))))
       (missing-page-name-result summary)
 
-      (and (= command :remove-block) (not (seq (:block opts))))
+      (and (= command :remove) (seq args))
+      (command-core/invalid-options-result summary "remove does not accept subcommands")
+
+      (and (= command :remove) (empty? remove-targets))
       (missing-target-result summary)
 
-      (and (= command :remove-page) (not (seq (:page opts))))
-      (missing-target-result summary)
+      (and (= command :remove) (> (count remove-targets) 1))
+      (command-core/invalid-options-result summary "only one of --id, --uuid, or --page is allowed")
 
       (and (= command :move-block) (move-command/invalid-options? opts))
       (command-core/invalid-options-result summary (move-command/invalid-options? opts))
@@ -162,7 +168,7 @@
       (missing-target-result summary)
 
       (and (= command :show) (> (count show-targets) 1))
-      (command-core/invalid-options-result summary "only one of --id, --uuid, or --page-name is allowed")
+      (command-core/invalid-options-result summary "only one of --id, --uuid, or --page is allowed")
 
       (and (= command :query)
            (not (seq (some-> (:query opts) string/trim)))
@@ -172,6 +178,9 @@
       (and (#{:list-page :list-tag :list-property} command)
            (list-command/invalid-options? command opts))
       (command-core/invalid-options-result summary (list-command/invalid-options? command opts))
+
+      (and (= command :remove) (remove-command/invalid-options? opts))
+      (command-core/invalid-options-result summary (remove-command/invalid-options? opts))
 
       (and (= command :show) (show-command/invalid-options? opts))
       (command-core/invalid-options-result summary (show-command/invalid-options? opts))
@@ -226,7 +235,7 @@
          :error {:code :missing-command
                  :message "missing command"}
            :summary summary})
-    (if (and (= 1 (count args)) (#{"graph" "server" "list" "add" "remove" "query"} (first args)))
+    (if (and (= 1 (count args)) (#{"graph" "server" "list" "add" "query"} (first args)))
         (command-core/help-result (command-core/group-summary (first args) table))
         (try
           (let [result (cli/dispatch table args {:spec global-spec})]
@@ -331,11 +340,8 @@
         :move-block
         (move-command/build-action options repo)
 
-        :remove-block
-        (remove-command/build-remove-block-action options repo)
-
-        :remove-page
-        (remove-command/build-remove-page-action options repo)
+        :remove
+        (remove-command/build-action options repo)
 
         :query
         (query-command/build-action options repo config)
@@ -377,8 +383,7 @@
                          :add-block (add-command/execute-add-block action config)
                          :add-page (add-command/execute-add-page action config)
                          :move-block (move-command/execute-move action config)
-                         :remove-block (remove-command/execute-remove action config)
-                         :remove-page (remove-command/execute-remove action config)
+                         :remove (remove-command/execute-remove action config)
                          :query (query-command/execute-query action config)
                          :query-list (query-command/execute-query-list action config)
                          :show (show-command/execute-show action config)
@@ -392,4 +397,4 @@
                                   :message "unknown action"}}))]
         (assoc result
                :command (or (:command action) (:type action))
-               :context (select-keys action [:repo :graph :page :block :blocks :source :target])))))
+               :context (select-keys action [:repo :graph :page :id :ids :uuid :block :blocks :source :target])))))

@@ -1,6 +1,7 @@
 (ns logseq.cli.command.show
   "Show-related CLI commands."
   (:require [clojure.string :as string]
+            [logseq.cli.command.id :as id-command]
             [logseq.cli.command.core :as core]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
@@ -10,73 +11,20 @@
 (def ^:private show-spec
   {:id {:desc "Block db/id or EDN vector of ids"}
    :uuid {:desc "Block UUID"}
-   :page-name {:desc "Page name"}
+   :page {:desc "Page name"}
    :level {:desc "Limit tree depth"
-           :coerce :long}
-   :format {:desc "Output format (text, json, edn)"}})
+           :coerce :long}})
 
 (def entries
   [(core/command-entry ["show"] :show "Show tree" show-spec)])
 
-(def ^:private show-formats
-  #{"text" "json" "edn"})
-
 (def ^:private multi-id-delimiter "\n================================================================\n")
-
-(defn- valid-id?
-  [value]
-  (and (number? value) (integer? value)))
-
-(defn- parse-id-option
-  [value]
-  (let [invalid (fn [message]
-                  {:ok? false :message message})]
-    (cond
-      (nil? value)
-      {:ok? true :value nil :multi? false}
-
-      (vector? value)
-      (cond
-        (empty? value) (invalid "id vector must contain at least one id")
-        (every? valid-id? value) {:ok? true :value (vec value) :multi? true}
-        :else (invalid "id vector must contain only integers"))
-
-      (valid-id? value)
-      {:ok? true :value [value] :multi? false}
-
-      (string? value)
-      (let [text (string/trim value)]
-        (cond
-          (string/blank? text)
-          (invalid "id is required")
-
-          (string/starts-with? text "[")
-          (let [parsed (common-util/safe-read-string {:log-error? false} text)]
-            (cond
-              (nil? parsed) (invalid "invalid id edn")
-              (not (vector? parsed)) (invalid "id must be a vector")
-              (empty? parsed) (invalid "id vector must contain at least one id")
-              (every? valid-id? parsed) {:ok? true :value (vec parsed) :multi? true}
-              :else (invalid "id vector must contain only integers")))
-
-          (re-matches #"-?\\d+" text)
-          {:ok? true :value [(js/parseInt text 10)] :multi? false}
-
-          :else
-          (invalid "id must be a number or vector of numbers")))
-
-      :else
-      (invalid "id must be a number or vector of numbers"))))
 
 (defn invalid-options?
   [opts]
-  (let [format (:format opts)
-        level (:level opts)
-        id-result (parse-id-option (:id opts))]
+  (let [level (:level opts)
+        id-result (id-command/parse-id-option (:id opts))]
     (cond
-      (and (seq format) (not (contains? show-formats (string/lower-case format))))
-      (str "invalid format: " format)
-
       (and (some? level) (< level 1))
       "level must be >= 1"
 
@@ -367,7 +315,7 @@
     (build root-id 1)))
 
 (defn- fetch-tree
-  [config {:keys [repo id page-name level] :as opts}]
+  [config {:keys [repo id page level] :as opts}]
   (let [max-depth (or level 10)
         uuid-str (:uuid opts)]
     (cond
@@ -414,12 +362,12 @@
                 {:root (assoc entity :block/children children)})
               (throw (ex-info "block not found" {:code :block-not-found}))))))
 
-      (seq page-name)
+      (seq page)
       (p/let [page-entity (transport/invoke config :thread-api/pull false
                                             [repo [:db/id :block/uuid :block/title
                                                    {:logseq.property/status [:db/ident :block/name :block/title]}
                                                    {:block/tags [:db/id :block/name :block/title :block/uuid]}]
-                                             [:block/name page-name]])]
+                                             [:block/name page]])]
         (if-let [page-id (:db/id page-entity)]
           (p/let [blocks (fetch-blocks-for-page config repo page-id)
                   children (build-tree blocks page-id max-depth)]
@@ -491,11 +439,10 @@
     {:ok? false
      :error {:code :missing-repo
              :message "repo is required for show"}}
-    (let [format (some-> (:format options) string/lower-case)
-          id-result (parse-id-option (:id options))
+    (let [id-result (id-command/parse-id-option (:id options))
           ids (:value id-result)
           multi-id? (:multi? id-result)
-          targets (filter some? [(:id options) (:uuid options) (:page-name options)])]
+          targets (filter some? [(:id options) (:uuid options) (:page options)])]
       (if (empty? targets)
         {:ok? false
          :error {:code :missing-target
@@ -511,9 +458,8 @@
                     :ids ids
                     :multi-id? multi-id?
                     :uuid (:uuid options)
-                    :page-name (:page-name options)
-                    :level (:level options)
-                    :format format}})))))
+                    :page (:page options)
+                    :level (:level options)}})))))
 
 (defn- build-tree-data
   [config action]
@@ -565,7 +511,7 @@
 (defn execute-show
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
-              format (:format action)
+              format (:output-format config)
               ids (:ids action)
               multi-id? (:multi-id? action)]
         (if (and (seq ids) multi-id?)
@@ -594,7 +540,7 @@
                                          (and ok? (contained? id)))
                                        results))
                   payload (case format
-                            "edn"
+                            :edn
                             {:status :ok
                              :data (mapv (fn [{:keys [ok? tree id error]}]
                                            (if ok?
@@ -603,7 +549,7 @@
                                          results)
                              :output-format :edn}
 
-                            "json"
+                            :json
                             {:status :ok
                              :data (mapv (fn [{:keys [ok? tree id error]}]
                                            (if ok?
@@ -622,12 +568,12 @@
             payload)
           (p/let [tree-data (build-tree-data cfg action)]
             (case format
-              "edn"
+              :edn
               {:status :ok
                :data tree-data
                :output-format :edn}
 
-              "json"
+              :json
               {:status :ok
                :data tree-data
                :output-format :json}
