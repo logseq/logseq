@@ -16,11 +16,6 @@
             [malli.core :as m]
             [malli.error :as me]))
 
-(defn- ensure-db-graph
-  [db]
-  (when-not (ldb/db-based-graph? db)
-    (throw (ex-info "This tool must be called on a DB graph" {}))))
-
 (defn- minimal-list-item
   [e]
   (cond-> {:db/id (:db/id e)
@@ -32,7 +27,6 @@
 (defn list-properties
   "Main fn for ListProperties tool"
   [db {:keys [expand include-built-in] :as options}]
-  (ensure-db-graph db)
   (let [include-built-in? (if (contains? options :include-built-in) include-built-in true)]
     (->> (d/datoms db :avet :block/tags :logseq.class/Property)
          (map #(d/entity db (:e %)))
@@ -57,7 +51,6 @@
 (defn list-tags
   "Main fn for ListTags tool"
   [db {:keys [expand include-built-in] :as options}]
-  (ensure-db-graph db)
   (let [include-built-in? (if (contains? options :include-built-in) include-built-in true)]
     (->> (d/datoms db :avet :block/tags :logseq.class/Tag)
          (map #(d/entity db (:e %)))
@@ -123,7 +116,6 @@
 (defn list-pages
   "Main fn for ListPages tool"
   [db {:keys [expand include-hidden include-journal journal-only created-after updated-after] :as options}]
-  (ensure-db-graph db)
   (let [include-hidden? (boolean include-hidden)
         include-journal? (if (contains? options :include-journal) include-journal true)
         journal-only? (boolean journal-only)
