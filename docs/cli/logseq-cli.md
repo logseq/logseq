@@ -69,14 +69,13 @@ Inspect and edit commands:
 - `add block --blocks <edn> [--target-page-name <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - insert blocks via EDN vector
 - `add block --blocks-file <path> [--target-page-name <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - insert blocks from an EDN file
 - `add page --page <name>` - create a page
-- `move --id <id>|--uuid <uuid> --target-id <id>|--target-uuid <uuid>|--target-page-name <name> [--pos first-child|last-child|sibling]` - move a block and its children (defaults to first-child)
-- `remove block --block <uuid>` - remove a block and its children
-- `remove page --page <name>` - remove a page and its children
+- `move --id <id>|--uuid <uuid> --target-id <id>|--target-uuid <uuid>|--target-page <name> [--pos first-child|last-child|sibling]` - move a block and its children (defaults to first-child)
+- `remove --id <id>|--uuid <uuid>|--page <name>` - remove blocks (by db/id or UUID) or pages
 - `search <query> [--type page|block|tag|property|all] [--tag <name>] [--case-sensitive] [--sort updated-at|created-at] [--order asc|desc]` - search across pages, blocks, tags, and properties (query is positional)
 - `query --query <edn> [--inputs <edn-vector>]` - run a Datascript query against the graph
-- `show --page-name <name> [--format text|json|edn] [--level <n>]` - show page tree
-- `show --uuid <uuid> [--format text|json|edn] [--level <n>]` - show block tree
-- `show --id <id> [--format text|json|edn] [--level <n>]` - show block tree by db/id
+- `show --page <name> [--level <n>]` - show page tree
+- `show --uuid <uuid> [--level <n>]` - show block tree
+- `show --id <id> [--level <n>]` - show block tree by db/id
 
 Help output:
 
@@ -88,8 +87,7 @@ Subcommands:
   add block [options]      Add blocks
   add page [options]       Create page
   move [options]           Move block
-  remove block [options]   Remove block
-  remove page [options]    Remove page
+  remove [options]         Remove block or page
   search <query> [options] Search graph
   show [options]           Show tree
 ```
@@ -106,7 +104,7 @@ Revision: <commit>
 ```
 
 Output formats:
-- Global `--output <human|json|edn>` (also accepted per subcommand)
+- Global `--output <human|json|edn>` applies to all commands
 - For `graph export`, `--output` refers to the destination file path. Output formatting is controlled via `:output-format` in config or `LOGSEQ_CLI_OUTPUT`.
 - Human output is plain text. List/search commands render tables with a final `Count: N` line. For list and search subcommands, the ID column uses `:db/id` (not UUID). If `:db/ident` exists, an `IDENT` column is included. Search table columns are `ID` and `TITLE`. Block titles can include multiple lines; multi-line rows align additional lines under the `TITLE` column. Times such as list `UPDATED-AT`/`CREATED-AT` and `graph info` `Created at` are shown in human-friendly relative form. Errors include error codes and may include a `Hint:` line. Use `--output json|edn` for structured output.
 - `query` human output returns a plain string (the query result rendered via `pr-str`), which is convenient for pipelines like `logseq query ... | xargs logseq show --id`.
@@ -131,8 +129,8 @@ node ./dist/logseq.js graph create --repo demo
 node ./dist/logseq.js graph export --type edn --output /tmp/demo.edn --repo demo
 node ./dist/logseq.js graph import --type edn --input /tmp/demo.edn --repo demo-import
 node ./dist/logseq.js add block --target-page-name TestPage --content "hello world"
-node ./dist/logseq.js move --uuid <uuid> --target-page-name TargetPage
+node ./dist/logseq.js move --uuid <uuid> --target-page TargetPage
 node ./dist/logseq.js search "hello"
-node ./dist/logseq.js show --page-name TestPage --format json --output json
+node ./dist/logseq.js show --page TestPage --output json
 node ./dist/logseq.js server list
 ```
