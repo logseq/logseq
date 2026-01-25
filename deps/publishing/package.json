@@ -11,6 +11,6 @@
     "fs-extra": "9.1.0"
   },
   "scripts": {
-    "test": "yarn nbb-logseq -cp test:../graph-parser/src -m nextjournal.test-runner"
+    "test": "yarn nbb-logseq -cp test -m nextjournal.test-runner"
   }
 }

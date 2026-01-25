@@ -1,6 +1,6 @@
 ## Description
 
-Shared library for page publishing (snapshot payloads, SSR helpers, shared schemas, and storage contracts).
+Shared library for page publish features (snapshot payloads, SSR helpers, shared schemas, and storage contracts).
 
 The Cloudflare Durable Object implementation is expected to use SQLite with the
 Logseq datascript fork layered on top. Page publish payloads are expected to
@@ -15,7 +15,7 @@ Namespaces live under `logseq.publish`.
 
 ## Usage
 
-This module is intended to be consumed by the Logseq app and the publishing worker.
+This module is intended to be consumed by the Logseq app and the publish worker.
 
 ## Dev
 
@@ -29,10 +29,14 @@ linting examples.
 
 For one-time setup, install the [CloudFlare cli wrangler](https://developers.cloudflare.com/workers/wrangler/) with `npm install -g wrangler@latest`.
 
-To test the publish feature locally, follow these steps:
+To test the publish features locally, follow these steps:
 
 * Run `yarn watch` or `yarn release` to build the publish worker js asset.
 * Run `wrangler dev` in worker/ to start a local cloudflare worker server.
 * In `frontend.config`, enable the commented out `PUBLISH-API-BASE` which points to a localhost url.
 * Login on the desktop app.
 * Go to any page and select `Publish` from its page menu.
+
+### Deploy
+
+When changes are ready to be deployed, run `yarn deploy`.

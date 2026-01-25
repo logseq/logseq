@@ -1,4 +1,5 @@
 (ns logseq.publish.assets
+  "Handles publishing assets"
   (:require [clojure.string :as string]
             [logseq.publish.common :as publish-common])
   (:require-macros [logseq.publish.async :refer [js-await]]))

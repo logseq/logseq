@@ -126,16 +126,13 @@
                      (teardown)))}
   []
   (if-let [route-match (state/sub :route-match)]
-    (let [route-name (get-in route-match [:data :name])]
-      (when-let [view (:view (:data route-match))]
-        (ui/catch-error-and-notify
-         (helpful-default-error-screen)
-         [:<>
-          (if (= :draw route-name)
-            (view route-match)
-            (container/root-container
-             route-match
-             (view route-match)))
-          (when config/lsp-enabled?
-            (plugin/hook-daemon-renderers))])))
+    (when-let [view (:view (:data route-match))]
+      (ui/catch-error-and-notify
+       (helpful-default-error-screen)
+       [:<>
+        (container/root-container
+         route-match
+         (view route-match))
+        (when config/lsp-enabled?
+          (plugin/hook-daemon-renderers))]))
     (not-found)))

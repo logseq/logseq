@@ -14,10 +14,10 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [frontend.util.fs :as fs-util]
             [frontend.util.text :as text-util]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
+            [logseq.common.util :as common-util]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
@@ -394,6 +394,17 @@
       [:strong short-repo-name]
       (shui/tabler-icon "selector" {:size 18})]]))
 
+;; Update invalid-graph-name-warning if characters change
+(def multiplatform-reserved-chars ":\\*\\?\"<>|\\#\\\\")
+
+(def reserved-chars-pattern
+  (re-pattern (str "[" multiplatform-reserved-chars "]+")))
+
+(defn include-reserved-chars?
+  "Includes reserved characters that would broken FS"
+  [s]
+  (common-util/safe-re-find reserved-chars-pattern s))
+
 (defn invalid-graph-name-warning
   []
   (notification/show!
@@ -417,7 +428,7 @@
 (defn invalid-graph-name?
   "Returns boolean indicating if DB graph name is invalid. Must be kept in sync with invalid-graph-name-warning"
   [graph-name]
-  (or (fs-util/include-reserved-chars? graph-name)
+  (or (include-reserved-chars? graph-name)
       (string/includes? graph-name "+")
       (string/includes? graph-name "/")))
 

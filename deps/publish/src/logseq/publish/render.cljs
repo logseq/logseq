@@ -1,4 +1,5 @@
 (ns logseq.publish.render
+  "Renders published content as HTML"
   (:require-macros [hiccups.core])
   (:require [clojure.string :as string]
             [hiccups.runtime]

@@ -1,5 +1,7 @@
 (ns logseq.db.common.entity-plus
   "Add map ops such as assoc/dissoc to datascript Entity.
+   The db-based-graph? checks are still in this ns because it's unclear which of these
+   lower level fns are still used by the graph-parser.
 
    NOTE: This doesn't work for nbb/sci yet because of https://github.com/babashka/sci/issues/639"
   ;; Disable clj linters since we don't support clj
@@ -17,12 +19,9 @@
 
 (def nil-db-ident-entities
   "No such entities with these :db/ident, but `(d/entity <db> <ident>)` has been called somewhere."
-  #{:block/tx-id :block/uuid :block/journal-day :block/_refs :block/level :block/heading-level :block/warning
-    ;; File graph only attributes. Can these be removed if this is only called in db graphs?
-    :block/pre-block? :block/scheduled :block/deadline :block/type :block/name :block/marker
-
-    :block.temp/ast-title
-    :block.temp/load-status :block.temp/has-children? :block.temp/ast-body
+  #{:block/tx-id :block/uuid :block/journal-day :block/_refs :block/level :block/heading-level
+    :block/warning :block/name
+    :block.temp/ast-title :block.temp/load-status :block.temp/has-children? :block.temp/ast-body
 
     :db/valueType :db/cardinality :db/ident :db/index
 
@@ -78,7 +77,8 @@
   (Entity. db e (volatile! false) (volatile! {})))
 
 (defn db-based-graph?
-  "Whether the current graph is db-only"
+  "Whether the current graph is db-only. This should only be used in contexts
+   where both DB and file graph databases are possible e.g. graph-parser"
   [db]
   (when db
     (identical? "db" (:kv/value (entity-memoized db :logseq.kv/db-type)))))

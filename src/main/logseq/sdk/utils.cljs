@@ -8,8 +8,8 @@
             [frontend.util :as util]
             [goog.object :as gobj]
             [logseq.cli.common.mcp.tools :as cli-common-mcp-tools]
-            [logseq.db.common.entity-util :as common-entity-util]
-            [logseq.db.frontend.content :as db-content]))
+            [logseq.db.frontend.content :as db-content]
+            [logseq.db.frontend.entity-util :as entity-util]))
 
 (defn- keep-json-keyword?
   [k]
@@ -40,9 +40,9 @@
                            (gobj/get "runtime"))
            cljs? (= "cljs" runtime)
            input (cond
-                   (de/entity? input) (common-entity-util/entity->map input)
+                   (de/entity? input) (entity-util/entity->map input)
                    (sequential? input) (map #(if (de/entity? %)
-                                               (common-entity-util/entity->map %)
+                                               (entity-util/entity->map %)
                                                %) input)
                    :else input)]
        (walk/prewalk

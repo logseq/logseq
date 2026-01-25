@@ -552,7 +552,7 @@
                            (string/replace matched link (util/node-path.join url link))
                            matched)))
                       content)]
-        (format/to-html content :markdown (gp-mldoc/default-config :markdown))))
+        (format/to-html content (gp-mldoc/default-config :markdown))))
     (catch :default e
       (log/error :parse-user-md-exception e)
       content)))
@@ -782,9 +782,10 @@
   (when (and type (fn? f))
     (when config/lsp-enabled?
       (hook-plugin-app (str :before-command-invoked type) nil))
-    (apply f args)
-    (when config/lsp-enabled?
-      (hook-plugin-app (str :after-command-invoked type) nil))))
+    (let [result (apply f args)]
+      (when config/lsp-enabled?
+        (hook-plugin-app (str :after-command-invoked type) nil))
+      result)))
 
 (defn load-plugin-from-web-url!
   [url]

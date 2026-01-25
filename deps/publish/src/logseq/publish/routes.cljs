@@ -1,4 +1,5 @@
 (ns logseq.publish.routes
+  "Handles routing and responses for worker"
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [logseq.publish.assets :as publish-assets]
