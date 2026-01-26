@@ -1,4 +1,5 @@
 (ns logseq.common.authorization
+  "jwt token authorization"
   (:require [clojure.string :as string]
             [promesa.core :as p]))
 

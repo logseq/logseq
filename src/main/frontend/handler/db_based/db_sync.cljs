@@ -26,7 +26,7 @@
           base (string/replace base #"/sync/%s$" "")]
       base)))
 
-(defn- http-base []
+(defn http-base []
   (or config/db-sync-http-base
       (ws->http-base config/db-sync-ws-url)))
 
@@ -98,7 +98,7 @@
 
 (declare coerce-http-response)
 
-(defn- fetch-json
+(defn fetch-json
   [url opts {:keys [response-schema error-schema] :or {error-schema :error}}]
   (p/let [resp (js/fetch url (clj->js (with-auth-headers opts)))
           text (.text resp)
