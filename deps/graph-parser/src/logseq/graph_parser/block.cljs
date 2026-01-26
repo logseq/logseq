@@ -226,6 +226,7 @@
                                            (subs (str k) 1)
                                            k)
                                        k (-> (string/lower-case k)
+                                             (string/replace "/" "-")
                                              (string/replace " " "-")
                                              (string/replace "_" "-"))]
                                    (if (gp-property/valid-property-name? (str ":" k))
