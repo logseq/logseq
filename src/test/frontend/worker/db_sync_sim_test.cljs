@@ -423,6 +423,38 @@
                   (str "db empty seed=" seed " history=" (count @history))))))))))
 
 (defonce op-runs 500)
+
+(defn- run-random-ops!
+  [rng server clients repo->state base-uuid history run-ops-opts steps]
+  (dotimes [_ steps]
+    (let [client (rand-nth! rng clients)
+          state (get repo->state (:repo client))]
+      (run-ops! rng (assoc client :base-uuid base-uuid :state state) 1 history run-ops-opts)
+      (sync-loop! server clients))))
+
+(defn- run-local-ops!
+  [rng conn base-uuid state history run-ops-opts steps]
+  (dotimes [_ steps]
+    (run-ops! rng {:conn conn :base-uuid base-uuid :state state} 1 history run-ops-opts)))
+
+(defn- assert-synced-attrs!
+  [seed history attrs-a attrs-b attrs-c]
+  (when-not (= attrs-a attrs-b)
+    (let [[a b] (take 2 (data/diff attrs-a attrs-b))]
+      (prn :debug :diff :attrs-a a :attrs-b b)))
+  (when-not (= attrs-a attrs-c)
+    (let [[a c] (take 2 (data/diff attrs-a attrs-c))]
+      (prn :debug :diff :attrs-a a :attrs-c c)))
+  (is (= attrs-a attrs-b)
+      (str "db mismatch A/B seed=" seed
+           " a=" (count attrs-a)
+           " b=" (count attrs-b)
+           " history=" (count @history)))
+  (is (= attrs-a attrs-c)
+      (str "db mismatch A/C seed=" seed
+           " a=" (count attrs-a)
+           " c=" (count attrs-c)
+           " history=" (count @history))))
 (deftest three-clients-single-repo-sim-test
   (prn :debug "run three-clients-single-repo-sim-test")
   (testing "db-sync convergence with three clients sharing one repo"
@@ -451,12 +483,10 @@
                         repo-c {:conn conn-c :ops-conn ops-c}}
         (fn []
           (reset! db-sync/*repo->latest-remote-tx {})
-          (ensure-base-page! conn-a base-uuid)
-          (ensure-base-page! conn-b base-uuid)
-          (ensure-base-page! conn-c base-uuid)
-          (client-op/update-local-tx repo-a 0)
-          (client-op/update-local-tx repo-b 0)
-          (client-op/update-local-tx repo-c 0)
+          (doseq [conn [conn-a conn-b conn-c]]
+            (ensure-base-page! conn base-uuid))
+          (doseq [repo [repo-a repo-b repo-c]]
+            (client-op/update-local-tx repo 0))
           (let [clients [{:repo repo-a :conn conn-a :client client-a :online? true}
                          {:repo repo-b :conn conn-b :client client-b :online? true}
                          {:repo repo-c :conn conn-c :client client-c :online? true}]
@@ -464,24 +494,16 @@
                 run-ops-opts {}]
             (prn :debug :phase-a)
             ;; Phase A: all online
-            (dotimes [_ op-runs]
-              (let [client (rand-nth! rng clients)
-                    state (get repo->state (:repo client))]
-                (run-ops! rng (assoc client :base-uuid base-uuid :state state) 1 history run-ops-opts)
-                (sync-loop! server clients)))
+            (run-random-ops! rng server clients repo->state base-uuid history run-ops-opts op-runs)
 
             ;; Phase B: C offline, A/B online
             (prn :debug :phase-b-c-offline)
             (let [clients-phase-b [{:repo repo-a :conn conn-a :client client-a :online? true}
                                    {:repo repo-b :conn conn-b :client client-b :online? true}
                                    {:repo repo-c :conn conn-c :client client-c :online? false}]]
-              (dotimes [_ op-runs]
-                (let [client (rand-nth! rng (subvec (vec clients-phase-b) 0 2))
-                      state (get repo->state (:repo client))]
-                  (run-ops! rng (assoc client :base-uuid base-uuid :state state) 1 history run-ops-opts)
-                  (sync-loop! server clients-phase-b)))
-              (dotimes [_ op-runs]
-                (run-ops! rng {:client client-c :conn conn-c :base-uuid base-uuid :state state-c} 1 history run-ops-opts)))
+              (run-random-ops! rng server (subvec (vec clients-phase-b) 0 2) repo->state
+                               base-uuid history run-ops-opts op-runs)
+              (run-local-ops! rng conn-c base-uuid state-c history run-ops-opts op-runs))
 
             ;; Phase C: reconnect C
             (prn :debug :phase-c-reconnect)
@@ -492,13 +514,9 @@
             (let [clients-phase-d [{:repo repo-a :conn conn-a :client client-a :online? false}
                                    {:repo repo-b :conn conn-b :client client-b :online? true}
                                    {:repo repo-c :conn conn-c :client client-c :online? true}]]
-              (dotimes [_ op-runs]
-                (let [client (rand-nth! rng (subvec (vec clients-phase-d) 1 3))
-                      state (get repo->state (:repo client))]
-                  (run-ops! rng (assoc client :base-uuid base-uuid :state state) 1 history run-ops-opts)
-                  (sync-loop! server clients-phase-d)))
-              (dotimes [_ op-runs]
-                (run-ops! rng {:conn conn-a :base-uuid base-uuid :state state-a} 1 history run-ops-opts)))
+              (run-random-ops! rng server (subvec (vec clients-phase-d) 1 3) repo->state
+                               base-uuid history run-ops-opts op-runs)
+              (run-local-ops! rng conn-a base-uuid state-a history run-ops-opts op-runs))
 
             ;; Final sync
             (prn :debug :final-sync)
@@ -514,21 +532,4 @@
             (let [attrs-a (block-attr-map @conn-a)
                   attrs-b (block-attr-map @conn-b)
                   attrs-c (block-attr-map @conn-c)]
-              (when-not (= attrs-a attrs-b)
-                (let [[a b] (take 2 (data/diff attrs-a attrs-b))]
-                  (prn :debug :diff :attrs-a a
-                       :attrs-b b)))
-              (when-not (= attrs-a attrs-c)
-                (let [[a c] (take 2 (data/diff attrs-a attrs-c))]
-                  (prn :debug :diff :attrs-a a
-                       :attrs-c c)))
-              (is (= attrs-a attrs-b)
-                  (str "db mismatch A/B seed=" seed
-                       " a=" (count attrs-a)
-                       " b=" (count attrs-b)
-                       " history=" (count @history)))
-              (is (= attrs-a attrs-c)
-                  (str "db mismatch A/C seed=" seed
-                       " a=" (count attrs-a)
-                       " c=" (count attrs-c)
-                       " history=" (count @history))))))))))
+              (assert-synced-attrs! seed history attrs-a attrs-b attrs-c))))))))
