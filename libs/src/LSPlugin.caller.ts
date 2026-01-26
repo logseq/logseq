@@ -2,7 +2,7 @@ import Debug from 'debug'
 import { Postmate, Model, ParentAPI, ChildAPI } from './postmate'
 import EventEmitter from 'eventemitter3'
 import { PluginLocal } from './LSPlugin.core'
-import { deferred, IS_DEV } from './helpers'
+import { deferred, IS_DEV } from './common'
 import { LSPluginShadowFrame } from './LSPlugin.shadow'
 
 const debug = Debug('LSPlugin:caller')

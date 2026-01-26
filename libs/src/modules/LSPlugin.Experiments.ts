@@ -1,6 +1,6 @@
 import { LSPluginUser } from '../LSPlugin.user'
 import { PluginLocal } from '../LSPlugin.core'
-import { safeSnakeCase } from '../helpers'
+import { safeSnakeCase } from '../common'
 
 /**
  * WARN: These are some experience features and might be adjusted at any time.

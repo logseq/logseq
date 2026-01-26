@@ -21,8 +21,8 @@ import {
   injectTheme,
   cleanInjectedUI,
   PluginLogger,
-} from './helpers'
-import * as pluginHelpers from './helpers'
+} from './common'
+import * as pluginHelpers from './common'
 import DOMPurify from 'dompurify'
 import Debug from 'debug'
 import {
