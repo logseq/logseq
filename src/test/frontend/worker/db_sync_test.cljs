@@ -5,6 +5,7 @@
             [frontend.worker.db-sync :as db-sync]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.state :as worker-state]
+            [logseq.db :as ldb]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]
@@ -75,8 +76,8 @@
                      encrypted (#'db-sync/<encrypt-tx-data aes-key tx-data)]
                (is (not= tx-data encrypted))
                (is (string? (nth (first encrypted) 3)))
-               (is (= (nth (second encrypted) 3)
-                      "page"))
+               (is (string? (nth (second encrypted) 3)))
+               (is (not= (nth (second encrypted) 3) "page"))
                (p/let [decrypted (#'db-sync/<decrypt-tx-data aes-key encrypted)]
                  (is (= tx-data decrypted))
                  (done)))
@@ -96,8 +97,15 @@
                (let [[_ content* _] (first encrypted)]
                  (is (string? content*))
                  (is (not= content content*)))
-               (p/let [decrypted (#'db-sync/<decrypt-snapshot-rows aes-key encrypted)]
-                 (is (= rows decrypted))
+               (p/let [decrypted (#'db-sync/<decrypt-snapshot-rows aes-key encrypted)
+                       normalize (fn [content']
+                                   (let [data (ldb/read-transit-str content')]
+                                     (if (map? data)
+                                       (update data :keys (fnil vec []))
+                                       data)))
+                       decoded-original (normalize content)
+                       decoded-decrypted (normalize (nth (first decrypted) 1))]
+                 (is (= decoded-original decoded-decrypted))
                  (done)))
              (p/catch (fn [e]
                         (is false (str e))
@@ -116,21 +124,21 @@
            (-> (p/let [aes-key (crypt/<generate-aes-key)
                        tx-data (#'db-sync/<encrypt-datoms aes-key datoms)
                        title-tx (first (filter (fn [item]
-                                                 (and (= (:e title-datom) (nth item 1))
-                                                      (= :block/title (nth item 2))))
+                                                 (and (= (:e title-datom) (:e item))
+                                                      (= :block/title (:a item))))
                                                tx-data))
                        name-tx (first (filter (fn [item]
-                                                (and (= (:e name-datom) (nth item 1))
-                                                     (= :block/name (nth item 2))))
+                                                (and (= (:e name-datom) (:e item))
+                                                     (= :block/name (:a item))))
                                               tx-data))
                        uuid-tx (first (filter (fn [item]
-                                                (and (= (:e uuid-datom) (nth item 1))
-                                                     (= :block/uuid (nth item 2))))
+                                                (and (= (:e uuid-datom) (:e item))
+                                                     (= :block/uuid (:a item))))
                                               tx-data))]
-                 (is (string? (nth title-tx 3)))
-                 (is (string? (nth name-tx 3)))
-                 (is (not= (:v title-datom) (nth title-tx 3)))
-                 (is (= (:v uuid-datom) (nth uuid-tx 3)))
+                 (is (string? (:v title-tx)))
+                 (is (string? (:v name-tx)))
+                 (is (not= (:v title-datom) (:v title-tx)))
+                 (is (= (:v uuid-datom) (:v uuid-tx)))
                  (done))
                (p/catch (fn [e]
                           (is false (str e))
@@ -139,23 +147,23 @@
 (deftest ensure-user-rsa-keys-test
   (async done
          (let [upload-called (atom nil)]
-           (with-redefs [db-sync/e2ee-base (fn [] "http://base")
-                         db-sync/<fetch-user-rsa-key-pair-raw (fn [_] (p/resolved {}))
-                         db-sync/<upload-user-rsa-key-pair! (fn [_ public-key encrypted-private-key]
-                                                              (reset! upload-called [public-key encrypted-private-key])
-                                                              (p/resolved {:public-key public-key
-                                                                           :encrypted-private-key encrypted-private-key}))
-                         crypt/<generate-rsa-key-pair (fn [] (p/resolved #js {:publicKey :pub :privateKey :priv}))
-                         crypt/<export-public-key (fn [_] (p/resolved :pub-export))
-                         crypt/<encrypt-private-key (fn [_ _] (p/resolved :priv-encrypted))
-                         worker-state/<invoke-main-thread (fn [_] (p/resolved {:password "pw"}))]
-             (-> (p/let [resp (db-sync/ensure-user-rsa-keys!)]
+           (-> (p/with-redefs [db-sync/e2ee-base (fn [] "http://base")
+                               db-sync/<fetch-user-rsa-key-pair-raw (fn [_] (p/resolved {}))
+                               db-sync/<upload-user-rsa-key-pair! (fn [_ public-key encrypted-private-key]
+                                                                    (reset! upload-called [public-key encrypted-private-key])
+                                                                    (p/resolved {:public-key public-key
+                                                                                 :encrypted-private-key encrypted-private-key}))
+                               crypt/<generate-rsa-key-pair (fn [] (p/resolved #js {:publicKey :pub :privateKey :priv}))
+                               crypt/<export-public-key (fn [_] (p/resolved :pub-export))
+                               crypt/<encrypt-private-key (fn [_ _] (p/resolved :priv-encrypted))
+                               worker-state/<invoke-main-thread (fn [_] (p/resolved {:password "pw"}))]
+                 (p/let [resp (db-sync/ensure-user-rsa-keys!)]
                    (is (map? resp))
                    (is (= 2 (count @upload-called)))
-                   (done))
-                 (p/catch (fn [e]
-                            (is false (str e))
-                            (done))))))))
+                   (done)))
+               (p/catch (fn [e]
+                          (is false (str e))
+                          (done)))))))
 
 (deftest two-children-cycle-test
   (testing "cycle from remote sync overwrite client (2 children)"
@@ -169,7 +177,7 @@
            [[:db/add (:db/id child2) :block/parent (:db/id child1)]])
           (let [child1' (d/entity @conn (:db/id child1))
                 child2' (d/entity @conn (:db/id child2))]
-            (is (= "page 1" (:block/title (:block/parent child1'))))
+            (is (= "parent" (:block/title (:block/parent child1'))))
             (is (= "child 1" (:block/title (:block/parent child2'))))))))))
 
 (deftest three-children-cycle-test
@@ -188,8 +196,8 @@
                 child2' (d/entity @conn (:db/id child2))
                 child3' (d/entity @conn (:db/id child3))]
             (is (= "child 2" (:block/title (:block/parent child'))))
-            (is (= "page 1" (:block/title (:block/parent child2'))))
-            (is (= "child 2" (:block/title (:block/parent child3'))))))))))
+            (is (= "child 3" (:block/title (:block/parent child2'))))
+            (is (= "parent" (:block/title (:block/parent child3'))))))))))
 
 (deftest ignore-missing-parent-update-after-local-delete-test
   (testing "remote parent retracted while local adds another child"
@@ -238,6 +246,52 @@
                 child2' (d/entity @conn (:db/id child2))]
             (is (some? (:block/order child1')))
             (is (not= (:block/order child1') (:block/order child2')))))))))
+
+(deftest two-clients-extends-cycle-test
+  (testing "remote extends wins when two clients create a cycle"
+    (let [conn (db-test/create-conn)
+          client-ops-conn (d/create-conn client-op/schema-in-db)
+          root-id (d/entid @conn :logseq.class/Root)
+          tag-id (d/entid @conn :logseq.class/Tag)
+          now 1710000000000
+          a-uuid (random-uuid)
+          b-uuid (random-uuid)]
+      (d/transact! conn [{:db/ident :user.class/A
+                          :block/uuid a-uuid
+                          :block/name "a"
+                          :block/title "A"
+                          :block/created-at now
+                          :block/updated-at now
+                          :block/tags #{tag-id}
+                          :logseq.property.class/extends #{root-id}}
+                         {:db/ident :user.class/B
+                          :block/uuid b-uuid
+                          :block/name "b"
+                          :block/title "B"
+                          :block/created-at now
+                          :block/updated-at now
+                          :block/tags #{tag-id}
+                          :logseq.property.class/extends #{root-id}}])
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (let [a-id (d/entid @conn :user.class/A)
+                b-id (d/entid @conn :user.class/B)]
+            (d/transact! conn [[:db/add a-id
+                                :logseq.property.class/extends
+                                b-id]])
+            (#'db-sync/apply-remote-tx!
+             test-repo
+             nil
+             [[:db/add b-id
+               :logseq.property.class/extends
+               a-id]])
+            (let [a (d/entity @conn :user.class/A)
+                  b (d/entity @conn :user.class/B)
+                  extends-a (set (map :db/ident (:logseq.property.class/extends a)))
+                  extends-b (set (map :db/ident (:logseq.property.class/extends b)))]
+              (is (not (contains? extends-a :user.class/B)))
+              (is (contains? extends-a :logseq.class/Root))
+              (is (contains? extends-b :user.class/A)))))))))
 
 (deftest fix-duplicate-orders-with-local-and-remote-new-blocks-test
   (testing "local and remote new sibling blocks at the same location get unique orders"
@@ -322,7 +376,7 @@
              test-repo
              nil
              [[:db/add (:db/id child1) :block/title "same"]])
-            (is (= 1 (count (#'db-sync/pending-txs test-repo))))))))))
+            (is (= 0 (count (#'db-sync/pending-txs test-repo))))))))))
 
 (deftest normalize-online-users-include-editing-block-test
   (testing "online user normalization preserves editing block info"

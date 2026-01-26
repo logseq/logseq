@@ -88,24 +88,26 @@
         (fn [d]
           (if (= (count d) 5)
             (let [[e a v t added] d
-                  retract? (not added)
-                  e' (if retract?
-                       (eid->lookup db-before e)
-                       (or (eid->lookup db-before e)
-                           (eid->tempid db-after e)))
-                  v' (if (and (integer? v)
-                              (pos? v)
-                              (or (= :db.type/ref (:db/valueType (d/entity db-after a)))
-                                  (= :db.type/ref (:db/valueType (d/entity db-before a)))))
-                       (if retract?
-                         (eid->lookup db-before v)
-                         (or (eid->lookup db-before v)
-                             (eid->tempid db-after v)))
-                       v)]
-              (when (and (some? e') (some? v'))
-                (if added
-                  [:db/add e' a v' t]
-                  [:db/retract e' a v' t])))
+                  retract? (not added)]
+              (when-not (and retract?
+                             (contains? #{:block/created-at :block/updated-at :block/title} a))
+                (let [e' (if retract?
+                           (eid->lookup db-before e)
+                           (or (eid->lookup db-before e)
+                               (eid->tempid db-after e)))
+                      v' (if (and (integer? v)
+                                  (pos? v)
+                                  (or (= :db.type/ref (:db/valueType (d/entity db-after a)))
+                                      (= :db.type/ref (:db/valueType (d/entity db-before a)))))
+                           (if retract?
+                             (eid->lookup db-before v)
+                             (or (eid->lookup db-before v)
+                                 (eid->tempid db-after v)))
+                           v)]
+                  (when (and (some? e') (some? v'))
+                    (if added
+                      [:db/add e' a v' t]
+                      [:db/retract e' a v' t])))))
             d)))
        (remove-retract-entity-ref db-after)
        distinct))

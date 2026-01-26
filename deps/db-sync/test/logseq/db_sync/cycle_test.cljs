@@ -206,3 +206,25 @@
         (is (some #(= :fix-cycle (:outliner-op %)) tx-metas))
         (is (every? #(false? (:gen-undo-ops? %)) tx-metas))
         (is (every? #(false? (:persist-op? %)) tx-metas))))))
+
+(deftest class-extends-cycle-prefers-remote-set-test
+  (let [conn (new-conn)]
+    (d/transact! conn [{:db/ident :logseq.class/Root}
+                       {:db/ident :user.class/B}
+                       {:db/ident :user.class/A :logseq.property.class/extends :logseq.class/Root}])
+    (testing "prefers remote extends set when breaking cycles"
+      (let [remote-report (d/transact! conn [{:db/ident :user.class/B
+                                              :logseq.property.class/extends :user.class/A}])
+            rebase-report (d/transact! conn [{:db/ident :user.class/A
+                                              :logseq.property.class/extends :user.class/B}])
+            tx-metas (fix-cycle! conn remote-report rebase-report)]
+        (let [a (d/entity @conn :user.class/A)
+              b (d/entity @conn :user.class/B)
+              extends-a (set (map :db/ident (:logseq.property.class/extends a)))
+              extends-b (set (map :db/ident (:logseq.property.class/extends b)))]
+          (is (not (contains? extends-a :user.class/B)))
+          (is (contains? extends-a :logseq.class/Root))
+          (is (contains? extends-b :user.class/A)))
+        (is (some #(= :fix-cycle (:outliner-op %)) tx-metas))
+        (is (every? #(false? (:gen-undo-ops? %)) tx-metas))
+        (is (every? #(false? (:persist-op? %)) tx-metas))))))
