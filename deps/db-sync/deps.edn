@@ -10,6 +10,7 @@
   thheller/shadow-cljs                  {:mvn/version "3.3.4"}
   com.lambdaisland/glogi                {:git/url "https://github.com/lambdaisland/glogi"
                                          :git/sha "30328a045141717aadbbb693465aed55f0904976"}
+  metosin/reitit                        {:mvn/version "0.4.2"}
   logseq/common                         {:local/root "../common"}
   logseq/db                             {:local/root "../db"}}
  :aliases

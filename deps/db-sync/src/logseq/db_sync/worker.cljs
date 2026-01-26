@@ -13,6 +13,7 @@
             [logseq.db-sync.protocol :as protocol]
             [logseq.db-sync.snapshot :as snapshot]
             [logseq.db-sync.storage :as storage]
+            [logseq.db-sync.worker.routes :as routes]
             [promesa.core :as p]
             [shadow.cljs.modern :refer (defclass)]))
 
@@ -823,18 +824,12 @@
       (log/error :db-sync/index-db-missing {:binding "DB"}))
     db))
 
-(defn- graph-path-parts [path]
-  (->> (string/split path #"/")
-       (remove string/blank?)
-       (vec)))
-
 (defn- handle-index-fetch [^js self request]
   (let [db (index-db self)
         env (.-env self)
         url (js/URL. (.-url request))
         path (.-pathname url)
-        method (.-method request)
-        parts (graph-path-parts path)]
+        method (.-method request)]
     (try
       (cond
         (contains? #{"OPTIONS" "HEAD"} method)
@@ -848,331 +843,297 @@
                 claims (auth-claims request env)
                 _ (when claims
                     (index/<user-upsert! db claims))]
-          (cond
-            (nil? claims)
-            (unauthorized)
+          (let [route (routes/match-route method path)
+                path-params (:path-params route)
+                graph-id (:graph-id path-params)
+                member-id (:member-id path-params)]
+            (cond
+              (nil? claims)
+              (unauthorized)
 
-            (and (= method "GET") (= ["graphs"] parts))
-            (let [user-id (aget claims "sub")]
-              (if (string? user-id)
-                (p/let [graphs (index/<index-list db user-id)]
-                  (json-response :graphs/list {:graphs graphs}))
-                (unauthorized)))
+              route
+              (case (:handler route)
+                :graphs/list
+                (let [user-id (aget claims "sub")]
+                  (if (string? user-id)
+                    (p/let [graphs (index/<index-list db user-id)]
+                      (json-response :graphs/list {:graphs graphs}))
+                    (unauthorized)))
 
-            (and (= method "POST") (= ["graphs"] parts))
-            (.then (common/read-json request)
-                   (fn [result]
-                     (if (nil? result)
-                       (bad-request "missing body")
-                       (let [body (js->clj result :keywordize-keys true)
-                             body (coerce-http-request :graphs/create body)
-                             graph-id (str (random-uuid))
-                             user-id (aget claims "sub")]
-                         (cond
-                           (not (string? user-id))
-                           (unauthorized)
-
-                           (nil? body)
-                           (bad-request "invalid body")
-
-                           :else
-                           (p/let [{:keys [graph-name schema-version]} body
-                                   name-exists? (index/<graph-name-exists? db graph-name user-id)]
-                             (if name-exists?
-                               (bad-request "duplicate graph name")
-                               (p/let [_ (index/<index-upsert! db graph-id graph-name user-id schema-version)
-                                       _ (index/<graph-member-upsert! db graph-id user-id "manager" user-id)]
-                                 (json-response :graphs/create {:graph-id graph-id})))))))))
-
-            (and (= method "GET")
-                 (= 3 (count parts))
-                 (= "graphs" (first parts))
-                 (= "access" (nth parts 2)))
-            (let [graph-id (nth parts 1)
-                  user-id (aget claims "sub")]
-              (cond
-                (not (string? user-id))
-                (unauthorized)
-
-                :else
-                (p/let [owns? (index/<user-has-access-to-graph? db graph-id user-id)]
-                  (if owns?
-                    (json-response :graphs/access {:ok true})
-                    (forbidden)))))
-
-            (and (= method "GET")
-                 (= 3 (count parts))
-                 (= "graphs" (first parts))
-                 (= "members" (nth parts 2 nil)))
-            (let [graph-id (nth parts 1 nil)
-                  user-id (aget claims "sub")]
-              (cond
-                (not (string? user-id))
-                (unauthorized)
-
-                :else
-                (p/let [can-access? (index/<user-has-access-to-graph? db graph-id user-id)]
-                  (if (not can-access?)
-                    (forbidden)
-                    (p/let [members (index/<graph-members-list db graph-id)]
-                      (json-response :graph-members/list {:members members}))))))
-
-            (and (= method "POST")
-                 (= 3 (count parts))
-                 (= "graphs" (first parts))
-                 (= "members" (nth parts 2 nil)))
-            (let [graph-id (nth parts 1 nil)
-                  user-id (aget claims "sub")]
-              (cond
-                (not (string? user-id))
-                (unauthorized)
-
-                :else
+                :graphs/create
                 (.then (common/read-json request)
                        (fn [result]
                          (if (nil? result)
                            (bad-request "missing body")
                            (let [body (js->clj result :keywordize-keys true)
-                                 body (coerce-http-request :graph-members/create body)
-                                 member-id (:user-id body)
-                                 email (:email body)
-                                 role (or (:role body) "member")]
+                                 body (coerce-http-request :graphs/create body)
+                                 graph-id (str (random-uuid))
+                                 user-id (aget claims "sub")]
                              (cond
-                               (nil? body)
-                               (bad-request "invalid body")
+                               (not (string? user-id))
+                               (unauthorized)
 
-                               (and (not (string? member-id))
-                                    (not (string? email)))
-                               (bad-request "invalid user")
-
-                               :else
-                               (p/let [manager? (index/<user-is-manager? db graph-id user-id)
-                                       resolved-id (if (string? member-id)
-                                                     (p/resolved member-id)
-                                                     (index/<user-id-by-email db email))]
-                                 (if (not manager?)
-                                   (forbidden)
-                                   (if-not (string? resolved-id)
-                                     (bad-request "user not found")
-                                     (p/let [_ (index/<graph-member-upsert! db graph-id resolved-id role user-id)]
-                                       (json-response :graph-members/create {:ok true}))))))))))))
-
-            (and (= method "PUT")
-                 (= 4 (count parts))
-                 (= "graphs" (first parts))
-                 (= "members" (nth parts 2 nil)))
-            (let [graph-id (nth parts 1 nil)
-                  member-id (nth parts 3 nil)
-                  user-id (aget claims "sub")]
-              (cond
-                (not (string? user-id))
-                (unauthorized)
-
-                (not (string? member-id))
-                (bad-request "invalid user id")
-
-                :else
-                (.then (common/read-json request)
-                       (fn [result]
-                         (if (nil? result)
-                           (bad-request "missing body")
-                           (let [body (js->clj result :keywordize-keys true)
-                                 body (coerce-http-request :graph-members/update body)
-                                 role (:role body)]
-                             (cond
                                (nil? body)
                                (bad-request "invalid body")
 
                                :else
-                               (p/let [manager? (index/<user-is-manager? db graph-id user-id)]
-                                 (if (not manager?)
-                                   (forbidden)
-                                   (p/let [_ (index/<graph-member-update-role! db graph-id member-id role)]
-                                     (json-response :graph-members/update {:ok true})))))))))))
+                               (p/let [{:keys [graph-name schema-version]} body
+                                       name-exists? (index/<graph-name-exists? db graph-name user-id)]
+                                 (if name-exists?
+                                   (bad-request "duplicate graph name")
+                                   (p/let [_ (index/<index-upsert! db graph-id graph-name user-id schema-version)
+                                           _ (index/<graph-member-upsert! db graph-id user-id "manager" user-id)]
+                                     (json-response :graphs/create {:graph-id graph-id})))))))))
 
-            (and (= method "DELETE")
-                 (= 4 (count parts))
-                 (= "graphs" (first parts))
-                 (= "members" (nth parts 2 nil)))
-            (let [graph-id (nth parts 1 nil)
-                  member-id (nth parts 3 nil)
-                  user-id (aget claims "sub")]
-              (cond
-                (not (string? user-id))
-                (unauthorized)
-
-                (not (string? member-id))
-                (bad-request "invalid user id")
-
-                :else
-                (p/let [manager? (index/<user-is-manager? db graph-id user-id)
-                        target-role (index/<graph-member-role db graph-id member-id)
-                        self-leave? (and (= user-id member-id)
-                                         (= "member" target-role))]
+                :graphs/access
+                (let [user-id (aget claims "sub")]
                   (cond
-                    (and manager? (not= "manager" target-role))
-                    (p/let [_ (index/<graph-member-delete! db graph-id member-id)]
-                      (json-response :graph-members/delete {:ok true}))
-
-                    self-leave?
-                    (p/let [_ (index/<graph-member-delete! db graph-id member-id)]
-                      (json-response :graph-members/delete {:ok true}))
+                    (not (string? user-id))
+                    (unauthorized)
 
                     :else
-                    (forbidden)))))
+                    (p/let [owns? (index/<user-has-access-to-graph? db graph-id user-id)]
+                      (if owns?
+                        (json-response :graphs/access {:ok true})
+                        (forbidden)))))
 
-            (and (= method "GET")
-                 (= ["e2ee" "user-keys"] parts))
-            (let [user-id (aget claims "sub")]
-              (if (string? user-id)
-                (p/let [pair (index/<user-rsa-key-pair db user-id)]
-                  (json-response :e2ee/user-keys (or pair {})))
-                (unauthorized)))
+                :graph-members/list
+                (let [user-id (aget claims "sub")]
+                  (cond
+                    (not (string? user-id))
+                    (unauthorized)
 
-            (and (= method "POST")
-                 (= ["e2ee" "user-keys"] parts))
-            (.then (common/read-json request)
-                   (fn [result]
-                     (if (nil? result)
-                       (bad-request "missing body")
-                       (let [body (js->clj result :keywordize-keys true)
-                             body (coerce-http-request :e2ee/user-keys body)
-                             user-id (aget claims "sub")]
-                         (cond
-                           (not (string? user-id))
-                           (unauthorized)
+                    :else
+                    (p/let [can-access? (index/<user-has-access-to-graph? db graph-id user-id)]
+                      (if (not can-access?)
+                        (forbidden)
+                        (p/let [members (index/<graph-members-list db graph-id)]
+                          (json-response :graph-members/list {:members members}))))))
 
-                           (nil? body)
-                           (bad-request "invalid body")
+                :graph-members/create
+                (let [user-id (aget claims "sub")]
+                  (cond
+                    (not (string? user-id))
+                    (unauthorized)
 
-                           :else
-                           (let [{:keys [public-key encrypted-private-key]} body]
-                             (p/let [_ (index/<user-rsa-key-pair-upsert! db user-id public-key encrypted-private-key)]
-                               (json-response :e2ee/user-keys {:public-key public-key
-                                                               :encrypted-private-key encrypted-private-key}))))))))
+                    :else
+                    (.then (common/read-json request)
+                           (fn [result]
+                             (if (nil? result)
+                               (bad-request "missing body")
+                               (let [body (js->clj result :keywordize-keys true)
+                                     body (coerce-http-request :graph-members/create body)
+                                     member-id (:user-id body)
+                                     email (:email body)
+                                     role (or (:role body) "member")]
+                                 (cond
+                                   (nil? body)
+                                   (bad-request "invalid body")
 
-            (and (= method "GET")
-                 (= ["e2ee" "user-public-key"] parts))
-            (let [email (.get (.-searchParams url) "email")]
-              (p/let [public-key (index/<user-rsa-public-key-by-email db email)]
-                (json-response :e2ee/user-public-key
-                               (cond-> {}
-                                 (some? public-key)
-                                 (assoc :public-key public-key)))))
+                                   (and (not (string? member-id))
+                                        (not (string? email)))
+                                   (bad-request "invalid user")
 
-            (and (= method "GET")
-                 (= 4 (count parts))
-                 (= "e2ee" (first parts))
-                 (= "graphs" (nth parts 1))
-                 (= "aes-key" (nth parts 3)))
-            (let [graph-id (nth parts 2)
-                  user-id (aget claims "sub")]
-              (cond
-                (not (string? user-id))
-                (unauthorized)
+                                   :else
+                                   (p/let [manager? (index/<user-is-manager? db graph-id user-id)
+                                           resolved-id (if (string? member-id)
+                                                         (p/resolved member-id)
+                                                         (index/<user-id-by-email db email))]
+                                     (if (not manager?)
+                                       (forbidden)
+                                       (if-not (string? resolved-id)
+                                         (bad-request "user not found")
+                                         (p/let [_ (index/<graph-member-upsert! db graph-id resolved-id role user-id)]
+                                           (json-response :graph-members/create {:ok true}))))))))))))
 
-                :else
-                (p/let [access? (index/<user-has-access-to-graph? db graph-id user-id)]
-                  (if (not access?)
-                    (forbidden)
-                    (p/let [encrypted-aes-key (index/<graph-encrypted-aes-key db graph-id user-id)]
-                      (json-response :e2ee/graph-aes-key (cond-> {}
-                                                           (some? encrypted-aes-key)
-                                                           (assoc :encrypted-aes-key encrypted-aes-key))))))))
+                :graph-members/update
+                (let [user-id (aget claims "sub")]
+                  (cond
+                    (not (string? user-id))
+                    (unauthorized)
 
-            (and (= method "POST")
-                 (= 4 (count parts))
-                 (= "e2ee" (first parts))
-                 (= "graphs" (nth parts 1))
-                 (= "aes-key" (nth parts 3)))
-            (let [graph-id (nth parts 2)
-                  user-id (aget claims "sub")]
-              (cond
-                (not (string? user-id))
-                (unauthorized)
+                    (not (string? member-id))
+                    (bad-request "invalid user id")
 
-                :else
+                    :else
+                    (.then (common/read-json request)
+                           (fn [result]
+                             (if (nil? result)
+                               (bad-request "missing body")
+                               (let [body (js->clj result :keywordize-keys true)
+                                     body (coerce-http-request :graph-members/update body)
+                                     role (:role body)]
+                                 (cond
+                                   (nil? body)
+                                   (bad-request "invalid body")
+
+                                   :else
+                                   (p/let [manager? (index/<user-is-manager? db graph-id user-id)]
+                                     (if (not manager?)
+                                       (forbidden)
+                                       (p/let [_ (index/<graph-member-update-role! db graph-id member-id role)]
+                                         (json-response :graph-members/update {:ok true})))))))))))
+
+                :graph-members/delete
+                (let [user-id (aget claims "sub")]
+                  (cond
+                    (not (string? user-id))
+                    (unauthorized)
+
+                    (not (string? member-id))
+                    (bad-request "invalid user id")
+
+                    :else
+                    (p/let [manager? (index/<user-is-manager? db graph-id user-id)
+                            target-role (index/<graph-member-role db graph-id member-id)
+                            self-leave? (and (= user-id member-id)
+                                             (= "member" target-role))]
+                      (cond
+                        (and manager? (not= "manager" target-role))
+                        (p/let [_ (index/<graph-member-delete! db graph-id member-id)]
+                          (json-response :graph-members/delete {:ok true}))
+
+                        self-leave?
+                        (p/let [_ (index/<graph-member-delete! db graph-id member-id)]
+                          (json-response :graph-members/delete {:ok true}))
+
+                        :else
+                        (forbidden)))))
+
+                :graphs/delete
+                (let [user-id (aget claims "sub")]
+                  (cond
+                    (not (seq graph-id))
+                    (bad-request "missing graph id")
+
+                    (not (string? user-id))
+                    (unauthorized)
+
+                    :else
+                    (p/let [owns? (index/<user-has-access-to-graph? db graph-id user-id)]
+                      (if (not owns?)
+                        (forbidden)
+                        (p/let [_ (index/<index-delete! db graph-id)]
+                          (let [^js namespace (.-LOGSEQ_SYNC_DO (.-env self))
+                                do-id (.idFromName namespace graph-id)
+                                stub (.get namespace do-id)
+                                reset-url (str (.-origin url) "/admin/reset")]
+                            (.fetch stub (js/Request. reset-url #js {:method "DELETE"})))
+                          (json-response :graphs/delete {:graph-id graph-id :deleted true}))))))
+
+                :e2ee/user-keys-get
+                (let [user-id (aget claims "sub")]
+                  (if (string? user-id)
+                    (p/let [pair (index/<user-rsa-key-pair db user-id)]
+                      (json-response :e2ee/user-keys (or pair {})))
+                    (unauthorized)))
+
+                :e2ee/user-keys-post
                 (.then (common/read-json request)
                        (fn [result]
                          (if (nil? result)
                            (bad-request "missing body")
                            (let [body (js->clj result :keywordize-keys true)
-                                 body (coerce-http-request :e2ee/graph-aes-key body)]
-                             (if (nil? body)
+                                 body (coerce-http-request :e2ee/user-keys body)
+                                 user-id (aget claims "sub")]
+                             (cond
+                               (not (string? user-id))
+                               (unauthorized)
+
+                               (nil? body)
                                (bad-request "invalid body")
-                               (p/let [access? (index/<user-has-access-to-graph? db graph-id user-id)]
-                                 (if (not access?)
-                                   (forbidden)
-                                   (let [{:keys [encrypted-aes-key]} body]
-                                     (p/let [_ (index/<graph-encrypted-aes-key-upsert! db graph-id user-id encrypted-aes-key)]
-                                       (json-response :e2ee/graph-aes-key {:encrypted-aes-key encrypted-aes-key}))))))))))))
 
-            (and (= method "POST")
-                 (= 4 (count parts))
-                 (= "e2ee" (first parts))
-                 (= "graphs" (nth parts 1))
-                 (= "grant-access" (nth parts 3)))
-            (let [graph-id (nth parts 2)
-                  user-id (aget claims "sub")]
-              (cond
-                (not (string? user-id))
-                (unauthorized)
+                               :else
+                               (let [{:keys [public-key encrypted-private-key]} body]
+                                 (p/let [_ (index/<user-rsa-key-pair-upsert! db user-id public-key encrypted-private-key)]
+                                   (json-response :e2ee/user-keys {:public-key public-key
+                                                                   :encrypted-private-key encrypted-private-key}))))))))
 
-                :else
-                (.then (common/read-json request)
-                       (fn [result]
-                         (if (nil? result)
-                           (bad-request "missing body")
-                           (let [body (js->clj result :keywordize-keys true)
-                                 body (coerce-http-request :e2ee/grant-access body)]
-                             (if (nil? body)
-                               (bad-request "invalid body")
-                               (p/let [manager? (index/<user-is-manager? db graph-id user-id)]
-                                 (if (not manager?)
-                                   (forbidden)
-                                   (let [entries (:target-user-email+encrypted-aes-key-coll body)
-                                         missing (atom [])]
-                                     (p/let [_ (p/all
-                                                (map (fn [entry]
-                                                       (let [email (:email entry)
-                                                             encrypted-aes-key (:encrypted-aes-key entry)]
-                                                         (p/let [target-user-id (index/<user-id-by-email db email)
-                                                                 access? (and target-user-id
-                                                                              (index/<user-has-access-to-graph? db graph-id target-user-id))]
-                                                           (if (and target-user-id access?)
-                                                             (index/<graph-encrypted-aes-key-upsert! db graph-id target-user-id encrypted-aes-key)
-                                                             (swap! missing conj email)))))
-                                                     entries))]
-                                       (json-response :e2ee/grant-access
-                                                      (cond-> {:ok true}
-                                                        (seq @missing)
-                                                        (assoc :missing-users @missing))))))))))))))
+                :e2ee/user-public-key-get
+                (let [email (.get (.-searchParams url) "email")]
+                  (p/let [public-key (index/<user-rsa-public-key-by-email db email)]
+                    (json-response :e2ee/user-public-key
+                                   (cond-> {}
+                                     (some? public-key)
+                                     (assoc :public-key public-key)))))
 
-            (and (= method "DELETE")
-                 (= 2 (count parts))
-                 (= "graphs" (first parts)))
-            (let [graph-id (nth parts 1 nil)
-                  user-id (aget claims "sub")]
-              (cond
-                (not (seq graph-id))
-                (bad-request "missing graph id")
+                :e2ee/graph-aes-key-get
+                (let [user-id (aget claims "sub")]
+                  (cond
+                    (not (string? user-id))
+                    (unauthorized)
 
-                (not (string? user-id))
-                (unauthorized)
+                    :else
+                    (p/let [access? (index/<user-has-access-to-graph? db graph-id user-id)]
+                      (if (not access?)
+                        (forbidden)
+                        (p/let [encrypted-aes-key (index/<graph-encrypted-aes-key db graph-id user-id)]
+                          (json-response :e2ee/graph-aes-key (cond-> {}
+                                                               (some? encrypted-aes-key)
+                                                               (assoc :encrypted-aes-key encrypted-aes-key))))))))
 
-                :else
-                (p/let [owns? (index/<user-has-access-to-graph? db graph-id user-id)]
-                  (if (not owns?)
-                    (forbidden)
-                    (p/let [_ (index/<index-delete! db graph-id)]
-                      (let [^js namespace (.-LOGSEQ_SYNC_DO (.-env self))
-                            do-id (.idFromName namespace graph-id)
-                            stub (.get namespace do-id)
-                            reset-url (str (.-origin url) "/admin/reset")]
-                        (.fetch stub (js/Request. reset-url #js {:method "DELETE"})))
-                      (json-response :graphs/delete {:graph-id graph-id :deleted true}))))))
-            :else
-            (not-found))))
+                :e2ee/graph-aes-key-post
+                (let [user-id (aget claims "sub")]
+                  (cond
+                    (not (string? user-id))
+                    (unauthorized)
+
+                    :else
+                    (.then (common/read-json request)
+                           (fn [result]
+                             (if (nil? result)
+                               (bad-request "missing body")
+                               (let [body (js->clj result :keywordize-keys true)
+                                     body (coerce-http-request :e2ee/graph-aes-key body)]
+                                 (if (nil? body)
+                                   (bad-request "invalid body")
+                                   (p/let [access? (index/<user-has-access-to-graph? db graph-id user-id)]
+                                     (if (not access?)
+                                       (forbidden)
+                                       (let [{:keys [encrypted-aes-key]} body]
+                                         (p/let [_ (index/<graph-encrypted-aes-key-upsert! db graph-id user-id encrypted-aes-key)]
+                                           (json-response :e2ee/graph-aes-key {:encrypted-aes-key encrypted-aes-key}))))))))))))
+
+                :e2ee/grant-access
+                (let [user-id (aget claims "sub")]
+                  (cond
+                    (not (string? user-id))
+                    (unauthorized)
+
+                    :else
+                    (.then (common/read-json request)
+                           (fn [result]
+                             (if (nil? result)
+                               (bad-request "missing body")
+                               (let [body (js->clj result :keywordize-keys true)
+                                     body (coerce-http-request :e2ee/grant-access body)]
+                                 (if (nil? body)
+                                   (bad-request "invalid body")
+                                   (p/let [manager? (index/<user-is-manager? db graph-id user-id)]
+                                     (if (not manager?)
+                                       (forbidden)
+                                       (let [entries (:target-user-email+encrypted-aes-key-coll body)
+                                             missing (atom [])]
+                                         (p/let [_ (p/all
+                                                    (map (fn [entry]
+                                                           (let [email (:email entry)
+                                                                 encrypted-aes-key (:encrypted-aes-key entry)]
+                                                             (p/let [target-user-id (index/<user-id-by-email db email)
+                                                                     access? (and target-user-id
+                                                                                  (index/<user-has-access-to-graph? db graph-id target-user-id))]
+                                                               (if (and target-user-id access?)
+                                                                 (index/<graph-encrypted-aes-key-upsert! db graph-id target-user-id encrypted-aes-key)
+                                                                 (swap! missing conj email)))))
+                                                         entries))]
+                                           (json-response :e2ee/grant-access
+                                                          (cond-> {:ok true}
+                                                            (seq @missing)
+                                                            (assoc :missing-users @missing))))))))))))))
+
+                (not-found))
+
+              :else
+              (not-found)))))
       (catch :default error
         (log/error :db-sync/index-error error)
         (error-response "server error" 500)))))
