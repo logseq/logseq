@@ -165,17 +165,25 @@
               {:key "leave-shared-graph"
                :class "leave-shared-graph-menu-item"
                :on-click (fn []
-                           (notification/show!
-                            "Please ask this graph's manager to rovoke your access."
-                            :info
-                            false)
-                           ;; (let [prompt-str "Are you sure you want to leave this graph?"]
-                           ;;   (-> (shui/dialog-confirm!
-                           ;;        [:p.font-medium.-my-4 prompt-str])
-                           ;;       (p/then
-                           ;;        (fn []
-                           ;;          ))))
-                           )}
+                           (let [prompt-str "Are you sure you want to leave this graph?"]
+                             (-> (shui/dialog-confirm!
+                                  [:p.font-medium.-my-4 prompt-str])
+                                 (p/then
+                                  (fn []
+                                    (state/set-state! :rtc/loading-graphs? true)
+                                    (when (= (state/get-current-repo) repo)
+                                      (state/<invoke-db-worker :thread-api/rtc-stop))
+                                    (-> (rtc-handler/<rtc-leave-graph! GraphUUID)
+                                        (p/then (fn []
+                                                  (notification/show! "Left graph." :success)
+                                                  (rtc-handler/<get-remote-graphs)))
+                                        (p/catch (fn [e]
+                                                   (notification/show! "Failed to leave graph." :error)
+                                                   (log/error :db-sync/leave-graph-failed
+                                                              {:error e
+                                                               :graph-uuid GraphUUID})))
+                                        (p/finally (fn []
+                                                     (state/set-state! :rtc/loading-graphs? false)))))))))}
               "Leave this graph")))))]]]))
 
 (rum/defc repos-cp < rum/reactive

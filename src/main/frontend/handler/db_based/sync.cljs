@@ -72,3 +72,20 @@
   (if (db-sync-enabled?)
     (db-sync-handler/<rtc-invite-email graph-uuid email)
     (rtc-handler/<rtc-invite-email graph-uuid email)))
+
+(defn <rtc-remove-member!
+  [graph-uuid member-id]
+  (if (db-sync-enabled?)
+    (db-sync-handler/<rtc-remove-member! graph-uuid member-id)
+    (p/rejected (ex-info "RTC remove member not supported"
+                         {:type :rtc/unsupported-remove-member
+                          :graph-uuid graph-uuid
+                          :member-id member-id}))))
+
+(defn <rtc-leave-graph!
+  [graph-uuid]
+  (if (db-sync-enabled?)
+    (db-sync-handler/<rtc-leave-graph! graph-uuid)
+    (p/rejected (ex-info "RTC leave graph not supported"
+                         {:type :rtc/unsupported-leave-graph
+                          :graph-uuid graph-uuid}))))
