@@ -195,20 +195,37 @@
   (let [edges (cycle-edges cycle)
         cycle-nodes (set (distinct (butlast cycle)))
         remote-parent-fn (:remote-parent-fn attr-opts)
-        remote-candidates (when (and (= :block/parent attr) remote-parent-fn)
-                            (keep (fn [[from to]]
-                                    (let [remote-parent (remote-parent-fn db from to)
-                                          remote-parent (entid db remote-parent)
-                                          to-id (entid db to)]
-                                      (when (and remote-parent
-                                                 (not= remote-parent to-id))
-                                        {:victim from
-                                         :bad-v to-id
-                                         :safe remote-parent
-                                         :outside? (not (contains? cycle-nodes remote-parent))})))
-                                  edges))
-        remote-choice (or (some #(when (:outside? %) %) remote-candidates)
-                          (first remote-candidates))
+        remote-ref-set-fn (:remote-ref-set-fn attr-opts)
+        remote-parent-candidates (when (and (= :block/parent attr) remote-parent-fn)
+                                   (keep (fn [[from to]]
+                                           (let [remote-parent (remote-parent-fn db from to)
+                                                 remote-parent (entid db remote-parent)
+                                                 to-id (entid db to)]
+                                             (when (and remote-parent
+                                                        (not= remote-parent to-id))
+                                               {:victim from
+                                                :bad-v to-id
+                                                :safe remote-parent
+                                                :outside? (not (contains? cycle-nodes remote-parent))})))
+                                         edges))
+        remote-ref-candidates (when (and (= :logseq.property.class/extends attr) remote-ref-set-fn)
+                                (keep (fn [[from to]]
+                                        (let [to-id (entid db to)
+                                              remote-set (remote-ref-set-fn db from)
+                                              remote-set (set (keep #(entid db %) remote-set))]
+                                          (when (and (seq remote-set)
+                                                     (not (contains? remote-set to-id)))
+                                            {:victim from
+                                             :bad-v to-id})))
+                                      edges))
+        remote-choice (cond
+                        (seq remote-parent-candidates)
+                        (or (some #(when (:outside? %) %) remote-parent-candidates)
+                            (first remote-parent-candidates))
+                        (seq remote-ref-candidates)
+                        (first remote-ref-candidates)
+                        :else
+                        nil)
         victim (or (:victim remote-choice) (pick-victim cycle touched))
         [_from bad-v] (or (when (and remote-choice (:bad-v remote-choice))
                             [victim (:bad-v remote-choice)])
@@ -356,7 +373,12 @@
                               (fn [db e attr bad-v]
                                 (let [remote-parent (some-> (d/entity remote-db e) :block/parent :db/id)
                                       remote-parent (when (and remote-parent (not= remote-parent bad-v)) remote-parent)]
-                                  (or remote-parent (safe-target-for-block-parent db e attr bad-v))))))
+                                  (or remote-parent (safe-target-for-block-parent db e attr bad-v)))))
+                    remote-db
+                    (assoc-in [:logseq.property.class/extends :remote-ref-set-fn]
+                              (fn [_db e]
+                                (some->> (d/entity remote-db e)
+                                         :logseq.property.class/extends))))
         remote-touched-by-attr (touched-eids-many (:tx-data remote-tx-report))
         local-touched-by-attr  (touched-eids-many (:tx-data rebase-tx-report))
         candidates-by-attr     (union-candidates remote-touched-by-attr local-touched-by-attr)
