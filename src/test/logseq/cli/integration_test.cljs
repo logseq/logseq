@@ -127,6 +127,106 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
+(deftest test-cli-add-tags-and-properties
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-tags")]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       _ (run-cli ["graph" "create" "--repo" "tags-graph"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "tags-graph" "add" "page" "--page" "Home"] data-dir cfg-path)
+                       add-page-result (run-cli ["--repo" "tags-graph"
+                                                 "add" "page"
+                                                 "--page" "TaggedPage"
+                                                 "--tags" "[\"Quote\"]"
+                                                 "--properties" "{:logseq.property/publishing-public? true}"]
+                                                data-dir cfg-path)
+                       add-page-payload (parse-json-output add-page-result)
+                       add-block-result (run-cli ["--repo" "tags-graph"
+                                                  "add" "block"
+                                                  "--target-page-name" "Home"
+                                                  "--content" "Tagged block"
+                                                  "--tags" "[\"Quote\"]"
+                                                  "--properties" "{:logseq.property/deadline \"2026-01-25T12:00:00Z\"}"]
+                                                 data-dir cfg-path)
+                       add-block-payload (parse-json-output add-block-result)
+                       _ (p/delay 100)
+                       query-block-tags-result (run-cli ["--repo" "tags-graph"
+                                                         "query"
+                                                         "--query" "[:find ?tag :in $ ?title :where [?b :block/title ?title] [?b :block/tags ?t] [?t :block/title ?tag]]"
+                                                         "--inputs" "[\"Tagged block\"]"]
+                                                        data-dir cfg-path)
+                       query-block-tags-payload (parse-json-output query-block-tags-result)
+                       block-tag-names (->> (get-in query-block-tags-payload [:data :result])
+                                            (map first)
+                                            set)
+                       query-page-tags-result (run-cli ["--repo" "tags-graph"
+                                                        "query"
+                                                        "--query" "[:find ?tag :in $ ?title :where [?p :block/title ?title] [?p :block/tags ?t] [?t :block/title ?tag]]"
+                                                        "--inputs" "[\"TaggedPage\"]"]
+                                                       data-dir cfg-path)
+                       query-page-tags-payload (parse-json-output query-page-tags-result)
+                       page-tag-names (->> (get-in query-page-tags-payload [:data :result])
+                                           (map first)
+                                           set)
+                       query-page-result (run-cli ["--repo" "tags-graph"
+                                                   "query"
+                                                   "--query" "[:find ?value :in $ ?title :where [?p :block/title ?title] [?p :logseq.property/publishing-public? ?value]]"
+                                                   "--inputs" "[\"TaggedPage\"]"]
+                                                  data-dir cfg-path)
+                       query-page-payload (parse-json-output query-page-result)
+                       page-value (first (first (get-in query-page-payload [:data :result])))
+                       query-block-result (run-cli ["--repo" "tags-graph"
+                                                    "query"
+                                                    "--query" "[:find ?value :in $ ?title :where [?b :block/title ?title] [?b :logseq.property/deadline ?value]]"
+                                                    "--inputs" "[\"Tagged block\"]"]
+                                                   data-dir cfg-path)
+                       query-block-payload (parse-json-output query-block-result)
+                       block-deadline (first (first (get-in query-block-payload [:data :result])))
+                       stop-result (run-cli ["server" "stop" "--repo" "tags-graph"] data-dir cfg-path)
+                       stop-payload (parse-json-output stop-result)]
+                 (is (= 0 (:exit-code add-page-result)))
+                 (is (= "ok" (:status add-page-payload)))
+                 (is (= 0 (:exit-code add-block-result)))
+                 (is (= "ok" (:status add-block-payload)))
+                 (is (contains? block-tag-names "Quote"))
+                 (is (contains? page-tag-names "Quote"))
+                 (is (true? page-value))
+                 (is (number? block-deadline))
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
+(deftest test-cli-add-tags-rejects-missing-tag
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-tags-missing")]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       _ (run-cli ["graph" "create" "--repo" "tags-missing-graph"] data-dir cfg-path)
+                       add-block-result (run-cli ["--repo" "tags-missing-graph"
+                                                  "add" "block"
+                                                  "--target-page-name" "Home"
+                                                  "--content" "Block with missing tag"
+                                                  "--tags" "[\"MissingTag\"]"]
+                                                 data-dir cfg-path)
+                       add-block-payload (parse-json-output add-block-result)
+                       list-tag-result (run-cli ["--repo" "tags-missing-graph" "list" "tag"] data-dir cfg-path)
+                       list-tag-payload (parse-json-output list-tag-result)
+                       tag-names (->> (get-in list-tag-payload [:data :items])
+                                      (map #(or (:block/title %) (:block/name %)))
+                                      set)
+                       stop-result (run-cli ["server" "stop" "--repo" "tags-missing-graph"] data-dir cfg-path)
+                       stop-payload (parse-json-output stop-result)]
+                 (is (= 1 (:exit-code add-block-result)))
+                 (is (= "error" (:status add-block-payload)))
+                 (is (not (contains? tag-names "MissingTag")))
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
 (deftest test-cli-query
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-query")
