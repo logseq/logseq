@@ -176,8 +176,8 @@
      ;; Because UI assumes that the in-memory db has all the data except the last one transaction
      (when (seq tx-data)
 
-       (prn :debug :transact :sync? (= d/transact! (or @*transact-fn d/transact!)) :tx-meta tx-meta)
-       (cljs.pprint/pprint tx-data)
+       ;; (prn :debug :transact :sync? (= d/transact! (or @*transact-fn d/transact!)) :tx-meta tx-meta)
+       ;; (cljs.pprint/pprint tx-data)
        ;; (js/console.trace)
 
        (if-let [transact-fn @*transact-fn]
