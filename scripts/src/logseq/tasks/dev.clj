@@ -20,6 +20,12 @@
   (shell "yarn cljs:test")
   (apply shell "yarn cljs:run-test" args))
 
+(defn test-no-worker
+  "Run tests without compiling worker namespaces. Pass args through to cmd 'yarn cljs:run-test-no-worker'"
+  [& args]
+  (shell "yarn cljs:test-no-worker")
+  (apply shell "yarn cljs:run-test-no-worker" args))
+
 (defn lint-and-test
   "Run all lint tasks, then run tests(exclude testcases tagged by :long).
   pass args through to cmd 'yarn cljs:run-test'"
