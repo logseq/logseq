@@ -1,4 +1,5 @@
 (ns logseq.publish.worker
+  "Main public ns for worker"
   (:require ["cloudflare:workers" :refer [DurableObject]]
             [logseq.publish.meta-store :as meta-store]
             [logseq.publish.routes :as publish-routes]

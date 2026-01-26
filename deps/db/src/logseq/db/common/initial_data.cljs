@@ -6,8 +6,6 @@
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
-            [logseq.db.common.entity-plus :as entity-plus]
-            [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.db :as db-db]
@@ -29,7 +27,7 @@
   (->> (d/datoms db :avet :block/title page-name)
        (filter (fn [d]
                  (let [e (d/entity db (:e d))]
-                   (common-entity-util/page? e))))
+                   (entity-util/page? e))))
        (map :e)
        sort
        first))
@@ -98,7 +96,7 @@
                           (let [e (d/entity db eid)]
                             (when (or include-collapsed-children?
                                       (not (:block/collapsed? e))
-                                      (common-entity-util/page? e))
+                                      (entity-util/page? e))
                               (:block/_parent e)))) eids-to-expand)
                 ids-to-add (keep :db/id children)]
             (vswap! seen (partial apply conj) ids-to-add)
@@ -165,23 +163,18 @@
 (defn hidden-ref?
   "Whether ref-block (for block with the `id`) should be hidden."
   [db ref-block id]
-  (let [db-based? (entity-plus/db-based-graph? db)]
-    (if db-based?
-      (let [entity (d/entity db id)]
-        (or
-         (= (:db/id ref-block) id)
-         (= id (:db/id (:block/page ref-block)))
-         (= id (:db/id (:logseq.property/view-for ref-block)))
-         (entity-util/hidden? (:block/page ref-block))
-         (entity-util/hidden? ref-block)
-         (and (entity-util/class? entity)
-              (let [children (db-class/get-structured-children db id)
-                    class-ids (set (conj children id))]
-                (some class-ids (map :db/id (:block/tags ref-block)))))
-         (some? (get ref-block (:db/ident entity)))))
-      (or
-       (= (:db/id ref-block) id)
-       (= id (:db/id (:block/page ref-block)))))))
+  (let [entity (d/entity db id)]
+    (or
+     (= (:db/id ref-block) id)
+     (= id (:db/id (:block/page ref-block)))
+     (= id (:db/id (:logseq.property/view-for ref-block)))
+     (entity-util/hidden? (:block/page ref-block))
+     (entity-util/hidden? ref-block)
+     (and (entity-util/class? entity)
+          (let [children (db-class/get-structured-children db id)
+                class-ids (set (conj children id))]
+            (some class-ids (map :db/id (:block/tags ref-block)))))
+     (some? (get ref-block (:db/ident entity))))))
 
 (defn get-block-refs
   [db id]
@@ -263,7 +256,7 @@
          (keep (fn [d]
                  (when (<= (:v d) today)
                    (let [e (d/entity db (:e d))]
-                     (when (and (common-entity-util/journal? e) (:db/id e))
+                     (when (and (entity-util/journal? e) (:db/id e))
                        e))))))))
 
 (defn- get-structured-datoms
@@ -311,7 +304,7 @@
                                (string/blank? title)))
                  (let [e (d/entity db (:e datom))]
                    (when (and
-                          (common-entity-util/page? e)
+                          (entity-util/page? e)
                           (not (entity-util/hidden? e)))
                      e))))))
      (take 15))))
@@ -325,8 +318,7 @@
      (d/datoms db :avet :logseq.property.user/email))))
 
 (defn get-initial-data
-  "Returns current database schema and initial data.
-   NOTE: This fn is called by DB and file graphs"
+  "Returns current database schema and initial data"
   [db]
   (let [_ (reset! db-order/*max-key (db-order/get-max-order db))
         schema (:schema db)
@@ -336,6 +328,7 @@
                        [:logseq.kv/db-type
                         :logseq.kv/schema-version
                         :logseq.kv/graph-uuid
+                        :logseq.kv/local-graph-uuid
                         :logseq.kv/graph-rtc-e2ee?
                         :logseq.kv/latest-code-lang
                         :logseq.kv/graph-backup-folder

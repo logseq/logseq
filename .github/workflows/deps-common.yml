@@ -6,13 +6,13 @@ on:
     branches: [master]
     paths:
       - 'deps/common/**'
-      - '.github/workflows/logseq-common.yml'
+      - '.github/workflows/deps-common.yml'
       - '!deps/common/**.md'
   pull_request:
     branches: [master]
     paths:
       - 'deps/common/**'
-      - '.github/workflows/logseq-common.yml'
+      - '.github/workflows/deps-common.yml'
       - '!deps/common/**.md'
 
 defaults:

@@ -77,7 +77,6 @@
   (doseq [graph graphs]
     (if (fs/existsSync (cli-util/get-graph-path graph))
       (let [conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))
-            _ (cli-util/ensure-db-graph-for-command @conn)
             query* (when (string? (first args)) (common-util/safe-read-string {:log-error? false} (first args)))
             results (cond
                       ;; Run datalog query if detected

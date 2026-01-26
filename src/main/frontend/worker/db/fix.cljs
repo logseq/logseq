@@ -1,12 +1,11 @@
 (ns frontend.worker.db.fix
   "fix db"
   (:require [datascript.core :as d]
-            [logseq.db :as ldb]))
+            [logseq.db.frontend.schema :as db-schema]))
 
 (defn check-and-fix-schema!
-  [repo conn]
-  (let [schema (ldb/get-schema repo)
-        db-schema (:schema @conn)
+  [conn]
+  (let [db-schema (:schema @conn)
         diffs (->> (keep (fn [[k v]]
                            (let [schema-v (-> (get db-schema k)
                                               (dissoc :db/ident))
@@ -18,6 +17,6 @@
                                              (dissoc :db/index))]
                              (when-not (or (= v schema-v') (= k :db/ident))
                                (assoc v :db/ident k))))
-                         schema))]
+                         db-schema/schema))]
     (when (seq diffs)
       (d/transact! conn diffs))))

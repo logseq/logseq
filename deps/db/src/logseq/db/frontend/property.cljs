@@ -182,6 +182,16 @@
                                                  :cardinality :many
                                                  :public? true
                                                  :view-context :never}}
+     :logseq.property.class/bidirectional-property-title {:title "Bidirectional property title"
+                                                          :schema {:type :string
+                                                                   :public? true
+                                                                   :view-context :class}}
+     :logseq.property.class/enable-bidirectional? {:title "Enable bidirectional properties"
+                                                   :schema {:type :checkbox
+                                                            :public? true
+                                                            :view-context :class}
+                                                   :properties
+                                                   {:logseq.property/description "When enabled, this tag will show reverse nodes that link to the current node via properties."}}
      :logseq.property/hide-empty-value {:title "Hide empty value"
                                         :schema {:type :checkbox
                                                  :public? true
@@ -219,7 +229,7 @@
      :logseq.property/asset   {:title "Asset"
                                :schema {:type :entity
                                         :hide? true}}
-     ;; used by pdf and whiteboard
+     ;; used by pdf
      ;; TODO: remove ls-type
      :logseq.property/ls-type {:schema {:type :keyword
                                         :hide? true}}
@@ -258,9 +268,11 @@
                                                   :schema {:type :node
                                                            :cardinality :many
                                                            :hide? true}}
+     ;; TODO: Remove deprecated
      :logseq.property.tldraw/page {:title "Tldraw Page"
                                    :schema {:type :map
                                             :hide? true}}
+     ;; TODO: Remove deprecated
      :logseq.property.tldraw/shape {:title "Tldraw Shape"
                                     :schema {:type :map
                                              :hide? true}}
@@ -870,3 +882,16 @@
                   :else
                   false)))
             values)))
+
+(defn lookup
+  "Get the property value by a built-in property's db-ident from coll"
+  [block db-ident]
+  (let [val (get block db-ident)]
+    (if (built-in-has-ref-value? db-ident) (property-value-content val) val)))
+
+(defn get-block-property-value
+  "Get the value of built-in block's property by its db-ident"
+  [db block db-ident]
+  (when db
+    (let [block (or (d/entity db (:db/id block)) block)]
+      (lookup block db-ident))))

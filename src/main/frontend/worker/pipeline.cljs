@@ -35,14 +35,13 @@
           (:undo? tx-meta) (:redo? tx-meta)))))
 
 (defn- rebuild-block-refs
-  [repo {:keys [tx-meta db-after db-before]} blocks]
+  [{:keys [tx-meta db-after db-before]} blocks]
   (when (or (and (:outliner-op tx-meta) (refs-need-recalculated? tx-meta))
             (:rtc-tx? tx-meta)
             (:rtc-op? tx-meta))
     (mapcat (fn [block]
               (when (d/entity db-after (:db/id block))
-                (let [date-formatter (worker-state/get-date-formatter repo)
-                      refs (->> (outliner-core/rebuild-block-refs repo db-after date-formatter block) set)
+                (let [refs (->> (outliner-core/rebuild-block-refs db-after block) set)
                       old-refs (->> (:block/refs (d/entity db-before (:db/id block)))
                                     (map :db/id)
                                     set)
@@ -128,7 +127,7 @@
                   [:db/add eid :logseq.property.class/extends :logseq.class/Root]
                   [:db/retract eid :block/tags :logseq.class/Page]])
 
-             ;; remove #Page from tags/journals/whiteboards, etc.
+             ;; remove #Page from tags/journals etc.
                (= (:db/id page-tag) (:v datom))
                (let [tags (->> entity
                                :block/tags
@@ -524,12 +523,9 @@
 
 (defn invoke-hooks
   [conn {:keys [tx-meta] :as tx-report} context]
-  (let [{:keys [from-disk? new-graph? transact-new-graph-refs?]} tx-meta]
+  (let [{:keys [transact-new-graph-refs?]} tx-meta]
     (when-not transact-new-graph-refs?
       (cond
-        (or from-disk? new-graph?)
-        {:tx-report tx-report}
-
         ;; Rebuild refs for a new DB graph using EDN or when EDN data is imported.
         ;; Ref rebuilding happens here because transact-pipeline doesn't rebuild refs
         ;; for these cases

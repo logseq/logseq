@@ -1,17 +1,17 @@
 (ns frontend.format.block
-  "Block code needed by app but not graph-parser"
-  (:require [cljs-time.format :as tf]
-            [cljs.cache :as cache]
+  "Block code needed by app but not graph-parser. This should be the only frontend
+   namespace that has references to legacy file attributes like :block/pre-block?
+   as they are being removed from graph-parser output"
+  (:require [cljs.cache :as cache]
             [clojure.string :as string]
             [frontend.common.cache :as common.cache]
-            [frontend.config :as config]
-            [frontend.date :as date]
             [frontend.db :as db]
             [frontend.format :as format]
             [frontend.format.mldoc :as mldoc]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [lambdaisland.glogi :as log]
+            [logseq.common.config :as common-config]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]))
 
@@ -23,7 +23,7 @@ and handles unexpected failure."
     (try
       (let [blocks (gp-block/extract-blocks blocks content format
                                             {:user-config (state/get-config)
-                                             :block-pattern (config/get-block-pattern format)
+                                             :block-pattern common-config/block-pattern
                                              :db (db/get-db repo)
                                              :date-formatter (state/get-date-formatter)
                                              :page-name page-name
@@ -43,33 +43,6 @@ and handles unexpected failure."
         (notification/show! "An unexpected error occurred during block extraction." :error)
         []))))
 
-(defn- normalize-as-percentage
-  [block]
-  (some->> block
-           str
-           (re-matches #"(-?\d+\.?\d*)%")
-           second
-           (#(/ % 100))))
-
-(defn- normalize-as-date
-  [block]
-  (some->> block
-           str
-           date/normalize-date
-           (tf/unparse date/custom-formatter)))
-
-(defn normalize-block
-  "Normalizes supported formats such as dates and percentages.
-   Be careful, this function may harm query sort performance!
-   - nlp-date? - Enable NLP parsing on date items.
-       Requires heavy computation (see `normalize-as-date` for details)"
-  [block nlp-date?]
-  (->> [normalize-as-percentage (when nlp-date? normalize-as-date) identity]
-       (remove nil?)
-       (map #(% (if (set? block) (first block) block)))
-       (remove nil?)
-       (first)))
-
 (defn parse-block
   [{:block/keys [uuid title format] :as block}]
   (when-not (string/blank? title)
@@ -80,7 +53,7 @@ and handles unexpected failure."
           ;; it enabled yet and can cause visible bugs when '#' is used
           blocks (if (:logseq.property.node/display-type block)
                    [block]
-                   (let [ast (format/to-edn title format parse-config)]
+                   (let [ast (format/to-edn title parse-config)]
                      (extract-blocks ast title format {})))
           new-block (first blocks)
           block (cond-> (merge block new-block)
@@ -94,9 +67,9 @@ and handles unexpected failure."
 (defonce *blocks-ast-cache (volatile! (cache/lru-cache-factory {} :threshold 5000)))
 
 (defn- parse-title-and-body-helper
-  [format content]
-  (let [parse-config (mldoc/get-default-config format)
-        ast (->> (format/to-edn content format parse-config)
+  [_format content]
+  (let [parse-config (mldoc/get-default-config :markdown)
+        ast (->> (format/to-edn content parse-config)
                  (map first))
         title (when (gp-block/heading-block? (first ast))
                 (:title (second (first ast))))
@@ -120,12 +93,10 @@ and handles unexpected failure."
      (merge block
             (parse-title-and-body (:block/uuid block)
                                   (get block :block/format :markdown)
-                                  (:block/pre-block? block)
                                   (:block/title block)))))
-  ([_block-uuid format pre-block? content]
+  ([_block-uuid format content]
    (when-not (string/blank? content)
-     (let [content (if pre-block? content
-                       (str (config/get-block-pattern format) " " (string/triml content)))]
+     (let [content (str common-config/block-pattern " " (string/triml content))]
        (cached-parse-title-and-body-helper format content)))))
 
 (defn break-line-paragraph?

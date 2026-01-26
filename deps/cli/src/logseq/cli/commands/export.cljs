@@ -9,7 +9,6 @@
             [logseq.cli.common.file :as common-file]
             [logseq.cli.common.util :as cli-common-util]
             [logseq.cli.util :as cli-util]
-            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db.common.sqlite-cli :as sqlite-cli]))
 
@@ -34,8 +33,8 @@
 
 (defn- get-file-contents
   "Modified version of export.common/<get-file-contents which doesn't have to deal with worker threads"
-  [repo db content-config suffix]
-  (let [page->content (common-file/get-all-page->content repo db content-config)]
+  [db content-config suffix]
+  (let [page->content (common-file/get-all-page->content db content-config)]
     (map (fn [[page-title content]]
            {:path (str page-title "." suffix)
             :content content
@@ -45,26 +44,24 @@
 
 (defn- export-files-as-markdown
   "Modified version of handler.export.text/export-files-as-markdown for the CLI"
-  [repo files options]
+  [files options]
   (mapv
    (fn [{:keys [path title content]}]
-     [(or path title) (cli-export-text/export-helper repo content :markdown options)])
+     [(or path title) (cli-export-text/export-helper content :markdown options)])
    files))
 
 (defn- export-repo-as-markdown!
   "Modified version of handler.export.text/export-repo-as-markdown for the CLI"
-  [repo db {:keys [file]}]
+  [graph db {:keys [file]}]
   (let [content-config (get-content-config db)
-        files* (get-file-contents repo db content-config "md")]
+        files* (get-file-contents db content-config "md")]
     (when (seq files*)
       (let [files (binding [cli-export-common/*current-db* db
-                            cli-export-common/*current-repo* repo
                             cli-export-common/*content-config* content-config]
-                    (export-files-as-markdown repo files* nil))
-            repo' (string/replace repo common-config/db-version-prefix "")
+                    (export-files-as-markdown files* nil))
             zip-file-name (if file
                             (string/replace-first file #"(?i)\.zip$" "")
-                            (str repo' "_markdown_" (quot (common-util/time-ms) 1000)))
+                            (str graph "_markdown_" (quot (common-util/time-ms) 1000)))
             file-name (or file (str zip-file-name ".zip"))
             zip (cli-common-util/make-export-zip zip-file-name files)
             ;; matches behavior in make-export-zip
@@ -78,6 +75,5 @@
     (cli-util/error "Command missing required option 'graph'"))
   (if (fs/existsSync (cli-util/get-graph-path graph))
     (let [conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))]
-      (cli-util/ensure-db-graph-for-command @conn)
-      (export-repo-as-markdown! (str common-config/db-version-prefix graph) @conn opts))
+      (export-repo-as-markdown! graph @conn opts))
     (cli-util/error "Graph" (pr-str graph) "does not exist")))

@@ -4,7 +4,6 @@
                   logseq.db.common.sqlite-cli
                   logseq.db.frontend.property
                   logseq.db.frontend.property.build
-                  logseq.db.common.property-util
                   logseq.db.frontend.content
                   logseq.db.common.order
                   logseq.db.sqlite.create-graph

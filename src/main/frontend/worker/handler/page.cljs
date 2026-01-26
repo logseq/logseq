@@ -25,7 +25,6 @@
 
    * :uuid                     - when set, use this uuid instead of generating a new one.
    * :class?                   - when true, adds a :block/tags ':logseq.class/Tag'
-   * :whiteboard?              - when true, adds a :block/tags ':logseq.class/Whiteboard'
    * :tags                     - tag uuids that are added to :block/tags
    * :persist-op?              - when true, add an update-page op
    * :properties               - properties to add to the page
