@@ -39,20 +39,8 @@
     (string? data) (.encode (js/TextEncoder.) data)
     :else (js/Uint8Array. data)))
 
-(defn- decode-snapshot-rows [bytes]
-  (sqlite-util/read-transit-str (.decode snapshot-text-decoder (->uint8 bytes))))
-
-(defn- snapshot-rows-e2ee?
-  [rows]
-  (boolean
-   (some (fn [[_ content _]]
-           (try
-             (let [data (sqlite-util/read-transit-str content)]
-               (and (map? data)
-                    (= :logseq.kv/graph-rtc-e2ee? (:db/ident data))))
-             (catch :default _
-               false)))
-         rows)))
+(defn- decode-snapshot-rows [payload]
+  (sqlite-util/read-transit-str (.decode snapshot-text-decoder (->uint8 payload))))
 
 (defn- frame-len [^js data offset]
   (let [view (js/DataView. (.-buffer data) offset 4)]
@@ -107,16 +95,6 @@
     opts))
 
 (declare fetch-json)
-
-(defn- fetch-graph-e2ee?
-  [base graph-uuid]
-  (if-not (and (string? base) (string? graph-uuid))
-    false
-    (p/let [resp (fetch-json (str base "/e2ee/graphs/" graph-uuid "/aes-key")
-                             {:method "GET"}
-                             {:response-schema :e2ee/graph-aes-key})
-            encrypted-aes-key (:encrypted-aes-key resp)]
-      (boolean (string? encrypted-aes-key)))))
 
 (declare coerce-http-response)
 

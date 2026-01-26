@@ -455,7 +455,7 @@
 (defn transact-pipeline
   "Compute extra tx-data and block/refs, should ensure it's a pure function and
   doesn't call `d/transact!` or `ldb/transact!`."
-  [repo {:keys [db-after tx-meta _tx-data] :as tx-report}]
+  [{:keys [db-after tx-meta _tx-data] :as tx-report}]
   (when-not (:temp-conn? tx-meta)
     (let [extra-tx-data (compute-extra-tx-data tx-report)
           tx-report* (if (seq extra-tx-data)
@@ -469,7 +469,7 @@
           deleted-block-ids (set (map :db/id deleted-blocks))
           blocks' (remove (fn [b] (deleted-block-ids (:db/id b))) blocks)
           block-refs (when (seq blocks')
-                       (rebuild-block-refs repo tx-report* blocks'))
+                       (rebuild-block-refs tx-report* blocks'))
           tx-id-data (let [db-after (:db-after tx-report*)
                            updated-blocks (remove (fn [b] (contains? deleted-block-ids (:db/id b)))
                                                   (concat pages blocks))
