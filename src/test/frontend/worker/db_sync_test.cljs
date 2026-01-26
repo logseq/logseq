@@ -67,6 +67,63 @@
             (is (= (:db/id child1') (:db/id (:block/parent parent'))))
             (is (= (:db/id page') (:db/id (:block/parent child1'))))))))))
 
+(deftest ensure-block-parents-test
+  (let [{:keys [conn child1 parent]} (setup-parent-child)
+        child-uuid (:block/uuid child1)
+        parent-uuid (:block/uuid parent)
+        page-uuid (:block/uuid (:block/page child1))]
+    (testing "adds parent when a block loses parent without becoming a page"
+      (let [tx-data [[:db/retract [:block/uuid child-uuid] :block/parent [:block/uuid parent-uuid] 1]]
+            fixed (#'db-sync/ensure-block-parents @conn tx-data)]
+        (is (some (fn [item]
+                    (and (= :db/add (first item))
+                         (= [:block/uuid child-uuid] (second item))
+                         (= :block/parent (nth item 2))
+                         (= [:block/uuid page-uuid] (nth item 3))))
+                  fixed))))
+    (testing "does not add parent when converting to page"
+      (let [tx-data [[:db/retract [:block/uuid child-uuid] :block/parent [:block/uuid parent-uuid] 1]
+                     [:db/add [:block/uuid child-uuid] :block/name "page" 1]]
+            fixed (#'db-sync/ensure-block-parents @conn tx-data)]
+        (is (= tx-data fixed))))
+    (testing "does not add parent when entity is retracted"
+      (let [tx-data [[:db/retract [:block/uuid child-uuid] :block/parent [:block/uuid parent-uuid] 1]
+                     [:db/retractEntity [:block/uuid child-uuid]]]
+            fixed (#'db-sync/ensure-block-parents @conn tx-data)]
+        (is (= tx-data fixed))))))
+
+(deftest ensure-block-parents-last-op-retract-test
+  (let [{:keys [conn child1 parent]} (setup-parent-child)
+        child-uuid (:block/uuid child1)
+        parent-uuid (:block/uuid parent)
+        page-uuid (:block/uuid (:block/page child1))]
+    (testing "retract after add still reparents to page"
+      (let [tx-data [[:db/add [:block/uuid child-uuid] :block/parent [:block/uuid parent-uuid] 1]
+                     [:db/retract [:block/uuid child-uuid] :block/parent [:block/uuid parent-uuid] 2]]
+            fixed (#'db-sync/ensure-block-parents @conn tx-data)]
+        (is (some (fn [item]
+                    (and (= :db/add (first item))
+                         (= [:block/uuid child-uuid] (second item))
+                         (= :block/parent (nth item 2))
+                         (= [:block/uuid page-uuid] (nth item 3))))
+                  fixed))))))
+
+(deftest sanitize-tx-data-ensures-parent-test
+  (let [{:keys [conn child1 parent]} (setup-parent-child)
+        child-uuid (:block/uuid child1)
+        parent-uuid (:block/uuid parent)
+        page-uuid (:block/uuid (:block/page child1))]
+    (testing "sanitize-tx-data preserves parent for blocks when last op retracts parent"
+      (let [tx-data [[:db/add [:block/uuid child-uuid] :block/parent [:block/uuid parent-uuid] 1]
+                     [:db/retract [:block/uuid child-uuid] :block/parent [:block/uuid parent-uuid] 2]]
+            fixed (#'db-sync/sanitize-tx-data @conn tx-data #{})]
+        (is (some (fn [item]
+                    (and (= :db/add (first item))
+                         (= [:block/uuid child-uuid] (second item))
+                         (= :block/parent (nth item 2))
+                         (= [:block/uuid page-uuid] (nth item 3))))
+                  fixed))))))
+
 (deftest encrypt-decrypt-tx-data-test
   (async done
          (-> (p/let [aes-key (crypt/<generate-aes-key)
