@@ -5,8 +5,7 @@
             [datascript.core :as d]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.graph-parser.db :as gp-db]))
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
 
 (defn- build-links
   [links]
@@ -79,7 +78,8 @@
   (let [dark? (= "dark" theme)
         relation (ldb/get-pages-relation db journal?)
         tagged-pages (ldb/get-all-tagged-pages db)
-        namespaces (gp-db/get-all-namespace-relation db)
+        ;; FIXME: Implement for DB graphs
+        namespaces []
         tags (set (map second tagged-pages))
         full-pages (ldb/get-all-pages db)
         created-ats (map :block/created-at full-pages)
@@ -175,7 +175,8 @@
         tags (set (remove #(= page-id %) tags))
         ref-pages (get-page-referenced-pages db page-id)
         mentioned-pages (get-pages-that-mentioned-page db page-id show-journal)
-        namespaces (gp-db/get-all-namespace-relation db)
+        ;; FIXME: Implement for DB graphs
+        namespaces []
         links (concat
                namespaces
                (map (fn [ref-page]
@@ -213,7 +214,8 @@
                                  (if (ldb/page? b) b (:block/page b))))
                           (remove (fn [node] (= (:db/id block) (:db/id node))))
                           (common-util/distinct-by :db/id))
-          namespaces (gp-db/get-all-namespace-relation db)
+          ;; FIXME: Implement for DB graphs
+          namespaces []
           links (->> (concat
                       namespaces
                       (map (fn [p] [(:db/id block) (:db/id p)]) ref-blocks))

@@ -5,7 +5,6 @@
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.config :as config]
-            [frontend.handler.property.util :as pu]
             [frontend.search :as search]
             [frontend.storage :as storage]
             [frontend.ui :as ui]
@@ -54,15 +53,13 @@
   [node-entity {:keys [ignore-current-icon?]
                 :or {ignore-current-icon? false}}]
   (or (when-not ignore-current-icon?
-        (get node-entity (pu/get-pid :logseq.property/icon)))
+        (get node-entity :logseq.property/icon))
       (let [asset-type (:logseq.property.asset/type node-entity)
             first-tag-icon (some :logseq.property/icon (sort-by :db/id (:block/tags node-entity)))]
         (cond
           (ldb/class? node-entity)
           "hash"
           (ldb/property? node-entity)
-          "letter-p"
-          (ldb/whiteboard? node-entity)
           "writing"
           (ldb/page? node-entity)
           "file"

@@ -2,7 +2,6 @@
   "DB-based graph implementation"
   (:require [clojure.string :as string]
             [frontend.commands :as commands]
-            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
@@ -14,6 +13,7 @@
             [frontend.schema.handler.repo-config :as repo-config-schema]
             [frontend.state :as state]
             [frontend.util :as util]
+            [logseq.common.config :as common-config]
             [logseq.db.frontend.content :as db-content]
             [logseq.outliner.op]
             [promesa.core :as p]))
@@ -54,7 +54,7 @@
                 (let [ast (mldoc/->edn (string/trim title) :markdown)
                       first-elem-type (first (ffirst ast))
                       block-with-title? (mldoc/block-with-title? first-elem-type)
-                      content' (str (config/get-block-pattern :markdown) (if block-with-title? " " "\n") title)
+                      content' (str common-config/block-pattern (if block-with-title? " " "\n") title)
                       parsed-block (block/parse-block (assoc block :block/title content'))
                       block' (-> (merge block parsed-block {:block/title title})
                                  (dissoc :block/format))]
@@ -73,7 +73,7 @@
   "This fn is the db version of file-handler/alter-file"
   [path content]
   (let [file-valid? (if (= path "logseq/config.edn")
-                      (do (config-edn-common-handler/detect-deprecations path content {:db-graph? true})
+                      (do (config-edn-common-handler/detect-deprecations path content)
                           (config-edn-common-handler/validate-config-edn path content repo-config-schema/Config-edn))
                       true)]
 

@@ -116,6 +116,7 @@
 (def ^:export get_editing_cursor_position api-editor/get_editing_cursor_position)
 (def ^:export get_next_sibling_block api-editor/get_next_sibling_block)
 (def ^:export get_page api-editor/get_page)
+(def ^:export get_today_page api-editor/get_today_page)
 (def ^:export get_page_blocks_tree api-editor/get_page_blocks_tree)
 (def ^:export get_page_linked_references api-editor/get_page_linked_references)
 (def ^:export get_page_properties api-editor/get_page_properties)
@@ -214,6 +215,8 @@
 (def ^:export remove_tag_property db-based-api/tag-remove-property)
 (def ^:export set_block_icon db-based-api/set-block-icon)
 (def ^:export remove_block_icon db-based-api/remove-block-icon)
+(def ^:export add_property_value_choices db-based-api/add-property-value-choices)
+(def ^:export set_property_node_tags db-based-api/set-property-node-tags)
 
 ;; Internal db-based CLI APIs
 ;; CLI APIs should use ensure-db-graph unless they have a nested check in cli-common-mcp-tools ns

@@ -3,6 +3,7 @@
   platforms by delegating to implementations of the fs protocol"
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
+            [electron.ipc :as ipc]
             [frontend.fs.memory-fs :as memory-fs]
             [frontend.fs.node :as node]
             [frontend.fs.protocol :as protocol]
@@ -97,6 +98,20 @@
                   ;; Disable this temporarily
                   ;; (js/alert "Current file can't be saved! Please copy its content to your local file system and click the refresh button.")
                   ))))))
+
+(defn write-file!
+  "A node only version of write-plain-text-file! to avoid using the fs-protocol
+   which has file graph assumptions"
+  [path content]
+  (when (util/electron?)
+    (let [file-fpath (common-util/path-normalize path)]
+      ;; repo is nil because we don't want a backup file written
+      (-> (ipc/ipc "writeFile" nil file-fpath content)
+          (p/catch (fn [error]
+                     (state/pub-event! [:capture-error {:error error
+                                                        :payload {:type :write-file/failed
+                                                                  :user-agent (when js/navigator js/navigator.userAgent)
+                                                                  :content-length (count content)}}])))))))
 
 ;; read-file should return string on all platforms
 (defn read-file

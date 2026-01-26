@@ -1,7 +1,7 @@
 (ns frontend.components.query.result-test
   (:require [clojure.test :refer [deftest are testing is]]
-            [frontend.db.model :as model]
-            [frontend.components.query.result :as query-result]))
+            [frontend.components.query.result :as query-result]
+            [frontend.db.model :as model]))
 
 (defn- transform-query-result
   [config query-m result]
@@ -11,10 +11,10 @@
 (deftest transform-query-result-with-transforms-and-grouping
   (let [result (mapv
                 #(assoc % :block/page {:db/id 1} :block/parent {:db/id 2})
-                [{:block/uuid (random-uuid) :block/scheduled 20230418}
-                 {:block/uuid (random-uuid) :block/scheduled 20230415}
-                 {:block/uuid (random-uuid) :block/scheduled 20230417}])
-        sorted-result (sort-by :block/scheduled result)]
+                [{:block/uuid (random-uuid) :logseq.property/scheduled 20230418}
+                 {:block/uuid (random-uuid) :logseq.property/scheduled 20230415}
+                 {:block/uuid (random-uuid) :logseq.property/scheduled 20230417}])
+        sorted-result (sort-by :logseq.property/scheduled result)]
     (testing "For list view"
       (are [query-m expected]
            (= expected (transform-query-result {:table? false} query-m result))
@@ -28,11 +28,11 @@
         result
 
         ;; Return transformed result for list view
-        {:result-transform '(partial sort-by :block/scheduled)}
+        {:result-transform '(partial sort-by :logseq.property/scheduled)}
         sorted-result
 
         ; User overrides transform to return grouped result
-        {:result-transform '(partial sort-by :block/scheduled) :group-by-page? true}
+        {:result-transform '(partial sort-by :logseq.property/scheduled) :group-by-page? true}
         {{:db/id 1} sorted-result})
 
       (testing "For table view"
@@ -44,7 +44,7 @@
           result
 
           ;; Return transformed result
-          {:result-transform '(partial sort-by :block/scheduled)}
+          {:result-transform '(partial sort-by :logseq.property/scheduled)}
           sorted-result
 
           ;; Ignore override and return normal result
@@ -53,7 +53,7 @@
 
       (testing "current block in results"
         (is (= result
-               (let [current-block {:block/uuid (random-uuid) :block/scheduled 20230420 :block/page {:db/id 1}}]
+               (let [current-block {:block/uuid (random-uuid) :logseq.property/scheduled 20230420 :block/page {:db/id 1}}]
                  (transform-query-result {:table? false
                                           :current-block-uuid (:block/uuid current-block)}
                                          {:group-by-page? false}

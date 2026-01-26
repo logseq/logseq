@@ -136,9 +136,7 @@
   [url]
   (match url
     ["File" s]
-    (-> (string/replace s "file://" "")
-             ;; "file:/Users/ll/Downloads/test.pdf" is a normal org file link
-        (string/replace "file:" ""))
+    (string/replace s "file://" "")
 
     ["Complex" m]
     (let [{:keys [link protocol]} m]
@@ -653,7 +651,7 @@
        on-context-menu
        (assoc :on-context-menu on-context-menu))
      (when (and show-icon? (not tag?))
-       (let [own-icon (get page-entity (pu/get-pid :logseq.property/icon))
+       (let [own-icon (get page-entity :logseq.property/icon)
              emoji? (and (map? own-icon) (= (:type own-icon) :emoji))]
          (when-let [icon (icon-component/get-node-icon-cp page-entity {:color? true
                                                                        :not-text-or-page? true})]
@@ -1119,21 +1117,9 @@
        [:span.text-gray-500 page-ref/right-brackets])]))
 
 (defn- show-link?
-  [config metadata s full-text]
-  (let [media-formats (set (map name config/media-formats))
-        metadata-show (:show (common-util/safe-read-map-string metadata))
-        format (get-in config [:block :block/format] :markdown)]
+  [s full-text]
+  (let [media-formats (set (map name config/media-formats))]
     (or
-     (and
-      (= :org format)
-      (or
-       (and
-        (nil? metadata-show)
-        (or
-         (common-config/local-relative-asset? s)
-         (text-util/media-link? media-formats s)))
-       (true? (boolean metadata-show))))
-
      ;; markdown
      (string/starts-with? (string/triml full-text) "!")
 
@@ -1216,7 +1202,7 @@
                 :target "_blank"}
             (map-inline config label))
 
-    (show-link? config metadata s full_text)
+    (show-link? s full_text)
     (media-link config url s label metadata full_text)
 
     (util/electron?)
@@ -1259,15 +1245,10 @@
                            id label*)))
 
       ["Page_ref" page]
-      (let [format (get-in config [:block :block/format] :markdown)]
-        (if (and (= format :org)
-                 (show-link? config nil page page)
-                 (not (contains? #{"pdf" "mp4" "ogg" "webm"} (util/get-file-ext page))))
-          (image-link config url page nil metadata full_text)
-          (let [label* (if (seq (mldoc/plain->text label)) label nil)]
-            (if (and (string? page) (string/blank? page))
-              [:span (ref/->page-ref page)]
-              (page-reference config page label*)))))
+      (let [label* (if (seq (mldoc/plain->text label)) label nil)]
+        (if (and (string? page) (string/blank? page))
+          [:span (ref/->page-ref page)]
+          (page-reference config page label*)))
 
       ["Embed_data" src]
       (image-link config url src nil metadata full_text)
@@ -1284,20 +1265,8 @@
                      (assoc :link-js-url (try (js/URL. href)
                                               (catch :default _ nil))))]
         (cond
-          (and (= (get-in config [:block :block/format] :markdown) :org)
-               (= "Complex" protocol)
-               (= (string/lower-case (:protocol path)) "id")
-               (string? (:link path))
-               (util/uuid-string? (:link path)))       ; org mode id
-          (let [id (uuid (:link path))
-                block (db/entity [:block/uuid id])]
-            (if (:block/pre-block? block)
-              (let [page (:block/page block)]
-                (page-reference config (:block/name page) label))
-              (block-reference config (:link path) label)))
-
           (= protocol "file")
-          (if (show-link? config metadata href full_text)
+          (if (show-link? href full_text)
             (media-link config url href label metadata full_text)
             (let [href* (if (util/electron?)
                           (relative-assets-path->absolute-path href)
@@ -1317,7 +1286,7 @@
                   title (assoc :title title))
                 (map-inline config label))]))
 
-          (show-link? config metadata href full_text)
+          (show-link? href full_text)
           (media-link config url href label metadata full_text)
 
           :else
@@ -1688,9 +1657,6 @@
 (defn- bullet-on-click
   [e block uuid {:keys [on-redirect-to-page]}]
   (cond
-    (pu/shape-block? block)
-    (route-handler/redirect-to-page! (get-in block [:block/page :block/uuid]) {:block-id uuid})
-
     (gobj/get e "shiftKey")
     (do
       (state/sidebar-add-block!
@@ -1782,6 +1748,7 @@
         current-user-uuid (user-handler/user-uuid)
         editing-user (editing-user-for-block uuid online-users current-user-uuid)
         ref? (:ref? config)
+        container-id (:container-id config)
         empty-content? (block-content-empty? block)
         fold-button-right? (state/enable-fold-button-right?)
         own-number-list? (:own-order-number-list? config)
@@ -1814,9 +1781,10 @@
          :on-click (fn [event]
                      (util/stop event)
                      (state/clear-edit!)
+                     (state/set-state! :editor/container-id container-id)
                      (p/do!
                       (if ref?
-                        (state/toggle-collapsed-block! uuid)
+                        (state/toggle-collapsed-block! uuid container-id)
                         (if collapsed?
                           (editor-handler/expand-block! uuid)
                           (editor-handler/collapse-block! uuid)))
@@ -1926,8 +1894,7 @@
   [config block]
   (let [format :markdown
         block (if-not (:block.temp/ast-title block)
-                (merge block (block/parse-title-and-body uuid format false
-                                                         (:block/title block)))
+                (merge block (block/parse-title-and-body uuid format (:block/title block)))
                 block)
         block-ast-title (:block.temp/ast-title block)
         config (assoc config :block block)
@@ -1975,8 +1942,7 @@
                              (or (pu/lookup block :logseq.property.pdf/hl-page)
                                  "?"))]]
 
-                      (when (and area? (or (get-in block [:block/properties :hl-stamp])
-                                           (:logseq.property.pdf/hl-image block)))
+                      (when (and area? (:logseq.property.pdf/hl-image block))
                         (pdf-assets/area-display block))])]
        (remove-nils
         (concat
@@ -2207,14 +2173,13 @@
                    (state/set-selection-start-block! block-dom-element)))))))))))
 
 (rum/defc dnd-separator-wrapper < rum/reactive
-  [block block-id top?]
+  [_block block-id top?]
   (let [dragging? (rum/react *dragging?)
         drag-to-block (rum/react *drag-to-block)
         move-to (rum/react *move-to)]
     (when (and
            dragging?
            (= block-id drag-to-block)
-           (not (:block/pre-block? block))
            move-to)
       (when-not (or (and top? (not= move-to :top))
                     (and (not top?) (= move-to :top)))
@@ -2412,7 +2377,7 @@
 
 (rum/defc task-spent-time-cp
   [block]
-  (when (and (state/enable-timetracking?) (ldb/class-instance? (db/entity :logseq.class/Task) block))
+  (when (ldb/class-instance? (db/entity :logseq.class/Task) block)
     (let [[result set-result!] (rum/use-state nil)
           repo (state/get-current-repo)
           [status-history time-spent] result]
@@ -2441,7 +2406,7 @@
         content (:block/raw-title block)
         content (if (string? content) (string/trim content) "")
         block-ref? (:block-ref? config)
-        block (merge block (block/parse-title-and-body uuid format false content))
+        block (merge block (block/parse-title-and-body uuid format content))
         ast-body (:block.temp/ast-body block)
         ast-title (:block.temp/ast-title block)
         block (assoc block :block/title content)
@@ -2743,7 +2708,6 @@
                                (let [result (block/parse-title-and-body
                                              uuid
                                              (get block :block/format :markdown)
-                                             (:block/pre-block? block)
                                              title)
                                      ast-body (:block.temp/ast-body result)
                                      ast-title (:block.temp/ast-title result)
@@ -3015,7 +2979,7 @@
         custom-query? (boolean (:custom-query? config*))
         ref-or-custom-query? (or ref? custom-query?)
         *navigating-block (get container-state ::navigating-block)
-        {:block/keys [uuid pre-block? title]} block
+        {:block/keys [uuid title]} block
         config (build-config config* block {:navigated? navigated? :navigating-block navigating-block})
         level (:level config)
         *control-show? (get container-state ::control-show?)
@@ -3025,7 +2989,7 @@
                          (:view? config)
                          (root-block? config block)
                          (and (or (ldb/class? block) (ldb/property? block)) (:page-title? config)))
-                     (state/sub-block-collapsed uuid)
+                     (state/sub-block-collapsed uuid container-id)
 
                      :else
                      db-collapsed?)
@@ -3044,7 +3008,7 @@
         order-list? (boolean own-number-list?)
         children (ldb/get-children block)
         page-icon (when (:page-title? config)
-                    (let [icon' (get block (pu/get-pid :logseq.property/icon))]
+                    (let [icon' (get block :logseq.property/icon)]
                       (when-let [icon (and (ldb/page? block)
                                            (or icon'
                                                (some :logseq.property/icon (:block/tags block))
@@ -3060,12 +3024,12 @@
                                                                    (if icon
                                                                      (db-property-handler/set-block-property!
                                                                       (:db/id block)
-                                                                      (pu/get-pid :logseq.property/icon)
+                                                                      :logseq.property/icon
                                                                       (select-keys icon [:id :type :color]))
                                                                      ;; del
                                                                      (db-property-handler/remove-block-property!
                                                                       (:db/id block)
-                                                                      (pu/get-pid :logseq.property/icon))))
+                                                                      :logseq.property/icon)))
                                                       :del-btn? (boolean icon')
                                                       :icon-props {:style {:width "1lh"
                                                                            :height "1lh"
@@ -3084,7 +3048,6 @@
        :ref #(when (nil? @*ref) (reset! *ref %))
        :data-collapsed (and collapsed? has-child?)
        :class (str (when selected? "selected")
-                   (when pre-block? " pre-block")
                    (when order-list? " is-order-list")
                    (when (string/blank? title) " is-blank")
                    (when original-block " embed-block"))
@@ -3187,7 +3150,7 @@
 
           ;; Not embed self
           [:div.flex.flex-col.w-full
-           (let [block (merge block (block/parse-title-and-body uuid (get block :block/format :markdown) pre-block? title))
+           (let [block (merge block (block/parse-title-and-body uuid (get block :block/format :markdown) title))
                  hide-block-refs-count? (or (and (:embed? config)
                                                  (= (:block/uuid block) (:embed-id config)))
                                             table?)]
@@ -3285,10 +3248,12 @@
     (boolean result)))
 
 (defn- set-collapsed-block!
-  [block-id v]
+  [block-id v container-id]
   (if (false? v)
-    (editor-handler/expand-block! block-id {:skip-db-collpsing? true})
-    (state/set-collapsed-block! block-id v)))
+    (do
+      (editor-handler/expand-block! block-id {:skip-db-collpsing? true})
+      (state/set-collapsed-block! block-id v container-id))
+    (state/set-collapsed-block! block-id v container-id)))
 
 (rum/defcs loaded-block-container < rum/reactive db-mixins/query
   (rum/local false ::show-block-left-menu?)
@@ -3298,19 +3263,23 @@
            (let [[config block] (:rum/args state)
                  block-id (:block/uuid block)
                  linked-block? (or (:block/link block)
-                                   (:original-block config))]
+                                   (:original-block config))
+                 container-id (if (or linked-block? (nil? (:container-id config)))
+                                (state/get-next-container-id)
+                                (:container-id config))]
              (when-not (:property-block? config)
                (cond
                  (and (:page-title? config) (or (ldb/class? block) (ldb/property? block)) (not config/publishing?))
-                 (let [collapsed? (state/get-block-collapsed block-id)]
-                   (set-collapsed-block! block-id (if (some? collapsed?) collapsed? true)))
+                 (let [collapsed? (state/get-block-collapsed block-id container-id)]
+                   (set-collapsed-block! block-id (if (some? collapsed?) collapsed? true) container-id))
 
                  (root-block? config block)
-                 (set-collapsed-block! block-id false)
+                 (set-collapsed-block! block-id false container-id)
 
                  (or (:view? config) (:ref? config) (:custom-query? config))
                  (set-collapsed-block! block-id
-                                       (boolean (editor-handler/block-default-collapsed? block config)))
+                                       (boolean (editor-handler/block-default-collapsed? block config))
+                                       container-id)
 
                  :else
                  nil))
@@ -3318,14 +3287,15 @@
               (assoc state
                      ::control-show? (atom false)
                      ::navigating-block (atom (:block/uuid block)))
-               (or linked-block? (nil? (:container-id config)))
-               (assoc ::container-id (state/get-next-container-id)))))
+               (and container-id (or linked-block? (nil? (:container-id config))))
+               (assoc ::container-id container-id))))
    :will-unmount (fn [state]
                                                      ;; restore root block's collapsed state
                    (let [[config block] (:rum/args state)
-                         block-id (:block/uuid block)]
+                         block-id (:block/uuid block)
+                         container-id (or (:container-id config) (::container-id state))]
                      (when (root-block? config block)
-                       (set-collapsed-block! block-id nil)))
+                       (set-collapsed-block! block-id nil container-id)))
                    state)}
   [state config block & {:as opts}]
   (let [repo (state/get-current-repo)
@@ -3359,7 +3329,8 @@
          (p/let [block (db-async/<get-block (state/get-current-repo)
                                             id
                                             {:children? (not
-                                                         (if-some [result (state/get-block-collapsed (:block/uuid block))]
+                                                         (if-some [result (state/get-block-collapsed (:block/uuid block)
+                                                                                                     (:container-id config))]
                                                            result
                                                            (:block/collapsed? block)))
                                              :skip-refresh? false})]
@@ -3491,33 +3462,6 @@
        tb-col-groups
        (cons head groups)))]))
 
-(defn logbook-cp
-  [log]
-  (let [clocks (filter #(string/starts-with? % "CLOCK:") log)
-        clocks (reverse (sort-by str clocks))]
-    ;; TODO: display states change log
-    ; states (filter #(not (string/starts-with? % "CLOCK:")) log)
-
-    (when (seq clocks)
-      (let [tr (fn [elm cols] (->elem :tr
-                                      (mapv (fn [col] (->elem elm col)) cols)))
-            head [:thead.overflow-x-scroll (tr :th.py-0 ["Type" "Start" "End" "Span"])]
-            clock-tbody (->elem
-                         :tbody.overflow-scroll.sm:overflow-auto
-                         (mapv (fn [clock]
-                                 (let [cols (->> (string/split clock #": |--|=>")
-                                                 (map string/trim))]
-                                   (mapv #(tr :td.py-0 %) [cols])))
-                               clocks))]
-        [:div.overflow-x-scroll.sm:overflow-auto
-         (->elem
-          :table.m-0
-          {:class "logbook-table"
-           :border 0
-           :style {:width "max-content"}
-           :cell-spacing 15}
-          (cons head [clock-tbody]))]))))
-
 (defn map-inline
   [config col]
   (map #(inline config %) col))
@@ -3619,15 +3563,7 @@
   (try
     (match item
       ["Drawer" name lines]
-      (when (or (not= name "logbook")
-                (and
-                 (= name "logbook")
-                 (state/enable-timetracking?)
-                 (or (get-in (state/get-config) [:logbook/settings :enabled-in-all-blocks])
-                     (when (get-in (state/get-config)
-                                   [:logbook/settings :enabled-in-timestamped-blocks] true)
-                       (or (:block/scheduled (:block config))
-                           (:block/deadline (:block config)))))))
+      (when (not= name "logbook")
         [:div
          [:div.text-sm
           [:div.drawer {:data-drawer-name name}
@@ -3635,9 +3571,7 @@
             [:div.opacity-50.font-medium.logbook
              (util/format ":%s:" (string/upper-case name))]
             [:div.opacity-50.font-medium
-             (if (= name "logbook")
-               (logbook-cp lines)
-               (apply str lines))
+             (apply str lines)
              [:div ":END:"]]
             {:default-collapsed? true
              :title-trigger? true})]]])

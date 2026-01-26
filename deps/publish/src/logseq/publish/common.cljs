@@ -1,4 +1,5 @@
 (ns logseq.publish.common
+  "Provides common util fns"
   (:require [clojure.string :as string]
             [cognitect.transit :as transit]
             [datascript.transit :as dt]

@@ -58,7 +58,7 @@
       (spit config-edn config))))
 
 (defn diff-datoms
-  "Runs data/diff on two edn files written by dev:db-datoms"
+  "Runs data/diff on two edn files written by dev:datoms"
   [file1 file2 & args]
   (let [spec {:ignored-attributes
               ;; Ignores some attributes by default that are expected to change often
@@ -115,4 +115,4 @@
     (doseq [file-graph file-graphs]
       (let [db-graph (fs/path parent-graph-dir (fs/file-name file-graph))]
         (println "Importing" (str db-graph) "...")
-        (apply shell "bb" "dev:db-import" file-graph db-graph (concat import-options ["--validate"]))))))
+        (apply shell "bb" "dev:import" file-graph db-graph (concat import-options ["--validate"]))))))

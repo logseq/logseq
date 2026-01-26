@@ -1,10 +1,8 @@
 (ns ^:bb-compatible logseq.db.frontend.rules
-  "Datalog rules mostly for DB graphs. `rules`
-   is the only var also used by file graphs"
-  (:require [logseq.db.file-based.rules :as file-rules]))
+  "Datalog rules for DB graphs")
 
 (def ^:large-vars/data-var rules
-  "Rules used mainly in frontend.db.model for both DB and file graphs"
+  "Rules used mainly in frontend.db.model"
   ;; rule "parent" is optimized for parent node -> child node nesting queries
   {:parent
    '[[(parent ?p ?c)
@@ -83,12 +81,23 @@
 (def ^:large-vars/data-var db-query-dsl-rules
   "Rules used by frontend.query.dsl for DB graphs"
   (merge
-   (dissoc file-rules/query-dsl-rules :namespace
-           :page-property :has-page-property
-           :page-tags :all-page-tags)
    rules
 
-   {:between
+   {:page-ref
+    '[(page-ref ?b ?ref)
+      (has-ref ?b ?ref)]
+
+    :block-content
+    '[(block-content ?b ?query)
+      [?b :block/title ?content]
+      [(clojure.string/includes? ?content ?query)]]
+
+    :page
+    '[(page ?b ?page-name)
+      [?b :block/page ?bp]
+      [?bp :block/name ?page-name]]
+
+    :between
     '[(between ?b ?start ?end)
       [?b :block/page ?p]
       [?p :block/tags :logseq.class/Journal]

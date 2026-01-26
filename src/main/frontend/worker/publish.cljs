@@ -6,8 +6,8 @@
             [frontend.worker.state :as worker-state]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.frontend.content :as db-content]
+            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.schema :as db-schema]))
 
@@ -38,7 +38,7 @@
   [db blocks page-entity graph-uuid]
   (let [page-uuid (:block/uuid page-entity)
         page-title (publish-entity-title page-entity)
-        page? (common-entity-util/page? page-entity)
+        page? (entity-util/page? page-entity)
         graph-uuid (str graph-uuid)]
     (mapcat (fn [block]
               (let [block-uuid (:block/uuid block)
@@ -74,7 +74,7 @@
 
 (defn- collect-publish-blocks
   [db entity]
-  (if (common-entity-util/page? entity)
+  (if (entity-util/page? entity)
     (:block/_page entity)
     (ldb/get-block-and-children db (:block/uuid entity))))
 
@@ -209,10 +209,10 @@
                             eids)
                     (remove (fn [[_e a _v _tx _added]]
                               (contains? #{:block/tx-id :logseq.property.user/email :logseq.property.embedding/hnsw-label-updated-at} a))))
-        datoms (if (common-entity-util/page? entity)
+        datoms (if (entity-util/page? entity)
                  raw-datoms
                  (normalize-block-publish-datoms raw-datoms (set (map :db/id blocks)) (:db/id entity)))]
-    {:page (common-entity-util/entity->map entity)
+    {:page (entity-util/entity->map entity)
      :page-uuid (:block/uuid entity)
      :page-title (publish-entity-title entity)
      :graph-uuid (some-> graph-uuid str)
