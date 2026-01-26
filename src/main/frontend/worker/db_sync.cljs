@@ -1205,7 +1205,7 @@
         (remove-pending-txs! repo (map :tx-id local-txs)))
 
       (when tx-report
-        (let [asset-uuids (asset-uuids-from-tx (:db-after remote-tx-report) (:tx-data remote-tx-report))]
+        (let [asset-uuids (asset-uuids-from-tx @conn (:tx-data tx-report))]
           (when (seq asset-uuids)
             (enqueue-asset-downloads! repo client asset-uuids))))
 
