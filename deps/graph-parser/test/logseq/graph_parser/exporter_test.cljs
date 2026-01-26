@@ -589,7 +589,8 @@
 
     (testing "multiline blocks"
       (is (= "|markdown| table|\n|some|thing|" (:block/title (db-test/find-block-by-content @conn #"markdown.*table"))))
-      (is (= "multiline block\na 2nd\nand a 3rd" (:block/title (db-test/find-block-by-content @conn #"multiline block"))))
+      (is (= "multiline block\na 2nd\nand a 3rd" (:block/title (db-test/find-block-by-content @conn #"^multiline block"))))
+      (is (= "props multiline block\nlast line" (:block/title (db-test/find-block-by-content @conn #"props multiline block"))))
       (is (= "logbook block" (:block/title (db-test/find-block-by-content @conn #"logbook block")))))
 
     (testing ":block/refs"

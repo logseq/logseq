@@ -2168,8 +2168,10 @@
                    (-> (select-keys options [:notify-user :default-config :<save-config-file])
                        (set/rename-keys {:<save-config-file :<save-file})))]
      (let [files (common-config/remove-hidden-files *files config rpath-key)
-           logseq-file? #(string/starts-with? (get % rpath-key) "logseq/")
-           asset-file? #(string/starts-with? (get % rpath-key) "assets/")
+           normalized-rpath (fn [f]
+                              (some-> (get f rpath-key) path/path-normalize))
+           logseq-file? #(string/starts-with? (normalized-rpath %) "logseq/")
+           asset-file? #(string/starts-with? (normalized-rpath %) "assets/")
            doc-files (->> files
                           (remove #(or (logseq-file? %) (asset-file? %)))
                           (filter #(contains? #{"md" "org" "markdown" "edn"} (path/file-ext (:path %)))))
