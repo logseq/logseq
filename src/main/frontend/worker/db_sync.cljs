@@ -763,6 +763,50 @@
             (take 3 item)
             item)))))
 
+(defn- ensure-block-parents
+  "Ensure block entities don't lose :block/parent without becoming pages."
+  [db tx-data]
+  (let [last-parent-op (atom {})
+        page-retracts (atom #{})
+        name-adds (atom #{})
+        retract-entities (atom #{})]
+    (doseq [item tx-data]
+      (when (vector? item)
+        (let [op (first item)]
+          (cond
+            (= op :db/retractEntity)
+            (swap! retract-entities conj (second item))
+
+            (and (contains? #{:db/add :db/retract} op)
+                 (>= (count item) 4))
+            (let [e (second item)
+                  a (nth item 2)]
+              (cond
+                (= a :block/parent)
+                (swap! last-parent-op assoc e {:op op :v (nth item 3)})
+
+                (and (= op :db/retract) (= a :block/page))
+                (swap! page-retracts conj e)
+
+                (and (= op :db/add) (= a :block/name))
+                (swap! name-adds conj e)))))))
+    (let [candidates (->> @last-parent-op
+                          (keep (fn [[e {:keys [op]}]]
+                                  (when (= op :db/retract) e)))
+                          (remove @retract-entities)
+                          (remove @page-retracts)
+                          (remove @name-adds))
+          fixes (keep (fn [e]
+                        (when-let [ent (d/entity db e)]
+                          (when (and (:block/page ent)
+                                     (not (ldb/page? ent)))
+                            (when-let [page-uuid (:block/uuid (:block/page ent))]
+                              [:db/add e :block/parent [:block/uuid page-uuid]]))))
+                      candidates)]
+      (if (seq fixes)
+        (into tx-data fixes)
+        tx-data))))
+
 (defn- sanitize-tx-data
   [db tx-data local-deleted-ids]
   (let [sanitized-tx-data (->> tx-data
@@ -773,7 +817,8 @@
                                                   (contains? #{:block/created-at :block/updated-at :block/title}
                                                              (nth item 2)))
                                              (contains? local-deleted-ids (get-lookup-id (last item))))))
-                               keep-last-update)]
+                               keep-last-update)
+        sanitized-tx-data (ensure-block-parents db sanitized-tx-data)]
     ;; (when (not= tx-data sanitized-tx-data)
     ;;   (prn :debug :tx-data tx-data)
     ;;   (prn :debug :sanitized-tx-data sanitized-tx-data))
@@ -796,7 +841,8 @@
                       tx-data (->> txs
                                    (db-normalize/remove-retract-entity-ref @conn)
                                    keep-last-update
-                                   distinct)]
+                                   distinct)
+                      tx-data (ensure-block-parents @conn tx-data)]
                   ;; (prn :debug :before-keep-last-update txs)
                   ;; (prn :debug :upload :tx-data tx-data)
                   (when (seq txs)
