@@ -583,14 +583,6 @@
     (p/let [items (p/all (mapv (fn [item] (decrypt-tx-item aes-key item)) tx-data))]
       (vec items))))
 
-(defn- <encrypt-keys-attrs
-  [aes-key keys]
-  (p/all (mapv (fn [[e a v t]]
-                 (if (contains? rtc-const/encrypt-attr-set a)
-                   (p/let [v' (<encrypt-text-value aes-key v)]
-                     [e a v' t])
-                   [e a v t])) keys)))
-
 (defn- <decrypt-keys-attrs
   [aes-key keys]
   (p/all (mapv (fn [[e a v t]]
@@ -598,24 +590,6 @@
                    (p/let [v' (<decrypt-text-value aes-key v)]
                      [e a v' t])
                    (p/resolved [e a v t]))) keys)))
-
-(defn- <encrypt-snapshot-rows
-  [aes-key rows]
-  (if-not (seq rows)
-    (p/resolved [])
-    (p/let [items (p/all
-                   (mapv (fn [[addr content addresses]]
-                           (let [data (ldb/read-transit-str content)]
-                             (p/let [keys' (if (map? data) ; node
-                                             (<encrypt-keys-attrs aes-key (:keys data))
-                                             ;; leaf
-                                             (p/let [result (p/all (map #(<encrypt-keys-attrs aes-key %) data))]
-                                               (vec result)))
-                                     data' (if (map? data) (assoc data :keys keys') keys')
-                                     content' (ldb/write-transit-str data')]
-                               [addr content' addresses])))
-                         rows))]
-      (vec items))))
 
 (defn- <decrypt-snapshot-rows
   [aes-key rows]

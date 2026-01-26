@@ -35,9 +35,6 @@
     (db-sync-handler/<rtc-update-presence! editing-block-uuid)
     (rtc-handler/<rtc-update-presence! editing-block-uuid)))
 
-(defn <rtc-branch-graph! [repo]
-  (rtc-handler/<rtc-branch-graph! repo))
-
 (defn notification-download-higher-schema-graph! [graph-name graph-uuid schema-version]
   (rtc-handler/notification-download-higher-schema-graph! graph-name graph-uuid schema-version))
 

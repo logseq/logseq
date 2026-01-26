@@ -1,5 +1,5 @@
 (ns frontend.worker.db-sync-test
-  (:require [cljs.test :refer [deftest is testing run-test async]]
+  (:require [cljs.test :refer [deftest is testing async]]
             [datascript.core :as d]
             [frontend.common.crypt :as crypt]
             [frontend.worker.db-sync :as db-sync]
@@ -88,23 +88,26 @@
 (deftest encrypt-decrypt-snapshot-rows-test
   (async done
          (-> (p/let [aes-key (crypt/<generate-aes-key)
-                     content (sqlite-util/write-transit-str {:db/id 1
-                                                             :block/title "hello"
-                                                             :block/name "page"})
-                     rows [[1 content nil]]
-                     encrypted (#'db-sync/<encrypt-snapshot-rows aes-key rows)]
-               (is (not= rows encrypted))
-               (let [[_ content* _] (first encrypted)]
-                 (is (string? content*))
-                 (is (not= content content*)))
-               (p/let [decrypted (#'db-sync/<decrypt-snapshot-rows aes-key encrypted)
-                       normalize (fn [content']
-                                   (let [data (ldb/read-transit-str content')]
-                                     (if (map? data)
-                                       (update data :keys (fnil vec []))
-                                       data)))
-                       decoded-original (normalize content)
-                       decoded-decrypted (normalize (nth (first decrypted) 1))]
+                     keys [[1 :block/title "hello" 0]
+                           [1 :block/name "page" 0]
+                           [1 :block/uuid (random-uuid) 0]]
+                     content (sqlite-util/write-transit-str {:keys keys})
+                     encrypted-title (#'db-sync/<encrypt-text-value aes-key "hello")
+                     encrypted-name (#'db-sync/<encrypt-text-value aes-key "page")
+                     encrypted-content (sqlite-util/write-transit-str
+                                        {:keys [[1 :block/title encrypted-title 0]
+                                                [1 :block/name encrypted-name 0]
+                                                [1 :block/uuid (nth (nth keys 2) 2) 0]]})
+                     rows [[1 encrypted-content nil]]]
+               (is (not= content encrypted-content))
+               (p/let [decrypted (#'db-sync/<decrypt-snapshot-rows aes-key rows)
+                       decode (fn [content']
+                                (let [data (ldb/read-transit-str content')]
+                                  (if (map? data)
+                                    (update data :keys (fnil vec []))
+                                    data)))
+                       decoded-original (decode content)
+                       decoded-decrypted (decode (nth (first decrypted) 1))]
                  (is (= decoded-original decoded-decrypted))
                  (done)))
              (p/catch (fn [e]

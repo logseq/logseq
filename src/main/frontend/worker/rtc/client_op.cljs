@@ -129,18 +129,19 @@
               [:db/add "e" :local-tx t]))]
       (ldb/transact! conn [tx-data]))))
 
-(defn update-local-checksum
-  [repo checksum]
-  {:pre [(some? checksum)]}
-  (let [conn (worker-state/get-client-ops-conn repo)]
-    (assert (some? conn) repo)
-    (let [tx-data
-          (if-let [datom (first (d/datoms @conn :avet :db-sync/checksum))]
-            [:db/add (:e datom) :db-sync/checksum checksum]
-            (if-let [datom (first (d/datoms @conn :avet :local-tx))]
+(comment
+  (defn update-local-checksum
+    [repo checksum]
+    {:pre [(some? checksum)]}
+    (let [conn (worker-state/get-client-ops-conn repo)]
+      (assert (some? conn) repo)
+      (let [tx-data
+            (if-let [datom (first (d/datoms @conn :avet :db-sync/checksum))]
               [:db/add (:e datom) :db-sync/checksum checksum]
-              [:db/add "e" :db-sync/checksum checksum]))]
-      (ldb/transact! conn [tx-data]))))
+              (if-let [datom (first (d/datoms @conn :avet :local-tx))]
+                [:db/add (:e datom) :db-sync/checksum checksum]
+                [:db/add "e" :db-sync/checksum checksum]))]
+        (ldb/transact! conn [tx-data])))))
 
 (defn remove-local-tx
   [repo]
@@ -157,11 +158,12 @@
       ;; (assert (some? r))
       r)))
 
-(defn get-local-checksum
-  [repo]
-  (let [conn (worker-state/get-client-ops-conn repo)]
-    (assert (some? conn) repo)
-    (:v (first (d/datoms @conn :avet :db-sync/checksum)))))
+(comment
+  (defn get-local-checksum
+    [repo]
+    (let [conn (worker-state/get-client-ops-conn repo)]
+      (assert (some? conn) repo)
+      (:v (first (d/datoms @conn :avet :db-sync/checksum))))))
 
 (defn- merge-update-ops
   [op1 op2]
