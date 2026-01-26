@@ -6,7 +6,7 @@
     "dev": "cd ./worker && npx wrangler dev",
     "watch": "clojure -M:cljs watch db-sync",
     "release": "clojure -M:cljs release db-sync",
-    "test": "clojure -M:cljs compile db-sync-test",
+    "test": "clojure -M:cljs compile db-sync-test && node worker/dist/worker-test.js",
     "clean": "rm -rf ./worker/dist/",
     "deploy": "yarn clean && yarn release && cd ./worker && wrangler deploy",
     "deploy-staging": "yarn clean && yarn release && cd ./worker && wrangler deploy --env staging"
