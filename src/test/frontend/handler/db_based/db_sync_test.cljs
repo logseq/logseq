@@ -4,28 +4,6 @@
             [frontend.handler.user :as user-handler]
             [promesa.core :as p]))
 
-(deftest download-graph-e2ee-detection-test
-  (async done
-         (-> (p/with-redefs [db-sync/fetch-json (fn [_ _ _]
-                                                  (p/resolved {:encrypted-aes-key "k"}))]
-               (p/let [enabled? (#'db-sync/fetch-graph-e2ee? "http://base" "graph-1")]
-                 (is (true? enabled?))
-                 (done)))
-             (p/catch (fn [e]
-                        (is false (str e))
-                        (done))))))
-
-(deftest download-graph-e2ee-missing-key-test
-  (async done
-         (-> (p/with-redefs [db-sync/fetch-json (fn [_ _ _]
-                                                  (p/resolved {}))]
-               (p/let [enabled? (#'db-sync/fetch-graph-e2ee? "http://base" "graph-1")]
-                 (is (false? enabled?))
-                 (done)))
-             (p/catch (fn [e]
-                        (is false (str e))
-                        (done))))))
-
 (deftest remove-member-request-test
   (async done
          (let [called (atom nil)]

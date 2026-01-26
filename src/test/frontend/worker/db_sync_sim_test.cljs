@@ -360,7 +360,7 @@
             op
             (recur (- remaining weight) rest-ops)))))))
 
-(defn- run-ops! [rng {:keys [conn base-uuid state client]} steps history & {:keys [pick-op-opts]}]
+(defn- run-ops! [rng {:keys [conn base-uuid state]} steps history & {:keys [pick-op-opts]}]
   (dotimes [_ steps]
     (let [{:keys [f name]} (pick-op rng pick-op-opts)
           ;; _ (prn :debug :client (:repo client) :name name)
