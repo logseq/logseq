@@ -110,18 +110,6 @@ $ typos -w
 
 To configure it e.g. for dealing with false positives, see `typos.toml`.
 
-### Separate DB and File Graph Code
-
-There is a growing number of code and features that are only for file or DB graphs. Run this linter to
-ensure that code you add or modify keeps with existing conventions:
-
-```
-$ bb lint:db-and-file-graphs-separate
-✅ All checks passed!
-```
-
-The main convention is that file and db specific files go under directories named `file_based` and `db_based` respectively. To see the full list of file and db specific namespaces and files see the top of [the script](/scripts/src/logseq/tasks/dev/db_and_file_graphs.clj).
-
 ### Separate Worker from Frontend
 
 The worker and frontend code share common code from deps/ and `frontend.common.*`. However, the worker should never depend on other frontend namespaces as it could pull in libraries like React which cause it to fail hard. Likewise the frontend should never depend on worker namespaces. Run this linter to ensure worker and frontend namespaces don't require each other:
@@ -363,7 +351,7 @@ These tasks are specific to database graphs. For these tasks there is a one time
   $ bb dev:transact test-db '[:find ?b :where [?b :block/title "say wut"]]' '(fn [id] (vector :db/add id :block/title "say woot!"))'
   Updated 1 block(s) for graph test-db!
   ```
-  
+
   Run the dev command `Replace graph with its db.sqlite file` to use the updated graph in the desktop app.
 
 * `dev:create` - Create a DB graph given a `sqlite.build` EDN file
