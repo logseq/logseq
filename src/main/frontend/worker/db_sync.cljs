@@ -512,7 +512,7 @@
                   encrypted-str (ldb/write-transit-str encrypted)
                   body (coerce-http-request :e2ee/grant-access
                                             {:target-user-email+encrypted-aes-key-coll
-                                             [{:user/email target-email
+                                             [{:email target-email
                                                :encrypted-aes-key encrypted-str}]})
                   _ (when (nil? body)
                       (fail-fast :db-sync/invalid-field {:type :e2ee/grant-access :body body}))
