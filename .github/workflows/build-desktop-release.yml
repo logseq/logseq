@@ -259,8 +259,8 @@ jobs:
           mkdir -p builds
           # NOTE: save VERSION file to builds directory
           cp static/VERSION ./builds/VERSION
-          mv static/out/make/*-*.AppImage ./builds/Logseq-linux-x64-${{ steps.ref.outputs.version }}.AppImage
-          mv static/out/make/zip/linux/x64/*-linux-x64-*.zip ./builds/Logseq-linux-x64-${{ steps.ref.outputs.version }}.zip
+          mv static/out/make/*-*.AppImage ./builds/Logseq-og-linux-x64-${{ steps.ref.outputs.version }}.AppImage
+          mv static/out/make/zip/linux/x64/*-linux-x64-*.zip ./builds/Logseq-og-linux-x64-${{ steps.ref.outputs.version }}.zip
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -313,8 +313,8 @@ jobs:
           mkdir -p builds
           # NOTE: save VERSION file to builds directory
           cp static/VERSION ./builds/VERSION
-          # mv static/out/make/*-*.AppImage ./builds/Logseq-linux-arm64-${{ steps.ref.outputs.version }}.AppImage
-          mv static/out/make/zip/linux/arm64/*-linux-arm64-*.zip ./builds/Logseq-linux-arm64-${{ steps.ref.outputs.version }}.zip
+          # mv static/out/make/*-*.AppImage ./builds/Logseq-og-linux-arm64-${{ steps.ref.outputs.version }}.AppImage
+          mv static/out/make/zip/linux/arm64/*-linux-arm64-*.zip ./builds/Logseq-og-linux-arm64-${{ steps.ref.outputs.version }}.zip
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -365,7 +365,10 @@ jobs:
       - name: Save Artifact for Code Signing
         run: |
           mkdir builds
-          mv static\out\make\squirrel.windows\x64\*.exe    builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.exe
+          mv static\out\make\squirrel.windows\x64\*.nupkg  builds\Logseq-og-win-x64-${{ steps.ref.outputs.version }}-full.nupkg
+          mv static\out\make\zip\win32\x64\*.exe           builds\Logseq-og-win-x64-${{ steps.ref.outputs.version }}.exe
+          mv static\out\make\wix\x64\Logseq*.msi            builds\Logseq-og-win-x64-${{ steps.ref.outputs.version }}.msi
+          mv static\out\make\squirrel.windows\x64\RELEASES builds\RELEASES
 
       - name: Sign
         uses: azure/trusted-signing-action@v0.5.9
@@ -462,8 +465,8 @@ jobs:
       - name: Save x64 artifacts
         run: |
           mkdir -p builds
-          mv static/out/make/Logseq.dmg ./builds/Logseq-darwin-x64-${{ steps.ref.outputs.version }}.dmg
-          mv static/out/make/zip/darwin/x64/*.zip ./builds/Logseq-darwin-x64-${{ steps.ref.outputs.version }}.zip
+          mv static/out/make/Logseq*.dmg ./builds/Logseq-og-darwin-x64-${{ steps.ref.outputs.version }}.dmg
+          mv static/out/make/zip/darwin/x64/*.zip ./builds/Logseq-og-darwin-x64-${{ steps.ref.outputs.version }}.zip
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -539,8 +542,8 @@ jobs:
       - name: Save arm64 artifacts
         run: |
           mkdir -p builds
-          mv static/out/make/Logseq.dmg ./builds/Logseq-darwin-arm64-${{ steps.ref.outputs.version }}.dmg
-          mv static/out/make/zip/darwin/arm64/*.zip ./builds/Logseq-darwin-arm64-${{ steps.ref.outputs.version }}.zip
+          mv static/out/make/Logseq*.dmg ./builds/Logseq-og-darwin-arm64-${{ steps.ref.outputs.version }}.dmg
+          mv static/out/make/zip/darwin/arm64/*.zip ./builds/Logseq-og-darwin-arm64-${{ steps.ref.outputs.version }}.zip
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -623,7 +626,7 @@ jobs:
           draft: false
           prerelease: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.is-pre-release) || (github.event_name == 'schedule')}}
           body: |
-            This is a nightly release of the Logseq desktop app.
+            This is a nightly release of the Logseq OG desktop app.
             It's unstable compared to the official releases, **use it with caution**!
           files: |
             ./SHA256SUMS.txt
@@ -688,7 +691,7 @@ jobs:
 
       - name: Fix .nupkg name in RELEASES file
         run: |
-          sed -i "s/Logseq-.*.nupkg/Logseq-win-x64-${{ steps.ref.outputs.version }}-full.nupkg/g" RELEASES
+          sed -i "s/Logseq-.*.nupkg/Logseq-og-win-x64-${{ steps.ref.outputs.version }}-full.nupkg/g" RELEASES
 
       - name: Generate SHA256 checksums
         run: |
