@@ -1,6 +1,6 @@
 (ns logseq.db-sync.worker-routes-test
   (:require [cljs.test :refer [deftest is testing]]
-            [logseq.db-sync.worker.routes :as routes]))
+            [logseq.db-sync.worker.routes.index :as routes]))
 
 (deftest match-route-graphs-test
   (testing "graphs routes"
