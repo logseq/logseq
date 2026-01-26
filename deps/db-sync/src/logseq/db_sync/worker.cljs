@@ -1143,7 +1143,7 @@
                                          missing (atom [])]
                                      (p/let [_ (p/all
                                                 (map (fn [entry]
-                                                       (let [email (or (:user/email entry) (:email entry))
+                                                       (let [email (:email entry)
                                                              encrypted-aes-key (:encrypted-aes-key entry)]
                                                          (p/let [target-user-id (index/<user-id-by-email db email)
                                                                  access? (and target-user-id

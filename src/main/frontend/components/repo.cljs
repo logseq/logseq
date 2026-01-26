@@ -138,8 +138,7 @@
               "Use Logseq sync (Beta testing)"))
 
            (when (and remote?
-                      ;; manager?
-                      )
+                      manager?)
              (shui/dropdown-menu-item
               {:key "delete-remotely"
                :class "delete-remote-graph-menu-item"
