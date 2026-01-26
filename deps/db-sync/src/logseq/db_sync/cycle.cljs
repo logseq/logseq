@@ -46,6 +46,19 @@
   [db _e _attr _bad-v]
   (d/entid db :logseq.class/Root))
 
+(defn- ancestor?
+  "Return true if `ancestor-eid` appears in the parent chain of `start-eid`."
+  [db ancestor-eid start-eid]
+  (loop [current start-eid
+         seen #{}]
+    (cond
+      (nil? current) false
+      (= current ancestor-eid) true
+      (contains? seen current) false
+      :else
+      (let [parent (some-> (d/entity db current) :block/parent :db/id)]
+        (recur parent (conj seen current))))))
+
 (def ^:private default-attr-opts
   {;; Cardinality-one
    :block/parent
@@ -180,16 +193,41 @@
   Returns a tx vector (possibly with an add), or nil."
   [db cycle attr {:keys [safe-target-fn skip?] :as attr-opts} touched]
   (let [edges (cycle-edges cycle)
-        victim (pick-victim cycle touched)
-        [_from bad-v] (some (fn [[from _to :as e]]
-                              (when (= from victim) e))
-                            edges)
+        cycle-nodes (set (distinct (butlast cycle)))
+        remote-parent-fn (:remote-parent-fn attr-opts)
+        remote-candidates (when (and (= :block/parent attr) remote-parent-fn)
+                            (keep (fn [[from to]]
+                                    (let [remote-parent (remote-parent-fn db from to)
+                                          remote-parent (entid db remote-parent)
+                                          to-id (entid db to)]
+                                      (when (and remote-parent
+                                                 (not= remote-parent to-id))
+                                        {:victim from
+                                         :bad-v to-id
+                                         :safe remote-parent
+                                         :outside? (not (contains? cycle-nodes remote-parent))})))
+                                  edges))
+        remote-choice (or (some #(when (:outside? %) %) remote-candidates)
+                          (first remote-candidates))
+        victim (or (:victim remote-choice) (pick-victim cycle touched))
+        [_from bad-v] (or (when (and remote-choice (:bad-v remote-choice))
+                            [victim (:bad-v remote-choice)])
+                          (some (fn [[from _to :as e]]
+                                  (when (= from victim) e))
+                                edges))
         bad-v (entid db bad-v)]
     (when (and victim bad-v)
       (when-not (and skip? (skip? db victim attr bad-v))
         ;; Ensure the edge still exists in current db.
         (when (contains? (ref-eids db victim attr attr-opts) bad-v)
-          (let [safe (when safe-target-fn (safe-target-fn db victim attr bad-v))]
+          (let [safe (or (:safe remote-choice)
+                         (when safe-target-fn (safe-target-fn db victim attr bad-v)))
+                safe (if (and (= :block/parent attr)
+                              (number? safe)
+                              (nil? remote-choice)
+                              (ancestor? db victim safe))
+                       (safe-target-for-block-parent db victim attr bad-v)
+                       safe)]
             (prn :debug
                  :victim victim
                  :page-id (:db/id (:block/page (d/entity db victim)))
@@ -214,6 +252,11 @@
 ;; -----------------------------------------------------------------------------
 ;; Iterative repair (THIS is the key fix)
 ;; -----------------------------------------------------------------------------
+
+(def ^:private fix-cycle-tx-meta
+  {:outliner-op :fix-cycle
+   :gen-undo-ops? false
+   :persist-op? false})
 
 (defn- apply-cycle-repairs!
   "Detect & break cycles AFTER rebase, iterating until stable.
@@ -267,8 +310,7 @@
 
           (if (seq tx)
             (do
-              (transact! temp-conn tx (merge tx-meta
-                                             {:outliner-op :fix-cycle :gen-undo-ops? false}))
+              (transact! temp-conn tx (merge tx-meta fix-cycle-tx-meta))
               (recur (inc it) seen-edges'))
             ;; No more cycles detected from these candidates => done
             nil))))))
@@ -303,9 +345,21 @@
   - Iteratively breaks cycles until stable."
   [temp-conn remote-tx-report rebase-tx-report & {:keys [transact! tx-meta]
                                                   :or {transact! ldb/transact!}}]
-  (let [remote-touched-by-attr (touched-eids-many (:tx-data remote-tx-report))
+  (let [remote-db (:db-after remote-tx-report)
+        attr-opts (cond-> default-attr-opts
+                    remote-db
+                    (assoc-in [:block/parent :remote-parent-fn]
+                              (fn [_db e _bad-v]
+                                (some-> (d/entity remote-db e) :block/parent :db/id)))
+                    remote-db
+                    (assoc-in [:block/parent :safe-target-fn]
+                              (fn [db e attr bad-v]
+                                (let [remote-parent (some-> (d/entity remote-db e) :block/parent :db/id)
+                                      remote-parent (when (and remote-parent (not= remote-parent bad-v)) remote-parent)]
+                                  (or remote-parent (safe-target-for-block-parent db e attr bad-v))))))
+        remote-touched-by-attr (touched-eids-many (:tx-data remote-tx-report))
         local-touched-by-attr  (touched-eids-many (:tx-data rebase-tx-report))
         candidates-by-attr     (union-candidates remote-touched-by-attr local-touched-by-attr)
         touched-info           (touched-info-by-attr remote-touched-by-attr local-touched-by-attr)]
     (when (seq candidates-by-attr)
-      (apply-cycle-repairs! transact! temp-conn candidates-by-attr touched-info default-attr-opts tx-meta))))
+      (apply-cycle-repairs! transact! temp-conn candidates-by-attr touched-info attr-opts tx-meta))))

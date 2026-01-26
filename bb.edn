@@ -159,6 +159,9 @@
   dev:test
   logseq.tasks.dev/test
 
+  dev:test-no-worker
+  logseq.tasks.dev/test-no-worker
+
   dev:lint-and-test
   logseq.tasks.dev/lint-and-test
 

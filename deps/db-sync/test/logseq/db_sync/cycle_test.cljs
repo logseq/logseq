@@ -9,7 +9,12 @@
 
 (defn- fix-cycle!
   [temp-conn remote-tx-report rebase-tx-report]
-  (cycle/fix-cycle! temp-conn remote-tx-report rebase-tx-report {:transact! d/transact!}))
+  (let [tx-metas (atom [])]
+    (cycle/fix-cycle! temp-conn remote-tx-report rebase-tx-report
+                      {:transact! (fn [conn tx-data tx-meta]
+                                    (swap! tx-metas conj tx-meta)
+                                    (d/transact! conn tx-data tx-meta))})
+    @tx-metas))
 
 (defn- create-page!
   [conn title]
@@ -35,12 +40,15 @@
                         :block/page [:block/uuid page-uuid]
                         :block/parent [:block/uuid a]}])
     (testing "breaks a 2-node :block/parent cycle and reparents to the page"
-      (let [remote-report (d/transact! conn [{:block/uuid a :block/parent [:block/uuid b]}])]
-        (fix-cycle! conn remote-report nil)
-        (let [a' (d/entity @conn [:block/uuid a])
-              b' (d/entity @conn [:block/uuid b])]
-          (is (= (block-eid @conn page-uuid) (:db/id (:block/parent a'))))
-          (is (= (block-eid @conn a) (:db/id (:block/parent b')))))))))
+      (let [remote-report (d/transact! conn [{:block/uuid a :block/parent [:block/uuid b]}])
+            tx-metas (fix-cycle! conn remote-report nil)
+            a' (d/entity @conn [:block/uuid a])
+            b' (d/entity @conn [:block/uuid b])]
+        (is (= (block-eid @conn page-uuid) (:db/id (:block/parent a'))))
+        (is (= (block-eid @conn a) (:db/id (:block/parent b'))))
+        (is (some #(= :fix-cycle (:outliner-op %)) tx-metas))
+        (is (every? #(false? (:gen-undo-ops? %)) tx-metas))
+        (is (every? #(false? (:persist-op? %)) tx-metas))))))
 
 (deftest block-parent-3-node-cycle-test
   (let [conn (new-conn)
@@ -58,14 +66,108 @@
                         :block/page [:block/uuid page-uuid]
                         :block/parent [:block/uuid b]}])
     (testing "breaks a 3-node :block/parent cycle and reparents to the page"
-      (let [remote-report (d/transact! conn [{:block/uuid a :block/parent [:block/uuid c]}])]
-        (fix-cycle! conn remote-report nil)
+      (let [remote-report (d/transact! conn [{:block/uuid a :block/parent [:block/uuid c]}])
+            tx-metas (fix-cycle! conn remote-report nil)]
         (let [a' (d/entity @conn [:block/uuid a])
               b' (d/entity @conn [:block/uuid b])
               c' (d/entity @conn [:block/uuid c])]
           (is (= (block-eid @conn page-uuid) (:db/id (:block/parent a'))))
           (is (= (block-eid @conn a) (:db/id (:block/parent b'))))
-          (is (= (block-eid @conn b) (:db/id (:block/parent c')))))))))
+          (is (= (block-eid @conn b) (:db/id (:block/parent c')))))
+        (is (some #(= :fix-cycle (:outliner-op %)) tx-metas))
+        (is (every? #(false? (:gen-undo-ops? %)) tx-metas))
+        (is (every? #(false? (:persist-op? %)) tx-metas))))))
+
+(deftest block-parent-cycle-prefers-remote-parent-test
+  (let [conn (new-conn)
+        page-uuid (create-page! conn "page")
+        a (random-uuid)
+        b (random-uuid)
+        c (random-uuid)]
+    (d/transact! conn [{:block/uuid a
+                        :block/page [:block/uuid page-uuid]
+                        :block/parent [:block/uuid page-uuid]}
+                       {:block/uuid b
+                        :block/page [:block/uuid page-uuid]
+                        :block/parent [:block/uuid page-uuid]}
+                       {:block/uuid c
+                        :block/page [:block/uuid page-uuid]
+                        :block/parent [:block/uuid page-uuid]}])
+    (testing "prefers remote parent when breaking local cycle"
+      (let [remote-report (d/transact! conn [{:block/uuid b :block/parent [:block/uuid c]}
+                                             {:block/uuid a :block/parent [:block/uuid b]}])
+            rebase-report (d/transact! conn [{:block/uuid b :block/parent [:block/uuid a]}
+                                             {:block/uuid c :block/parent [:block/uuid b]}])
+            tx-metas (fix-cycle! conn remote-report rebase-report)
+            a' (d/entity @conn [:block/uuid a])
+            b' (d/entity @conn [:block/uuid b])
+            c' (d/entity @conn [:block/uuid c])]
+        (is (= (block-eid @conn b) (:db/id (:block/parent a'))))
+        (is (= (block-eid @conn c) (:db/id (:block/parent b'))))
+        (is (= (block-eid @conn page-uuid) (:db/id (:block/parent c'))))
+        (is (some #(= :fix-cycle (:outliner-op %)) tx-metas))
+        (is (every? #(false? (:gen-undo-ops? %)) tx-metas))
+        (is (every? #(false? (:persist-op? %)) tx-metas))))))
+
+(deftest block-parent-cycle-avoids-descendant-remote-parent-test
+  (let [conn (new-conn)
+        page-uuid (create-page! conn "page")
+        a (random-uuid)
+        b (random-uuid)
+        c (random-uuid)]
+    (d/transact! conn [{:block/uuid a
+                        :block/page [:block/uuid page-uuid]
+                        :block/parent [:block/uuid page-uuid]}
+                       {:block/uuid b
+                        :block/page [:block/uuid page-uuid]
+                        :block/parent [:block/uuid a]}
+                       {:block/uuid c
+                        :block/page [:block/uuid page-uuid]
+                        :block/parent [:block/uuid b]}])
+    (testing "falls back to page when remote parent is a descendant"
+      (let [remote-report (d/transact! conn [{:block/uuid b :block/parent [:block/uuid c]}])
+            rebase-report (d/transact! conn [{:block/uuid a :block/parent [:block/uuid b]}])
+            tx-metas (fix-cycle! conn remote-report rebase-report)
+            a' (d/entity @conn [:block/uuid a])
+            b' (d/entity @conn [:block/uuid b])
+            c' (d/entity @conn [:block/uuid c])]
+        (is (= (block-eid @conn page-uuid) (:db/id (:block/parent b'))))
+        (is (= (block-eid @conn b) (:db/id (:block/parent a'))))
+        (is (= (block-eid @conn b) (:db/id (:block/parent c'))))
+        (is (some #(= :fix-cycle (:outliner-op %)) tx-metas))
+        (is (every? #(false? (:gen-undo-ops? %)) tx-metas))
+        (is (every? #(false? (:persist-op? %)) tx-metas))))))
+
+(deftest block-parent-cycle-preserves-safe-remote-edges-test
+  (let [conn (new-conn)
+        page-uuid (create-page! conn "page")
+        a (random-uuid)
+        b (random-uuid)
+        c (random-uuid)]
+    (d/transact! conn [{:block/uuid a
+                        :block/page [:block/uuid page-uuid]
+                        :block/parent [:block/uuid page-uuid]}
+                       {:block/uuid b
+                        :block/page [:block/uuid page-uuid]
+                        :block/parent [:block/uuid a]}
+                       {:block/uuid c
+                        :block/page [:block/uuid page-uuid]
+                        :block/parent [:block/uuid b]}])
+    (testing "preserves remote parent when it doesn't reintroduce a cycle"
+      (let [remote-report (d/transact! conn [{:block/uuid b :block/parent [:block/uuid c]}
+                                             {:block/uuid a :block/parent [:block/uuid b]}])
+            rebase-report (d/transact! conn [{:block/uuid b :block/parent [:block/uuid a]}
+                                             {:block/uuid c :block/parent [:block/uuid b]}])
+            tx-metas (fix-cycle! conn remote-report rebase-report)
+            a' (d/entity @conn [:block/uuid a])
+            b' (d/entity @conn [:block/uuid b])
+            c' (d/entity @conn [:block/uuid c])]
+        (is (= (block-eid @conn b) (:db/id (:block/parent a'))))
+        (is (= (block-eid @conn page-uuid) (:db/id (:block/parent b'))))
+        (is (= (block-eid @conn b) (:db/id (:block/parent c'))))
+        (is (some #(= :fix-cycle (:outliner-op %)) tx-metas))
+        (is (every? #(false? (:gen-undo-ops? %)) tx-metas))
+        (is (every? #(false? (:persist-op? %)) tx-metas))))))
 
 (deftest class-extends-2-node-cycle-test
   (let [conn (new-conn)]
@@ -74,13 +176,16 @@
                        {:db/ident :user.class/A :logseq.property.class/extends :user.class/B}])
     (testing "breaks a 2-node :logseq.property.class/extends cycle"
       (let [remote-report (d/transact! conn [{:db/ident :user.class/B
-                                              :logseq.property.class/extends :user.class/A}])]
-        (fix-cycle! conn remote-report nil)
+                                              :logseq.property.class/extends :user.class/A}])
+            tx-metas (fix-cycle! conn remote-report nil)]
         (let [b (d/entity @conn :user.class/B)
               _ (prn :debug :extends (:logseq.property.class/extends b))
               extends (set (map :db/ident (:logseq.property.class/extends b)))]
           (is (not (contains? extends :user.class/A)))
-          (is (contains? extends :logseq.class/Root)))))))
+          (is (contains? extends :logseq.class/Root)))
+        (is (some #(= :fix-cycle (:outliner-op %)) tx-metas))
+        (is (every? #(false? (:gen-undo-ops? %)) tx-metas))
+        (is (every? #(false? (:persist-op? %)) tx-metas))))))
 
 (deftest class-extends-3-node-cycle-with-multiple-values-test
   (let [conn (new-conn)]
@@ -91,10 +196,13 @@
                        {:db/ident :user.class/A :logseq.property.class/extends :user.class/B}])
     (testing "breaks a 3-node :logseq.property.class/extends cycle while preserving other extends"
       (let [remote-report (d/transact! conn [{:db/ident :user.class/C
-                                              :logseq.property.class/extends #{:user.class/A :user.class/D}}])]
-        (fix-cycle! conn remote-report nil)
+                                              :logseq.property.class/extends #{:user.class/A :user.class/D}}])
+            tx-metas (fix-cycle! conn remote-report nil)]
         (let [c (d/entity @conn :user.class/C)
               extends (set (map :db/ident (:logseq.property.class/extends c)))]
           (is (not (contains? extends :user.class/A)))
           (is (contains? extends :user.class/D))
-          (is (contains? extends :logseq.class/Root)))))))
+          (is (contains? extends :logseq.class/Root)))
+        (is (some #(= :fix-cycle (:outliner-op %)) tx-metas))
+        (is (every? #(false? (:gen-undo-ops? %)) tx-metas))
+        (is (every? #(false? (:persist-op? %)) tx-metas))))))
