@@ -6,5 +6,6 @@
 
   :consistent-alias
   {:aliases {clojure.string string}}}
+ :lint-as {promesa.core/let clojure.core/let}
  :skip-comments true
  :output {:progress true}}

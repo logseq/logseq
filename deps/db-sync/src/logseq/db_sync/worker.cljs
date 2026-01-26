@@ -185,10 +185,6 @@
   [^js self ^js ws]
   (swap! (presence* self) dissoc ws))
 
-(defn- fail-fast [tag data]
-  (log/error tag data)
-  (throw (ex-info (name tag) data)))
-
 (defn- coerce-http-request [schema-key body]
   (if-let [coercer (get db-sync-schema/http-request-coercers schema-key)]
     (let [coerced (coerce coercer body {:schema schema-key :dir :request})]
@@ -276,11 +272,6 @@
 (defn- snapshot-url [request graph-id snapshot-id]
   (let [url (js/URL. (.-url request))]
     (str (.-origin url) "/assets/" graph-id "/" snapshot-id ".snapshot")))
-
-(defn- maybe-compress-stream [stream]
-  (if (exists? js/CompressionStream)
-    (.pipeThrough stream (js/CompressionStream. "gzip"))
-    stream))
 
 (defn- maybe-decompress-stream [stream encoding]
   (if (and (= encoding snapshot-content-encoding) (exists? js/DecompressionStream))
