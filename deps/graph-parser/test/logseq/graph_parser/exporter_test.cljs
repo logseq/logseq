@@ -220,7 +220,7 @@
       (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Pdf-annotation]] @conn))))
 
       ;; Properties and tags aren't included in this count as they aren't a Page
-      (is (= 10
+      (is (= 11
              (->> (d/q '[:find [?b ...]
                          :where
                          [?b :block/title]
