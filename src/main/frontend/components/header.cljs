@@ -35,7 +35,6 @@
             [logseq.shui.ui :as shui]
             [logseq.shui.util :as shui-util]
             [missionary.core :as m]
-            [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
 
