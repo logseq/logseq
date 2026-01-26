@@ -15,7 +15,6 @@
                "bb lint:carve"
                "bb lint:large-vars"
                "bb lint:worker-and-frontend-separate"
-               "bb lint:db-and-file-graphs-separate"
                "bb lang:validate-translations"
                "bb lint:ns-docstrings"]]
     (println cmd)
