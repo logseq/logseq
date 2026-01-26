@@ -183,9 +183,13 @@
    [:encrypted-aes-key {:optional true} [:maybe :string]]])
 
 (def e2ee-grant-access-entry-schema
-  [:map
-   [:user/email :string]
-   [:encrypted-aes-key :string]])
+  [:or
+   [:map
+    [:user/email :string]
+    [:encrypted-aes-key :string]]
+   [:map
+    [:email :string]
+    [:encrypted-aes-key :string]]])
 
 (def e2ee-grant-access-request-schema
   [:map
