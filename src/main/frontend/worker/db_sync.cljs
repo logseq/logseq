@@ -352,17 +352,17 @@
   (assert (and k @e2ee-store))
   (idb-keyval/set k value @e2ee-store))
 
-(defn- e2ee-base
+(defn e2ee-base
   []
   (http-base-url))
 
-(defn- <fetch-user-rsa-key-pair-raw
+(defn <fetch-user-rsa-key-pair-raw
   [base]
   (fetch-json (str base "/e2ee/user-keys")
               {:method "GET"}
               {:response-schema :e2ee/user-keys}))
 
-(defn- <upload-user-rsa-key-pair!
+(defn <upload-user-rsa-key-pair!
   [base public-key encrypted-private-key]
   (let [body (coerce-http-request :e2ee/user-keys
                                   {:public-key public-key
