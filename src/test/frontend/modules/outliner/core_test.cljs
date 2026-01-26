@@ -9,8 +9,7 @@
             [frontend.db.model :as db-model]
             [frontend.modules.outliner.tree :as tree]
             [frontend.state :as state]
-            [frontend.test.fixtures :as fixtures]
-            [frontend.test.helper :as test-helper :refer [load-test-files]]
+            [frontend.test.helper :as test-helper]
             [frontend.worker.db-listener :as worker-db-listener]
             [logseq.db :as ldb]
             [logseq.graph-parser.block :as gp-block]
@@ -37,8 +36,8 @@
 
 (use-fixtures :each
   disable-browser-fns
-  fixtures/react-components
-  fixtures/reset-db
+  test-helper/react-components
+  #(test-helper/start-and-destroy-db % {:build-init-data? false})
   listen-db-fixture)
 
 (defn get-block
@@ -501,49 +500,6 @@
          '(16 17)
          (map :block/uuid (tree/get-sorted-block-and-children test-db (:db/id (get-block 16))))))))
 
-(defn- save-block!
-  [block]
-  (outliner-tx/transact! (transact-opts)
-                         (outliner-core/save-block! (db/get-db test-db false)
-                                                    block)))
-
-(deftest save-test
-  (load-test-files [{:file/path "pages/page1.md"
-                     :file/content "alias:: foo, bar
-tags:: tag1, tag2
-- block #blarg #bar"}])
-  (testing "save deletes a page's tags"
-    (let [conn (db/get-db test-db false)
-          pre-block (->> (d/q '[:find (pull ?b [*])
-                                :where [?b :block/pre-block? true]]
-                              @conn)
-                         ffirst)
-          _ (save-block! (-> pre-block
-                             (update :block/properties dissoc :tags)
-                             (update :block/properties-text-values dissoc :tags)))
-          updated-page (-> (d/q '[:find (pull ?bp [* {:block/alias [*]}])
-                                  :where [?b :block/pre-block? true]
-                                  [?b :block/page ?bp]]
-                                @conn)
-                           ffirst)]
-      (is (nil? (:block/tags updated-page))
-          "Page's tags are deleted")))
-
-  ;; FIXME:
-  (testing "save deletes orphaned pages when a block's refs change"
-    (let [conn (db/get-db test-db false)
-          pages (set (map first (d/q '[:find ?bn :where [?b :block/name ?bn]] @conn)))
-          _ (assert (set/subset? #{"blarg" "bar"} pages) "Pages from block exist")
-          block-with-refs (ffirst (d/q '[:find (pull ?b [* {:block/refs [*]}])
-                                         :where [?b :block/title "block #blarg #bar"]]
-                                       @conn))
-          _ (save-block! (-> block-with-refs
-                             (assoc :block/title "block"
-                                    :block/refs [])))
-          updated-pages (set (map first (d/q '[:find ?bn :where [?b :block/name ?bn]] @conn)))]
-      (is (not (contains? updated-pages "blarg"))
-          "Deleted, orphaned page no longer exists"))))
-
 ;;; Fuzzy tests
 
 (def init-id (atom 100))
@@ -833,13 +789,3 @@ tags:: tag1, tag2
                :block/parent #:db{:id 2333},
                :block/page #:db{:id 2313},
                :block/level 3}]}]})))))
-
-(comment
-  (dotimes [i 5]
-    (do
-      (frontend.test.fixtures/reset-datascript test-db)
-      (cljs.test/run-tests)))
-
-  (do
-    (frontend.test.fixtures/reset-datascript test-db)
-    (cljs.test/test-vars [#'test-paste-first-empty-block])))

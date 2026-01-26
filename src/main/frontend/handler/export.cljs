@@ -28,8 +28,7 @@
                                     :app-state (select-keys @state/state
                                                             [:ui/theme
                                                              :ui/sidebar-collapsed-blocks])
-                                    :repo-config (get-in @state/state [:config repo])
-                                    :db-graph? true})
+                                    :repo-config (get-in @state/state [:config repo])})
           html-str     (str "data:text/html;charset=UTF-8,"
                             (js/encodeURIComponent html))]
       (if (util/electron?)

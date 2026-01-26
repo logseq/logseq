@@ -5,8 +5,6 @@
             [logseq.common.util :as common-util]
             [clojure.string :as string]))
 
-(def default-journal-filename-formatter "yyyy_MM_dd")
-
 (defonce built-in-journal-title-formatters
   (list
    "do MMM yyyy"
@@ -80,11 +78,3 @@
 (defn ^:api valid-journal-title-with-slash?
   [title]
   (some #(valid-journal-title? title %) slash-journal-title-formatters))
-
-(defn ^:api date->file-name
-  "Date object to filename format"
-  [date journal-filename-formatter]
-  (let [formatter (if journal-filename-formatter
-                    (tf/formatter journal-filename-formatter)
-                    (tf/formatter default-journal-filename-formatter))]
-    (tf/unparse formatter date)))

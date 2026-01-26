@@ -27,12 +27,11 @@
   #{:script :base :head :link :meta :style :title :comment :xml :svg :frame :frameset :embed :object :canvas :applet})
 
 (defn ^:large-vars/cleanup-todo hiccup->doc-inner
-  [format hiccup opts]
-  (let [transform-fn (fn [hiccup opts]
-                       (hiccup->doc-inner format hiccup opts))
-        block-pattern (if (= format :markdown)
-                        "#"
-                        (config/get-block-pattern format))
+  [hiccup opts]
+  (let [format :markdown
+        transform-fn (fn [hiccup opts]
+                       (hiccup->doc-inner hiccup opts))
+        block-pattern "#"
         map-join (fn [children & {list?' :list?}]
                    (let [opts' (if list?'
                                  (let [level (inc (or (:level opts) 0))]
@@ -142,20 +141,14 @@
                                 (when-not (string/blank? href)
                                   (if has-img-tag?
                                     (export-hiccup x)
-                                    (case format
-                                      :markdown (util/format "[%s](%s)" label href)
-                                      :org (util/format "[[%s][%s]]" href label)
-                                      nil))))
+                                    (util/format "[%s](%s)" label href))))
                            :img (let [src (:src attrs)
                                       alt (or (:alt attrs) "")
                                       ;; reject url-encoded and utf8-encoded(svg)
                                       unsafe-data-url? (and (string/starts-with? src "data:")
                                                             (not (re-find #"^data:.*?;base64," src)))]
                                   (when-not unsafe-data-url?
-                                    (case format
-                                      :markdown (util/format "![%s](%s)" alt src)
-                                      :org (util/format "[[%s][%s]]" src alt)
-                                      nil)))
+                                    (util/format "![%s](%s)" alt src)))
                            :p (util/format "%s"
                                            (map-join children))
 
@@ -186,25 +179,17 @@
                              (reset! *inside-pre? true)
                              (let [content (string/trim (doall (map-join children)))]
                                (reset! *inside-pre? false)
-                               (case format
-                                 :markdown (if (util/starts-with? content "```")
-                                             content
-                                             (str "```\n" content "\n```"))
-                                 :org (if (util/starts-with? content "#+BEGIN_SRC")
-                                        content
-                                        (util/format "#+BEGIN_SRC\n%s\n#+END_SRC" content))
-                                 nil)))
+                               (if (util/starts-with? content "```")
+                                 content
+                                 (str "```\n" content "\n```"))))
 
                            :blockquote
-                           (case format
-                             :markdown (str "> " (map-join children))
-                             :org (util/format "#+BEGIN_QUOTE\n%s\n#+END_QUOTE" (map-join children))
-                             nil)
+                           (str "> " (map-join children))
 
                            :li
                            (let [tabs (apply str (repeat (- (or (:level opts) 1) 1) "\t"))]
                              (str tabs
-                                  (if (= format :markdown) "-" "*")
+                                  "-"
                                   " "
                                   (map-join children)))
 
@@ -212,32 +197,18 @@
                            "\n"
 
                            :dt
-                           (case format
-                             :org (str "- " (map-join children) " ")
-                             :markdown (str (map-join children) "\n")
-                             nil)
+                           (str (map-join children) "\n")
 
                            :dd
-                           (case format
-                             :markdown (str ": " (map-join children) "\n")
-                             :org (str ":: " (map-join children) "\n")
-                             nil)
+                           (str ": " (map-join children) "\n")
 
                            :thead
-                           (case format
-                             :markdown (let [columns (count (last (first children)))]
-                                         (str
-                                          (map-join children)
-                                          (str "| " (string/join " | "
-                                                                 (repeat columns "----"))
-                                               " |")))
-                             :org (let [columns (count (last (first children)))]
-                                    (str
-                                     (map-join children)
-                                     (str "|" (string/join "+"
-                                                           (repeat columns "----"))
-                                          "|")))
-                             nil)
+                           (let [columns (count (last (first children)))]
+                             (str
+                              (map-join children)
+                              (str "| " (string/join " | "
+                                                     (repeat columns "----"))
+                                   " |")))
                            :tr
                            (str "| "
                                 (->> (map #(transform-fn % (assoc opts :in-table? true)) children)
@@ -265,8 +236,8 @@
     (apply str result)))
 
 (defn hiccup->doc
-  [format hiccup]
-  (let [s (hiccup->doc-inner format hiccup {})]
+  [hiccup]
+  (let [s (hiccup->doc-inner hiccup {})]
     (if (string/blank? s)
       ""
       (-> s
@@ -287,11 +258,11 @@
     s))
 
 (defn convert
-  [format html]
+  [html]
   (when-not (string/blank? html)
     (let [hiccup (hickory/as-hiccup (hickory/parse html))
           decoded-hiccup (html-decode-hiccup hiccup)
-          result (hiccup->doc format decoded-hiccup)]
+          result (hiccup->doc decoded-hiccup)]
       (remove-ending-dash-lines result))))
 
 (comment

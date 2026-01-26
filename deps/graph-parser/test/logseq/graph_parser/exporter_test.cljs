@@ -231,12 +231,11 @@
                   #_(map #(select-keys % [:block/title :block/tags]))
                   count))
           "Correct number of pages with block content")
-      (is (= 15 (->> @conn
+      (is (= 14 (->> @conn
                      (d/q '[:find [?ident ...]
                             :where [?b :block/tags :logseq.class/Tag] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
                      count))
           "Correct number of user classes")
-      (is (= 4 (count (d/datoms @conn :avet :block/tags :logseq.class/Whiteboard))))
       (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")
       (is (= 0 (count @(:ignored-assets import-state))) "No ignored assets")
       (is (= 1 (count @(:ignored-files import-state))) "Ignore .edn for now")
@@ -607,13 +606,7 @@
                   :block/refs
                   (map #(:db/ident (d/entity @conn (:db/id %))))
                   set))
-            "Block has correct task tag and property :block/refs")))
-
-    (testing "whiteboards"
-      (let [block-with-props (db-test/find-block-by-content @conn #"block with props")]
-        (is (= {:user.property/prop-num 10}
-               (db-test/readable-properties block-with-props)))
-        (is (= "block with props" (:block/title block-with-props)))))))
+            "Block has correct task tag and property :block/refs")))))
 
 (deftest-async export-basic-graph-with-convert-all-tags-option-disabled
   (p/let [file-graph-dir "test/resources/exporter-test-graph"

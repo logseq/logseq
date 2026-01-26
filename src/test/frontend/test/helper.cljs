@@ -6,10 +6,10 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
+            [frontend.db.react :as react]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
-            [frontend.test.repo :as file-repo-handler]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.pipeline :as worker-pipeline]
             [logseq.db :as ldb]
@@ -17,167 +17,78 @@
             [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.graph-parser.text :as text]))
+            [logseq.db.test.helper :as db-test]))
+
+(defn react-components
+  [f]
+  (reset! react/*query-state {})
+  (let [r (f)]
+    (reset! react/*query-state {})
+    r))
 
 (def bare-marker-pattern
-  #"(NOW|LATER|TODO|DOING|DONE|WAITING|WAIT|CANCELED|CANCELLED|IN-PROGRESS){1}\s+")
+  #"(TODO|DOING|DONE|WAIT|CANCELED|CANCELLED){1}\s+")
 
-(def node? (exists? js/process))
-
-(def test-db-name "test-db")
-(def test-db-name-db-version "logseq_db_test-db")
-(def test-db
-  (if (and node? (some? js/process.env.DB_GRAPH)) test-db-name-db-version test-db-name))
+(def test-db "logseq_db_test-db")
 
 (defn start-test-db!
-  [& {:as opts}]
-  (let [db-graph? (or (:db-graph? opts) (and node? (some? js/process.env.DB_GRAPH)))
-        test-db' (if db-graph? test-db-name-db-version test-db-name)]
-    (state/set-current-repo! test-db')
-    (conn/start! test-db' opts)
-    (ldb/register-transact-pipeline-fn!
-     (fn [tx-report]
-       (worker-pipeline/transact-pipeline test-db' tx-report)))
-    (let [conn (conn/get-db test-db' false)]
-      (when db-graph?
-        (d/transact! conn (sqlite-create-graph/build-db-initial-data "")))
-      (d/listen! conn ::listen-db-changes!
-                 (fn [tx-report]
-                   (worker-pipeline/invoke-hooks conn tx-report {}))))))
+  [& {:keys [build-init-data?] :or {build-init-data? true} :as opts}]
+  (state/set-current-repo! test-db)
+  (conn/start! test-db opts)
+  (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+  (let [conn (conn/get-db test-db false)]
+    (when build-init-data? (d/transact! conn (sqlite-create-graph/build-db-initial-data config/config-default-content)))
+    (d/listen! conn ::listen-db-changes!
+               (fn [tx-report]
+                 (worker-pipeline/invoke-hooks conn tx-report {})))))
 
 (defn destroy-test-db!
   []
   (conn/destroy-all!))
 
-(defn- parse-property-value [value]
-  (if-let [refs (seq (map #(or (second %) (get % 2))
-                          (re-seq #"#(\S+)|\[\[(.*?)\]\]" value)))]
-    (set refs)
-    (if-some [new-val (text/parse-non-string-property-value value)]
-      new-val
-      value)))
-
-(defn- property-lines->properties
-  [property-lines]
-  (->> property-lines
-       (keep (fn [line]
-               (let [[k v] (string/split line #"::\s*" 2)]
-                 (when (string/includes? line "::")
-                   [(keyword k)
-                    (if (= "tags" k)
-                      (parse-property-value v)
-                      (let [val (parse-property-value v)]
-                        (if (coll? val)
-                          (set (map #(vector :build/page {:block/title %}) val))
-                          val)))]))))
-       (into {})))
-
-(defn- property-lines->attributes
-  "Converts markdown property lines e.g. `foo:: bar\nfoo:: baz` to properties
-  and attributes. All are treated as properties except for tags -> :block/tags
-  and created-at -> :block/created-at"
-  [lines]
-  (let [props (property-lines->properties lines)]
-    (cond-> {:build/properties (dissoc props :created-at :tags)}
-      (:tags props)
-      (assoc :build/tags (mapv keyword (:tags props)))
-      (:created-at props)
-      (assoc :block/created-at (:created-at props)))))
-
 (def file-to-db-statuses
   {"TODO" :logseq.property/status.todo
-   "LATER" :logseq.property/status.todo
-   "IN-PROGRESS" :logseq.property/status.doing
-   "NOW" :logseq.property/status.doing
    "DOING" :logseq.property/status.doing
    "DONE" :logseq.property/status.done
-   "WAIT" :logseq.property/status.backlog
-   "WAITING" :logseq.property/status.backlog
    "CANCELED" :logseq.property/status.canceled
    "CANCELLED" :logseq.property/status.canceled})
 
-(defn- parse-content
-  "Given a file's content as markdown, returns blocks and page attributes for the file
-   to be used with sqlite-build/build-blocks-tx"
-  [content*]
-  (let [blocks** (if (string/includes? content* "\n-")
-                   (->> (string/split content* #"\n-\s*")
-                        (mapv (fn [s]
-                                (let [[content & props] (string/split-lines s)]
-                                  (cond-> {:block/title content}
-                                    ;; If no property chars may accidentally parse child blocks
-                                    ;; so don't do property parsing
-                                    (and (string/includes? s ":: ") props)
-                                    (merge (property-lines->attributes props)))))))
-                   ;; only has a page pre-block
-                   [{:block/title content*}])
-        [page-attrs blocks*]
-        (if (string/includes? (:block/title (first blocks**)) "::")
-          [(property-lines->attributes (string/split-lines (:block/title (first blocks**))))
-           (rest blocks**)]
-          [nil blocks**])
-        blocks
-        (mapv #(if-let [status (some-> (second (re-find bare-marker-pattern (:block/title %)))
-                                       file-to-db-statuses)]
-                 (-> %
-                     (assoc :block/tags [{:db/ident :logseq.class/Task}])
-                     (update :build/properties merge {:logseq.property/status status}))
-                 %)
-              blocks*)]
-    {:blocks (mapv (fn [b] (update b :block/title #(string/replace-first % #"^-\s*" "")))
-                   blocks)
-     :page-attributes page-attrs}))
+(defn- build-test-block
+  [block]
+  (if-let [status (some->> (:build.test/title block)
+                           (re-find bare-marker-pattern)
+                           second
+                           file-to-db-statuses)]
+    (-> {:block/title
+         (string/replace-first (:build.test/title block) bare-marker-pattern "")}
+        (assoc :block/tags [{:db/ident :logseq.class/Task}])
+        (update :build/properties merge {:logseq.property/status status}))
+    block))
 
-(defn- build-blocks-tx-options
-  "Given arguments to load-test-files, parses and converts them to options for
-  sqlite-build/build-blocks-tx. Supports a limited set of markdown including
-  task keywords, page properties and block properties. See query-dsl-test for examples"
-  [options*]
-  (let [pages-and-blocks
-        (mapv (fn [{:file/keys [path content]}]
-                (let [{:keys [blocks page-attributes]} (parse-content content)
-                      unique-page-attrs
-                      (if (string/starts-with? path "journals")
-                        {:build/journal
-                         (or (some-> (second (re-find #"/([^/]+)\." path))
-                                     (string/replace "_" "")
-                                     parse-double)
-                             (throw (ex-info (str "Can't detect page name of file: " (pr-str path)) {})))}
-                        {:block/title
-                         (or (second (re-find #"/([^/]+)\." path))
-                             (throw (ex-info (str "Can't detect page name of file: " (pr-str path)) {})))})]
-                  {:page (cond-> unique-page-attrs
-                           (seq page-attributes)
-                           (merge page-attributes))
-                   :blocks blocks}))
-              options*)
-        options {:pages-and-blocks pages-and-blocks
-                 :auto-create-ontology? true}]
-    options))
-
-(defn load-test-files-for-db-graph
+(defn load-test-files
+  "Builds the given data into the current test-db.
+   Wrapper around sqlite-build/build-blocks-tx with frontend defaults. Also supports
+   the following special keys:
+   * :build.test/title - Only available to top-level blocks. Convenient for writing tasks quickly"
   [options*]
   (let [;; Builds options from markdown :file/content unless given explicit build-blocks config
         options (cond (:page (first options*))
                       {:pages-and-blocks options* :auto-create-ontology? true}
-                      (:pages-and-blocks options*)
-                      (assoc options* :auto-create-ontology? true)
                       :else
-                      (build-blocks-tx-options options*))
-        {:keys [init-tx block-props-tx]} (sqlite-build/build-blocks-tx options)]
-    (db/transact! test-db init-tx)
-    (when (seq block-props-tx)
-      (db/transact! test-db block-props-tx))))
-
-(defn load-test-files
-  "Given a collection of file maps, loads them into the current test-db.
-This can be called in synchronous contexts as no async fns should be invoked"
-  [files]
-  (if (and node? js/process.env.DB_GRAPH)
-    (load-test-files-for-db-graph files)
-    (file-repo-handler/parse-files-and-load-to-db!
-     test-db
-     files)))
+                      (assoc options* :auto-create-ontology? true))
+        options' (update options
+                         :pages-and-blocks
+                         (fn [pbs]
+                           (mapv (fn [m]
+                                   (update m :blocks
+                                           (fn [blocks]
+                                             (mapv build-test-block blocks))))
+                                 pbs)))
+        {:keys [init-tx block-props-tx] :as _txs} (sqlite-build/build-blocks-tx options')
+        ;; Allow pages to reference each other via uuid and for unordered init-tx
+        init-index (map #(select-keys % [:block/uuid]) init-tx)]
+    ;; (cljs.pprint/pprint _txs)
+    (db/transact! test-db (concat init-index init-tx block-props-tx))))
 
 (defn initial-test-page-and-blocks
   [& {:keys [page-uuid]}]
@@ -211,30 +122,19 @@ This can be called in synchronous contexts as no async fns should be invoked"
   also seeds the db with the same default data that the app does and destroys a db
   connection when done with it."
   [f & {:as start-opts}]
-  ;; Set current-repo explicitly since it's not the default
-  (let [db-graph? (or (:db-graph? start-opts) (and node? (some? js/process.env.DB_GRAPH)))
-        repo (if db-graph? test-db-name-db-version test-db-name)]
-    (state/set-current-repo! repo)
-    (start-test-db! start-opts)
-    (when db-graph?
-      (let [built-in-data (sqlite-create-graph/build-db-initial-data
-                           config/config-default-content)]
-        (db/transact! repo built-in-data)))
-    (when-let [init-f (:init-data start-opts)]
-      (assert (fn? f) "init-data should be a fn")
-      (init-f (db/get-db repo false)))
-    (f)
-    (state/set-current-repo! nil)
-    (destroy-test-db!)))
+  (state/set-current-repo! test-db)
+  (start-test-db! start-opts)
+  (when-let [init-f (:init-data start-opts)]
+    (assert (fn? f) "init-data should be a fn")
+    (init-f (db/get-db test-db false)))
+  (f)
+  (state/set-current-repo! nil)
+  (destroy-test-db!))
 
-(defn db-based-start-and-destroy-db
-  [f & {:as start-opts}]
-  (start-and-destroy-db f (assoc start-opts :db-graph? true)))
-
-(def db-based-start-and-destroy-db-map-fixture
+(def start-and-destroy-db-map-fixture
   "To avoid 'Fixtures may not be of mixed types' error
   when use together with other map-type fixtures"
-  {:before #(start-test-db! {:db-graph? true})
+  {:before start-test-db!
    :after #(destroy-test-db!)})
 
 (defn save-block!
@@ -251,3 +151,9 @@ This can be called in synchronous contexts as no async fns should be invoked"
         conn (db/get-db repo false)
         [page-name _page-uuid] (worker-page/create! conn title opts)]
     page-name))
+
+(defn find-page-by-title [page-title]
+  (db-test/find-page-by-title (conn/get-db) page-title))
+
+(defn find-block-by-content [block-title]
+  (db-test/find-block-by-content (conn/get-db) block-title))

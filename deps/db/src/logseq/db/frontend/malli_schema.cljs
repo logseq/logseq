@@ -3,6 +3,7 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
+            [datascript.impl.entity :as de]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
@@ -408,6 +409,7 @@
    [:block/link {:optional true} :int]
    [:logseq.property/created-from-property {:optional true} :int]])
 
+;; TODO: Remove deprecated
 (def whiteboard-block
   "A (shape) block for whiteboard"
   (vec
@@ -526,6 +528,14 @@
    [:block/created-at {:optional true} :int]
    [:block/updated-at {:optional true} :int]])
 
+(defn- whiteboard?
+  [entity]
+  (when (or (map? entity) (de/entity? entity))
+    (some (fn [t]
+            (or (keyword-identical? (:db/ident t) :logseq.class/Whiteboard)
+                (keyword-identical? t :logseq.class/Whiteboard)))
+          (:block/tags entity))))
+
 (defn entity-dispatch-key [db ent]
   (let [d (if (:block/uuid ent) (d/entity db [:block/uuid (:block/uuid ent)]) ent)
         ;; order matters as some block types are a subset of others e.g. :whiteboard
@@ -536,7 +546,8 @@
                        :class
                        (entity-util/hidden? d)
                        :hidden
-                       (entity-util/whiteboard? d)
+                       ;; TODO: Remove deprecated
+                       (whiteboard? d)
                        :normal-page
                        (entity-util/page? d)
                        :normal-page

@@ -1,5 +1,5 @@
 (ns frontend.handler.property
-  "Property fns for both file and DB graphs"
+  "Property fns"
   (:require [frontend.db.model :as db-model]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.state :as state]))

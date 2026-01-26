@@ -126,9 +126,6 @@
             _ (<ensure-dir! containing-dir)
             _ (js/window.pfs.writeFile fpath content)]
 
-      ;; TODO: store file metadata
-      ;; (db/set-file-content! repo rpath content)
-      ;; (db/set-file-last-modified-at! repo rpath (js/Date.))
       ))
   (rename! [_this _repo old-path new-path]
     (let [old-path (path/url-to-path old-path)

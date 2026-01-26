@@ -15,7 +15,7 @@
             [meander.epsilon :as me]))
 
 (t/use-fixtures :each
-  test-helper/db-based-start-and-destroy-db-map-fixture
+  test-helper/start-and-destroy-db-map-fixture
   r.fixture/listen-test-db-to-gen-rtc-ops-fixture)
 
 (defn- tx-data=>e->a->add?->v->t

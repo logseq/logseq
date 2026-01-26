@@ -5,7 +5,6 @@
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
-            [datascript.impl.entity :as de]
             [logseq.common.config :as common-config]
             [logseq.common.date :as common-date]
             [logseq.common.util :as common-util]
@@ -16,6 +15,8 @@
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.entity-util :as entity-util]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.text :as text]
@@ -52,8 +53,7 @@
                   (and
                    (= url-type "Page_ref")
                    (and (string? value)
-                        (not (or (common-config/local-relative-asset? value)
-                                 (common-config/draw? value))))
+                        (not (common-config/local-relative-asset? value)))
                    value)
 
                   (and
@@ -305,21 +305,28 @@
 ;; Hack to detect export as some fns are too deeply nested to be refactored to get explicit option
 (def *export-to-db-graph? (atom false))
 
+(defn- get-page
+  "Similar to get-page but only for file graphs"
+  [db page-name]
+  (when (and db (string? page-name))
+    (d/entity db
+              (first (sort (map :e (entity-util/get-pages-by-name db page-name)))))))
+
 (defn- page-name-string->map
   [original-page-name db date-formatter
    {:keys [with-timestamp? page-uuid from-page class? skip-existing-page-check?]}]
-  (let [db-based? (ldb/db-based-graph? db)
+  (let [db-based? (entity-plus/db-based-graph? db)
         original-page-name (common-util/remove-boundary-slashes original-page-name)
         [original-page-name' page-name journal-day] (convert-page-if-journal original-page-name date-formatter {:export-to-db-graph? @*export-to-db-graph?})
         namespace? (and (or (not db-based?) @*export-to-db-graph?)
                         (not (boolean (text/get-nested-page-name original-page-name')))
                         (text/namespace-page? original-page-name'))
         page-entity (when (and db (not skip-existing-page-check?))
-                      (if class?
+                      (if (and class? db-based?)
                         (some->> (ldb/page-exists? db original-page-name' #{:logseq.class/Tag})
                                  first
                                  (d/entity db))
-                        (ldb/get-page db original-page-name')))
+                        (get-page db original-page-name')))
         original-page-name' (or from-page (:block/title page-entity) original-page-name')
         page (merge
               {:block/name page-name
@@ -366,6 +373,12 @@
   [s]
   (string/replace s "#" "HashTag-"))
 
+(defn- page-entity?
+  "Support DB or file graphs because of exporter"
+  [entity]
+  (or (entity-util/page? entity)
+      (contains? #{"page" "journal"} (:block/type entity))))
+
 ;; TODO: refactor
 (defn page-name->map
   "Create a page's map structure given a original page name (string).
@@ -377,8 +390,8 @@
   [original-page-name db with-timestamp? date-formatter
    & {:keys [page-uuid class?] :as options}]
   (when-not (and db (common-util/uuid-string? original-page-name)
-                 (not (ldb/page? (d/entity db [:block/uuid (uuid original-page-name)]))))
-    (let [db-based? (ldb/db-based-graph? db)
+                 (not (page-entity? (d/entity db [:block/uuid (uuid original-page-name)]))))
+    (let [db-based? (entity-plus/db-based-graph? db)
           original-page-name (cond-> (string/trim original-page-name)
                                db-based?
                                sanitize-hashtag-name)
@@ -457,7 +470,7 @@
 (defn- with-page-refs-and-tags
   [{:keys [title body tags refs marker priority] :as block} db date-formatter {:keys [structured-tags]
                                                                                :or {structured-tags #{}}}]
-  (let [db-based? (and (ldb/db-based-graph? db) (not @*export-to-db-graph?))
+  (let [db-based? (and (entity-plus/db-based-graph? db) (not @*export-to-db-graph?))
         refs (->> (concat tags refs (when-not db-based? [marker priority]))
                   (remove string/blank?)
                   (distinct))
@@ -867,60 +880,3 @@
                      (recur blocks parents result))))
         result' (map (fn [block] (assoc block :block/order (db-order/gen-key))) result)]
     (concat result' other-blocks)))
-
-(defn extract-plain
-  "Extract plain elements including page refs"
-  [repo content]
-  (let [ast (gp-mldoc/->edn repo content :markdown)
-        *result (atom [])]
-    (walk/prewalk
-     (fn [f]
-       (cond
-           ;; tag
-         (and (vector? f)
-              (= "Tag" (first f)))
-         nil
-
-           ;; nested page ref
-         (and (vector? f)
-              (= "Nested_link" (first f)))
-         (swap! *result conj (:content (second f)))
-
-           ;; page ref
-         (and (vector? f)
-              (= "Link" (first f))
-              (map? (second f))
-              (vector? (:url (second f)))
-              (= "Page_ref" (first (:url (second f)))))
-         (swap! *result conj
-                (:full_text (second f)))
-
-           ;; plain
-         (and (vector? f)
-              (= "Plain" (first f)))
-         (swap! *result conj (second f))
-
-         :else
-         f))
-     ast)
-    (-> (string/trim (apply str @*result))
-        text/page-ref-un-brackets!)))
-
-(defn extract-refs-from-text
-  [repo db text date-formatter]
-  (when (string? text)
-    (let [ast-refs (gp-mldoc/get-references text (gp-mldoc/get-default-config repo :markdown))
-          page-refs (map #(get-page-reference % :markdown) ast-refs)
-          block-refs (map get-block-reference ast-refs)
-          refs' (->> (concat page-refs block-refs)
-                     (remove string/blank?)
-                     distinct)]
-      (-> (map #(cond
-                  (de/entity? %)
-                  {:block/uuid (:block/uuid %)}
-                  (common-util/uuid-string? %)
-                  {:block/uuid (uuid %)}
-                  :else
-                  (page-name->map % db true date-formatter))
-               refs')
-          set))))
