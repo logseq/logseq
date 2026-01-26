@@ -1,4 +1,5 @@
 (ns logseq.publish.meta-store
+  "Handles storing Durable Object in SQLite"
   (:require [clojure.string :as string]
             [logseq.publish.common :as publish-common])
   (:require-macros [logseq.common.async :refer [js-await]]))
@@ -104,7 +105,7 @@
            "content_hash" (get data "content_hash")
            "content_length" (get data "content_length"))))
 
-(defn do-fetch [^js self request]
+(defn ^:large-vars/cleanup-todo do-fetch [^js self request]
   (let [sql (.-sql self)]
     (init-schema! sql)
     (cond

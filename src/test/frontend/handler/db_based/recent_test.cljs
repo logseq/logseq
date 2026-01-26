@@ -8,7 +8,7 @@
 (def init-data (test-helper/initial-test-page-and-blocks))
 (defn start-and-destroy-db
   [f]
-  (test-helper/db-based-start-and-destroy-db
+  (test-helper/start-and-destroy-db
    f
    {:init-data (fn [conn] (d/transact! conn init-data))}))
 

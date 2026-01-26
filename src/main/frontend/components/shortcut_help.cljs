@@ -1,14 +1,13 @@
 (ns frontend.components.shortcut-help
   "Shortcut help"
-  (:require [frontend.context.i18n :refer [t]]
-            [frontend.state :as state]
-            [frontend.extensions.latex :as latex]
+  (:require [frontend.components.shortcut :as shortcut]
+            [frontend.context.i18n :refer [t]]
             [frontend.extensions.highlight :as highlight]
+            [frontend.extensions.latex :as latex]
             [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.page-ref :as page-ref]
-            [rum.core :as rum]
-            [frontend.components.shortcut :as shortcut]
-            [logseq.shui.ui :as shui]))
+            [logseq.shui.ui :as shui]
+            [rum.core :as rum]))
 
 (rum/defc trigger-table []
   [:table.classic-table.w-full
@@ -37,38 +36,19 @@
      [:td.text-left (t :help/context-menu)]
      [:td.text-right [:code "Right click bullet"]]]]])
 
-(defn markdown-and-orgmode-syntax []
+(defn markdown-syntax []
   (let [list [:bold :italics :del :mark :latex :code :link :pre :img]
-
-        preferred-format (state/get-preferred-format) ; markdown/org
-
-        title (case preferred-format
-                :markdown (t :help/markdown-syntax)
-                :org (t :help/org-mode-syntax))
-
-        learn-more (case preferred-format
-                     :markdown "https://www.markdownguide.org/basic-syntax"
-                     :org "https://orgmode.org/worg/dev/org-syntax.html")
-
-        raw (case preferred-format
-              :markdown {:bold (str "**" (t :bold) "**")
-                         :italics (str "_" (t :italics) "_")
-                         :link "[Link](https://www.example.com)"
-                         :del (str "~~" (t :strikethrough) "~~")
-                         :mark (str "^^" (t :highlight) "^^")
-                         :latex "$$E = mc^2$$"
-                         :code (str "`" (t :code) "`")
-                         :pre "```clojure\n  (println \"Hello world!\")\n```"
-                         :img "![image](https://asset.logseq.com/static/img/logo.png)"}
-              :org {:bold (str "*" (t :bold) "*")
-                    :italics (str "/" (t :italics) "/")
-                    :del (str "+" (t :strikethrough) "+")
-                    :pre [:pre "#+BEGIN_SRC clojure\n  (println \"Hello world!\")\n#+END_SRC"]
-                    :link "[[https://www.example.com][Link]]"
-                    :mark (str "^^" (t :highlight) "^^")
-                    :latex "$$E = mc^2$$"
-                    :code "~Code~"
-                    :img "[[https://asset.logseq.com/static/img/logo.png][image]]"})
+        title (t :help/markdown-syntax)
+        learn-more "https://www.markdownguide.org/basic-syntax"
+        raw {:bold (str "**" (t :bold) "**")
+             :italics (str "_" (t :italics) "_")
+             :link "[Link](https://www.example.com)"
+             :del (str "~~" (t :strikethrough) "~~")
+             :mark (str "^^" (t :highlight) "^^")
+             :latex "$$E = mc^2$$"
+             :code (str "`" (t :code) "`")
+             :pre "```clojure\n  (println \"Hello world!\")\n```"
+             :img "![image](https://asset.logseq.com/static/img/logo.png)"}
 
         rendered {:italics [:i (t :italics)]
                   :bold [:b (t :bold)]
@@ -101,5 +81,5 @@
    {:class "-mt-2"}
    (when show-title? [:h1.title (t :help/shortcut-page-title)])
    (trigger-table)
-   (markdown-and-orgmode-syntax)
+   (markdown-syntax)
    (shortcut/shortcut-keymap-x)])

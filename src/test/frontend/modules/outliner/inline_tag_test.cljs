@@ -8,7 +8,7 @@
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]))
 
-(use-fixtures :each test-helper/db-based-start-and-destroy-db)
+(use-fixtures :each test-helper/start-and-destroy-db)
 
 (deftest save-inline-tag
   (let [conn (db-test/create-conn-with-blocks

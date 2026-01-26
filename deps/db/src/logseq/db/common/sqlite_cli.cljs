@@ -1,23 +1,14 @@
 (ns ^:node-only logseq.db.common.sqlite-cli
-  "Primary ns to interact with DB files for DB and file graphs with node.js based CLIs"
+  "Primary ns to interact with DB files with node.js based CLIs"
   (:require ["better-sqlite3" :as sqlite3]
-            ["fs" :as fs]
             ["os" :as os]
             ["path" :as node-path]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [datascript.storage :refer [IStorage]]
             [logseq.db.common.sqlite :as common-sqlite]
-            [logseq.db.file-based.schema :as file-schema]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util]))
-
-;; Should this check directory name instead if file graphs also
-;; have this file?
-(defn db-graph-directory?
-  "Returns boolean indicating if the given directory is a DB graph"
-  [graph-dir]
-  (fs/existsSync (node-path/join graph-dir "db.sqlite")))
 
 ;; Reference same sqlite default class in cljs + nbb without needing .cljc
 (def sqlite (if (find-ns 'nbb.core) (aget sqlite3 "default") sqlite3))
@@ -76,18 +67,14 @@
   ([db-full-path]
    (open-sqlite-datascript! nil db-full-path))
   ([graphs-dir db-name]
-   (let [[base-name db-full-path]
+   (let [db-full-path
          (if (nil? graphs-dir)
-           [(node-path/basename db-name) db-name]
-           [db-name (second (common-sqlite/get-db-full-path graphs-dir db-name))])
-         db (new sqlite db-full-path nil)
-        ;; For both desktop and CLI, only file graphs have db-name that indicate their db type
-         schema (if (common-sqlite/local-file-based-graph? base-name)
-                  file-schema/schema
-                  db-schema/schema)]
+           db-name
+           (second (common-sqlite/get-db-full-path graphs-dir db-name)))
+         db (new sqlite db-full-path nil)]
      (common-sqlite/create-kvs-table! db)
      (let [storage (new-sqlite-storage db)
-           conn (common-sqlite/get-storage-conn storage schema)]
+           conn (common-sqlite/get-storage-conn storage db-schema/schema)]
        {:sqlite db
         :conn conn}))))
 

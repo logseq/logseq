@@ -2,10 +2,8 @@
   "Date related fns shared by worker and frontend namespaces. Eventually some
    of this should go to logseq.common.util.date-time"
   (:require [cljs-time.format :as tf]
-            [logseq.common.util :as common-util]
-            [clojure.string :as string]))
-
-(def default-journal-filename-formatter "yyyy_MM_dd")
+            [clojure.string :as string]
+            [logseq.common.util :as common-util]))
 
 (defonce built-in-journal-title-formatters
   (list
@@ -80,11 +78,3 @@
 (defn ^:api valid-journal-title-with-slash?
   [title]
   (some #(valid-journal-title? title %) slash-journal-title-formatters))
-
-(defn ^:api date->file-name
-  "Date object to filename format"
-  [date journal-filename-formatter]
-  (let [formatter (if journal-filename-formatter
-                    (tf/formatter journal-filename-formatter)
-                    (tf/formatter default-journal-filename-formatter))]
-    (tf/unparse formatter date)))

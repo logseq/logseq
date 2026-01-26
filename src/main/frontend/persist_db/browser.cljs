@@ -7,7 +7,6 @@
             [frontend.common.missionary :as c.m]
             [frontend.common.thread-api :as thread-api]
             [frontend.config :as config]
-            [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.transact :as db-transact]
             [frontend.handler.notification :as notification]
@@ -83,12 +82,8 @@
                  :validate-db-options (:dev/validate-db-options (state/get-config))
                  :importing? (:graph/importing @state/state)
                  :date-formatter (state/get-date-formatter)
-                 :journal-file-name-format (or (state/get-journal-file-name-format)
-                                               date/default-journal-filename-formatter)
                  :export-bullet-indentation (state/get-export-bullet-indentation)
-                 :preferred-format (state/get-preferred-format)
-                 :journals-directory (config/get-journals-directory)
-                 :pages-directory (config/get-pages-directory)}]
+                 :preferred-format (state/get-preferred-format)}]
     (state/<invoke-db-worker :thread-api/transact repo tx-data tx-meta context)))
 
 (defn- set-worker-fs

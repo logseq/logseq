@@ -28,7 +28,6 @@
             [electron.window :as win]
             [logseq.cli.common.graph :as cli-common-graph]
             [logseq.common.graph :as common-graph]
-            [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
 
@@ -75,15 +74,6 @@
              (string-some-deleted? db-content new-content))
     (logger/info ::backup "backup db file" path)
     (backup-file/backup-file repo :backup-dir path (node-path/extname path) db-content)))
-
-(defmethod handle :addVersionFile [_window [_ repo path content]]
-  (backup-file/backup-file repo :version-file-dir path (node-path/extname path) content))
-
-(defmethod handle :openFileBackupDir [_window [_ repo path]]
-  (when (string? path)
-    (let [dir (backup-file/get-backup-dir repo path)
-          full-path (utils/to-native-win-path! dir)]
-      (.openPath shell full-path))))
 
 (defmethod handle :openFileInFolder [_window [_ full-path]]
   (when-let [full-path (utils/to-native-win-path! full-path)]
@@ -203,13 +193,6 @@
     (bean/->js {:path path
                 :files files})))
 
-(defn- get-file-graphs-dir
-  "Get cache directory for file graphs"
-  []
-  (let [dir (node-path/join (os/homedir) ".logseq" "graphs")]
-    (fs-extra/ensureDirSync dir)
-    dir))
-
 (defn get-graphs
   "Returns all graph names"
   []
@@ -218,8 +201,7 @@
 ;; TODO support alias mechanism
 (defn get-graph-name
   "Given a graph's name of string, returns the graph's fullname. For example, given
-  `cat`, returns `logseq_local_<path_to_directory>/cat` for a file graph and
-  `logseq_db_cat` for a db graph.  Returns `nil` if no such graph exists."
+  `cat`, returns `logseq_db_cat`.  Returns `nil` if no such graph exists."
   [graph-identifier]
   (->> (get-graphs)
        (some #(when (or
@@ -231,12 +213,9 @@
 (defmethod handle :getGraphs [_window [_]]
   (get-graphs))
 
-(defmethod handle :deleteGraph [_window [_ graph graph-name _db-based?]]
-  (when graph-name
-    (db/unlink-graph! graph)
-    (let [old-transit-path (node-path/join (get-file-graphs-dir) (str (common-sqlite/sanitize-db-name graph) ".transit"))]
-      (when (fs/existsSync old-transit-path)
-        (fs/unlinkSync old-transit-path)))))
+(defmethod handle :deleteGraph [_window [_ graph]]
+  (when graph
+    (db/unlink-graph! graph)))
 
 ;; DB related IPCs start
 
@@ -249,24 +228,6 @@
 
 ;; DB related IPCs End
 
-(defn clear-cache!
-  [window]
-  (let [graphs-dir (get-file-graphs-dir)]
-    (fs-extra/removeSync graphs-dir))
-
-  (let [path (.getPath ^object app "userData")]
-    (doseq [dir ["search" "IndexedDB"]]
-      (let [path (node-path/join path dir)]
-        (try
-          (fs-extra/removeSync path)
-          (catch :default e
-            (logger/error "Clear cache:" e)))))
-    (utils/send-to-renderer window "redirect" {:payload {:to :home}})))
-
-(defmethod handle :clearCache [window _]
-  (logger/info ::clear-cache)
-  (clear-cache! window))
-
 (defmethod handle :openDialog [^js _window _messages]
   (open-dir-dialog))
 
@@ -274,17 +235,8 @@
   (p/let [^js result (.showOpenDialog dialog options)]
     result))
 
-(defmethod handle :copyDirectory [^js _window [_ src dest opts]]
-  (fs-extra/copy src dest opts))
-
 (defmethod handle :getLogseqDotDirRoot []
   (utils/get-ls-dotdir-root))
-
-(defmethod handle :getSystemProxy [^js window]
-  (if-let [sess (.. window -webContents -session)]
-    (p/let [proxy (.resolveProxy sess "https://www.google.com")]
-      proxy)
-    (p/resolved nil)))
 
 (defmethod handle :setProxy [_win [_ options]]
   ;; options: {:type "system" | "direct" | "socks5" | "http" | ... }
@@ -339,9 +291,6 @@
             (state/set-state! [:config k] v))
         (cfgs/get-item k))
       config)))
-
-(defmethod handle :getDirname [_]
-  js/__dirname)
 
 (defmethod handle :getAppBaseInfo [^js win [_ _opts]]
   {:isFullScreen (.isFullScreen win)
@@ -437,6 +386,7 @@
   (logger/info ::quick-and-install)
   (.quitAndInstall autoUpdater))
 
+;; The graphHas* events are not used but maybe useful later?
 (defmethod handle :graphHasOtherWindow [^js win [_ graph]]
   (let [dir (utils/get-graph-dir graph)]
     (win/graph-has-other-windows? win dir)))

@@ -1,4 +1,5 @@
 (ns logseq.publish.assets
+  "Handles publishing assets"
   (:require [clojure.string :as string]
             [logseq.common.authorization :as authorization]
             [logseq.publish.common :as publish-common])

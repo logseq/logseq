@@ -311,6 +311,7 @@ const exists = await logseq.UI.queryElementById('my-id')
 ```
 
 ### `logseq.Git` - Git Operations
+Only supported in file-based graphs for desktop Logseq.
 
 ```typescript
 const result = await logseq.Git.execCommand(['status'])
@@ -452,7 +453,7 @@ Create custom block renderers using `{{renderer : type, arg1, arg2}}`:
 logseq.App.onMacroRendererSlotted(({ slot, payload }) => {
   const [type, ...args] = payload.arguments
 
-  if (type !== ': my-renderer') return
+  if (type !== ':my-renderer') return
 
   logseq.provideUI({
     key: `my-renderer-${payload.uuid}`,
