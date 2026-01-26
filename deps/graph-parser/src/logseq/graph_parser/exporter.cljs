@@ -563,6 +563,12 @@
                            (translate-linked-ref-filters prop-value page-names-to-uuids)
                            :ls-type
                            [[:logseq.property/ls-type (keyword prop-value)]]
+                           :hl-color
+                           (let [color-text-idents
+                                 (->> (get-in db-property/built-in-properties [:logseq.property.pdf/hl-color :closed-values])
+                                      (map (juxt :value :db-ident))
+                                      (into {}))]
+                             [[:logseq.property.pdf/hl-color (get color-text-idents prop-value)]])
                            ;; else
                            [[(built-in-property-file-to-db-idents prop) prop-value]]))))
              (into {}))]
