@@ -18,16 +18,16 @@
   (->uint8 (transit/write transit-w rows)))
 
 (defn decode-rows
-  [bytes]
-  (transit/read transit-r (.decode text-decoder (->uint8 bytes))))
+  [payload]
+  (transit/read transit-r (.decode text-decoder (->uint8 payload))))
 
 (defn frame-bytes
-  [^js bytes]
-  (let [len (.-byteLength bytes)
+  [^js payload]
+  (let [len (.-byteLength payload)
         out (js/Uint8Array. (+ 4 len))
         view (js/DataView. (.-buffer out))]
     (.setUint32 view 0 len false)
-    (.set out bytes 4)
+    (.set out payload 4)
     out))
 
 (defn concat-bytes

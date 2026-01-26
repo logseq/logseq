@@ -1,4 +1,4 @@
-(ns logseq.db-sync.worker.routes
+(ns logseq.db-sync.worker.routes.index
   (:require [reitit.core :as r]))
 
 (def ^:private route-data
