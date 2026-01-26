@@ -37,14 +37,9 @@ validate [options]   Validate DB graph
 help                 Print a command's help
 
 $ logseq list
-DB Graphs:
 db-test
 docs
 woot
-...
-
-File Graphs:
-docs
 ...
 
 $ logseq show db-test
@@ -65,8 +60,8 @@ To run a command against the current desktop graph, set `$LOGSEQ_API_SERVER_TOKE
 # Search your current graph and print highlighted results one per line like grep
 $ logseq search woot -a my-token
 Search found 100 results:
-dev:db-export woot woot.edn && dev:db-create woot2 woot.edn
-dev:db-diff woot woot2
+dev:db-export woot woot.edn && dev:create woot2 woot.edn
+dev:diff-graphs woot woot2
 ...
 # Can also authenticate api with $LOGSEQ_API_SERVER_TOKEN
 $ export LOGSEQ_API_SERVER_TOKEN=my-token
@@ -167,7 +162,7 @@ Most of this library is also compatible with ClojureScript for use on the
 frontend. This library follows the practices that [the Logseq frontend
 follows](/docs/dev-practices.md). Most of the same linters are used, with
 configurations that are specific to this library. See [this library's CI
-file](/.github/workflows/cli.yml) for linting examples.
+file](/.github/workflows/deps-cli.yml) for linting examples.
 
 ### Setup
 

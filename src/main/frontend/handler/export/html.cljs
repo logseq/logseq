@@ -5,6 +5,7 @@
             [clojure.string :as string]
             [clojure.zip :as z]
             [frontend.db :as db]
+            [frontend.db.conn :as conn]
             [frontend.format.mldoc :as mldoc]
             [frontend.handler.export.common :as common]
             [frontend.handler.export.zip-helper :refer [get-level goto-last
@@ -13,8 +14,7 @@
             [hiccups.runtime :as h]
             [logseq.cli.common.export.common :as cli-export-common :refer [*state*]]
             [logseq.cli.common.util :refer-macros [concatv mapcatv removev]]
-            [malli.core :as m]
-            [frontend.db.conn :as conn]))
+            [malli.core :as m]))
 
 (def ^:private hiccup-malli-schema
   [:cat :keyword [:* :any]])
@@ -429,8 +429,7 @@
         first-block (and (coll? root-block-uuids-or-page-uuid)
                          (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)]))
         format (get first-block :block/format :markdown)]
-    (binding [cli-export-common/*current-repo* repo
-              cli-export-common/*current-db* (conn/get-db repo)
+    (binding [cli-export-common/*current-db* (conn/get-db repo)
               cli-export-common/*content-config* (common/get-content-config)]
       (export-helper content format options))))
 

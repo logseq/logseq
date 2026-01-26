@@ -123,27 +123,6 @@
                   :gen-undo-ops? false
                   :rtc-op? true}))
 
-(defmethod transact-db! :delete-whiteboard-blocks [_ conn block-uuids]
-  (ldb/transact! conn
-                 (mapv (fn [block-uuid] [:db/retractEntity [:block/uuid block-uuid]]) block-uuids)
-                 {:persist-op? false
-                  :gen-undo-ops? false
-                  :rtc-op? true}))
-
-(defmethod transact-db! :upsert-whiteboard-block [_ conn blocks]
-  (ldb/transact! conn blocks {:persist-op? false
-                              :gen-undo-ops? false
-                              :rtc-op? true}))
-
-(defn- group-remote-remove-ops-by-whiteboard-block
-  "return {true [<whiteboard-block-ops>], false [<other-ops>]}"
-  [db remote-remove-ops]
-  (group-by (fn [{:keys [block-uuid]}]
-              (boolean
-               (when-let [block (d/entity db [:block/uuid block-uuid])]
-                 (ldb/whiteboard? (:block/parent block)))))
-            remote-remove-ops))
-
 (defn- apply-remote-remove-ops-helper
   [conn remove-ops]
   (let [block-uuid->entity (into {}
@@ -164,32 +143,28 @@
      :block-uuids-to-remove block-uuid-set}))
 
 (defn- apply-remote-remove-ops
-  [conn remove-ops]
-  (let [{whiteboard-block-ops true other-ops false} (group-remote-remove-ops-by-whiteboard-block @conn remove-ops)]
-    (transact-db! :delete-whiteboard-blocks conn (map :block-uuid whiteboard-block-ops))
-
-    (let [{:keys [block-uuids-need-move block-uuids-to-remove]}
-          (apply-remote-remove-ops-helper conn other-ops)]
+  [conn other-ops]
+  (let [{:keys [block-uuids-need-move block-uuids-to-remove]}
+        (apply-remote-remove-ops-helper conn other-ops)]
       ;; move to page-block's first child
-      (doseq [block-uuid block-uuids-need-move]
-        (when-let [b (d/entity @conn [:block/uuid block-uuid])]
-          (when-let [target-b
-                     (d/entity @conn (:db/id (:block/page (d/entity @conn [:block/uuid block-uuid]))))]
-            (transact-db! :move-blocks&persist-op conn [b] target-b {:sibling? false}))))
-      (let [deleting-blocks (keep (fn [block-uuid]
-                                    (d/entity @conn [:block/uuid block-uuid]))
-                                  block-uuids-to-remove)]
-        (when (seq deleting-blocks)
-          (transact-db! :delete-blocks conn deleting-blocks {}))))))
+    (doseq [block-uuid block-uuids-need-move]
+      (when-let [b (d/entity @conn [:block/uuid block-uuid])]
+        (when-let [target-b
+                   (d/entity @conn (:db/id (:block/page (d/entity @conn [:block/uuid block-uuid]))))]
+          (transact-db! :move-blocks&persist-op conn [b] target-b {:sibling? false}))))
+    (let [deleting-blocks (keep (fn [block-uuid]
+                                  (d/entity @conn [:block/uuid block-uuid]))
+                                block-uuids-to-remove)]
+      (when (seq deleting-blocks)
+        (transact-db! :delete-blocks conn deleting-blocks {})))))
 
 (defn- insert-or-move-block
   [conn block-uuid remote-parents remote-block-order move? op-value]
   (when (or (seq remote-parents) remote-block-order) ;at least one of parent|order exists
     (let [first-remote-parent (first remote-parents)
           local-parent (when first-remote-parent (d/entity @conn [:block/uuid first-remote-parent]))
-          whiteboard-page-block? (ldb/whiteboard? local-parent)
           b (d/entity @conn [:block/uuid block-uuid])]
-      (case [whiteboard-page-block? (some? local-parent) (some? remote-block-order)]
+      (case [false (some? local-parent) (some? remote-block-order)]
         [false true true]
         (do
           (if move?
@@ -208,9 +183,6 @@
         [false false true] ;no parent, only update order. e.g. update property's order
         (when (and (empty? remote-parents) move?)
           (transact-db! :update-block-order-directly conn block-uuid nil remote-block-order))
-
-        ([true false false] [true false true] [true true false] [true true true])
-        (throw (ex-info "Not implemented yet for whiteboard" {:op-value op-value}))
 
         (let [e (ex-info "Don't know where to insert" {:block-uuid block-uuid
                                                        :remote-parents remote-parents

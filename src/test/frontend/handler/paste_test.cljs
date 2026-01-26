@@ -1,44 +1,15 @@
 (ns frontend.handler.paste-test
-  (:require [cljs.test :refer [deftest are is testing]]
-            [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async]]
-            [goog.object :as gobj]
-            ["/frontend/utils" :as utils]
-            [frontend.state :as state]
+  (:require ["/frontend/utils" :as utils]
+            [cljs.test :refer [deftest are is testing]]
             [frontend.commands :as commands]
-            [frontend.util :as util]
-            [frontend.util.cursor :as cursor]
-            [promesa.core :as p]
             [frontend.extensions.html-parser :as html-parser]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.paste :as paste-handler]))
-
-(deftest try-parse-as-json-result-parse-test
-  (are [x y] (let [result (#'paste-handler/try-parse-as-json x)
-                   obj-result (if (object? result) result #js{})]
-               (gobj/get obj-result "foo") ;; This op shouldn't throw
-               (gobj/getValueByKeys obj-result "foo" "bar") ;; This op shouldn't throw
-               (gobj/equals result y))
-    "{\"number\": 1234}" #js{:number 1234}
-    "1234" 1234
-    "null" nil
-    "true" true
-    "[1234, 5678]" #js[1234 5678]
-    ;; invalid JSON
-    "{number: 1234}" #js{}))
-
-(deftest try-parse-as-json-result-get-test
-  (are [x y z] (let [result (#'paste-handler/try-parse-as-json x)
-                     obj-result (if (object? result) result #js{})]
-                 (and (gobj/equals (gobj/get obj-result "foo") y)
-                      (gobj/equals (gobj/getValueByKeys obj-result "foo" "bar") z)))
-    "{\"foo\": {\"bar\": 1234}}" #js{:bar 1234} 1234
-    "{\"number\": 1234}" nil nil
-    "1234" nil nil
-    "null" nil nil
-    "true" nil nil
-    "[{\"number\": 1234}]" nil nil
-    ;; invalid JSON
-    "{number: 1234}" nil nil))
+            [frontend.handler.paste :as paste-handler]
+            [frontend.state :as state]
+            [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async]]
+            [frontend.util :as util]
+            [frontend.util.cursor :as cursor]
+            [promesa.core :as p]))
 
 (deftest selection-within-link-test
   (are [x y] (= (#'paste-handler/selection-within-link? x) y)
@@ -83,10 +54,10 @@
     (let [clipboard "https://www.youtube.com/watch?v=xu9p5ynlhZk"
           expected-paste "https://www.youtube.com/watch?v=xu9p5ynlhZk"]
       (p/with-redefs
-        [utils/getClipText (fn [cb] (cb clipboard))
-         state/get-input (constantly #js {:value "block"})
-         commands/delete-selection! (constantly nil)
-         editor-handler/insert (fn [text _] (p/resolved text))]
+       [utils/getClipText (fn [cb] (cb clipboard))
+        state/get-input (constantly #js {:value "block"})
+        commands/delete-selection! (constantly nil)
+        editor-handler/insert (fn [text _] (p/resolved text))]
         (p/let [result (paste-handler/editor-on-paste-raw!)]
           (is (= expected-paste result)))))))
 
@@ -94,10 +65,10 @@
   (let [clipboard "a\n\na"
         expected-paste "a\n\na"]
     (p/with-redefs
-      [utils/getClipText (fn [cb] (cb clipboard))
-       state/get-input (constantly #js {:value "block"})
-       commands/delete-selection! (constantly nil)
-       editor-handler/insert (fn [text _] (p/resolved text))]
+     [utils/getClipText (fn [cb] (cb clipboard))
+      state/get-input (constantly #js {:value "block"})
+      commands/delete-selection! (constantly nil)
+      editor-handler/insert (fn [text _] (p/resolved text))]
       (p/let [result (paste-handler/editor-on-paste-raw!)]
         (is (= expected-paste result))))))
 
@@ -106,12 +77,12 @@
     (let [clipboard "https://www.youtube.com/watch?v=xu9p5ynlhZk"
           expected-paste "{{video https://www.youtube.com/watch?v=xu9p5ynlhZk}}"]
       (p/with-redefs
-        [;; paste-copied-blocks-or-text mocks below
-         commands/delete-selection! (constantly nil)
-         commands/simple-insert! (fn [_input text] (p/resolved text))
-         util/stop (constantly nil)
-         util/get-selected-text (constantly "")
-         html-parser/convert (constantly nil)]
+       [;; paste-copied-blocks-or-text mocks below
+        commands/delete-selection! (constantly nil)
+        commands/simple-insert! (fn [_input text] (p/resolved text))
+        util/stop (constantly nil)
+        util/get-selected-text (constantly "")
+        html-parser/convert (constantly nil)]
         (p/let [result ((paste-handler/editor-on-paste! nil)
                         #js {:clipboardData #js {:getData (constantly clipboard)}})]
           (is (= expected-paste result)))))))
@@ -121,11 +92,11 @@
     (let [clipboard "https://x.com/chiefnoah13/status/1792677792506843462"
           expected-paste "{{twitter https://x.com/chiefnoah13/status/1792677792506843462}}"]
       (p/with-redefs
-        [commands/delete-selection! (constantly nil)
-         commands/simple-insert! (fn [_input text] (p/resolved text))
-         util/stop (constantly nil)
-         util/get-selected-text (constantly "")
-         html-parser/convert (constantly nil)]
+       [commands/delete-selection! (constantly nil)
+        commands/simple-insert! (fn [_input text] (p/resolved text))
+        util/stop (constantly nil)
+        util/get-selected-text (constantly "")
+        html-parser/convert (constantly nil)]
         (p/let [result ((paste-handler/editor-on-paste! nil)
                         #js {:clipboardData #js {:getData (constantly clipboard)}})]
           (is (= expected-paste result)))))))
@@ -138,14 +109,14 @@
           block-content (str selected-text " is awesome")
           expected-paste "[logseq](https://logseq.com) is awesome"]
       (p/with-redefs
-        [;; paste-copied-blocks-or-text mocks below
-         util/stop (constantly nil)
-         util/get-selected-text (constantly selected-text)
-         editor-handler/get-selection-and-format
-         (constantly {:selection-start 0 :selection-end (count selected-text)
-                      :selection selected-text :format :markdown :value block-content})
-         state/set-edit-content! (fn [_ new-value] (reset! actual-text new-value))
-         cursor/move-cursor-to (constantly nil)]
+       [;; paste-copied-blocks-or-text mocks below
+        util/stop (constantly nil)
+        util/get-selected-text (constantly selected-text)
+        editor-handler/get-selection-and-format
+        (constantly {:selection-start 0 :selection-end (count selected-text)
+                     :selection selected-text :format :markdown :value block-content})
+        state/set-edit-content! (fn [_ new-value] (reset! actual-text new-value))
+        cursor/move-cursor-to (constantly nil)]
         (p/let [_ ((paste-handler/editor-on-paste! nil)
                    #js {:clipboardData #js {:getData (constantly clipboard)}})]
           (is (= expected-paste @actual-text)))))))
@@ -158,14 +129,14 @@
           block-content (str selected-text " - Obaluaê!")
           expected-paste "[great song](https://www.youtube.com/watch?v=xu9p5ynlhZk) - Obaluaê!"]
       (p/with-redefs
-        [;; paste-copied-blocks-or-text mocks below
-         util/stop (constantly nil)
-         util/get-selected-text (constantly selected-text)
-         editor-handler/get-selection-and-format
-         (constantly {:selection-start 0 :selection-end (count selected-text)
-                      :selection selected-text :format :markdown :value block-content})
-         state/set-edit-content! (fn [_ new-value] (reset! actual-text new-value))
-         cursor/move-cursor-to (constantly nil)]
+       [;; paste-copied-blocks-or-text mocks below
+        util/stop (constantly nil)
+        util/get-selected-text (constantly selected-text)
+        editor-handler/get-selection-and-format
+        (constantly {:selection-start 0 :selection-end (count selected-text)
+                     :selection selected-text :format :markdown :value block-content})
+        state/set-edit-content! (fn [_ new-value] (reset! actual-text new-value))
+        cursor/move-cursor-to (constantly nil)]
         (p/let [_ ((paste-handler/editor-on-paste! nil)
                    #js {:clipboardData #js {:getData (constantly clipboard)}})]
           (is (= expected-paste @actual-text)))))))
@@ -174,11 +145,11 @@
   (let [clipboard "((647f90f4-d733-4ee2-bbf5-907e820a23d3))"
         expected-paste "647f90f4-d733-4ee2-bbf5-907e820a23d3"]
     (p/with-redefs
-      [;; paste-copied-blocks-or-text mocks below
-       util/stop (constantly nil)
-       state/get-input (constantly #js {:value "(())"})
-       cursor/pos (constantly 2)
-       commands/simple-insert! (fn [_input text] (p/resolved text))]
+     [;; paste-copied-blocks-or-text mocks below
+      util/stop (constantly nil)
+      state/get-input (constantly #js {:value "(())"})
+      cursor/pos (constantly 2)
+      commands/simple-insert! (fn [_input text] (p/resolved text))]
       (p/let [result ((paste-handler/editor-on-paste! nil)
                       #js {:clipboardData #js {:getData (constantly clipboard)}})]
         (is (= expected-paste result))))))
@@ -190,12 +161,12 @@
                          {:block/title "Notes\nid:: 6422ec75-85c7-4e09-9a4d-2a1639a69b2f"}]
         clipboard "- Test node\n\t- Notes\nid:: 6422ec75-85c7-4e09-9a4d-2a1639a69b2f"]
     (p/with-redefs
-      [;; paste-copied-blocks-or-text mocks below
-       util/stop (constantly nil)
-       state/get-current-repo (constantly "test")
-       paste-handler/get-copied-blocks (constantly (p/resolved {:graph "test"
-                                                                :blocks expected-blocks}))
-       editor-handler/paste-blocks (fn [blocks _] (reset! actual-blocks blocks))]
+     [;; paste-copied-blocks-or-text mocks below
+      util/stop (constantly nil)
+      state/get-current-repo (constantly "test")
+      paste-handler/get-copied-blocks (constantly (p/resolved {:graph "test"
+                                                               :blocks expected-blocks}))
+      editor-handler/paste-blocks (fn [blocks _] (reset! actual-blocks blocks))]
       (p/let [_ ((paste-handler/editor-on-paste! nil)
                  #js {:clipboardData #js {:getData (constantly clipboard)}})]
         (is (= expected-blocks @actual-blocks))))))
@@ -205,12 +176,12 @@
         expected-paste "after"
         block-content "test:: before"]
     (p/with-redefs
-      [state/get-input (constantly #js {:value block-content})
+     [state/get-input (constantly #js {:value block-content})
        ;; paste-copied-blocks-or-text mocks below
-       commands/delete-selection! (constantly nil)
-       commands/simple-insert! (fn [_input text] (p/resolved text))
-       util/stop (constantly nil)
-       html-parser/convert (constantly nil)]
+      commands/delete-selection! (constantly nil)
+      commands/simple-insert! (fn [_input text] (p/resolved text))
+      util/stop (constantly nil)
+      html-parser/convert (constantly nil)]
       (p/let [result ((paste-handler/editor-on-paste! nil)
                       #js {:clipboardData #js {:getData (constantly clipboard)}})]
         (is (= expected-paste result))))))
@@ -220,12 +191,12 @@
         files [{:name "image.png" :type "image/png" :size 11836}]
         pasted-file (atom nil)]
     (p/with-redefs
-      [state/preferred-pasting-file? (constantly true)
+     [state/preferred-pasting-file? (constantly true)
        ;; paste-file-if-exists mocks below
-       editor-handler/upload-asset! (fn [_id file & _]
+      editor-handler/upload-asset! (fn [_id file & _]
                                      (reset! pasted-file file))
-       util/stop (constantly nil)
-       state/get-edit-block (constantly {})]
+      util/stop (constantly nil)
+      state/get-edit-block (constantly {})]
       (p/let [_ ((paste-handler/editor-on-paste! :fake-id)
                  #js {:clipboardData #js {:getData (constantly clipboard)
                                           :files files}})]

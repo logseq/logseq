@@ -62,24 +62,10 @@ jobs:
             --exclude mobile \
             ./static/ ./public/
 
-          mkdir -p r2
-          mv ./public/js/main.js.map ./r2/${{ inputs.branch }}.main.js.map
+          rm ./public/js/*.map
 
-          sed -i "s|=main.js.map|=https://assets.logseq.io/${{ inputs.branch }}.main.js.map|g" \
-            ./public/js/main.js
         env:
-          LOGSEQ_SENTRY_DSN: ${{ secrets.LOGSEQ_SENTRY_DSN }}
           LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
-
-      - name: Upload sourcemaps to R2
-        uses: ryand56/r2-upload-action@latest
-        with:
-          r2-account-id: 2553ea8236c11ea0f88de28fce1cbfee
-          r2-access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
-          r2-secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          r2-bucket: ${{ secrets.R2_ASSETS_BUCKET }}
-          source-dir: r2
-          destination-dir: ./
 
       - name: Publish to Cloudflare Pages
         uses: cloudflare/pages-action@1

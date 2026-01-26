@@ -1,30 +1,30 @@
-name: logseq/publishing CI
+name: logseq/graph-parser CI
 
 on:
-  # Path filters ensure jobs only kick off if a change is made to publishing or
+  # Path filters ensure jobs only kick off if a change is made to graph-parser or
   # its local dependencies
   push:
     branches: [master]
     paths:
-      - 'deps/publishing/**'
-      - '.github/workflows/publishing.yml'
-      - '!deps/publishing/**.md'
-      # Deps that logseq/publishing depends on should trigger this workflow
+      - 'deps/graph-parser/**'
+      - '.github/workflows/deps-graph-parser.yml'
+      - '!deps/graph-parser/**.md'
+      # Deps that logseq/graph-parser depends on should trigger this workflow
       - 'deps/db/**'
       - 'deps/common/**'
   pull_request:
     branches: [master]
     paths:
-      - 'deps/publishing/**'
-      - '.github/workflows/publishing.yml'
-      - '!deps/publishing/**.md'
-      # Deps that logseq/publishing depends on should trigger this workflow
+      - 'deps/graph-parser/**'
+      - '.github/workflows/deps-graph-parser.yml'
+      - '!deps/graph-parser/**.md'
+      # Deps that logseq/graph-parser depends on should trigger this workflow
       - 'deps/db/**'
       - 'deps/common/**'
 
 defaults:
   run:
-    working-directory: deps/publishing
+    working-directory: deps/graph-parser
 
 env:
   CLOJURE_VERSION: '1.11.1.1413'
@@ -47,7 +47,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'yarn'
-          cache-dependency-path: deps/publishing/yarn.lock
+          cache-dependency-path: deps/graph-parser/yarn.lock
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -55,15 +55,31 @@ jobs:
           distribution: 'zulu'
           java-version: ${{ env.JAVA_VERSION }}
 
-      # Clojure needed for bb step
       - name: Set up Clojure
         uses: DeLaGuardo/setup-clojure@10.1
         with:
           cli: ${{ env.CLOJURE_VERSION }}
           bb: ${{ env.BABASHKA_VERSION }}
 
+      - name: Clojure cache
+        uses: actions/cache@v4
+        id: clojure-deps
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+          key: ${{ runner.os }}-clojure-deps-${{ hashFiles('deps.edn') }}
+          restore-keys: ${{ runner.os }}-clojure-deps-
+
+      - name: Fetch Clojure deps
+        if: steps.clojure-deps.outputs.cache-hit != 'true'
+        run: clojure -A:test -P
+
       - name: Fetch yarn deps
         run: yarn install --frozen-lockfile
+
+      - name: Run ClojureScript tests
+        run: clojure -M:test
 
       - name: Run nbb-logseq tests
         run: yarn test
@@ -92,7 +108,7 @@ jobs:
           bb: ${{ env.BABASHKA_VERSION }}
 
       - name: Run clj-kondo lint
-        run: clojure -M:clj-kondo --lint src test
+        run: clojure -M:clj-kondo --parallel --lint src test
 
       - name: Carve lint for unused vars
         run: bb lint:carve
@@ -102,6 +118,3 @@ jobs:
 
       - name: Lint for namespaces that aren't documented
         run: bb lint:ns-docstrings
-
-      - name: Lint for public vars that are private based on usage
-        run: bb lint:minimize-public-vars

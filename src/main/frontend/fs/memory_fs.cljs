@@ -81,7 +81,7 @@
           result))
       (p/catch
           ;; ensure throw ex-info both on web & electron, not string or js/Error
-          (fn [e] (ex-info (str e) {})))))
+       (fn [e] (ex-info (str e) {})))))
 
 (defrecord MemoryFs []
   protocol/Fs
@@ -124,12 +124,8 @@
     (p/let [fpath (path/url-to-path (path/path-join dir rpath))
             containing-dir (path/parent fpath)
             _ (<ensure-dir! containing-dir)
-            _ (js/window.pfs.writeFile fpath content)]
+            _ (js/window.pfs.writeFile fpath content)]))
 
-      ;; TODO: store file metadata
-      ;; (db/set-file-content! repo rpath content)
-      ;; (db/set-file-last-modified-at! repo rpath (js/Date.))
-      ))
   (rename! [_this _repo old-path new-path]
     (let [old-path (path/url-to-path old-path)
           new-path (path/url-to-path new-path)]

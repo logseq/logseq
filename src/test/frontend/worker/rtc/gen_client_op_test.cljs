@@ -15,7 +15,7 @@
             [meander.epsilon :as me]))
 
 (t/use-fixtures :each
-  test-helper/db-based-start-and-destroy-db-map-fixture
+  test-helper/start-and-destroy-db-map-fixture
   r.fixture/listen-test-db-to-gen-rtc-ops-fixture)
 
 (defn- tx-data=>e->a->add?->v->t
@@ -188,8 +188,8 @@
                         :block/tags :block/title :db/cardinality}]
     #_{:clj-kondo/ignore [:unresolved-symbol :invalid-arity]}
     (is (->> (me/find (subject/generate-rtc-ops-from-property-entities [ent])
-               ([:update-page . _ ...] [:add _ {:block-uuid ?block-uuid :av-coll ([!av-coll-attrs . _ ...] ...)}])
-               !av-coll-attrs)
+                      ([:update-page . _ ...] [:add _ {:block-uuid ?block-uuid :av-coll ([!av-coll-attrs . _ ...] ...)}])
+                      !av-coll-attrs)
              set
              (set/difference av-coll-attrs)
              empty?))))
@@ -202,8 +202,8 @@
                         :block/tags :block/title}]
     #_{:clj-kondo/ignore [:unresolved-symbol :invalid-arity]}
     (is (->> (me/find (subject/generate-rtc-ops-from-class-entities [ent])
-               ([:update-page . _ ...] [:add _ {:block-uuid ?block-uuid :av-coll ([!av-coll-attrs . _ ...] ...)}])
-               !av-coll-attrs)
+                      ([:update-page . _ ...] [:add _ {:block-uuid ?block-uuid :av-coll ([!av-coll-attrs . _ ...] ...)}])
+                      !av-coll-attrs)
              set
              (set/difference av-coll-attrs)
              empty?))))

@@ -8,7 +8,6 @@
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.handler.notification :as notification]
-            [frontend.handler.property.util :as pu]
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
@@ -67,9 +66,7 @@
                        block-id
                        (p/let [block (db-async/<get-block (state/get-current-repo) block-id {:children? false})]
                          (if block
-                           (if (pu/shape-block? block)
-                             (route-handler/redirect-to-page! (get-in block [:block/page :block/uuid]) {:block-id block-id})
-                             (route-handler/redirect-to-page! block-id))
+                           (route-handler/redirect-to-page! block-id)
                            (notification/show! (str "Open link failed. Block-id `" block-id "` doesn't exist in the graph.") :error false)))))))
 
   (safe-api-call "foundInPage"
@@ -87,6 +84,10 @@
   (safe-api-call "quickCapture"
                  (fn [args]
                    (state/pub-event! [:editor/quick-capture args])))
+
+  (safe-api-call "invokeCommand"
+                 (fn [args]
+                   (state/pub-event! [:editor/invoke-command args])))
 
   (safe-api-call "openNewWindowOfGraph"
                  ;; Handle open new window in renderer, until the destination graph doesn't rely on setting local storage

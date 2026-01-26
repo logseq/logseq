@@ -1,6 +1,6 @@
 (ns frontend.handler.query.builder-test
-  (:require [frontend.handler.query.builder :as query-builder]
-            [clojure.test :refer [deftest is]]))
+  (:require [clojure.test :refer [deftest is]]
+            [frontend.handler.query.builder :as query-builder]))
 
 (deftest builder
   (let [q []]
@@ -34,5 +34,5 @@
          [:and [:page-ref "foo"] [:page-ref "bar"]]))
   (is (= (query-builder/from-dsl '(and [[foo]] (or [[bar]] (:property :key :value))))
          [:and [:page-ref "foo"] [:or [:page-ref "bar"] [:property :key :value]]]))
-  (is (= (query-builder/from-dsl '(and (priority A) (task NOW)))
-         [:and ['priority 'A] ['task 'NOW]])))
+  (is (= (query-builder/from-dsl '(and (priority A) (task Doing)))
+         [:and ['priority 'A] ['task 'Doing]])))

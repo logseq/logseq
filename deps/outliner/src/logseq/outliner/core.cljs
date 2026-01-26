@@ -5,19 +5,14 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [datascript.impl.entity :as de :refer [Entity]]
-            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
-            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.graph-parser.block :as gp-block]
-            [logseq.graph-parser.db :as gp-db]
             [logseq.outliner.batch-tx :include-macros true :as batch-tx]
             [logseq.outliner.datascript :as ds]
             [logseq.outliner.pipeline :as outliner-pipeline]
@@ -63,7 +58,7 @@
                 (if (de/entity? block) block (d/entity db (:db/id block))))))))
 
 (defn- remove-orphaned-page-refs!
-  [db {db-id :db/id} txs-state old-refs new-refs {:keys [db-graph?]}]
+  [db {db-id :db/id} txs-state old-refs new-refs]
   (when (not= old-refs new-refs)
     (let [new-refs (set (map (fn [ref]
                                (or (:block/name ref)
@@ -76,10 +71,7 @@
                          (remove nil?))
           orphaned-pages (when (seq old-pages)
                            (ldb/get-orphaned-pages db {:pages old-pages
-                                                       :built-in-pages-names
-                                                       (if db-graph?
-                                                         sqlite-create-graph/built-in-pages-names
-                                                         gp-db/built-in-pages-names)
+                                                       :built-in-pages-names sqlite-create-graph/built-in-pages-names
                                                        :empty-ref-f (fn [page]
                                                                       (let [refs (:block/_refs page)]
                                                                         (and (or (zero? (count refs))
@@ -91,42 +83,25 @@
           (swap! txs-state (fn [state] (vec (concat state tx)))))))))
 
 (defn- update-page-when-save-block
-  [txs-state block-entity m]
+  [txs-state block-entity]
   (when-let [e (:block/page block-entity)]
     (let [m' (cond-> {:db/id (:db/id e)
                       :block/updated-at (common-util/time-ms)}
                (not (:block/created-at e))
                (assoc :block/created-at (common-util/time-ms)))
-          txs (if (or (:block/pre-block? block-entity)
-                      (:block/pre-block? m))
-                (let [properties (:block/properties m)
-                      alias (set (:alias properties))
-                      tags (set (:tags properties))
-                      alias (map (fn [p] {:block/name (common-util/page-name-sanity-lc p)}) alias)
-                      tags (map (fn [p] {:block/name (common-util/page-name-sanity-lc p)}) tags)
-                      deleteable-page-attributes {:block/alias alias
-                                                  :block/tags tags
-                                                  :block/properties properties
-                                                  :block/properties-text-values (:block/properties-text-values m)}
-                            ;; Retract page attributes to allow for deletion of page attributes
-                      page-retractions
-                      (mapv #(vector :db/retract (:db/id e) %) (keys deleteable-page-attributes))]
-                  (conj page-retractions (merge m' deleteable-page-attributes)))
-                [m'])]
+          txs [m']]
       (swap! txs-state into txs))))
 
 (defn- remove-orphaned-refs-when-save
-  [db txs-state block-entity m {:keys [db-graph?] :as opts}]
+  [db txs-state block-entity m]
   (let [remove-self-page #(remove (fn [b]
                                     (= (:db/id b) (:db/id (:block/page block-entity)))) %)
         ;; only provide content based refs for db graphs instead of removing
         ;; as calculating all non-content refs is more complex
-        old-refs (if db-graph?
-                   (let [content-refs (set (outliner-pipeline/block-content-refs db block-entity))]
-                     (filter #(contains? content-refs (:db/id %)) (:block/refs block-entity)))
-                   (remove-self-page (:block/refs block-entity)))
+        old-refs (let [content-refs (set (outliner-pipeline/block-content-refs db block-entity))]
+                   (filter #(contains? content-refs (:db/id %)) (:block/refs block-entity)))
         new-refs (remove-self-page (:block/refs m))]
-    (remove-orphaned-page-refs! db block-entity txs-state old-refs new-refs opts)))
+    (remove-orphaned-page-refs! db block-entity txs-state old-refs new-refs)))
 
 (defn- get-last-child-or-self
   [db block]
@@ -137,47 +112,13 @@
 
 (declare move-blocks)
 
-(defn- file-rebuild-block-refs
-  [repo db date-formatter {:block/keys [properties] :as block}]
-  (let [property-key-refs (->> (keys properties)
-                               (keep (fn [property-id]
-                                       (:block/uuid (ldb/get-page db (name property-id))))))
-        property-value-refs (->> (vals properties)
-                                 (mapcat (fn [v]
-                                           (cond
-                                             (and (coll? v) (uuid? (first v)))
-                                             v
-
-                                             (uuid? v)
-                                             (when-let [_entity (d/entity db [:block/uuid v])]
-                                               [v])
-
-                                             (and (coll? v) (string? (first v)))
-                                             (mapcat #(gp-block/extract-refs-from-text repo db % date-formatter) v)
-
-                                             (string? v)
-                                             (gp-block/extract-refs-from-text repo db v date-formatter)
-
-                                             :else
-                                             nil))))
-        property-refs (->> (concat property-key-refs property-value-refs)
-                           (map (fn [id-or-map] (if (uuid? id-or-map) {:block/uuid id-or-map} id-or-map)))
-                           (remove (fn [b] (nil? (d/entity db [:block/uuid (:block/uuid b)])))))
-        content-refs (when-let [content (:block/title block)]
-                       (let [format (or (:block/format block) :markdown)
-                             content' (str (common-config/get-block-pattern format) " " content)]
-                         (gp-block/extract-refs-from-text repo db content' date-formatter)))]
-    (concat property-refs content-refs)))
-
 (defn ^:api rebuild-block-refs
-  [repo db date-formatter block]
-  (if (sqlite-util/db-based-graph? repo)
-    (outliner-pipeline/db-rebuild-block-refs db block)
-    (file-rebuild-block-refs repo db date-formatter block)))
+  [db block]
+  (outliner-pipeline/db-rebuild-block-refs db block))
 
 (defn- fix-tag-ids
   "Fix or remove tags related when entered via `Escape`"
-  [m db {:keys [db-graph?]}]
+  [m db]
   (let [refs (set (keep :block/name (seq (:block/refs m))))
         tags (seq (:block/tags m))]
     (if (and (seq refs) tags)
@@ -200,7 +141,7 @@
                             tag))
                         tags)
 
-                    db-graph?
+                    true
                     ;; Remove tags changing case with `Escape`
                     ((fn [tags']
                        (let [ref-titles (->> (map :block/title (:block/refs m))
@@ -299,19 +240,17 @@
                               :or {retract-attributes? true}}]
     (assert (ds/outliner-txs-state? *txs-state)
             "db should be satisfied outliner-tx-state?")
-    (let [db-graph? (entity-plus/db-based-graph? db)
-          data (if (de/entity? this)
+    (let [data (if (de/entity? this)
                  (assoc (.-kv ^js this) :db/id (:db/id this))
                  this)
-          data' (->> (dissoc data :block/properties)
-                     (remove-disallowed-inline-classes db))
+          data' (remove-disallowed-inline-classes db data)
           collapse-or-expand? (= outliner-op :collapse-expand-blocks)
           m* (cond->
               (-> data'
                   (dissoc :block/children :block/meta :block/unordered
                           :block.temp/ast-title :block.temp/ast-body :block/level :block.temp/load-status
                           :block.temp/has-children?)
-                  (fix-tag-ids db {:db-graph? db-graph?}))
+                  (fix-tag-ids db))
                (not collapse-or-expand?)
                block-with-updated-at)
           db-id (:db/id this)
@@ -328,19 +267,16 @@
                                    (not= block-title (:block/title block-entity)))
           _ (when (and page? block-title)
               (outliner-validate/validate-page-title-characters block-title {:node m*}))
-          m* (if page-title-changed?
-               (let [_ (outliner-validate/validate-page-title (:block/title m*) {:node m*})
-                     page-name (common-util/page-name-sanity-lc (:block/title m*))]
-                 (assoc m* :block/name page-name))
-               m*)
+          m (if page-title-changed?
+              (let [_ (outliner-validate/validate-page-title (:block/title m*) {:node m*})
+                    page-name (common-util/page-name-sanity-lc (:block/title m*))]
+                (assoc m* :block/name page-name))
+              m*)
           _ (when (and ;; page or object changed?
                    (or (ldb/page? block-entity) (ldb/object? block-entity))
-                   (:block/title m*)
-                   (not= (:block/title m*) (:block/title block-entity)))
-              (outliner-validate/validate-block-title db (:block/title m*) block-entity))
-          m (cond-> m*
-              true
-              (dissoc :block/format :block/pre-block? :block/priority :block/marker :block/properties-order))]
+                   (:block/title m)
+                   (not= (:block/title m) (:block/title block-entity)))
+              (outliner-validate/validate-block-title db (:block/title m) block-entity))]
       ;; Ensure block UUID never changes
       (let [e (d/entity db db-id)]
         (when (and e block-uuid)
@@ -365,10 +301,10 @@
 
         ;; Update block's page attributes
         (when-not collapse-or-expand?
-          (update-page-when-save-block *txs-state block-entity m))
+          (update-page-when-save-block *txs-state block-entity))
         ;; Remove orphaned refs from block
         (when (and (:block/title m) (not= (:block/title m) (:block/title block-entity)))
-          (remove-orphaned-refs-when-save db *txs-state block-entity m {:db-graph? db-graph?})))
+          (remove-orphaned-refs-when-save db *txs-state block-entity m)))
 
       ;; handle others txs
       (let [other-tx (:db/other-tx m)]
@@ -400,16 +336,8 @@
                                   [:db/retract (:db/id block) :block/order]
                                   [:db/retract (:db/id block) :block/page]])
         (let [ids (cons (:db/id this) (ldb/get-block-full-children-ids db (:db/id block)))
-              txs (map (fn [id] [:db/retractEntity id]) ids)
-              page-tx (let [block (d/entity db [:block/uuid block-id])]
-                        (when (:block/pre-block? block)
-                          (when-let [id (:db/id (:block/page block))]
-                            [[:db/retract id :block/properties]
-                             [:db/retract id :block/properties-order]
-                             [:db/retract id :block/properties-text-values]
-                             [:db/retract id :block/alias]
-                             [:db/retract id :block/tags]])))]
-          (swap! *txs-state concat txs page-tx)
+              txs (map (fn [id] [:db.fn/retractEntity id]) ids)]
+          (swap! *txs-state concat txs)
           block-id)))))
 
 (defn- assoc-level-aux
@@ -815,9 +743,7 @@
                         update-timestamps?
                         (mapv #(dissoc % :block/created-at :block/updated-at))
                         true
-                        (mapv block-with-timestamps)
-                        true
-                        (mapv #(-> % (dissoc :block/properties)))))
+                        (mapv block-with-timestamps)))
             insert-opts {:sibling? sibling?
                          :replace-empty-target? replace-empty-target?
                          :keep-uuid? keep-uuid?

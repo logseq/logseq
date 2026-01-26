@@ -23,14 +23,14 @@
         } 
     ```
 - Working directory: Logseq root directory
-- Run `yarn && yarn app-watch` from the logseq project root directory in terminal.
+- Run `yarn && yarn mobile-watch` from the logseq project root directory in terminal.
 - Run `npx cap sync ios` in another terminal to copy web assets from public to *ios/App/App/public*, and create *capacitor.config.json* in *ios/App/App*, and update iOS plugins.
 - Connect your iOS device to MacBook.
 - Run `npx cap open ios` to open Logseq project in Xcode, and build the app there.
 
 or, you can run `bb dev:ios-app` to do those steps with one command if you are on MacOS. To download bb, see https://github.com/babashka/babashka#installation. Also, in order to use mobile bb tasks on macOS, `gsed` needs to be installed in your system (run `brew install gnu-sed` to install).
 
-Note: if the dev build isn't reflecting the change of code, restart `yarn app-watch` and run `npx cap sync ios` again.
+Note: if the dev build isn't reflecting the change of code, restart `yarn mobile-watch` and run `npx cap sync ios` again.
 
 ### Build the release app
 - Comment out `server` section above in **capacitor.config.ts**.
@@ -69,7 +69,7 @@ or, you can run `bb release:ios-app` to do those steps with one command.
         cleartext: true
         } 
     ```
-- Run `yarn && yarn app-watch` from the logseq project root directory in terminal.
+- Run `yarn && yarn mobile-watch` from the logseq project root directory in terminal.
 - Run `npx cap sync android` in another terminal.
 - Run `npx cap run android` to install app into your device.
 

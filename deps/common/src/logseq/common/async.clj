@@ -1,4 +1,4 @@
-(ns logseq.common.async
+(ns ^:no-doc logseq.publish.async
   (:require [shadow.cljs.modern]))
 
 (defmacro js-await

@@ -338,7 +338,7 @@
 
      [:div.r
       [:h3.head.text-xl.font-bold.pt-1.5
-
+       {:title name}
        [:span.l.link-block.cursor-pointer
         {:on-click (get-open-plugin-readme-handler url item repo)}
         name]
@@ -361,7 +361,14 @@
          (str "ID: " id)]]]
 
     ;; Github repo
-      [:div.flag.is-top.opacity-50
+      [:div.flag.is-top.flex.items-center.space-x-2
+       (cond
+         (false? (:supportsDB item))
+         [:a.flex.cursor-help {:title "Not supports DB graph"}
+          (shui/tabler-icon "database-off" {:size 17})]
+         (true? (:supportsDB item))
+         [:a.flex.cursor-help {:title "Supports DB graph"}
+          (shui/tabler-icon "database-heart" {:size 17})])
        (when repo
          [:a.flex {:target "_blank"
                    :href   (plugin-handler/gh-repo-url repo)}
@@ -670,6 +677,10 @@
                      {:title (t :plugin/title "A - Z")
                       :options {:on-click #(reset! *sort-by :letters)}
                       :icon (ui/icon (aim-icon :letters))}
+
+                     {:title   (t :plugin/supports-db)
+                      :options {:on-click #(reset! *sort-by :supportsDB)}
+                      :icon    (ui/icon (aim-icon :supportsDB))}
 
                      {:title   (t :plugin/date-added)
                       :options {:on-click #(reset! *sort-by :addedAt)}
@@ -1138,7 +1149,7 @@
   (shui/dialog-open! installed-themes
                      {:align :top}))
 
-(rum/defc hook-ui-slot
+(rum/defc hook-ui-slot < rum/static
   ([type payload] (hook-ui-slot type payload nil #(plugin-handler/hook-plugin-app type % nil)))
   ([type payload opts callback]
    (let [rs      (util/rand-str 8)
@@ -1254,36 +1265,8 @@
 
 (rum/defc header-ui-items-list-wrap
   [children]
-  (let [*wrap-el (rum/use-ref nil)
-        [right-sidebar-resized] (rum-utils/use-atom ui-handler/*right-sidebar-resized-at)]
-
-    (hooks/use-effect!
-     (fn []
-       (when-let [^js wrap-el (rum/deref *wrap-el)]
-         (when-let [^js header-el (.closest wrap-el ".cp__header")]
-           (let [^js header-l (.querySelector header-el "* > .l")
-                 ^js header-r (.querySelector header-el "* > .r")
-                 set-max-width! #(when (number? %) (set! (.-maxWidth (.-style wrap-el)) (str % "px")))
-                 calc-wrap-max-width #(let [width-l  (.-offsetWidth header-l)
-                                            width-t  (-> (js/document.querySelector "#main-content-container") (.-offsetWidth))
-                                            children (to-array (.-children header-r))
-                                            width-c' (reduce (fn [acc ^js e]
-                                                               (when (some-> e (.-classList) (.contains "ui-items-container") (not))
-                                                                 (+ acc (or (.-offsetWidth e) 0)))) 0 children)]
-                                        (when-let [width-t (and (number? width-t)
-                                                                (if-not (state/get-left-sidebar-open?)
-                                                                  (- width-t width-l) width-t))]
-                                          (set-max-width! (max (- width-t width-c' 100) 76))))]
-             (when (util/electron?)
-               (.addEventListener js/window "resize" calc-wrap-max-width)
-               (js/setTimeout calc-wrap-max-width 16))
-             #(when (util/electron?)
-                (.removeEventListener js/window "resize" calc-wrap-max-width))))))
-     [right-sidebar-resized])
-
-    [:div.list-wrap
-     {:ref *wrap-el}
-     children]))
+  (let [*wrap-el (rum/use-ref nil)]
+    [:div.list-wrap {:ref *wrap-el} children]))
 
 (rum/defcs hook-ui-items < rum/reactive
   < {:key-fn #(identity "plugin-hook-items")}
