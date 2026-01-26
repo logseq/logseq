@@ -182,6 +182,16 @@
          :compiler-options {:static-fns false}
          :main frontend.test.frontend-node-test-runner/main}
 
+  :test-no-worker {:target :node-test
+                   :output-to "static/tests-no-worker.js"
+                   :closure-defines {frontend.util/NODETEST true
+                                     logseq.shui.util/NODETEST true}
+                   :devtools {:enabled false}
+                   :build-options {:ns-exclude-regexp "^(frontend\\.worker|logseq\\.db-sync\\.worker)"}
+                   ;; disable :static-fns to allow for with-redefs and repl development
+                   :compiler-options {:static-fns false}
+                   :main frontend.test.frontend-node-test-runner/main}
+
   :gen-malli-kondo-config {:target :node-script
                            :closure-defines {frontend.util/NODETEST true}
                            :devtools {:enabled false}
