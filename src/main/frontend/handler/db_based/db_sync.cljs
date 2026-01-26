@@ -380,3 +380,27 @@
                             :graph-uuid graph-uuid
                             :email email
                             :base base})))))
+
+(defn <rtc-remove-member!
+  [graph-uuid member-id]
+  (let [base (http-base)
+        graph-uuid (some-> graph-uuid str)
+        member-id (some-> member-id str)]
+    (if (and base (string? graph-uuid) (string? member-id))
+      (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)]
+        (fetch-json (str base "/graphs/" graph-uuid "/members/" member-id)
+                    {:method "DELETE"}
+                    {:response-schema :graph-members/delete}))
+      (p/rejected (ex-info "db-sync missing member info"
+                           {:type :db-sync/invalid-member
+                            :graph-uuid graph-uuid
+                            :member-id member-id
+                            :base base})))))
+
+(defn <rtc-leave-graph!
+  [graph-uuid]
+  (if-let [member-id (user-handler/user-uuid)]
+    (<rtc-remove-member! graph-uuid member-id)
+    (p/rejected (ex-info "db-sync missing user id"
+                         {:type :db-sync/invalid-member
+                          :graph-uuid graph-uuid}))))

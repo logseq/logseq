@@ -254,6 +254,17 @@
                   graph-id
                   user-id))
 
+(defn <graph-member-role [db graph-id user-id]
+  (when (and (string? graph-id) (string? user-id))
+    (p/let [result (common/<d1-all db
+                                   "select role from graph_members where graph_id = ? and user_id = ?"
+                                   graph-id
+                                   user-id)
+            rows (common/get-sql-rows result)
+            row (first rows)]
+      (when row
+        (aget row "role")))))
+
 (defn <user-has-access-to-graph? [db graph-id user-id]
   (when (and (string? graph-id) (string? user-id))
     (p/let [result (common/<d1-all db

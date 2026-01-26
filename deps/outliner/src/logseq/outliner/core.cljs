@@ -936,15 +936,16 @@
 (defn- move-block
   [db block target-block sibling?]
   (let [target-block (d/entity db (:db/id target-block))
-        block (d/entity db (:db/id block))]
-    (if (or
-         ;; target-block doesn't have parent
-         (and sibling? (nil? (:block/parent target-block)))
-         ;; move page to be a child of block
-         (and (not sibling?)
-              (not (ldb/page? target-block))
-              (ldb/page? block)))
-      (throw (ex-info "not-allowed-move-block-page" {}))
+        block (d/entity db (:db/id block))
+        target-without-parent? (and sibling? (nil? (:block/parent target-block)))
+        move-page-as-block-child? (and (not sibling?)
+                                       (not (ldb/page? target-block))
+                                       (ldb/page? block))]
+    (if (or target-without-parent? move-page-as-block-child?)
+      (throw (ex-info "not-allowed-move-block-page"
+                      {:reason (if target-without-parent?
+                                 :move-to-target-without-parent
+                                 :move-page-to-be-child-of-block)}))
       (let [first-block-page (:db/id (:block/page block))
             target-page (get-target-block-page target-block sibling?)
             not-same-page? (not= first-block-page target-page)

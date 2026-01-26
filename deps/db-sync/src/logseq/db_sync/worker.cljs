@@ -1014,11 +1014,21 @@
                 (bad-request "invalid user id")
 
                 :else
-                (p/let [manager? (index/<user-is-manager? db graph-id user-id)]
-                  (if (not manager?)
-                    (forbidden)
+                (p/let [manager? (index/<user-is-manager? db graph-id user-id)
+                        target-role (index/<graph-member-role db graph-id member-id)
+                        self-leave? (and (= user-id member-id)
+                                         (= "member" target-role))]
+                  (cond
+                    (and manager? (not= "manager" target-role))
                     (p/let [_ (index/<graph-member-delete! db graph-id member-id)]
-                      (json-response :graph-members/delete {:ok true}))))))
+                      (json-response :graph-members/delete {:ok true}))
+
+                    self-leave?
+                    (p/let [_ (index/<graph-member-delete! db graph-id member-id)]
+                      (json-response :graph-members/delete {:ok true}))
+
+                    :else
+                    (forbidden)))))
 
             (and (= method "GET")
                  (= ["e2ee" "user-keys"] parts))
