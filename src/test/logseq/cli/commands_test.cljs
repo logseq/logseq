@@ -423,10 +423,34 @@
       (is (= "abc" (get-in result [:options :target-uuid])))
       (is (= "first-child" (get-in result [:options :pos])))))
 
+  (testing "add block parses with tags and properties"
+    (let [result (commands/parse-args ["add" "block"
+                                       "--content" "hello"
+                                       "--tags" "[\"TagA\" \"TagB\"]"
+                                       "--properties" "{:logseq.property/publishing-public? true}"])]
+      (is (true? (:ok? result)))
+      (is (= :add-block (:command result)))
+      (is (= "[\"TagA\" \"TagB\"]" (get-in result [:options :tags])))
+      (is (= "{:logseq.property/publishing-public? true}" (get-in result [:options :properties])))))
+
   (testing "add block rejects invalid pos"
     (let [result (commands/parse-args ["add" "block"
                                        "--content" "hello"
                                        "--pos" "middle"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "add block rejects tags with blocks payload"
+    (let [result (commands/parse-args ["add" "block"
+                                       "--blocks" "[]"
+                                       "--tags" "[\"TagA\"]"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "add block rejects properties with blocks-file payload"
+    (let [result (commands/parse-args ["add" "block"
+                                       "--blocks-file" "/tmp/blocks.edn"
+                                       "--properties" "{:logseq.property/publishing-public? true}"])]
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code])))))
 
@@ -440,6 +464,16 @@
       (is (true? (:ok? result)))
       (is (= :add-page (:command result)))
       (is (= "Home" (get-in result [:options :page])))))
+
+  (testing "add page parses with tags and properties"
+    (let [result (commands/parse-args ["add" "page"
+                                       "--page" "Home"
+                                       "--tags" "[\"TagA\"]"
+                                       "--properties" "{:logseq.property/publishing-public? true}"])]
+      (is (true? (:ok? result)))
+      (is (= :add-page (:command result)))
+      (is (= "[\"TagA\"]" (get-in result [:options :tags])))
+      (is (= "{:logseq.property/publishing-public? true}" (get-in result [:options :properties])))))
 
   (testing "remove requires target"
     (let [result (commands/parse-args ["remove"])]
@@ -731,6 +765,31 @@
       (is (true? (:ok? result)))
       (is (= :show (get-in result [:action :type])))
       (is (= [1 2] (get-in result [:action :ids]))))))
+
+(deftest test-build-action-add-validates-properties
+  (testing "add block rejects unknown property"
+    (let [parsed (commands/parse-args ["add" "block"
+                                       "--content" "hello"
+                                       "--properties" "{:not/a 1}"])
+          result (commands/build-action parsed {:repo "demo"})]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "add block rejects non-public built-in property"
+    (let [parsed (commands/parse-args ["add" "block"
+                                       "--content" "hello"
+                                       "--properties" "{:logseq.property/heading 1}"])
+          result (commands/build-action parsed {:repo "demo"})]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "add block rejects invalid checkbox value"
+    (let [parsed (commands/parse-args ["add" "block"
+                                       "--content" "hello"
+                                       "--properties" "{:logseq.property/publishing-public? \"nope\"}"])
+          result (commands/build-action parsed {:repo "demo"})]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code]))))))
 
 (deftest test-build-action-move
   (testing "move requires source selector"
