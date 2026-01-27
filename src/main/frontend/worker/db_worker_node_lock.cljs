@@ -26,13 +26,17 @@
   [data-dir repo]
   (node-path/join (repo-dir data-dir repo) "db-worker.lock"))
 
-(defn- pid-alive?
+(defn- pid-status
   [pid]
   (when (number? pid)
     (try
       (.kill js/process pid 0)
-      true
-      (catch :default _ false))))
+      :alive
+      (catch :default e
+        (case (.-code e)
+          "ESRCH" :not-found
+          "EPERM" :no-permission
+          :error)))))
 
 (defn read-lock
   [path]
@@ -53,9 +57,9 @@
        (let [data-dir (resolve-data-dir data-dir)
              path (lock-path data-dir repo)
              existing (read-lock path)]
-         (when (and existing (pid-alive? (:pid existing)))
+         (when (and existing (contains? #{:alive :no-permission} (pid-status (:pid existing))))
            (throw (ex-info "graph already locked" {:code :repo-locked :lock existing})))
-         (when existing
+         (when (and existing (= :not-found (pid-status (:pid existing))))
            (remove-lock! path))
          (fs/mkdirSync (node-path/dirname path) #js {:recursive true})
          (let [fd (fs/openSync path "wx")

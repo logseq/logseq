@@ -29,13 +29,17 @@
   [data-dir repo]
   (node-path/join (repo-dir data-dir repo) "db-worker.lock"))
 
-(defn- pid-alive?
+(defn- pid-status
   [pid]
   (when (number? pid)
     (try
       (.kill js/process pid 0)
-      true
-      (catch :default _ false))))
+      :alive
+      (catch :default e
+        (case (.-code e)
+          "ESRCH" :not-found
+          "EPERM" :no-permission
+          :error)))))
 
 (defn- read-lock
   [path]
@@ -117,7 +121,7 @@
     (nil? lock)
     (p/resolved nil)
 
-    (not (pid-alive? (:pid lock)))
+    (= :not-found (pid-status (:pid lock)))
     (do
       (remove-lock! path)
       (p/resolved nil))
@@ -219,13 +223,13 @@
             {:ok? true
              :data {:repo repo}})
           (p/catch (fn [_]
-                     (when (and (pid-alive? (:pid lock))
+                     (when (and (= :alive (pid-status (:pid lock)))
                                 (not= (:pid lock) (.-pid js/process)))
                        (try
                          (.kill js/process (:pid lock) "SIGTERM")
                          (catch :default e
                            (log/warn :cli-server-stop-sigterm-failed e))))
-                     (when-not (pid-alive? (:pid lock))
+                     (when (= :not-found (pid-status (:pid lock)))
                        (remove-lock! path))
                      (if (fs/existsSync path)
                        {:ok? false
