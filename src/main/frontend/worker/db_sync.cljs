@@ -14,7 +14,6 @@
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [lambdaisland.glogi :as log]
-            [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db-sync.cycle :as sync-cycle]
@@ -753,6 +752,7 @@
              (= :block/uuid (first x)))
     (second x)))
 
+;; TODO: is this really needed?
 (defn- keep-last-update
   [tx-data]
   (->> tx-data
@@ -762,51 +762,6 @@
                    (contains? #{:block/updated-at :block/title :block/name :block/order} (nth item 2)))
             (take 3 item)
             item)))))
-
-;; Is `ensure-block-parents` really needed?
-(defn- ensure-block-parents
-  "Ensure block entities don't lose :block/parent without becoming pages."
-  [db tx-data]
-  (let [last-parent-op (atom {})
-        page-retracts (atom #{})
-        name-adds (atom #{})
-        retract-entities (atom #{})]
-    (doseq [item tx-data]
-      (when (vector? item)
-        (let [op (first item)]
-          (cond
-            (= op :db/retractEntity)
-            (swap! retract-entities conj (second item))
-
-            (and (contains? #{:db/add :db/retract} op)
-                 (>= (count item) 4))
-            (let [e (second item)
-                  a (nth item 2)]
-              (cond
-                (= a :block/parent)
-                (swap! last-parent-op assoc e {:op op :v (nth item 3)})
-
-                (and (= op :db/retract) (= a :block/page))
-                (swap! page-retracts conj e)
-
-                (and (= op :db/add) (= a :block/name))
-                (swap! name-adds conj e)))))))
-    (let [candidates (->> @last-parent-op
-                          (keep (fn [[e {:keys [op]}]]
-                                  (when (= op :db/retract) e)))
-                          (remove @retract-entities)
-                          (remove @page-retracts)
-                          (remove @name-adds))
-          fixes (keep (fn [e]
-                        (when-let [ent (d/entity db e)]
-                          (when (and (:block/page ent)
-                                     (not (ldb/page? ent)))
-                            (when-let [page-uuid (:block/uuid (:block/page ent))]
-                              [:db/add e :block/parent [:block/uuid page-uuid]]))))
-                      candidates)]
-      (if (seq fixes)
-        (into tx-data fixes)
-        tx-data))))
 
 (defn- sanitize-tx-data
   [db tx-data local-deleted-ids]
@@ -818,8 +773,7 @@
                                                   (contains? #{:block/created-at :block/updated-at :block/title}
                                                              (nth item 2)))
                                              (contains? local-deleted-ids (get-lookup-id (last item))))))
-                               keep-last-update)
-        sanitized-tx-data (ensure-block-parents db sanitized-tx-data)]
+                               keep-last-update)]
     ;; (when (not= tx-data sanitized-tx-data)
     ;;   (prn :debug :tx-data tx-data)
     ;;   (prn :debug :sanitized-tx-data sanitized-tx-data))
@@ -842,8 +796,7 @@
                       tx-data (->> txs
                                    (db-normalize/remove-retract-entity-ref @conn)
                                    keep-last-update
-                                   distinct)
-                      tx-data (ensure-block-parents @conn tx-data)]
+                                   distinct)]
                   ;; (prn :debug :before-keep-last-update txs)
                   ;; (prn :debug :upload :tx-data tx-data)
                   (when (seq txs)
@@ -1041,45 +994,6 @@
   (if-let [client (current-client repo)]
     (enqueue-asset-downloads! repo client [asset-uuid])
     (p/resolved nil)))
-
-(defn- enqueue-asset-initial-download!
-  [repo client]
-  (enqueue-asset-task! client
-                       (fn []
-                         (if-let [conn (worker-state/get-datascript-conn repo)]
-                           (let [db @conn
-                                 graph-id (:graph-id client)
-                                 remote-assets (d/q '[:find ?uuid ?type
-                                                      :where
-                                                      [?e :block/uuid ?uuid]
-                                                      [?e :logseq.property.asset/type ?type]
-                                                      [?e :logseq.property.asset/remote-metadata]]
-                                                    db)]
-                             (if (seq graph-id)
-                               (-> (p/let [paths (worker-state/<invoke-main-thread
-                                                  :thread-api/get-all-asset-file-paths
-                                                  repo)]
-                                     (let [local-uuids (into #{}
-                                                             (keep (fn [path]
-                                                                     (let [stem (path/file-stem path)]
-                                                                       (when (seq stem)
-                                                                         stem))))
-                                                             paths)
-                                           missing (remove (fn [[uuid _type]]
-                                                             (contains? local-uuids (str uuid)))
-                                                           remote-assets)]
-                                       (p/loop [entries missing]
-                                         (if (empty? entries)
-                                           nil
-                                           (let [[asset-uuid asset-type] (first entries)]
-                                             (p/do!
-                                              (download-remote-asset! repo graph-id asset-uuid asset-type)
-                                              (p/recur (rest entries))))))))
-                                   (p/catch (fn [e]
-                                              (log/error :db-sync/asset-initial-download-failed
-                                                         {:repo repo :error e}))))
-                               (p/resolved nil)))
-                           (p/resolved nil)))))
 
 (defn- get-local-deleted-blocks
   [reversed-tx-report reversed-tx-data]

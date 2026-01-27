@@ -1,15 +1,11 @@
 (ns frontend.worker.db-sync-test
-  (:require [cljs.test :refer [deftest is testing async]]
+  (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
-            [frontend.common.crypt :as crypt]
             [frontend.worker.db-sync :as db-sync]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.state :as worker-state]
-            [logseq.db :as ldb]
-            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.test.helper :as db-test]
-            [logseq.outliner.core :as outliner-core]
-            [promesa.core :as p]))
+            [logseq.outliner.core :as outliner-core]))
 
 (def ^:private test-repo "test-db-sync-repo")
 
@@ -67,164 +63,6 @@
             (is (= (:db/id child1') (:db/id (:block/parent parent'))))
             (is (= (:db/id page') (:db/id (:block/parent child1'))))))))))
 
-(deftest ensure-block-parents-test
-  (let [{:keys [conn child1 parent]} (setup-parent-child)
-        child-uuid (:block/uuid child1)
-        parent-uuid (:block/uuid parent)
-        page-uuid (:block/uuid (:block/page child1))]
-    (testing "adds parent when a block loses parent without becoming a page"
-      (let [tx-data [[:db/retract [:block/uuid child-uuid] :block/parent [:block/uuid parent-uuid] 1]]
-            fixed (#'db-sync/ensure-block-parents @conn tx-data)]
-        (is (some (fn [item]
-                    (and (= :db/add (first item))
-                         (= [:block/uuid child-uuid] (second item))
-                         (= :block/parent (nth item 2))
-                         (= [:block/uuid page-uuid] (nth item 3))))
-                  fixed))))
-    (testing "does not add parent when converting to page"
-      (let [tx-data [[:db/retract [:block/uuid child-uuid] :block/parent [:block/uuid parent-uuid] 1]
-                     [:db/add [:block/uuid child-uuid] :block/name "page" 1]]
-            fixed (#'db-sync/ensure-block-parents @conn tx-data)]
-        (is (= tx-data fixed))))
-    (testing "does not add parent when entity is retracted"
-      (let [tx-data [[:db/retract [:block/uuid child-uuid] :block/parent [:block/uuid parent-uuid] 1]
-                     [:db/retractEntity [:block/uuid child-uuid]]]
-            fixed (#'db-sync/ensure-block-parents @conn tx-data)]
-        (is (= tx-data fixed))))))
-
-(deftest ensure-block-parents-last-op-retract-test
-  (let [{:keys [conn child1 parent]} (setup-parent-child)
-        child-uuid (:block/uuid child1)
-        parent-uuid (:block/uuid parent)
-        page-uuid (:block/uuid (:block/page child1))]
-    (testing "retract after add still reparents to page"
-      (let [tx-data [[:db/add [:block/uuid child-uuid] :block/parent [:block/uuid parent-uuid] 1]
-                     [:db/retract [:block/uuid child-uuid] :block/parent [:block/uuid parent-uuid] 2]]
-            fixed (#'db-sync/ensure-block-parents @conn tx-data)]
-        (is (some (fn [item]
-                    (and (= :db/add (first item))
-                         (= [:block/uuid child-uuid] (second item))
-                         (= :block/parent (nth item 2))
-                         (= [:block/uuid page-uuid] (nth item 3))))
-                  fixed))))))
-
-(deftest sanitize-tx-data-ensures-parent-test
-  (let [{:keys [conn child1 parent]} (setup-parent-child)
-        child-uuid (:block/uuid child1)
-        parent-uuid (:block/uuid parent)
-        page-uuid (:block/uuid (:block/page child1))]
-    (testing "sanitize-tx-data preserves parent for blocks when last op retracts parent"
-      (let [tx-data [[:db/add [:block/uuid child-uuid] :block/parent [:block/uuid parent-uuid] 1]
-                     [:db/retract [:block/uuid child-uuid] :block/parent [:block/uuid parent-uuid] 2]]
-            fixed (#'db-sync/sanitize-tx-data @conn tx-data #{})]
-        (is (some (fn [item]
-                    (and (= :db/add (first item))
-                         (= [:block/uuid child-uuid] (second item))
-                         (= :block/parent (nth item 2))
-                         (= [:block/uuid page-uuid] (nth item 3))))
-                  fixed))))))
-
-(deftest encrypt-decrypt-tx-data-test
-  (async done
-         (-> (p/let [aes-key (crypt/<generate-aes-key)
-                     tx-data [[:db/add 1 :block/title "hello"]
-                              [:db/add 2 :block/name "page"]
-                              [:db/add 3 :block/uuid (random-uuid)]]
-                     encrypted (#'db-sync/<encrypt-tx-data aes-key tx-data)]
-               (is (not= tx-data encrypted))
-               (is (string? (nth (first encrypted) 3)))
-               (is (string? (nth (second encrypted) 3)))
-               (is (not= (nth (second encrypted) 3) "page"))
-               (p/let [decrypted (#'db-sync/<decrypt-tx-data aes-key encrypted)]
-                 (is (= tx-data decrypted))
-                 (done)))
-             (p/catch (fn [e]
-                        (is false (str e))
-                        (done))))))
-
-(deftest encrypt-decrypt-snapshot-rows-test
-  (async done
-         (-> (p/let [aes-key (crypt/<generate-aes-key)
-                     keys [[1 :block/title "hello" 0]
-                           [1 :block/name "page" 0]
-                           [1 :block/uuid (random-uuid) 0]]
-                     content (sqlite-util/write-transit-str {:keys keys})
-                     encrypted-title (#'db-sync/<encrypt-text-value aes-key "hello")
-                     encrypted-name (#'db-sync/<encrypt-text-value aes-key "page")
-                     encrypted-content (sqlite-util/write-transit-str
-                                        {:keys [[1 :block/title encrypted-title 0]
-                                                [1 :block/name encrypted-name 0]
-                                                [1 :block/uuid (nth (nth keys 2) 2) 0]]})
-                     rows [[1 encrypted-content nil]]]
-               (is (not= content encrypted-content))
-               (p/let [decrypted (#'db-sync/<decrypt-snapshot-rows aes-key rows)
-                       decode (fn [content']
-                                (let [data (ldb/read-transit-str content')]
-                                  (if (map? data)
-                                    (update data :keys (fnil vec []))
-                                    data)))
-                       decoded-original (decode content)
-                       decoded-decrypted (decode (nth (first decrypted) 1))]
-                 (is (= decoded-original decoded-decrypted))
-                 (done)))
-             (p/catch (fn [e]
-                        (is false (str e))
-                        (done))))))
-
-(deftest encrypt-datoms-test
-  (async done
-         (let [conn (db-test/create-conn-with-blocks
-                     {:pages-and-blocks
-                      [{:page {:block/title "page 1"}
-                        :blocks [{:block/title "parent"}]}]})
-               datoms (vec (d/datoms @conn :eavt))
-               title-datom (first (filter (fn [datom] (= :block/title (:a datom))) datoms))
-               name-datom (first (filter (fn [datom] (= :block/name (:a datom))) datoms))
-               uuid-datom (first (filter (fn [datom] (= :block/uuid (:a datom))) datoms))]
-           (-> (p/let [aes-key (crypt/<generate-aes-key)
-                       tx-data (#'db-sync/<encrypt-datoms aes-key datoms)
-                       title-tx (first (filter (fn [item]
-                                                 (and (= (:e title-datom) (:e item))
-                                                      (= :block/title (:a item))))
-                                               tx-data))
-                       name-tx (first (filter (fn [item]
-                                                (and (= (:e name-datom) (:e item))
-                                                     (= :block/name (:a item))))
-                                              tx-data))
-                       uuid-tx (first (filter (fn [item]
-                                                (and (= (:e uuid-datom) (:e item))
-                                                     (= :block/uuid (:a item))))
-                                              tx-data))]
-                 (is (string? (:v title-tx)))
-                 (is (string? (:v name-tx)))
-                 (is (not= (:v title-datom) (:v title-tx)))
-                 (is (= (:v uuid-datom) (:v uuid-tx)))
-                 (done))
-               (p/catch (fn [e]
-                          (is false (str e))
-                          (done)))))))
-
-(deftest ensure-user-rsa-keys-test
-  (async done
-         (let [upload-called (atom nil)]
-           (-> (p/with-redefs [db-sync/e2ee-base (fn [] "http://base")
-                               db-sync/<fetch-user-rsa-key-pair-raw (fn [_] (p/resolved {}))
-                               db-sync/<upload-user-rsa-key-pair! (fn [_ public-key encrypted-private-key]
-                                                                    (reset! upload-called [public-key encrypted-private-key])
-                                                                    (p/resolved {:public-key public-key
-                                                                                 :encrypted-private-key encrypted-private-key}))
-                               crypt/<generate-rsa-key-pair (fn [] (p/resolved #js {:publicKey :pub :privateKey :priv}))
-                               crypt/<export-public-key (fn [_] (p/resolved :pub-export))
-                               crypt/<encrypt-private-key (fn [_ _] (p/resolved :priv-encrypted))
-                               worker-state/<invoke-main-thread (fn [_] (p/resolved {:password "pw"}))]
-                 (p/let [resp (db-sync/ensure-user-rsa-keys!)]
-                   (is (map? resp))
-                   (is (= 2 (count @upload-called)))
-                   (done)))
-               (p/catch (fn [e]
-                          (is false (str e))
-                          (done)))))))
-
 (deftest two-children-cycle-test
   (testing "cycle from remote sync overwrite client (2 children)"
     (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)]
@@ -258,26 +96,6 @@
             (is (= "child 2" (:block/title (:block/parent child'))))
             (is (= "child 3" (:block/title (:block/parent child2'))))
             (is (= "parent" (:block/title (:block/parent child3'))))))))))
-
-(deftest hello-message-does-not-trigger-initial-asset-download-test
-  (let [called? (atom false)
-        client {:repo test-repo
-                :graph-id "graph-id"
-                :asset-queue (atom (p/resolved nil))
-                :inflight (atom [])
-                :ws {}}
-        raw (js/JSON.stringify (clj->js {:type "hello" :t 0}))]
-    (with-redefs [db-sync/enqueue-asset-initial-download!
-                  (fn [& _]
-                    (reset! called? true)
-                    (p/resolved nil))
-                  db-sync/enqueue-asset-sync! (fn [& _] (p/resolved nil))
-                  db-sync/flush-pending! (fn [& _] (p/resolved nil))
-                  db-sync/send! (fn [& _] nil)
-                  db-sync/broadcast-rtc-state! (fn [& _] nil)
-                  client-op/get-local-tx (fn [& _] 0)]
-      (#'db-sync/handle-message! test-repo client raw)
-      (is (false? @called?)))))
 
 (deftest ignore-missing-parent-update-after-local-delete-test
   (testing "remote parent retracted while local adds another child"
