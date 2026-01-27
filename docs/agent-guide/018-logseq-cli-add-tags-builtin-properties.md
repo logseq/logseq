@@ -38,6 +38,7 @@ Add block supports setting tags on all inserted blocks.
 Add page supports setting tags on the created page.
 Add block supports setting built-in properties with correct type coercion.
 Add page supports setting built-in properties with correct type coercion.
+Add block and add page accept tag and property references by id, :block/title, or :db/ident for --tags and --properties.
 CLI rejects non built-in properties for these new options.
 CLI rejects built-in properties that are not public and provides a clear error message.
 CLI rejects adding non public tags to blocks.
@@ -110,6 +111,8 @@ Add new options to content-add-spec in src/main/logseq/cli/command/add.cljs for 
 Add new options to add-page-spec in src/main/logseq/cli/command/add.cljs for tags and properties.
 Use a single EDN map option like --properties for multiple properties and a repeated option like --property for key value pairs if needed.
 Use a single EDN vector option like --tags and a repeated option like --tag for convenience.
+For --tags, allow each entry to be either a tag id, :db/ident, or the tag page's :block/title.
+For --properties, allow each property key to be a property id, :db/ident, or the property's :block/title.
 Update command summary and help output in src/main/logseq/cli/command/core.cljs if needed to reflect new options.
 
 ### 2. Tag resolution helpers
