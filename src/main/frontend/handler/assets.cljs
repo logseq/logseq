@@ -208,6 +208,35 @@
         {:checksum checksum})
       (p/catch (constantly nil))))
 
+(defn- asset-transfer-in-progress?
+  [progress-entry]
+  (let [{:keys [loaded total]} progress-entry]
+    (and (number? loaded) (number? total) (pos? total) (not= loaded total))))
+
+(defn should-request-remote-asset-download?
+  [repo asset-block file-ready? progress]
+  (let [asset-uuid (:block/uuid asset-block)
+        asset-type (:logseq.property.asset/type asset-block)
+        external-url (:logseq.property.asset/external-url asset-block)
+        progress-entry (get progress (str asset-uuid))]
+    (and (seq repo)
+         asset-uuid
+         (seq asset-type)
+         (string/blank? external-url)
+         (not file-ready?)
+         (not (asset-transfer-in-progress? progress-entry)))))
+
+(defn maybe-request-remote-asset-download!
+  [repo asset-block file-ready?]
+  (let [progress-atom (get @state/state :rtc/asset-upload-download-progress)
+        progress (get (or (some-> progress-atom deref) {}) repo)]
+    (when (should-request-remote-asset-download? repo asset-block file-ready? progress)
+      (state/<invoke-db-worker
+       :thread-api/db-sync-request-asset-download
+       repo
+       (:block/uuid asset-block))
+      true)))
+
 (defn <write-asset
   [repo asset-block-id asset-type data]
   (let [asset-block-id-str (str asset-block-id)
