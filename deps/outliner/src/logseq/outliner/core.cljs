@@ -336,7 +336,7 @@
                                   [:db/retract (:db/id block) :block/order]
                                   [:db/retract (:db/id block) :block/page]])
         (let [ids (cons (:db/id this) (ldb/get-block-full-children-ids db (:db/id block)))
-              txs (map (fn [id] [:db.fn/retractEntity id]) ids)]
+              txs (map (fn [id] [:db/retractEntity id]) ids)]
           (swap! *txs-state concat txs)
           block-id)))))
 
