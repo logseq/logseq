@@ -18,8 +18,8 @@
   {:content {:desc "Block content for add"}
    :blocks {:desc "EDN vector of blocks for add"}
    :blocks-file {:desc "EDN file of blocks for add"}
-   :tags {:desc "EDN vector of tags"}
-   :properties {:desc "EDN map of built-in properties"}
+   :tags {:desc "EDN vector of tags (id, :db/ident, or :block/title)"}
+   :properties {:desc "EDN map of built-in properties (id, :db/ident, or :block/title)"}
    :target-id {:desc "Target block db/id"
                :coerce :long}
    :target-uuid {:desc "Target block UUID"}
@@ -29,8 +29,8 @@
 
 (def ^:private add-page-spec
   {:page {:desc "Page name"}
-   :tags {:desc "EDN vector of tags"}
-   :properties {:desc "EDN map of built-in properties"}})
+   :tags {:desc "EDN vector of tags (id, :db/ident, or :block/title)"}
+   :properties {:desc "EDN map of built-in properties (id, :db/ident, or :block/title)"}})
 
 (def entries
   [(core/command-entry ["add" "block"] :add-block "Add blocks" content-add-spec)
@@ -120,19 +120,20 @@
   (when (seq value)
     (common-util/safe-read-string {:log-error? false} value)))
 
-(defn- keyword->name
-  [value]
-  (subs (str value) 1))
-
 (defn- normalize-tag-value
   [value]
   (cond
     (uuid? value) value
+    (number? value) value
     (and (string? value) (common-util/uuid-string? (string/trim value)))
     (uuid (string/trim value))
-    (keyword? value) (keyword->name value)
+    (keyword? value) value
     (string? value) (let [text (-> value string/trim (string/replace #"^#+" ""))]
-                      (when (seq text) text))
+                      (cond
+                        (string/blank? text) nil
+                        (common-util/valid-edn-keyword? text)
+                        (common-util/safe-read-string {:log-error? false} text)
+                        :else text))
     :else nil))
 
 (defn- parse-tags-option
@@ -153,7 +154,7 @@
         :else
         (let [tags (mapv normalize-tag-value parsed)]
           (if (some nil? tags)
-            (invalid-options-result "tags must be strings, keywords, or uuids")
+            (invalid-options-result "tags must be strings, keywords, uuids, or ids")
             {:ok? true :value tags}))))))
 
 (defn- normalize-property-key
@@ -167,6 +168,39 @@
         (common-util/valid-edn-keyword? text)
         (common-util/safe-read-string {:log-error? false} text)
         :else (keyword text)))
+    :else nil))
+
+(def ^:private built-in-properties-by-title
+  (into {}
+        (keep (fn [[ident {:keys [title]}]]
+                (when (string? title)
+                  [(common-util/page-name-sanity-lc title) ident])))
+        db-property/built-in-properties))
+
+(defn- property-title->ident
+  [value]
+  (when (string? value)
+    (let [text (string/trim value)]
+      (when (seq text)
+        (get built-in-properties-by-title (common-util/page-name-sanity-lc text))))))
+
+(defn- normalize-property-key-input
+  [value]
+  (cond
+    (keyword? value) {:type :ident :value value}
+    (number? value) {:type :id :value value}
+    (string? value)
+    (let [text (string/trim value)]
+      (cond
+        (string/blank? text) nil
+        (common-util/valid-edn-keyword? text)
+        (let [parsed (common-util/safe-read-string {:log-error? false} text)]
+          (when (keyword? parsed)
+            {:type :ident :value parsed}))
+        :else
+        (if-let [ident (property-title->ident text)]
+          {:type :ident :value ident}
+          {:type :ident :value (keyword text)})))
     :else nil))
 
 (defn- parse-boolean-value
@@ -320,27 +354,32 @@
         (invalid-options-result "properties must be a non-empty map")
 
         :else
-        (loop [entries (seq parsed)
+        (loop [prop-entries (seq parsed)
                acc {}]
-          (if (empty? entries)
+          (if (empty? prop-entries)
             {:ok? true :value acc}
-            (let [[k v] (first entries)
-                  key* (normalize-property-key k)]
-              (if-not key*
+            (let [[k v] (first prop-entries)
+                  key-result (normalize-property-key-input k)]
+              (if-not key-result
                 (invalid-options-result (str "invalid property key: " k))
-                (let [property (get db-property/built-in-properties key*)]
-                  (cond
-                    (nil? property)
-                    (invalid-options-result (str "unknown built-in property: " key*))
+                (let [{:keys [type value]} key-result
+                      key-ident value]
+                  (if (= type :id)
+                    (recur (rest prop-entries) (assoc acc key-ident v))
+                    (let [property (get db-property/built-in-properties key-ident)]
+                      (cond
+                        (nil? property)
+                        (invalid-options-result (str "unknown built-in property: " key-ident))
 
-                    (not (property-public? property))
-                    (invalid-options-result (str "property is not public: " key*))
+                        (not (property-public? property))
+                        (invalid-options-result (str "property is not public: " key-ident))
 
-                    :else
-                    (let [{:keys [ok? value message]} (normalize-property-values property v)]
-                      (if-not ok?
-                        (invalid-options-result (str "invalid value for " key* ": " message))
-                        (recur (rest entries) (assoc acc key* value))))))))))))))
+                        :else
+                        (let [{:keys [ok? value message]} (normalize-property-values property v)
+                              normalized-value value]
+                          (if-not ok?
+                            (invalid-options-result (str "invalid value for " key-ident ": " message))
+                            (recur (rest prop-entries) (assoc acc key-ident normalized-value))))))))))))))))
 
 (defn invalid-options?
   [opts]
@@ -375,8 +414,10 @@
 (defn- tag-lookup-ref
   [tag]
   (cond
+    (number? tag) tag
     (uuid? tag) [:block/uuid tag]
     (and (string? tag) (common-util/uuid-string? (string/trim tag))) [:block/uuid (uuid (string/trim tag))]
+    (keyword? tag) [:db/ident tag]
     (string? tag) [:block/name (common-util/page-name-sanity-lc tag)]
     :else nil))
 
@@ -475,11 +516,11 @@
       :class (resolve-class-id config repo value)
       :property (resolve-property-id config repo value)
       :entity (resolve-entity-id config repo (cond
-                                              (number? value) value
-                                              (uuid? value) [:block/uuid value]
-                                              (and (string? value) (common-util/uuid-string? (string/trim value)))
-                                              [:block/uuid (uuid (string/trim value))]
-                                              :else value))
+                                               (number? value) value
+                                               (uuid? value) [:block/uuid value]
+                                               (and (string? value) (common-util/uuid-string? (string/trim value)))
+                                               [:block/uuid (uuid (string/trim value))]
+                                               :else value))
       :node (resolve-node-id config repo value)
       :date (resolve-date-page-id config repo value)
       (p/resolved value))))
@@ -488,18 +529,70 @@
   [config repo properties]
   (if-not (seq properties)
     (p/resolved nil)
-    (p/let [entries (p/all
-                     (map (fn [[k v]]
-                            (let [property (get db-property/built-in-properties k)
-                                  many? (= :many (get-in property [:schema :cardinality]))
-                                  values (if many?
-                                           (if (and (coll? v) (not (string? v))) v [v])
-                                           [v])]
-                              (p/let [resolved (p/all (map #(resolve-property-value config repo property %) values))
-                                      final-value (if many? (vec resolved) (first resolved))]
-                                [k final-value])))
-                          properties))]
-      (into {} entries))))
+    (p/let [resolved-entries (p/all
+                              (map (fn [[k v]]
+                                     (p/let [{:keys [ident property]}
+                                             (cond
+                                               (keyword? k)
+                                               (let [property (get db-property/built-in-properties k)]
+                                                 (when-not property
+                                                   (throw (ex-info "unknown built-in property"
+                                                                   {:code :unknown-property :property k})))
+                                                 (when-not (property-public? property)
+                                                   (throw (ex-info "property is not public"
+                                                                   {:code :property-not-public :property k})))
+                                                 (p/resolved {:ident k :property property}))
+
+                                               (number? k)
+                                               (p/let [entity (pull-entity config repo [:db/ident] k)
+                                                       ident (:db/ident entity)
+                                                       property (get db-property/built-in-properties ident)]
+                                                 (cond
+                                                   (nil? ident)
+                                                   (throw (ex-info "property not found"
+                                                                   {:code :property-not-found :property k}))
+
+                                                   (nil? property)
+                                                   (throw (ex-info "unknown built-in property"
+                                                                   {:code :unknown-property :property ident}))
+
+                                                   (not (property-public? property))
+                                                   (throw (ex-info "property is not public"
+                                                                   {:code :property-not-public :property ident}))
+
+                                                   :else
+                                                   {:ident ident :property property}))
+
+                                               (string? k)
+                                               (let [ident (or (property-title->ident k)
+                                                               (normalize-property-key k))
+                                                     property (get db-property/built-in-properties ident)]
+                                                 (when-not property
+                                                   (throw (ex-info "unknown built-in property"
+                                                                   {:code :unknown-property :property k})))
+                                                 (when-not (property-public? property)
+                                                   (throw (ex-info "property is not public"
+                                                                   {:code :property-not-public :property ident})))
+                                                 (p/resolved {:ident ident :property property}))
+
+                                               :else
+                                               (p/rejected (ex-info "invalid property key"
+                                                                    {:code :invalid-property :property k})))
+                                             {:keys [ok? value message]} (normalize-property-values property v)]
+                                       (when-not ok?
+                                         (throw (ex-info "invalid property value"
+                                                         {:code :invalid-property-value
+                                                          :property ident
+                                                          :message message})))
+                                       (let [many? (= :many (get-in property [:schema :cardinality]))
+                                             values (if many?
+                                                      (if (and (coll? value) (not (string? value))) value [value])
+                                                      [value])]
+                                         (p/let [resolved (p/all (map #(resolve-property-value config repo property %) values))
+                                                 final-value (if many? (vec resolved) (first resolved))]
+                                           [ident final-value]))))
+                                   properties))]
+      (into {} resolved-entries))))
 
 (defn- resolve-add-target
   [config {:keys [repo target-id target-uuid target-page-name]}]
@@ -582,26 +675,26 @@
         properties-result
 
         :else
-      (if-not (:ok? blocks-result)
-        blocks-result
-        (let [vector-result (ensure-blocks (:value blocks-result))]
-          (if-not (:ok? vector-result)
-            vector-result
-            (let [blocks (cond-> (:value vector-result)
-                           ensure-uuids?
-                           ensure-block-uuids)]
-              {:ok? true
-               :action {:type :add-block
-                        :repo repo
-                        :graph (core/repo->graph repo)
-                        :target-id (:target-id options)
-                        :target-uuid (some-> (:target-uuid options) string/trim)
-                        :target-page-name (some-> (:target-page-name options) string/trim)
-                        :pos (or (some-> (:pos options) string/trim string/lower-case) "last-child")
-                        :status status
-                        :tags tags
-                        :properties properties
-                        :blocks blocks}}))))))))
+        (if-not (:ok? blocks-result)
+          blocks-result
+          (let [vector-result (ensure-blocks (:value blocks-result))]
+            (if-not (:ok? vector-result)
+              vector-result
+              (let [blocks (cond-> (:value vector-result)
+                             ensure-uuids?
+                             ensure-block-uuids)]
+                {:ok? true
+                 :action {:type :add-block
+                          :repo repo
+                          :graph (core/repo->graph repo)
+                          :target-id (:target-id options)
+                          :target-uuid (some-> (:target-uuid options) string/trim)
+                          :target-page-name (some-> (:target-page-name options) string/trim)
+                          :pos (or (some-> (:pos options) string/trim string/lower-case) "last-child")
+                          :status status
+                          :tags tags
+                          :properties properties
+                          :blocks blocks}}))))))))
 
 (defn build-add-page-action
   [options repo]
