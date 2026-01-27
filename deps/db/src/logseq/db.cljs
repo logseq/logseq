@@ -180,15 +180,7 @@
        (if-let [transact-fn @*transact-fn]
          (transact-fn repo-or-conn tx-data tx-meta)
          (transact-sync repo-or-conn tx-data tx-meta))))))
-
-(defn remove-conflict-datoms
-  [datoms]
-  (->> datoms
-       (group-by (fn [d] (take 4 d))) ; group by '(e a v tx)
-       (keep (fn [[_eavt same-eavt-datoms]]
-               (first (rseq same-eavt-datoms))))
-       ;; sort by :tx, use nth to make this fn works on both vector and datom
-       (sort-by #(nth % 3))))
+(def remove-conflict-datoms db-normalize/remove-conflict-datoms)
 
 (defn transact-with-temp-conn!
   "Validate db and store once for a batch transaction, the `temp` conn can still load data from disk,
@@ -217,8 +209,7 @@
                         (if (fn? filter-tx-data)
                           (filter-tx-data temp-after-db tx-data)
                           tx-data)
-                        remove-conflict-datoms
-                        (db-normalize/remove-deleted-add-datoms temp-after-db))]
+                        remove-conflict-datoms)]
           (transact! conn tx-data' tx-meta))))))
 
 (def page? entity-util/page?)

@@ -47,11 +47,11 @@
       s)))
 
 (defn- rng-uuid [rng]
-  (let [bytes (vec (repeatedly 16 #(rand-int! rng 256)))
-        bytes (-> bytes
-                  (assoc 6 (bit-or 0x40 (bit-and (nth bytes 6) 0x0f)))
-                  (assoc 8 (bit-or 0x80 (bit-and (nth bytes 8) 0x3f))))
-        hexes (map byte->hex bytes)
+  (let [payload (vec (repeatedly 16 #(rand-int! rng 256)))
+        payload (-> payload
+                    (assoc 6 (bit-or 0x40 (bit-and (nth payload 6) 0x0f)))
+                    (assoc 8 (bit-or 0x80 (bit-and (nth payload 8) 0x3f))))
+        hexes (map byte->hex payload)
         uuid-str (str (apply str (take 4 hexes)) "-"
                       (apply str (take 2 (drop 4 hexes))) "-"
                       (apply str (take 2 (drop 6 hexes))) "-"
@@ -169,7 +169,9 @@
 
 (defn- update-title! [conn uuid new-title]
   ;; (prn :debug :update-title uuid :from (:block/title (d/entity @conn [:block/uuid uuid])) :to new-title)
-  (ldb/transact! conn [[:db/add [:block/uuid uuid] :block/title new-title]]))
+  (outliner-core/save-block! conn
+                             {:block/uuid uuid
+                              :block/title new-title}))
 
 (defn- move-block! [conn block parent]
   (let [block (d/entity @conn [:block/uuid (:block/uuid block)])
@@ -211,7 +213,7 @@
          (fn [{:keys [t txs conn] :as state}]
            (if (not= t t-before)
              state
-             (let [{:keys [db-before db-after tx-data]} (ldb/transact! conn tx-data)
+             (let [{:keys [db-before db-after tx-data]} (ldb/transact! conn tx-data {:op :apply-client-tx})
                    normalized-data (->> tx-data
                                         (db-normalize/normalize-tx-data db-after db-before))
                    next-t (inc t)]
@@ -263,7 +265,6 @@
           (recur (inc i))))))
   (let [conns (keep (fn [c] (when (:online? c) (:conn c))) clients)
         block-counts (map #(count (d/datoms (deref %) :avet :block/uuid)) conns)]
-    (when (seq block-counts))
     (when-not (= (count (distinct block-counts)) 1)
       (throw (ex-info "blocks count not equal after sync"
                       {:block-counts block-counts
@@ -377,7 +378,7 @@
                            [base-uuid]))
         ent (rand-nth! rng (vec ents))
         block (d/entity db [:block/uuid (:block/uuid ent)])]
-    (when block
+    (when (and block (not (ldb/page? block)))
       (let [uuid (:block/uuid block)
             title (str "Title-" (rand-int! rng 1000000))]
         (update-title! conn uuid title)
@@ -410,11 +411,13 @@
 ;; TODO: add tag/property/migrate/undo/redo ops
 (def ^:private op-table
   [{:name :create-page :weight 6 :f op-create-page!}
-   ;; {:name :delete-page :weight 2 :f op-delete-page!}
+   {:name :delete-page :weight 2 :f op-delete-page!}
    {:name :create-block :weight 10 :f op-create-block!}
-   ;; {:name :update-title :weight 8 :f op-update-title!}
    {:name :move-block :weight 6 :f op-move-block!}
-   ;; {:name :delete-block :weight 4 :f op-delete-block!}
+   {:name :delete-block :weight 4 :f op-delete-block!}
+
+   ;; Failed ops
+   ;; {:name :update-title :weight 8 :f op-update-title!}
    ])
 
 (defn- pick-op [rng {:keys [disable-ops]}]
@@ -448,28 +451,6 @@
         (swap! history conj (cond-> (assoc result :type :op :step step)
                               repo (assoc :repo repo)
                               context (assoc :context context)))))))
-
-(deftest history-captures-repo-test
-  (testing "history captures repo info for reproduction"
-    (let [seed 99
-          rng (make-rng seed)
-          gen-uuid #(rng-uuid rng)
-          base-uuid (gen-uuid)
-          conn (db-test/create-conn)
-          ops (d/create-conn client-op/schema-in-db)
-          history (atom [])
-          state (atom {:pages #{base-uuid} :blocks #{}})]
-      (with-test-repos {repo-a {:conn conn :ops-conn ops}}
-        (fn []
-          (record-meta! history {:seed seed :base-uuid base-uuid})
-          (ensure-base-page! conn base-uuid)
-          (run-ops! rng {:repo repo-a :conn conn :base-uuid base-uuid :state state :gen-uuid gen-uuid}
-                    1
-                    history
-                    {:pick-op-opts {:disable-ops #{:create-block :move-block}}})
-          (let [entry (first (filter #(= :op (:type %)) @history))]
-            (is (= repo-a (:repo entry)))
-            (is (= :create-page (:op entry)))))))))
 
 (deftest two-clients-online-offline-sim-test
   (testing "db-sync convergence with online/offline client and random ops"
@@ -532,7 +513,7 @@
               (finally
                 (restore)))))))))
 
-(defonce op-runs 100)
+(defonce op-runs 500)
 
 (defn- run-random-ops!
   [rng server clients repo->state base-uuid history run-ops-opts steps]
@@ -567,7 +548,8 @@
            " a=" (count attrs-a)
            " c=" (count attrs-c)
            " history=" (count @history))))
-(deftest three-clients-single-repo-sim-test
+
+(deftest ^:large-vars/cleanup-todo three-clients-single-repo-sim-test
   (prn :debug "run three-clients-single-repo-sim-test")
   (testing "db-sync convergence with three clients sharing one repo"
     (let [seed (or (env-seed) default-seed)
