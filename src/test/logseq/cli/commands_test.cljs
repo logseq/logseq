@@ -1,6 +1,7 @@
 (ns logseq.cli.commands-test
   (:require [cljs.test :refer [async deftest is testing]]
             [clojure.string :as string]
+            [logseq.cli.command.add :as add-command]
             [logseq.cli.command.show :as show-command]
             [logseq.cli.commands :as commands]
             [logseq.cli.server :as cli-server]
@@ -402,6 +403,63 @@
       (is (= :invalid-options (get-in result [:error :code]))))))
 
 (deftest test-verb-subcommand-parse-add-remove
+  (testing "remove requires target"
+    (let [result (commands/parse-args ["remove"])]
+      (is (false? (:ok? result)))
+      (is (= :missing-target (get-in result [:error :code])))))
+
+  (testing "remove parses with id"
+    (let [result (commands/parse-args ["remove" "--id" "10"])]
+      (is (true? (:ok? result)))
+      (is (= :remove (:command result)))
+      (is (= 10 (get-in result [:options :id])))))
+
+  (testing "remove parses with uuid"
+    (let [result (commands/parse-args ["remove" "--uuid" "abc"])]
+      (is (true? (:ok? result)))
+      (is (= :remove (:command result)))
+      (is (= "abc" (get-in result [:options :uuid])))))
+
+  (testing "remove parses with page"
+    (let [result (commands/parse-args ["remove" "--page" "Home"])]
+      (is (true? (:ok? result)))
+      (is (= :remove (:command result)))
+      (is (= "Home" (get-in result [:options :page])))))
+
+  (testing "remove rejects multiple selectors"
+    (let [result (commands/parse-args ["remove" "--id" "1" "--page" "Home"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "remove rejects empty id vector"
+    (let [result (commands/parse-args ["remove" "--id" "[]"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "remove rejects invalid id vector"
+    (let [result (commands/parse-args ["remove" "--id" "[1 \"no\"]"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "move requires source selector"
+    (let [result (commands/parse-args ["move" "--target-id" "10"])]
+      (is (false? (:ok? result)))
+      (is (= :missing-source (get-in result [:error :code])))))
+
+  (testing "move requires target selector"
+    (let [result (commands/parse-args ["move" "--id" "1"])]
+      (is (false? (:ok? result)))
+      (is (= :missing-target (get-in result [:error :code])))))
+
+  (testing "move parses with source and target"
+    (let [result (commands/parse-args ["move" "--uuid" "abc" "--target-uuid" "def" "--pos" "last-child"])]
+      (is (true? (:ok? result)))
+      (is (= :move-block (:command result)))
+      (is (= "abc" (get-in result [:options :uuid])))
+      (is (= "def" (get-in result [:options :target-uuid])))
+      (is (= "last-child" (get-in result [:options :pos]))))))
+
+(deftest test-verb-subcommand-parse-add
   (testing "add block requires content source"
     (let [result (commands/parse-args ["add" "block"])]
       (is (false? (:ok? result)))
@@ -473,63 +531,7 @@
       (is (true? (:ok? result)))
       (is (= :add-page (:command result)))
       (is (= "[\"TagA\"]" (get-in result [:options :tags])))
-      (is (= "{:logseq.property/publishing-public? true}" (get-in result [:options :properties])))))
-
-  (testing "remove requires target"
-    (let [result (commands/parse-args ["remove"])]
-      (is (false? (:ok? result)))
-      (is (= :missing-target (get-in result [:error :code])))))
-
-  (testing "remove parses with id"
-    (let [result (commands/parse-args ["remove" "--id" "10"])]
-      (is (true? (:ok? result)))
-      (is (= :remove (:command result)))
-      (is (= 10 (get-in result [:options :id])))))
-
-  (testing "remove parses with uuid"
-    (let [result (commands/parse-args ["remove" "--uuid" "abc"])]
-      (is (true? (:ok? result)))
-      (is (= :remove (:command result)))
-      (is (= "abc" (get-in result [:options :uuid])))))
-
-  (testing "remove parses with page"
-    (let [result (commands/parse-args ["remove" "--page" "Home"])]
-      (is (true? (:ok? result)))
-      (is (= :remove (:command result)))
-      (is (= "Home" (get-in result [:options :page])))))
-
-  (testing "remove rejects multiple selectors"
-    (let [result (commands/parse-args ["remove" "--id" "1" "--page" "Home"])]
-      (is (false? (:ok? result)))
-      (is (= :invalid-options (get-in result [:error :code])))))
-
-  (testing "remove rejects empty id vector"
-    (let [result (commands/parse-args ["remove" "--id" "[]"])]
-      (is (false? (:ok? result)))
-      (is (= :invalid-options (get-in result [:error :code])))))
-
-  (testing "remove rejects invalid id vector"
-    (let [result (commands/parse-args ["remove" "--id" "[1 \"no\"]"])]
-      (is (false? (:ok? result)))
-      (is (= :invalid-options (get-in result [:error :code])))))
-
-  (testing "move requires source selector"
-    (let [result (commands/parse-args ["move" "--target-id" "10"])]
-      (is (false? (:ok? result)))
-      (is (= :missing-source (get-in result [:error :code])))))
-
-  (testing "move requires target selector"
-    (let [result (commands/parse-args ["move" "--id" "1"])]
-      (is (false? (:ok? result)))
-      (is (= :missing-target (get-in result [:error :code])))))
-
-  (testing "move parses with source and target"
-    (let [result (commands/parse-args ["move" "--uuid" "abc" "--target-uuid" "def" "--pos" "last-child"])]
-      (is (true? (:ok? result)))
-      (is (= :move-block (:command result)))
-      (is (= "abc" (get-in result [:options :uuid])))
-      (is (= "def" (get-in result [:options :target-uuid])))
-      (is (= "last-child" (get-in result [:options :pos]))))))
+      (is (= "{:logseq.property/publishing-public? true}" (get-in result [:options :properties]))))))
 
 (deftest test-verb-subcommand-parse-move-target-page
   (testing "move parses with target page"
@@ -775,6 +777,15 @@
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code])))))
 
+  (testing "add block accepts property title key"
+    (let [parsed (commands/parse-args ["add" "block"
+                                       "--content" "hello"
+                                       "--properties" "{\"Publishing Public?\" true}"])
+          result (commands/build-action parsed {:repo "demo"})]
+      (is (true? (:ok? result)))
+      (is (= :logseq.property/publishing-public?
+             (-> result :action :properties keys first)))))
+
   (testing "add block rejects non-public built-in property"
     (let [parsed (commands/parse-args ["add" "block"
                                        "--content" "hello"
@@ -790,6 +801,23 @@
           result (commands/build-action parsed {:repo "demo"})]
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code]))))))
+
+(deftest test-build-action-add-accepts-tag-ids
+  (testing "add block accepts numeric tag ids"
+    (let [parsed (commands/parse-args ["add" "block"
+                                       "--content" "hello"
+                                       "--tags" "[42]"])
+          result (commands/build-action parsed {:repo "demo"})]
+      (is (true? (:ok? result)))
+      (is (= [42] (get-in result [:action :tags]))))))
+
+(deftest test-tag-lookup-ref-accepts-id
+  (let [tag-lookup-ref #'add-command/tag-lookup-ref]
+    (is (= 42 (tag-lookup-ref 42)))))
+
+(deftest test-normalize-property-key-input-accepts-id
+  (let [normalize-property-key-input #'add-command/normalize-property-key-input]
+    (is (= {:type :id :value 42} (normalize-property-key-input 42)))))
 
 (deftest test-build-action-move
   (testing "move requires source selector"
