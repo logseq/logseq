@@ -84,7 +84,7 @@
    (when (state/enable-flashcards?)
      (shui/dropdown-menu-item
       {:key "Make a Card"
-       :on-click (fsrs/batch-make-cards!)}
+       :on-click #(fsrs/batch-make-cards!)}
       (t :context-menu/make-a-flashcard)))
 
    (shui/dropdown-menu-item
