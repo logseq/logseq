@@ -259,6 +259,26 @@
             (is (= "child 3" (:block/title (:block/parent child2'))))
             (is (= "parent" (:block/title (:block/parent child3'))))))))))
 
+(deftest hello-message-does-not-trigger-initial-asset-download-test
+  (let [called? (atom false)
+        client {:repo test-repo
+                :graph-id "graph-id"
+                :asset-queue (atom (p/resolved nil))
+                :inflight (atom [])
+                :ws {}}
+        raw (js/JSON.stringify (clj->js {:type "hello" :t 0}))]
+    (with-redefs [db-sync/enqueue-asset-initial-download!
+                  (fn [& _]
+                    (reset! called? true)
+                    (p/resolved nil))
+                  db-sync/enqueue-asset-sync! (fn [& _] (p/resolved nil))
+                  db-sync/flush-pending! (fn [& _] (p/resolved nil))
+                  db-sync/send! (fn [& _] nil)
+                  db-sync/broadcast-rtc-state! (fn [& _] nil)
+                  client-op/get-local-tx (fn [& _] 0)]
+      (#'db-sync/handle-message! test-repo client raw)
+      (is (false? @called?)))))
+
 (deftest ignore-missing-parent-update-after-local-delete-test
   (testing "remote parent retracted while local adds another child"
     (let [{:keys [conn client-ops-conn parent child1]} (setup-parent-child)
