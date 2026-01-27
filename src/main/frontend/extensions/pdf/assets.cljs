@@ -199,14 +199,20 @@
        :owner-window (pdf-windows/resolve-own-window viewer)))))
 
 (defn get-zotero-local-pdf-path
-  [path]
+  [path & {:keys [id]}]
   (let [zotero-config (get-in (state/sub-config) [:zotero/settings-v2 "default"])
         zotero-data-directory (:zotero-data-directory zotero-config)
         zotero-linked-attachment-base-directory (:zotero-linked-attachment-base-directory zotero-config)
         relative-path (subs path 14)]
-    (if (string/starts-with? path "zotero-link://")
-      (str zotero-linked-attachment-base-directory "/" relative-path)
-      (str zotero-data-directory "/storage/" relative-path))))
+    (cond
+      (string/starts-with? path "zotero-link://")
+      (str "file://" (util/node-path.join zotero-linked-attachment-base-directory relative-path))
+
+      (string/starts-with? path "zotero-path://")
+      (str "file://" (util/node-path.join zotero-data-directory "storage" relative-path))
+
+      :else ;; compatible with commit 33db791
+      (str "file://" (util/node-path.join zotero-data-directory "storage" id path)))))
 
 (defn db-based-open-block-ref!
   [block]
