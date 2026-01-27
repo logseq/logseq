@@ -6,6 +6,7 @@
             [clojure.string :as string]
             [frontend.test.node-helper :as node-helper]
             [logseq.cli.main :as cli-main]
+            [logseq.db.frontend.property :as db-property]
             [promesa.core :as p]))
 
 (defn- run-cli
@@ -42,12 +43,69 @@
   [node]
   (or (:block/children node) (:children node)))
 
+(defn- item-id
+  [item]
+  (or (:db/id item) (:id item)))
+
+(defn- item-title
+  [item]
+  (or (:block/title item) (:block/name item) (:title item) (:name item)))
+
 (defn- find-block-by-title
   [node title]
   (when node
     (if (= title (node-title node))
       node
       (some #(find-block-by-title % title) (node-children node)))))
+
+(defn- setup-tags-graph
+  [data-dir]
+  (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+          _ (fs/writeFileSync cfg-path "{:output-format :json}")
+          _ (run-cli ["graph" "create" "--repo" "tags-graph"] data-dir cfg-path)
+          _ (run-cli ["--repo" "tags-graph" "add" "page" "--page" "Home"] data-dir cfg-path)]
+    {:cfg-path cfg-path :repo "tags-graph"}))
+
+(defn- stop-repo!
+  [data-dir cfg-path repo]
+  (p/let [result (run-cli ["server" "stop" "--repo" repo] data-dir cfg-path)]
+    (parse-json-output result)))
+
+(defn- run-query
+  [data-dir cfg-path repo query inputs]
+  (p/let [result (run-cli ["--repo" repo "query" "--query" query "--inputs" inputs]
+                          data-dir cfg-path)]
+    (parse-json-output result)))
+
+(defn- query-tags
+  [data-dir cfg-path repo title]
+  (p/let [payload (run-query data-dir cfg-path repo
+                             "[:find ?tag :in $ ?title :where [?b :block/title ?title] [?b :block/tags ?t] [?t :block/title ?tag]]"
+                             (pr-str [title]))]
+    (->> (get-in payload [:data :result])
+         (map first)
+         set)))
+
+(defn- query-property
+  [data-dir cfg-path repo title property]
+  (p/let [payload (run-query data-dir cfg-path repo
+                             (str "[:find ?value :in $ ?title :where [?e :block/title ?title] [?e "
+                                  property
+                                  " ?value]]")
+                             (pr-str [title]))]
+    (first (first (get-in payload [:data :result])))))
+
+(defn- list-items
+  [data-dir cfg-path repo list-type]
+  (p/let [result (run-cli ["--repo" repo "list" list-type] data-dir cfg-path)]
+    (parse-json-output result)))
+
+(defn- find-item-id
+  [items title]
+  (->> items
+       (some (fn [item]
+               (when (= title (item-title item)) item)))
+       item-id))
 
 (deftest test-cli-graph-list
   (async done
@@ -127,13 +185,10 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-add-tags-and-properties
+(deftest test-cli-add-tags-and-properties-by-name
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-tags")]
-           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
-                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
-                       _ (run-cli ["graph" "create" "--repo" "tags-graph"] data-dir cfg-path)
-                       _ (run-cli ["--repo" "tags-graph" "add" "page" "--page" "Home"] data-dir cfg-path)
+           (-> (p/let [{:keys [cfg-path repo]} (setup-tags-graph data-dir)
                        add-page-result (run-cli ["--repo" "tags-graph"
                                                  "add" "page"
                                                  "--page" "TaggedPage"
@@ -149,49 +204,105 @@
                                                   "--properties" "{:logseq.property/deadline \"2026-01-25T12:00:00Z\"}"]
                                                  data-dir cfg-path)
                        add-block-payload (parse-json-output add-block-result)
-                       _ (p/delay 100)
-                       query-block-tags-result (run-cli ["--repo" "tags-graph"
-                                                         "query"
-                                                         "--query" "[:find ?tag :in $ ?title :where [?b :block/title ?title] [?b :block/tags ?t] [?t :block/title ?tag]]"
-                                                         "--inputs" "[\"Tagged block\"]"]
-                                                        data-dir cfg-path)
-                       query-block-tags-payload (parse-json-output query-block-tags-result)
-                       block-tag-names (->> (get-in query-block-tags-payload [:data :result])
-                                            (map first)
-                                            set)
-                       query-page-tags-result (run-cli ["--repo" "tags-graph"
-                                                        "query"
-                                                        "--query" "[:find ?tag :in $ ?title :where [?p :block/title ?title] [?p :block/tags ?t] [?t :block/title ?tag]]"
-                                                        "--inputs" "[\"TaggedPage\"]"]
+                       add-block-ident-result (run-cli ["--repo" "tags-graph"
+                                                        "add" "block"
+                                                        "--target-page-name" "Home"
+                                                        "--content" "Tagged block ident"
+                                                 "--tags" "[:logseq.class/Quote-block]"]
                                                        data-dir cfg-path)
-                       query-page-tags-payload (parse-json-output query-page-tags-result)
-                       page-tag-names (->> (get-in query-page-tags-payload [:data :result])
-                                           (map first)
-                                           set)
-                       query-page-result (run-cli ["--repo" "tags-graph"
-                                                   "query"
-                                                   "--query" "[:find ?value :in $ ?title :where [?p :block/title ?title] [?p :logseq.property/publishing-public? ?value]]"
-                                                   "--inputs" "[\"TaggedPage\"]"]
-                                                  data-dir cfg-path)
-                       query-page-payload (parse-json-output query-page-result)
-                       page-value (first (first (get-in query-page-payload [:data :result])))
-                       query-block-result (run-cli ["--repo" "tags-graph"
-                                                    "query"
-                                                    "--query" "[:find ?value :in $ ?title :where [?b :block/title ?title] [?b :logseq.property/deadline ?value]]"
-                                                    "--inputs" "[\"Tagged block\"]"]
+                       add-block-ident-payload (parse-json-output add-block-ident-result)
+                       deadline-prop-title (get-in db-property/built-in-properties [:logseq.property/deadline :title])
+                       publishing-prop-title (get-in db-property/built-in-properties [:logseq.property/publishing-public? :title])
+                       add-page-title-result (run-cli ["--repo" "tags-graph"
+                                                       "add" "page"
+                                                       "--page" "TaggedPageTitle"
+                                                       "--properties" (str "{\"" publishing-prop-title "\" true}")]
+                                                      data-dir cfg-path)
+                       add-page-title-payload (parse-json-output add-page-title-result)
+                       add-block-title-result (run-cli ["--repo" "tags-graph"
+                                                        "add" "block"
+                                                        "--target-page-name" "Home"
+                                                        "--content" "Tagged block title"
+                                                        "--properties" (str "{\"" deadline-prop-title "\" \"2026-01-25T12:00:00Z\"}")]
+                                                       data-dir cfg-path)
+                       add-block-title-payload (parse-json-output add-block-title-result)
+                       _ (p/delay 100)
+                       block-tag-names (query-tags data-dir cfg-path repo "Tagged block")
+                       block-ident-tag-names (query-tags data-dir cfg-path repo "Tagged block ident")
+                       page-tag-names (query-tags data-dir cfg-path repo "TaggedPage")
+                       page-value (query-property data-dir cfg-path repo "TaggedPage" ":logseq.property/publishing-public?")
+                       page-title-value (query-property data-dir cfg-path repo "TaggedPageTitle" ":logseq.property/publishing-public?")
+                       block-deadline (query-property data-dir cfg-path repo "Tagged block" ":logseq.property/deadline")
+                       block-deadline-title (query-property data-dir cfg-path repo "Tagged block title" ":logseq.property/deadline")
+                       stop-payload (stop-repo! data-dir cfg-path repo)]
+                (is (= 0 (:exit-code add-page-result)))
+                (is (= "ok" (:status add-page-payload)))
+                (is (= 0 (:exit-code add-block-result)))
+                (is (= "ok" (:status add-block-payload)))
+                (is (= 0 (:exit-code add-block-ident-result)))
+                (is (= "ok" (:status add-block-ident-payload)))
+                (is (string? deadline-prop-title))
+                (is (string? publishing-prop-title))
+                (is (= 0 (:exit-code add-page-title-result)))
+                (is (= "ok" (:status add-page-title-payload)))
+                (is (= 0 (:exit-code add-block-title-result)))
+                (is (= "ok" (:status add-block-title-payload)))
+                (is (contains? block-tag-names "Quote"))
+                (is (contains? block-ident-tag-names "Quote"))
+                (is (contains? page-tag-names "Quote"))
+                (is (true? page-value))
+                (is (true? page-title-value))
+                (is (number? block-deadline))
+                (is (number? block-deadline-title))
+                (is (= "ok" (:status stop-payload)))
+                (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
+(deftest test-cli-add-tags-and-properties-by-id
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-tags-id")]
+           (-> (p/let [{:keys [cfg-path repo]} (setup-tags-graph data-dir)
+                       list-tag-payload (list-items data-dir cfg-path repo "tag")
+                       quote-tag-id (find-item-id (get-in list-tag-payload [:data :items]) "Quote")
+                       list-property-payload (list-items data-dir cfg-path repo "property")
+                       deadline-title (get-in db-property/built-in-properties [:logseq.property/deadline :title])
+                       publishing-title (get-in db-property/built-in-properties [:logseq.property/publishing-public? :title])
+                       deadline-id (find-item-id (get-in list-property-payload [:data :items]) deadline-title)
+                       publishing-id (find-item-id (get-in list-property-payload [:data :items]) publishing-title)
+                       add-page-id-result (run-cli ["--repo" repo
+                                                    "add" "page"
+                                                    "--page" "TaggedPageId"
+                                                    "--tags" (pr-str [quote-tag-id])
+                                                    "--properties" (pr-str {publishing-id true})]
                                                    data-dir cfg-path)
-                       query-block-payload (parse-json-output query-block-result)
-                       block-deadline (first (first (get-in query-block-payload [:data :result])))
-                       stop-result (run-cli ["server" "stop" "--repo" "tags-graph"] data-dir cfg-path)
-                       stop-payload (parse-json-output stop-result)]
-                 (is (= 0 (:exit-code add-page-result)))
-                 (is (= "ok" (:status add-page-payload)))
-                 (is (= 0 (:exit-code add-block-result)))
-                 (is (= "ok" (:status add-block-payload)))
-                 (is (contains? block-tag-names "Quote"))
-                 (is (contains? page-tag-names "Quote"))
-                 (is (true? page-value))
-                 (is (number? block-deadline))
+                       add-page-id-payload (parse-json-output add-page-id-result)
+                       add-block-id-result (run-cli ["--repo" repo
+                                                     "add" "block"
+                                                     "--target-page-name" "Home"
+                                                     "--content" "Tagged block id"
+                                                     "--tags" (pr-str [quote-tag-id])
+                                                     "--properties" (pr-str {deadline-id "2026-01-25T12:00:00Z"})]
+                                                    data-dir cfg-path)
+                       add-block-id-payload (parse-json-output add-block-id-result)
+                       _ (p/delay 100)
+                       page-id-value (query-property data-dir cfg-path repo "TaggedPageId" ":logseq.property/publishing-public?")
+                       block-deadline-id (query-property data-dir cfg-path repo "Tagged block id" ":logseq.property/deadline")
+                       stop-payload (stop-repo! data-dir cfg-path repo)]
+                 (is (= "ok" (:status list-tag-payload)))
+                 (is (number? quote-tag-id))
+                 (is (= "ok" (:status list-property-payload)))
+                 (is (number? deadline-id))
+                 (is (number? publishing-id))
+                 (is (= 0 (:exit-code add-page-id-result))
+                     (pr-str (:error add-page-id-payload)))
+                 (is (= "ok" (:status add-page-id-payload)))
+                 (is (= 0 (:exit-code add-block-id-result))
+                     (pr-str (:error add-block-id-payload)))
+                 (is (= "ok" (:status add-block-id-payload)))
+                 (is (true? page-id-value))
+                 (is (number? block-deadline-id))
                  (is (= "ok" (:status stop-payload)))
                  (done))
                (p/catch (fn [e]
