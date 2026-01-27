@@ -427,6 +427,10 @@
   [editing-block-uuid]
   (db-sync/update-presence! editing-block-uuid))
 
+(def-thread-api :thread-api/db-sync-request-asset-download
+  [repo asset-uuid]
+  (db-sync/request-asset-download! repo asset-uuid))
+
 (def-thread-api :thread-api/db-sync-grant-graph-access
   [repo graph-id target-email]
   (db-sync/grant-graph-access! repo graph-id target-email))

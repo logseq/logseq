@@ -915,19 +915,39 @@
        [:a.asset-ref {:target "_blank" :href real-path-url}
         title-or-path])]))
 
+(defn- maybe-request-asset-download!
+  [state block]
+  (let [repo (state/get-current-repo)
+        file-exists? @(::file-exists? state)
+        requested? (get state ::download-requested?)
+        asset-file-write-finish @(get @state/state :assets/asset-file-write-finish)
+        asset-file-write-finished? (get-in asset-file-write-finish [repo (str (:block/uuid block))])
+        file-ready? (or file-exists? asset-file-write-finished?)]
+    (when (and (true? @requested?) file-ready?)
+      (reset! requested? false))
+    (when (and (not @requested?)
+               (assets-handler/maybe-request-remote-asset-download! repo block file-ready?))
+      (reset! requested? true)))
+  state)
+
 (rum/defcs asset-cp < rum/reactive
   (rum/local nil ::file-exists?)
+  (rum/local false ::download-requested?)
   {:will-mount (fn [state]
                  (let [block (last (:rum/args state))
                        asset-type (:logseq.property.asset/type block)
                        external-url? (not (string/blank? (:logseq.property.asset/external-url block)))
                        path (path/path-join common-config/local-assets-dir (str (:block/uuid block) "." asset-type))]
                    (p/let [result (if (or external-url? config/publishing?)
-                                                        ;; publishing doesn't have window.pfs defined
+                                    ;; publishing doesn't have window.pfs defined
                                     true
                                     (fs/file-exists? (config/get-repo-dir (state/get-current-repo)) path))]
                      (reset! (::file-exists? state) result))
-                   state))}
+                   state))
+   :did-mount (fn [state]
+                (maybe-request-asset-download! state (last (:rum/args state))))
+   :did-update (fn [state]
+                 (maybe-request-asset-download! state (last (:rum/args state))))}
   [state config block]
   (let [asset-type (:logseq.property.asset/type block)
         file (str (:block/uuid block) "." asset-type)
@@ -935,7 +955,22 @@
         repo (state/get-current-repo)
         asset-file-write-finished? (state/sub :assets/asset-file-write-finish
                                               {:path-in-sub-atom [repo (str (:block/uuid block))]})
-        asset-type (:logseq.property.asset/type block)
+        file-ready? (or file-exists? asset-file-write-finished?)
+        progress-entry (state/sub :rtc/asset-upload-download-progress
+                                  {:path-in-sub-atom [repo (str (:block/uuid block))]})
+        {:keys [direction loaded total]} progress-entry
+        in-progress? (and (number? loaded) (number? total) (pos? total) (not= loaded total))
+        percent (when in-progress?
+                  (int (* 100 (/ loaded total))))
+        label (case direction
+                :upload "Uploading"
+                :download "Downloading"
+                "Syncing")
+        progress-view (when in-progress?
+                        [:div.asset-transfer-progress
+                         [:div.asset-transfer-progress-label (str label " " percent "%")]
+                         [:div.asset-transfer-progress-bar
+                          [:span {:style {:width (str percent "%")}}]]])
         image? (contains? (common-config/img-formats) (keyword asset-type))
         width (get-in block [:logseq.property.asset/resize-metadata :width])
         asset-width (:logseq.property.asset/width block)
@@ -951,18 +986,24 @@
                             {:height (/ width aspect-ratio)}))))
         img-placeholder (when image?
                           [:div.img-placeholder.asset-container
-                           {:style img-metadata}])]
-    (cond
-      (or file-exists? asset-file-write-finished?)
-      (asset-link (assoc config
-                         :asset-block block
-                         :image-placeholder img-placeholder)
-                  (:block/title block)
-                  (path/path-join (str "../" common-config/local-assets-dir) file)
-                  img-metadata
-                  nil)
-      image?
-      img-placeholder)))
+                           {:style img-metadata}])
+        content (cond
+                  file-ready?
+                  (asset-link (assoc config
+                                     :asset-block block
+                                     :image-placeholder img-placeholder)
+                              (:block/title block)
+                              (path/path-join (str "../" common-config/local-assets-dir) file)
+                              img-metadata
+                              nil)
+                  image?
+                  img-placeholder)]
+    (if progress-view
+      [:div.asset-transfer-shell
+       (or content
+           [:div.asset-transfer-placeholder (str label " asset...")])
+       progress-view]
+      content)))
 
 (defn- img-audio-video?
   [block]

@@ -1249,3 +1249,23 @@ html.is-mac {
         }
     }
 }
+
+.asset-transfer-shell {
+  @apply relative inline-block w-full;
+}
+
+.asset-transfer-placeholder {
+  @apply text-sm text-gray-11 mt-2;
+}
+
+.asset-transfer-progress {
+  @apply absolute left-2 right-2 bottom-2 rounded-md px-2 py-1 text-xs text-white bg-black/60 flex flex-col gap-1;
+}
+
+.asset-transfer-progress-bar {
+  @apply w-full h-1 rounded bg-white/30 overflow-hidden;
+
+  > span {
+    @apply block h-full bg-white;
+  }
+}
