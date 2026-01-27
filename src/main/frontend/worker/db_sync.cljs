@@ -1129,9 +1129,7 @@
 (defn- apply-remote-tx-with-local-changes!
   [{:keys [conn local-txs reversed-tx-data safe-remote-tx-data remote-deleted-blocks
            temp-tx-meta *remote-tx-report *reversed-tx-report *remote-deleted-ids *rebase-tx-data]}]
-  (let [batch-tx-meta {:rtc-tx? true
-                       ;; Reverse/rebase batches can temporarily violate block schema.
-                       :skip-validate-db? true}]
+  (let [batch-tx-meta {:rtc-tx? true}]
     (ldb/transact-with-temp-conn!
      conn
      batch-tx-meta
@@ -1158,11 +1156,11 @@
                                                        (set (map :block/uuid local-deleted-blocks)))]
                                   (when (seq rebased-tx-data)
                                     (ldb/transact! temp-conn rebased-tx-data (assoc tx-meta :op :rebase)))))
-             ;; 4. delete nodes and fix tx data
+             ;; 4. fix tx data and delete nodes
              db @temp-conn
              deleted-nodes (keep (fn [id] (d/entity db [:block/uuid id])) deleted-ids)]
-         (delete-nodes! temp-conn deleted-nodes (assoc tx-meta :op :delete-blocks))
-         (fix-tx! temp-conn remote-tx-report rebase-tx-report (assoc tx-meta :op :fix))))
+         (fix-tx! temp-conn remote-tx-report rebase-tx-report (assoc tx-meta :op :fix))
+         (delete-nodes! temp-conn deleted-nodes (assoc tx-meta :op :delete-blocks))))
      {:listen-db (fn [{:keys [tx-meta tx-data]}]
                    (when-not (contains? #{:reverse :transact-remote-tx-data} (:op tx-meta))
                      (swap! *rebase-tx-data into tx-data)))})))
