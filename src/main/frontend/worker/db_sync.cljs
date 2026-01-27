@@ -763,6 +763,7 @@
             (take 3 item)
             item)))))
 
+;; Is `ensure-block-parents` really needed?
 (defn- ensure-block-parents
   "Ensure block entities don't lose :block/parent without becoming pages."
   [db tx-data]
@@ -994,7 +995,12 @@
         (if (empty? ops)
           nil
           (p/do!
-           (process-asset-op! repo graph-id (first ops))
+           (-> (process-asset-op! repo graph-id (first ops))
+               (p/catch (fn [e]
+                          (log/error :db-sync/asset-op-failed
+                                     {:repo repo
+                                      :asset-uuid (:block/uuid (first ops))
+                                      :error e}))))
            (p/recur (rest ops)))))
       (p/resolved nil))))
 
@@ -1016,14 +1022,25 @@
                                          ent (when conn (d/entity @conn [:block/uuid asset-uuid]))
                                          asset-type (:logseq.property.asset/type ent)]
                                      (p/do!
-                                      (when (seq asset-type)
-                                        (p/let [meta (worker-state/<invoke-main-thread
-                                                      :thread-api/get-asset-file-metadata
-                                                      repo (str asset-uuid) asset-type)]
-                                          (when (nil? meta)
-                                            (download-remote-asset! repo graph-id asset-uuid asset-type))))
+                                      (-> (p/let [meta (when (seq asset-type)
+                                                         (worker-state/<invoke-main-thread
+                                                          :thread-api/get-asset-file-metadata
+                                                          repo (str asset-uuid) asset-type))]
+                                            (when (and (seq asset-type) (nil? meta))
+                                              (download-remote-asset! repo graph-id asset-uuid asset-type)))
+                                          (p/catch (fn [e]
+                                                     (log/error :db-sync/asset-download-failed
+                                                                {:repo repo
+                                                                 :asset-uuid asset-uuid
+                                                                 :error e}))))
                                       (p/recur (rest uuids))))))
                                (p/resolved nil)))))))
+
+(defn request-asset-download!
+  [repo asset-uuid]
+  (if-let [client (current-client repo)]
+    (enqueue-asset-downloads! repo client [asset-uuid])
+    (p/resolved nil)))
 
 (defn- enqueue-asset-initial-download!
   [repo client]
@@ -1270,7 +1287,6 @@
                   (when (> remote-tx local-tx)
                     (send! (:ws client) {:type "pull" :since local-tx}))
                   (enqueue-asset-sync! repo client)
-                  (enqueue-asset-initial-download! repo client)
                   (flush-pending! repo client))
         "online-users" (let [users (:online-users message)]
                          (when (and (some? users) (not (sequential? users)))
@@ -1394,8 +1410,7 @@
             (reset-reconnect! updated)
             (set-ws-state! updated :open)
             (send! ws {:type "hello" :client repo})
-            (enqueue-asset-sync! repo updated)
-            (enqueue-asset-initial-download! repo updated)))
+            (enqueue-asset-sync! repo updated)))
     (start-pull-loop! updated ws)))
 
 (defn stop!

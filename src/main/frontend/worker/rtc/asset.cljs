@@ -135,7 +135,10 @@
                     (when-let [edata (ex-data e)]
                       ;; if download-url return 404, ignore this asset
                       (when (not= 404 (:status (:data edata)))
-                        (throw (ex-info "download asset error(not= 404)" e)))) ()))))
+                        (log/error :rtc/asset-download-failed
+                                   {:repo repo
+                                    :asset-uuid asset-uuid
+                                    :error e}))) ()))))
 
             (c.m/concurrent-exec-flow 5 (m/seed asset-uuid->url))
             (m/reduce (constantly nil)))))))
