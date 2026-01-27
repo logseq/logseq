@@ -363,28 +363,27 @@
                             (:db/id block))
                           (dec (- idx)))]
             (if replacing-block?
-              (if (seq (:block/_parent target-block)) ; target-block has children
-                              ;; update block properties
-                [(assoc block
-                        :db/id (:db/id target-block)
-                        :block/uuid (:block/uuid target-block))]
-                (let [old-property-values (d/q
-                                           '[:find ?b ?a
-                                             :in $ ?v
-                                             :where
-                                             [?b ?a ?v]
-                                             [?v :block/uuid]]
-                                           db
-                                           (:db/id target-block))
-                      from-property (:logseq.property/created-from-property target-block)]
-                  (concat
-                   [[:db/retractEntity (:db/id target-block)] ; retract target-block first
-                    (cond-> (assoc block :db/id db-id)
-                      from-property
-                      (assoc :logseq.property/created-from-property (:db/id from-property)))]
-                   (map (fn [[b a]]
-                          [:db/add b a db-id])
-                        old-property-values))))
+              (let [block' (assoc block
+                                  :db/id (:db/id target-block)
+                                  :block/uuid (:block/uuid target-block))]
+                (if (seq (:block/_parent target-block)) ; target-block has children
+                  [block']
+                  (let [old-property-values (d/q
+                                             '[:find ?b ?a
+                                               :in $ ?v
+                                               :where
+                                               [?b ?a ?v]
+                                               [?v :block/uuid]]
+                                             db
+                                             (:db/id target-block))
+                        from-property (:logseq.property/created-from-property target-block)]
+                    (concat
+                     [(cond-> block'
+                        from-property
+                        (assoc :logseq.property/created-from-property (:db/id from-property)))]
+                     (map (fn [[b a]]
+                            [:db/add b a db-id])
+                          old-property-values)))))
               [(assoc block :db/id db-id)]))))
        (apply concat)))
 
