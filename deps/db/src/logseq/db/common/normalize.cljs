@@ -79,31 +79,20 @@
        3))
    datoms))
 
-(defn remove-deleted-add-datoms
-  [db tx-data]
-  (let [deleted (->>
-                 (keep
-                  (fn [d]
-                    (when (and (false? (:added d))
-                               (= :block/uuid (:a d))
-                               (nil? (d/entity db (:e d))))
-                      [(:e d) (:v d)]))
-                  tx-data))
-        deleted-eids (set (map first deleted))
-        deleted-uuids (set (map (fn [item] [:block/uuid (second item)]) deleted))]
-    (if (seq deleted-eids)
-      (remove (fn [d]
-                (or (and (:added d) (contains? deleted-eids (:e d)))
-                    (and (not (= (:a d) :block/uuid))
-                         (or
-                          (contains? deleted-uuids (:e d))
-                          (contains? deleted-uuids (:v d)))))) tx-data)
-      tx-data)))
+(defn remove-conflict-datoms
+  [datoms]
+  (->> datoms
+       (group-by (fn [d] (take 4 d))) ; group by '(e a v tx)
+       (keep (fn [[_eavt same-eavt-datoms]]
+               (first (rseq same-eavt-datoms))))
+       ;; sort by :tx, use nth to make this fn works on both vector and datom
+       (sort-by #(nth % 3))))
 
 (defn normalize-tx-data
   [db-after db-before tx-data]
   (->> tx-data
-       (remove-deleted-add-datoms db-after)
+       remove-conflict-datoms
+       ;; (remove-deleted-add-datoms db-after)
        replace-attr-retract-with-retract-entity
        sort-datoms
        (keep
