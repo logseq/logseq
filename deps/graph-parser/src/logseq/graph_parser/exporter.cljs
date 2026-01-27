@@ -1288,18 +1288,18 @@
                (and zotero-asset? asset-name) (string/replace path #"[^/]+$" asset-name)
                :else path)
         asset-link-or-name (or link asset-name)
-        external-props (when zotero-asset?
-                         (if linked-path
-                           {:zotero-linked-file linked-relative}
-                           {:zotero-imported-file (string/join ns-util/namespace-char [(last (string/split link #"/")) asset-name])}))]
+        asset-path (when zotero-asset?
+                     (if linked-path
+                       (str "zotero-link://" linked-relative)
+                       (str "zotero-path://" (string/join ns-util/namespace-char [(last (string/split link #"/")) asset-name]))))]
     {:asset-link-or-name asset-link-or-name
      :asset-name asset-name
-     :external-props external-props
+     :asset-path asset-path
      :path path
      :zotero-asset? zotero-asset?}))
 
 (defn- ensure-asset-data!
-  [assets asset-link-or-name path asset-name external-props <get-file-stat]
+  [assets asset-link-or-name path asset-path <get-file-stat]
   (when (and asset-link-or-name
              (not (get @assets asset-link-or-name))
              (string/ends-with? path ".pdf")
@@ -1312,8 +1312,7 @@
                   :checksum "0000000000000000000000000000000000000000000000000000000000000000"
                   :size (.-size stat)
                   :external-url (or asset-link-or-name path)
-                  :external-file-name asset-name
-                  :external-props external-props}))
+                  :external-file-name asset-path}))
         (p/catch (fn [error]
                    (js/console.error error))))))
 
@@ -1346,9 +1345,9 @@
     (if (seq asset-links)
       (p/let [asset-maps* (p/all (map
                                   (fn [asset-link]
-                                    (p/let [{:keys [asset-link-or-name asset-name external-props path zotero-asset?]}
+                                    (p/let [{:keys [asset-link-or-name asset-name asset-path path zotero-asset?]}
                                             (resolve-asset-data asset-link user-config linked-files linked-base-dir zotero-imported-files)
-                                            _ (ensure-asset-data! assets asset-link-or-name path asset-name external-props <get-file-stat)
+                                            _ (ensure-asset-data! assets asset-link-or-name path asset-path <get-file-stat)
                                             asset-data (when asset-link-or-name (get @assets asset-link-or-name))]
                                       (if asset-data
                                         (cond
