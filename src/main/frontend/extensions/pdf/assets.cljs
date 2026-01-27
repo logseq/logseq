@@ -199,13 +199,14 @@
        :owner-window (pdf-windows/resolve-own-window viewer)))))
 
 (defn- get-zotero-local-pdf-path
-  [{:keys [zotero-linked-file zotero-imported-file]}]
+  [path]
   (let [zotero-config (get-in (state/sub-config) [:zotero/settings-v2 "default"])
         zotero-data-directory (:zotero-data-directory zotero-config)
-        zotero-linked-attachment-base-directory (:zotero-linked-attachment-base-directory zotero-config)]
-    (if zotero-linked-file
-      (str zotero-linked-attachment-base-directory "/" zotero-linked-file)
-      (str zotero-data-directory "/storage/" zotero-imported-file))))
+        zotero-linked-attachment-base-directory (:zotero-linked-attachment-base-directory zotero-config)
+        relative-path (subs path 14)]
+    (if (string/starts-with? path "zotero-link://")
+      (str zotero-linked-attachment-base-directory "/" relative-path)
+      (str zotero-data-directory "/storage/" relative-path))))
 
 (defn db-based-open-block-ref!
   [block]
@@ -214,7 +215,7 @@
         external-url (:logseq.property.asset/external-url asset)
         file-path (or external-url (str "../assets/" (:block/uuid asset) ".pdf"))
         file-path (if (string/starts-with? file-path "zotero://")
-                    (get-zotero-local-pdf-path (:logseq.property.asset/external-props asset))
+                    (get-zotero-local-pdf-path (:logseq.property.asset/external-file-name asset))
                     file-path)]
     (if asset
       (->
