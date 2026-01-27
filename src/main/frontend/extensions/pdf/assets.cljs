@@ -198,7 +198,7 @@
        (ref/->block-ref (:block/uuid ref-block))
        :owner-window (pdf-windows/resolve-own-window viewer)))))
 
-(defn- get-zotero-local-pdf-path
+(defn get-zotero-local-pdf-path
   [path]
   (let [zotero-config (get-in (state/sub-config) [:zotero/settings-v2 "default"])
         zotero-data-directory (:zotero-data-directory zotero-config)
