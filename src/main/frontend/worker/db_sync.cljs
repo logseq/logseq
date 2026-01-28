@@ -697,15 +697,6 @@
     (fail-fast :db-sync/missing-field
                (merge {:repo repo :field field :value value} context))))
 
-(defn- asset-uuids-from-tx [db tx-data]
-  (->> tx-data
-       (keep (fn [datom]
-               (when (and (:added datom)
-                          (= :logseq.property.asset/size (:a datom)))
-                 (when-let [ent (d/entity db (:e datom))]
-                   (:block/uuid ent)))))
-       (distinct)))
-
 (defn- persist-local-tx! [repo normalized-tx-data reversed-datoms _tx-meta]
   (when-let [conn (client-ops-conn repo)]
     (let [tx-id (random-uuid)
@@ -960,40 +951,24 @@
 (defn- enqueue-asset-sync! [repo client]
   (enqueue-asset-task! client #(process-asset-ops! repo client)))
 
-(defn- enqueue-asset-downloads!
-  [repo client asset-uuids]
-  (when (seq asset-uuids)
-    (enqueue-asset-task! client
-                         (fn []
-                           (let [graph-id (:graph-id client)]
-                             (if (seq graph-id)
-                               (p/loop [uuids (distinct asset-uuids)]
-                                 (if (empty? uuids)
-                                   nil
-                                   (let [asset-uuid (first uuids)
-                                         conn (worker-state/get-datascript-conn repo)
-                                         ent (when conn (d/entity @conn [:block/uuid asset-uuid]))
-                                         asset-type (:logseq.property.asset/type ent)]
-                                     (p/do!
-                                      (-> (p/let [meta (when (seq asset-type)
-                                                         (worker-state/<invoke-main-thread
-                                                          :thread-api/get-asset-file-metadata
-                                                          repo (str asset-uuid) asset-type))]
-                                            (when (and (seq asset-type) (nil? meta))
-                                              (download-remote-asset! repo graph-id asset-uuid asset-type)))
-                                          (p/catch (fn [e]
-                                                     (log/error :db-sync/asset-download-failed
-                                                                {:repo repo
-                                                                 :asset-uuid asset-uuid
-                                                                 :error e}))))
-                                      (p/recur (rest uuids))))))
-                               (p/resolved nil)))))))
-
 (defn request-asset-download!
   [repo asset-uuid]
-  (if-let [client (current-client repo)]
-    (enqueue-asset-downloads! repo client [asset-uuid])
-    (p/resolved nil)))
+  (when-let [client (current-client repo)]
+    (let [conn (worker-state/get-datascript-conn repo)
+          graph-id (:graph-id client)
+          ent (when conn (d/entity @conn [:block/uuid asset-uuid]))
+          asset-type (:logseq.property.asset/type ent)]
+      (-> (p/let [meta (when (seq asset-type)
+                         (worker-state/<invoke-main-thread
+                          :thread-api/get-asset-file-metadata
+                          repo (str asset-uuid) asset-type))]
+            (when (and (seq asset-type) (nil? meta))
+              (download-remote-asset! repo graph-id asset-uuid asset-type)))
+          (p/catch (fn [e]
+                     (log/error :db-sync/asset-download-failed
+                                {:repo repo
+                                 :asset-uuid asset-uuid
+                                 :error e})))))))
 
 (defn- get-local-deleted-blocks
   [reversed-tx-report reversed-tx-data]
@@ -1174,11 +1149,6 @@
             (when (seq normalized-tx-data)
               (persist-local-tx! repo normalized-tx-data reversed-datoms {:op :rtc-rebase}))))
         (remove-pending-txs! repo (map :tx-id local-txs)))
-
-      (when tx-report
-        (let [asset-uuids (asset-uuids-from-tx @conn (:tx-data tx-report))]
-          (when (seq asset-uuids)
-            (enqueue-asset-downloads! repo client asset-uuids))))
 
       (when-let [*inflight (:inflight client)]
         (reset! *inflight []))
