@@ -270,10 +270,8 @@
                                 total' (+ total (count rows))
                                 total-rows' (into total-rows rows)]
                             (when (seq total-rows')
-                              (p/do!
-                               (state/<invoke-db-worker :thread-api/db-sync-import-kvs-rows
-                                                        graph total-rows' true graph-uuid)
-                               (state/<invoke-db-worker :thread-api/db-sync-finalize-kvs-import graph remote-tx)))
+                              (state/<invoke-db-worker :thread-api/db-sync-import-kvs-rows
+                                                       graph total-rows' true graph-uuid remote-tx))
                             total')
                           (let [value (.-value chunk)
                                 {:keys [rows buffer]} (parse-framed-chunk buffer value)
