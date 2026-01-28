@@ -268,7 +268,7 @@
       (and uuid graph-uuid (publish-model/page-entity? entity))
       [[:a.page-ref {:href (str "/page/" graph-uuid "/" uuid)} title]]
       (common-util/url? title)
-      [:a {:href title} title]
+      [[:a {:href title} title]]
       :else
       [title])))
 
