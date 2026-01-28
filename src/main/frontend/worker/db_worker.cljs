@@ -423,7 +423,7 @@
 
 (def-thread-api :thread-api/db-sync-grant-graph-access
   [repo graph-id target-email]
-  (db-sync/grant-graph-access! repo graph-id target-email))
+  (db-sync/<grant-graph-access! repo graph-id target-email))
 
 (def-thread-api :thread-api/db-sync-ensure-user-rsa-keys
   []
@@ -643,10 +643,10 @@
 (def-thread-api :thread-api/db-sync-import-kvs-rows
   [repo rows reset? graph-id remote-tx]
   (p/let [_ (when reset? (close-db! repo))
-          db (ensure-db-sync-import-db! repo reset?)
           aes-key (db-sync/<fetch-graph-aes-key-for-download repo graph-id)
           _ (when (nil? aes-key)
               (db-sync/fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
+          db (ensure-db-sync-import-db! repo reset?)
           batches (medley/indexed (partition-all 100 rows))]
     (rtc-log-and-state/rtc-log :rtc.log/download
                                {:sub-type :download-progress
