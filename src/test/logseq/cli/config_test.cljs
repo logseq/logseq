@@ -5,6 +5,7 @@
             [goog.object :as gobj]
             [logseq.cli.config :as config]
             ["fs" :as fs]
+            ["os" :as os]
             ["path" :as node-path]))
 
 (defn- with-env
@@ -76,6 +77,12 @@
   (let [result (config/resolve-config {:output-format :edn
                                        :output "json"})]
     (is (= :edn (:output-format result)))))
+
+(deftest test-default-paths
+  (let [result (config/resolve-config {})
+        expected-config-path (node-path/join (.homedir os) "logseq" "cli.edn")]
+    (is (= expected-config-path (:config-path result)))
+    (is (= "~/logseq/cli-graphs" (:data-dir result)))))
 
 (deftest test-update-config
   (let [dir (node-helper/create-tmp-dir "cli")
