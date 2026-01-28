@@ -351,6 +351,11 @@
   (assert (and k @e2ee-store))
   (idb-keyval/set k value @e2ee-store))
 
+(defn- <clear-item!
+  [k]
+  (assert (and k @e2ee-store))
+  (idb-keyval/del k @e2ee-store))
+
 (defn e2ee-base
   []
   (http-base-url))
@@ -471,10 +476,12 @@
 
 (defn <fetch-graph-aes-key-for-download
   [repo graph-id]
-  (let [base (e2ee-base)]
+  (let [base (e2ee-base)
+        aes-key-k (graph-encrypted-aes-key-idb-key graph-id)]
     (when-not (and (string? base) (string? graph-id))
       (fail-fast :db-sync/missing-field {:base base :graph-id graph-id}))
     (p/let [{:keys [public-key encrypted-private-key]} (<fetch-user-rsa-key-pair-raw base)]
+      (<clear-item! aes-key-k)
       (when-not (and (string? public-key) (string? encrypted-private-key))
         (fail-fast :db-sync/missing-field {:graph-id graph-id :field :user-rsa-key-pair}))
       (p/let [private-key (<decrypt-private-key encrypted-private-key)
@@ -487,12 +494,12 @@
         (when-not encrypted-aes-key
           (fail-fast :db-sync/missing-field {:graph-id graph-id :field :encrypted-aes-key}))
         (when (and encrypted-aes-key (nil? local-encrypted))
-          (<set-item! (graph-encrypted-aes-key-idb-key graph-id) encrypted-aes-key))
+          (<set-item! aes-key-k encrypted-aes-key))
         (p/let [aes-key (crypt/<decrypt-aes-key private-key encrypted-aes-key)]
           (swap! *repo->aes-key assoc repo aes-key)
           aes-key)))))
 
-(defn- <grant-graph-access!
+(defn <grant-graph-access!
   [repo graph-id target-email]
   (if-not (graph-e2ee? repo)
     (p/resolved nil)
@@ -521,10 +528,6 @@
                                  :body (js/JSON.stringify (clj->js body))}
                                 {:response-schema :e2ee/grant-access})]
             nil))))))
-
-(defn grant-graph-access!
-  [repo graph-id target-email]
-  (<grant-graph-access! repo graph-id target-email))
 
 (defn- <encrypt-text-value
   [aes-key value]
