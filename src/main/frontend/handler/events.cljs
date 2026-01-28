@@ -76,8 +76,11 @@
    (graph-switch graph)
    (state/set-state! :sync-graph/init? false)
    (when (:rtc-download? opts)
-     (and (search-handler/rebuild-indices!) true)
-     (repo-handler/refresh-repos!))))
+     (repo-handler/refresh-repos!)
+     (p/do!
+      (p/delay 5000)
+      ;; TODO: search should be lazy computed
+      (search-handler/rebuild-indices!)))))
 
 (defmethod handle :graph/switch [[_ graph opts]]
   (let [switch-promise
