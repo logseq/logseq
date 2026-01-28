@@ -10,12 +10,12 @@
           :coerce :boolean}
    :version {:desc "Show version"
              :coerce :boolean}
-   :config {:desc "Path to cli.edn"}
+   :config {:desc "Path to cli.edn (default ~/logseq/cli.edn)"}
    :repo {:desc "Graph name"}
-   :data-dir {:desc "Path to db-worker data dir"}
-   :timeout-ms {:desc "Request timeout in ms"
+   :data-dir {:desc "Path to db-worker data dir (default ~/logseq/cli-graphs)"}
+   :timeout-ms {:desc "Request timeout in ms (default 10000)"
                 :coerce :long}
-   :output {:desc "Output format (human, json, edn)"}})
+   :output {:desc "Output format (human, json, edn). Default: human"}})
 
 (defn global-spec
   []
