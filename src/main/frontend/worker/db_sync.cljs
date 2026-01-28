@@ -201,7 +201,7 @@
       (when-not (= coerced invalid-coerce)
         coerced))))
 
-(defn- fail-fast [tag data]
+(defn fail-fast [tag data]
   (log/error tag data)
   (throw (ex-info (name tag) data)))
 
@@ -469,7 +469,7 @@
           (swap! *repo->aes-key assoc repo aes-key)
           aes-key)))))
 
-(defn- <fetch-graph-aes-key-for-download
+(defn <fetch-graph-aes-key-for-download
   [repo graph-id]
   (let [base (e2ee-base)]
     (when-not (and (string? base) (string? graph-id))
@@ -590,30 +590,21 @@
                      [e a v' t])
                    (p/resolved [e a v t]))) keys)))
 
-(defn- <decrypt-snapshot-rows
-  [aes-key rows]
-  (if-not (seq rows)
-    (p/resolved [])
-    (p/let [items (p/all
-                   (mapv (fn [[addr content addresses]]
-                           (let [data (ldb/read-transit-str content)]
-                             (p/let [keys' (if (map? data) ; node
-                                             (<decrypt-keys-attrs aes-key (:keys data))
-                                             ;; leaf
-                                             (p/let [result (p/all (map #(<decrypt-keys-attrs aes-key %) data))]
-                                               (vec result)))
-                                     data' (if (map? data) (assoc data :keys keys') keys')
-                                     content' (ldb/write-transit-str data')]
-                               [addr content' addresses])))
-                         rows))]
-      (vec items))))
+(defn- <decrypt-snapshot-row
+  [aes-key [addr content addresses]]
+  (p/let [data (ldb/read-transit-str content)
+          keys' (if (map? data)
+                  (<decrypt-keys-attrs aes-key (:keys data))
+                  (p/let [result (p/all (map #(<decrypt-keys-attrs aes-key %) data))]
+                    ;; if you truly need a vector:
+                    (vec result)))
+          data' (if (map? data) (assoc data :keys keys') keys')
+          content' (ldb/write-transit-str data')]
+    [addr content' addresses]))
 
-(defn <decrypt-kvs-rows
-  [repo graph-id rows]
-  (p/let [aes-key (<fetch-graph-aes-key-for-download repo graph-id)
-          _ (when (nil? aes-key)
-              (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))]
-    (<decrypt-snapshot-rows aes-key rows)))
+(defn <decrypt-snapshot-rows-batch
+  [aes-key rows-batch]
+  (p/all (map #(<decrypt-snapshot-row aes-key %) rows-batch)))
 
 (defn- <encrypt-datoms
   [aes-key datoms]

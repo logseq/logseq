@@ -58,6 +58,7 @@
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
             [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]
+            [medley.core :as medley]
             [missionary.core :as m]
             [promesa.core :as p]))
 
@@ -69,7 +70,6 @@
 (defonce *client-ops-conns worker-state/*client-ops-conns)
 (defonce *opfs-pools worker-state/*opfs-pools)
 (defonce *publishing? (atom false))
-(defonce *db-sync-import-dbs (atom {}))
 
 (defn- check-worker-scope!
   []
@@ -138,16 +138,14 @@
 
 (defn- ensure-db-sync-import-db!
   [repo reset?]
-  (p/let [^js pool (<get-opfs-pool repo)
-          ^js db (or (get @*db-sync-import-dbs repo)
-                     (let [^js db (new (.-OpfsSAHPoolDb pool) repo-path)]
-                       (swap! *db-sync-import-dbs assoc repo db)
-                       db))]
-    (enable-sqlite-wal-mode! db)
-    (common-sqlite/create-kvs-table! db)
-    (when reset?
-      (.exec db "delete from kvs"))
-    db))
+  (if-let [sqlite @*sqlite]
+    (let [^js DB (.-DB ^js (.-oo1 sqlite))
+          ^js db (new DB ":memory:" "c")]
+      (common-sqlite/create-kvs-table! db)
+      (when reset?
+        (.exec db "delete from kvs"))
+      db)
+    (db-sync/fail-fast :db-sync/missing-field {:repo repo :field :sqlite})))
 
 (defn restore-data-from-addr
   "Update sqlite-cli/restore-data-from-addr when making changes"
@@ -218,16 +216,6 @@
                                          s))]
       (d/reset-conn! conn new-db' {:reset-conn! true})
       (d/reset-schema! conn (:schema new-db)))))
-
-(defn reset-db-from-datoms!
-  [repo datoms]
-  (p/do!
-   ((@thread-api/*thread-apis :thread-api/create-or-open-db) repo
-                                                             {:close-other-db? false
-                                                              :datoms datoms
-                                                              :db-sync-download-graph? true})
-   ((@thread-api/*thread-apis :thread-api/export-db) repo)
-   (shared-service/broadcast-to-clients! :add-repo {:repo repo})))
 
 (defn- get-dbs
   [repo]
@@ -614,46 +602,45 @@
   (reset-db! repo db-transit)
   nil)
 
-(def-thread-api :thread-api/db-sync-reset-from-datoms
-  [repo datoms]
-  (reset-db-from-datoms! repo datoms)
-  nil)
-
-(def-thread-api :thread-api/db-sync-import-kvs-rows
-  [repo rows reset? graph-id]
-  (p/let [_ (when reset?
-              (close-db! repo))
-          rows* (db-sync/<decrypt-kvs-rows repo graph-id rows)
-          db (ensure-db-sync-import-db! repo reset?)]
-    (when (seq rows*)
-      (upsert-addr-content! db (rows->sqlite-binds rows*)))
-    nil))
-
-(def-thread-api :thread-api/db-sync-finalize-kvs-import
-  [repo remote-tx]
-  (-> (p/let [^js db (get @*db-sync-import-dbs repo)]
-        (.close db)
-        (swap! *db-sync-import-dbs dissoc repo)
-        ((@thread-api/*thread-apis :thread-api/create-or-open-db) repo {:close-other-db? true})
-        (let [conn (worker-state/get-datascript-conn repo)
-              datoms (d/datoms @conn :eavt)
-              new-conn (d/conn-from-datoms datoms (:schema @conn))
-              new-db (update @new-conn :eavt (fn [^BTSet s]
-                                               (set! (.-storage s) (.-storage (:eavt @conn)))
-                                               s))]
-          (d/reset-conn! conn new-db {:rtc-tx? true}))
-        ((@thread-api/*thread-apis :thread-api/export-db) repo)
-        (client-op/update-local-tx repo remote-tx)
-        (shared-service/broadcast-to-clients! :add-repo {:repo repo}))
-      (p/catch (fn [error]
-                 (js/console.error error)))))
-
-(def-thread-api :thread-api/unsafe-unlink-db
+(defn- <unlink-db!
   [repo]
   (p/let [pool (<get-opfs-pool repo)
           _ (close-db! repo)
           _result (remove-vfs! pool)]
     nil))
+
+(def-thread-api :thread-api/unsafe-unlink-db
+  [repo]
+  (<unlink-db! repo))
+
+(defn- import-datoms-to-db!
+  [repo remote-tx datoms]
+  (-> (p/do!
+       ((@thread-api/*thread-apis :thread-api/create-or-open-db) repo {:close-other-db? true
+                                                                       :datoms datoms})
+       ((@thread-api/*thread-apis :thread-api/export-db) repo)
+       (client-op/update-local-tx repo remote-tx)
+       (shared-service/broadcast-to-clients! :add-repo {:repo repo}))
+      (p/catch (fn [error]
+                 (js/console.error error)))))
+
+(def-thread-api :thread-api/db-sync-import-kvs-rows
+  [repo rows reset? graph-id remote-tx]
+  (p/let [_ (when reset? (close-db! repo))
+          db (ensure-db-sync-import-db! repo reset?)
+          aes-key (db-sync/<fetch-graph-aes-key-for-download repo graph-id)
+          _ (when (nil? aes-key)
+              (db-sync/fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
+          batches (medley/indexed (partition-all 100 rows))]
+    ;; sequential batches: low memory
+    (p/doseq [batch batches]
+      (p/let [dec-rows (db-sync/<decrypt-snapshot-rows-batch aes-key batch)]
+        (upsert-addr-content! db (rows->sqlite-binds dec-rows))))
+    (let [storage (new-sqlite-storage db)
+          conn (common-sqlite/get-storage-conn storage db-schema/schema)
+          datoms (vec (d/datoms @conn :eavt))]
+      (.close db)
+      (import-datoms-to-db! repo remote-tx datoms))))
 
 (def-thread-api :thread-api/release-access-handles
   [repo]
