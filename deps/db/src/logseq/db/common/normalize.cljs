@@ -37,13 +37,15 @@
        (remove-retract-entity-ref db)))
 
 (defn replace-attr-retract-with-retract-entity
-  [tx-data]
+  [db-after tx-data]
   (let [e-datoms (->> (group-by first tx-data)
                       (sort-by first))]
     (mapcat
      (fn [[_e datoms]]
        (if-let [d (some (fn [d]
-                          (when (and (= :block/uuid (:a d)) (false? (:added d)))
+                          (when (and (= :block/uuid (:a d))
+                                     (false? (:added d))
+                                     (nil? (d/entity db-after [:block/uuid (:v d)])))
                             d)) datoms)]  ; retract entity
          [[:db/retractEntity [:block/uuid (:v d)]]]
          datoms))
@@ -92,8 +94,7 @@
   [db-after db-before tx-data]
   (->> tx-data
        remove-conflict-datoms
-       ;; (remove-deleted-add-datoms db-after)
-       replace-attr-retract-with-retract-entity
+       (replace-attr-retract-with-retract-entity db-after)
        sort-datoms
        (keep
         (fn [d]
