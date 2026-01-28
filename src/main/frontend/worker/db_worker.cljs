@@ -30,6 +30,7 @@
             [frontend.worker.rtc.core :as rtc.core]
             [frontend.worker.rtc.db-listener]
             [frontend.worker.rtc.debug-log :as rtc-debug-log]
+            [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
             [frontend.worker.rtc.migrate :as rtc-migrate]
             [frontend.worker.search :as search]
             [frontend.worker.shared-service :as shared-service]
@@ -59,6 +60,7 @@
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
             [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]
+            [medley.core :as medley]
             [missionary.core :as m]
             [promesa.core :as p]))
 
@@ -620,10 +622,18 @@
   (<unlink-db! repo))
 
 (defn- import-datoms-to-db!
-  [repo remote-tx datoms]
+  [repo graph-id remote-tx datoms]
   (-> (p/do!
+       (rtc-log-and-state/rtc-log :rtc.log/download
+                                  {:sub-type :download-progress
+                                   :graph-uuid graph-id
+                                   :message "Saving data to DB"})
        ((@thread-api/*thread-apis :thread-api/create-or-open-db) repo {:close-other-db? true
                                                                        :datoms datoms})
+       (rtc-log-and-state/rtc-log :rtc.log/download
+                                  {:sub-type :download-completed
+                                   :graph-uuid graph-id
+                                   :message "Graph is ready!"})
        ((@thread-api/*thread-apis :thread-api/export-db) repo)
        (client-op/update-local-tx repo remote-tx)
        (shared-service/broadcast-to-clients! :add-repo {:repo repo}))
@@ -637,16 +647,24 @@
           aes-key (db-sync/<fetch-graph-aes-key-for-download repo graph-id)
           _ (when (nil? aes-key)
               (db-sync/fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
-          batches (partition-all 100 rows)]
+          batches (medley/indexed (partition-all 100 rows))]
+    (rtc-log-and-state/rtc-log :rtc.log/download
+                               {:sub-type :download-progress
+                                :graph-uuid graph-id
+                                :message "Start decrypting data"})
     ;; sequential batches: low memory
-    (p/doseq [batch batches]
+    (p/doseq [[i batch] batches]
       (p/let [dec-rows (db-sync/<decrypt-snapshot-rows-batch aes-key batch)]
-        (upsert-addr-content! db (rows->sqlite-binds dec-rows))))
+        (upsert-addr-content! db (rows->sqlite-binds dec-rows))
+        (rtc-log-and-state/rtc-log :rtc.log/download
+                                   {:sub-type :download-progress
+                                    :graph-uuid graph-id
+                                    :message (str "Decrypting data " (inc i) "/" (count batches))})))
     (let [storage (new-sqlite-storage db)
           conn (common-sqlite/get-storage-conn storage db-schema/schema)
           datoms (vec (d/datoms @conn :eavt))]
       (.close db)
-      (import-datoms-to-db! repo remote-tx datoms))))
+      (import-datoms-to-db! repo graph-id remote-tx datoms))))
 
 (def-thread-api :thread-api/release-access-handles
   [repo]

@@ -252,7 +252,15 @@
                             (throw (ex-info "missing snapshot download url"
                                             {:graph graph-name
                                              :response download-resp})))
-                        resp (js/fetch download-url (clj->js (with-auth-headers {:method "GET"})))]
+                        resp (js/fetch download-url (clj->js (with-auth-headers {:method "GET"})))
+                        total-bytes (when-let [raw (some-> resp .-headers (.get "content-length"))]
+                                      (let [parsed (js/parseInt raw 10)]
+                                        (when-not (js/isNaN parsed) parsed)))
+                        _ (state/pub-event!
+                           [:rtc/log {:type :rtc.log/download
+                                      :sub-type :download-progress
+                                      :graph-uuid graph-uuid
+                                      :message (str "Start downloading graph snapshot, file size: " total-bytes)}])]
                   (when-not (.-ok resp)
                     (throw (ex-info "snapshot download failed"
                                     {:graph graph-name
@@ -263,20 +271,27 @@
                   (p/let [reader (.getReader (.-body resp))]
                     (p/loop [buffer nil
                              total 0
-                             total-rows []]
+                             total-rows []
+                             loaded 0]
                       (p/let [chunk (.read reader)]
                         (if (.-done chunk)
                           (let [rows (finalize-framed-buffer buffer)
                                 total' (+ total (count rows))
                                 total-rows' (into total-rows rows)]
+                            (state/pub-event!
+                             [:rtc/log {:type :rtc.log/download
+                                        :sub-type :download-completed
+                                        :graph-uuid graph-uuid
+                                        :message "Graph snapshot downloaded"}])
                             (when (seq total-rows')
                               (state/<invoke-db-worker :thread-api/db-sync-import-kvs-rows
                                                        graph total-rows' true graph-uuid remote-tx))
                             total')
                           (let [value (.-value chunk)
+                                loaded' (+ loaded (.-byteLength value))
                                 {:keys [rows buffer]} (parse-framed-chunk buffer value)
                                 total' (+ total (count rows))]
-                            (p/recur buffer total' (into total-rows rows))))))))
+                            (p/recur buffer total' (into total-rows rows) loaded')))))))
                 (p/finally
                   (fn []
                     (when-let [download-url @download-url*]
