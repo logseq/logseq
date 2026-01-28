@@ -9,6 +9,7 @@
             [frontend.components.profiler :as profiler]
             [frontend.components.shortcut-help :as shortcut-help]
             [frontend.components.vector-search.sidebar :as vector-search]
+            [frontend.components.plugins :as plugins]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -133,6 +134,12 @@
 
         :page
         (block-render)
+
+        :plugin
+        [[:.flex.items-center.page-title
+          (ui/icon "puzzle" {:class "text-md mr-2"})
+          (str db-id)]
+         (plugins/renderer-resolver db-id)]
 
         :search
         [[:.flex.items-center.page-title

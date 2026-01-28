@@ -1580,6 +1580,28 @@
     :align   :start
     :id      "ls-focused-settings-modal"}))
 
+;; tools for user registered host renderers
+(rum/defc renderer-container
+  [{:keys [_pid render] :as opts}]
+  (if (fn? render)
+    [:div.lsp-host-renderer-container
+     (render opts)]
+    [:pre (pr-str opts)]))
+
+(rum/defc renderer-resolver < rum/static
+  [key']
+  (when-let [[pid key] (some-> key' (string/split "."))]
+    ;; TODO: resolve pid renderer from registered plugins
+    (let [pid (or pid "UnknownPlugin")
+          render (if (not (string/blank? key))
+                   (fn [opts]
+                     [:div.p-6
+                      [:h2.bold.text-lg "Renderer for key: " key]
+                      [:p "Plugin ID: " pid]
+                      [:pre (pr-str opts)]])
+                   #(do [:div "No renderer found for key: " key]))]
+      (renderer-container {:key key :pid pid :render render}))))
+
 (defn hook-custom-routes
   [routes]
   (cond-> routes
