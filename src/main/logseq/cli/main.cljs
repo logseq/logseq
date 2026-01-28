@@ -4,6 +4,7 @@
   (:require [clojure.string :as string]
             [logseq.cli.commands :as commands]
             [logseq.cli.config :as config]
+            [logseq.cli.data-dir :as data-dir]
             [logseq.cli.format :as format]
             [logseq.cli.version :as version]
             [promesa.core :as p]))
@@ -39,39 +40,59 @@
                     :output (version/format-version)})
 
        :else
-       (let [cfg (config/resolve-config (:options parsed))
-             action-result (commands/build-action parsed cfg)]
-         (if-not (:ok? action-result)
-           (p/resolved {:exit-code 1
-                        :output (format/format-result {:status :error
-                                                       :error (:error action-result)
-                                                       :command (:command parsed)
-                                                       :context (select-keys (:options parsed)
-                                                                             [:repo :graph :page :block])}
-                                                      cfg)})
-           (-> (commands/execute (:action action-result) cfg)
-               (p/then (fn [result]
-                         (let [opts (cond-> cfg
-                                      (:output-format result)
-                                      (assoc :output-format (:output-format result)))]
-                           {:exit-code 0
-                            :output (format/format-result result opts)})))
-               (p/catch (fn [error]
-                          (let [data (ex-data error)
-                                message (cond
-                                          (and (= :http-error (:code data)) (seq (:body data)))
-                                          (str "http request failed (" (:status data) "): " (:body data))
+       (let [cfg (config/resolve-config (:options parsed))]
+         (try
+           (let [cfg (assoc cfg :data-dir (data-dir/ensure-data-dir! (:data-dir cfg)))
+                 action-result (commands/build-action parsed cfg)]
+             (if-not (:ok? action-result)
+               (p/resolved {:exit-code 1
+                            :output (format/format-result {:status :error
+                                                           :error (:error action-result)
+                                                           :command (:command parsed)
+                                                           :context (select-keys (:options parsed)
+                                                                                 [:repo :graph :page :block])}
+                                                          cfg)})
+               (-> (commands/execute (:action action-result) cfg)
+                   (p/then (fn [result]
+                             (let [opts (cond-> cfg
+                                          (:output-format result)
+                                          (assoc :output-format (:output-format result)))]
+                               {:exit-code 0
+                                :output (format/format-result result opts)})))
+                   (p/catch (fn [error]
+                              (let [data (ex-data error)
+                                    message (cond
+                                              (and (= :http-error (:code data)) (seq (:body data)))
+                                              (str "http request failed (" (:status data) "): " (:body data))
 
-                                          (some? (:message data))
-                                          (:message data)
+                                              (some? (:message data))
+                                              (:message data)
 
-                                          :else
-                                          (or (.-message error) (str error)))]
-                            {:exit-code 1
-                             :output (format/format-result {:status :error
-                                                            :error {:code :exception
-                                                                    :message message}}
-                                                           cfg)}))))))))))
+                                              :else
+                                              (or (.-message error) (str error)))]
+                                (if (= :data-dir-permission (:code data))
+                                  {:exit-code 1
+                                   :output (format/format-result {:status :error
+                                                                  :error {:code :data-dir-permission
+                                                                          :message message
+                                                                          :path (:path data)}}
+                                                                 cfg)}
+                                  {:exit-code 1
+                                   :output (format/format-result {:status :error
+                                                                  :error {:code :exception
+                                                                          :message message}}
+                                                                 cfg)})))))))
+           (catch :default error
+             (let [data (ex-data error)
+                   message (or (.-message error) (str error))]
+               (if (= :data-dir-permission (:code data))
+                 (p/resolved {:exit-code 1
+                              :output (format/format-result {:status :error
+                                                             :error {:code :data-dir-permission
+                                                                     :message message
+                                                                     :path (:path data)}}
+                                                            cfg)})
+                 (throw error))))))))))
 
 (defn main
   [& args]
