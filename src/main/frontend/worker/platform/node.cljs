@@ -186,7 +186,7 @@
 
 (defn node-platform
   [{:keys [data-dir event-fn]}]
-  (let [data-dir (expand-home (or data-dir "~/.logseq/cli-graphs"))
+  (let [data-dir (expand-home (or data-dir "~/logseq/cli-graphs"))
         kv (kv-store data-dir)]
     (p/do!
      (ensure-dir! data-dir)

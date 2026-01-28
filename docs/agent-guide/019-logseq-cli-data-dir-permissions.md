@@ -12,7 +12,7 @@ Tech Stack: ClojureScript, Node.js fs APIs, promesa, logseq-cli, db-worker-node.
 
 ## Current behavior summary
 
-- `logseq.cli.config/resolve-config` defaults `:data-dir` to `~/.logseq/cli-graphs`.
+- `logseq.cli.config/resolve-config` defaults `:data-dir` to `~/logseq/cli-graphs`.
 - `logseq.cli.server` resolves and uses `data-dir` for locks and server discovery.
 - `frontend.worker.db-worker-node` writes logs and lock files under `data-dir` and delegates storage to `frontend.worker.platform.node`, which creates directories as needed.
 - No explicit read/write permission checks exist; errors bubble up from fs operations.

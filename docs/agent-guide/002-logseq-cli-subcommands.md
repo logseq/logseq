@@ -56,7 +56,7 @@ Global options apply to all subcommands and are parsed before subcommand options
 | --- | --- | --- |
 | --help | Show help | Available at top level and per subcommand. |
 | --version | Show version | Prints build time and revision. |
-| --config PATH | Config file path | Defaults to ~/.logseq/cli.edn. |
+| --config PATH | Config file path | Defaults to ~/logseq/cli.edn. |
 | --repo REPO | Graph name | Used as current repo. |
 | --timeout-ms MS | Request timeout | Integer milliseconds. |
 | --output FORMAT | Output format | One of human, json, edn. |

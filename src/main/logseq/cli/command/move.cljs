@@ -15,7 +15,7 @@
                :coerce :long}
    :target-uuid {:desc "Target block UUID"}
    :target-page {:desc "Target page name"}
-   :pos {:desc "Position (first-child, last-child, sibling)"}})
+   :pos {:desc "Position (first-child, last-child, sibling). Default: first-child"}})
 
 (def entries
   [(core/command-entry ["move"] :move-block "Move block" move-spec)])
