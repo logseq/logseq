@@ -1354,6 +1354,13 @@
                  :bind #js [last-addr limit]
                  :rowMode "array"}))
 
+(defn- count-kvs-rows
+  [db]
+  (when-let [result (-> (.exec db #js {:sql "select count(*) from kvs"
+                                       :rowMode "array"})
+                        first)]
+    (first (bean/->clj result))))
+
 (defn- normalize-snapshot-rows [rows]
   (mapv (fn [row] (vec row)) (array-seq rows)))
 
@@ -1402,7 +1409,12 @@
   [repo]
   (->
    (let [base (http-base-url)
-         graph-id (get-graph-id repo)]
+         graph-id (get-graph-id repo)
+         update-progress (fn [payload]
+                           (worker-util/post-message :rtc-log
+                                                     (merge {:type :rtc.log/upload
+                                                             :graph-uuid graph-id}
+                                                            payload)))]
      (if (and (seq base) (seq graph-id))
        (if-let [source-conn (worker-state/get-datascript-conn repo)]
          (p/let [aes-key (<ensure-graph-aes-key repo graph-id)
@@ -1412,21 +1424,23 @@
            (ensure-client-graph-uuid! repo graph-id)
            (p/let [datoms (d/datoms @source-conn :eavt)
                    _ (prn :debug :datoms-count (count datoms) :time (js/Date.))
+                   _ (update-progress {:sub-type :upload-progress
+                                       :message "Encrypting data"})
                    encrypted-datoms (<encrypt-datoms aes-key datoms)
-                   _ (prn :debug :encrypted-datoms-count (count encrypted-datoms)
-                          :time (js/Date.))
-                   {:keys [db] :as temp} (<create-temp-sqlite-conn (d/schema @source-conn) encrypted-datoms)]
-             (prn :debug :created-temp-conn :time (js/Date.))
+                   {:keys [db] :as temp} (<create-temp-sqlite-conn (d/schema @source-conn) encrypted-datoms)
+                   total-rows (count-kvs-rows db)]
              (->
               (p/loop [last-addr -1
-                       first-batch? true]
+                       first-batch? true
+                       loaded 0]
                 (let [rows (fetch-kvs-rows db last-addr upload-kvs-batch-size)]
-                  (prn :debug :rows-count (count rows))
                   (if (empty? rows)
                     (do
                       (client-op/remove-local-tx repo)
                       (client-op/update-local-tx repo 0)
                       (client-op/add-all-exists-asset-as-ops repo)
+                      (update-progress {:sub-type :upload-completed
+                                        :message "Graph upload finished!"})
                       {:graph-id graph-id})
                     (let [max-addr (apply max (map first rows))
                           rows (normalize-snapshot-rows rows)
@@ -1439,10 +1453,12 @@
                                              :headers headers
                                              :body body}
                                             {:response-schema :sync/snapshot-upload})]
-                        (p/recur max-addr false))))))
+                        (let [loaded' (+ loaded (count rows))]
+                          (update-progress {:sub-type :upload-progress
+                                            :message (str "Uploading " loaded "/" total-rows)})
+                          (p/recur max-addr false loaded')))))))
               (p/finally
                 (fn []
-                  (prn :debug :cleanup-temp-db :time (js/Date.))
                   (cleanup-temp-sqlite! temp))))))
          (p/rejected (ex-info "db-sync missing datascript conn"
                               {:repo repo :graph-id graph-id})))
