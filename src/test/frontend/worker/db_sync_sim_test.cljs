@@ -263,16 +263,25 @@
             (reset! progress? true)))
         (when @progress?
           (recur (inc i))))))
-  (let [conns (keep (fn [c] (when (:online? c) (:conn c))) clients)
-        block-counts (map #(count (d/datoms (deref %) :avet :block/uuid)) conns)]
-    (when-not (= (count (distinct block-counts)) 1)
-      (throw (ex-info "blocks count not equal after sync"
-                      {:block-counts block-counts
-                       :clients (keep (fn [c]
-                                        (when (:online? c)
-                                          {:repo (:repo c)
-                                           :datoms-count (count (d/datoms (deref (:conn c)) :avet :block/uuid))}))
-                                      clients)})))))
+  (let [conns (keep (fn [c] (when (:online? c) (:conn c))) clients)]
+    (when (seq conns)
+      (let [block-counts (map #(count (d/datoms (deref %) :avet :block/uuid)) conns)]
+        (when-not (= (count (distinct block-counts)) 1)
+          (throw (ex-info "blocks count not equal after sync"
+                          {:block-counts block-counts
+                           :clients (keep (fn [c]
+                                            (when (:online? c)
+                                              {:repo (:repo c)
+                                               :datoms-count (count (d/datoms (deref (:conn c)) :avet :block/uuid))}))
+                                          clients)})))))))
+
+(deftest sync-loop-all-offline-no-error-test
+  (testing "sync-loop tolerates all clients offline"
+    (let [server (make-server)
+          conn (db-test/create-conn)
+          client (make-client repo-a)
+          clients [{:repo repo-a :conn conn :client client :online? false}]]
+      (is (nil? (sync-loop! server clients))))))
 
 (defn- db-issues [db]
   (let [blocks (->> (d/q '[:find [?e ...]
