@@ -58,7 +58,6 @@
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
             [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]
-            [medley.core :as medley]
             [missionary.core :as m]
             [promesa.core :as p]))
 
