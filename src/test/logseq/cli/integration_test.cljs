@@ -4,7 +4,9 @@
             [cljs.reader :as reader]
             [cljs.test :refer [deftest is async]]
             [clojure.string :as string]
+            [frontend.worker-common.util :as worker-util]
             [frontend.test.node-helper :as node-helper]
+            [logseq.cli.command.core :as command-core]
             [logseq.cli.main :as cli-main]
             [logseq.db.frontend.property :as db-property]
             [promesa.core :as p]))
@@ -116,6 +118,44 @@
                  (is (= 0 (:exit-code result)))
                  (is (= "ok" (:status payload)))
                  (is (contains? payload :data))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
+(deftest test-cli-data-dir-permission-error
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-readonly")]
+           (fs/chmodSync data-dir 365)
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       result (run-cli ["graph" "list"] data-dir cfg-path)
+                       payload (parse-json-output result)]
+                 (is (= 1 (:exit-code result)))
+                 (is (= "error" (:status payload)))
+                 (is (= "data-dir-permission" (get-in payload [:error :code])))
+                 (is (string/includes? (get-in payload [:error :message]) data-dir))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
+(deftest test-cli-graph-create-readonly-graph-dir
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-graph-readonly")
+               repo "readonly-graph"
+               repo-id (command-core/resolve-repo repo)
+               repo-dir (node-path/join data-dir (worker-util/encode-graph-dir-name repo-id))]
+           (fs/mkdirSync repo-dir #js {:recursive true})
+           (fs/chmodSync repo-dir 365)
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       result (run-cli ["graph" "create" "--repo" repo] data-dir cfg-path)
+                       payload (parse-json-output result)]
+                 (is (= 1 (:exit-code result)))
+                 (is (= "error" (:status payload)))
+                 (is (= "data-dir-permission" (get-in payload [:error :code])))
+                 (is (string/includes? (get-in payload [:error :message]) repo-dir))
                  (done))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))
