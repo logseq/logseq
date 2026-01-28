@@ -30,7 +30,11 @@ logseq graph list
 
 ## Configuration
 
-Optional configuration file: `~/.logseq/cli.edn`
+Optional configuration file: `~/logseq/cli.edn`
+
+Default data dir: `~/logseq/cli-graphs`.
+
+Migration note: If you previously used `~/.logseq/cli-graphs` or `~/.logseq/cli.edn`, pass `--data-dir` or `--config` to continue using those locations.
 
 Supported keys include:
 - `:repo`
