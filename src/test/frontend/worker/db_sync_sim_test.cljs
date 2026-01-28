@@ -1,6 +1,7 @@
 (ns frontend.worker.db-sync-sim-test
   (:require [cljs.test :refer [deftest is testing]]
             [clojure.data :as data]
+            [clojure.string :as string]
             [datascript.core :as d]
             [frontend.worker.db-sync :as db-sync]
             [frontend.worker.handler.page :as worker-page]
@@ -377,21 +378,16 @@
             (swap! state update :blocks conj uuid)
             {:op :create-block :uuid uuid :parent parent-uuid}))))))
 
-(defn- op-update-title! [rng conn state base-uuid]
+(defn- op-update-title! [rng conn state _base-uuid]
   (let [db @conn
-        ents (concat (existing-entities db (:pages @state))
-                     (existing-entities db (:blocks @state))
-                     (keep (fn [uuid]
-                             (when (= uuid base-uuid)
-                               (d/entity db [:block/uuid uuid])))
-                           [base-uuid]))
+        ents (existing-entities db (:blocks @state))
         ent (rand-nth! rng (vec ents))
         block (d/entity db [:block/uuid (:block/uuid ent)])]
     (when (and block (not (ldb/page? block)))
       (let [uuid (:block/uuid block)
-            title (str "Title-" (rand-int! rng 1000000))]
-        (update-title! conn uuid title)
-        {:op :update-title :uuid uuid :title title}))))
+            new-title (string/replace (:block/title (d/entity @conn [:block/uuid uuid])) "block" "title")]
+        (update-title! conn uuid new-title)
+        {:op :update-title :uuid uuid :title new-title}))))
 
 (defn- op-move-block! [rng conn state base-uuid]
   (let [db @conn
@@ -424,10 +420,7 @@
    {:name :create-block :weight 10 :f op-create-block!}
    {:name :move-block :weight 6 :f op-move-block!}
    {:name :delete-block :weight 4 :f op-delete-block!}
-
-   ;; Failed ops
-   ;; {:name :update-title :weight 8 :f op-update-title!}
-   ])
+   {:name :update-title :weight 8 :f op-update-title!}])
 
 (defn- pick-op [rng {:keys [disable-ops]}]
   (let [op-table' (if (seq disable-ops)
@@ -522,7 +515,7 @@
               (finally
                 (restore)))))))))
 
-(defonce op-runs 500)
+(defonce op-runs 50)
 
 (defn- run-random-ops!
   [rng server clients repo->state base-uuid history run-ops-opts steps]

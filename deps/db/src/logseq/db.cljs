@@ -209,7 +209,8 @@
                         (if (fn? filter-tx-data)
                           (filter-tx-data temp-after-db tx-data)
                           tx-data)
-                        remove-conflict-datoms)]
+                        remove-conflict-datoms
+                        (db-normalize/replace-attr-retract-with-retract-entity temp-after-db))]
           (transact! conn tx-data' tx-meta))))))
 
 (def page? entity-util/page?)
