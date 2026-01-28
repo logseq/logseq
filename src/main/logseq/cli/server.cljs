@@ -25,6 +25,28 @@
   [data-dir repo]
   (node-path/join data-dir (worker-util/encode-graph-dir-name repo)))
 
+(defn- ensure-repo-dir!
+  [data-dir repo]
+  (let [path (repo-dir data-dir repo)]
+    (try
+      (when-not (fs/existsSync path)
+        (fs/mkdirSync path #js {:recursive true}))
+      (let [stat (fs/statSync path)]
+        (when-not (.isDirectory stat)
+          (throw (ex-info (str "graph-dir is not a directory: " path)
+                          {:code :data-dir-permission
+                           :path path
+                           :cause "ENOTDIR"}))))
+      (let [constants (.-constants fs)
+            mode (bit-or (.-R_OK constants) (.-W_OK constants))]
+        (fs/accessSync path mode))
+      path
+      (catch :default e
+        (throw (ex-info (str "graph-dir is not readable/writable: " path)
+                        {:code :data-dir-permission
+                         :path path
+                         :cause (.-code e)}))))))
+
 (defn lock-path
   [data-dir repo]
   (node-path/join (repo-dir data-dir repo) "db-worker.lock"))
@@ -180,6 +202,7 @@
   [config repo]
   (let [data-dir (resolve-data-dir config)
         path (lock-path data-dir repo)]
+    (ensure-repo-dir! data-dir repo)
     (p/let [existing (read-lock path)
             _ (cleanup-stale-lock! path existing)
             _ (when (not (fs/existsSync path))

@@ -8,6 +8,7 @@
             [frontend.worker.platform.node :as platform-node]
             [frontend.worker.state :as worker-state]
             [lambdaisland.glogi :as log]
+            [logseq.cli.data-dir :as data-dir]
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
@@ -300,65 +301,68 @@
         port 0]
     (if-not (seq repo)
       (p/rejected (ex-info "repo is required" {:code :missing-repo}))
-      (do
-        (install-file-logger! {:data-dir data-dir
-                               :repo repo
-                               :log-level (keyword (or log-level "info"))})
-        (reset! *ready? false)
-        (set-main-thread-stub!)
-        (-> (p/let [platform (platform-node/node-platform {:data-dir data-dir
-                                                           :event-fn handle-event!})
-                    proxy (db-core/init-core! platform)
-                    _ (<init-worker! proxy (or rtc-ws-url ""))
-                    {:keys [path lock]} (db-lock/ensure-lock! {:data-dir data-dir
-                                                               :repo repo
-                                                               :host host
-                                                               :port port})
-                    _ (reset! *lock-info {:path path :lock lock})
-                    _ (let [method-kw :thread-api/create-or-open-db
-                            method-str (normalize-method-str method-kw)]
-                        (<invoke! proxy method-str method-kw false [repo {}]))]
-              (let [stop!* (atom nil)
-                    server (make-server proxy {:bound-repo repo
-                                               :stop-fn (fn []
-                                                          (when-let [stop! @stop!*]
-                                                            (stop!)))})]
-                (p/create
-                 (fn [resolve reject]
-                   (.listen server port host
-                            (fn []
-                              (let [address (.address server)
-                                    actual-port (if (number? address)
-                                                  address
-                                                  (.-port address))
-                                    stop! (fn []
-                                            (p/create
-                                             (fn [resolve _]
-                                               (reset! *ready? false)
-                                               (doseq [^js res @*sse-clients]
-                                                 (try
-                                                   (.end res)
-                                                   (catch :default _)))
-                                               (reset! *sse-clients #{})
-                                               (when-let [lock-path (:path @*lock-info)]
-                                                 (db-lock/remove-lock! lock-path))
-                                               (.close server (fn [] (resolve true))))))]
-                                (reset! *ready? true)
-                                (reset! stop!* stop!)
-                                (p/let [lock' (assoc (:lock @*lock-info) :port actual-port)
-                                        _ (db-lock/update-lock! (:path @*lock-info) lock')]
-                                  (resolve {:host host
-                                            :port actual-port
-                                            :server server
-                                            :stop! stop!})))))
-                   (.on server "error" (fn [error]
-                                         (when-let [lock-path (:path @*lock-info)]
-                                           (db-lock/remove-lock! lock-path))
-                                         (reject error)))))))
-            (p/catch (fn [e]
-                       (when-let [lock-path (:path @*lock-info)]
-                         (db-lock/remove-lock! lock-path))
-                       (throw e))))))))
+      (try
+        (let [data-dir (data-dir/ensure-data-dir! data-dir)]
+          (install-file-logger! {:data-dir data-dir
+                                 :repo repo
+                                 :log-level (keyword (or log-level "info"))})
+          (reset! *ready? false)
+          (set-main-thread-stub!)
+          (-> (p/let [platform (platform-node/node-platform {:data-dir data-dir
+                                                             :event-fn handle-event!})
+                      proxy (db-core/init-core! platform)
+                      _ (<init-worker! proxy (or rtc-ws-url ""))
+                      {:keys [path lock]} (db-lock/ensure-lock! {:data-dir data-dir
+                                                                 :repo repo
+                                                                 :host host
+                                                                 :port port})
+                      _ (reset! *lock-info {:path path :lock lock})
+                      _ (let [method-kw :thread-api/create-or-open-db
+                              method-str (normalize-method-str method-kw)]
+                          (<invoke! proxy method-str method-kw false [repo {}]))]
+                (let [stop!* (atom nil)
+                      server (make-server proxy {:bound-repo repo
+                                                 :stop-fn (fn []
+                                                            (when-let [stop! @stop!*]
+                                                              (stop!)))})]
+                  (p/create
+                   (fn [resolve reject]
+                     (.listen server port host
+                              (fn []
+                                (let [address (.address server)
+                                      actual-port (if (number? address)
+                                                    address
+                                                    (.-port address))
+                                      stop! (fn []
+                                              (p/create
+                                               (fn [resolve _]
+                                                 (reset! *ready? false)
+                                                 (doseq [^js res @*sse-clients]
+                                                   (try
+                                                     (.end res)
+                                                     (catch :default _)))
+                                                 (reset! *sse-clients #{})
+                                                 (when-let [lock-path (:path @*lock-info)]
+                                                   (db-lock/remove-lock! lock-path))
+                                                 (.close server (fn [] (resolve true))))))]
+                                  (reset! *ready? true)
+                                  (reset! stop!* stop!)
+                                  (p/let [lock' (assoc (:lock @*lock-info) :port actual-port)
+                                          _ (db-lock/update-lock! (:path @*lock-info) lock')]
+                                    (resolve {:host host
+                                              :port actual-port
+                                              :server server
+                                              :stop! stop!})))))
+                     (.on server "error" (fn [error]
+                                           (when-let [lock-path (:path @*lock-info)]
+                                             (db-lock/remove-lock! lock-path))
+                                           (reject error)))))))
+              (p/catch (fn [e]
+                         (when-let [lock-path (:path @*lock-info)]
+                           (db-lock/remove-lock! lock-path))
+                         (throw e)))))
+        (catch :default e
+          (p/rejected e))))))
 
 (defn main
   []
@@ -370,16 +374,23 @@
     (when-not (seq repo)
       (show-help!)
       (.exit js/process 1))
-    (p/let [{:keys [stop!] :as daemon}
-            (start-daemon! {:data-dir data-dir
-                            :repo repo
-                            :rtc-ws-url rtc-ws-url
-                            :log-level (:log-level opts)})]
-      (log/info :db-worker-node-ready {:host (:host daemon) :port (:port daemon)})
-      (let [shutdown (fn []
-                       (-> (stop!)
-                           (p/finally (fn []
-                                        (log/info :db-worker-node-stopped nil)
-                                        (.exit js/process 0)))))]
-        (.on js/process "SIGINT" shutdown)
-        (.on js/process "SIGTERM" shutdown)))))
+    (-> (p/let [{:keys [stop!] :as daemon}
+                (start-daemon! {:data-dir data-dir
+                                :repo repo
+                                :rtc-ws-url rtc-ws-url
+                                :log-level (:log-level opts)})]
+          (log/info :db-worker-node-ready {:host (:host daemon) :port (:port daemon)})
+          (let [shutdown (fn []
+                           (-> (stop!)
+                               (p/finally (fn []
+                                            (log/info :db-worker-node-stopped nil)
+                                            (.exit js/process 0)))))]
+            (.on js/process "SIGINT" shutdown)
+            (.on js/process "SIGTERM" shutdown)))
+        (p/catch (fn [error]
+                   (let [data (ex-data error)
+                         message (or (.-message error) (str error))]
+                     (when (= :data-dir-permission (:code data))
+                       (.error js/console message)
+                       (.exit js/process 1))
+                     (throw error)))))))
