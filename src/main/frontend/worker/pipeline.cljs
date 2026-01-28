@@ -456,7 +456,7 @@
   "Compute extra tx-data and block/refs, should ensure it's a pure function and
   doesn't call `d/transact!` or `ldb/transact!`."
   [{:keys [db-after tx-meta _tx-data] :as tx-report}]
-  (when-not (:temp-conn? tx-meta)
+  (when-not (or (:temp-conn? tx-meta) (:sync-download-graph? tx-meta))
     (let [extra-tx-data (compute-extra-tx-data tx-report)
           tx-report* (if (seq extra-tx-data)
                        (let [result (d/with db-after extra-tx-data)]
