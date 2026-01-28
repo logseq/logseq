@@ -16,7 +16,7 @@
 
 (defn resolve-data-dir
   [data-dir]
-  (expand-home (or data-dir "~/.logseq/cli-graphs")))
+  (expand-home (or data-dir "~/logseq/cli-graphs")))
 
 (defn repo-dir
   [data-dir repo]
