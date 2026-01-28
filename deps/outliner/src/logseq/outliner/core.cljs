@@ -1077,7 +1077,10 @@
           (save-block @conn block opts))]
   (defn save-block!
     [conn block & {:as opts}]
-    (op-transact! :save-block f conn block opts)))
+    (op-transact! :save-block f conn block
+                  (if (:outliner-op opts)
+                    opts
+                    (assoc opts :outliner-op :save-block)))))
 
 (let [f (fn [conn blocks target-block opts]
           (insert-blocks @conn blocks target-block opts))]
