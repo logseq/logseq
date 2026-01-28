@@ -631,7 +631,7 @@
           aes-key (db-sync/<fetch-graph-aes-key-for-download repo graph-id)
           _ (when (nil? aes-key)
               (db-sync/fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
-          batches (medley/indexed (partition-all 100 rows))]
+          batches (partition-all 100 rows)]
     ;; sequential batches: low memory
     (p/doseq [batch batches]
       (p/let [dec-rows (db-sync/<decrypt-snapshot-rows-batch aes-key batch)]
