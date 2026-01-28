@@ -3,12 +3,12 @@
 ## Context
 logseq-cli and db-worker-node currently store CLI-managed graphs under `~/.logseq/db-worker/` and use per-graph directories named like `.logseq-pool-<graph-name>/` (with partial encoding). This plan captures the non-functional updates requested:
 
-1) Rename `~/.logseq/db-worker/` to `~/.logseq/cli-graphs/` for CLI-managed graphs.
+1) Rename `~/.logseq/db-worker/` to `~/logseq/cli-graphs/` for CLI-managed graphs.
 2) Rename per-graph directory format from `.logseq-pool-<graph-name>/` to `<graph-name>/`.
 3) Ensure graph names that are not valid directory names are encoded, and decoding is symmetric when reading/listing.
 
 ## Goals
-- Move CLI graph storage to `~/.logseq/cli-graphs` by default.
+- Move CLI graph storage to `~/logseq/cli-graphs` by default.
 - Use a clean per-graph directory name equal to the (encoded) graph name, without `.` prefix or `logseq-pool-` prefix.
 - Provide a reversible encode/decode for graph names so list/read operations reconstruct the original graph name.
 - CLI commands and outputs should hide the internal `logseq_db_` prefix; user-facing graph names strip that db prefix.
@@ -29,7 +29,7 @@ logseq-cli and db-worker-node currently store CLI-managed graphs under `~/.logse
 
 ## Proposed Approach
 ### 1) New default data dir
-- Change default data dir for CLI and db-worker-node from `~/.logseq/db-worker` to `~/.logseq/cli-graphs`.
+- Change default data dir for CLI and db-worker-node from `~/.logseq/db-worker` to `~/logseq/cli-graphs`.
 - Update help text and any user-facing docs mentioning the old default.
 
 ### 2) New per-graph directory naming
@@ -51,7 +51,7 @@ logseq-cli and db-worker-node currently store CLI-managed graphs under `~/.logse
    - Files: `src/main/frontend/worker_common/util.cljc`, potentially `deps/cli/src/logseq/cli/common/graph.cljs`.
 
 2) Update data dir defaults
-   - Change defaults to `~/.logseq/cli-graphs` in:
+   - Change defaults to `~/logseq/cli-graphs` in:
      - `src/main/logseq/cli/config.cljs`
      - `src/main/logseq/cli/server.cljs`
      - `src/main/frontend/worker/db_worker_node_lock.cljs`
