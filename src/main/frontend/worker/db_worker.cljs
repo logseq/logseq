@@ -35,6 +35,7 @@
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.thread-atom]
+            [frontend.worker.undo-redo :as undo-validate]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [lambdaisland.glogi.console :as glogi-console]
@@ -580,6 +581,12 @@
 
           ;; (prn :debug :transact :tx-data tx-data' :tx-meta tx-meta')
 
+          (when (and (or (:undo? tx-meta) (:redo? tx-meta))
+                     (not (undo-validate/valid-undo-redo-tx? conn tx-data')))
+            (throw (ex-info "undo/redo tx invalid"
+                            {:repo repo
+                             :undo? (:undo? tx-meta)
+                             :redo? (:redo? tx-meta)})))
           (worker-util/profile "Worker db transact"
                                (ldb/transact! conn tx-data' tx-meta')))
         nil)
