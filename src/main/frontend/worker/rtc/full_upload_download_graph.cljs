@@ -427,7 +427,7 @@
     (m/sp
       (rtc-log-and-state/clean-cached-graph-local-and-remote-t graph-uuid)
       (rtc-log-and-state/update-local-t graph-uuid remote-t)
-      (rtc-log-and-state/update-remote-t graph-uuid remote-t)
+      (rtc-log-and-state/update-remote-t graph-uuid remote-t repo)
       (c.m/<?
        (p/do!
         ((@thread-api/*thread-apis :thread-api/create-or-open-db) repo {:close-other-db? false})

@@ -96,6 +96,7 @@
    :db-ident {:db/unique :db.unique/identity}
    :db-ident-or-block-uuid {:db/unique :db.unique/identity}
    :local-tx {:db/index true}
+   :remote-t {:db/index true}
    :graph-uuid {:db/index true}})
 
 (defn update-graph-uuid
@@ -133,6 +134,25 @@
     (let [r (:v (first (d/datoms @conn :avet :local-tx)))]
       (assert (some? r))
       r)))
+
+(defn update-remote-t
+  "Persist remote-t to database to survive app restarts.
+   See: https://github.com/logseq/logseq/issues/12333"
+  [repo t]
+  {:pre [(some? t)]}
+  (when-let [conn (worker-state/get-client-ops-conn repo)]
+    (let [tx-data
+          (if-let [datom (first (d/datoms @conn :avet :remote-t))]
+            [:db/add (:e datom) :remote-t t]
+            [:db/add "e" :remote-t t])]
+      (ldb/transact! conn [tx-data]))))
+
+(defn get-remote-t
+  "Get persisted remote-t from database.
+   Returns nil if not found (first sync or legacy data)."
+  [repo]
+  (when-let [conn (worker-state/get-client-ops-conn repo)]
+    (:v (first (d/datoms @conn :avet :remote-t)))))
 
 (defn- merge-update-ops
   [op1 op2]

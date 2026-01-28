@@ -1,6 +1,7 @@
 (ns frontend.worker.rtc.log-and-state
   "Fns to generate rtc related logs"
   (:require [frontend.common.missionary :as c.m]
+            [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.shared-service :as shared-service]
             [lambdaisland.glogi :as log]
             [logseq.common.defkeywords :refer [defkeywords]]
@@ -100,16 +101,35 @@
     (swap! *graph-uuid->local-t assoc graph-uuid local-t)))
 
 (defn update-remote-t
-  [graph-uuid remote-t]
-  (let [graph-uuid (ensure-uuid graph-uuid)
-        current-remote-t (get @*graph-uuid->remote-t graph-uuid)
-        current-local-t (get @*graph-uuid->local-t graph-uuid)]
-    (when (and current-remote-t current-local-t)
-      (assert (and remote-t (>= remote-t current-remote-t) (>= remote-t current-local-t))
-              {:remote-t remote-t
-               :current-local-t current-local-t
-               :current-remote-t current-remote-t}))
-    (swap! *graph-uuid->remote-t assoc graph-uuid remote-t)))
+  "Update in-memory remote-t and optionally persist to database.
+   Pass `repo` to enable persistence. Without `repo`, only updates memory."
+  ([graph-uuid remote-t]
+   (update-remote-t graph-uuid remote-t nil))
+  ([graph-uuid remote-t repo]
+   (let [graph-uuid (ensure-uuid graph-uuid)
+         current-remote-t (get @*graph-uuid->remote-t graph-uuid)
+         current-local-t (get @*graph-uuid->local-t graph-uuid)]
+     (when (and current-remote-t current-local-t)
+       (assert (and remote-t (>= remote-t current-remote-t) (>= remote-t current-local-t))
+               {:remote-t remote-t
+                :current-local-t current-local-t
+                :current-remote-t current-remote-t}))
+     (swap! *graph-uuid->remote-t assoc graph-uuid remote-t)
+     ;; Persist to database when repo is provided
+     ;; See: https://github.com/logseq/logseq/issues/12333
+     (when repo
+       (client-op/update-remote-t repo remote-t)))))
+
+(defn restore-remote-t-from-db
+  "Restore remote-t from persistent database on app startup.
+   This prevents unnecessary full re-syncs after app restart.
+   See: https://github.com/logseq/logseq/issues/12333"
+  [graph-uuid repo]
+  (when-let [persisted-remote-t (client-op/get-remote-t repo)]
+    (let [graph-uuid (ensure-uuid graph-uuid)]
+      (log/info :rtc/restore-remote-t {:graph-uuid graph-uuid :remote-t persisted-remote-t})
+      (swap! *graph-uuid->remote-t assoc graph-uuid persisted-remote-t)
+      persisted-remote-t)))
 
 ;;; subscribe-logs, push to frontend
 ;;; TODO: refactor by using c.m/run-background-task

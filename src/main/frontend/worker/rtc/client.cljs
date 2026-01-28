@@ -44,6 +44,9 @@
 (defn- new-task--init-request
   [get-ws-create-task graph-uuid major-schema-version repo conn *last-calibrate-t *server-schema-version add-log-fn]
   (m/sp
+    ;; Restore remote-t from DB on startup to prevent full re-sync
+    ;; See: https://github.com/logseq/logseq/issues/12333
+    (rtc-log-and-state/restore-remote-t-from-db graph-uuid repo)
     (let [t-before (client-op/get-local-tx repo)
           get-graph-skeleton? (or (nil? @*last-calibrate-t)
                                   (< 500 (- t-before @*last-calibrate-t)))]
@@ -74,7 +77,7 @@
                 (reset! *server-schema-version server-schema-version)
                 (reset! *last-calibrate-t remote-t-query-end))
               (when remote-t-query-end
-                (rtc-log-and-state/update-remote-t graph-uuid remote-t-query-end)
+                (rtc-log-and-state/update-remote-t graph-uuid remote-t-query-end repo)
                 (when (not t-before)
                   (client-op/update-local-tx repo remote-t-query-end)))
               (when (and server-schema-version server-builtin-db-idents)
