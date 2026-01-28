@@ -226,6 +226,7 @@
                                            (subs (str k) 1)
                                            k)
                                        k (-> (string/lower-case k)
+                                             (string/replace "/" "-")
                                              (string/replace " " "-")
                                              (string/replace "_" "-"))]
                                    (if (gp-property/valid-property-name? (str ":" k))
@@ -770,12 +771,14 @@
                   (recur headings (rest ast-blocks) (inc block-idx) timestamps properties body))
 
                 (heading-block? ast-block)
-                ;; for db-graphs cut multi-line when there is property, deadline/scheduled or logbook text in :block/title
-                (let [cut-multiline? (and export-to-db-graph?
-                                          (when-let [prev-block (first (get all-blocks (dec block-idx)))]
-                                            (or (and (gp-property/properties-ast? prev-block)
-                                                     (not= "Custom" (ffirst (get all-blocks (- block-idx 2)))))
-                                                (= ["Drawer" "logbook"] (take 2 prev-block))
+                ;; for db-graphs cut multi-line when there is deadline/scheduled or logbook text in :block/title
+                (let [prev-block (first (get all-blocks (dec block-idx)))
+                      prev-block-properties? (and prev-block (gp-property/properties-ast? prev-block))
+                      prev-block-custom-query? (and prev-block-properties?
+                                                    (= "Custom" (ffirst (get all-blocks (- block-idx 2)))))
+                      cut-multiline? (and export-to-db-graph?
+                                          (when prev-block
+                                            (or (= ["Drawer" "logbook"] (take 2 prev-block))
                                                 (and (= "Paragraph" (first prev-block))
                                                      (seq (set/intersection (set (flatten prev-block)) #{"Deadline" "Scheduled"}))))))
                       pos-meta' (if cut-multiline?
@@ -789,8 +792,8 @@
                       options' (assoc options
                                       :remove-properties?
                                       (and export-to-db-graph?
-                                           (and (gp-property/properties-ast? (first (get all-blocks (dec block-idx))))
-                                                (= "Custom" (ffirst (get all-blocks (- block-idx 2)))))))
+                                           (or prev-block-custom-query?
+                                               (and prev-block-properties? (not prev-block-custom-query?)))))
                       block' (construct-block ast-block properties timestamps body encoded-content format pos-meta' options')
                       block'' (cond
                                 db-graph-mode?
