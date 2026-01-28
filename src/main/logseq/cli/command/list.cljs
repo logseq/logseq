@@ -14,7 +14,7 @@
    :offset {:desc "Offset results"
             :coerce :long}
    :sort {:desc "Sort field"}
-   :order {:desc "Sort order (asc, desc)"}})
+   :order {:desc "Sort order (asc, desc). Default: asc"}})
 
 (def ^:private list-page-spec
   (merge list-common-spec

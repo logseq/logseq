@@ -24,7 +24,7 @@
                :coerce :long}
    :target-uuid {:desc "Target block UUID"}
    :target-page-name {:desc "Target page name"}
-   :pos {:desc "Position (first-child, last-child, sibling)"}
+   :pos {:desc "Position (first-child, last-child, sibling). Default: last-child"}
    :status {:desc "Task status (todo, doing, done, etc.)"}})
 
 (def ^:private add-page-spec

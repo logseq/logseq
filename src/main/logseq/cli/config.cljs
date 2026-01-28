@@ -26,7 +26,7 @@
 
 (defn- default-config-path
   []
-  (node-path/join (.homedir os) ".logseq" "cli.edn"))
+  (node-path/join (.homedir os) "logseq" "cli.edn"))
 
 (defn- read-config-file
   [config-path]
@@ -75,7 +75,7 @@
   [opts]
   (let [defaults {:timeout-ms 10000
                   :output-format nil
-                  :data-dir "~/.logseq/cli-graphs"
+                  :data-dir "~/logseq/cli-graphs"
                   :config-path (default-config-path)}
         env (env-config)
         config-path (or (:config-path opts)

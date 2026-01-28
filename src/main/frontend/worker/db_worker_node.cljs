@@ -226,7 +226,7 @@
 (defn- show-help!
   []
   (println "db-worker-node options:")
-  (println "  --data-dir <path>    (default ~/.logseq/cli-graphs)")
+  (println "  --data-dir <path>    (default ~/logseq/cli-graphs)")
   (println "  --repo <name>        (required)")
   (println "  --rtc-ws-url <url>   (optional)")
   (println "  --log-level <level>  (default info)")
