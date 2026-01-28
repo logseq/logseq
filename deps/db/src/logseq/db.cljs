@@ -596,6 +596,7 @@
 (def get-all-properties db-db/get-all-properties)
 (def get-class-extends db-class/get-class-extends)
 (def get-classes-parents db-db/get-classes-parents)
+(def get-page-parents db-db/get-page-parents)
 (def get-title-with-parents db-db/get-title-with-parents)
 (def class-instance? db-db/class-instance?)
 (def inline-tag? db-db/inline-tag?)

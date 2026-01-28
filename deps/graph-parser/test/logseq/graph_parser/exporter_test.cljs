@@ -210,7 +210,7 @@
 
       ;; Counts
       ;; Includes journals as property values e.g. :logseq.property/deadline
-      (is (= 31 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
+      (is (= 32 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
 
       (is (= 5 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Asset]] @conn))))
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
@@ -231,7 +231,7 @@
                   #_(map #(select-keys % [:block/title :block/tags]))
                   count))
           "Correct number of pages with block content")
-      (is (= 14 (->> @conn
+      (is (= 15 (->> @conn
                      (d/q '[:find [?ident ...]
                             :where [?b :block/tags :logseq.class/Tag] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
                      count))
