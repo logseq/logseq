@@ -12,7 +12,7 @@
   {:id {:desc "Block db/id or EDN vector of ids"}
    :uuid {:desc "Block UUID"}
    :page {:desc "Page name"}
-   :level {:desc "Limit tree depth"
+   :level {:desc "Limit tree depth (default 10)"
            :coerce :long}})
 
 (def entries

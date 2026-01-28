@@ -1,5 +1,6 @@
 (ns logseq.cli.data-dir-test
   (:require ["fs" :as fs]
+            ["os" :as os]
             ["path" :as node-path]
             [cljs.test :refer [deftest is testing]]
             [frontend.test.node-helper :as node-helper]
@@ -39,3 +40,9 @@
           (let [data (ex-data e)]
             (is (= :data-dir-permission (:code data)))
             (is (= (node-path/resolve target) (:path data)))))))))
+
+(deftest normalize-data-dir-default
+  (testing "defaults to ~/logseq/cli-graphs"
+    (let [expected (node-path/resolve (node-path/join (.homedir os) "logseq" "cli-graphs"))
+          resolved (data-dir/normalize-data-dir nil)]
+      (is (= expected resolved)))))
