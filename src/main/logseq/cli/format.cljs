@@ -88,6 +88,7 @@
     :missing-content "Use --content or pass content as args"
     :missing-query "Use --query <edn>"
     :unknown-query "Use `logseq query list` to see available queries"
+    :data-dir-permission "Check filesystem permissions or set LOGSEQ_CLI_DATA_DIR"
     nil))
 
 (defn- format-error
