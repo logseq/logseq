@@ -885,7 +885,7 @@
                              conn
                              [{:block/uuid asset-uuid
                                :logseq.property.asset/remote-metadata {:checksum checksum :type asset-type}}]
-                             {:persist-op? false}))
+                             {:persist-op? true}))
                           (client-op/remove-asset-op repo asset-uuid)
                           (when-let [client (current-client repo)]
                             (broadcast-rtc-state! client))))
@@ -952,7 +952,9 @@
                          (worker-state/<invoke-main-thread
                           :thread-api/get-asset-file-metadata
                           repo (str asset-uuid) asset-type))]
-            (when (and (seq asset-type) (nil? meta))
+            (when (and (seq asset-type)
+                       (:logseq.property.asset/remote-metadata ent)
+                       (nil? meta))
               (download-remote-asset! repo graph-id asset-uuid asset-type)))
           (p/catch (fn [e]
                      (log/error :db-sync/asset-download-failed
