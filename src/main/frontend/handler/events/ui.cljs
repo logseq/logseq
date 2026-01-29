@@ -18,6 +18,7 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.extensions.fsrs :as fsrs]
+            [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.handler.db-based.sync :as rtc-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.events :as events]
@@ -299,10 +300,16 @@
           (state/set-user-info! result)
           (when-let [uid (user-handler/user-uuid)]
             (sentry-event/set-user! uid))
-          (let [status (if (user-handler/alpha-or-beta-user?) :welcome :unavailable)]
-            (when (and (= status :welcome) (user-handler/logged-in?))
+          (let [status (if (user-handler/alpha-or-beta-user?) :welcome :unavailable)
+                fetch-graphs? (and (user-handler/logged-in?)
+                                   (or (= status :welcome)
+                                       (user-handler/rtc-group?)))]
+            (when fetch-graphs?
               (async/<! (p->c (rtc-handler/<get-remote-graphs)))
-              (repo-handler/refresh-repos!))))))))
+              (repo-handler/refresh-repos!)
+              (when-let [current-repo (state/get-current-repo)]
+                (when (some #(= current-repo (:url %)) (state/get-rtc-graphs))
+                  (rtc-flows/trigger-rtc-start current-repo))))))))))
 
 (defmethod events/handle :dialog/show-block [[_ block option]]
   (shui/dialog-open!
