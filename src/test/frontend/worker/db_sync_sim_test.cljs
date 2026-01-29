@@ -224,7 +224,6 @@
   (let [txs (mapcat :tx pending)]
     (->> txs
          (db-normalize/remove-retract-entity-ref @conn)
-         (#'db-sync/keep-last-update)
          distinct
          vec)))
 

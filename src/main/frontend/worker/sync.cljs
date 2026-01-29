@@ -434,19 +434,6 @@
              (= :block/uuid (first x)))
     (second x)))
 
-;; TODO: is this really needed?
-(defn- keep-last-update
-  [tx-data]
-  tx-data
-  ;; (->> tx-data
-  ;;      (common-util/distinct-by-last-wins
-  ;;       (fn [item]
-  ;;         (if (and (vector? item) (= 5 (count item))
-  ;;                  (contains? #{:block/updated-at :block/title :block/name :block/order} (nth item 2)))
-  ;;           (take 3 item)
-  ;;           item))))
-  )
-
 (defn- sanitize-tx-data
   [db tx-data local-deleted-ids]
   (let [sanitized-tx-data (->> tx-data
@@ -457,7 +444,11 @@
                                                   (contains? #{:block/created-at :block/updated-at :block/title}
                                                              (nth item 2)))
                                              (contains? local-deleted-ids (get-lookup-id (last item))))))
-                               keep-last-update)]
+                               ;; Notice: rebase should generate larger tx-id than reverse tx
+                               (map (fn [item]
+                                      (if (= (count item) 5)
+                                        (vec (butlast item))
+                                        item))))]
     ;; (when (not= tx-data sanitized-tx-data)
     ;;   (prn :debug :tx-data tx-data)
     ;;   (prn :debug :sanitized-tx-data sanitized-tx-data))
@@ -479,7 +470,6 @@
                       txs (mapcat :tx batch)
                       tx-data (->> txs
                                    (db-normalize/remove-retract-entity-ref @conn)
-                                   keep-last-update
                                    distinct)]
                   ;; (prn :debug :before-keep-last-update txs)
                   ;; (prn :debug :upload :tx-data tx-data)
@@ -724,13 +714,11 @@
 
     (->>
      tx-data'
-     (concat (map (fn [id] [:db/retractEntity id]) retract-block-ids))
-     keep-last-update)))
+     (concat (map (fn [id] [:db/retractEntity id]) retract-block-ids)))))
 
 (defn- apply-remote-tx-with-local-changes!
   [{:keys [conn local-txs reversed-tx-data safe-remote-tx-data remote-deleted-blocks
            temp-tx-meta *remote-tx-report *reversed-tx-report *remote-deleted-ids *rebase-tx-data]}]
-  (prn :debug :apply-remote-tx-with-local-changes!)
   (let [batch-tx-meta {:rtc-tx? true}]
     (ldb/transact-with-temp-conn!
      conn
@@ -769,7 +757,6 @@
 
 (defn- apply-remote-tx-without-local-changes!
   [{:keys [conn safe-remote-tx-data remote-deleted-block-ids temp-tx-meta]}]
-  (prn :debug :apply-remote-tx-without-local-changes!)
   (let [db @conn]
     (ldb/transact-with-temp-conn!
      conn
@@ -787,8 +774,7 @@
   [repo client tx-data*]
   (if-let [conn (worker-state/get-datascript-conn repo)]
     (let [tx-data (->> tx-data*
-                       (db-normalize/remove-retract-entity-ref @conn)
-                       keep-last-update)
+                       (db-normalize/remove-retract-entity-ref @conn))
           local-txs (pending-txs repo)
           reversed-tx-data (get-reverse-tx-data local-txs)
           has-local-changes? (seq reversed-tx-data)
@@ -834,7 +820,6 @@
                                 (normalize-tx-data (:db-after tx-report)
                                                    (or (:db-after remote-tx-report)
                                                        (:db-after @*reversed-tx-report)))
-                                keep-last-update
                                 (remove (fn [[op _e a]]
                                           (and (= op :db/retract)
                                                (contains? #{:block/updated-at :block/created-at :block/title} a)))))
