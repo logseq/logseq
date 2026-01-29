@@ -16,10 +16,6 @@
    :rtc/ignore-attr-when-init-download true
    :rtc/ignore-attr-when-syncing true})
 
-(def ^:private property-ignore-rtc-upload-sync
-  {:rtc/ignore-attr-when-init-upload true
-   :rtc/ignore-attr-when-syncing true})
-
 ;; Main property vars
 ;; ==================
 
