@@ -478,7 +478,7 @@
               (let [clients [{:repo repo-a :conn conn-a :client client-a :online? true :gen-uuid gen-uuid}]]
                 (prn :debug :phase-a)
                 ;; Phase A: online
-                (dotimes [_ 40]
+                (dotimes [_ 500]
                   (let [client (first clients)]
                     (run-ops! rng (assoc client :base-uuid base-uuid :state state-a)
                               1
@@ -489,7 +489,7 @@
                 ;; Phase B: offline
                 (prn :debug :phase-b-offline)
                 (let [clients-a [{:repo repo-a :conn conn-a :client client-a :online? false}]]
-                  (dotimes [_ 30]
+                  (dotimes [_ 500]
                     (run-ops! rng {:repo repo-a :conn conn-a :base-uuid base-uuid :state state-a :gen-uuid gen-uuid}
                               1
                               history
