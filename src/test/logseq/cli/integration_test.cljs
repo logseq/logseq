@@ -8,6 +8,7 @@
             [frontend.test.node-helper :as node-helper]
             [logseq.cli.command.core :as command-core]
             [logseq.cli.main :as cli-main]
+            [logseq.common.util :as common-util]
             [logseq.db.frontend.property :as db-property]
             [promesa.core :as p]))
 
@@ -28,6 +29,16 @@
 (defn- parse-json-output
   [result]
   (js->clj (js/JSON.parse (:output result)) :keywordize-keys true))
+
+(defn- parse-json-output-safe
+  [result label]
+  (try
+    (parse-json-output result)
+    (catch :default e
+      (throw (ex-info (str "json parse failed: " label)
+                      {:label label
+                       :output (:output result)}
+                      e)))))
 
 (defn- parse-edn-output
   [result]
@@ -219,6 +230,127 @@
                  (is (= "ok" (:status show-payload)))
                  (is (contains? (get-in show-payload [:data :root]) :uuid))
                  (is (= "ok" (:status remove-page-payload)))
+                 (is (= "ok" (:status stop-payload)))
+                (done))
+              (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
+(deftest test-cli-add-block-rewrites-page-ref
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-ref-rewrite")]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       _ (run-cli ["graph" "create" "--repo" "ref-rewrite-graph"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "ref-rewrite-graph" "add" "page" "--page" "Home"] data-dir cfg-path)
+                       add-block-result (run-cli ["--repo" "ref-rewrite-graph"
+                                                  "add" "block"
+                                                  "--target-page-name" "Home"
+                                                  "--content" "See [[New Page]]"]
+                                                 data-dir cfg-path)
+                       add-block-payload (parse-json-output-safe add-block-result "add-block")
+                       _ (p/delay 100)
+                       list-page-result (run-cli ["--repo" "ref-rewrite-graph" "list" "page"] data-dir cfg-path)
+                       list-page-payload (parse-json-output-safe list-page-result "list-page")
+                       page-titles (->> (get-in list-page-payload [:data :items])
+                                        (map #(or (:block/title %) (:title %)))
+                                        set)
+                       query-payload (run-query data-dir cfg-path "ref-rewrite-graph"
+                                                "[:find ?title :in $ ?page-name :where [?p :block/name ?page-name] [?b :block/page ?p] [?b :block/title ?title]]"
+                                                (pr-str [(common-util/page-name-sanity-lc "Home")]))
+                       titles (map first (get-in query-payload [:data :result]))
+                       ref-title (some #(when (and (string? %)
+                                                   (string/includes? % "See [[")
+                                                   (string/includes? % "]]"))
+                                         %)
+                                       titles)
+                       ref-value (when ref-title
+                                   (second (first (re-seq #"\[\[(.*?)\]\]" ref-title))))
+                       stop-result (run-cli ["server" "stop" "--repo" "ref-rewrite-graph"] data-dir cfg-path)
+                       stop-payload (parse-json-output-safe stop-result "server-stop")]
+                 (is (= 0 (:exit-code add-block-result)))
+                 (is (= "ok" (:status add-block-payload)))
+                 (is (contains? page-titles "New Page"))
+                 (is (string? ref-value))
+                 (is (common-util/uuid-string? ref-value))
+                 (is (string? ref-title))
+                 (is (not (string/includes? ref-title "[[New Page]]")))
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
+(deftest test-cli-add-block-keeps-uuid-ref
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-uuid-ref")]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       _ (run-cli ["graph" "create" "--repo" "uuid-ref-graph"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "uuid-ref-graph" "add" "page" "--page" "Home"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "uuid-ref-graph"
+                                   "add" "block"
+                                   "--target-page-name" "Home"
+                                   "--content" "Target block"]
+                                  data-dir cfg-path)
+                       _ (p/delay 100)
+                       target-query-payload (run-query data-dir cfg-path "uuid-ref-graph"
+                                                       "[:find ?uuid :in $ ?title :where [?b :block/title ?title] [?b :block/uuid ?uuid]]"
+                                                       (pr-str ["Target block"]))
+                       target-uuid (first (first (get-in target-query-payload [:data :result])))
+                       add-block-result (run-cli ["--repo" "uuid-ref-graph"
+                                                  "add" "block"
+                                                  "--target-page-name" "Home"
+                                                  "--content" (str "See [[" target-uuid "]]")]
+                                                 data-dir cfg-path)
+                       add-block-payload (parse-json-output add-block-result)
+                       _ (p/delay 100)
+                       list-page-result (run-cli ["--repo" "uuid-ref-graph" "list" "page"] data-dir cfg-path)
+                       list-page-payload (parse-json-output list-page-result)
+                       page-titles (->> (get-in list-page-payload [:data :items])
+                                        (map #(or (:block/title %) (:title %)))
+                                        set)
+                       ref-query-payload (run-query data-dir cfg-path "uuid-ref-graph"
+                                                    "[:find ?title :in $ ?page-name :where [?p :block/name ?page-name] [?b :block/page ?p] [?b :block/title ?title]]"
+                                                    (pr-str [(common-util/page-name-sanity-lc "Home")]))
+                       titles (map first (get-in ref-query-payload [:data :result]))
+                       ref-title (some #(when (and (string? %)
+                                                   (string/includes? % (str "[[" target-uuid "]]")))
+                                         %)
+                                       titles)
+                       stop-result (run-cli ["server" "stop" "--repo" "uuid-ref-graph"] data-dir cfg-path)
+                       stop-payload (parse-json-output stop-result)]
+                 (is (string? target-uuid))
+                 (is (= 0 (:exit-code add-block-result)))
+                 (is (= "ok" (:status add-block-payload)))
+                 (is (not (contains? page-titles target-uuid)))
+                 (is (string? ref-title))
+                 (is (string/includes? ref-title (str "[[" target-uuid "]]")))
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
+(deftest test-cli-add-block-missing-uuid-ref-errors
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-missing-uuid-ref")]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       _ (run-cli ["graph" "create" "--repo" "missing-uuid-ref-graph"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "missing-uuid-ref-graph" "add" "page" "--page" "Home"] data-dir cfg-path)
+                       missing-uuid (str (random-uuid))
+                       add-block-result (run-cli ["--repo" "missing-uuid-ref-graph"
+                                                  "add" "block"
+                                                  "--target-page-name" "Home"
+                                                  "--content" (str "See [[" missing-uuid "]]")]
+                                                 data-dir cfg-path)
+                       add-block-payload (parse-json-output add-block-result)
+                       stop-result (run-cli ["server" "stop" "--repo" "missing-uuid-ref-graph"] data-dir cfg-path)
+                       stop-payload (parse-json-output stop-result)]
+                 (is (= 1 (:exit-code add-block-result)))
+                 (is (= "error" (:status add-block-payload)))
+                 (is (string/includes? (get-in add-block-payload [:error :message]) missing-uuid))
                  (is (= "ok" (:status stop-payload)))
                  (done))
                (p/catch (fn [e]

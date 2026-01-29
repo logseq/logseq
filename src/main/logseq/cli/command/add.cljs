@@ -8,8 +8,10 @@
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
             [logseq.common.util :as common-util]
+            [logseq.common.util.page-ref :as page-ref]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.uuid :as common-uuid]
+            [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [promesa.core :as p]))
@@ -46,14 +48,15 @@
 
 (defn- ensure-page!
   [config repo page-name]
-  (p/let [page (transport/invoke config :thread-api/pull false
-                                 [repo [:db/id :block/uuid :block/name :block/title] [:block/name page-name]])]
+  (let [page-name-lc (common-util/page-name-sanity-lc page-name)]
+    (p/let [page (transport/invoke config :thread-api/pull false
+                                   [repo [:db/id :block/uuid :block/name :block/title] [:block/name page-name-lc]])]
     (if (:db/id page)
       page
       (p/let [_ (transport/invoke config :thread-api/apply-outliner-ops false
                                   [repo [[:create-page [page-name {}]]] {}])]
         (transport/invoke config :thread-api/pull false
-                          [repo [:db/id :block/uuid :block/name :block/title] [:block/name page-name]])))))
+                          [repo [:db/id :block/uuid :block/name :block/title] [:block/name page-name-lc]]))))))
 
 (def ^:private add-positions
   #{"first-child" "last-child" "sibling"})
@@ -107,6 +110,91 @@
 
               :else
               (assoc block :block/uuid (common-uuid/gen-uuid)))))
+        blocks))
+
+(defn- extract-page-refs
+  [title]
+  (when (string? title)
+    (->> (re-seq page-ref/page-ref-re title)
+         (map second)
+         (remove string/blank?))))
+
+(defn- collect-page-refs
+  [blocks]
+  (->> blocks
+       (mapcat (fn walk [block]
+                 (let [refs (extract-page-refs (:block/title block))
+                       children (:block/children block)]
+                   (if (seq children)
+                     (concat refs (mapcat walk children))
+                     refs))))
+       (remove string/blank?)
+       vec))
+
+(defn- partition-ref-values
+  [refs]
+  (reduce
+   (fn [acc ref-value]
+     (let [value (string/trim ref-value)]
+       (cond
+         (string/blank? value)
+         acc
+
+         (common-util/uuid-string? value)
+         (update acc :uuid-refs conj value)
+
+         :else
+         (update acc :page-refs conj value))))
+   {:uuid-refs [] :page-refs []}
+   refs))
+
+(defn- resolve-page-ref-entities
+  [config repo page-refs]
+  (if (seq page-refs)
+    (let [unique (reduce (fn [acc ref-value]
+                           (let [value (string/trim ref-value)]
+                             (if (string/blank? value)
+                               acc
+                               (assoc acc (common-util/page-name-sanity-lc value) value))))
+                         {}
+                         page-refs)]
+      (p/let [resolved (p/all
+                        (map (fn [[_ page-name]]
+                               (p/let [page (ensure-page! config repo page-name)
+                                       page-uuid (:block/uuid page)]
+                                 (when-not page-uuid
+                                   (throw (ex-info "page not found"
+                                                   {:code :page-not-found
+                                                    :page page-name})))
+                                 {:block/uuid page-uuid
+                                  :block/title (or (:block/title page) page-name)}))
+                             unique))]
+        (vec resolved)))
+    (p/resolved nil)))
+
+(defn- ensure-block-refs-exist!
+  [config repo uuid-refs]
+  (when (seq uuid-refs)
+    (p/all
+     (map (fn [uuid-ref]
+            (p/let [entity (transport/invoke config :thread-api/pull false
+                                             [repo [:db/id :block/uuid] [:block/uuid (uuid uuid-ref)]])]
+              (when-not (:db/id entity)
+                (throw (ex-info (str "block ref not found: " uuid-ref)
+                                {:code :block-ref-not-found
+                                 :uuid uuid-ref})))))
+          (distinct uuid-refs)))))
+
+(defn- normalize-block-title-refs
+  [blocks refs]
+  (mapv (fn update-block [block]
+          (let [block' (if (string? (:block/title block))
+                         (update block :block/title
+                                 #(db-content/title-ref->id-ref % refs :replace-tag? false))
+                         block)]
+            (if (seq (:block/children block'))
+              (update block' :block/children #(normalize-block-title-refs % refs))
+              block')))
         blocks))
 
 (defn- invalid-options-result
@@ -729,6 +817,13 @@
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
               target-id (resolve-add-target cfg action)
+              ref-values (collect-page-refs (:blocks action))
+              {:keys [uuid-refs page-refs]} (partition-ref-values ref-values)
+              _ (ensure-block-refs-exist! cfg (:repo action) uuid-refs)
+              refs (or (resolve-page-ref-entities cfg (:repo action) page-refs) [])
+              blocks (if (seq refs)
+                       (normalize-block-title-refs (:blocks action) refs)
+                       (:blocks action))
               status (:status action)
               tags (resolve-tags cfg (:repo action) (:tags action))
               properties (resolve-properties cfg (:repo action) (:properties action))
@@ -741,11 +836,11 @@
               opts (cond-> opts
                      keep-uuid?
                      (assoc :keep-uuid? true))
-              ops [[:insert-blocks [(:blocks action)
+              ops [[:insert-blocks [blocks
                                     target-id
                                     (assoc opts :outliner-op :insert-blocks)]]]
               _ (transport/invoke cfg :thread-api/apply-outliner-ops false [(:repo action) ops {}])
-              block-ids (->> (:blocks action)
+              block-ids (->> blocks
                              (map :block/uuid)
                              (remove nil?)
                              vec)
