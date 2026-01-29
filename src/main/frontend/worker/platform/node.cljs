@@ -78,7 +78,9 @@
     (let [sql (gobj/get opts-or-sql "sql")
           bind (gobj/get opts-or-sql "bind")
           row-mode (gobj/get opts-or-sql "rowMode")
-          bind' (if (and bind (object? bind))
+          bind' (cond
+                  (array? bind) bind
+                  (and bind (object? bind))
                   (let [out (js-obj)]
                     (doseq [key (js/Object.keys bind)]
                       (let [value (gobj/get bind key)
@@ -88,7 +90,7 @@
                                          :else key)]
                         (gobj/set out normalized value)))
                     out)
-                  bind)
+                  :else bind)
           ^js stmt (.prepare db sql)]
       (if (= row-mode "array")
         (do
