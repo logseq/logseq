@@ -16,6 +16,7 @@
             [goog.crypt :as crypt]
             [goog.crypt.Hmac]
             [goog.crypt.Sha256]
+            [goog.crypt.base64 :as base64]
             [missionary.core :as m]))
 
 ;;; userinfo, token, login/logout, ...
@@ -31,7 +32,7 @@
   (some-> jwt
           (string/split ".")
           second
-          (#(.decodeString ^js crypt/base64 % true))
+          (#(base64/decodeString % true))
           js/JSON.parse
           (js->clj :keywordize-keys true)
           (update :cognito:username decode-username)))
@@ -212,7 +213,7 @@
         key          (.encode text-encoder client-secret)
         hasher       (new crypt/Sha256)
         hmacer       (new crypt/Hmac hasher key)
-        secret-hash  (.encodeByteArray ^js crypt/base64 (.getHmac hmacer (str username' client-id)))
+        secret-hash  (base64/encodeByteArray (.getHmac hmacer (str username' client-id)))
         payload      {"AuthParameters" {"USERNAME"    username',
                                         "PASSWORD"    password,
                                         "SECRET_HASH" secret-hash}

@@ -1,9 +1,9 @@
 (ns frontend.worker.db-sync-test
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
-            [frontend.worker.db-sync :as db-sync]
-            [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.state :as worker-state]
+            [frontend.worker.sync :as db-sync]
+            [frontend.worker.sync.client-op :as client-op]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]))
 
