@@ -316,6 +316,29 @@
         (is (= child-uuid (:block/uuid (:block/parent parent))))
         (is (= page-uuid (:block/uuid (:block/parent child))))))))
 
+(deftest undo-validation-fast-path-skips-db-issues-for-non-structural-tx-test
+  (testing "undo validation skips db-issues for non-structural tx-data"
+    (let [conn (db/get-db test-db false)
+          {:keys [child-uuid]} (seed-page-parent-child!)]
+      (with-redefs [frontend.worker.undo-redo/db-issues (fn [_]
+                                                          (throw (js/Error. "db-issues called")))]
+        (is (true? (undo-validate/valid-undo-redo-tx?
+                    conn
+                    [[:db/add [:block/uuid child-uuid] :block/title "child-updated"]])))))))
+
+(deftest undo-validation-checks-structural-tx-test
+  (testing "undo validation evaluates structural changes"
+    (let [conn (db/get-db test-db false)
+          {:keys [page-uuid child-uuid]} (seed-page-parent-child!)
+          calls (atom 0)]
+      (with-redefs [frontend.worker.undo-redo/issues-for-entity-ids (fn [_ _]
+                                                                      (swap! calls inc)
+                                                                      [])]
+        (is (true? (undo-validate/valid-undo-redo-tx?
+                    conn
+                    [[:db/add [:block/uuid child-uuid] :block/parent [:block/uuid page-uuid]]])))
+        (is (pos? @calls))))))
+
 (deftest ^:long undo-redo-test
   (testing "Random mixed operations"
     (set! undo-redo/max-stack-length 500)
