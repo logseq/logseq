@@ -218,8 +218,10 @@
   (let [asset-uuid (:block/uuid asset-block)
         asset-type (:logseq.property.asset/type asset-block)
         external-url (:logseq.property.asset/external-url asset-block)
+        remote-metadata (:logseq.property.asset/remote-metadata asset-block)
         progress-entry (get progress (str asset-uuid))]
     (and (seq repo)
+         remote-metadata
          asset-uuid
          (seq asset-type)
          (string/blank? external-url)
