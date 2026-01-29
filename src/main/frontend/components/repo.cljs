@@ -460,8 +460,8 @@
                               (p/do
                                 (state/set-state! :rtc/uploading? true)
                                 (rtc-handler/<rtc-create-graph! repo)
-                                (rtc-flows/trigger-rtc-start repo)
-                                (rtc-handler/<get-remote-graphs))
+                                (rtc-handler/<get-remote-graphs)
+                                (rtc-flows/trigger-rtc-start repo))
                               (p/catch (fn [error]
                                          (log/error :create-db-failed error)))
                               (p/finally (fn []
