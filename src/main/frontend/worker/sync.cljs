@@ -13,7 +13,6 @@
             [frontend.worker.sync.const :as rtc-const]
             [frontend.worker.sync.crypt :as sync-crypt]
             [lambdaisland.glogi :as log]
-            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db-sync.cycle :as sync-cycle]
             [logseq.db-sync.malli-schema :as db-sync-schema]
@@ -388,7 +387,7 @@
     (fail-fast :db-sync/missing-field
                (merge {:repo repo :field field :value value} context))))
 
-(defn- persist-local-tx! [repo normalized-tx-data reversed-datoms tx-meta]
+(defn- persist-local-tx! [repo normalized-tx-data reversed-datoms _tx-meta]
   (when-let [conn (client-ops-conn repo)]
     (let [tx-id (random-uuid)
           now (.now js/Date)]
