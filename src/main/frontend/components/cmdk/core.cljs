@@ -944,7 +944,7 @@
           [:<>
            (button-fn "Open" ["return"])
            (button-fn "Open in sidebar" ["shift" "return"] {:open-sidebar? true})
-           (when (:source-block @(::highlighted-item state)) (button-fn "Copy ref" ["⌘" "c"]))]
+           (when (:source-block @(::highlighted-item state)) (button-fn "Copy ref" ["cmd" "c"]))]
 
           :search
           [:<>
