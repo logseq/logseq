@@ -7,7 +7,6 @@
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.export.common :as export-common-handler]
             [frontend.handler.notification :as notification]
-            [frontend.handler.user :as user-handler]
             [frontend.idb :as idb]
             [frontend.persist-db :as persist-db]
             [frontend.state :as state]
@@ -89,24 +88,6 @@
        (.click anchor)))
    (p/catch (fn [error]
               (js/console.error error)))))
-
-(defn export-repo-as-debug-log-sqlite!
-  [repo]
-  (if-not (and (state/get-auth-id-token) (user-handler/rtc-group?))
-    (notification/show! "Debug log export is limited to team members." :warning)
-    (->
-     (p/let [data (state/<invoke-db-worker-direct-pass :thread-api/export-debug-log-db repo)]
-       (if-not data
-         (notification/show! "Debug log db is not available for this graph." :warning)
-         (let [filename (file-name (str repo "_debug-log") "sqlite")
-               url (js/URL.createObjectURL (js/Blob. #js [data]))
-               anchor (.createElement js/document "a")]
-           (set! (.-href anchor) url)
-           (set! (.-download anchor) filename)
-           (.click anchor)
-           (js/URL.revokeObjectURL url))))
-     (p/catch (fn [error]
-                (js/console.error error))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Export to roam json ;;
