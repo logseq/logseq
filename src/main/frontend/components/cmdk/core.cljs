@@ -29,7 +29,6 @@
             [frontend.util.ref :as ref]
             [goog.functions :as gfun]
             [goog.object :as gobj]
-            [goog.userAgent]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
@@ -916,7 +915,7 @@
       (for [key shortcut]
         [:div.ui__button-shortcut-key
          (case key
-           "cmd" [:div (if goog.userAgent/MAC "⌘" "Ctrl")]
+           "cmd" [:div (if util/mac? "⌘" "Ctrl")]
            "shift" [:div "⇧"]
            "return" [:div "⏎"]
            "esc" [:div.tracking-tightest {:style {:transform   "scaleX(0.8) scaleY(1.2) "
