@@ -5,12 +5,8 @@ The Logseq CLI is a Node.js program compiled from ClojureScript that connects to
 ## Build the CLI
 
 ```bash
-LOGSEQ_BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ") \
-LOGSEQ_REVISION=$(git rev-parse --short HEAD) \
-clojure -M:cljs compile logseq-cli
+clojure -M:cljs compile logseq-cli db-worker-node
 ```
-
-If `LOGSEQ_BUILD_TIME` or `LOGSEQ_REVISION` are not provided, the CLI prints defaults in `--version` output.
 
 ## db-worker-node lifecycle
 
@@ -22,7 +18,12 @@ If `LOGSEQ_BUILD_TIME` or `LOGSEQ_REVISION` are not provided, the CLI prints def
 node ./dist/logseq.js graph list
 ```
 
-If installed globally, run:
+You can also use npm link to make ./dist/logseq.js globally available, run:
+```
+npm link
+```
+
+If installed(or linked) globally, run:
 
 ```bash
 logseq graph list
