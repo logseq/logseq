@@ -1,6 +1,7 @@
 (ns logseq.db
   "Main namespace for db fns. All fns are only for DB graphs"
-  (:require [clojure.set :as set]
+  (:require [clojure.data :as data]
+            [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.conn :as dc]
@@ -186,7 +187,7 @@
 (defn transact-with-temp-conn!
   "Validate db and store once for a batch transaction, the `temp` conn can still load data from disk,
   however it can't write to the disk."
-  [conn tx-meta batch-tx-fn & {:keys [listen-db filter-tx-data]}]
+  [conn tx-meta batch-tx-fn & {:keys [listen-db]}]
   (let [temp-conn (d/conn-from-db @conn)
         *batch-tx-data (volatile! [])]
     ;; can read from disk, write is disallowed
@@ -207,11 +208,10 @@
       (when (seq tx-data)
         ;; transact tx-data to `conn` and validate db
         (let [tx-data' (->>
-                        (if (fn? filter-tx-data)
-                          (filter-tx-data temp-after-db tx-data)
-                          tx-data)
+                        tx-data
                         remove-conflict-datoms
                         (db-normalize/replace-attr-retract-with-retract-entity temp-after-db))]
+          (prn :debug :transact-with-temp-conn :diff (data/diff (set tx-data) (set tx-data')))
           (transact! conn tx-data' tx-meta))))))
 
 (def page? entity-util/page?)
