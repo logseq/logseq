@@ -567,8 +567,7 @@
                                               :hide? true
                                               :public? false}
                                              :properties
-                                             {:logseq.property/description "Metadata of asset in remote storage"}
-                                             :rtc property-ignore-rtc-upload-sync}
+                                             {:logseq.property/description "Metadata of asset in remote storage"}}
      :logseq.property.asset/resize-metadata {:title "Asset resize metadata"
                                              :schema {:type :map
                                                       :hide? true
