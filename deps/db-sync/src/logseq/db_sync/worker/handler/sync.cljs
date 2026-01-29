@@ -264,11 +264,17 @@
 
       :else
       (if txs
-        (let [new-t (apply-tx! self sender txs)]
-          (if (and (map? new-t) (= "tx/reject" (:type new-t)))
-            new-t
-            {:type "tx/batch/ok"
-             :t new-t}))
+        (try
+          (let [new-t (apply-tx! self sender txs)]
+            (if (and (map? new-t) (= "tx/reject" (:type new-t)))
+              new-t
+              {:type "tx/batch/ok"
+               :t new-t}))
+          (catch :default e
+            (log/error :db-sync/transact-failed e)
+            {:type "tx/reject"
+             :reason "db transact failed"
+             :t current-t}))
         {:type "tx/reject"
          :reason "empty tx data"}))))
 

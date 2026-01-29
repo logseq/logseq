@@ -31,7 +31,7 @@
      [:type [:= "ping"]]]]])
 
 (def tx-reject-reason-schema
-  [:enum "stale" "empty tx data" "invalid tx" "invalid t-before"])
+  [:enum "stale" "empty tx data" "invalid tx" "invalid t-before" "db transact failed"])
 
 (def tx-reject-schema
   [:map
