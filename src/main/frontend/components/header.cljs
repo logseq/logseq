@@ -421,7 +421,8 @@
        (when (and current-repo
                   (ldb/get-graph-rtc-uuid (db/get-db))
                   (user-handler/logged-in?)
-                  (user-handler/rtc-group?))
+                  (user-handler/rtc-group?)
+                  (some #(= current-repo (:url %)) (state/get-rtc-graphs)))
          [:<>
           (recent-slider)
           (rum/with-key (rtc-collaborators)

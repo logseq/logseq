@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [deftest is async]]
             [frontend.handler.db-based.sync :as db-sync]
             [frontend.handler.user :as user-handler]
+            [frontend.state :as state]
             [promesa.core :as p]))
 
 (deftest remove-member-request-test
@@ -51,3 +52,33 @@
              (p/catch (fn [e]
                         (is (= :db-sync/invalid-member (:type (ex-data e))))
                         (done))))))
+
+(deftest rtc-start-skips-when-graph-missing-from-remote-list-test
+  (async done
+         (let [called (atom nil)]
+           (-> (p/with-redefs [state/get-rtc-graphs (fn [] [{:url "repo-other"}])
+                               state/<invoke-db-worker (fn [& args]
+                                                         (reset! called args)
+                                                         (p/resolved :ok))]
+                 (db-sync/<rtc-start! "repo-current"))
+               (p/then (fn [_]
+                         (is (nil? @called))
+                         (done)))
+               (p/catch (fn [e]
+                          (is false (str e))
+                          (done)))))))
+
+(deftest rtc-start-invokes-worker-when-graph-in-remote-list-test
+  (async done
+         (let [called (atom nil)]
+           (-> (p/with-redefs [state/get-rtc-graphs (fn [] [{:url "repo-current"}])
+                               state/<invoke-db-worker (fn [& args]
+                                                         (reset! called args)
+                                                         (p/resolved :ok))]
+                 (db-sync/<rtc-start! "repo-current"))
+               (p/then (fn [_]
+                         (is (= [:thread-api/db-sync-start "repo-current"] @called))
+                         (done)))
+               (p/catch (fn [e]
+                          (is false (str e))
+                          (done)))))))
