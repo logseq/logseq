@@ -454,7 +454,8 @@
                        (invalid-graph-name-warning)
                        (do
                          (set-creating-db? true)
-                         (p/let [repo (repo-handler/new-db! graph-name)]
+                         (p/let [repo (repo-handler/new-db! graph-name
+                                                            {:remote-graph? cloud?})]
                            (when cloud?
                              (->
                               (p/do
