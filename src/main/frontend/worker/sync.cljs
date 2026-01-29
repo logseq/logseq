@@ -1045,7 +1045,8 @@
   (when (and (enabled?) (seq tx-data)
              (not (:rtc-tx? tx-meta))
              (:persist-op? tx-meta true)
-             (ldb/get-graph-rtc-uuid (:db-after tx-report)))
+             ;; (ldb/get-graph-rtc-uuid (:db-after tx-report))
+             )
     (enqueue-local-tx! repo tx-report)
     (when-let [client @worker-state/*db-sync-client]
       (when (= repo (:repo client))
