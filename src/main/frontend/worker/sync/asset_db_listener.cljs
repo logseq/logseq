@@ -5,37 +5,30 @@
             [frontend.worker.sync.client-op :as client-op]
             [logseq.db :as ldb]))
 
-(defn- max-t
-  [entity-datoms]
-  (apply max (map (fn [[_e _a _v t]] t) entity-datoms)))
+(defn- asset-checksum?
+  [a]
+  (= :logseq.property.asset/checksum a))
 
-(defn- asset-related-attrs-changed?
-  [entity-datoms]
-  (some (fn [[_e a]] (= :logseq.property.asset/checksum a)) entity-datoms))
-
-(defn- entity-datoms=>ops
-  [db-before db-after entity-datoms]
-  (when-let [e (ffirst entity-datoms)]
-    (let [ent-after (d/entity db-after e)
-          ent-before (d/entity db-before e)]
-      (cond
-        (and (some-> ent-after ldb/asset?)
-             (asset-related-attrs-changed? entity-datoms))
-        [[:update-asset (max-t entity-datoms) {:block-uuid (:block/uuid ent-after)}]]
-
-        (and (some-> ent-before ldb/asset?)
-             (nil? ent-after))
-        [[:remove-asset (max-t entity-datoms) {:block-uuid (:block/uuid ent-before)}]]))))
+(defn- datom=>op
+  [db-after [e _a _v t _]]
+  (let [ent-after (d/entity db-after e)]
+    (when (ldb/asset? ent-after)
+      [:update-asset t {:block-uuid (:block/uuid ent-after)}])))
 
 (defn generate-asset-ops
-  [repo db-before db-after same-entity-datoms-coll]
-  (when-let [ops (not-empty (mapcat (partial entity-datoms=>ops db-before db-after) same-entity-datoms-coll))]
-    (client-op/add-asset-ops repo ops)))
+  [repo _db-before db-after tx-data]
+  (let [related-datoms (filter
+                        (fn [datom]
+                          (and (asset-checksum? (:a datom)) (:added datom)))
+                        tx-data)]
+    (when-let [ops (not-empty (map #(datom=>op db-after %) related-datoms))]
+      (client-op/add-asset-ops repo ops))))
 
 (defmethod db-listener/listen-db-changes :gen-asset-change-events
   [_
-   {:keys [repo same-entity-datoms-coll]}
-   {:keys [_tx-data tx-meta db-before db-after]}]
+   {:keys [repo]}
+   {:keys [tx-data tx-meta db-before db-after]}]
   (when (and (client-op/rtc-db-graph? repo)
-             (:persist-op? tx-meta true))
-    (generate-asset-ops repo db-before db-after same-entity-datoms-coll)))
+             (:persist-op? tx-meta true)
+             (not (:rtc-tx? tx-meta)))
+    (generate-asset-ops repo db-before db-after tx-data)))

@@ -223,9 +223,9 @@
           (if (not access?)
             (http/forbidden)
             (p/let [encrypted-aes-key (index/<graph-encrypted-aes-key db graph-id user-id)]
-              (http/json-response :e2ee/graph-aes-key (cond-> {}
-                                                        (some? encrypted-aes-key)
-                                                        (assoc :encrypted-aes-key encrypted-aes-key)))))))
+              (if (some? encrypted-aes-key)
+                (http/json-response :e2ee/graph-aes-key {:encrypted-aes-key encrypted-aes-key})
+                (http/error-response "encrypted aes key missing" 404))))))
 
       :e2ee/graph-aes-key-post
       (cond
