@@ -63,6 +63,7 @@
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.ui :as shui]
+            [medley.core :as medley]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -1319,7 +1320,7 @@
         (fs/write-plain-text-file! repo dir file-rpath content nil)))))
 
 (defn- new-asset-block
-  [repo ^js file {:keys [repo-dir asset-dir-rpath external-url]}]
+  [repo ^js file {:keys [repo-dir asset-dir-rpath external-url] :as opts}]
   ;; WARN file name maybe fully qualified path when paste file
   (p/let [[file title] (if (map? file) [(:src file) (:title file)] [file nil])
           [file external-url] (if (string? file) [nil file] [file external-url])
@@ -1339,7 +1340,7 @@
                             false)
         nil)
       ;; new asset block
-      (let [block-id (ldb/new-block-id)
+      (let [block-id (or (:block/uuid opts) (ldb/new-block-id))
             ext (when file-name (db-asset/asset-path->type file-name))
             _ (when (string/blank? ext)
                 (throw (ex-info "File doesn't have a valid ext."
@@ -1375,13 +1376,18 @@
           today-page (if (nil? today-page-e)
                        (state/pub-event! [:page/create today-page-name])
                        today-page-e)
+          edit-block (or (state/get-edit-block) last-edit-block)
+          empty-target? (if (state/get-edit-block)
+                          (string/blank? (state/get-edit-content))
+                          (string/blank? (:block/title last-edit-block)))
           blocks* (p/all
-                   (for [^js file files]
+                   (for [^js [idx file] (medley/indexed files)]
                      (new-asset-block repo file
                                       {:repo-dir repo-dir
-                                       :asset-dir-rpath asset-dir-rpath})))
+                                       :asset-dir-rpath asset-dir-rpath
+                                       :block/uuid (when (and (zero? idx) empty-target?)
+                                                     (:block/uuid edit-block))})))
           blocks (remove nil? blocks*)
-          edit-block (or (state/get-edit-block) last-edit-block)
           insert-to-current-block-page? (and (:block/uuid edit-block) (not pdf-area?))
           target (cond
                    insert-to-current-block-page?
