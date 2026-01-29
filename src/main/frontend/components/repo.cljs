@@ -150,13 +150,12 @@
                                     [:small "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."]]])
                                  (p/then
                                   (fn []
-                                    (let [<delete-graph rtc-handler/<rtc-delete-graph!]
-                                      (state/set-state! :rtc/loading-graphs? true)
-                                      (when (= (state/get-current-repo) repo)
-                                        (state/<invoke-db-worker :thread-api/rtc-stop))
-                                      (p/do! (<delete-graph GraphUUID GraphSchemaVersion)
-                                             (state/set-state! :rtc/loading-graphs? false)
-                                             (rtc-handler/<get-remote-graphs))))))))}
+                                    (state/set-state! :rtc/loading-graphs? true)
+                                    (when (= (state/get-current-repo) repo)
+                                      (state/<invoke-db-worker :thread-api/rtc-stop))
+                                    (p/do! (rtc-handler/<rtc-delete-graph! GraphUUID GraphSchemaVersion)
+                                           (state/set-state! :rtc/loading-graphs? false)
+                                           (rtc-handler/<get-remote-graphs)))))))}
               "Delete from server"))
 
            (when (and remote? (not manager?))
