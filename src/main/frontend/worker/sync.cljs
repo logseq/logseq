@@ -437,13 +437,15 @@
 ;; TODO: is this really needed?
 (defn- keep-last-update
   [tx-data]
-  (->> tx-data
-       (common-util/distinct-by-last-wins
-        (fn [item]
-          (if (and (vector? item) (= 5 (count item))
-                   (contains? #{:block/updated-at :block/title :block/name :block/order} (nth item 2)))
-            (take 3 item)
-            item)))))
+  tx-data
+  ;; (->> tx-data
+  ;;      (common-util/distinct-by-last-wins
+  ;;       (fn [item]
+  ;;         (if (and (vector? item) (= 5 (count item))
+  ;;                  (contains? #{:block/updated-at :block/title :block/name :block/order} (nth item 2)))
+  ;;           (take 3 item)
+  ;;           item))))
+  )
 
 (defn- sanitize-tx-data
   [db tx-data local-deleted-ids]
