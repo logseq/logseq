@@ -1,18 +1,17 @@
-(ns frontend.worker.db-sync
+(ns frontend.worker.sync
   "Simple db-sync client based on promesa + WebSocket."
-  (:require ["/frontend/idbkv" :as idb-keyval]
-            [cljs-bean.core :as bean]
+  (:require [cljs-bean.core :as bean]
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
             [datascript.storage :refer [IStorage]]
-            [frontend.common.crypt :as crypt]
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.handler.page :as worker-page]
-            [frontend.worker.rtc.client-op :as client-op]
-            [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
+            [frontend.worker.sync.client-op :as client-op]
+            [frontend.worker.sync.const :as rtc-const]
+            [frontend.worker.sync.crypt :as sync-crypt]
             [lambdaisland.glogi :as log]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
@@ -27,8 +26,6 @@
             [promesa.core :as p]))
 
 (defonce *repo->latest-remote-tx (atom {}))
-(defonce ^:private *repo->aes-key (atom {}))
-(defonce ^:private e2ee-store (delay (idb-keyval/newStore "localforage" "keyvaluepairs" 2)))
 
 (defn- current-client
   [repo]
@@ -224,13 +221,6 @@
     (catch :default e
       (fail-fast :db-sync/response-parse-failed (assoc context :error e)))))
 
-(defn- coerce-http-request [schema-key body]
-  (if-let [coercer (get db-sync-schema/http-request-coercers schema-key)]
-    (let [coerced (coerce coercer body {:schema schema-key :dir :request})]
-      (when-not (= coerced invalid-coerce)
-        coerced))
-    body))
-
 (defn- coerce-http-response [schema-key body]
   (if-let [coercer (get db-sync-schema/http-response-coercers schema-key)]
     (let [coerced (coerce coercer body {:schema schema-key :dir :response})]
@@ -325,295 +315,6 @@
                         {:status (.-status resp)
                          :url url
                          :body body}))))))
-
-(def ^:private invalid-transit ::invalid-transit)
-
-(defn- graph-e2ee?
-  [repo]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (true? (ldb/get-graph-rtc-e2ee? @conn))))
-
-(defn- user-uuid []
-  (some-> (worker-state/get-id-token) worker-util/parse-jwt :sub))
-
-(defn- graph-encrypted-aes-key-idb-key
-  [graph-id]
-  (str "rtc-encrypted-aes-key###" graph-id))
-
-(defn- <get-item
-  [k]
-  (assert (and k @e2ee-store))
-  (p/let [r (idb-keyval/get k @e2ee-store)]
-    (js->clj r :keywordize-keys true)))
-
-(defn- <set-item!
-  [k value]
-  (assert (and k @e2ee-store))
-  (idb-keyval/set k value @e2ee-store))
-
-(defn- <clear-item!
-  [k]
-  (assert (and k @e2ee-store))
-  (idb-keyval/del k @e2ee-store))
-
-(defn e2ee-base
-  []
-  (http-base-url))
-
-(defn <fetch-user-rsa-key-pair-raw
-  [base]
-  (fetch-json (str base "/e2ee/user-keys")
-              {:method "GET"}
-              {:response-schema :e2ee/user-keys}))
-
-(defn <upload-user-rsa-key-pair!
-  [base public-key encrypted-private-key]
-  (let [body (coerce-http-request :e2ee/user-keys
-                                  {:public-key public-key
-                                   :encrypted-private-key encrypted-private-key})]
-    (when (nil? body)
-      (fail-fast :db-sync/invalid-field {:type :e2ee/user-keys :body body}))
-    (fetch-json (str base "/e2ee/user-keys")
-                {:method "POST"
-                 :headers {"content-type" "application/json"}
-                 :body (js/JSON.stringify (clj->js body))}
-                {:response-schema :e2ee/user-keys})))
-
-(defn- <ensure-user-rsa-key-pair-raw
-  [base]
-  (p/let [existing (-> (<fetch-user-rsa-key-pair-raw base)
-                       (p/catch (fn [error]
-                                  (throw error))))]
-    (if (and (string? (:public-key existing))
-             (string? (:encrypted-private-key existing)))
-      existing
-      (p/let [{:keys [publicKey privateKey]} (crypt/<generate-rsa-key-pair)
-              {:keys [password]} (worker-state/<invoke-main-thread :thread-api/request-e2ee-password)
-              encrypted-private-key (crypt/<encrypt-private-key password privateKey)
-              exported-public-key (crypt/<export-public-key publicKey)
-              public-key-str (ldb/write-transit-str exported-public-key)
-              encrypted-private-key-str (ldb/write-transit-str encrypted-private-key)]
-        (p/let [_ (<upload-user-rsa-key-pair! base public-key-str encrypted-private-key-str)]
-          {:public-key public-key-str
-           :encrypted-private-key encrypted-private-key-str})))))
-
-(defn ensure-user-rsa-keys!
-  []
-  (let [base (e2ee-base)]
-    (when-not (string? base)
-      (fail-fast :db-sync/missing-field {:base base}))
-    (<ensure-user-rsa-key-pair-raw base)))
-
-(defn- <decrypt-private-key
-  [encrypted-private-key-str]
-  (p/let [encrypted-private-key (ldb/read-transit-str encrypted-private-key-str)
-          exported-private-key (worker-state/<invoke-main-thread
-                                :thread-api/decrypt-user-e2ee-private-key
-                                encrypted-private-key)]
-    (crypt/<import-private-key exported-private-key)))
-
-(defn- <import-public-key
-  [public-key-str]
-  (p/let [exported (ldb/read-transit-str public-key-str)]
-    (crypt/<import-public-key exported)))
-
-(defn- <fetch-user-public-key-by-email
-  [base email]
-  (fetch-json (str base "/e2ee/user-public-key?email=" (js/encodeURIComponent email))
-              {:method "GET"}
-              {:response-schema :e2ee/user-public-key}))
-
-(defn- <fetch-graph-encrypted-aes-key-raw
-  [base graph-id]
-  (fetch-json (str base "/e2ee/graphs/" graph-id "/aes-key")
-              {:method "GET"}
-              {:response-schema :e2ee/graph-aes-key}))
-
-(defn- <upsert-graph-encrypted-aes-key!
-  [base graph-id encrypted-aes-key]
-  (let [body (coerce-http-request :e2ee/graph-aes-key
-                                  {:encrypted-aes-key encrypted-aes-key})]
-    (when (nil? body)
-      (fail-fast :db-sync/invalid-field {:type :e2ee/graph-aes-key :body body}))
-    (fetch-json (str base "/e2ee/graphs/" graph-id "/aes-key")
-                {:method "POST"
-                 :headers {"content-type" "application/json"}
-                 :body (js/JSON.stringify (clj->js body))}
-                {:response-schema :e2ee/graph-aes-key})))
-
-(defn- <ensure-graph-aes-key
-  [repo graph-id]
-  (if-not (graph-e2ee? repo)
-    (p/resolved nil)
-    (if-let [cached (get @*repo->aes-key repo)]
-      (p/resolved cached)
-      (let [base (e2ee-base)
-            user-id (user-uuid)]
-        (when-not (and (string? base) (string? user-id))
-          (fail-fast :db-sync/missing-field {:base base :user-id user-id :graph-id graph-id}))
-        (p/let [{:keys [public-key encrypted-private-key]} (<ensure-user-rsa-key-pair-raw base)
-                public-key' (when (string? public-key) (<import-public-key public-key))
-                private-key' (when (string? encrypted-private-key) (<decrypt-private-key encrypted-private-key))
-                local-encrypted (when graph-id
-                                  (<get-item (graph-encrypted-aes-key-idb-key graph-id)))
-                remote-encrypted (when (and (nil? local-encrypted) graph-id)
-                                   (p/let [resp (<fetch-graph-encrypted-aes-key-raw base graph-id)]
-                                     (when-let [encrypted-aes-key (:encrypted-aes-key resp)]
-                                       (ldb/read-transit-str encrypted-aes-key))))
-                encrypted-aes-key (or local-encrypted remote-encrypted)
-                aes-key (if encrypted-aes-key
-                          (crypt/<decrypt-aes-key private-key' encrypted-aes-key)
-                          (p/let [aes-key (crypt/<generate-aes-key)
-                                  encrypted (crypt/<encrypt-aes-key public-key' aes-key)
-                                  encrypted-str (ldb/write-transit-str encrypted)
-                                  _ (<upsert-graph-encrypted-aes-key! base graph-id encrypted-str)
-                                  _ (<set-item! (graph-encrypted-aes-key-idb-key graph-id) encrypted)]
-                            aes-key))
-                _ (when (and graph-id encrypted-aes-key (nil? local-encrypted))
-                    (<set-item! (graph-encrypted-aes-key-idb-key graph-id) encrypted-aes-key))]
-          (swap! *repo->aes-key assoc repo aes-key)
-          aes-key)))))
-
-(defn <fetch-graph-aes-key-for-download
-  [repo graph-id]
-  (let [base (e2ee-base)
-        aes-key-k (graph-encrypted-aes-key-idb-key graph-id)]
-    (when-not (and (string? base) (string? graph-id))
-      (fail-fast :db-sync/missing-field {:base base :graph-id graph-id}))
-    (p/let [{:keys [public-key encrypted-private-key]} (<fetch-user-rsa-key-pair-raw base)]
-      (<clear-item! aes-key-k)
-      (when-not (and (string? public-key) (string? encrypted-private-key))
-        (fail-fast :db-sync/missing-field {:graph-id graph-id :field :user-rsa-key-pair}))
-      (p/let [private-key (<decrypt-private-key encrypted-private-key)
-              encrypted-aes-key (p/let [resp (<fetch-graph-encrypted-aes-key-raw base graph-id)]
-                                  (when-let [encrypted-aes-key (:encrypted-aes-key resp)]
-                                    (ldb/read-transit-str encrypted-aes-key)))]
-        (if-not encrypted-aes-key
-          (fail-fast :db-sync/missing-field {:graph-id graph-id :field :encrypted-aes-key})
-          (<set-item! aes-key-k encrypted-aes-key))
-        (p/let [aes-key (crypt/<decrypt-aes-key private-key encrypted-aes-key)]
-          (swap! *repo->aes-key assoc repo aes-key)
-          aes-key)))))
-
-(defn <grant-graph-access!
-  [repo graph-id target-email]
-  (if-not (graph-e2ee? repo)
-    (p/resolved nil)
-    (let [base (e2ee-base)]
-      (when-not (string? base)
-        (fail-fast :db-sync/missing-field {:base base :graph-id graph-id}))
-      (p/let [aes-key (<ensure-graph-aes-key repo graph-id)
-              _ (when (nil? aes-key)
-                  (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
-              resp (<fetch-user-public-key-by-email base target-email)
-              public-key-str (:public-key resp)]
-        (if-not (string? public-key-str)
-          (fail-fast :db-sync/missing-field {:repo repo :field :public-key :email target-email})
-          (p/let [public-key (<import-public-key public-key-str)
-                  encrypted (crypt/<encrypt-aes-key public-key aes-key)
-                  encrypted-str (ldb/write-transit-str encrypted)
-                  body (coerce-http-request :e2ee/grant-access
-                                            {:target-user-email+encrypted-aes-key-coll
-                                             [{:email target-email
-                                               :encrypted-aes-key encrypted-str}]})
-                  _ (when (nil? body)
-                      (fail-fast :db-sync/invalid-field {:type :e2ee/grant-access :body body}))
-                  _ (fetch-json (str base "/e2ee/graphs/" graph-id "/grant-access")
-                                {:method "POST"
-                                 :headers {"content-type" "application/json"}
-                                 :body (js/JSON.stringify (clj->js body))}
-                                {:response-schema :e2ee/grant-access})]
-            nil))))))
-
-(defn- <encrypt-text-value
-  [aes-key value]
-  (assert (string? value) (str "encrypting value should be a string, value: " value))
-  (p/let [encrypted (crypt/<encrypt-text aes-key (ldb/write-transit-str value))]
-    (ldb/write-transit-str encrypted)))
-
-(defn- <decrypt-text-value
-  [aes-key value]
-  (assert (string? value) (str "encrypted value should be a string, value: " value))
-  (let [decoded (ldb/read-transit-str value)]
-    (if (= decoded invalid-transit)
-      (p/resolved value)
-      (p/let [value (crypt/<decrypt-text-if-encrypted aes-key decoded)
-              value' (ldb/read-transit-str value)]
-        value'))))
-
-(defn- encrypt-tx-item
-  [aes-key item]
-  (cond
-    (and (vector? item) (<= 4 (count item)))
-    (let [attr (nth item 2)
-          v (nth item 3)]
-      (if (contains? rtc-const/encrypt-attr-set attr)
-        (p/let [v' (<encrypt-text-value aes-key v)]
-          (assoc item 3 v'))
-        (p/resolved item)))
-
-    :else
-    (p/resolved item)))
-
-(defn- decrypt-tx-item
-  [aes-key item]
-  (cond
-    (and (vector? item) (<= 4 (count item)))
-    (let [attr (nth item 2)
-          v (nth item 3)]
-      (if (contains? rtc-const/encrypt-attr-set attr)
-        (p/let [v' (<decrypt-text-value aes-key v)]
-          (assoc item 3 v'))
-        (p/resolved item)))
-
-    :else
-    (p/resolved item)))
-
-(defn- <encrypt-tx-data
-  [aes-key tx-data]
-  (when (seq tx-data)
-    (p/let [items (p/all (mapv (fn [item] (encrypt-tx-item aes-key item)) tx-data))]
-      (vec items))))
-
-(defn- <decrypt-tx-data
-  [aes-key tx-data]
-  (when (seq tx-data)
-    (p/let [items (p/all (mapv (fn [item] (decrypt-tx-item aes-key item)) tx-data))]
-      (vec items))))
-
-(defn- <decrypt-keys-attrs
-  [aes-key keys]
-  (p/all (mapv (fn [[e a v t]]
-                 (if (contains? rtc-const/encrypt-attr-set a)
-                   (p/let [v' (<decrypt-text-value aes-key v)]
-                     [e a v' t])
-                   (p/resolved [e a v t]))) keys)))
-
-(defn- <decrypt-snapshot-row
-  [aes-key [addr content addresses]]
-  (p/let [data (ldb/read-transit-str content)
-          keys' (if (map? data)
-                  (<decrypt-keys-attrs aes-key (:keys data))
-                  (p/let [result (p/all (map #(<decrypt-keys-attrs aes-key %) data))]
-                    ;; if you truly need a vector:
-                    (vec result)))
-          data' (if (map? data) (assoc data :keys keys') keys')
-          content' (ldb/write-transit-str data')]
-    [addr content' addresses]))
-
-(defn <decrypt-snapshot-rows-batch
-  [aes-key rows-batch]
-  (p/all (map #(<decrypt-snapshot-row aes-key %) rows-batch)))
-
-(defn- <encrypt-datoms
-  [aes-key datoms]
-  (p/all
-   (mapv (fn [d]
-           (if (contains? rtc-const/encrypt-attr-set (:a d))
-             (p/let [v' (<encrypt-text-value aes-key (:v d))]
-               (assoc d :v v'))
-             d))
-         datoms)))
 
 (defn- upsert-addr-content!
   [^js db data]
@@ -782,11 +483,11 @@
                   ;; (prn :debug :upload :tx-data tx-data)
                   (when (seq txs)
                     (->
-                     (p/let [aes-key (<ensure-graph-aes-key repo (:graph-id client))
-                             _ (when (and (graph-e2ee? repo) (nil? aes-key))
+                     (p/let [aes-key (sync-crypt/<ensure-graph-aes-key repo (:graph-id client))
+                             _ (when (and (sync-crypt/graph-e2ee? repo) (nil? aes-key))
                                  (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
                              tx-data* (if aes-key
-                                        (<encrypt-tx-data aes-key tx-data)
+                                        (sync-crypt/<encrypt-tx-data aes-key tx-data)
                                         tx-data)]
 
                        (reset! (:inflight client) tx-ids)
@@ -1188,11 +889,11 @@
                                          txs)
                           tx (distinct (mapcat identity txs-data))]
                       (when (seq tx)
-                        (p/let [aes-key (<ensure-graph-aes-key repo (:graph-id client))
-                                _ (when (and (graph-e2ee? repo) (nil? aes-key))
+                        (p/let [aes-key (sync-crypt/<ensure-graph-aes-key repo (:graph-id client))
+                                _ (when (and (sync-crypt/graph-e2ee? repo) (nil? aes-key))
                                     (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
                                 tx* (if aes-key
-                                      (<decrypt-tx-data aes-key tx)
+                                      (sync-crypt/<decrypt-tx-data aes-key tx)
                                       (p/resolved tx))]
                           (apply-remote-tx! repo client tx*)
                           (client-op/update-local-tx repo remote-tx)
@@ -1418,8 +1119,8 @@
                                                             payload)))]
      (if (and (seq base) (seq graph-id))
        (if-let [source-conn (worker-state/get-datascript-conn repo)]
-         (p/let [aes-key (<ensure-graph-aes-key repo graph-id)
-                 _ (when (and (graph-e2ee? repo) (nil? aes-key))
+         (p/let [aes-key (sync-crypt/<ensure-graph-aes-key repo graph-id)
+                 _ (when (and (sync-crypt/graph-e2ee? repo) (nil? aes-key))
                      (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))]
            (set-graph-e2ee-enabled! repo)
            (ensure-client-graph-uuid! repo graph-id)
@@ -1427,7 +1128,7 @@
                    _ (prn :debug :datoms-count (count datoms) :time (js/Date.))
                    _ (update-progress {:sub-type :upload-progress
                                        :message "Encrypting data"})
-                   encrypted-datoms (<encrypt-datoms aes-key datoms)
+                   encrypted-datoms (sync-crypt/<encrypt-datoms aes-key datoms)
                    {:keys [db] :as temp} (<create-temp-sqlite-conn (d/schema @source-conn) encrypted-datoms)
                    total-rows (count-kvs-rows db)]
              (->
