@@ -485,15 +485,11 @@
       (when-not (and (string? public-key) (string? encrypted-private-key))
         (fail-fast :db-sync/missing-field {:graph-id graph-id :field :user-rsa-key-pair}))
       (p/let [private-key (<decrypt-private-key encrypted-private-key)
-              local-encrypted (<get-item (graph-encrypted-aes-key-idb-key graph-id))
-              remote-encrypted (when (nil? local-encrypted)
-                                 (p/let [resp (<fetch-graph-encrypted-aes-key-raw base graph-id)]
-                                   (when-let [encrypted-aes-key (:encrypted-aes-key resp)]
-                                     (ldb/read-transit-str encrypted-aes-key))))
-              encrypted-aes-key (or local-encrypted remote-encrypted)]
-        (when-not encrypted-aes-key
-          (fail-fast :db-sync/missing-field {:graph-id graph-id :field :encrypted-aes-key}))
-        (when (and encrypted-aes-key (nil? local-encrypted))
+              encrypted-aes-key (p/let [resp (<fetch-graph-encrypted-aes-key-raw base graph-id)]
+                                  (when-let [encrypted-aes-key (:encrypted-aes-key resp)]
+                                    (ldb/read-transit-str encrypted-aes-key)))]
+        (if-not encrypted-aes-key
+          (fail-fast :db-sync/missing-field {:graph-id graph-id :field :encrypted-aes-key})
           (<set-item! aes-key-k encrypted-aes-key))
         (p/let [aes-key (crypt/<decrypt-aes-key private-key encrypted-aes-key)]
           (swap! *repo->aes-key assoc repo aes-key)

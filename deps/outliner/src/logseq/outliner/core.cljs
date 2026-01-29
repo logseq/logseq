@@ -354,7 +354,7 @@
   (assoc-level-aux tree-vec children-key 1))
 
 (defn- assign-temp-id
-  [db blocks target-block replace-empty-target? keep-uuid?]
+  [blocks target-block replace-empty-target?]
   (->> blocks
        (map-indexed
         (fn [idx block]
@@ -363,34 +363,10 @@
                             (:db/id block))
                           (dec (- idx)))]
             (if replacing-block?
-              (let [block' (assoc block
-                                  :db/id (:db/id target-block)
-                                  :block/uuid (:block/uuid target-block))]
-                (if (seq (:block/_parent target-block)) ; target-block has children
-                  [block']
-                  (let [old-property-values (d/q
-                                             '[:find ?b ?a
-                                               :in $ ?v
-                                               :where
-                                               [?b ?a ?v]
-                                               [?v :block/uuid]]
-                                             db
-                                             (:db/id target-block))
-                        from-property (:logseq.property/created-from-property target-block)
-                        db-id (dec (- idx))]
-                    (concat
-                     [[:db/retractEntity (:db/id target-block)] ; retract target-block first
-                      (cond-> (assoc block
-                                     :db/id db-id
-                                     :block/uuid (if keep-uuid?
-                                                   (or (:block/uuid block)
-                                                       (common-uuid/gen-uuid))
-                                                   (common-uuid/gen-uuid)))
-                        from-property
-                        (assoc :logseq.property/created-from-property (:db/id from-property)))]
-                     (map (fn [[b a]]
-                            [:db/add b a db-id])
-                          old-property-values)))))
+              [(assoc block
+                      :db/id (:db/id target-block)
+                      :block/uuid (:block/uuid target-block)
+                      :block/order (:block/order target-block))]
               [(assoc block :db/id db-id)]))))
        (apply concat)))
 
@@ -763,7 +739,7 @@
                            :tx (vec blocks-tx)
                            :blocks (vec blocks)
                            :target-block target-block}))
-          (let [tx (assign-temp-id db blocks-tx target-block replace-empty-target? keep-uuid?)
+          (let [tx (assign-temp-id blocks-tx target-block replace-empty-target?)
                 old-db-id-blocks (->> (filter :block.temp/use-old-db-id? tx)
                                       (map :block/uuid)
                                       (set))
