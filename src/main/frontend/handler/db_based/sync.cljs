@@ -411,4 +411,5 @@
       (throw (ex-info "graph id doesn't exist when uploading to server" {:repo repo})))
     (p/do!
      (state/<invoke-db-worker :thread-api/db-sync-upload-graph repo)
+     (<get-remote-graphs)
      (<rtc-start! repo))))
