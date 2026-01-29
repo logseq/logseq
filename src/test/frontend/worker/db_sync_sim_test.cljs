@@ -514,6 +514,36 @@
               (finally
                 (restore)))))))))
 
+(deftest two-clients-rebase-keeps-local-title-after-reverse-tx-test
+  (testing "two clients keep local title after reverse tx with newer tx id"
+    (let [base-uuid (uuid "11111111-1111-1111-1111-111111111111")
+          block-uuid (uuid "22222222-2222-2222-2222-222222222222")
+          conn-a (db-test/create-conn)
+          conn-b (db-test/create-conn)
+          ops-a (d/create-conn client-op/schema-in-db)
+          ops-b (d/create-conn client-op/schema-in-db)
+          client-a (make-client repo-a)
+          client-b (make-client repo-b)
+          server (make-server)]
+      (with-test-repos {repo-a {:conn conn-a :ops-conn ops-a}
+                        repo-b {:conn conn-b :ops-conn ops-b}}
+        (fn []
+          (reset! db-sync/*repo->latest-remote-tx {})
+          (client-op/update-local-tx repo-a 0)
+          (client-op/update-local-tx repo-b 0)
+          (ensure-base-page! conn-a base-uuid)
+          (let [base (d/entity @conn-a [:block/uuid base-uuid])]
+            (create-block! conn-a base "before" block-uuid))
+          (sync-loop! server [{:repo repo-a :conn conn-a :client client-a :online? true}])
+          (sync-loop! server [{:repo repo-b :conn conn-b :client client-b :online? true}])
+          (is (= "before" (:block/title (d/entity @conn-b [:block/uuid block-uuid]))))
+          (update-title! conn-a block-uuid "test")
+          (is (seq (#'db-sync/pending-txs repo-a)))
+          (d/transact! conn-b [[:db/add [:block/uuid block-uuid] :block/updated-at 1710000000000]])
+          (sync-loop! server [{:repo repo-b :conn conn-b :client client-b :online? true}])
+          (sync-loop! server [{:repo repo-a :conn conn-a :client client-a :online? true}])
+          (is (= "test" (:block/title (d/entity @conn-a [:block/uuid block-uuid])))))))))
+
 (defonce op-runs 50)
 
 (defn- run-random-ops!
@@ -549,6 +579,57 @@
            " a=" (count attrs-a)
            " c=" (count attrs-c)
            " history=" (count @history))))
+
+(deftest two-clients-online-sim-test
+  (testing "db-sync convergence with two online clients"
+    (let [seed (or (env-seed) default-seed)
+          rng (make-rng seed)
+          gen-uuid #(rng-uuid rng)
+          base-uuid (gen-uuid)
+          conn-a (db-test/create-conn)
+          conn-b (db-test/create-conn)
+          ops-a (d/create-conn client-op/schema-in-db)
+          ops-b (d/create-conn client-op/schema-in-db)
+          client-a (make-client repo-a)
+          client-b (make-client repo-b)
+          server (make-server)
+          history (atom [])
+          state-a (atom {:pages #{base-uuid} :blocks #{}})
+          state-b (atom {:pages #{base-uuid} :blocks #{}})
+          repo->state {repo-a state-a
+                       repo-b state-b}]
+      (with-test-repos {repo-a {:conn conn-a :ops-conn ops-a}
+                        repo-b {:conn conn-b :ops-conn ops-b}}
+        (fn []
+          (let [{:keys [restore]} (install-invalid-tx-repro! seed history)]
+            (try
+              (reset! db-sync/*repo->latest-remote-tx {})
+              (record-meta! history {:seed seed :base-uuid base-uuid})
+              (doseq [conn [conn-a conn-b]]
+                (ensure-base-page! conn base-uuid))
+              (doseq [repo [repo-a repo-b]]
+                (client-op/update-local-tx repo 0))
+              (let [clients [{:repo repo-a :conn conn-a :client client-a :online? true :gen-uuid gen-uuid}
+                             {:repo repo-b :conn conn-b :client client-b :online? true :gen-uuid gen-uuid}]]
+                (prn :debug :phase-a)
+                (run-random-ops! rng server clients repo->state base-uuid history
+                                 {:context {:phase :phase-a}}
+                                 op-runs)
+                (prn :debug :final-sync)
+                (sync-loop! server clients)
+                (let [issues-a (db-issues @conn-a)
+                      issues-b (db-issues @conn-b)]
+                  (when (seq issues-a)
+                    (report-history! seed history {:type :db-issues :repo repo-a :issues issues-a}))
+                  (when (seq issues-b)
+                    (report-history! seed history {:type :db-issues :repo repo-b :issues issues-b}))
+                  (is (empty? issues-a) (str "db A issues seed=" seed " " (pr-str issues-a)))
+                  (is (empty? issues-b) (str "db B issues seed=" seed " " (pr-str issues-b))))
+                (let [attrs-a (block-attr-map @conn-a)
+                      attrs-b (block-attr-map @conn-b)]
+                  (assert-synced-attrs! seed history attrs-a attrs-b attrs-b)))
+              (finally
+                (restore)))))))))
 
 (deftest ^:large-vars/cleanup-todo three-clients-single-repo-sim-test
   (prn :debug "run three-clients-single-repo-sim-test")
