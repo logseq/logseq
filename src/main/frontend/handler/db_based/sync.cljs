@@ -147,10 +147,19 @@
         coerced))
     body))
 
+(defn- graph-in-remote-list?
+  [repo]
+  (some #(= repo (:url %)) (state/get-rtc-graphs)))
+
 (defn <rtc-start!
   [repo & {:keys [_stop-before-start?] :as _opts}]
-  (log/info :db-sync/start {:repo repo})
-  (state/<invoke-db-worker :thread-api/db-sync-start repo))
+  (if (graph-in-remote-list? repo)
+    (do
+      (log/info :db-sync/start {:repo repo})
+      (state/<invoke-db-worker :thread-api/db-sync-start repo))
+    (do
+      (log/info :db-sync/skip-start {:repo repo :reason :graph-not-in-remote-list})
+      (p/resolved nil))))
 
 (defn <rtc-stop!
   []
