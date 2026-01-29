@@ -249,8 +249,7 @@
     (p/let [[db search-db client-ops-db :as dbs] (get-dbs repo)
             storage (new-sqlite-storage db)
             client-ops-storage (when-not @*publishing?
-                                 (new-sqlite-storage client-ops-db))
-            db-based? true]
+                                 (new-sqlite-storage client-ops-db))]
       (swap! *sqlite-conns assoc repo {:db db
                                        :search search-db
                                        :client-ops client-ops-db})
@@ -287,7 +286,7 @@
         (swap! *client-ops-conns assoc repo client-ops-conn)
         (when (and (not @*publishing?) (not= client-op/schema-in-db (d/schema @client-ops-conn)))
           (d/reset-schema! client-ops-conn client-op/schema-in-db))
-        (let [initial-tx-report (when (and db-based? (not initial-data-exists?) (not datoms))
+        (let [initial-tx-report (when (and (not initial-data-exists?) (not datoms))
                                   (let [config (or config "")
                                         initial-data (sqlite-create-graph/build-db-initial-data
                                                       config (select-keys opts [:import-type :graph-git-sha]))]
