@@ -320,8 +320,8 @@
   (testing "undo validation skips db-issues for non-structural tx-data"
     (let [conn (db/get-db test-db false)
           {:keys [child-uuid]} (seed-page-parent-child!)]
-      (with-redefs [frontend.worker.undo-redo/db-issues (fn [_]
-                                                          (throw (js/Error. "db-issues called")))]
+      (with-redefs [undo-validate/issues-for-entity-ids (fn [_ _]
+                                                          (throw (js/Error. "issues-for-entity-ids called")))]
         (is (true? (undo-validate/valid-undo-redo-tx?
                     conn
                     [[:db/add [:block/uuid child-uuid] :block/title "child-updated"]])))))))
@@ -331,9 +331,9 @@
     (let [conn (db/get-db test-db false)
           {:keys [page-uuid child-uuid]} (seed-page-parent-child!)
           calls (atom 0)]
-      (with-redefs [frontend.worker.undo-redo/issues-for-entity-ids (fn [_ _]
-                                                                      (swap! calls inc)
-                                                                      [])]
+      (with-redefs [undo-validate/issues-for-entity-ids (fn [_ _]
+                                                          (swap! calls inc)
+                                                          [])]
         (is (true? (undo-validate/valid-undo-redo-tx?
                     conn
                     [[:db/add [:block/uuid child-uuid] :block/parent [:block/uuid page-uuid]]])))
