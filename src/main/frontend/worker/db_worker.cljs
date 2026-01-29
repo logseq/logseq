@@ -289,8 +289,9 @@
         (let [initial-tx-report (when (and (not initial-data-exists?) (not datoms))
                                   (let [config (or config "")
                                         initial-data (sqlite-create-graph/build-db-initial-data
-                                                      config (select-keys opts [:import-type :graph-git-sha]))]
-                                    (ldb/transact! conn initial-data {:initial-db? true})))]
+                                                      config (select-keys opts [:import-type :graph-git-sha :remote-graph?]))]
+                                    (ldb/transact! conn initial-data
+                                                   {:initial-db? true})))]
           (db-migrate/migrate conn)
 
           (gc-sqlite-dbs! db client-ops-db conn {})

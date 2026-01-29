@@ -426,6 +426,15 @@
       (when-let [client (current-client repo)]
         (broadcast-rtc-state! client)))))
 
+(comment
+  (defn- clear-pending-txs!
+    [repo]
+    (when-let [conn (client-ops-conn repo)]
+      (let [tx-data (->> (d/datoms @conn :avet :db-sync/created-at)
+                         (map (fn [d]
+                                [:db/retractEntity (:e d)])))]
+        (d/transact! conn tx-data)))))
+
 (defn get-lookup-id
   [x]
   (when (and (vector? x)
@@ -1030,12 +1039,11 @@
                                              (flush-pending! repo current))))))))))))))))))
 
 (defn handle-local-tx!
-  [repo {:keys [tx-data tx-meta] :as tx-report}]
+  [repo {:keys [tx-data tx-meta db-after] :as tx-report}]
   (when (and (enabled?) (seq tx-data)
              (not (:rtc-tx? tx-meta))
              (:persist-op? tx-meta true)
-             ;; (ldb/get-graph-rtc-uuid (:db-after tx-report))
-             )
+             (:kv/value (d/entity db-after :logseq.kv/graph-remote?)))
     (enqueue-local-tx! repo tx-report)
     (when-let [client @worker-state/*db-sync-client]
       (when (= repo (:repo client))
@@ -1096,7 +1104,8 @@
 (defn- set-graph-e2ee-enabled!
   [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (ldb/transact! conn [(ldb/kv :logseq.kv/graph-rtc-e2ee? true)])))
+    (ldb/transact! conn [(ldb/kv :logseq.kv/graph-remote? true)
+                         (ldb/kv :logseq.kv/graph-rtc-e2ee? true)])))
 
 (defn upload-graph!
   [repo]
