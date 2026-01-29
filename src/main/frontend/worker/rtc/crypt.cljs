@@ -3,12 +3,11 @@
   Each user has an RSA key pair.
   Each graph has an AES key.
   Server stores the encrypted AES key, public key, and encrypted private key."
-  (:require ["/frontend/idbkv" :as idb-keyval]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [frontend.common.crypt :as crypt]
-            [frontend.common.file.opfs :as opfs]
             [frontend.common.missionary :as c.m]
             [frontend.common.thread-api :refer [def-thread-api]]
+            [frontend.worker.platform :as platform]
             [frontend.worker.rtc.ws-util :as ws-util]
             [frontend.worker.state :as worker-state]
             [lambdaisland.glogi :as log]
@@ -17,7 +16,6 @@
             [promesa.core :as p])
   (:import [missionary Cancelled]))
 
-(defonce ^:private store (delay (idb-keyval/newStore "localforage" "keyvaluepairs" 2)))
 (defonce ^:private e2ee-password-file "e2ee-password")
 (defonce ^:private native-env?
   (let [href (try (.. js/self -location -href)
@@ -38,6 +36,14 @@
   []
   (worker-state/<invoke-main-thread :thread-api/native-get-e2ee-password))
 
+(defn- <read-text!
+  [path]
+  (platform/read-text! (platform/current) path))
+
+(defn- <write-text!
+  [path text]
+  (platform/write-text! (platform/current) path text))
+
 (defn- <save-e2ee-password
   [refresh-token password]
   (p/let [result (crypt/<encrypt-text-by-text-password refresh-token password)
@@ -47,28 +53,28 @@
             nil)
           (p/catch (fn [e]
                      (log/error :native-save-e2ee-password {:error e})
-                     (opfs/<write-text! e2ee-password-file text))))
-      (opfs/<write-text! e2ee-password-file text))))
+                     (<write-text! e2ee-password-file text))))
+      (<write-text! e2ee-password-file text))))
 
 (defn- <read-e2ee-password
   [refresh-token]
   (p/let [text (if (native-worker?)
                  (<native-read-password-text)
-                 (opfs/<read-text! e2ee-password-file))
+                 (<read-text! e2ee-password-file))
           data (ldb/read-transit-str text)
           password (crypt/<decrypt-text-by-text-password refresh-token data)]
     password))
 
 (defn- <get-item
   [k]
-  (assert (and k @store))
-  (p/let [r (idb-keyval/get k @store)]
+  (assert k)
+  (p/let [r (platform/kv-get (platform/current) k)]
     (js->clj r :keywordize-keys true)))
 
 (defn- <set-item!
   [k value]
-  (assert (and k @store))
-  (idb-keyval/set k value @store))
+  (assert k)
+  (platform/kv-set! (platform/current) k value))
 
 (defn- graph-encrypted-aes-key-idb-key
   [repo]

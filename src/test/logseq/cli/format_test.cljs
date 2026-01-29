@@ -1,0 +1,201 @@
+(ns logseq.cli.format-test
+  (:require [cljs.test :refer [deftest is testing]]
+            [logseq.cli.format :as format]))
+
+(deftest test-format-success
+  (testing "json output via output-format"
+    (let [result (format/format-result {:status :ok :data {:message "ok"}}
+                                       {:output-format :json})]
+      (is (= "{\"status\":\"ok\",\"data\":{\"message\":\"ok\"}}" result))))
+
+  (testing "edn output via output-format"
+    (let [result (format/format-result {:status :ok :data {:message "ok"}}
+                                       {:output-format :edn})]
+      (is (= "{:status :ok, :data {:message \"ok\"}}" result))))
+
+  (testing "human output (default)"
+    (let [result (format/format-result {:status :ok :data {:message "ok"}}
+                                       {:output-format nil})]
+      (is (= "ok" result)))))
+
+(deftest test-format-ignores-legacy-json-flag
+  (testing "json? flag does not override output-format"
+    (let [result (format/format-result {:status :ok :data {:message "ok"}}
+                                       {:output-format nil
+                                        :json? true})]
+      (is (= "ok" result)))))
+
+(deftest test-format-error
+  (testing "json error via output-format"
+    (let [result (format/format-result {:status :error :error {:code :boom :message "nope"}}
+                                       {:output-format :json})]
+      (is (= "{\"status\":\"error\",\"error\":{\"code\":\"boom\",\"message\":\"nope\"}}" result))))
+
+  (testing "edn error via output-format"
+    (let [result (format/format-result {:status :error :error {:code :boom :message "nope"}}
+                                       {:output-format :edn})]
+      (is (= "{:status :error, :error {:code :boom, :message \"nope\"}}" result))))
+
+  (testing "human error (default)"
+    (let [result (format/format-result {:status :error :error {:code :boom :message "nope"}}
+                                       {:output-format nil})]
+      (is (= "Error (boom): nope" result)))))
+
+(deftest test-human-output-list-page
+  (testing "list page renders a table with count"
+    (let [result (format/format-result {:status :ok
+                                        :command :list-page
+                                        :data {:items [{:db/id 1
+                                                        :title "Alpha"
+                                                        :updated-at 90000
+                                                        :created-at 40000}]}}
+                                       {:output-format nil
+                                        :now-ms 100000})]
+      (is (= (str "ID  TITLE  UPDATED-AT  CREATED-AT\n"
+                  "1   Alpha  10s ago     1m ago\n"
+                  "Count: 1")
+             result)))))
+
+(deftest test-human-output-list-tag-property
+  (testing "list tag uses ID column from :db/id"
+    (let [result (format/format-result {:status :ok
+                                        :command :list-tag
+                                        :data {:items [{:block/title "Tag"
+                                                        :db/id 42
+                                                        :block/created-at 40000
+                                                        :block/updated-at 90000
+                                                        :db/ident :logseq.class/Tag}]}}
+                                       {:output-format nil
+                                        :now-ms 100000})]
+      (is (= (str "ID  TITLE  IDENT              UPDATED-AT  CREATED-AT\n"
+                  "42  Tag    :logseq.class/Tag  10s ago     1m ago\n"
+                  "Count: 1")
+             result))))
+
+  (testing "list property uses ID column from :db/id"
+    (let [result (format/format-result {:status :ok
+                                        :command :list-property
+                                        :data {:items [{:block/title "Prop"
+                                                        :db/id 99
+                                                        :block/created-at 40000
+                                                        :block/updated-at 90000}]}}
+                                       {:output-format nil
+                                        :now-ms 100000})]
+      (is (= (str "ID  TITLE  UPDATED-AT  CREATED-AT\n"
+                  "99  Prop   10s ago     1m ago\n"
+                  "Count: 1")
+             result)))))
+
+(deftest test-human-output-add-remove
+  (testing "add block renders a succinct success line"
+    (let [result (format/format-result {:status :ok
+                                        :command :add-block
+                                        :context {:repo "demo-repo"
+                                                  :blocks ["a" "b"]}
+                                        :data {:result {:ok true}}}
+                                       {:output-format nil})]
+      (is (= "Added blocks: 2 (repo: demo-repo)" result))))
+
+  (testing "remove page renders a succinct success line"
+    (let [result (format/format-result {:status :ok
+                                        :command :remove-page
+                                        :context {:repo "demo-repo"
+                                                  :page "Home"}
+                                        :data {:result {:ok true}}}
+                                       {:output-format nil})]
+      (is (= "Removed page: Home (repo: demo-repo)" result))))
+
+  (testing "move block renders a succinct success line"
+    (let [result (format/format-result {:status :ok
+                                        :command :move-block
+                                        :context {:repo "demo-repo"
+                                                  :source "source-uuid"
+                                                  :target "target-uuid"}
+                                        :data {:result {:ok true}}}
+                                       {:output-format nil})]
+      (is (= "Moved block: source-uuid -> target-uuid (repo: demo-repo)" result)))))
+
+(deftest test-human-output-graph-import-export
+  (testing "graph export renders a succinct success line"
+    (let [result (format/format-result {:status :ok
+                                        :command :graph-export
+                                        :context {:export-type "edn"
+                                                  :output "/tmp/export.edn"}}
+                                       {:output-format nil})]
+      (is (= "Exported edn to /tmp/export.edn" result))))
+
+  (testing "graph import renders a succinct success line"
+    (let [result (format/format-result {:status :ok
+                                        :command :graph-import
+                                        :context {:import-type "sqlite"
+                                                  :input "/tmp/import.sqlite"}}
+                                       {:output-format nil})]
+      (is (= "Imported sqlite from /tmp/import.sqlite" result)))))
+
+(deftest test-human-output-graph-info
+  (testing "graph info includes key metadata lines"
+    (let [result (format/format-result {:status :ok
+                                        :command :graph-info
+                                        :data {:graph "demo-graph"
+                                               :logseq.kv/graph-created-at 40000
+                                               :logseq.kv/schema-version 2}}
+                                       {:output-format nil
+                                        :now-ms 100000})]
+      (is (= (str "Graph: demo-graph\n"
+                  "Created at: 1m ago\n"
+                  "Schema version: 2")
+             result)))))
+
+(deftest test-human-output-server-status
+  (testing "server status includes repo, status, host, port"
+    (let [result (format/format-result {:status :ok
+                                        :command :server-status
+                                        :data {:repo "logseq_db_demo-repo"
+                                               :status :ready
+                                               :host "127.0.0.1"
+                                               :port 1234}}
+                                       {:output-format nil})]
+      (is (= (str "Server ready: demo-repo\n"
+                  "Host: 127.0.0.1  Port: 1234")
+             result)))))
+
+(deftest test-human-output-show
+  (testing "show renders text payloads directly"
+    (let [result (format/format-result {:status :ok
+                                        :command :show
+                                        :data {:message "Line 1\nLine 2"}}
+                                       {:output-format nil})]
+      (is (= "Line 1\nLine 2" result)))))
+
+(deftest test-human-output-query
+  (testing "query renders raw result"
+    (let [result (format/format-result {:status :ok
+                                        :command :query
+                                        :data {:result [[1] [2] [3]]}}
+                                       {:output-format nil})]
+      (is (= "[[1],[2],[3]]" result)))))
+
+(deftest test-human-output-query-list
+  (testing "query list renders a table with count"
+    (let [result (format/format-result {:status :ok
+                                        :command :query-list
+                                        :data {:queries [{:name "block-search"
+                                                          :inputs ["search-title"]
+                                                          :doc "Find blocks"
+                                                          :source :built-in}]}}
+                                       {:output-format nil})]
+      (is (= (str "NAME          INPUTS        SOURCE    DOC\n"
+                  "block-search  search-title  built-in  Find blocks\n"
+                  "Count: 1")
+             result)))))
+
+(deftest test-human-output-error-formatting
+  (testing "errors include code and hint when available"
+    (let [result (format/format-result {:status :error
+                                        :command :graph-create
+                                        :error {:code :missing-graph
+                                                :message "graph name is required"}}
+                                       {:output-format nil})]
+      (is (= (str "Error (missing-graph): graph name is required\n"
+                  "Hint: Use --repo <name>")
+             result)))))

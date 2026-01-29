@@ -1,8 +1,6 @@
 (ns frontend.worker.db-metadata
   "Fns to read/write metadata.edn file for db-based."
-  (:require ["/frontend/idbkv" :as idb-keyval]))
-
-(defonce ^:private store (delay (idb-keyval/newStore "localforage" "keyvaluepairs" 2)))
+  (:require [frontend.worker.platform :as platform]))
 
 (defn- gen-key
   [repo]
@@ -10,8 +8,8 @@
 
 (defn <store
   [repo metadata-str]
-  (idb-keyval/set (gen-key repo) metadata-str @store))
+  (platform/kv-set! (platform/current) (gen-key repo) metadata-str))
 
 (defn <get
   [repo]
-  (idb-keyval/get (gen-key repo) @store))
+  (platform/kv-get (platform/current) (gen-key repo)))

@@ -117,6 +117,7 @@ DROP TRIGGER IF EXISTS blocks_au;
 
 (defn upsert-blocks!
   [^Object db blocks]
+  (assert db ::upsert-blocks!)
   (.transaction db (fn [tx]
                      (doseq [item blocks]
                        (if (and (common-util/uuid-string? (.-id item))
@@ -133,6 +134,7 @@ DROP TRIGGER IF EXISTS blocks_au;
 
 (defn delete-blocks!
   [db ids]
+  (assert db ::delete-blocks!)
   (let [sql (str "DELETE from blocks WHERE id IN " (clj-list->sql ids))]
     (.exec db sql)))
 

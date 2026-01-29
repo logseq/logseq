@@ -176,6 +176,12 @@
   dev:gen-malli-kondo-config
   logseq.tasks.dev/gen-malli-kondo-config
 
+  dev:db-worker-node
+  {:doc "Compile and start db-worker-node (pass-through args forwarded to node)"
+   :task (do
+           (shell "clojure" "-M:cljs" "compile" "db-worker-node")
+           (apply shell "node" "./static/db-worker-node.js" *command-line-args*))}
+
   lint:dev
   logseq.tasks.dev.lint/dev
 

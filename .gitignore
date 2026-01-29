@@ -16,6 +16,7 @@ node_modules/
 static/**
 tmp
 cljs-test-runner-out
+.tmp/
 
 .cpcache/
 /src/gen
@@ -75,3 +76,4 @@ clj-e2e/.wally
 clj-e2e/e2e-dump
 .dir-locals.el
 .projectile
+*.map
