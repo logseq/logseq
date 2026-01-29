@@ -1,7 +1,6 @@
 (ns logseq.db
   "Main namespace for db fns. All fns are only for DB graphs"
-  (:require [clojure.data :as data]
-            [clojure.set :as set]
+  (:require [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.conn :as dc]
@@ -211,7 +210,6 @@
                         tx-data
                         remove-conflict-datoms
                         (db-normalize/replace-attr-retract-with-retract-entity temp-after-db))]
-          (prn :debug :transact-with-temp-conn :diff (data/diff (set tx-data) (set tx-data')))
           (transact! conn tx-data' tx-meta))))))
 
 (def page? entity-util/page?)
