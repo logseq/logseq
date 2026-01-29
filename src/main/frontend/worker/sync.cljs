@@ -728,6 +728,7 @@
 (defn- apply-remote-tx-with-local-changes!
   [{:keys [conn local-txs reversed-tx-data safe-remote-tx-data remote-deleted-blocks
            temp-tx-meta *remote-tx-report *reversed-tx-report *remote-deleted-ids *rebase-tx-data]}]
+  (prn :debug :apply-remote-tx-with-local-changes!)
   (let [batch-tx-meta {:rtc-tx? true}]
     (ldb/transact-with-temp-conn!
      conn
@@ -766,10 +767,12 @@
 
 (defn- apply-remote-tx-without-local-changes!
   [{:keys [conn safe-remote-tx-data remote-deleted-block-ids temp-tx-meta]}]
+  (prn :debug :apply-remote-tx-without-local-changes!)
   (let [db @conn]
     (ldb/transact-with-temp-conn!
      conn
-     {:rtc-tx? true}
+     {:rtc-tx? true
+      :without-local-changes? true}
      (fn [temp-conn]
        (when (seq safe-remote-tx-data)
          (d/transact! temp-conn safe-remote-tx-data {:rtc-tx? true}))
