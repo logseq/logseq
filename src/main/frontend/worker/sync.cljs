@@ -388,7 +388,9 @@
     (fail-fast :db-sync/missing-field
                (merge {:repo repo :field field :value value} context))))
 
-(defn- persist-local-tx! [repo normalized-tx-data reversed-datoms _tx-meta]
+(defn- persist-local-tx! [repo normalized-tx-data reversed-datoms tx-meta]
+  (prn :debug :persist-local-tx tx-meta)
+  (js/console.trace)
   (when-let [conn (client-ops-conn repo)]
     (let [tx-id (random-uuid)
           now (.now js/Date)]
@@ -1044,7 +1046,8 @@
   [repo {:keys [tx-data tx-meta] :as tx-report}]
   (when (and (enabled?) (seq tx-data)
              (not (:rtc-tx? tx-meta))
-             (:persist-op? tx-meta true))
+             (:persist-op? tx-meta true)
+             (ldb/get-graph-rtc-uuid (:db-after tx-report)))
     (enqueue-local-tx! repo tx-report)
     (when-let [client @worker-state/*db-sync-client]
       (when (= repo (:repo client))
