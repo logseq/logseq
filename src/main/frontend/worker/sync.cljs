@@ -389,8 +389,6 @@
                (merge {:repo repo :field field :value value} context))))
 
 (defn- persist-local-tx! [repo normalized-tx-data reversed-datoms tx-meta]
-  (prn :debug :persist-local-tx tx-meta)
-  (js/console.trace)
   (when-let [conn (client-ops-conn repo)]
     (let [tx-id (random-uuid)
           now (.now js/Date)]
