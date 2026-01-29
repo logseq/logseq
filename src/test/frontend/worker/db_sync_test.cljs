@@ -276,6 +276,30 @@
              [[:db/add (:db/id child1) :block/title "same"]])
             (is (= 0 (count (#'db-sync/pending-txs test-repo))))))))))
 
+(deftest rebase-preserves-title-when-reversed-tx-ids-change-test
+  (testing "rebase keeps local title when reverse tx gets a new tx id"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "old"}]}]})
+          client-ops-conn (d/create-conn client-op/schema-in-db)
+          block (db-test/find-block-by-content @conn "old")]
+      (with-redefs [db-sync/enqueue-local-tx!
+                    (let [orig db-sync/enqueue-local-tx!]
+                      (fn [repo tx-report]
+                        (when-not (:rtc-tx? (:tx-meta tx-report))
+                          (orig repo tx-report))))]
+        (with-datascript-conns conn client-ops-conn
+          (fn []
+            (d/transact! conn [[:db/add (:db/id block) :block/title "test"]])
+            (is (= 1 (count (#'db-sync/pending-txs test-repo))))
+            (#'db-sync/apply-remote-tx!
+             test-repo
+             nil
+             [[:db/add (:db/id block) :block/updated-at 1710000000000]])
+            (let [block' (d/entity @conn (:db/id block))]
+              (is (= "test" (:block/title block'))))))))))
+
 (deftest normalize-online-users-include-editing-block-test
   (testing "online user normalization preserves editing block info"
     (let [result (#'db-sync/normalize-online-users
