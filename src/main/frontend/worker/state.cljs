@@ -45,6 +45,8 @@
                        :thread-atom/online-event (atom nil)}))
 
 (defonce *rtc-ws-url (atom nil))
+(defonce *db-sync-config (atom {:enabled? false :ws-url nil}))
+(defonce *db-sync-client (atom nil))
 
 (defonce *sqlite (atom nil))
 ;; repo -> {:db conn :search conn :client-ops conn :debug-log conn}
@@ -116,6 +118,10 @@
 (defn get-id-token
   []
   (:auth/id-token @*state))
+
+(defn online?
+  []
+  @(:thread-atom/online-event @*state))
 
 (comment
   (defn mobile?

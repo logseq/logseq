@@ -45,8 +45,8 @@
          tx))
      refs)))
 
-(defn update-refs-history-and-macros
-  "When a block is deleted, refs are updated, property history are deleted"
+(defn update-refs-history
+  "When a block is deleted, refs are updated, property history are deleted."
   [db txs _opts]
   (let [retracted-block-ids (->> (keep (fn [tx]
                                          (when (and (vector? tx)
@@ -59,5 +59,12 @@
             retracted-tx (build-retracted-tx retracted-blocks)
             retract-history-tx (mapcat (fn [e]
                                          (map (fn [history] [:db/retractEntity (:db/id history)])
-                                              (:logseq.property.history/_block e))) retracted-blocks)]
-        (concat txs retracted-tx retract-history-tx)))))
+                                              (:logseq.property.history/_block e))) retracted-blocks)
+            delete-views (->>
+                          (mapcat
+                           (fn [item]
+                             (let [block (d/entity db (:db/id item))]
+                               (:logseq.property/_view-for block)))
+                           retracted-blocks)
+                          (map (fn [b] [:db/retractEntity (:db/id b)])))]
+        (concat retracted-tx delete-views retract-history-tx)))))

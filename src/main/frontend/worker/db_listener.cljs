@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [frontend.common.thread-api :as thread-api]
+            [frontend.worker.db-sync :as db-sync]
             [frontend.worker.pipeline :as worker-pipeline]
             [frontend.worker.rtc.gen-client-op :as gen-client-op]
             [frontend.worker.search :as search]
@@ -50,6 +51,10 @@
     (prn :tx-data tx-data)
     (prn :tx-meta tx-meta)))
 
+(defmethod listen-db-changes :db-sync
+  [_ {:keys [repo]} tx-report]
+  (db-sync/handle-local-tx! repo tx-report))
+
 (defn- remove-old-embeddings-and-reset-new-updates!
   [conn tx-data tx-meta]
   (let [;; Remove old :logseq.property.embedding/hnsw-label-updated-at when importing a graph
@@ -57,8 +62,10 @@
                                   (->> (d/datoms @conn :avet :logseq.property.embedding/hnsw-label-updated-at)
                                        (map (fn [d]
                                               [:db/retract (:e d) :logseq.property.embedding/hnsw-label-updated-at]))))
-          ;; Mark vector embedding
-        mark-embedding-tx-data (->> (keep (fn [datom] (when (and (= :block/title (:a datom)) (:added datom) (not (string/blank? (:v datom))))
+        ;; Mark vector embedding
+        mark-embedding-tx-data (->> (keep (fn [datom] (when (and (= :block/title (:a datom))
+                                                                 (:added datom)
+                                                                 (not (string/blank? (:block/title (d/entity @conn (:e datom))))))
                                                         (:e datom))) tx-data)
                                       ;; Mark block embedding to be computed
                                     (map (fn [id] [:db/add id :logseq.property.embedding/hnsw-label-updated-at 0])))

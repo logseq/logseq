@@ -101,8 +101,7 @@
       {:block/uuid page-uuid
        :block/name "test"
        :block/title "Test"
-       ;; :block/tags #{:logseq.class/Page}
-       }
+       :block/tags #{:logseq.class/Page}}
       ;; first block
       {:block/uuid first-block-uuid
        :block/page page-id

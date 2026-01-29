@@ -428,6 +428,55 @@
       (is (= [22] (get-children 1)))
       (is (= [2 12 16] (get-children 22))))))
 
+(deftest test-paste-multiple-blocks-into-empty-block
+  (testing "
+    Page starts with:
+    - 1
+      - 2
+    - 3
+    - (empty)
+
+    Copy 1,2,3 and paste into the empty block with :replace-empty-target? true
+ "
+    (transact-tree! [[22 [[23]]] [24] [25]])
+    (db/transact! test-db [{:block/uuid 22
+                            :block/title "1"}
+                           {:block/uuid 23
+                            :block/title "2"}
+                           {:block/uuid 24
+                            :block/title "3"}
+                           {:block/uuid 25
+                            :block/title ""}])
+    (let [target-block (get-block 25)
+          copied-blocks (->> (build-blocks [[101 [[102]]] [103]])
+                             (map (fn [block]
+                                    (case (:block/uuid block)
+                                      101 (assoc block :block/title "1")
+                                      102 (assoc block :block/title "2")
+                                      103 (assoc block :block/title "3")
+                                      block))))]
+      (outliner-tx/transact!
+       (transact-opts)
+       (outliner-core/insert-blocks! (db/get-db test-db false)
+                                     copied-blocks
+                                     target-block
+                                     {:sibling? true
+                                      :outliner-op :paste
+                                      :replace-empty-target? true}))
+      (let [top-level (get-children 1)
+            new-top-level (remove #{22 24 25} top-level)
+            replaced (get-block 25)]
+        (is (= 4 (count top-level)))
+        (is (= [22 24] (take 2 top-level)))
+        (is (= 1 (count new-top-level)))
+        (is (= "1" (:block/title replaced)))
+        (is (= [23] (get-children 22)))
+        (let [replaced-children (get-children 25)]
+          (is (= 1 (count replaced-children)))
+          (is (not= 23 (first replaced-children)))
+          (is (= "2" (:block/title (get-block (first replaced-children))))))
+        (is (= "3" (:block/title (get-block (first new-top-level)))))))))
+
 (deftest test-batch-transact
   (testing "add 4, 5 after 2 and delete 3"
     (let [tree' [[10 [[2] [3]]]]]

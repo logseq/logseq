@@ -16,6 +16,7 @@
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.db-metadata :as worker-db-metadata]
+            [frontend.worker.db-sync :as db-sync]
             [frontend.worker.db.fix :as db-fix]
             [frontend.worker.db.migrate :as db-migrate]
             [frontend.worker.db.validate :as worker-db-validate]
@@ -29,11 +30,13 @@
             [frontend.worker.rtc.core :as rtc.core]
             [frontend.worker.rtc.db-listener]
             [frontend.worker.rtc.debug-log :as rtc-debug-log]
+            [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
             [frontend.worker.rtc.migrate :as rtc-migrate]
             [frontend.worker.search :as search]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.thread-atom]
+            [frontend.worker.undo-redo :as undo-validate]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [lambdaisland.glogi.console :as glogi-console]
@@ -57,6 +60,7 @@
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
             [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]
+            [medley.core :as medley]
             [missionary.core :as m]
             [promesa.core :as p]))
 
@@ -120,6 +124,30 @@
      (doseq [item data]
        (.exec tx #js {:sql "INSERT INTO kvs (addr, content, addresses) values ($addr, $content, $addresses) on conflict(addr) do update set content = $content, addresses = $addresses"
                       :bind item})))))
+
+(defn- rows->sqlite-binds
+  [rows]
+  (mapv (fn [[addr content addresses]]
+          #js {:$addr addr
+               :$content content
+               :$addresses addresses})
+        rows))
+
+(defn- enable-sqlite-wal-mode!
+  [^Object db]
+  (.exec db "PRAGMA locking_mode=exclusive")
+  (.exec db "PRAGMA journal_mode=WAL"))
+
+(defn- ensure-db-sync-import-db!
+  [repo reset?]
+  (if-let [sqlite @*sqlite]
+    (let [^js DB (.-DB ^js (.-oo1 sqlite))
+          ^js db (new DB ":memory:" "c")]
+      (common-sqlite/create-kvs-table! db)
+      (when reset?
+        (.exec db "delete from kvs"))
+      db)
+    (db-sync/fail-fast :db-sync/missing-field {:repo repo :field :sqlite})))
 
 (defn restore-data-from-addr
   "Update sqlite-cli/restore-data-from-addr when making changes"
@@ -208,11 +236,6 @@
             debug-log-db (new (.-OpfsSAHPoolDb pool) (str "debug-log" repo-path))]
       [db search-db client-ops-db debug-log-db])))
 
-(defn- enable-sqlite-wal-mode!
-  [^Object db]
-  (.exec db "PRAGMA locking_mode=exclusive")
-  (.exec db "PRAGMA journal_mode=WAL"))
-
 (defn- gc-sqlite-dbs!
   "Gc main db weekly and rtc ops db each time when opening it"
   [sqlite-db client-ops-db debug-log-db datascript-conn {:keys [full-gc?]}]
@@ -275,20 +298,22 @@
         (swap! *client-ops-conns assoc repo client-ops-conn)
         (when (and (not @*publishing?) (not= client-op/schema-in-db (d/schema @client-ops-conn)))
           (d/reset-schema! client-ops-conn client-op/schema-in-db))
-        (when (and db-based? (not initial-data-exists?) (not datoms))
-          (let [config (or config "")
-                initial-data (sqlite-create-graph/build-db-initial-data
-                              config (select-keys opts [:import-type :graph-git-sha]))]
-            (ldb/transact! conn initial-data {:initial-db? true})))
+        (let [initial-tx-report (when (and db-based? (not initial-data-exists?) (not datoms))
+                                  (let [config (or config "")
+                                        initial-data (sqlite-create-graph/build-db-initial-data
+                                                      config (select-keys opts [:import-type :graph-git-sha]))]
+                                    (ldb/transact! conn initial-data {:initial-db? true})))]
+          (gc-sqlite-dbs! db client-ops-db debug-log-db conn {})
 
-        (gc-sqlite-dbs! db client-ops-db debug-log-db conn {})
+          (let [migration-result (db-migrate/migrate conn)]
+            (when (client-op/rtc-db-graph? repo)
+              (let [client-ops (rtc-migrate/migration-results=>client-ops migration-result)]
+                (client-op/add-ops! repo client-ops))))
 
-        (let [migration-result (db-migrate/migrate conn)]
-          (when (client-op/rtc-db-graph? repo)
-            (let [client-ops (rtc-migrate/migration-results=>client-ops migration-result)]
-              (client-op/add-ops! repo client-ops))))
+          (when initial-tx-report
+            (db-sync/handle-local-tx! repo initial-tx-report))
 
-        (db-listener/listen-db-changes! repo (get @*datascript-conns repo))))))
+          (db-listener/listen-db-changes! repo (get @*datascript-conns repo)))))))
 
 (defn- iter->vec [iter']
   (when iter'
@@ -374,6 +399,39 @@
   [rtc-ws-url]
   (reset! worker-state/*rtc-ws-url rtc-ws-url)
   (init-sqlite-module!))
+
+(def-thread-api :thread-api/set-db-sync-config
+  [config]
+  (reset! worker-state/*db-sync-config config)
+  nil)
+
+(def-thread-api :thread-api/db-sync-start
+  [repo]
+  (db-sync/start! repo))
+
+(def-thread-api :thread-api/db-sync-stop
+  []
+  (db-sync/stop!))
+
+(def-thread-api :thread-api/db-sync-update-presence
+  [editing-block-uuid]
+  (db-sync/update-presence! editing-block-uuid))
+
+(def-thread-api :thread-api/db-sync-request-asset-download
+  [repo asset-uuid]
+  (db-sync/request-asset-download! repo asset-uuid))
+
+(def-thread-api :thread-api/db-sync-grant-graph-access
+  [repo graph-id target-email]
+  (db-sync/<grant-graph-access! repo graph-id target-email))
+
+(def-thread-api :thread-api/db-sync-ensure-user-rsa-keys
+  []
+  (db-sync/ensure-user-rsa-keys!))
+
+(def-thread-api :thread-api/db-sync-upload-graph
+  [repo]
+  (db-sync/upload-graph! repo))
 
 (def-thread-api :thread-api/set-infer-worker-proxy
   [infer-worker-proxy]
@@ -525,6 +583,12 @@
 
           ;; (prn :debug :transact :tx-data tx-data' :tx-meta tx-meta')
 
+          (when (and (or (:undo? tx-meta) (:redo? tx-meta))
+                     (not (undo-validate/valid-undo-redo-tx? conn tx-data')))
+            (throw (ex-info "undo/redo tx invalid"
+                            {:repo repo
+                             :undo? (:undo? tx-meta)
+                             :redo? (:redo? tx-meta)})))
           (worker-util/profile "Worker db transact"
                                (ldb/transact! conn tx-data' tx-meta')))
         nil)
@@ -546,12 +610,61 @@
   (reset-db! repo db-transit)
   nil)
 
-(def-thread-api :thread-api/unsafe-unlink-db
+(defn- <unlink-db!
   [repo]
   (p/let [pool (<get-opfs-pool repo)
           _ (close-db! repo)
           _result (remove-vfs! pool)]
     nil))
+
+(def-thread-api :thread-api/unsafe-unlink-db
+  [repo]
+  (<unlink-db! repo))
+
+(defn- import-datoms-to-db!
+  [repo graph-id remote-tx datoms]
+  (-> (p/do!
+       (rtc-log-and-state/rtc-log :rtc.log/download
+                                  {:sub-type :download-progress
+                                   :graph-uuid graph-id
+                                   :message "Saving data to DB"})
+       ((@thread-api/*thread-apis :thread-api/create-or-open-db) repo {:close-other-db? true
+                                                                       :datoms datoms})
+       (rtc-log-and-state/rtc-log :rtc.log/download
+                                  {:sub-type :download-completed
+                                   :graph-uuid graph-id
+                                   :message "Graph is ready!"})
+       ((@thread-api/*thread-apis :thread-api/export-db) repo)
+       (client-op/update-local-tx repo remote-tx)
+       (shared-service/broadcast-to-clients! :add-repo {:repo repo}))
+      (p/catch (fn [error]
+                 (js/console.error error)))))
+
+(def-thread-api :thread-api/db-sync-import-kvs-rows
+  [repo rows reset? graph-id remote-tx]
+  (p/let [_ (when reset? (close-db! repo))
+          aes-key (db-sync/<fetch-graph-aes-key-for-download repo graph-id)
+          _ (when (nil? aes-key)
+              (db-sync/fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
+          db (ensure-db-sync-import-db! repo reset?)
+          batches (medley/indexed (partition-all 100 rows))]
+    (rtc-log-and-state/rtc-log :rtc.log/download
+                               {:sub-type :download-progress
+                                :graph-uuid graph-id
+                                :message "Start decrypting data"})
+    ;; sequential batches: low memory
+    (p/doseq [[i batch] batches]
+      (p/let [dec-rows (db-sync/<decrypt-snapshot-rows-batch aes-key batch)]
+        (upsert-addr-content! db (rows->sqlite-binds dec-rows))
+        (rtc-log-and-state/rtc-log :rtc.log/download
+                                   {:sub-type :download-progress
+                                    :graph-uuid graph-id
+                                    :message (str "Decrypting data " (inc i) "/" (count batches))})))
+    (let [storage (new-sqlite-storage db)
+          conn (common-sqlite/get-storage-conn storage db-schema/schema)
+          datoms (vec (d/datoms @conn :eavt))]
+      (.close db)
+      (import-datoms-to-db! repo graph-id remote-tx datoms))))
 
 (def-thread-api :thread-api/release-access-handles
   [repo]

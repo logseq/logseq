@@ -159,7 +159,7 @@
   (ldb/transact-with-temp-conn!
    conn
    {}
-   (fn [temp-conn]
+   (fn [temp-conn _*batch-tx-data]
      (#'r.remote/apply-remote-move-ops temp-conn move-ops))))
 
 (deftest apply-remote-move-ops-test

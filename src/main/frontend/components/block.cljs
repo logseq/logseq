@@ -51,6 +51,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.user :as user-handler]
             [frontend.mixins :as mixins]
             [frontend.mobile.haptics :as haptics]
             [frontend.mobile.intent :as mobile-intent]
@@ -81,6 +82,7 @@
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
+            [logseq.shui.util :as shui-util]
             [medley.core :as medley]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -913,19 +915,39 @@
        [:a.asset-ref {:target "_blank" :href real-path-url}
         title-or-path])]))
 
+(defn- maybe-request-asset-download!
+  [state block]
+  (let [repo (state/get-current-repo)
+        file-exists? @(::file-exists? state)
+        requested? (get state ::download-requested?)
+        asset-file-write-finish @(get @state/state :assets/asset-file-write-finish)
+        asset-file-write-finished? (get-in asset-file-write-finish [repo (str (:block/uuid block))])
+        file-ready? (or file-exists? asset-file-write-finished?)]
+    (when (and (true? @requested?) file-ready?)
+      (reset! requested? false))
+    (when (and (not @requested?)
+               (assets-handler/maybe-request-remote-asset-download! repo block file-ready?))
+      (reset! requested? true)))
+  state)
+
 (rum/defcs asset-cp < rum/reactive
   (rum/local nil ::file-exists?)
+  (rum/local false ::download-requested?)
   {:will-mount (fn [state]
                  (let [block (last (:rum/args state))
                        asset-type (:logseq.property.asset/type block)
                        external-url? (not (string/blank? (:logseq.property.asset/external-url block)))
                        path (path/path-join common-config/local-assets-dir (str (:block/uuid block) "." asset-type))]
                    (p/let [result (if (or external-url? config/publishing?)
-                                                        ;; publishing doesn't have window.pfs defined
+                                    ;; publishing doesn't have window.pfs defined
                                     true
                                     (fs/file-exists? (config/get-repo-dir (state/get-current-repo)) path))]
                      (reset! (::file-exists? state) result))
-                   state))}
+                   state))
+   :did-mount (fn [state]
+                (maybe-request-asset-download! state (last (:rum/args state))))
+   :did-update (fn [state]
+                 (maybe-request-asset-download! state (last (:rum/args state))))}
   [state config block]
   (let [asset-type (:logseq.property.asset/type block)
         file (str (:block/uuid block) "." asset-type)
@@ -933,7 +955,22 @@
         repo (state/get-current-repo)
         asset-file-write-finished? (state/sub :assets/asset-file-write-finish
                                               {:path-in-sub-atom [repo (str (:block/uuid block))]})
-        asset-type (:logseq.property.asset/type block)
+        file-ready? (or file-exists? asset-file-write-finished?)
+        progress-entry (state/sub :rtc/asset-upload-download-progress
+                                  {:path-in-sub-atom [repo (str (:block/uuid block))]})
+        {:keys [direction loaded total]} progress-entry
+        in-progress? (and (number? loaded) (number? total) (pos? total) (not= loaded total))
+        percent (when in-progress?
+                  (int (* 100 (/ loaded total))))
+        label (case direction
+                :upload "Uploading"
+                :download "Downloading"
+                "Syncing")
+        progress-view (when in-progress?
+                        [:div.asset-transfer-progress
+                         [:div.asset-transfer-progress-label (str label " " percent "%")]
+                         [:div.asset-transfer-progress-bar
+                          [:span {:style {:width (str percent "%")}}]]])
         image? (contains? (common-config/img-formats) (keyword asset-type))
         width (get-in block [:logseq.property.asset/resize-metadata :width])
         asset-width (:logseq.property.asset/width block)
@@ -949,18 +986,24 @@
                             {:height (/ width aspect-ratio)}))))
         img-placeholder (when image?
                           [:div.img-placeholder.asset-container
-                           {:style img-metadata}])]
-    (cond
-      (or file-exists? asset-file-write-finished?)
-      (asset-link (assoc config
-                         :asset-block block
-                         :image-placeholder img-placeholder)
-                  (:block/title block)
-                  (path/path-join (str "../" common-config/local-assets-dir) file)
-                  img-metadata
-                  nil)
-      image?
-      img-placeholder)))
+                           {:style img-metadata}])
+        content (cond
+                  file-ready?
+                  (asset-link (assoc config
+                                     :asset-block block
+                                     :image-placeholder img-placeholder)
+                              (:block/title block)
+                              (path/path-join (str "../" common-config/local-assets-dir) file)
+                              img-metadata
+                              nil)
+                  image?
+                  img-placeholder)]
+    (if progress-view
+      [:div.asset-transfer-shell
+       (or content
+           [:div.asset-transfer-placeholder (str label " asset...")])
+       progress-view]
+      content)))
 
 (defn- img-audio-video?
   [block]
@@ -1703,12 +1746,48 @@
   [block]
   (string/blank? (:block/title block)))
 
+(defn- user-initials
+  [user-name]
+  (when (string? user-name)
+    (let [name (string/trim user-name)]
+      (when-not (string/blank? name)
+        (-> name (subs 0 (min 2 (count name))) string/upper-case)))))
+
+(defn- editing-user-for-block
+  [block-uuid online-users current-user-uuid]
+  (when (and block-uuid (seq online-users))
+    (some (fn [{:user/keys [editing-block-uuid uuid] :as user}]
+            (when (and (string? editing-block-uuid)
+                       (= editing-block-uuid (str block-uuid))
+                       (not= uuid current-user-uuid))
+              user))
+          online-users)))
+
+(defn- editing-user-avatar
+  [{:user/keys [name uuid]}]
+  (let [user-name (or name uuid)
+        initials (user-initials user-name)
+        color (when uuid (shui-util/uuid-color uuid))]
+    (when initials
+      [:span.block-editing-avatar-wrap
+       (shui/avatar
+        {:class "block-editing-avatar w-4 h-4 flex-none"
+         :title user-name}
+        (shui/avatar-fallback
+         {:style {:background-color (when color (str color "50"))
+                  :font-size 9}}
+         initials))])))
+
 (rum/defcs ^:large-vars/cleanup-todo block-control < rum/reactive
   (rum/local false ::dragging?)
   [state config block {:keys [uuid block-id collapsed? *control-show? edit? selected? top? bottom?]}]
   (let [*bullet-dragging? (::dragging? state)
         doc-mode? (state/sub :document/mode?)
         control-show? (util/react *control-show?)
+        rtc-state (state/sub :rtc/state)
+        online-users (:online-users rtc-state)
+        current-user-uuid (user-handler/user-uuid)
+        editing-user (editing-user-for-block uuid online-users current-user-uuid)
         ref? (:ref? config)
         container-id (:container-id config)
         empty-content? (block-content-empty? block)
@@ -1734,6 +1813,8 @@
                                 :is-with-icon with-icon?
                                 :bullet-closed collapsed?
                                 :bullet-hidden (:hide-bullet? config)}])}
+     (when (and (not page-title?) editing-user)
+       (editing-user-avatar editing-user))
      (when (and (or (not fold-button-right?) collapsable? collapsed?)
                 (not (:table? config)))
        [:a.block-control
@@ -1812,7 +1893,8 @@
 
                        :else
                        bullet)]
-         (when-not @*bullet-dragging?
+         (if @*bullet-dragging?
+           bullet'
            (ui/tooltip
             bullet'
             [:div.flex.flex-col.gap-1.p-2

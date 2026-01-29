@@ -1,8 +1,8 @@
 (ns frontend.handler.route-test
-  (:require [frontend.handler.route :as route-handler]
-            [frontend.test.helper :as test-helper :refer [load-test-files]]
+  (:require [clojure.test :refer [deftest is use-fixtures testing]]
             [frontend.db.utils :as db-utils]
-            [clojure.test :refer [deftest is use-fixtures testing]]))
+            [frontend.handler.route :as route-handler]
+            [frontend.test.helper :as test-helper :refer [load-test-files]]))
 
 (use-fixtures :each {:before test-helper/start-test-db!
                      :after test-helper/destroy-test-db!})

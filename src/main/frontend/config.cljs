@@ -55,6 +55,24 @@
 (if ENABLE-RTC-SYNC-PRODUCTION
   (def RTC-WS-URL "wss://ws.logseq.com/rtc-sync?token=%s")
   (def RTC-WS-URL "wss://ws-dev.logseq.com/rtc-sync?token=%s"))
+
+;; (goog-define ENABLE-DB-SYNC false)
+(goog-define ENABLE-DB-SYNC true)
+(defonce db-sync-enabled? ENABLE-DB-SYNC)
+
+(goog-define ENABLE-DB-SYNC-LOCAL false)
+(defonce db-sync-local? ENABLE-DB-SYNC-LOCAL)
+
+(defonce db-sync-ws-url
+  (if db-sync-local?
+    "ws://127.0.0.1:8787/sync/%s"
+    "wss://logseq-sync.logseq.workers.dev/sync/%s"))
+
+(defonce db-sync-http-base
+  (if db-sync-local?
+    "http://127.0.0.1:8787"
+    "https://logseq-sync.logseq.workers.dev"))
+
 ;; Feature flags
 ;; =============
 

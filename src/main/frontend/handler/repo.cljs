@@ -89,7 +89,9 @@
   (when-let [repos' (seq (concat (map (fn [{:keys [sync-meta metadata] :as repo}]
                                         (let [graph-id (some-> (or (:kv/value metadata)
                                                                    (second sync-meta)) str)]
-                                          (if graph-id (assoc repo :GraphUUID graph-id) repo)))
+                                          (if (and graph-id (nil? (:GraphUUID repo)))
+                                            (assoc repo :GraphUUID graph-id)
+                                            repo)))
                                       local-repos)
                                  (some->> remote-repos
                                           (map #(assoc % :remote? true)))))]

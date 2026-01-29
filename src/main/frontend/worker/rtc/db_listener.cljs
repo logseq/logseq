@@ -3,7 +3,8 @@
   (:require [frontend.worker.db-listener :as db-listener]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.debug-log :as rtc-debug-log]
-            [frontend.worker.rtc.gen-client-op :as gen-client-op]))
+            [frontend.worker.rtc.gen-client-op :as gen-client-op]
+            [frontend.worker.state :as worker-state]))
 
 (comment
   ;; TODO: make it a qualified-keyword
@@ -15,7 +16,8 @@
    {:keys [repo same-entity-datoms-coll id->same-entity-datoms]}
    {:keys [tx-data tx-meta db-before db-after]}]
   (when (and (client-op/rtc-db-graph? repo)
-             (:persist-op? tx-meta true))
+             (:persist-op? tx-meta true)
+             (not (:enabled? @worker-state/*db-sync-config)))
     (rtc-debug-log/log-tx! repo tx-data tx-meta)
     (let [e->a->add?->v->t (update-vals
                             id->same-entity-datoms
