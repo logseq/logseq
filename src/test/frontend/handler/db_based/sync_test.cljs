@@ -1,6 +1,6 @@
-(ns frontend.handler.db-based.db-sync-test
+(ns frontend.handler.db-based.sync-test
   (:require [cljs.test :refer [deftest is async]]
-            [frontend.handler.db-based.db-sync :as db-sync]
+            [frontend.handler.db-based.sync :as db-sync]
             [frontend.handler.user :as user-handler]
             [promesa.core :as p]))
 

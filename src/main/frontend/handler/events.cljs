@@ -337,7 +337,7 @@
           [:div (str "Downloading " graph-name " ...")]
           (indicator/downloading-logs)])
        {:id :download-rtc-graph}))
-    (rtc-handler/<rtc-download-graph! graph-name graph-uuid graph-schema-version 60000)
+    (rtc-handler/<rtc-download-graph! graph-name graph-uuid)
     (rtc-handler/<get-remote-graphs)
     (when (util/mobile?)
       (shui/popup-hide! :download-rtc-graph)))

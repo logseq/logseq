@@ -1,8 +1,8 @@
-(ns frontend.worker.rtc.asset-db-listener
+(ns frontend.worker.sync.asset-db-listener
   "Listen asset-block changes in db, generate asset-sync operations"
   (:require [datascript.core :as d]
             [frontend.worker.db-listener :as db-listener]
-            [frontend.worker.rtc.client-op :as client-op]
+            [frontend.worker.sync.client-op :as client-op]
             [logseq.db :as ldb]))
 
 (defn- max-t

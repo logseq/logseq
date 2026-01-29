@@ -130,11 +130,12 @@
   (state/set-current-repo! nil)
   (destroy-test-db!))
 
-(def start-and-destroy-db-map-fixture
-  "To avoid 'Fixtures may not be of mixed types' error
+(comment
+  (def start-and-destroy-db-map-fixture
+    "To avoid 'Fixtures may not be of mixed types' error
   when use together with other map-type fixtures"
-  {:before start-test-db!
-   :after #(destroy-test-db!)})
+    {:before start-test-db!
+     :after #(destroy-test-db!)}))
 
 (defn save-block!
   "Wrapper around editor-handler/save-block! that also adds tags"

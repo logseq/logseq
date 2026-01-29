@@ -38,18 +38,14 @@
                        :auth/refresh-token nil
 
                        :user/info nil
-
-                       :rtc/downloading-graph? false
-
                        ;; thread atoms, these atoms' value are syncing from ui-thread
                        :thread-atom/online-event (atom nil)}))
 
-(defonce *rtc-ws-url (atom nil))
-(defonce *db-sync-config (atom {:enabled? false :ws-url nil}))
+(defonce *db-sync-config (atom {:enabled? true :ws-url nil}))
 (defonce *db-sync-client (atom nil))
 
 (defonce *sqlite (atom nil))
-;; repo -> {:db conn :search conn :client-ops conn :debug-log conn}
+;; repo -> {:db conn :search conn :client-ops conn}
 (defonce *sqlite-conns (atom {}))
 ;; repo -> conn
 (defonce *datascript-conns (atom nil))
@@ -64,7 +60,7 @@
 (defn get-sqlite-conn
   ([repo] (get-sqlite-conn repo :db))
   ([repo which-db]
-   (assert (contains? #{:db :search :client-ops :debug-log} which-db) which-db)
+   (assert (contains? #{:db :search :client-ops} which-db) which-db)
    (get-in @*sqlite-conns [repo which-db])))
 
 (defn get-datascript-conn
@@ -105,15 +101,6 @@
   [new-state]
   (swap! *state (fn [old-state]
                   (merge old-state new-state))))
-
-;; TODO: Move or remove as this is no longer stateful
-(defn get-date-formatter
-  [_repo]
-  "MMM do, yyyy")
-
-(defn set-rtc-downloading-graph!
-  [value]
-  (swap! *state assoc :rtc/downloading-graph? value))
 
 (defn get-id-token
   []

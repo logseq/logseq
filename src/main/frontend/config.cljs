@@ -51,15 +51,6 @@
 ;; Enable for local development
 ;; (def PUBLISH-API-BASE "http://localhost:8787")
 
-(goog-define ENABLE-RTC-SYNC-PRODUCTION false)
-(if ENABLE-RTC-SYNC-PRODUCTION
-  (def RTC-WS-URL "wss://ws.logseq.com/rtc-sync?token=%s")
-  (def RTC-WS-URL "wss://ws-dev.logseq.com/rtc-sync?token=%s"))
-
-;; (goog-define ENABLE-DB-SYNC false)
-(goog-define ENABLE-DB-SYNC true)
-(defonce db-sync-enabled? ENABLE-DB-SYNC)
-
 (goog-define ENABLE-DB-SYNC-LOCAL false)
 (defonce db-sync-local? ENABLE-DB-SYNC-LOCAL)
 

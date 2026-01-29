@@ -83,8 +83,6 @@
 (def ^:export clear_right_sidebar_blocks api-app/clear_right_sidebar_blocks)
 (def ^:export push_state api-app/push_state)
 (def ^:export replace_state api-app/replace_state)
-(def ^:export export_debug_log_db api-app/export_debug_log_db)
-(def ^:export reset_debug_log_db api-app/reset_debug_log_db)
 
 ;; db
 (def ^:export q api-db/q)
