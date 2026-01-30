@@ -20,8 +20,8 @@
   {:content {:desc "Block content for add"}
    :blocks {:desc "EDN vector of blocks for add"}
    :blocks-file {:desc "EDN file of blocks for add"}
-   :tags {:desc "EDN vector of tags (id, :db/ident, or :block/title)"}
-   :properties {:desc "EDN map of built-in properties (id, :db/ident, or :block/title)"}
+   :tags {:desc "EDN vector of tags. Identifiers can be id, :db/ident, or :block/title."}
+   :properties {:desc "EDN map of built-in properties. Identifiers can be id, :db/ident, or :block/title."}
    :target-id {:desc "Target block db/id"
                :coerce :long}
    :target-uuid {:desc "Target block UUID"}
@@ -31,8 +31,8 @@
 
 (def ^:private add-page-spec
   {:page {:desc "Page name"}
-   :tags {:desc "EDN vector of tags (id, :db/ident, or :block/title)"}
-   :properties {:desc "EDN map of built-in properties (id, :db/ident, or :block/title)"}})
+   :tags {:desc "EDN vector of tags. Identifiers can be id, :db/ident, or :block/title."}
+   :properties {:desc "EDN map of built-in properties. Identifiers can be id, :db/ident, or :block/title."}})
 
 (def entries
   [(core/command-entry ["add" "block"] :add-block "Add blocks" content-add-spec)
