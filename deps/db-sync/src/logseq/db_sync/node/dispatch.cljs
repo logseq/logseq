@@ -1,26 +1,31 @@
-(ns logseq.db-sync.worker.dispatch
+(ns logseq.db-sync.node.dispatch
   (:require [clojure.string :as string]
             [logseq.db-sync.common :as common]
+            [logseq.db-sync.node.graph :as graph]
+            [logseq.db-sync.node.routes :as node-routes]
             [logseq.db-sync.platform.core :as platform]
             [logseq.db-sync.worker.handler.assets :as assets-handler]
             [logseq.db-sync.worker.handler.index :as index-handler]
+            [logseq.db-sync.worker.handler.sync :as sync-handler]
             [logseq.db-sync.worker.http :as http]
             [promesa.core :as p]))
 
-(defn handle-worker-fetch [request ^js env]
+(defn handle-node-fetch
+  [{:keys [request env registry deps]}]
   (let [url (platform/request-url request)
         path (.-pathname url)
-        method (.-method request)]
+        method (.-method request)
+        index-self #js {:env env :d1 (aget env "DB")}]
     (cond
       (= path "/health")
       (http/json-response :worker/health {:ok true})
 
       (or (= path "/graphs")
           (string/starts-with? path "/graphs/"))
-      (index-handler/handle-fetch #js {:env env :d1 (aget env "DB")} request)
+      (index-handler/handle-fetch index-self request)
 
       (string/starts-with? path "/e2ee")
-      (index-handler/handle-fetch #js {:env env :d1 (aget env "DB")} request)
+      (index-handler/handle-fetch index-self request)
 
       (string/starts-with? path "/assets/")
       (if (= method "OPTIONS")
@@ -36,33 +41,20 @@
       (common/options-response)
 
       (string/starts-with? path "/sync/")
-      (let [prefix (count "/sync/")
-            rest-path (subs path prefix)
-            rest-path (if (string/starts-with? rest-path "/")
-                        (subs rest-path 1)
-                        rest-path)
-            slash-idx (or (string/index-of rest-path "/") -1)
-            graph-id (if (neg? slash-idx) rest-path (subs rest-path 0 slash-idx))
-            tail (if (neg? slash-idx)
-                   "/"
-                   (subs rest-path slash-idx))
-            new-url (js/URL. (str (.-origin url) tail (.-search url)))]
+      (if-let [{:keys [graph-id tail]} (node-routes/parse-sync-path path)]
         (if (seq graph-id)
           (if (= method "OPTIONS")
             (common/options-response)
             (p/let [access-resp (index-handler/graph-access-response request env graph-id)]
               (if (.-ok access-resp)
-                (let [^js namespace (.-LOGSEQ_SYNC_DO env)
-                      do-id (.idFromName namespace graph-id)
-                      stub (.get namespace do-id)]
-                  (if (common/upgrade-request? request)
-                    (.fetch stub request)
-                    (do
-                      (.set (.-searchParams new-url) "graph-id" graph-id)
-                      (let [rewritten (platform/request (.toString new-url) request)]
-                        (.fetch stub rewritten)))))
+                (let [ctx (graph/get-or-create-graph registry deps graph-id)
+                      new-url (js/URL. (str (.-origin url) tail (.-search url)))]
+                  (.set (.-searchParams new-url) "graph-id" graph-id)
+                  (let [rewritten (platform/request (.toString new-url) request)]
+                    (sync-handler/handle-http ctx rewritten)))
                 access-resp)))
-          (http/bad-request "missing graph id")))
+          (http/bad-request "missing graph id"))
+        (http/bad-request "missing graph id"))
 
       :else
       (http/not-found))))

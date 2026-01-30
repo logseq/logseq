@@ -122,3 +122,21 @@ yarn release-electron
 ```
 
 The final released binaries or installers will be at `static/out/`.
+
+## DB sync Node adapter (self-hosted)
+
+Build and run the Node.js adapter for self-hosted DB sync.
+
+```bash
+cd deps/db-sync
+yarn install
+DB_SYNC_AUTH_DRIVER=static DB_SYNC_AUTH_TOKEN=dev-token DB_SYNC_PORT=8080 yarn build:node-adapter
+DB_SYNC_AUTH_DRIVER=static DB_SYNC_AUTH_TOKEN=dev-token DB_SYNC_PORT=8080 yarn start:node-adapter
+```
+
+Optional environment variables:
+- DB_SYNC_DATA_DIR (defaults to data/db-sync)
+- DB_SYNC_STATIC_USER_ID (defaults to user)
+- DB_SYNC_STATIC_EMAIL
+- DB_SYNC_STATIC_USERNAME
+
