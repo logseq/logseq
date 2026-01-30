@@ -8,6 +8,7 @@
             [frontend.worker.platform.node :as platform-node]
             [frontend.worker.state :as worker-state]
             [lambdaisland.glogi :as log]
+            [logseq.cli.style :as style]
             [logseq.cli.data-dir :as data-dir]
             [logseq.db :as ldb]
             [promesa.core :as p]))
@@ -225,11 +226,11 @@
 
 (defn- show-help!
   []
-  (println "db-worker-node options:")
-  (println "  --data-dir <path>    (default ~/logseq/cli-graphs)")
-  (println "  --repo <name>        (required)")
-  (println "  --rtc-ws-url <url>   (optional)")
-  (println "  --log-level <level>  (default info)")
+  (println (str (style/bold "db-worker-node") " " (style/bold "options") ":"))
+  (println (str "  " (style/bold "--data-dir") " <path>    (default ~/logseq/cli-graphs)"))
+  (println (str "  " (style/bold "--repo") " <name>        (required)"))
+  (println (str "  " (style/bold "--rtc-ws-url") " <url>   (optional)"))
+  (println (str "  " (style/bold "--log-level") " <level>  (default info)"))
   (println "  logs: <data-dir>/<graph-dir>/db-worker-node-YYYYMMDD.log (retains 7)"))
 
 (defn- pad2
