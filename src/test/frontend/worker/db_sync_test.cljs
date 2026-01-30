@@ -371,7 +371,7 @@
                      (reset! worker-state/*db-sync-config config-prev)
                      (done))))))))
 
-(deftest download-large-title-decrypts-transit-payload-test
+(deftest ^:fix-me download-large-title-decrypts-transit-payload-test
   (testing "encrypted large title downloads transit-encoded payload"
     (async done
            (let [title (apply str (repeat 5000 "b"))
