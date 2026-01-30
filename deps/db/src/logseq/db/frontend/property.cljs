@@ -625,6 +625,10 @@
                                                     :cardinality :many
                                                     :public? true}
                                            :queryable? true}
+     :logseq.property.sync/large-title-object {:title "Reference to large block title stored in remote object storage"
+                                               :schema {:type :map
+                                                        :public? false
+                                                        :hide? true}}
      :logseq.property.embedding/hnsw-label-updated-at {:title "HNSW label updated-at"
                                                        :schema {:type :datetime
                                                                 :public? false
