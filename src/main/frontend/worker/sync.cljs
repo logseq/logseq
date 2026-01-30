@@ -5,6 +5,7 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [datascript.storage :refer [IStorage]]
+            [frontend.common.crypt :as crypt]
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.shared-service :as shared-service]
@@ -151,6 +152,11 @@
 (def ^:private reconnect-base-delay-ms 1000)
 (def ^:private reconnect-max-delay-ms 30000)
 (def ^:private reconnect-jitter-ms 250)
+(def ^:private large-title-byte-limit 4096)
+(def ^:private large-title-asset-type "txt")
+(def ^:private large-title-object-attr :logseq.property.sync/large-title-object)
+(def ^:private text-encoder (js/TextEncoder.))
+(def ^:private text-decoder (js/TextDecoder.))
 
 (defn- format-ws-url [base graph-id]
   (cond
@@ -168,6 +174,30 @@
     (let [separator (if (string/includes? url "?") "&" "?")]
       (str url separator "token=" (js/encodeURIComponent token)))
     url))
+
+(defn- utf8-byte-length [value]
+  (when (string? value)
+    (.-length (.encode text-encoder value))))
+
+(defn- large-title? [value]
+  (when-let [byte-length (utf8-byte-length value)]
+    (> byte-length large-title-byte-limit)))
+
+(defn- assoc-datom-value
+  [datom new-value]
+  (let [[op e a _v & rest] datom]
+    (into [op e a new-value] rest)))
+
+(defn- large-title-object
+  [asset-uuid asset-type]
+  {:asset-uuid asset-uuid
+   :asset-type asset-type})
+
+(defn- large-title-object?
+  [value]
+  (and (map? value)
+       (string? (:asset-uuid value))
+       (string? (:asset-type value))))
 
 (defn- get-graph-id [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
@@ -211,6 +241,8 @@
 (defn fail-fast [tag data]
   (log/error tag data)
   (throw (ex-info (name tag) data)))
+
+(declare offload-large-titles)
 
 (defn- require-number [value context]
   (when-not (number? value)
@@ -494,17 +526,23 @@
                   ;; (prn :debug :upload :tx-data tx-data)
                   (when (seq txs)
                     (->
-                     (p/let [aes-key (sync-crypt/<ensure-graph-aes-key repo (:graph-id client))
+                     (p/let [aes-key (when (sync-crypt/graph-e2ee? repo)
+                                       (sync-crypt/<ensure-graph-aes-key repo (:graph-id client)))
                              _ (when (and (sync-crypt/graph-e2ee? repo) (nil? aes-key))
                                  (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
-                             tx-data* (if aes-key
-                                        (sync-crypt/<encrypt-tx-data aes-key tx-data)
-                                        tx-data)]
+                             tx-data* (offload-large-titles
+                                       tx-data
+                                       {:repo repo
+                                        :graph-id (:graph-id client)
+                                        :aes-key aes-key})
+                             tx-data** (if aes-key
+                                         (sync-crypt/<encrypt-tx-data aes-key tx-data*)
+                                         tx-data*)]
 
                        (reset! (:inflight client) tx-ids)
                        (send! ws {:type "tx/batch"
                                   :t-before local-tx
-                                  :txs (sqlite-util/write-transit-str tx-data*)}))
+                                  :txs (sqlite-util/write-transit-str tx-data**)}))
                      (p/catch (fn [error]
                                 (js/console.error error))))))))))))))
 
@@ -521,6 +559,132 @@
 
 (defn- asset-url [base graph-id asset-uuid asset-type]
   (str base "/assets/" graph-id "/" asset-uuid "." asset-type))
+
+(defn- upload-large-title!
+  [repo graph-id title aes-key]
+  (let [base (http-base-url)]
+    (when-not (seq base)
+      (fail-fast :db-sync/missing-field {:repo repo :field :http-base}))
+    (when-not (seq graph-id)
+      (fail-fast :db-sync/missing-field {:repo repo :field :graph-id}))
+    (let [asset-uuid (str (random-uuid))
+          asset-type large-title-asset-type
+          url (asset-url base graph-id asset-uuid asset-type)]
+      (p/let [payload (if aes-key
+                        (p/let [payload-str (sync-crypt/<encrypt-text-value aes-key
+                                                                            (ldb/write-transit-str title))]
+                          (.encode text-encoder payload-str))
+                        (p/resolved title))
+              headers (merge {"content-type" "text/plain; charset=utf-8"
+                              "x-amz-meta-type" asset-type}
+                             (auth-headers))
+              resp (js/fetch url #js {:method "PUT"
+                                      :headers (clj->js headers)
+                                      :body payload})]
+        (if (.-ok resp)
+          (large-title-object asset-uuid asset-type)
+          (fail-fast :db-sync/large-title-upload-failed
+                     {:repo repo :status (.-status resp)}))))))
+
+(defn- download-large-title!
+  [repo graph-id obj aes-key]
+  (let [base (http-base-url)]
+    (when-not (seq base)
+      (fail-fast :db-sync/missing-field {:repo repo :field :http-base}))
+    (when-not (seq graph-id)
+      (fail-fast :db-sync/missing-field {:repo repo :field :graph-id}))
+    (let [url (asset-url base graph-id (:asset-uuid obj) (:asset-type obj))
+          headers (auth-headers)]
+      (p/let [resp (js/fetch url #js {:method "GET"
+                                      :headers (clj->js headers)})]
+        (when-not (.-ok resp)
+          (fail-fast :db-sync/large-title-download-failed
+                     {:repo repo :status (.-status resp)}))
+        (p/let [buf (.arrayBuffer resp)
+                payload (js/Uint8Array. buf)
+                data (if aes-key
+                       (p/let [payload-str (.decode text-decoder payload)]
+                         (sync-crypt/<decrypt-text-value aes-key payload-str))
+                       (p/resolved payload))]
+          (.decode text-decoder data))))))
+
+(defn- offload-large-titles
+  [tx-data {:keys [repo graph-id upload-fn aes-key]}]
+  (let [upload-fn (or upload-fn upload-large-title!)]
+    (p/loop [remaining tx-data
+             acc []]
+      (if (empty? remaining)
+        acc
+        (let [item (first remaining)
+              op (nth item 0 nil)
+              attr (nth item 2 nil)
+              value (nth item 3 nil)]
+          (if (and (vector? item)
+                   (= :db/add op)
+                   (= :block/title attr)
+                   (string? value)
+                   (large-title? value))
+            (p/let [obj (upload-fn repo graph-id value aes-key)
+                    placeholder (assoc-datom-value item "")]
+              (p/recur (rest remaining)
+                       (conj acc placeholder
+                             [:db/add (nth item 1) large-title-object-attr obj])))
+            (p/recur (rest remaining) (conj acc item))))))))
+
+(defn- rehydrate-large-titles!
+  [repo {:keys [graph-id download-fn aes-key]}]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (let [download-fn (or download-fn download-large-title!)
+          graph-id (or graph-id (get-graph-id repo))
+          items (->> (d/datoms @conn :eavt)
+                     (keep (fn [datom]
+                             (when (= large-title-object-attr (:a datom))
+                               (let [obj (:v datom)]
+                                 (when (large-title-object? obj)
+                                   {:e (:e datom)
+                                    :obj obj})))))
+                     (distinct))]
+      (when (seq items)
+        (p/let [aes-key (or aes-key
+                            (when (sync-crypt/graph-e2ee? repo)
+                              (sync-crypt/<ensure-graph-aes-key repo graph-id)))
+                _ (when (and (sync-crypt/graph-e2ee? repo) (nil? aes-key))
+                    (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))]
+          (p/all
+           (mapv (fn [{:keys [e obj]}]
+                   (p/let [title (download-fn repo graph-id obj aes-key)]
+                     (ldb/transact! conn
+                                    [[:db/add e :block/title title]]
+                                    {:rtc-tx? true
+                                     :persist-op? false
+                                     :op :large-title-rehydrate})))
+                 items)))))))
+
+(defn- offload-large-titles-in-datoms
+  [repo graph-id datoms aes-key]
+  (p/loop [remaining datoms
+           acc []]
+    (if (empty? remaining)
+      acc
+      (let [datom (first remaining)
+            attr (:a datom)
+            value (:v datom)]
+        (if (and (= :block/title attr)
+                 (string? value)
+                 (large-title? value))
+          (p/let [obj (upload-large-title! repo graph-id value aes-key)
+                  placeholder (assoc datom :v "")
+                  obj-datom (assoc datom :a large-title-object-attr :v obj)]
+            (p/recur (rest remaining) (conj acc placeholder obj-datom)))
+          (p/recur (rest remaining) (conj acc datom)))))))
+
+(defn rehydrate-large-titles-from-db!
+  [repo graph-id]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (let [tx-data (mapv (fn [datom]
+                          [:db/add (:e datom) large-title-object-attr (:v datom)])
+                        (d/datoms @conn :avet large-title-object-attr))]
+      (rehydrate-large-titles! repo {:tx-data tx-data :graph-id graph-id}))))
 
 (defn- enqueue-asset-task! [client task]
   (when-let [queue (:asset-queue client)]
@@ -855,6 +1019,12 @@
       (when-let [*inflight (:inflight client)]
         (reset! *inflight []))
 
+      (-> (rehydrate-large-titles! repo {:tx-data tx-data
+                                         :graph-id (:graph-id client)})
+          (p/catch (fn [error]
+                     (log/error :db-sync/large-title-rehydrate-failed
+                                {:repo repo :error error}))))
+
       (reset! *remote-tx-report nil))
     (fail-fast :db-sync/missing-db {:repo repo :op :apply-remote-tx})))
 
@@ -1139,9 +1309,10 @@
            (ensure-client-graph-uuid! repo graph-id)
            (p/let [datoms (d/datoms @source-conn :eavt)
                    _ (prn :debug :datoms-count (count datoms) :time (js/Date.))
+                   datoms* (offload-large-titles-in-datoms repo graph-id datoms aes-key)
                    _ (update-progress {:sub-type :upload-progress
                                        :message "Encrypting data"})
-                   encrypted-datoms (sync-crypt/<encrypt-datoms aes-key datoms)
+                   encrypted-datoms (sync-crypt/<encrypt-datoms aes-key datoms*)
                    {:keys [db] :as temp} (<create-temp-sqlite-conn (d/schema @source-conn) encrypted-datoms)
                    total-rows (count-kvs-rows db)]
              (->
