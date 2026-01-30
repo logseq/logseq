@@ -1719,19 +1719,9 @@
         page-title? (:page-title? config)
         collapsable? (editor-handler/collapsable? uuid {:semantic? true
                                                         :ignore-children? page-title?})
-        link? (boolean (:original-block config))
-        icon-size (if collapsed? 12 14)
-        icon (icon-component/get-node-icon-cp block {:size icon-size :color? true :link? link?})
-        with-icon? (and (some? icon)
-                        (or (and (db/page? block)
-                                 (not (:library? config)))
-                            (:logseq.property/icon block)
-                            link?
-                            (some :logseq.property/icon (:block/tags block))
-                            (contains? #{"pdf"} (:logseq.property.asset/type block))))]
+        link? (boolean (:original-block config))]
     [:div.block-control-wrap.flex.flex-row.items-center.h-6
      {:class (util/classnames [{:is-order-list order-list?
-                                :is-with-icon with-icon?
                                 :bullet-closed collapsed?
                                 :bullet-hidden (:hide-bullet? config)}])}
      (when (and (or (not fold-button-right?) collapsable? collapsed?)
@@ -1780,15 +1770,13 @@
                          :on-drag-end (fn [_e]
                                         (reset! *bullet-dragging? false))))
 
-                      (if with-icon?
-                        icon
-                        [:span.bullet (cond->
-                                       {:blockid (str uuid)}
-                                        selected?
-                                        (assoc :class "selected"))
-                         (when
-                          order-list?
-                           [:label (str order-list-idx ".")])])]]
+                      ;; Always show bullet (icon moved to inline before title)
+                      [:span.bullet (cond->
+                                     {:blockid (str uuid)}
+                                     selected?
+                                     (assoc :class "selected"))
+                       (when order-list?
+                         [:label (str order-list-idx ".")])]]]
              bullet' (cond
                        (and (or (mobile-util/native-platform?)
                                 (:ui/show-empty-bullets? (state/get-config))
@@ -2524,6 +2512,53 @@
                                        (str "var(--ls-highlight-color-" bg-color ")")
                                        bg-color)
                    :color (when-not built-in-color? "white")}})))
+
+     ;; Inline block icon - displayed BEFORE positioned properties like Status
+     (when-not (or table? (:page-title? config))
+       (let [block-icon (:logseq.property/icon block)
+             tag-icon (some :logseq.property/icon (:block/tags block))
+             ;; Check for default-icon-type on tags (for auto-generated icons)
+             sorted-tags (sort-by :db/id (:block/tags block))
+             default-icon-type (some (fn [tag]
+                                       (when-let [dit (:logseq.property.class/default-icon-type tag)]
+                                         (or (:block/title dit)
+                                             (:logseq.property/value dit))))
+                                     sorted-tags)
+             has-icon? (or block-icon tag-icon default-icon-type)]
+         (when has-icon?
+           (let [icon (or block-icon
+                          (when (and default-icon-type (:block/title block))
+                            (case default-icon-type
+                              "avatar" {:type :avatar
+                                        :data {:value (icon-component/derive-avatar-initials (:block/title block))}}
+                              "text" {:type :text
+                                      :data {:value (icon-component/derive-initials (:block/title block))}}
+                              nil))
+                          tag-icon)]
+             [:div.inline-block-icon.flex.items-center.h-6.select-none
+              (icon-component/icon-picker
+               icon
+               {:on-chosen (fn [_e new-icon]
+                             (if new-icon
+                               (let [icon-data (cond
+                                                 (= :text (:type new-icon))
+                                                 {:type :text :data (:data new-icon)}
+
+                                                 (= :avatar (:type new-icon))
+                                                 {:type :avatar :data (:data new-icon)}
+
+                                                 :else
+                                                 (select-keys new-icon [:id :type :color]))]
+                                 (db-property-handler/set-block-property!
+                                  (:db/id block)
+                                  :logseq.property/icon
+                                  icon-data))
+                               ;; Delete icon
+                               (db-property-handler/remove-block-property!
+                                (:db/id block)
+                                :logseq.property/icon)))
+                :del-btn? (boolean block-icon)
+                :icon-props {:size 16}})]))))
 
      (when-not table?
        (block-positioned-properties config block :block-left))

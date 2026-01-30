@@ -204,25 +204,6 @@
     }
   }
 
-  &.is-with-icon {
-    &.bullet-closed {
-      .block-control .control-hide {}
-    }
-
-    .bullet-container {
-      .icon-cp-container {
-        @apply flex;
-      }
-
-      &.bullet-closed {
-        .ls-icon-color-wrap em-emoji {
-          position: relative;
-          top: -0.08em;
-        }
-      }
-    }
-  }
-
   &.bullet-hidden {
     padding-right: 2px;
   }
@@ -997,6 +978,20 @@ html.is-mac {
 .block-title-wrap a.tag, .block-body a.tag {
   font-size: initial;
   opacity: 1;
+}
+
+/* Inline block icon - displayed before positioned properties and title */
+.inline-block-icon {
+  @apply flex items-center select-none h-6;
+  margin-right: 2px;
+}
+
+.inline-block-icon .icon-cp-container {
+  @apply flex items-center;
+}
+
+.inline-block-icon .ui__button {
+  @apply px-0.5 py-0.5 h-auto;
 }
 
 .positioned-properties {
