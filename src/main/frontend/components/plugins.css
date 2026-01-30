@@ -192,6 +192,14 @@
       overflow: hidden;
       line-height: 24px;
       padding-right: 24px;
+
+      > .l {
+        display: inline-block;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        width: 92%;
+      }
     }
 
     .desc {
@@ -256,6 +264,7 @@
     > .r {
       flex: 1;
       position: relative;
+      min-width: 0; /* prevent flex item overflow */
 
       p {
         @apply py-1 m-0;
@@ -767,6 +776,10 @@
       }
     }
   }
+}
+
+.lsp-daemon-container {
+  @apply fixed top-0 left-0 z-10;
 }
 
 .lsp-ui-float-container {

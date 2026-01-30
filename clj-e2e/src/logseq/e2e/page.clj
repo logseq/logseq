@@ -1,9 +1,11 @@
 (ns logseq.e2e.page
-  (:require [logseq.e2e.keyboard :as k]
+  (:require [logseq.e2e.assert :as assert]
+            [logseq.e2e.block :as b]
+            [logseq.e2e.keyboard :as k]
+            [logseq.e2e.locator :as loc]
             [logseq.e2e.util :as util]
             [wally.main :as w]
-            [wally.selectors :as ws]
-            [logseq.e2e.block :as b])
+            [wally.selectors :as ws])
   (:import (com.microsoft.playwright TimeoutError)))
 
 (defn goto-page
@@ -15,6 +17,10 @@
       ;; try one more time
       (k/esc)
       (util/search-and-click page-name))))
+
+(defn get-page-name
+  []
+  (util/get-text "div[data-testid='page title'] .block-title-wrap"))
 
 (defn new-page
   [title]
@@ -38,3 +44,27 @@
   (w/click "div[data-testid='page title']")
   (b/save-block new-page-name)
   (k/esc))
+
+(defn- set-tag-extends
+  [extends & [retry-count]]
+  (let [retry-count (or retry-count 5)]
+    (util/wait-timeout 500)
+    (w/click (loc/filter ".property-value" :has-text "root tag"))
+    (let [extends-visible? (mapv #(w/visible? (format "div:has(> button):has(div:text('%s'))" %)) extends)]
+      (if (every? identity extends-visible?)
+        (doseq [extend extends]
+          (w/click (format "div:has(> button):has(div:text('%s'))" extend)))
+        (if (zero? retry-count)
+          (throw (ex-info "parent-tag not found" {:extends extends :visible? extends-visible?}))
+          (do (k/esc)
+              (set-tag-extends extends (dec retry-count))))))))
+
+(defn convert-to-tag
+  [page-name & {:keys [extends]}]
+  (goto-page page-name)
+  (util/right-click "div[data-testid='page title']")
+  (w/click (loc/filter "div[role='menuitem']" :has-text "convert to tag"))
+  (assert/assert-is-visible ".ls-page-icon")
+  (when (seq extends)
+    (set-tag-extends extends)
+    (k/esc)))

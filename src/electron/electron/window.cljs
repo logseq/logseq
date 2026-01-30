@@ -1,15 +1,15 @@
 (ns electron.window
-  (:require ["electron-window-state" :as windowStateKeeper]
-            [electron.utils :refer [mac? win32? linux? dev? open] :as utils]
+  (:require ["electron" :refer [BrowserWindow app session shell dialog] :as electron]
+            ["electron-window-state" :as windowStateKeeper]
+            ["path" :as node-path]
+            ["url" :as URL]
+            [cljs-bean.core :as bean]
+            [clojure.string :as string]
             [electron.configs :as cfgs]
             [electron.context-menu :as context-menu]
             [electron.logger :as logger]
-            ["electron" :refer [BrowserWindow app session shell dialog] :as electron]
-            ["path" :as node-path]
-            ["url" :as URL]
             [electron.state :as state]
-            [cljs-bean.core :as bean]
-            [clojure.string :as string]))
+            [electron.utils :refer [mac? win32? linux? dev? open] :as utils]))
 
 (defonce *quitting? (atom false))
 
@@ -28,27 +28,27 @@
          native-titlebar? (cfgs/get-item :window/native-titlebar?)
          url (if graph (str url "#/?graph=" graph) url)
          win-opts  (cond->
-                     {:backgroundColor      "#fff" ; SEE https://www.electronjs.org/docs/latest/faq#the-font-looks-blurry-what-is-this-and-what-can-i-do
-                      :width                (.-width win-state)
-                      :height               (.-height win-state)
-                      :frame                (or mac? native-titlebar?)
-                      :titleBarStyle        "hiddenInset"
-                      :trafficLightPosition {:x 16 :y 16}
-                      :autoHideMenuBar      (not mac?)
-                      :show                 false
-                      :webPreferences
-                      {:plugins                 true        ; pdf
-                       :nodeIntegration         false
-                       :nodeIntegrationInWorker false
-                       :nativeWindowOpen        true
-                       :sandbox                 false
-                       :webSecurity             (not dev?)
-                       :contextIsolation        true
-                       :spellcheck              ((fnil identity true) (cfgs/get-item :spell-check))
+                    {:backgroundColor      "#fff" ; SEE https://www.electronjs.org/docs/latest/faq#the-font-looks-blurry-what-is-this-and-what-can-i-do
+                     :width                (.-width win-state)
+                     :height               (.-height win-state)
+                     :frame                (or mac? native-titlebar?)
+                     :titleBarStyle        "hiddenInset"
+                     :trafficLightPosition {:x 16 :y 16}
+                     :autoHideMenuBar      (not mac?)
+                     :show                 false
+                     :webPreferences
+                     {:plugins                 true        ; pdf
+                      :nodeIntegration         false
+                      :nodeIntegrationInWorker false
+                      :nativeWindowOpen        true
+                      :sandbox                 false
+                      :webSecurity             (not dev?)
+                      :contextIsolation        true
+                      :spellcheck              ((fnil identity true) (cfgs/get-item :spell-check))
                        ;; Remove OverlayScrollbars and transition `.scrollbar-spacing`
                        ;; to use `scollbar-gutter` after the feature is implemented in browsers.
-                       :enableBlinkFeatures     'OverlayScrollbars'
-                       :preload                 (node-path/join js/__dirname "js/preload.js")}}
+                      :enableBlinkFeatures     'OverlayScrollbars'
+                      :preload                 (node-path/join js/__dirname "js/preload.js")}}
 
                      (seq opts)
                      (merge opts)
@@ -59,19 +59,14 @@
      (.onBeforeSendHeaders (.. session -defaultSession -webRequest)
                            (clj->js {:urls (array "*://*.youtube.com/*")})
                            (fn [^js details callback]
-                             (let [url            (.-url details)
-                                   urlObj         (js/URL. url)
-                                   origin         (.-origin urlObj)
-                                   requestHeaders (.-requestHeaders details)]
-                               (if (and
-                                    (.hasOwnProperty requestHeaders "referer")
-                                    (not-empty (.-referer requestHeaders)))
-                                 (callback #js {:cancel         false
-                                                :requestHeaders requestHeaders})
-                                 (do
-                                   (set! (.-referer requestHeaders) origin)
-                                   (callback #js {:cancel         false
-                                                  :requestHeaders requestHeaders}))))))
+                             (let [requestHeaders (.-requestHeaders details)
+                                   headers (-> (bean/->clj requestHeaders)
+                                               (dissoc :Cookie :cookie)
+                                               (assoc :Referrer-Policy "strict-origin-when-cross-origin"
+                                                      :referer "https://logseq.com"))]
+                               (callback (bean/->js
+                                          {:cancel         false
+                                           :requestHeaders headers})))))
      (.loadURL win url)
      ;;(when dev? (.. win -webContents (openDevTools)))
      win)))
@@ -85,10 +80,8 @@
   (.destroy win))
 
 (defn close-handler
-  [^js win close-watcher-f e]
+  [^js win e]
   (.preventDefault e)
-  (when-let [dir (state/get-window-graph-path win)]
-    (close-watcher-f win dir))
   (state/close-window! win)
   (let [web-contents (. win -webContents)]
     (.send web-contents "persist-zoom-level" (.getZoomLevel web-contents)))
@@ -96,8 +89,8 @@
 
 (defn on-close-actions!
   ;; TODO merge with the on close in core
-  [^js win close-watcher-f] ;; injected watcher related func
-  (.on win "close" (fn [e] (close-handler win close-watcher-f e))))
+  [^js win]
+  (.on win "close" (fn [e] (close-handler win e))))
 
 (defn switch-to-window!
   [^js win]
@@ -129,12 +122,12 @@
       (if (contains? #{"https:" "http:" "mailto:"} (.-protocol parsed-url))
         (.openExternal shell url)
         (when-let [^js res (and (fn? default-open)
-                             (.showMessageBoxSync dialog
-                               #js {:type "warning"
-                                    :message (str "Are you sure you want to open this link? \n\n" url)
-                                    :defaultId 1
-                                    :cancelId 0
-                                    :buttons #js ["Cancel" "OK"]}))]
+                                (.showMessageBoxSync dialog
+                                                     #js {:type "warning"
+                                                          :message (str "Are you sure you want to open this link? \n\n" url)
+                                                          :defaultId 1
+                                                          :cancelId 0
+                                                          :buttons #js ["Cancel" "OK"]}))]
           (when (= res 1)
             (default-open url)))))))
 
@@ -187,7 +180,7 @@
                               :webSecurity (not dev?)
                               :preload (node-path/join js/__dirname "js/preload.js")
                               :nativeWindowOpen true}}}
-                      features)
+                           features)
                     (do (open-external! url) {:action "deny"}))
                   (bean/->js))))]
 

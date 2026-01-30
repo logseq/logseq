@@ -8,15 +8,13 @@
                :default ["mldoc" :refer [Mldoc]])
             #?(:org.babashka/nbb [logseq.common.log :as log]
                :default [lambdaisland.glogi :as log])
-            [goog.object :as gobj]
             [cljs-bean.core :as bean]
-            [logseq.graph-parser.utf8 :as utf8]
             [clojure.string :as string]
-            [logseq.common.util :as common-util]
+            [goog.object :as gobj]
             [logseq.common.config :as common-config]
-            #_:clj-kondo/ignore
-            [logseq.graph-parser.schema.mldoc :as mldoc-schema]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.common.util :as common-util]
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.graph-parser.utf8 :as utf8]))
 
 (defonce parseJson (gobj/get Mldoc "parseJson"))
 (defonce parseInlineJson (gobj/get Mldoc "parseInlineJson"))
@@ -103,7 +101,7 @@
                       (common-util/safe-subs line level)
                       ;; Otherwise, trim these invalid spaces
                       (string/triml line)))
-               (if remove-first-line? lines r))
+                  (if remove-first-line? lines r))
         content (if remove-first-line? body (cons f body))]
     (string/join "\n" content)))
 
@@ -111,16 +109,16 @@
   [ast content]
   (let [content (utf8/encode content)]
     (map (fn [[block pos-meta]]
-          (if (and (vector? block)
-                   (= "Src" (first block)))
-            (let [{:keys [start_pos end_pos]} pos-meta
-                  content (utf8/substring content start_pos end_pos)
-                  spaces (re-find #"^[\t ]+" (first (string/split-lines content)))
-                  content (if spaces (remove-indentation-spaces content (count spaces) true)
-                              content)
-                  block ["Src" (assoc (second block) :full_content content)]]
-              [block pos-meta])
-            [block pos-meta])) ast)))
+           (if (and (vector? block)
+                    (= "Src" (first block)))
+             (let [{:keys [start_pos end_pos]} pos-meta
+                   content (utf8/substring content start_pos end_pos)
+                   spaces (re-find #"^[\t ]+" (first (string/split-lines content)))
+                   content (if spaces (remove-indentation-spaces content (count spaces) true)
+                               content)
+                   block ["Src" (assoc (second block) :full_content content)]]
+               [block pos-meta])
+             [block pos-meta])) ast)))
 
 (defn collect-page-properties
   [ast config]
@@ -171,6 +169,11 @@
   ([repo content format]
    (->edn content (get-default-config repo format))))
 
+(defn ->db-edn
+  "Wrapper around ->edn for DB graphs"
+  [content format]
+  (->edn "logseq_db_repo_stub" content format))
+
 (defn inline->edn
   [text config]
   (try
@@ -191,18 +194,7 @@
           (not (contains? #{"Page_ref" "Block_ref"} ref-type))
 
           (and (contains? #{"Page_ref"} ref-type)
-               (or
-                ;; 2. excalidraw link
-                (common-config/draw? ref-value)
-
-                ;; 3. local asset link
-                (boolean (common-config/local-asset? ref-value))))))))
-
-(defn link?
-  [format link]
-  (when (string? link)
-    (some-> (first (inline->edn link (default-config format)))
-            ast-link?)))
+               (boolean (common-config/local-relative-asset? ref-value)))))))
 
 (defn mldoc-link?
   "Check whether s is a link (including page/block refs)."
@@ -214,27 +206,9 @@
        (or (contains? #{"Nested_link"} (first result'))
            (contains? #{"Page_ref" "Block_ref" "Complex"} (first (:url (second result')))))))))
 
-(defn properties?
-  [ast]
-  (contains? #{"Properties" "Property_Drawer"} (ffirst ast)))
-
 (defn block-with-title?
   [type]
   (contains? #{"Paragraph"
                "Raw_Html"
                "Hiccup"
                "Heading"} type))
-
-(defn- has-title?
-  [repo content format]
-  (let [ast (->edn repo content format)]
-    (block-with-title? (ffirst (map first ast)))))
-
-(defn get-title&body
-  "parses content and returns [title body]
-   returns nil if no title"
-  [repo content format]
-  (let [lines (string/split-lines content)]
-    (if (has-title? repo content format)
-      [(first lines) (string/join "\n" (rest lines))]
-      [nil (string/join "\n" lines)])))

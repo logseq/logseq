@@ -1,6 +1,6 @@
 (ns frontend.worker.db-worker
   "Worker used for browser DB implementation"
-  (:require ["@logseq/sqlite-wasm" :default sqlite3InitModule]
+  (:require ["@sqlite.org/sqlite-wasm" :default sqlite3InitModule]
             ["comlink" :as Comlink]
             [cljs-bean.core :as bean]
             [cljs.cache :as cache]
@@ -13,43 +13,54 @@
             [frontend.common.graph-view :as graph-view]
             [frontend.common.missionary :as c.m]
             [frontend.common.thread-api :as thread-api :refer [def-thread-api]]
+            [frontend.worker-common.util :as worker-util]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.db-metadata :as worker-db-metadata]
             [frontend.worker.db.fix :as db-fix]
             [frontend.worker.db.migrate :as db-migrate]
             [frontend.worker.db.validate :as worker-db-validate]
+            [frontend.worker.embedding :as embedding]
             [frontend.worker.export :as worker-export]
-            [frontend.worker.file :as file]
-            [frontend.worker.file.reset :as file-reset]
             [frontend.worker.handler.page :as worker-page]
-            [frontend.worker.handler.page.file-based.rename :as file-worker-page-rename]
+            [frontend.worker.pipeline :as worker-pipeline]
+            [frontend.worker.publish]
             [frontend.worker.rtc.asset-db-listener]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.core :as rtc.core]
             [frontend.worker.rtc.db-listener]
+            [frontend.worker.rtc.debug-log :as rtc-debug-log]
+            [frontend.worker.rtc.migrate :as rtc-migrate]
             [frontend.worker.search :as search]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.thread-atom]
-            [frontend.worker.util :as worker-util]
             [goog.object :as gobj]
+            [lambdaisland.glogi :as log]
             [lambdaisland.glogi.console :as glogi-console]
+            [logseq.cli.common.mcp.tools :as cli-common-mcp-tools]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.initial-data :as common-initial-data]
             [logseq.db.common.order :as db-order]
+            [logseq.db.common.reference :as db-reference]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.common.view :as db-view]
+            [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.entity-util :as entity-util]
+            [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.sqlite.gc :as sqlite-gc]
             [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
             [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]
             [missionary.core :as m]
             [promesa.core :as p]))
+
+(.importScripts js/self "worker.js")
 
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
@@ -68,8 +79,8 @@
   [graph]
   (when-not @*publishing?
     (or (worker-state/get-opfs-pool graph)
-        (p/let [^js pool (.installOpfsSAHPoolVfs @*sqlite #js {:name (worker-util/get-pool-name graph)
-                                                               :initialCapacity 20})]
+        (p/let [^js pool (.installOpfsSAHPoolVfs ^js @*sqlite #js {:name (worker-util/get-pool-name graph)
+                                                                   :initialCapacity 20})]
           (swap! *opfs-pools assoc graph pool)
           pool))))
 
@@ -77,78 +88,38 @@
   []
   (when-not @*sqlite
     (p/let [href (.. js/location -href)
-            electron? (string/includes? href "electron=true")
             publishing? (string/includes? href "publishing=true")
-
-            _ (reset! *publishing? publishing?)
-            base-url (str js/self.location.protocol "//" js/self.location.host)
-            sqlite-wasm-url (if electron?
-                              (js/URL. "sqlite3.wasm" (.. js/location -href))
-                              (str base-url (string/replace js/self.location.pathname "db-worker.js" "")))
-            sqlite (sqlite3InitModule (clj->js {:url sqlite-wasm-url
-                                                :print js/console.log
-                                                :printErr js/console.error}))]
+            sqlite (sqlite3InitModule (clj->js {:print #(log/info :init-sqlite-module! %)
+                                                :printErr #(log/error :init-sqlite-module! %)}))]
+      (reset! *publishing? publishing?)
       (reset! *sqlite sqlite)
       nil)))
 
 (def repo-path "/db.sqlite")
+(def debug-log-path "/debug-log/db.sqlite")
 
 (defn- <export-db-file
-  [repo]
-  (p/let [^js pool (<get-opfs-pool repo)]
-    (when pool
-      (.exportFile ^js pool repo-path))))
+  ([repo]
+   (<export-db-file repo repo-path))
+  ([repo path]
+   (p/let [^js pool (<get-opfs-pool repo)]
+     (when pool
+       (.exportFile ^js pool path)))))
 
 (defn- <import-db
   [^js pool data]
   (.importDb ^js pool repo-path data))
 
-(defn- get-all-datoms-from-sqlite-db
-  [db]
-  (some->> (.exec db #js {:sql "select * from kvs"
-                          :rowMode "array"})
-           bean/->clj
-           (mapcat
-            (fn [[_addr content _addresses]]
-              (let [content' (sqlite-util/transit-read content)
-                    datoms (when (map? content')
-                             (:keys content'))]
-                datoms)))
-           distinct
-           (map (fn [[e a v t]]
-                  (d/datom e a v t)))))
-
-(defn- rebuild-db-from-datoms!
-  "Persistent-sorted-set has been broken, used addresses can't be found"
-  [datascript-conn sqlite-db]
-  (let [datoms (get-all-datoms-from-sqlite-db sqlite-db)
-        db (d/init-db [] db-schema/schema
-                      {:storage (storage/storage @datascript-conn)})
-        db (d/db-with db
-                      (map (fn [d]
-                             [:db/add (:e d) (:a d) (:v d) (:t d)]) datoms))]
-    (prn :debug :rebuild-db-from-datoms :datoms-count (count datoms))
-    (worker-util/post-message :notification ["The SQLite db will be exported to avoid any data-loss." :warning false])
-    (worker-util/post-message :export-current-db [])
-    (.exec sqlite-db #js {:sql "delete from kvs"})
-    (d/reset-conn! datascript-conn db)))
-
-(defn- fix-broken-graph
-  [graph]
-  (let [conn (worker-state/get-datascript-conn graph)
-        sqlite-db (worker-state/get-sqlite-conn graph)]
-    (when (and conn sqlite-db)
-      (rebuild-db-from-datoms! conn sqlite-db)
-      (worker-util/post-message :notification ["The graph has been successfully rebuilt." :success false]))))
-
 (defn upsert-addr-content!
   "Upsert addr+data-seq. Update sqlite-cli/upsert-addr-content! when making changes"
   [db data]
   (assert (some? db) "sqlite db not exists")
-  (.transaction db (fn [tx]
-                     (doseq [item data]
-                       (.exec tx #js {:sql "INSERT INTO kvs (addr, content, addresses) values ($addr, $content, $addresses) on conflict(addr) do update set content = $content, addresses = $addresses"
-                                      :bind item})))))
+  (.transaction
+   db
+   (fn [tx]
+     (doseq [item data]
+       (.exec tx #js {:sql "INSERT INTO kvs (addr, content, addresses) values ($addr, $content, $addresses) on conflict(addr) do update set content = $content, addresses = $addresses"
+                      :bind item})))))
 
 (defn restore-data-from-addr
   "Update sqlite-cli/restore-data-from-addr when making changes"
@@ -187,27 +158,28 @@
       (restore-data-from-addr db addr))))
 
 (defn- close-db-aux!
-  [repo ^Object db ^Object search ^Object client-ops]
+  [repo ^Object db ^Object search ^Object client-ops ^Object debug-log]
   (swap! *sqlite-conns dissoc repo)
   (swap! *datascript-conns dissoc repo)
   (swap! *client-ops-conns dissoc repo)
   (when db (.close db))
   (when search (.close search))
   (when client-ops (.close client-ops))
+  (when debug-log (.close debug-log))
   (when-let [^js pool (worker-state/get-opfs-pool repo)]
-    (.releaseAccessHandles pool))
+    (.pauseVfs pool))
   (swap! *opfs-pools dissoc repo))
 
 (defn- close-other-dbs!
   [repo]
-  (doseq [[r {:keys [db search client-ops]}] @*sqlite-conns]
+  (doseq [[r {:keys [db search client-ops debug-log]}] @*sqlite-conns]
     (when-not (= repo r)
-      (close-db-aux! r db search client-ops))))
+      (close-db-aux! r db search client-ops debug-log))))
 
 (defn close-db!
   [repo]
-  (let [{:keys [db search client-ops]} (get @*sqlite-conns repo)]
-    (close-db-aux! repo db search client-ops)))
+  (let [{:keys [db search client-ops debug-log]} (get @*sqlite-conns repo)]
+    (close-db-aux! repo db search client-ops debug-log)))
 
 (defn reset-db!
   [repo db-transit-str]
@@ -229,11 +201,12 @@
     (p/let [^js pool (<get-opfs-pool repo)
             capacity (.getCapacity pool)
             _ (when (zero? capacity)   ; file handle already releases since pool will be initialized only once
-                (.acquireAccessHandles pool))
+                (.unpauseVfs pool))
             db (new (.-OpfsSAHPoolDb pool) repo-path)
             search-db (new (.-OpfsSAHPoolDb pool) (str "search" repo-path))
-            client-ops-db (new (.-OpfsSAHPoolDb pool) (str "client-ops-" repo-path))]
-      [db search-db client-ops-db])))
+            client-ops-db (new (.-OpfsSAHPoolDb pool) (str "client-ops-" repo-path))
+            debug-log-db (new (.-OpfsSAHPoolDb pool) (str "debug-log" repo-path))]
+      [db search-db client-ops-db debug-log-db])))
 
 (defn- enable-sqlite-wal-mode!
   [^Object db]
@@ -242,41 +215,55 @@
 
 (defn- gc-sqlite-dbs!
   "Gc main db weekly and rtc ops db each time when opening it"
-  [sqlite-db client-ops-db datascript-conn {:keys [full-gc?]}]
+  [sqlite-db client-ops-db debug-log-db datascript-conn {:keys [full-gc?]}]
   (let [last-gc-at (:kv/value (d/entity @datascript-conn :logseq.kv/graph-last-gc-at))]
     (when (or full-gc?
               (nil? last-gc-at)
               (not (number? last-gc-at))
               (> (- (common-util/time-ms) last-gc-at) (* 3 24 3600 1000))) ; 3 days ago
-      (println :debug "gc current graph")
-      (doseq [db [sqlite-db client-ops-db]]
+      (log/info :gc-sqlite-dbs "gc current graph")
+      (doseq [db (if @*publishing? [sqlite-db] [sqlite-db client-ops-db])]
         (sqlite-gc/gc-kvs-table! db {:full-gc? full-gc?})
         (.exec db "VACUUM"))
-      (d/transact! datascript-conn [{:db/ident :logseq.kv/graph-last-gc-at
-                                     :kv/value (common-util/time-ms)}]))))
+      (rtc-debug-log/gc! debug-log-db)
+      (ldb/transact! datascript-conn [{:db/ident :logseq.kv/graph-last-gc-at
+                                       :kv/value (common-util/time-ms)}]))))
 
-(defn- create-or-open-db!
+(defn- <create-or-open-db!
   [repo {:keys [config datoms] :as opts}]
   (when-not (worker-state/get-sqlite-conn repo)
-    (p/let [[db search-db client-ops-db :as dbs] (get-dbs repo)
+    (p/let [[db search-db client-ops-db debug-log-db :as dbs] (get-dbs repo)
             storage (new-sqlite-storage db)
             client-ops-storage (when-not @*publishing?
                                  (new-sqlite-storage client-ops-db))
-            db-based? (sqlite-util/db-based-graph? repo)]
+            db-based? true]
       (swap! *sqlite-conns assoc repo {:db db
                                        :search search-db
-                                       :client-ops client-ops-db})
+                                       :client-ops client-ops-db
+                                       :debug-log debug-log-db})
       (doseq [db' dbs]
         (enable-sqlite-wal-mode! db'))
       (common-sqlite/create-kvs-table! db)
       (when-not @*publishing? (common-sqlite/create-kvs-table! client-ops-db))
+      (rtc-debug-log/create-tables! debug-log-db)
       (search/create-tables-and-triggers! search-db)
-      (let [schema (ldb/get-schema repo)
-            conn (common-sqlite/get-storage-conn storage schema)
-            _ (db-fix/check-and-fix-schema! repo conn)
+      (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+      (let [conn (common-sqlite/get-storage-conn storage db-schema/schema)
+            _ (db-fix/check-and-fix-schema! conn)
             _ (when datoms
-                (let [data (map (fn [datom]
-                                  [:db/add (:e datom) (:a datom) (:v datom)]) datoms)]
+                (let [eid->datoms (group-by :e datoms)
+                      {properties true non-properties false} (group-by
+                                                              (fn [[_eid datoms]]
+                                                                (boolean
+                                                                 (some (fn [datom] (and (= (:a datom) :db/ident)
+                                                                                        (db-property/property? (:v datom))))
+                                                                       datoms)))
+                                                              eid->datoms)
+                      datoms (concat (mapcat second properties)
+                                     (mapcat second non-properties))
+                      data (map (fn [datom]
+                                  [:db/add (:e datom) (:a datom) (:v datom)])
+                                datoms)]
                   (d/transact! conn data {:initial-db? true})))
             client-ops-conn (when-not @*publishing? (common-sqlite/get-storage-conn
                                                      client-ops-storage
@@ -290,13 +277,16 @@
           (d/reset-schema! client-ops-conn client-op/schema-in-db))
         (when (and db-based? (not initial-data-exists?) (not datoms))
           (let [config (or config "")
-                initial-data (sqlite-create-graph/build-db-initial-data config
-                                                                        (select-keys opts [:import-type :graph-git-sha]))]
-            (d/transact! conn initial-data {:initial-db? true})))
+                initial-data (sqlite-create-graph/build-db-initial-data
+                              config (select-keys opts [:import-type :graph-git-sha]))]
+            (ldb/transact! conn initial-data {:initial-db? true})))
 
-        (gc-sqlite-dbs! db client-ops-db conn {})
+        (gc-sqlite-dbs! db client-ops-db debug-log-db conn {})
 
-        (db-migrate/migrate conn)
+        (let [migration-result (db-migrate/migrate conn)]
+          (when (client-op/rtc-db-graph? repo)
+            (let [client-ops (rtc-migrate/migration-results=>client-ops migration-result)]
+              (client-op/add-ops! repo client-ops))))
 
         (db-listener/listen-db-changes! repo (get @*datascript-conns repo))))))
 
@@ -339,9 +329,7 @@
             db-dirs (filter (fn [file]
                               (string/starts-with? (.-name file) db-dir-prefix))
                             current-dir-dirs)]
-      (prn :debug
-           :db-dirs (map #(.-name %) db-dirs)
-           :all-dirs (map #(.-name %) current-dir-dirs))
+      (log/info :db-dirs (map #(.-name %) db-dirs) :all-dirs (map #(.-name %) current-dir-dirs))
       (p/all (map (fn [dir]
                     (p/let [graph-name (-> (.-name dir)
                                            (string/replace-first ".logseq-pool-" "")
@@ -387,8 +375,14 @@
   (reset! worker-state/*rtc-ws-url rtc-ws-url)
   (init-sqlite-module!))
 
+(def-thread-api :thread-api/set-infer-worker-proxy
+  [infer-worker-proxy]
+  (reset! worker-state/*infer-worker infer-worker-proxy)
+  nil)
+
 ;; [graph service]
 (defonce *service (atom []))
+
 (defonce fns {"remoteInvoke" thread-api/remote-function})
 
 (defn- start-db!
@@ -399,17 +393,27 @@
    (when close-other-db?
      (close-other-dbs! repo))
    (when @shared-service/*master-client?
-     (create-or-open-db! repo (dissoc opts :close-other-db?)))
+     (<create-or-open-db! repo (dissoc opts :close-other-db?)))
    nil))
 
 (def-thread-api :thread-api/create-or-open-db
   [repo opts]
+  (when-not (= repo (worker-state/get-current-repo)) ; graph switched
+    (reset! worker-state/*deleted-block-uuid->db-id {}))
   (start-db! repo opts))
 
 (def-thread-api :thread-api/q
   [repo inputs]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (apply d/q (first inputs) @conn (rest inputs))))
+    (worker-util/profile
+     (str "Datalog query: " inputs)
+     (apply d/q (first inputs) @conn (rest inputs)))))
+
+(def-thread-api :thread-api/datoms
+  [repo & args]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (let [result (apply d/datoms @conn args)]
+      (map (fn [d] [(:e d) (:a d) (:v d) (:tx d) (:added d)]) result))))
 
 (def-thread-api :thread-api/pull
   [repo selector id]
@@ -431,19 +435,24 @@
         [db requests]]))
    (fn [db requests]
      (when db
-       (mapv (fn [{:keys [id opts]}]
-               (let [id' (if (and (string? id) (common-util/uuid-string? id)) (uuid id) id)]
-                 (-> (common-initial-data/get-block-and-children db id' opts)
-                     (assoc :id id)))) requests)))))
+       (->> requests
+            (mapv (fn [{:keys [id opts]}]
+                    (let [id' (if (and (string? id) (common-util/uuid-string? id)) (uuid id) id)]
+                      (-> (common-initial-data/get-block-and-children db id' opts)
+                          (assoc :id id)))))
+            ldb/write-transit-str)))))
 
 (def-thread-api :thread-api/get-blocks
   [repo requests]
-  (get-blocks-with-cache repo requests))
+  (let [requests (ldb/read-transit-str requests)]
+    (get-blocks-with-cache repo requests)))
 
 (def-thread-api :thread-api/get-block-refs
   [repo id]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (ldb/get-block-refs @conn id)))
+    (->> (db-reference/get-linked-references @conn id)
+         :ref-blocks
+         (map (fn [b] (assoc (into {} b) :db/id (:db/id b)))))))
 
 (def-thread-api :thread-api/get-block-refs-count
   [repo id]
@@ -457,20 +466,25 @@
 
 (defn- search-blocks
   [repo q option]
-  (p/let [search-db (get-search-db repo)
-          conn (worker-state/get-datascript-conn repo)]
+  (let [search-db (get-search-db repo)
+        conn (worker-state/get-datascript-conn repo)]
     (search/search-blocks repo conn search-db q option)))
 
 (def-thread-api :thread-api/block-refs-check
   [repo id {:keys [unlinked?]}]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (let [db @conn
-          block (d/entity db id)]
-      (if unlinked?
-        (p/let [title (string/lower-case (:block/title block))
-                result (search-blocks repo title {:limit 3})]
-          (boolean (some (fn [b] (not= id (:db/id b))) result)))
-        (some? (first (:block/_refs block)))))))
+  (m/sp
+    (when-let [conn (worker-state/get-datascript-conn repo)]
+      (let [db @conn
+            block (d/entity db id)]
+        (if unlinked?
+          (let [title (string/lower-case (:block/title block))
+                result (m/? (search-blocks repo title {:limit 100}))]
+            (boolean (some (fn [b]
+                             (let [block (d/entity db (:db/id b))]
+                               (and (not= id (:db/id block))
+                                    (not ((set (map :db/id (:block/refs block))) id))
+                                    (string/includes? (string/lower-case (:block/title block)) title)))) result)))
+          (some? (first (common-initial-data/get-block-refs db (:db/id block)))))))))
 
 (def-thread-api :thread-api/get-block-parents
   [repo id depth]
@@ -499,8 +513,7 @@
                        tx-data)
             _ (when context (worker-state/set-context! context))
             tx-meta' (cond-> tx-meta
-                       (and (not (:whiteboard/transact? tx-meta))
-                            (not (:rtc-download-graph? tx-meta))) ; delay writes to the disk
+                       (not (:rtc-download-graph? tx-meta)) ; delay writes to the disk
                        (assoc :skip-store? true)
 
                        true
@@ -516,14 +529,17 @@
                                (ldb/transact! conn tx-data' tx-meta')))
         nil)
       (catch :default e
-        (prn :debug :error)
-        (js/console.error e)
-        (prn :debug :tx-data @conn tx-data)))))
+        (prn :debug :worker-transact-failed :tx-meta tx-meta :tx-data tx-data)
+        (log/error ::worker-transact-failed e)
+        (throw e)))))
 
 (def-thread-api :thread-api/get-initial-data
-  [repo]
+  [repo opts]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (common-initial-data/get-initial-data @conn)))
+    (if (:file-graph-import? opts)
+      {:schema (:schema @conn)
+       :initial-data (vec (d/datoms @conn :eavt))}
+      (common-initial-data/get-initial-data @conn))))
 
 (def-thread-api :thread-api/reset-db
   [repo db-transit]
@@ -540,7 +556,7 @@
 (def-thread-api :thread-api/release-access-handles
   [repo]
   (when-let [^js pool (worker-state/get-opfs-pool repo)]
-    (.releaseAccessHandles pool)
+    (.pauseVfs pool)
     nil))
 
 (def-thread-api :thread-api/db-exists
@@ -553,6 +569,23 @@
     (.exec db "PRAGMA wal_checkpoint(2)"))
   (p/let [data (<export-db-file repo)]
     (Comlink/transfer data #js [(.-buffer data)])))
+
+(def-thread-api :thread-api/export-debug-log-db
+  [repo]
+  (when-let [^js db (worker-state/get-sqlite-conn repo :debug-log)]
+    (.exec db "PRAGMA wal_checkpoint(2)"))
+  (-> (p/let [data (<export-db-file
+                    repo
+                    debug-log-path)]
+        (when data
+          (Comlink/transfer data #js [(.-buffer data)])))
+      (p/catch (fn [error]
+                 (throw error)))))
+
+(def-thread-api :thread-api/reset-debug-log-db
+  [repo]
+  (when-let [^js db (worker-state/get-sqlite-conn repo :debug-log)]
+    (rtc-debug-log/reset-tables! db)))
 
 (def-thread-api :thread-api/import-db
   [repo data]
@@ -598,38 +631,22 @@
     (try
       (worker-util/profile
        "apply outliner ops"
-       (outliner-op/apply-ops! repo conn ops (worker-state/get-date-formatter repo) opts))
+       (outliner-op/apply-ops! conn ops opts))
       (catch :default e
         (let [data (ex-data e)
               {:keys [type payload]} (when (map? data) data)]
           (case type
             :notification
-            (shared-service/broadcast-to-clients! :notification [(:message payload) (:type payload)])
+            (do
+              (log/error ::apply-outliner-ops-failed e)
+              (shared-service/broadcast-to-clients! :notification [(:message payload) (:type payload) (:clear? payload) (:uid payload) (:timeout payload)]))
             (throw e)))))))
-
-(def-thread-api :thread-api/file-writes-finished?
-  [repo]
-  (let [conn (worker-state/get-datascript-conn repo)
-        writes @file/*writes]
-    ;; Clean pages that have been deleted
-    (when conn
-      (swap! file/*writes (fn [writes]
-                            (->> writes
-                                 (remove (fn [[_ pid]] (d/entity @conn pid)))
-                                 (into {})))))
-    (if (empty? writes)
-      true
-      (do
-        (prn "Unfinished file writes:" @file/*writes)
-        false))))
-
-(def-thread-api :thread-api/page-file-saved
-  [request-id _page-id]
-  (file/dissoc-request! request-id)
-  nil)
 
 (def-thread-api :thread-api/sync-app-state
   [new-state]
+  (when (and (contains? new-state :git/current-repo)
+             (nil? (:git/current-repo new-state)))
+    (log/error :thread-api/sync-app-state new-state))
   (worker-state/set-new-state! new-state)
   nil)
 
@@ -638,21 +655,18 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (worker-export/get-debug-datoms conn)))
 
-(def-thread-api :thread-api/export-get-all-pages
-  [repo]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (worker-export/get-all-pages repo @conn)))
-
 (def-thread-api :thread-api/export-get-all-page->content
   [repo options]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (worker-export/get-all-page->content repo @conn options)))
+    (worker-export/get-all-page->content @conn options)))
 
 (def-thread-api :thread-api/validate-db
   [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (worker-db-validate/validate-db conn)))
 
+;; Returns an export-edn map for given repo. When there's an unexpected error, a map
+;; with key :export-edn-error is returned
 (def-thread-api :thread-api/export-edn
   [repo options]
   (let [conn (worker-state/get-datascript-conn repo)]
@@ -664,17 +678,29 @@
         (worker-util/post-message :notification
                                   ["An unexpected error occurred during export. See the javascript console for details."
                                    :error])
-        :export-edn-error))))
+        {:export-edn-error (.-message e)}))))
 
 (def-thread-api :thread-api/get-view-data
   [repo view-id option]
   (let [db @(worker-state/get-datascript-conn repo)]
     (db-view/get-view-data db view-id option)))
 
+(def-thread-api :thread-api/get-class-objects
+  [repo class-id]
+  (let [db @(worker-state/get-datascript-conn repo)]
+    (->> (db-class/get-class-objects db class-id)
+         (map entity-util/entity->map))))
+
 (def-thread-api :thread-api/get-property-values
   [repo {:keys [property-ident] :as option}]
   (let [conn (worker-state/get-datascript-conn repo)]
     (db-view/get-property-values @conn property-ident option)))
+
+(def-thread-api :thread-api/get-bidirectional-properties
+  [repo {:keys [target-id]}]
+  (let [conn (worker-state/get-datascript-conn repo)]
+    (worker-util/profile "get-bidirectional-properties"
+                         (ldb/get-bidirectional-properties @conn target-id))))
 
 (def-thread-api :thread-api/build-graph
   [repo option]
@@ -701,23 +727,75 @@
   [repo]
   (get-all-page-titles-with-cache repo))
 
-(def-thread-api :thread-api/fix-broken-graph
-  [graph]
-  (fix-broken-graph graph))
-
-(def-thread-api :thread-api/reset-file
-  [repo file-path content opts]
-  ;; (prn :debug :reset-file :file-path file-path :opts opts)
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (file-reset/reset-file! repo conn file-path content opts)))
-
 (def-thread-api :thread-api/gc-graph
   [repo]
-  (let [{:keys [db client-ops]} (get @*sqlite-conns repo)
+  (let [{:keys [db client-ops debug-log]} (get @*sqlite-conns repo)
         conn (get @*datascript-conns repo)]
     (when (and db conn)
-      (gc-sqlite-dbs! db client-ops conn {:full-gc? true})
+      (gc-sqlite-dbs! db client-ops debug-log conn {:full-gc? true})
       nil)))
+
+(def-thread-api :thread-api/vec-search-embedding-model-info
+  [repo]
+  (embedding/task--embedding-model-info repo))
+
+(def-thread-api :thread-api/vec-search-init-embedding-model
+  [repo]
+  (js/Promise. (embedding/task--init-embedding-model repo)))
+
+(def-thread-api :thread-api/vec-search-load-model
+  [repo model-name]
+  (js/Promise. (embedding/task--load-model repo model-name)))
+
+(def-thread-api :thread-api/vec-search-embedding-graph
+  [repo opts]
+  (embedding/embedding-graph! repo opts))
+
+(def-thread-api :thread-api/vec-search-search
+  [repo query-string nums-neighbors]
+  (embedding/task--search repo query-string nums-neighbors))
+
+(def-thread-api :thread-api/vec-search-cancel-indexing
+  [repo]
+  (embedding/cancel-indexing repo))
+
+(def-thread-api :thread-api/vec-search-update-index-info
+  [repo]
+  (js/Promise. (embedding/task--update-index-info! repo)))
+
+(def-thread-api :thread-api/mobile-logs
+  []
+  @worker-state/*log)
+
+(def-thread-api :thread-api/get-rtc-graph-uuid
+  [repo]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (ldb/get-graph-rtc-uuid @conn)))
+
+(def-thread-api :thread-api/api-get-page-data
+  [repo page-title]
+  (let [conn (worker-state/get-datascript-conn repo)]
+    (cli-common-mcp-tools/get-page-data @conn page-title)))
+
+(def-thread-api :thread-api/api-list-properties
+  [repo options]
+  (let [conn (worker-state/get-datascript-conn repo)]
+    (cli-common-mcp-tools/list-properties @conn options)))
+
+(def-thread-api :thread-api/api-list-tags
+  [repo options]
+  (let [conn (worker-state/get-datascript-conn repo)]
+    (cli-common-mcp-tools/list-tags @conn options)))
+
+(def-thread-api :thread-api/api-list-pages
+  [repo options]
+  (let [conn (worker-state/get-datascript-conn repo)]
+    (cli-common-mcp-tools/list-pages @conn options)))
+
+(def-thread-api :thread-api/api-build-upsert-nodes-edn
+  [repo ops]
+  (let [conn (worker-state/get-datascript-conn repo)]
+    (cli-common-mcp-tools/build-upsert-nodes-edn @conn ops)))
 
 (comment
   (def-thread-api :general/dangerousRemoveAllDbs
@@ -726,47 +804,35 @@
             dbs (ldb/read-transit-str r)]
       (p/all (map #(.unsafeUnlinkDB this (:name %)) dbs)))))
 
-(defn- rename-page!
-  [repo conn page-uuid new-name]
-  (let [config (worker-state/get-config repo)
-        f (if (sqlite-util/db-based-graph? repo)
-            (throw (ex-info "Rename page is a file graph only operation" {}))
-            file-worker-page-rename/rename!)]
-    (f repo conn config page-uuid new-name)))
-
 (defn- delete-page!
-  [repo conn page-uuid]
+  [conn page-uuid]
   (let [error-handler (fn [{:keys [msg]}]
                         (worker-util/post-message :notification
                                                   [[:div [:p msg]] :error]))]
-    (worker-page/delete! repo conn page-uuid {:error-handler error-handler})))
+    (worker-page/delete! conn page-uuid {:error-handler error-handler})))
 
 (defn- create-page!
-  [repo conn title options]
-  (let [config (worker-state/get-config repo)]
-    (worker-page/create! repo conn config title options)))
+  [conn title options]
+  (try
+    (worker-page/create! conn title options)
+    (catch :default e
+      (js/console.error e)
+      (throw e))))
 
 (defn- outliner-register-op-handlers!
   []
   (outliner-op/register-op-handlers!
-   {:create-page (fn [repo conn [title options]]
-                   (create-page! repo conn title options))
-    :rename-page (fn [repo conn [page-uuid new-name]]
-                   (rename-page! repo conn page-uuid new-name))
-    :delete-page (fn [repo conn [page-uuid]]
-                   (delete-page! repo conn page-uuid))}))
-
-(defn- <ratelimit-file-writes!
-  []
-  (file/<ratelimit-file-writes!
-   (fn [col]
-     (when (seq col)
-       (let [repo (ffirst col)
-             conn (worker-state/get-datascript-conn repo)]
-         (if conn
-           (when-not (ldb/db-based-graph? @conn)
-             (file/write-files! conn col (worker-state/get-context)))
-           (js/console.error (str "DB is not found for " repo))))))))
+   {:create-page (fn [conn [title options]]
+                   (create-page! conn title options))
+    :rename-page (fn [conn [page-uuid new-title]]
+                   (if (string/blank? new-title)
+                     (throw (ex-info "Page name shouldn't be blank" {:block/uuid page-uuid
+                                                                     :block/title new-title}))
+                     (outliner-core/save-block! conn
+                                                {:block/uuid page-uuid
+                                                 :block/title new-title})))
+    :delete-page (fn [conn [page-uuid]]
+                   (delete-page! conn page-uuid))}))
 
 (defn- on-become-master
   [repo start-opts]
@@ -776,7 +842,10 @@
      (when-not (:import-type start-opts)
        (c.m/<? (start-db! repo start-opts))
        (assert (some? (worker-state/get-datascript-conn repo))))
-     (m/? (rtc.core/new-task--rtc-start true)))))
+     ;; Don't wait for rtc started because the app will be slow to be ready
+     ;; for users.
+     (when @worker-state/*rtc-ws-url
+       (rtc.core/new-task--rtc-start true)))))
 
 (def broadcast-data-types
   (set (map
@@ -804,9 +873,23 @@
           (reset! *service [graph service])
           service)))))
 
+(defn- notify-invalid-data
+  [{:keys [tx-meta]} errors]
+  ;; don't notify on production when undo/redo failed
+  (when-not (and (or (:undo? tx-meta) (:redo? tx-meta))
+                 (not worker-util/dev?))
+    (shared-service/broadcast-to-clients! :notification
+                                          [["Invalid data writing to db!"] :error])
+    (worker-util/post-message :capture-error
+                              {:error (ex-info "Invalid data writing to db" {})
+                               :payload {}
+                               :extra {:errors (str errors)}})))
+
 (defn init
   "web worker entry"
   []
+  (ldb/register-transact-invalid-callback-fn! notify-invalid-data)
+
   (let [proxy-object (->>
                       fns
                       (map
@@ -820,13 +903,17 @@
                                 ;; because shared-service operates at the graph level,
                                 ;; creating a new database or switching to another one requires re-initializing the service.
                                 (let [[graph opts] (ldb/read-transit-str (last args))]
-                                  (p/let [service (<init-service! graph opts)]
+                                  (p/let [service (<init-service! graph opts)
+                                          client-id (:client-id service)]
+                                    (when client-id
+                                      (worker-util/post-message :record-worker-client-id {:client-id client-id}))
                                     (get-in service [:status :ready])
                                     ;; wait for service ready
                                     (js-invoke (:proxy service) k args)))
 
-                                (or (contains? #{:thread-api/sync-app-state} method-k)
-                                    (nil? service))
+                                (or
+                                 (contains? #{:thread-api/set-infer-worker-proxy :thread-api/sync-app-state} method-k)
+                                 (nil? service))
                                 ;; only proceed down this branch before shared-service is initialized
                                 (apply f args)
 
@@ -837,9 +924,10 @@
                       (into {})
                       bean/->js)]
     (glogi-console/install!)
+    (log/set-levels {:glogi/root :info})
+    (log/add-handler worker-state/log-append!)
     (check-worker-scope!)
     (outliner-register-op-handlers!)
-    (<ratelimit-file-writes!)
     (js/setInterval #(.postMessage js/self "keepAliveResponse") (* 1000 25))
     (Comlink/expose proxy-object)
     (let [^js wrapped-main-thread* (Comlink/wrap js/self)

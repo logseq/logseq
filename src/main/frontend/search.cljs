@@ -3,14 +3,12 @@
   search. Most of these fns depend on the search protocol"
   (:require [clojure.string :as string]
             [frontend.common.search-fuzzy :as fuzzy]
-            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.search.agency :as search-agency]
             [frontend.search.protocol :as protocol]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.common.config :as common-config]
             [promesa.core :as p]))
 
 (def fuzzy-search fuzzy/fuzzy-search)
@@ -33,7 +31,7 @@
    (when-let [repo (state/get-current-repo)]
      (let [q (fuzzy/clean-str q)]
        (when-not (string/blank? q)
-         (p/let [mldoc-exts (set (map name common-config/mldoc-support-formats))
+         (p/let [mldoc-exts #{"markdown" "md"}
                  result (db-async/<get-files repo)
                  files (->> result
                             (map first)
@@ -48,45 +46,12 @@
   ([q limit]
    (when-let [repo (state/get-current-repo)]
      (when q
-       (let [db-based? (config/db-based-graph?)]
-         (p/let [q (fuzzy/clean-str q)
-                 templates (if db-based?
-                             (db-async/<get-tag-objects repo (:db/id (db/entity :logseq.class/Template)))
-                             (p/let [result (db-async/<get-all-templates repo)]
-                               (vals result)))]
-           (when (seq templates)
-             (let [extract-fn :block/title]
-               (fuzzy/fuzzy-search templates q {:limit limit
-                                                :extract-fn extract-fn})))))))))
-
-(defn property-search
-  ([q]
-   (property-search q 100))
-  ([q limit]
-   (when q
-     (p/let [q (fuzzy/clean-str q)
-             properties* (db-async/<get-all-properties)
-             properties (map :block/title properties*)]
-       (when (seq properties)
-         (if (string/blank? q)
-           properties
-           (let [result (fuzzy/fuzzy-search properties q :limit limit)]
-             (vec result))))))))
-
-;; file-based graph only
-(defn property-value-search
-  ([property q]
-   (property-value-search property q 100))
-  ([property q limit]
-   (when-let [repo (state/get-current-repo)]
-     (when q
        (p/let [q (fuzzy/clean-str q)
-               result (db-async/<file-get-property-values repo (keyword property))]
-         (when (seq result)
-           (if (string/blank? q)
-             result
-             (let [result (fuzzy/fuzzy-search result q :limit limit)]
-               (vec result)))))))))
+               templates (db-async/<get-tag-objects repo (:db/id (db/entity :logseq.class/Template)))]
+         (when (seq templates)
+           (let [extract-fn :block/title]
+             (fuzzy/fuzzy-search templates q {:limit limit
+                                              :extract-fn extract-fn}))))))))
 
 (defn rebuild-indices!
   ([]
@@ -97,11 +62,6 @@
        (p/do!
         (protocol/rebuild-pages-indice! engine)
         (protocol/rebuild-blocks-indice! engine))))))
-
-(defn reset-indice!
-  [repo]
-  (when-let [engine (get-engine repo)]
-    (protocol/truncate-blocks! engine)))
 
 (defn remove-db!
   [repo]

@@ -195,9 +195,9 @@
       :will-remount
       (fn [old-state new-state]
         (util/profile "[shortcuts] reinstalled:"
-                      (uninstall-shortcut-handler! (::install-id old-state))
-                      (when-let [install-id (install-shortcut-handler! handler-id {:state new-state})]
-                        (assoc new-state ::install-id install-id))))))))
+          (uninstall-shortcut-handler! (::install-id old-state))
+          (when-let [install-id (install-shortcut-handler! handler-id {:state new-state})]
+            (assoc new-state ::install-id install-id))))))))
 
 (defn mixin*
   "This is an optimized version compared to (mixin).
@@ -230,7 +230,7 @@
    (doseq [{:keys [handler group dispatch-fn]} (vals @*installed-handlers)
            :when (not= group :shortcut.handler/misc)]
      (if dispose?
-       (.dispose handler)
+       (.dispose ^js handler)
        (events/unlisten handler EventType/SHORTCUT_TRIGGERED dispatch-fn)))))
 
 (defn listen-all! []

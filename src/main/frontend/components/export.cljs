@@ -18,6 +18,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.db :as ldb]
+            [logseq.db.sqlite.export :as sqlite-export]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -62,14 +63,14 @@
            {:variant :default
             :on-click (fn []
                         (->
-                         (p/let [result (export/backup-db-graph repo :set-folder)]
+                         (p/let [result (export/backup-db-graph repo)]
                            (case result
                              true
                              (notification/show! "Backup successful!" :success)
                              :graph-not-changed
                              (notification/show! "Graph has not been updated since last export." :success)
                              nil)
-                           (export/auto-db-backup! repo {:backup-now? false}))
+                           (export/auto-db-backup! repo))
                          (p/catch (fn [error]
                                     (println "Failed to backup.")
                                     (js/console.error error)))))}
@@ -85,61 +86,52 @@
 (rum/defc export
   []
   (when-let [current-repo (state/get-current-repo)]
-    (let [db-based? (config/db-based-graph? current-repo)]
-      [:div.export
-       [:h1.title.mb-8 (t :export)]
+    [:div.export
+     [:h1.title.mb-8 (t :export)]
 
-       [:div.flex.flex-col.gap-4.ml-1
-        (when-not db-based?
-          [:div
-           [:a.font-medium {:on-click #(export/export-repo-as-edn! current-repo)}
-            (t :export-edn)]])
-        (when-not db-based?
-          [:div
-           [:a.font-medium {:on-click #(export/export-repo-as-json! current-repo)}
-            (t :export-json)]])
-        (when db-based?
-          [:div
-           [:a.font-medium {:on-click #(export/export-repo-as-sqlite-db! current-repo)}
-            (t :export-sqlite-db)]])
-        (when db-based?
-          [:div
-           [:a.font-medium {:on-click #(export/export-repo-as-zip! current-repo)}
-            (t :export-zip)]])
+     [:div.flex.flex-col.gap-4.ml-1
+      [:div
+       [:a.font-medium {:on-click #(export/export-repo-as-sqlite-db! current-repo)}
+        (t :export-sqlite-db)]
+       [:p.text-sm.opacity-70.mb-0 "Primary way to backup graph's content to a single .sqlite file."]]
+      [:div
+       [:a.font-medium {:on-click #(export/export-repo-as-zip! current-repo)}
+        (t :export-zip)]
+       [:p.text-sm.opacity-70.mb-0 "Primary way to backup graph's content and assets to a .zip file."]]
 
-        (when db-based?
-          [:div
-           [:a.font-medium {:on-click #(db-export-handler/export-repo-as-db-edn! current-repo)}
-            (t :export-db-edn)]])
+      (when-not (util/mobile?)
+        [:div
+         [:a.font-medium {:on-click #(db-export-handler/export-repo-as-db-edn! current-repo)}
+          (t :export-db-edn)]
+         [:p.text-sm.opacity-70.mb-0 "Exports to a readable and editable .edn file. Don't rely on this as a primary backup."]])
+      (when-not (mobile-util/native-platform?)
+        [:div
+         [:a.font-medium {:on-click #(export-text/export-repo-as-markdown! current-repo)}
+          (t :export-markdown)]])
 
-        (when-not (mobile-util/native-platform?)
-          [:div
-           [:a.font-medium {:on-click #(export-text/export-repo-as-markdown! current-repo)}
-            (t :export-markdown)]])
+      (when (util/electron?)
+        [:div
+         [:a.font-medium {:on-click #(export/download-repo-as-html! current-repo)}
+          (t :export-public-pages)]])
 
-        (when (util/electron?)
-          [:div
-           [:a.font-medium {:on-click #(export/download-repo-as-html! current-repo)}
-            (t :export-public-pages)]])
+      [:div
+       [:a.font-medium {:on-click #(export/export-repo-as-debug-transit! current-repo)}
+        "Export debug transit file"]
+       [:p.text-sm.opacity-70.mb-0 "Exports to a .transit file to send to us for debugging. Any sensitive data will be removed in the exported file."]]
 
-        (when-not (or (mobile-util/native-platform?) db-based?)
-          [:div
-           [:a.font-medium {:on-click #(export-opml/export-repo-as-opml! current-repo)}
-            (t :export-opml)]])
-        (when-not (or (mobile-util/native-platform?) db-based?)
-          [:div
-           [:a.font-medium {:on-click #(export/export-repo-as-roam-json! current-repo)}
-            (t :export-roam-json)]])
-        (when db-based?
-          [:div
-           [:a.font-medium {:on-click #(export/export-repo-as-debug-transit! current-repo)}
-            "Export debug transit file"]
-           [:p.text-sm.opacity-70.mb-0 "Any sensitive data will be removed in the exported transit file, you can send it to us for debugging."]])
-
-        (when (and db-based? util/web-platform?)
+      (if (util/electron?)
+        [:div
+         [:hr]
+         [:div "Hourly backups are enabled for this graph, "
+          [:a.ml-1 {:on-click (fn []
+                                (let [path (config/get-electron-backup-dir (state/get-current-repo))]
+                                  (js/window.apis.openPath path)))}
+           "open backups folder for this graph"]]]
+        (when (and util/web-platform?
+                   (not (util/mobile?)))
           [:div
            [:hr]
-           (auto-backup)])]])))
+           (auto-backup)]))]]))
 
 (def *export-block-type (atom :text))
 
@@ -177,18 +169,18 @@
                       :selected-nodes
                       {:node-ids (mapv #(vector :block/uuid %) root-block-uuids-or-page-uuid)}
                       {})]
-    (state/<invoke-db-worker :thread-api/export-edn
-                             (state/get-current-repo)
-                             (merge {:export-type export-type} export-args))))
-
-(defn- get-zoom-level
-  [page-uuid]
-  (let [uuid (:block/uuid (db/get-page page-uuid))
-        whiteboard-camera (->> (str "logseq.tldraw.camera:" uuid)
-                               (.getItem js/sessionStorage)
-                               (js/JSON.parse)
-                               (js->clj))]
-    (or (get whiteboard-camera "zoom") 1)))
+    (p/let [export-edn (state/<invoke-db-worker :thread-api/export-edn
+                                                (state/get-current-repo)
+                                                (merge {:export-type export-type} export-args))]
+      ;; Don't validate :block for now b/c it requires more setup
+      (if (#{:page :selected-nodes} export-type)
+        (if-let [error (:error (sqlite-export/validate-export export-edn))]
+          (do
+            (js/console.log "Invalid export EDN:")
+            (pprint/pprint export-edn)
+            {:export-edn-error error})
+          export-edn)
+        export-edn))))
 
 (defn- get-image-blob
   [block-uuids-or-page-name {:keys [transparent-bg? x y width height zoom]} callback]
@@ -200,7 +192,7 @@
                    "#main-content-container"
                    (str "[blockid='" top-block-id "']"))
         container  (js/document.querySelector selector)
-        scale (if page? (/ 1 (or zoom (get-zoom-level top-block-id))) 1)
+        scale (if page? (/ 1 (or zoom 1)) 1)
         options #js {:allowTaint true
                      :useCORS true
                      :backgroundColor (or background "transparent")
@@ -235,7 +227,7 @@
   (rum/local nil ::content)
   {:will-mount (fn [state]
                  (let [top-level-uuids (get-top-level-uuids (first (:rum/args state)))]
-                   (reset! *export-block-type (if (:whiteboard? (last (:rum/args state))) :png :text))
+                   (reset! *export-block-type :text)
                    (if (= @*export-block-type :png)
                      (do (reset! (::content state) nil)
                          (get-image-blob top-level-uuids
@@ -246,7 +238,7 @@
                    (reset! (::text-indent-style state) (state/get-export-block-text-indent-style))
                    (reset! (::text-other-options state) (state/get-export-block-text-other-options))
                    (assoc state ::top-level-uuids top-level-uuids)))}
-  [state _selection-ids {:keys [whiteboard? export-type] :as options}]
+  [state _selection-ids {:keys [export-type] :as options}]
   (let [top-level-uuids (::top-level-uuids state)
         tp @*export-block-type
         *text-other-options (::text-other-options state)
@@ -257,34 +249,34 @@
     [:div.export.resize
      {:class "-m-5"}
      [:div.p-6
-      (when-not whiteboard?
-        [:div.flex.pb-3
-         (ui/button "Text"
+      [:div.flex.pb-3
+       (ui/button "Text"
+                  :class "mr-4 w-20"
+                  :on-click #(do (reset! *export-block-type :text)
+                                 (reset! *content (export-helper top-level-uuids))))
+       (ui/button "OPML"
+                  :class "mr-4 w-20"
+                  :on-click #(do (reset! *export-block-type :opml)
+                                 (reset! *content (export-helper top-level-uuids))))
+       (ui/button "HTML"
+                  :class "mr-4 w-20"
+                  :on-click #(do (reset! *export-block-type :html)
+                                 (reset! *content (export-helper top-level-uuids))))
+       ;; TODO: Remove if this is no longer used after whiteboard removal
+       (when-not (seq? top-level-uuids)
+         (ui/button "PNG"
                     :class "mr-4 w-20"
-                    :on-click #(do (reset! *export-block-type :text)
-                                   (reset! *content (export-helper top-level-uuids))))
-         (ui/button "OPML"
-                    :class "mr-4 w-20"
-                    :on-click #(do (reset! *export-block-type :opml)
-                                   (reset! *content (export-helper top-level-uuids))))
-         (ui/button "HTML"
-                    :class "mr-4 w-20"
-                    :on-click #(do (reset! *export-block-type :html)
-                                   (reset! *content (export-helper top-level-uuids))))
-         (when-not (seq? top-level-uuids)
-           (ui/button "PNG"
-                      :class "mr-4 w-20"
-                      :on-click #(do (reset! *export-block-type :png)
-                                     (reset! *content nil)
-                                     (get-image-blob top-level-uuids (merge options {:transparent-bg? false}) (fn [blob] (reset! *content blob))))))
-         (when (config/db-based-graph?)
-           (ui/button "EDN"
-                      :class "w-20"
-                      :on-click #(do (reset! *export-block-type :edn)
-                                     (p/let [result (<export-edn-helper top-level-uuids export-type)
-                                             pull-data (with-out-str (pprint/pprint result))]
-                                       (when-not (= :export-edn-error result)
-                                         (reset! *content pull-data))))))])
+                    :on-click #(do (reset! *export-block-type :png)
+                                   (reset! *content nil)
+                                   (get-image-blob top-level-uuids (merge options {:transparent-bg? false}) (fn [blob] (reset! *content blob))))))
+       (ui/button "EDN"
+                  :class "w-20"
+                  :on-click #(do (reset! *export-block-type :edn)
+                                 (p/let [result (<export-edn-helper top-level-uuids export-type)
+                                         pull-data (with-out-str (pprint/pprint result))]
+                                   (if (:export-edn-error result)
+                                     (notification/show! (:export-edn-error result) :error)
+                                     (reset! *content pull-data)))))]
       (if (= :png tp)
         [:div.flex.items-center.justify-center.relative
          (when (not @*content) [:div.absolute (ui/loading "")])

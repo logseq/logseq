@@ -1,9 +1,10 @@
 (ns frontend.worker.state
   "State hub for worker"
-  (:require [logseq.common.config :as common-config]
-            [logseq.common.util :as common-util]))
+  (:require [logseq.common.util :as common-util]))
 
 (defonce *main-thread (atom nil))
+(defonce *infer-worker (atom nil))
+(defonce *deleted-block-uuid->db-id (atom {}))
 
 (defn- <invoke-main-thread*
   [qkw direct-pass? args-list]
@@ -36,16 +37,17 @@
                        :auth/access-token nil
                        :auth/refresh-token nil
 
+                       :user/info nil
+
                        :rtc/downloading-graph? false
 
                        ;; thread atoms, these atoms' value are syncing from ui-thread
-                       :thread-atom/online-event (atom nil)
-                       }))
+                       :thread-atom/online-event (atom nil)}))
 
 (defonce *rtc-ws-url (atom nil))
 
 (defonce *sqlite (atom nil))
-;; repo -> {:db conn :search conn :client-ops conn}
+;; repo -> {:db conn :search conn :client-ops conn :debug-log conn}
 (defonce *sqlite-conns (atom {}))
 ;; repo -> conn
 (defonce *datascript-conns (atom nil))
@@ -56,10 +58,11 @@
 ;; repo -> pool
 (defonce *opfs-pools (atom nil))
 
+;;; ================================================================
 (defn get-sqlite-conn
   ([repo] (get-sqlite-conn repo :db))
   ([repo which-db]
-   (assert (contains? #{:db :search :client-ops} which-db) which-db)
+   (assert (contains? #{:db :search :client-ops :debug-log} which-db) which-db)
    (get-in @*sqlite-conns [repo which-db])))
 
 (defn get-datascript-conn
@@ -73,17 +76,6 @@
 (defn get-opfs-pool
   [repo]
   (get @*opfs-pools repo))
-
-(defn tx-idle?
-  [repo & {:keys [diff]
-           :or {diff 1000}}]
-  (when repo
-    (let [last-input-time (get-in @*state [:db/latest-transact-time repo])]
-      (or
-       (nil? last-input-time)
-
-       (let [now (common-util/time-ms)]
-         (>= (- now last-input-time) diff))))))
 
 (defn set-db-latest-tx-time!
   [repo]
@@ -103,10 +95,6 @@
          (fn [c]
            (merge c context))))
 
-(defn get-config
-  [repo]
-  (get-in @*state [:config repo]))
-
 (defn get-current-repo
   []
   (:git/current-repo @*state))
@@ -116,9 +104,10 @@
   (swap! *state (fn [old-state]
                   (merge old-state new-state))))
 
+;; TODO: Move or remove as this is no longer stateful
 (defn get-date-formatter
-  [repo]
-  (common-config/get-date-formatter (get-config repo)))
+  [_repo]
+  "MMM do, yyyy")
 
 (defn set-rtc-downloading-graph!
   [value]
@@ -127,3 +116,16 @@
 (defn get-id-token
   []
   (:auth/id-token @*state))
+
+(comment
+  (defn mobile?
+    []
+    (:mobile? (get-context))))
+
+;;; ========================== mobile log ======================================
+(defonce *log (atom []))
+(defn log-append!
+  [record]
+  (swap! *log conj record)
+  (when (> (count @*log) 1000)
+    (reset! *log (subvec @*log 800))))

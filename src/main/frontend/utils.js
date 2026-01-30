@@ -1,8 +1,4 @@
-import path from 'path/path.js'
-
-// TODO split the capacitor abilities to a separate file for capacitor APIs
-import { Capacitor } from '@capacitor/core'
-import { Clipboard as CapacitorClipboard } from '@capacitor/clipboard'
+import path from 'path'
 
 if (typeof window === 'undefined') {
   global.window = {}
@@ -265,11 +261,6 @@ export const getClipText = (cb, errorHandler) => {
 }
 
 export const writeClipboard = ({text, html, blocks}, ownerWindow) => {
-    if (Capacitor.isNativePlatform()) {
-        CapacitorClipboard.write({ string: text });
-        return
-    }
-
     const navigator = (ownerWindow || window).navigator
 
     navigator.permissions.query({
@@ -414,14 +405,41 @@ export const prettifyXml = (sourceXml) => {
 }
 
 export const elementIsVisibleInViewport = (el, partiallyVisible = false) => {
-  const { top, left, bottom, right } = el.getBoundingClientRect()
-  const { innerHeight, innerWidth } = window
-  return partiallyVisible
-    ? ((top > 0 && top < innerHeight) ||
-      (bottom > 0 && bottom < innerHeight)) &&
-    ((left > 0 && left < innerWidth) || (right > 0 && right < innerWidth))
-    : top >= 0 && left >= 0 && bottom <= innerHeight && right <= innerWidth
-}
+  if (!el || el.getClientRects().length === 0) return false;
+
+  // Find nearest scrollable ancestor (null => window)
+  const getScrollRoot = (node) => {
+    let p = node && node.parentElement;
+    while (p) {
+      const cs = getComputedStyle(p);
+      const oy = cs.overflowY || cs.overflow, ox = cs.overflowX || cs.overflow;
+      if (/(auto|scroll|overlay)/.test(`${oy}${ox}`)) return p;
+      p = p.parentElement;
+    }
+    return null;
+  };
+
+  const r = el.getBoundingClientRect();
+  const root = getScrollRoot(el);
+
+  // Viewport rect: either the window or the scroll container’s content box
+  const vp = root
+    ? root.getBoundingClientRect()
+    : { top: 0, left: 0, right: window.innerWidth, bottom: window.innerHeight };
+
+  if (partiallyVisible) {
+    const horizontally = r.left < vp.right && r.right > vp.left;
+    const vertically   = r.top  < vp.bottom && r.bottom > vp.top;
+    return horizontally && vertically;
+  } else {
+    return (
+      r.top    >= vp.top &&
+      r.left   >= vp.left &&
+      r.bottom <= vp.bottom &&
+      r.right  <= vp.right
+    );
+  }
+};
 
 export const convertToLetters = (num) => {
   if (!+num) return false
@@ -465,4 +483,20 @@ export function hsl2hex(h, s, l, alpha) {
   }
 
   return `#${f(0)}${f(8)}${f(4)}${alpha}`
+}
+
+export function base64ToUint8Array (base64String) {
+  try {
+    const base64Data = base64String.replace(/^data:image\/\w+;base64,/, '')
+    const binaryString = atob(base64Data)
+    const len = binaryString.length
+    const uint8Array = new Uint8Array(len)
+    for (let i = 0; i < len; i++) {
+      uint8Array[i] = binaryString.charCodeAt(i)
+    }
+    return uint8Array
+  } catch (e) {
+    console.error('Invalid Base64 string:', e)
+    return null
+  }
 }

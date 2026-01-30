@@ -7,12 +7,12 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]))
 
-(def repo test-helper/test-db-name-db-version)
+(def repo test-helper/test-db)
 
 (def init-data (test-helper/initial-test-page-and-blocks))
 (defn start-and-destroy-db
   [f]
-  (test-helper/db-based-start-and-destroy-db
+  (test-helper/start-and-destroy-db
    f
    {:init-data (fn [conn] (d/transact! conn init-data))}))
 
@@ -33,8 +33,10 @@
              ["class1" "class2"]))
            (set (map :block/title (model/get-all-classes repo)))))))
 
+;; TODO: Async test
 (deftest ^:fix-me get-class-objects-test
-  (let [opts {:redirect? false}
+  (let [opts {:class? true
+              :redirect? false}
         _ (test-helper/create-page! "class1" opts)
         class (db/get-case-page "class1")
         _ (test-helper/save-block! repo fbid "Block 1" {:tags ["class1"]})]

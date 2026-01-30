@@ -1,142 +1,6 @@
 {:meta/version 1
 
- ;; == FILE GRAPH CONFIG ==
- ;;
- ;; Set the preferred format.
- ;; This is _only_ for file graphs.
- ;; Available options:
- ;; - Markdown (default)
- ;; - Org
- ;; :preferred-format "Markdown"
-
- ;; Set the preferred workflow style.
- ;; This is _only_ for file graphs.
- ;; Available options:
- ;; - :now for NOW/LATER style (default)
- ;; - :todo for TODO/DOING style
- :preferred-workflow :now
-
- ;; Exclude directories/files.
- ;; This is _only_ for file graphs.
- ;; Example usage:
- ;; :hidden ["/archived" "/test.md" "../assets/archived"]
- :hidden []
-
- ;; Define the default journal page template.
- ;; Enter the template name between the quotes.
- ;; This is _only_ for file graphs.
- :default-templates
- {:journals ""}
-
- ;; Set a custom date format for the journal page title.
- ;; This is _only_ for file graphs.
- ;; Default value: "MMM do, yyyy"
- ;; e.g., "Jan 19th, 2038"
- ;; Example usage e.g., "Tue 19th, Jan 2038"
- ;; :journal/page-title-format "EEE do, MMM yyyy"
-
- ;; Specify the journal filename format using a valid date format string.
- ;; !Warning:
- ;;   This configuration is not retroactive and affects only new journals.
- ;;   To show old journal files in the app, manually rename the files in the
- ;;   journal directory to match the new format.
- ;; This is _only_ for file graphs.
- ;; Default value: "yyyy_MM_dd"
- ;; :journal/file-name-format "yyyy_MM_dd"
-
- ;; Set the default location for storing notes.
- ;; This is _only_ for file graphs.
- ;; Default value: "pages"
- ;; :pages-directory "pages"
-
- ;; Set the default location for storing journals.
- ;; This is _only_ for file graphs.
- ;; Default value: "journals"
- ;; :journals-directory "journals"
-
- ;; Set the default location for storing whiteboards.
- ;; This is _only_ for file graphs.
- ;; Default value: "whiteboards"
- ;; :whiteboards-directory "whiteboards"
-
- ;; Enabling this option converts
- ;; [[Grant Ideas]] to [[file:./grant_ideas.org][Grant Ideas]] for org-mode.
- ;; For more information, visit https://github.com/logseq/logseq/issues/672
- ;; This is _only_ for file graphs.
- ;; :org-mode/insert-file-link? false
-
-;; Favorites to list on the left sidebar
- ;; This is _only_ for file graphs.
- :favorites []
-
- ;; Set flashcards interval.
- ;; This is _only_ for file graphs.
- ;; Expected value:
- ;; - Float between 0 and 1
- ;; higher values result in faster changes to the next review interval.
- ;; Default value: 0.5
- ;; :srs/learning-fraction 0.5
-
- ;; Set the initial interval after the first successful review of a card.
- ;; This is _only_ for file graphs.
- ;; Default value: 4
- ;; :srs/initial-interval 4
-
- ;; Hide specific block properties.
- ;; This is _only_ for file graphs.
- ;; Example usage:
- ;; :block-hidden-properties #{:public :icon}
-
- ;; Create a page for all properties.
- ;; This is _only_ for file graphs.
- ;; Default value: true
- :property-pages/enabled? true
-
- ;; Properties to exclude from having property pages
- ;; This is _only_ for file graphs.
- ;; Example usage:
- ;; :property-pages/excludelist #{:duration :author}
-
- ;; By default, property value separated by commas will not be treated as
- ;; page references. You can add properties to enable it.
- ;; This is _only_ for file graphs.
- ;; Example usage:
- ;; :property/separated-by-commas #{:alias :tags}
-
- ;; Properties that are ignored when parsing property values for references
- ;; This is _only_ for file graphs.
- ;; Example usage:
- ;; :ignored-page-references-keywords #{:author :website}
-
- ;; logbook configuration.
- ;; This is _only_ for file graphs.
- ;; :logbook/settings
- ;; {:with-second-support? false ;limit logbook to minutes, seconds will be eliminated
- ;;  :enabled-in-all-blocks true ;display logbook in all blocks after timetracking
- ;;  :enabled-in-timestamped-blocks false ;don't display logbook at all
- ;; }
-
- ;; File sync options
- ;; Ignore these files when syncing, regexp is supported.
- ;; This is _only_ for file graphs.
- ;; :file-sync/ignore-files []
-
- ;; Configure the escaping method for special characters in page titles.
- ;; This is _only_ for file graphs.
- ;; Warning:
- ;;   This is a dangerous operation. To modify the setting,
- ;;   you'll need to manually rename all affected files and
- ;;   re-index them on all clients after synchronization.
- ;;   Incorrect handling may result in messy page titles.
- ;; Available options:
- ;;   - :triple-lowbar (default)
- ;;      ;use triple underscore `___` for slash `/` in page title
- ;;      ;use Percent-encoding for other invalid characters
- :file/name-format :triple-lowbar
- ;; == END OF FILE GRAPH CONFIG ==
-
  ;; Hide empty block properties
- ;; This is _only_ for DB graphs.
  ;; Default value: false
  ;; :ui/hide-empty-properties? false
 
@@ -168,10 +32,6 @@
  ;; Enable flashcards.
  ;; Default value: true
  ;; :feature/enable-flashcards? true
-
- ;; Enable whiteboards.
- ;; Default value: true
- ;; :feature/enable-whiteboards? true
 
  ;; Disable the journal's built-in 'Scheduled tasks and deadlines' query.
  ;; Default value: false
@@ -391,17 +251,4 @@
  ;;  :redirect-page? false          ;; Default value: false
  ;;  :default-page "quick capture"} ;; Default page: "quick capture"
 
- ;; Configure the Enter key behavior for
- ;; context-aware editing with DWIM (Do What I Mean).
- ;; context-aware Enter key behavior implies that pressing Enter will
- ;; have different outcomes based on the context.
- ;; For instance, pressing Enter within a list generates a new list item,
- ;; whereas pressing Enter in a block reference opens the referenced block.
- ;; :dwim/settings
- ;; {:admonition&src?  true        ;; Default value: true
- ;;  :markup?          false       ;; Default value: false
- ;;  :block-ref?       true        ;; Default value: true
- ;;  :page-ref?        true        ;; Default value: true
- ;;  :properties?      true        ;; Default value: true
- ;;  :list?            false}      ;; Default value: false
  }

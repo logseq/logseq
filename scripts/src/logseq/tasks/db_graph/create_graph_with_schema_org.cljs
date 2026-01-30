@@ -13,13 +13,13 @@
   (:require ["fs" :as fs]
             [babashka.cli :as cli]
             [clojure.edn :as edn]
+            [clojure.pprint :as pprint]
             [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as w]
             [datascript.core :as d]
             [logseq.db.common.sqlite-cli :as sqlite-cli]
-            [logseq.db.frontend.malli-schema :as db-malli-schema]
-            [logseq.db.frontend.property :as db-property]
+            [logseq.db.sqlite.export :as sqlite-export]
             [logseq.outliner.cli :as outliner-cli]
             [nbb.classpath :as cp]
             [nbb.core :as nbb]))
@@ -38,25 +38,23 @@
 (defn- strip-schema-prefix [s]
   (string/replace-first s "schema:" ""))
 
-(defn- ->class-page [class-m class-properties {:keys [verbose renamed-classes renamed-pages]}]
-  (let [parent-class* (class-m "rdfs:subClassOf")
-        parent-class (cond
-                       (map? parent-class*)
-                       (parent-class* "@id")
-                       (vector? parent-class*)
-                       (do (when verbose
-                             (println "Picked first class for multi-parent class" (pr-str (class-m "@id"))))
-                           (get (first parent-class*) "@id"))
-                       ;; DataTypes are weird in that they are subclassed from
-                       ;; rdfs:class but that info is omitted. It seems schema
-                       ;; does this on purpose to display it as a separate tree but
-                       ;; we want all classes under one tree
-                       (contains? (set (as-> (class-m "@type") type'
-                                         (if (string? type') [type'] type')))
-                                  "schema:DataType")
-                       "schema:DataType")
+(defn- ->class-page [class-m class-properties {:keys [renamed-classes renamed-pages]}]
+  (let [parent-classes* (class-m "rdfs:subClassOf")
+        parent-classes (cond
+                         (map? parent-classes*)
+                         [(parent-classes* "@id")]
+                         (vector? parent-classes*)
+                         (mapv #(get % "@id") parent-classes*)
+                         ;; DataTypes are weird in that they are subclassed from
+                         ;; rdfs:class but that info is omitted. It seems schema
+                         ;; does this on purpose to display it as a separate tree but
+                         ;; we want all classes under one tree
+                         (contains? (set (as-> (class-m "@type") type'
+                                           (if (string? type') [type'] type')))
+                                    "schema:DataType")
+                         ["schema:DataType"])
         ;; Map of owl:equivalentClass exceptions
-        parent-class' (get {"rdfs:Class" "Class"} parent-class parent-class)
+        parent-classes' (mapv #(get {"rdfs:Class" "Class"} % %) parent-classes)
         properties (class-properties (class-m "@id"))
         inverted-renamed-classes (set/map-invert renamed-classes)
         class-name (strip-schema-prefix (class-m "@id"))
@@ -65,8 +63,8 @@
              :build/properties (cond-> {:url url}
                                  (class-m "rdfs:comment")
                                  (assoc :logseq.property/description (get-comment-string (class-m "rdfs:comment") renamed-pages)))}
-      parent-class'
-      (assoc :build/class-parent (keyword (strip-schema-prefix parent-class')))
+      (seq parent-classes')
+      (assoc :build/class-extends (mapv #(keyword (strip-schema-prefix %)) parent-classes'))
       (seq properties)
       (assoc :build/class-properties (mapv (comp keyword strip-schema-prefix) properties)))))
 
@@ -78,11 +76,12 @@
    "schema:Text" :default
    "schema:URL" :url
    "schema:Boolean" :checkbox
-   "schema:Date" :date})
+   "schema:Date" :date
+   "schema:DateTime" :datetime})
 
 (def unsupported-data-types
   "Schema datatypes, https://schema.org/DataType, that don't have Logseq equivalents"
-  #{"schema:Time" "schema:DateTime"})
+  #{"schema:Time"})
 
 (defn- get-range-includes [property-m]
   (let [range-includes (as-> (property-m "schema:rangeIncludes") range-includes*
@@ -96,11 +95,12 @@
              (when (class-map %) :node))
         range-includes))
 
-(defn- ->property-page [property-m class-map {:keys [verbose renamed-pages renamed-properties]}]
+(defn- ->property-page [property-m class-map {:keys [verbose renamed-pages]}]
   (let [range-includes (get-range-includes property-m)
         schema-type (get-schema-type range-includes class-map)
-        ;; Pick first range to determine type as only one range is supported currently
-        _ (when (and verbose (> (count range-includes) 1))
+        ;; Notify when a property is only using one of the available property types (rangeIncludes)
+        ;; Doesn't apply to :node since they do include all rangeIncludes
+        _ (when (and verbose (> (count range-includes) 1) (not= schema-type :node))
             (println "Picked property type:"
                      {:property (property-m "@id") :type schema-type :range-includes (vec range-includes)}))
         _ (assert schema-type (str "No schema found for property " (property-m "@id")))
@@ -110,9 +110,7 @@
               (throw (ex-info (str "property " (pr-str (property-m "@id"))
                                    " with type :node has DataType class values which aren't supported: " datatype-classes) {}))))
 
-        inverted-renamed-properties (set/map-invert renamed-properties)
-        class-name (strip-schema-prefix (property-m "@id"))
-        url (str "https://schema.org/" (get inverted-renamed-properties class-name class-name))]
+        url (str "https://schema.org/" (strip-schema-prefix (property-m "@id")))]
     {(keyword (strip-schema-prefix (property-m "@id")))
      (cond-> {:logseq.property/type schema-type
               :build/properties (cond-> {:url url}
@@ -148,10 +146,10 @@
   (let [range-includes
         (as-> (prop "schema:rangeIncludes") range-includes*
           (set (map (fn [m] (m "@id")) (if (map? range-includes*) [range-includes*] range-includes*))))
-        unsupported-data-types
+        unsupported-data-types'
         (set/intersection range-includes unsupported-data-types)]
     (and (seq range-includes)
-         (every? (fn [x] (contains? unsupported-data-types x)) range-includes))))
+         (every? (fn [x] (contains? unsupported-data-types' x)) range-includes))))
 
 (defn- get-vector-conflicts
   "Given a seq of tuples returns a seq of tuples that conflict i.e. their first element
@@ -165,32 +163,14 @@
 
 (defn- detect-final-conflicts
   "Does one final detection for conflicts after everything has been renamed"
-  [all-properties all-classes page-tuples]
-  (let [property-ids (map #(vector (% "@id") :property) all-properties)
-        class-ids (map #(vector (% "@id") :class) all-classes)
-        existing-conflicts (get-vector-conflicts (concat property-ids class-ids page-tuples))]
+  [all-classes page-tuples]
+  (let [class-ids (map #(vector (% "@id") :class) all-classes)
+        existing-conflicts (get-vector-conflicts (concat class-ids page-tuples))]
     (when (seq existing-conflicts) (prn :CONFLICTS existing-conflicts))
     (assert (empty? existing-conflicts)
             "There are no conflicts between existing pages, schema classes and properties")))
 
-(defn- detect-property-conflicts-and-get-renamed-properties
-  "Detects conflicts between properties and existing pages and returns renamed properties"
-  [property-ids existing-pages {:keys [verbose]}]
-  (let [conflicts (get-vector-conflicts (concat property-ids existing-pages))
-        _ (assert (every? #(= 2 (count %)) conflicts) "All conflicts must only be between two elements")
-        renamed-properties (->> conflicts
-                                (map #(-> % second first))
-                                ;; Renaming properties '_property' suffix guarantees uniqueness
-                                ;; b/c schema.org doesn't use '_' in their names
-                                (map #(vector % (str % "_property")))
-                                (into {}))]
-    (if verbose
-      (println "Renaming the following properties because they have names that conflict with Logseq's built in pages"
-               (keys renamed-properties) "\n")
-      (when (pos? (count renamed-properties))
-        (println "Renaming" (count renamed-properties) "properties due to page name conflicts")))
-    renamed-properties))
-
+;; NOTE: There are currently no class conflicts but if some come up this fn can be updated to exclude built-in properties
 (defn- detect-id-conflicts-and-get-renamed-classes
   "Detects conflicts between classes AND properties and existing
   pages. Renames any detected conflicts. Properties and class names conflict in
@@ -214,11 +194,12 @@
                              ;; b/c schema.org doesn't use '_' in their names
                              (map #(vector % (str % "_Class")))
                              (into {}))]
-    (if verbose
-      (println "Renaming the following classes because they have property names that conflict with Logseq's case insensitive :block/name:"
-               (keys renamed-classes) "\n")
-      (when (pos? (count renamed-classes))
-        (println "Renaming" (count renamed-classes) "classes due to page name conflicts")))
+    (when (seq renamed-classes)
+      (if verbose
+        (println "Renaming the following classes because they have names that conflict with Logseq's case insensitive :block/name:"
+                 (keys renamed-classes) "\n")
+        (when (pos? (count renamed-classes))
+          (println "Renaming" (count renamed-classes) "classes due to page name conflicts"))))
     renamed-classes))
 
 (defn- get-all-properties [schema-data {:keys [verbose]}]
@@ -239,7 +220,7 @@
                      (map #(vector (keyword (strip-schema-prefix (get % "@id")))
                                    (->class-page % class-to-properties options)))
                      (into {}))]
-    (assert (= ["Thing"] (keep #(when-not (:build/class-parent %)
+    (assert (= ["Thing"] (keep #(when-not (:build/class-extends %)
                                   (:block/title %))
                                (vals classes)))
             "Thing is the only class that doesn't have a schema.org parent class")
@@ -272,31 +253,24 @@
                                          "rdfs:Class")
                              schema-data)
         ;; Use built-in description
-        all-properties* (remove #(= "schema:description" (% "@id")) (get-all-properties schema-data options))
-        property-tuples (map #(vector (% "@id") :property) all-properties*)
+        all-properties (remove #(= "schema:description" (% "@id")) (get-all-properties schema-data options))
+        property-tuples (map #(vector (% "@id") :property) all-properties)
         class-tuples (map #(vector (% "@id") :class) all-classes*)
         page-tuples (map #(vector (str "schema:" %) :node) existing-pages)
         renamed-classes (detect-id-conflicts-and-get-renamed-classes
                          property-tuples class-tuples page-tuples options)
-        renamed-properties (detect-property-conflicts-and-get-renamed-properties
-                            property-tuples page-tuples options)
-        renamed-pages (merge renamed-classes renamed-properties)
         ;; Note: schema:description refs don't get renamed but they aren't used
         ;; Updates keys like @id, @subClassOf
-        rename-page-ids (fn [m]
-                          (w/postwalk (fn [x]
-                                        (if-let [new-page (and (map? x) (renamed-pages (x "@id")))]
-                                          (merge x {"@id" new-page})
-                                          x)) m))
+        rename-class-ids (fn [m]
+                           (w/postwalk (fn [x]
+                                         (if-let [new-page (and (map? x) (renamed-classes (x "@id")))]
+                                           (merge x {"@id" new-page})
+                                           x)) m))
         ;; Updates keys like @id, @rangeIncludes, @domainIncludes
-        all-classes (map rename-page-ids all-classes*)
-        all-properties (map rename-page-ids all-properties*)]
-    (detect-final-conflicts all-properties all-classes page-tuples)
+        all-classes (map rename-class-ids all-classes*)]
+    (detect-final-conflicts all-classes page-tuples)
     {:all-classes all-classes
      :all-properties all-properties
-     :renamed-properties (->> renamed-properties
-                              (map (fn [[k v]] [(strip-schema-prefix k) (strip-schema-prefix v)]))
-                              (into {}))
      :renamed-classes (->> renamed-classes
                            (map (fn [[k v]] [(strip-schema-prefix k) (strip-schema-prefix v)]))
                            (into {}))}))
@@ -306,7 +280,7 @@
                         js/JSON.parse
                         (js->clj)
                         (get "@graph"))
-        {:keys [all-classes all-properties renamed-classes renamed-properties]}
+        {:keys [all-classes all-properties renamed-classes]}
         (get-all-classes-and-properties schema-data existing-pages options)
         ;; Generate data shared across pages and properties
         class-map (->> all-classes
@@ -315,14 +289,14 @@
         select-class-ids
         (if (:subset options)
           ["schema:Person" "schema:CreativeWorkSeries" "schema:Organization"
+           "schema:Intangible" "schema:Series" "schema:TVSeries" ; Test class multiple inheritance
            "schema:Movie" "schema:CreativeWork" "schema:Thing" "schema:Comment"]
           (keys class-map))
         class-to-properties (get-class-to-properties select-class-ids all-properties)
         select-properties (set (mapcat val class-to-properties))
         options' (assoc options
                         :renamed-classes renamed-classes
-                        :renamed-properties renamed-properties
-                        :renamed-pages (merge renamed-properties renamed-classes))
+                        :renamed-pages renamed-classes)
         ;; Generate pages and properties
         properties (generate-properties
                     (filter #(contains? select-properties (% "@id")) all-properties)
@@ -352,51 +326,32 @@
    :config {:alias :c
             :coerce edn/read-string
             :desc "EDN map to add to config.edn"}
-   :debug {:alias :d
-           :desc "Prints additional debug info and a schema.edn for debugging"}
+   :export {:alias :e
+            :desc "Exports graph to schema.edn"}
    :subset {:alias :s
             :desc "Only generate a subset of data for testing purposes"}
    :verbose {:alias :v
              :desc "Verbose mode"}})
 
-(defn- write-debug-file [db]
-  (let [ents (remove #(db-malli-schema/internal-ident? (:db/ident %))
-                     (d/q '[:find [(pull ?b [*
-                                             {:logseq.property.class/properties [:block/title]}
-                                             {:logseq.property/classes [:block/title]}
-                                             {:logseq.property.class/extends [:block/title]}
-                                             {:block/tags [:block/title]}
-                                             {:block/refs [:block/title]}]) ...]
-                            :in $
-                            :where [?b :db/ident ?ident]]
-                          db))
-        top-level-properties [:logseq.property/type :logseq.property.class/properties :logseq.property/classes
-                              :logseq.property.class/extends :block/tags]
-        debug-attributes (into [:block/name :block/title :db/cardinality :db/ident :block/refs]
-                               top-level-properties)]
-    (fs/writeFileSync "schema-org.edn"
-                      (pr-str
-                       (->> ents
-                            (map (fn [m]
-                                   (let [props (apply dissoc (db-property/properties m) top-level-properties)]
-                                     (cond-> (select-keys m debug-attributes)
-                                       (seq props)
-                                       (assoc :block/properties (-> (update-keys props name)
-                                                                    (update-vals (fn [v]
-                                                                                   (if (:db/id v)
-                                                                                     (db-property/property-value-content (d/entity db (:db/id v)))
-                                                                                     v)))))
-                                       (seq (:logseq.property.class/properties m))
-                                       (update :logseq.property.class/properties #(set (map :block/title %)))
-                                       (some? (:logseq.property.class/extends m))
-                                       (update :logseq.property.class/extends :block/title)
-                                       (seq (:logseq.property/classes m))
-                                       (update :logseq.property/classes #(set (map :block/title %)))
-                                       (seq (:block/tags m))
-                                       (update :block/tags #(set (map :block/title %)))
-                                       (seq (:block/refs m))
-                                       (update :block/refs #(set (map :block/title %)))))))
-                            set)))))
+(defn- write-export-file [db]
+  (let [export-map* (sqlite-export/build-export db {:export-type :graph-ontology})
+        ;; Modify export to provide stable diff like diff-graphs.
+        ;; Remove this when export has stable sort order for these keys
+        export-map (-> export-map*
+                       (update :classes update-vals
+                               (fn [m]
+                                 (cond-> m
+                                   (:build/class-extends m)
+                                   (update :build/class-extends (comp vec sort))
+                                   (:build/class-properties m)
+                                   (update :build/class-properties (comp vec sort)))))
+                       (update :properties update-vals
+                               (fn [m]
+                                 (cond-> m
+                                   (:build/property-classes m)
+                                   (update :build/property-classes (comp vec sort))))))]
+    (fs/writeFileSync "schema.edn"
+                      (with-out-str (pprint/pprint export-map)))))
 
 (defn -main [args]
   (let [[graph-dir] args
@@ -419,7 +374,7 @@
     (d/transact! conn init-tx)
     (d/transact! conn block-props-tx)
     (when (:verbose options) (println "Transacted" (count (d/datoms @conn :eavt)) "datoms"))
-    (when (:debug options) (write-debug-file @conn))
+    (when (:export options) (write-export-file @conn))
     (println "Created graph" (str db-name "!"))))
 
 (when (= nbb/*file* (nbb/invoked-file))

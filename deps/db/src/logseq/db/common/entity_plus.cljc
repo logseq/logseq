@@ -1,5 +1,7 @@
 (ns logseq.db.common.entity-plus
   "Add map ops such as assoc/dissoc to datascript Entity.
+   The db-based-graph? checks are still in this ns because it's unclear which of these
+   lower level fns are still used by the graph-parser.
 
    NOTE: This doesn't work for nbb/sci yet because of https://github.com/babashka/sci/issues/639"
   ;; Disable clj linters since we don't support clj
@@ -17,12 +19,9 @@
 
 (def nil-db-ident-entities
   "No such entities with these :db/ident, but `(d/entity <db> <ident>)` has been called somewhere."
-  #{:block/tx-id :block/uuid :block/journal-day :block/_refs :block/level :block/heading-level :block/warning
-    ;; File graph only attributes. Can these be removed if this is only called in db graphs?
-    :block/pre-block? :block/scheduled :block/deadline :block/type :block/name :block/marker
-
-    :block.temp/ast-title
-    :block.temp/load-status :block.temp/has-children? :block.temp/ast-body
+  #{:block/tx-id :block/uuid :block/journal-day :block/_refs :block/level :block/heading-level
+    :block/warning :block/name
+    :block.temp/ast-title :block.temp/load-status :block.temp/has-children? :block.temp/ast-body
 
     :db/valueType :db/cardinality :db/ident :db/index
 
@@ -33,7 +32,7 @@
   it means `(db/entity :block/title)` always return same result"
   #{:block/link :block/updated-at :block/refs :block/closed-value-property
     :block/created-at :block/collapsed? :block/tags :block/title
-    :block/path-refs :block/parent :block/order :block/page
+    :block/parent :block/order :block/page
 
     :logseq.property/created-from-property
     :logseq.property/icon
@@ -53,29 +52,33 @@
   []
   (vreset! *seen-immutable-entities {}))
 
-(def ^:private *reset-cache-background-task-running?
-  ;; missionary is not compatible with nbb, so entity-memoized is disabled in nbb
-  (delay
-    ;; FIXME: Correct dependency ordering instead of resolve workaround
-    #?(:org.babashka/nbb false
-       :cljs (when-let [f (resolve 'frontend.common.missionary/background-task-running?)]
-               (f :logseq.db.common.entity-plus/reset-immutable-entities-cache!)))))
+(defonce *reset-cache-background-task-running-f (atom nil))
 
 (defn entity-memoized
   [db eid]
   (if (and (qualified-keyword? eid) (not (exists? js/process))) ; don't memoize on node
     (when-not (contains? nil-db-ident-entities eid) ;fast return nil
-      (if (and @*reset-cache-background-task-running?
-               (contains? immutable-db-ident-entities eid)) ;return cache entity if possible which isn't nil
-        (or (get @*seen-immutable-entities eid)
-            (let [r (d/entity db eid)]
-              (when r (vswap! *seen-immutable-entities assoc eid r))
-              r))
-        (d/entity db eid)))
+      (let [f @*reset-cache-background-task-running-f]
+        (if (and (fn? f)
+                 (f :logseq.db.common.entity-plus/reset-immutable-entities-cache!)
+                 (contains? immutable-db-ident-entities eid)) ;return cache entity if possible which isn't nil
+          (or (get @*seen-immutable-entities eid)
+              (let [r (d/entity db eid)]
+                (when r (vswap! *seen-immutable-entities assoc eid r))
+                r))
+          (d/entity db eid))))
     (d/entity db eid)))
 
+(defn unsafe->Entity
+  "Faster version of d/entity without checking e exists.
+  Only use it in performance-critical areas and where the existence of 'e' is confirmed."
+  [db e]
+  {:pre [(pos-int? e)]}
+  (Entity. db e (volatile! false) (volatile! {})))
+
 (defn db-based-graph?
-  "Whether the current graph is db-only"
+  "Whether the current graph is db-only. This should only be used in contexts
+   where both DB and file graph databases are possible e.g. graph-parser"
   [db]
   (when db
     (identical? "db" (:kv/value (entity-memoized db :logseq.kv/db-type)))))
@@ -95,11 +98,13 @@
        (get (.-kv e) k)
        (if db-based?
          (let [result (lookup-entity e k default-value)
-             ;; Replace title for pages only, otherwise it'll recursively
-             ;; replace block id refs if there're cycle references of blocks
+               ;; Replace title for pages only, otherwise it'll recursively
+               ;; replace block id refs if there're cycle references of blocks
                refs (:block/refs e)
                result' (if (and (string? result) refs)
-                         (db-content/id-ref->title-ref result refs)
+                         (db-content/id-ref->title-ref result refs
+                                                       {:db db
+                                                        :replace-pages-with-same-name? false})
                          result)]
            (or result' default-value))
          (lookup-entity e k default-value))))))
@@ -160,14 +165,8 @@
            :block.temp/property-keys
            (get-property-keys e)
 
-           ;; cache :block/title
            :block/title
-           (or
-            (:block.temp/cached-title @(.-cache e))
-            (let [title (get-block-title e k default-value)]
-              (vreset! (.-cache e) (assoc @(.-cache e)
-                                          :block.temp/cached-title title))
-              title))
+           (get-block-title e k default-value)
 
            :block/_parent
            (->> (lookup-entity e k default-value)
@@ -188,13 +187,33 @@
 
 (defn- cache-with-kv
   [^js this]
-  (let [v @(.-cache this)
-        v' (if (:block/title v)
-             (assoc v :block/title
-                    (db-content/id-ref->title-ref (:block/title v) (:block/refs this)))
-             v)]
-    (concat (seq v')
+  (let [v @(.-cache this)]
+    (concat (seq v)
             (seq (.-kv this)))))
+
+(defn- entity-ish? [x]
+  (instance? Entity x))
+
+(defn- ->printable
+  "Convert values so printing won't recurse forever:
+   - Entity => {:db/id eid}
+   - coll of Entity => coll of {:db/id ...}
+   - maps are walked (rare but safe)"
+  [x]
+  (cond
+    (entity-ish? x)
+    {:db/id (.-eid ^Entity x)}
+
+    (map? x)
+    (reduce-kv (fn [m k v] (assoc m k (->printable v))) {} x)
+
+    (sequential? x)
+    (map ->printable x)
+
+    (set? x)
+    (into #{} (map ->printable x))
+
+    :else x))
 
 #?(:org.babashka/nbb
    nil
@@ -223,8 +242,11 @@
 
      IPrintWithWriter
      (-pr-writer [this writer opts]
-       (let [m (-> (into {} (cache-with-kv this))
-                   (assoc :db/id (.-eid this)))]
+       ;; Touch ONLY this entity, to materialize its forward attrs
+       (entity/touch this)
+       (let [m0 (into {} (cache-with-kv this))
+             m  (-> (reduce-kv (fn [m k v] (assoc m k (->printable v))) {} m0)
+                    (assoc :db/id (.-eid this)))]
          (-pr-writer m writer opts)))
 
      ICollection

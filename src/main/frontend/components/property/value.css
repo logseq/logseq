@@ -1,4 +1,4 @@
-.property-value-inner:not([data-type="default"]):not([data-type="url"]):not([data-type="number"]):not([data-type="date"]):not([data-type="datetime"]) {
+.property-value-inner:not([data-type="default"]):not([data-type="url"]):not([data-type="number"]):not([data-type="string"]):not([data-type="date"]):not([data-type="datetime"]) {
   @apply cursor-pointer;
   &:hover, .as-scalar-value-wrap:hover {
     @apply bg-gray-02 rounded transition-[background-color] duration-300;
@@ -36,6 +36,11 @@
 }
 
 .ls-number {
+  @apply cursor-text;
+  min-height: 20px;
+}
+
+.ls-string {
   @apply cursor-text;
   min-height: 20px;
 }
@@ -181,4 +186,8 @@
 .menu-links-wrapper .menu-link-wrap .menu-link .text-gray-11,
 .menu-links-outer .menu-link-wrap .menu-link .text-gray-11 {
   color: var(--lx-gray-11, var(--rx-gray-11)) !important;
+}
+
+.ls-properties-area .empty-btn {
+  @apply !text-base;
 }

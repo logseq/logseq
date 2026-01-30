@@ -1,7 +1,8 @@
 {:deps
  ;; These nbb-logseq deps are kept in sync with https://github.com/logseq/nbb-logseq/blob/main/bb.edn
  {datascript/datascript {:git/url "https://github.com/logseq/datascript" ;; fork
-                         :sha     "b28f6574b9447bba9ccaa5d2b0cfd79308acf0e3"}
+                         :sha     "ff5a7d5326e2546f40146e4a489343f557519bc3"}
+  ;; datascript/datascript                 {:local/root "../../../../datascript"}
   datascript-transit/datascript-transit {:mvn/version "0.3.0"
                                          :exclusions [datascript/datascript]}
   cljs-bean/cljs-bean         {:mvn/version "1.5.0"}

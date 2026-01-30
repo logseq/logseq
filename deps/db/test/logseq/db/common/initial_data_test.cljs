@@ -6,8 +6,8 @@
             [cljs.test :refer [deftest async use-fixtures is testing]]
             [datascript.core :as d]
             [logseq.db.common.initial-data :as common-initial-data]
-            [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.common.sqlite-cli :as sqlite-cli]
+            [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.test.helper :as db-test]))
 
@@ -31,6 +31,7 @@
     (create-graph-dir "tmp/graphs" "test-db")
 
     (let [conn* (sqlite-cli/open-db! "tmp/graphs" "test-db")
+          _ (d/transact! conn* (sqlite-create-graph/build-db-initial-data "{}"))
           blocks [{:file/path "logseq/config.edn"
                    :file/content "{:foo :bar}"}]
           _ (d/transact! conn* blocks)
@@ -39,7 +40,8 @@
           conn (d/conn-from-datoms initial-data schema)]
       (is (= blocks
              (->> @conn
-                  (d/q '[:find (pull ?b [:block/uuid :file/path :file/content]) :where [?b :file/content]])
+                  (d/q '[:find (pull ?b [:file/path :file/content])
+                         :where [?b :file/content] [?b :file/path "logseq/config.edn"]])
                   (map first)))
           "Correct file with content is found"))))
 

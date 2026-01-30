@@ -1,7 +1,7 @@
 (ns frontend.handler.plugin-config
   "This system component encapsulates the global plugin.edn and depends on the
   global-config component. This component is only enabled? if both the
-  global-config and plugin components are enabled. plugin.edn is automatically updated
+  global-config and plugin components are enabled. plugins.edn is automatically updated
 when a plugin is installed, updated or removed"
   (:require [borkdude.rewrite-edn :as rewrite]
             [cljs-bean.core :as bean]
@@ -31,23 +31,21 @@ when a plugin is installed, updated or removed"
   (->> plugin-config-schema/Plugin rest (mapv first)))
 
 (defn add-or-update-plugin
-  "Adds or updates a plugin from plugin.edn"
+  "Adds or updates a plugin from plugins.edn"
   [{:keys [id] :as plugin}]
   (p/let [content (fs/read-file nil (plugin-config-path))
           updated-content (-> content
                               rewrite/parse-string
                               (rewrite/assoc (keyword id) (select-keys plugin common-plugin-keys))
                               str)]
-         ;; fs protocols require repo and dir when they aren't necessary. For this component,
-         ;; neither is needed so these are blank and nil respectively
-    (fs/write-plain-text-file! "" nil (plugin-config-path) updated-content {:skip-compare? true})))
+    (fs/write-file! (plugin-config-path) updated-content)))
 
 (defn remove-plugin
-  "Removes a plugin from plugin.edn"
+  "Removes a plugin from plugins.edn"
   [plugin-id]
-  (p/let [content (fs/read-file "" (plugin-config-path))
+  (p/let [content (fs/read-file nil (plugin-config-path))
           updated-content (-> content rewrite/parse-string (rewrite/dissoc (keyword plugin-id)) str)]
-    (fs/write-plain-text-file! "" nil (plugin-config-path) updated-content {:skip-compare? true})))
+    (fs/write-file! (plugin-config-path) updated-content)))
 
 (defn- create-plugin-config-file-if-not-exists
   []
@@ -55,7 +53,7 @@ when a plugin is installed, updated or removed"
                     (update-vals #(select-keys % common-plugin-keys))
                     pprint/pprint
                     with-out-str)]
-    (fs/create-if-not-exists "" nil (plugin-config-path) content)))
+    (fs/create-if-not-exists (state/get-current-repo) nil (plugin-config-path) content)))
 
 (defn- determine-plugins-to-change
   "Given installed plugins state and plugins from plugins.edn,

@@ -11,29 +11,13 @@ frontend.debug/defn
 frontend.debug/print
 ;; Lazily loaded
 frontend.extensions.code/editor
-;; Lazily loaded
-frontend.extensions.age-encryption/keygen
-frontend.extensions.age-encryption/encrypt-with-x25519
-frontend.extensions.age-encryption/decrypt-with-x25519
-frontend.extensions.age-encryption/encrypt-with-user-passphrase
-frontend.extensions.age-encryption/decrypt-with-user-passphrase
-;; Lazily loaded
-frontend.extensions.excalidraw/draw
-;; Lazily loaded
-frontend.extensions.tldraw/tldraw-app
-frontend.extensions.tldraw/generate-preview
 ;; Referenced in commented TODO
 frontend.extensions.pdf.utils/get-page-bounding
-;; For repl
-frontend.extensions.zotero.api/item
-;; For repl
-frontend.external.roam/reset-state!
-;; For repl
-logseq.graph-parser.mldoc/ast-export-markdown
 ;; Protocol fn wrapper that could be used
 frontend.fs/readdir
 ;; Referenced in TODO
 frontend.handler.metadata/update-properties!
+frontend.handler.user/<ensure-id&access-token
 ;; Referenced in comment
 frontend.image/get-orientation
 ;; For debugging
@@ -60,13 +44,9 @@ frontend.components.repo/add-repo
 frontend.util/trace!
 ;; Repl fn
 frontend.util.pool/terminate-pool!
-;; Repl fn
-frontend.handler.file-based.property.util/add-page-properties
 ;; Test runners used by shadow
 frontend.test.node-test-runner/main
 frontend.test.frontend-node-test-runner/main
-;; Test runner for nbb
-logseq.graph-parser.nbb-test-runner/run-tests
 ;; For debugging
 frontend.fs.sync/debug-print-sync-events-loop
 frontend.fs.sync/stop-debug-print-sync-events-loop
@@ -88,3 +68,6 @@ frontend.rum/use-atom-in
 frontend.common.missionary/<!
 ;; only used in deps/common
 frontend.common.missionary/background-task-running?
+;; defonce
+mobile.components.popup/native-sheet-listener
+mobile.bottom-tabs/add-tab-listeners!

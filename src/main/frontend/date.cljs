@@ -19,6 +19,9 @@
 
 (def custom-formatter (tf/formatter "yyyy-MM-dd'T'HH:mm:ssZZ"))
 
+(def ^:private mmm-do-yyyy-formatter (tf/formatter "MMM do, yyyy"))
+(def ^:private yyyy-MM-dd-HH-mm-formatter (tf/formatter "yyyy-MM-dd HH:mm"))
+
 (defn journal-title-formatters
   []
   (common-date/journal-title-formatters (state/get-date-formatter)))
@@ -26,8 +29,10 @@
 (defn get-date-time-string
   ([]
    (get-date-time-string (t/now)))
-  ([date-time]
-   (tf/unparse custom-formatter date-time)))
+  ([date-time & {:keys [formatter-str]}]
+   (tf/unparse (if formatter-str
+                 (tf/formatter formatter-str)
+                 custom-formatter) date-time)))
 
 (defn get-locale-string
   "Accepts a :date-time-no-ms string representation, or a cljs-time date object"
@@ -36,21 +41,13 @@
     (->> (cond->> input
            (string? input) (tf/parse (tf/formatters :date-time-no-ms)))
          (t/to-default-time-zone)
-         (tf/unparse (tf/formatter "MMM do, yyyy")))
+         (tf/unparse mmm-do-yyyy-formatter))
     (catch :default _e
       nil)))
 
 (def custom-formatter-2 (tf/formatter "yyyy-MM-dd-HH-mm-ss"))
 (defn get-date-time-string-2 []
   (tf/unparse custom-formatter-2 (tl/local-now)))
-
-(def custom-formatter-3 (tf/formatter "yyyy-MM-dd E HH:mm"))
-(defn get-date-time-string-3 []
-  (tf/unparse custom-formatter-3 (tl/local-now)))
-
-(def custom-formatter-4 (tf/formatter "yyyy-MM-dd E HH:mm:ss"))
-(defn get-date-time-string-4 []
-  (tf/unparse custom-formatter-4 (tl/local-now)))
 
 (defn journal-name
   ([]
@@ -64,14 +61,6 @@
                                          :date date
                                          :format formatter})
          (throw e))))))
-
-(defn journal-name-s [s]
-  (try
-    (journal-name (tf/parse (tf/formatter "yyyy-MM-dd") s))
-    (catch :default _e
-      (log/error :parse-journal-date {:message  "Unable to parse date to journal name, skipping."
-                                      :date-str s})
-      nil)))
 
 (defn start-of-day [date]
   (t/date-time (t/year date) (t/month date) (t/day date)))
@@ -88,20 +77,6 @@
   []
   (journal-name (t/minus (start-of-day (tl/local-now)) (t/days 1))))
 
-(defn get-local-date
-  []
-  (let [date (js/Date.)
-        year (.getFullYear date)
-        month (inc (.getMonth date))
-        day (.getDate date)
-        hour (.getHours date)
-        minute (.getMinutes date)]
-    {:year year
-     :month month
-     :day day
-     :hour hour
-     :minute minute}))
-
 (defn get-current-time
   []
   (let [d (js/Date.)]
@@ -111,14 +86,6 @@
      (bean/->js {:hour "2-digit"
                  :minute "2-digit"
                  :hourCycle "h23"}))))
-
-(defn normalize-date
-  [s]
-  (common-date/normalize-date s (state/get-date-formatter)))
-
-(defn normalize-journal-title
-  [title]
-  (common-date/normalize-journal-title title (state/get-date-formatter)))
 
 (defn valid-journal-title?
   [title]
@@ -142,24 +109,10 @@
   [journal-title]
   (journal-title-> journal-title #(tc/to-long %)))
 
-(def default-journal-filename-formatter common-date/default-journal-filename-formatter)
-
-(defn journal-title->default
-  "Journal title to filename format"
-  [journal-title]
-  (let [formatter (if-let [format (state/get-journal-file-name-format)]
-                    (tf/formatter format)
-                    (tf/formatter default-journal-filename-formatter))]
-    (journal-title-> journal-title #(tf/unparse formatter %))))
-
-(defn journal-title->custom-format
-  [journal-title]
-  (journal-title-> journal-title #(date-time-util/format % (state/get-date-formatter))))
-
 (defn int->local-time-2
   [n]
   (tf/unparse
-   (tf/formatter "yyyy-MM-dd HH:mm")
+   yyyy-MM-dd-HH-mm-formatter
    (t/to-default-time-zone (tc/from-long n))))
 
 (def iso-parser (tf/formatter "yyyy-MM-dd'T'HH:mm:ss.SSSS'Z'"))

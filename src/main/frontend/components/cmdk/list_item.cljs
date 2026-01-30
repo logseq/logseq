@@ -2,8 +2,10 @@
   (:require
    ["remove-accents" :as remove-accents]
    [clojure.string :as string]
-   [goog.string :as gstring]
+   [frontend.components.icon :as icon-component]
    [frontend.components.list-item-icon :as list-item-icon]
+   [frontend.handler.block :as block-handler]
+   [goog.string :as gstring]
    [logseq.shui.hooks :as hooks]
    [logseq.shui.ui :as shui]
    [rum.core :as rum]))
@@ -51,7 +53,7 @@
 
 (rum/defc root [{:keys [group icon icon-theme query text info shortcut value-label value
                         title highlighted on-highlight on-highlight-dep header on-click hls-page?
-                        hoverable compact rounded on-mouse-enter component-opts source-page source-create] :as _props
+                        hoverable compact rounded on-mouse-enter component-opts source-page source-create source-block] :as _props
                  :or {hoverable true rounded true}}
                 {:keys [app-config]}]
   (let [ref (hooks/create-ref)
@@ -59,10 +61,10 @@
         [hover? set-hover?] (rum/use-state false)
         ;; Determine icon variant
         icon-variant (cond
-                      source-create :create
-                      (#{:gradient} icon-theme) :default  ;; gradient handled with inline styles
-                      (#{:gray :color} icon-theme) :default
-                      :else :default)
+                       source-create :create
+                       (#{:gradient} icon-theme) :default  ;; gradient handled with inline styles
+                       (#{:gray :color} icon-theme) :default
+                       :else :default)
         ;; For gradient, we need to keep inline styles
         gradient-style (when (#{:gradient} icon-theme)
                          {:background "linear-gradient(-65deg, #8AE8FF, #5373E7, #369EFF, #00B1CC)"
@@ -106,13 +108,9 @@
        (when title
          [:div.text-sm.pb-2.font-bold.text-gray-11 (highlight-query title)])
        [:div {:class "text-sm font-medium text-gray-12"}
-        (if (and (= group :pages) (not= text source-page))  ;; alias
-          [:div.flex.flex-row.items-center.gap-2
-           (highlight-query text)
-           (if-not hls-page?
-             [:<> [:div.opacity-50.font-normal "alias of"] source-page]
-             [:div.opacity-50.font-normal.text-xs " — Highlights page"])]
-          (highlight-query text))
+        (block-handler/block-title-with-icon source-block
+                                             (highlight-query text)
+                                             icon-component/icon)
         (when info
           [:span.text-xs.text-gray-11 " — " (highlight-query info)])]]
       (when (or value-label value)
@@ -129,4 +127,4 @@
                        :min-height "20px"
                        :flex-wrap "nowrap"}}
          (shui/shortcut shortcut {:interactive? false
-                                   :aria-hidden? true})])]]))
+                                  :aria-hidden? true})])]]))

@@ -1,15 +1,14 @@
 (ns frontend.components.block.macros
   "Logseq macros that render and evaluate in blocks"
   (:require [clojure.walk :as walk]
+            [datascript.core :as d]
+            [frontend.db.conn :as db-conn]
             [frontend.extensions.sci :as sci]
             [frontend.handler.common :as common-handler]
+            [frontend.state :as state]
             [goog.string :as gstring]
             [goog.string.format]
-            [frontend.state :as state]
-            [frontend.config :as config]
-            [datascript.core :as d]
-            [logseq.db.frontend.property :as db-property]
-            [frontend.db.conn :as db-conn]))
+            [logseq.db.frontend.property :as db-property]))
 
 (defn- properties-by-name
   "Given a block from a query result, returns a map of its properties indexed by
@@ -28,7 +27,7 @@
        (into {})))
 
 (defn- normalize-query-function
-  [ast* repo result]
+  [ast* result]
   (let [ast (walk/prewalk
              (fn [f]
                (if (and (list? f)
@@ -43,27 +42,18 @@
                     (first f)
                     (list 'map (second f) 'result)))
                  f))
-             ast*)
-        db-based-graph? (config/db-based-graph? repo)
-        ;; These keyword aliases should be the same as those used in the query-table for sorting
-        special-file-graph-keywords
-        {:block :block/title
-         :page :block/name
-         :created-at :block/created-at
-         :updated-at :block/updated-at}]
+             ast*)]
     (walk/postwalk
      (fn [f]
        (cond
          (keyword? f)
-         (if-let [kw (and (not db-based-graph?) (get special-file-graph-keywords f))]
-           kw
-           (let [vals (map #(get-in % [:block/properties f]) result)
-                 int? (some integer? vals)]
-             `(~'fn [~'b]
-                    (~'let [~'result-str (~'get-in ~'b [:block/properties ~f])
-                            ~'result-num (~'parseFloat ~'result-str)
-                            ~'result (if (~'isNaN ~'result-num) ~'result-str ~'result-num)]
-                           (~'or ~'result (~'when ~int? 0))))))
+         (let [vals (map #(get-in % [:block/properties f]) result)
+               int? (some integer? vals)]
+           `(~'fn [~'b]
+                  (~'let [~'result-str (~'get-in ~'b [:block/properties ~f])
+                          ~'result-num (~'parseFloat ~'result-str)
+                          ~'result (if (~'isNaN ~'result-num) ~'result-str ~'result-num)]
+                         (~'or ~'result (~'when ~int? 0)))))
 
          :else
          f))
@@ -78,14 +68,12 @@
                        query-result*)
         repo (state/get-current-repo)
         db (db-conn/get-db repo)
-        query-result' (if (config/db-based-graph? repo)
-                        (->> query-result
-                             (map #(d/entity db (:db/id %)))
-                             (map #(hash-map :block/properties (properties-by-name db %))))
-                        query-result)
+        query-result' (->> query-result
+                           (map #(d/entity db (:db/id %)))
+                           (map #(hash-map :block/properties (properties-by-name db %))))
         fn-string (-> (gstring/format "(fn [result] %s)" (first arguments))
                       (common-handler/safe-read-string "failed to parse function")
-                      (normalize-query-function repo query-result')
+                      (normalize-query-function query-result')
                       (str))
         f (sci/eval-string fn-string)]
     (when (fn? f)

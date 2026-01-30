@@ -478,6 +478,7 @@
                                (vreset! *cursor-prev nil))))
         (.on editor "focus" (fn [_e]
                               (when (and
+                                     (:block/uuid (state/get-edit-block))
                                      (contains? #{:code} (:logseq.property.node/display-type code-block))
                                      (not= (:block/uuid edit-block) (:block/uuid (state/get-edit-block))))
                                 (editor-handler/edit-block! (or code-block edit-block) :max {:container-id (:container-id config)}))
@@ -585,11 +586,6 @@
                      (reset! (:last-theme state) next-theme)
                      (.setOption editor' "theme" next-theme)))
                  (reset! (:code-options state) (last (:rum/args state)))
-                 (when-not (:file? (first (:rum/args state)))
-                   (let [code (nth (:rum/args state) 3)
-                         editor' @(:editor-atom state)]
-                     (when (and editor' (not= (.getValue editor') code))
-                       (.setValue editor' code))))
                  state)}
   [state _config id attr code _theme _options]
   [:div.extensions__code.flex.flex-1

@@ -1,8 +1,10 @@
 (ns logseq.db.frontend.entity-util
   "Lower level entity util fns for DB graphs"
   (:require [clojure.string :as string]
+            [datascript.core :as d]
             [datascript.db]
-            [datascript.impl.entity :as de])
+            [datascript.impl.entity :as de]
+            [logseq.common.util :as common-util])
   (:refer-clojure :exclude [object?]))
 
 (defn- has-tag?
@@ -31,11 +33,6 @@
   [entity]
   (has-tag? entity :logseq.class/Property))
 
-(defn whiteboard?
-  "Given a page entity or map, check if it is a whiteboard page"
-  [entity]
-  (has-tag? entity :logseq.class/Whiteboard))
-
 (defn closed-value?
   [entity]
   (some? (:block/closed-value-property entity)))
@@ -48,10 +45,9 @@
 (defn page?
   [entity]
   (or (internal-page? entity)
+      (journal? entity)
       (class? entity)
-      (property? entity)
-      (whiteboard? entity)
-      (journal? entity)))
+      (property? entity)))
 
 (defn asset?
   "Given an entity or map, check if it is an asset block"
@@ -78,7 +74,6 @@
   (let [ident->type {:logseq.class/Tag :class
                      :logseq.class/Property :property
                      :logseq.class/Journal :journal
-                     :logseq.class/Whiteboard :whiteboard
                      :logseq.class/Page :page}]
     (set (map #(ident->type (:db/ident %)) (:block/tags entity)))))
 
@@ -86,3 +81,13 @@
   "Built-in page or block"
   [entity]
   (:logseq.property/built-in? entity))
+
+(defn get-pages-by-name
+  [db page-name]
+  (d/datoms db :avet :block/name (common-util/page-name-sanity-lc page-name)))
+
+(defn entity->map
+  "Convert a db Entity to a map"
+  [e]
+  (assert (de/entity? e))
+  (assoc (into {} e) :db/id (:db/id e)))

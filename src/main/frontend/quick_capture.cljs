@@ -4,7 +4,6 @@
             [clojure.string :as string]
             [frontend.config :as config]
             [frontend.date :as date]
-            [frontend.db :as db]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
@@ -53,7 +52,6 @@
                  (if (state/enable-journals?) ;; default to "quick capture" page if journals are not enabled
                    today-page
                    "quick capture"))
-          format (db/get-page-format page)
           time (date/get-current-time)
           text (or (and content (not-empty (string/trim content))) "")
           link (cond
@@ -67,10 +65,10 @@
                  (util/format "{{twitter %s}}" url)
 
                  (= title url)
-                 (config/link-format format nil url)
+                 (config/link-format nil url)
 
                  :else
-                 (config/link-format format title url))
+                 (config/link-format title url))
           template (get-in (state/get-config)
                            [:quick-capture-templates :text]
                            "**{time}** [[quick capture]]: {text} {url}")

@@ -4,20 +4,19 @@
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
             [datascript.core :as d]
-            [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.async.util :as db-async-util]
-            [frontend.db.file-based.async :as file-async]
-            [frontend.db.file-based.model :as file-model]
             [frontend.db.model :as db-model]
             [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
-            [frontend.handler.file-based.property.util :as property-util]
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.common.util :as common-util]
+            [logseq.db :as ldb]
             [promesa.core :as p]))
+
+(def ^:private yyyyMMdd-formatter (tf/formatter "yyyyMMdd"))
 
 (def <q db-async-util/<q)
 (def <pull db-async-util/<pull)
@@ -33,42 +32,12 @@
                        [?file :file/path ?path]])]
     (->> result seq reverse (map #(vector (:file/path %) (or (:file/last-modified-at %) 0))))))
 
-(defn <get-all-templates
-  [graph]
-  (p/let [result (<q graph
-                     {:transact-db? true}
-                     '[:find ?t (pull ?b [*])
-                       :where
-                       [?b :block/properties ?p]
-                       [(get ?p :template) ?t]])]
-    (->> result
-         (map (fn [[template b]]
-                [template (assoc b :block/title template)]))
-         (into {}))))
-
-(defn <get-template-by-name
-  [name]
-  (let [repo (state/get-current-repo)]
-    (p/let [templates (<get-all-templates repo)]
-      (get templates name))))
-
 (defn <get-all-properties
   "Returns all public properties as property maps including their
-  :block/title and :db/ident. For file graphs the map only contains
-  :block/title"
+  :block/title and :db/ident"
   [& {:as opts}]
   (when-let [graph (state/get-current-repo)]
-    (if (config/db-based-graph? graph)
-      (db-model/get-all-properties graph opts)
-      (p/let [properties (file-async/<file-based-get-all-properties graph)
-              hidden-properties (set (map name (property-util/hidden-properties)))]
-        (remove #(hidden-properties (:block/title %)) properties)))))
-
-(defn <file-get-property-values
-  "For file graphs, returns property value names for given property name"
-  [graph property]
-  (when-not (config/db-based-graph? graph)
-    (file-async/<get-file-based-property-values graph property)))
+    (db-model/get-all-properties graph opts)))
 
 (defn <get-property-values
   "For db graphs, returns a vec of property value maps for given property
@@ -79,8 +48,14 @@
     (state/<invoke-db-worker :thread-api/get-property-values (state/get-current-repo)
                              (assoc opts :property-ident property-id))))
 
+(defn <get-bidirectional-properties
+  [target-id]
+  (when target-id
+    (state/<invoke-db-worker :thread-api/get-bidirectional-properties (state/get-current-repo)
+                             {:target-id target-id})))
+
 (defn <get-block
-  [graph id-uuid-or-name & {:keys [children? skip-transact? skip-refresh? children-only? properties]
+  [graph id-uuid-or-name & {:keys [children? include-collapsed-children? skip-transact? skip-refresh? properties]
                             :or {children? true}
                             :as opts}]
 
@@ -101,27 +76,35 @@
         load-status (:block.temp/load-status e)]
     (cond
       (and (or (= load-status :full)
-               (and (= load-status :self) (not children?) (not children-only?)))
+               (and (= load-status :children) (not include-collapsed-children?))
+               (and (= load-status :self) (not children?)))
            (not (some #{:block.temp/refs-count} properties)))
       (p/promise e)
 
       :else
       (->
-       (p/let [result (state/<invoke-db-worker :thread-api/get-blocks graph
-                                               [{:id id :opts opts}])
+       (p/let [result-transit-str (state/<invoke-db-worker-direct-pass :thread-api/get-blocks graph
+                                                                       (ldb/write-transit-str [{:id id :opts opts}]))
+               result (ldb/read-transit-str result-transit-str)
                {:keys [block children]} (first result)]
          (when-not skip-transact?
            (let [conn (db/get-db graph false)
                  block-and-children (if block (cons block children) children)
                  affected-keys [[:frontend.worker.react/block (:db/id block)]]
-                 tx-data (->> (remove (fn [b] (:block.temp/load-status (db/entity (:db/id b)))) block-and-children)
-                              (common-util/fast-remove-nils)
-                              (remove empty?))]
+                 tx-data (concat
+                          (->> (remove (fn [b] (:block.temp/load-status (db/entity (:db/id b))))
+                                       block-and-children)
+                               (common-util/fast-remove-nils)
+                               (remove empty?))
+                          (when (and (:db/id block) children? include-collapsed-children?
+                                     (not= :full (:block.temp/load-status (some-> (:db/id block) db/entity))))
+                            [{:db/id (:db/id block)
+                              :block.temp/load-status :full}]))]
              (when (seq tx-data) (d/transact! conn tx-data))
              (when-not skip-refresh?
                (react/refresh-affected-queries! graph affected-keys {:skip-kv-custom-keys? true}))))
 
-         (if children-only? children block))
+         (if skip-transact? block (db/entity (:db/id block))))
        (p/catch (fn [error]
                   (js/console.error error)
                   (throw (ex-info "get-block error" {:block id-uuid-or-name}))))))))
@@ -130,10 +113,14 @@
   [graph ids* & {:as opts}]
   (let [ids (remove (fn [id] (:block.temp/load-status (db/entity id))) ids*)]
     (when (seq ids)
-      (p/let [result (state/<invoke-db-worker :thread-api/get-blocks graph
-                                              (map (fn [id]
-                                                     {:id id :opts (assoc opts :children? false)})
-                                                   ids))]
+      (p/let [result-transit-str
+              (state/<invoke-db-worker-direct-pass :thread-api/get-blocks graph
+                                                   (ldb/write-transit-str
+                                                    (map
+                                                     (fn [id]
+                                                       {:id id :opts (assoc opts :children? false)})
+                                                     ids)))
+              result (ldb/read-transit-str result-transit-str)]
         (let [conn (db/get-db graph false)
               result' (map :block result)]
           (when (seq result')
@@ -159,94 +146,43 @@
 (defn <get-block-refs
   [graph eid]
   (assert (integer? eid))
-  (p/let [result (state/<invoke-db-worker :thread-api/get-block-refs graph eid)
-          conn (db/get-db graph false)
-          _ (d/transact! conn result)]
-    result))
+  (state/<invoke-db-worker :thread-api/get-block-refs graph eid))
 
 (defn <get-block-refs-count
   [graph eid]
   (assert (integer? eid))
   (state/<invoke-db-worker :thread-api/get-block-refs-count graph eid))
 
-(defn <get-all-referenced-blocks-uuid
-  "Get all uuids of blocks with any back link exists."
-  [graph]
-  (<q graph {:transact-db? false}
-      '[:find [?refed-uuid ...]
-        :where
-           ;; ?referee-b is block with ref towards ?refed-b
-        [?refed-b   :block/uuid ?refed-uuid]
-        [?referee-b :block/refs ?refed-b]]))
-
-(defn <get-file
-  [graph path]
-  (when (and graph path)
-    (p/let [result (<pull graph [:file/path path])]
-      (:file/content result))))
-
 (defn <get-date-scheduled-or-deadlines
   [journal-title]
   (when-let [date (date/journal-title->int journal-title)]
     (let [future-days (state/get-scheduled-future-days)
-          date-format (tf/formatter "yyyyMMdd")
-          current-day (tf/parse date-format (str date))
+          current-day (tf/parse yyyyMMdd-formatter (str date))
           future-date (t/plus current-day (t/days future-days))
           future-day (some->> future-date
-                              (tf/unparse date-format)
+                              (tf/unparse yyyyMMdd-formatter)
                               (parse-long))
           start-time (date/journal-day->utc-ms date)
           future-time (tc/to-long future-date)]
       (when-let [repo (and future-day (state/get-current-repo))]
-        (p/let [result
-                (if (config/db-based-graph? repo)
-                  (<q repo {}
-                      '[:find [(pull ?block ?block-attrs) ...]
-                        :in $ ?start-time ?end-time ?block-attrs
-                        :where
-                        (or [?block :logseq.property/scheduled ?n]
-                            [?block :logseq.property/deadline ?n])
-                        [(>= ?n ?start-time)]
-                        [(<= ?n ?end-time)]
-                        [?block :logseq.property/status ?status]
-                        [?status :db/ident ?status-ident]
-                        [(not= ?status-ident :logseq.property/status.done)]
-                        [(not= ?status-ident :logseq.property/status.canceled)]]
-                      start-time
-                      future-time
-                      '[*])
-                  (<q repo {}
-                      '[:find [(pull ?block ?block-attrs) ...]
-                        :in $ ?day ?future ?block-attrs
-                        :where
-                        (or
-                         [?block :block/scheduled ?d]
-                         [?block :block/deadline ?d])
-                        [(get-else $ ?block :block/repeated? false) ?repeated]
-                        [(get-else $ ?block :block/marker "NIL") ?marker]
-                        [(not= ?marker "DONE")]
-                        [(not= ?marker "CANCELED")]
-                        [(not= ?marker "CANCELLED")]
-                        [(<= ?d ?future)]
-                        (or-join [?repeated ?d ?day]
-                                 [(true? ?repeated)]
-                                 [(>= ?d ?day)])]
-                      date
-                      future-day
-                      file-model/file-graph-block-attrs))]
+        (p/let [result (<q repo {}
+                           '[:find [(pull ?block ?block-attrs) ...]
+                             :in $ ?start-time ?end-time ?block-attrs
+                             :where
+                             (or [?block :logseq.property/scheduled ?n]
+                                 [?block :logseq.property/deadline ?n])
+                             [(>= ?n ?start-time)]
+                             [(<= ?n ?end-time)]
+                             [?block :logseq.property/status ?status]
+                             [?status :db/ident ?status-ident]
+                             [(not= ?status-ident :logseq.property/status.done)]
+                             [(not= ?status-ident :logseq.property/status.canceled)]]
+                           start-time
+                           future-time
+                           '[*])]
           (->> result
                db-model/sort-by-order-recursive
                db-utils/group-by-page))))))
-
-(defn <get-tag-pages
-  [graph tag-id]
-  (<q graph {:transact-db? false}
-      '[:find [(pull ?page [:db/id :block/uuid :block/name :block/title :block/created-at :block/updated-at]) ...]
-        :in $ ?tag-id
-        :where
-        [?page :block/tags ?tag-id]
-        [?page :block/name]]
-      tag-id))
 
 (defn <get-tag-objects
   [graph class-id]
@@ -258,23 +194,6 @@
           :where
           [?b :block/tags ?class-id]]
         class-ids)))
-
-(defn <get-whiteboards
-  [graph]
-  (p/let [result (if (config/db-based-graph? graph)
-                   (<q graph {:transact-db? false}
-                       '[:find [(pull ?page [:db/id :block/uuid :block/name :block/title :block/created-at :block/updated-at]) ...]
-                         :where
-                         [?page :block/tags :logseq.class/Whiteboard]
-                         [?page :block/name]])
-                   (<q graph {:transact-db? false}
-                       '[:find [(pull ?page [:db/id :block/uuid :block/name :block/title :block/created-at :block/updated-at]) ...]
-                         :where
-                         [?page :block/type "whiteboard"]
-                         [?page :block/name]]))]
-    (->> result
-         (sort-by :block/updated-at)
-         reverse)))
 
 (defn <get-views
   [graph class-id view-feature-type]
@@ -298,16 +217,6 @@
     (some-> (first result)
             :db/id
             db/entity)))
-
-(defn <get-pdf-annotations
-  [graph pdf-id]
-  (p/let [result (<q graph {:transact-db? true}
-                     '[:find [(pull ?b [*]) ...]
-                       :in $ ?pdf-id
-                       :where
-                       [?b :logseq.property/asset ?pdf-id]]
-                     pdf-id)]
-    result))
 
 (defn <get-block-properties-history
   [graph block-id]

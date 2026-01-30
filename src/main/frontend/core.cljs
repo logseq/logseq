@@ -6,15 +6,17 @@
             [frontend.common-keywords]
             [frontend.components.plugins :as plugins]
             [frontend.config :as config]
-            [frontend.fs.sync :as sync]
             [frontend.handler :as handler]
             [frontend.handler.db-based.rtc-background-tasks]
+            [frontend.handler.db-based.vector-search-background-tasks]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
             [frontend.log]
             [frontend.page :as page]
             [frontend.routes :as routes]
             [frontend.spec]
+            [frontend.util :as util]
+            [lambdaisland.glogi :as log]
             [logseq.api]
             [logseq.db.frontend.kv-entity]
             [malli.dev.cljs :as md]
@@ -52,16 +54,14 @@
 (defonce root (rdc/createRoot (.getElementById js/document "root")))
 
 (defn ^:export start []
-  (when config/dev?
-    (md/start!))
-  (set-router!)
+  (when-not (util/capacitor?)
+    (when config/dev?
+      (md/start!))
+    (set-router!)
 
-  (.render ^js root (page/current-page))
+    (.render ^js root (page/current-page))
 
-  (display-welcome-message)
-    ;; NO repo state here, better not add init logic here
-  (when config/dev?
-    (js/setTimeout #(sync/<sync-start) 1000)))
+    (display-welcome-message)))
 
 (comment
   (def d-entity-count (volatile! 0))
@@ -85,15 +85,13 @@
   ;; so it is available even in :advanced release builds
 
   ;; (setup-entity-profile!)
-  (plugin-handler/setup!
-   #(handler/start! start)))
+  (log/info ::init "App started")
+  (handler/start! start))
 
 (defn ^:export stop []
   ;; stop is called before any code is reloaded
   ;; this is controlled by :before-load in the config
   (handler/stop!)
-  (when config/dev?
-    (sync/<sync-stop))
   (js/console.log "stop"))
 
 (defn ^:export delay-remount

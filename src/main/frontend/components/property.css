@@ -88,7 +88,7 @@
     }
 
     .property-value {
-      @apply pl-1;
+      @apply pl-1 min-h-[28px];
 
       .jtrigger-id {
         @apply left-[-34px] top-[2px];
@@ -136,9 +136,6 @@
   }
 
   .cp__select-main {
-    width: fit-content;
-    margin: 0;
-
     .ui__dropdown-trigger {
       position: absolute;
 
@@ -180,7 +177,7 @@
 }
 
 .ui__button.empty-btn, .empty-text-btn {
-  @apply !h-6 !px-0 font-normal opacity-50;
+  @apply !h-6 !px-0 !text-base opacity-50 font-normal;
 }
 
 .ui__button.empty-btn:hover, .empty-text-btn:hover {
@@ -239,7 +236,7 @@ input.simple-input:focus {
   .cp__select-main {
     width: fit-content;
     margin: 0;
-    
+
     /* Fixed width to prevent jumping - use min-width of input as base */
     &:not(.w-96):not(.w-auto):not([class*="w-["]) {
       min-width: 14rem;
@@ -371,9 +368,6 @@ a.control-link {
 .ls-property-dropdown {
   @apply w-[260px] p-1.5;
 
-  .ui__dropdown-menu-item, .ui__dropdown-menu-sub-trigger {
-  }
-
   [role=separator] {
     @apply my-2;
   }
@@ -439,7 +433,8 @@ a.control-link {
 }
 
 .ls-property-choices-sub-pane {
-  @apply w-[220px] p-0;
+  @apply w-[220px] px-0 pb-8 overflow-y-scroll;
+  max-height: 100vh;
 
   > ul.choices-list {
     @apply m-0 px-1.5 pt-1 pb-[1px];
@@ -490,8 +485,6 @@ a.control-link {
   box-shadow: none;
 }
 
-
-
 /* Bordered square (property value default) */
 .property-bullet-bordered-square {
   border: 2px solid var(--lx-gray-08, var(--ls-block-bullet-color, var(--rx-gray-08)));
@@ -521,6 +514,14 @@ a.control-link {
 }
 
 .ls-properties-area .bullet-link-wrap:hover > .bullet-container .property-bullet-bordered-square {
-  transform: scale(1.2);  
+  transform: scale(1.2);
   border-color: var(--lx-gray-08, var(--ls-block-bullet-color, var(--rx-gray-08))) !important;
+}
+
+.ls-property-key {
+  .cp__select-results {
+    .menu-link {
+      @apply py-1;
+    }
+  }
 }

@@ -1,68 +1,24 @@
 (ns ^:no-doc frontend.handler.block
   (:require [clojure.string :as string]
-            [clojure.walk :as walk]
             [datascript.impl.entity :as de]
             [dommy.core :as dom]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
-            [frontend.handler.file-based.property.util :as property-util]
             [frontend.handler.property.util :as pu]
             [frontend.mobile.haptics :as haptics]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.util.file-based.drawer :as drawer]
-            [goog.dom :as gdom]
             [goog.object :as gobj]
             [logseq.db :as ldb]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.graph-parser.block :as gp-block]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op]
             [promesa.core :as p]))
 
 ;;  Fns
-
-;; TODO: reduced version
-(defn- walk-block
-  [block check? transform]
-  (let [result (atom nil)]
-    (walk/postwalk
-     (fn [x]
-       (if (check? x)
-         (reset! result (transform x))
-         x))
-     (:block.temp/ast-body block))
-    @result))
-
-(defn get-timestamp
-  [block typ]
-  (walk-block block
-              (fn [x]
-                (and (gp-block/timestamp-block? x)
-                     (= typ (first (second x)))))
-              #(second (second %))))
-
-(defn get-scheduled-ast
-  [block]
-  (get-timestamp block "Scheduled"))
-
-(defn get-deadline-ast
-  [block]
-  (get-timestamp block "Deadline"))
-
-(defn indentable?
-  [{:block/keys [parent] :as block}]
-  (when parent
-    (not= (:db/id (ldb/get-first-child (db/get-db) (:db/id parent)))
-          (:db/id block))))
-
-(defn outdentable?
-  [{:block/keys [level] :as _block}]
-  (not= level 1))
 
 (defn select-block!
   [block-uuid]
@@ -135,38 +91,52 @@
                            :container-id container-id :direction direction :event event :pos pos}))
     (mark-last-input-time! repo)))
 
-(defn sanity-block-content
-  [repo format content]
-  (if (sqlite-util/db-based-graph? repo)
-    content
-    (-> (property-util/remove-built-in-properties format content)
-        (drawer/remove-logbook))))
-
 (defn block-unique-title
   "Multiple pages/objects may have the same `:block/title`.
    Notice: this doesn't prevent for pages/objects that have the same tag or created by different clients."
-  [block]
-  (let [block-e (cond
-                  (de/entity? block)
-                  block
-                  (uuid? (:block/uuid block))
-                  (db/entity [:block/uuid (:block/uuid block)])
+  [block & {:keys [with-tags? alias]
+            :or {with-tags? true}}]
+  (if (ldb/built-in? block)
+    (:block/title block)
+    (let [block-e (cond
+                    (de/entity? block)
+                    block
+                    (uuid? (:block/uuid block))
+                    (db/entity [:block/uuid (:block/uuid block)])
+                    :else
+                    block)
+          tags (remove (fn [t]
+                         (or (some-> (:block/raw-title block-e) (ldb/inline-tag? t))
+                             (ldb/private-tags (:db/ident t))))
+                       (map (fn [tag] (if (number? tag) (db/entity tag) tag)) (:block/tags block)))
+          title (cond
+                  (ldb/class? block)
+                  (ldb/get-class-title-with-extends block)
+
+                  (and with-tags? (seq tags))
+                  (str (:block/title block)
+                       " "
+                       (string/join
+                        ", "
+                        (keep (fn [tag]
+                                (when-let [title (:block/title tag)]
+                                  (str "#" title)))
+                              tags)))
                   :else
-                  block)
-        tags (remove (fn [t]
-                       (or (some-> (:block/raw-title block-e) (ldb/inline-tag? t))
-                           (ldb/private-tags (:db/ident t))))
-                     (map (fn [tag] (if (number? tag) (db/entity tag) tag)) (:block/tags block)))]
-    (if (seq tags)
-      (str (:block/title block)
-           " "
-           (string/join
-            ", "
-            (keep (fn [tag]
-                    (when-let [title (:block/title tag)]
-                      (str "#" title)))
-                  tags)))
-      (:block/title block))))
+                  (:block/title block))]
+      (when title
+        (str (subs title 0 256)
+             (when alias
+               (str " -> alias: " alias)))))))
+
+(defn block-title-with-icon
+  "Used for select item"
+  [block title icon-cp]
+  (if-let [icon (:logseq.property/icon block)]
+    [:div.flex.flex-row.items-center.gap-1
+     (icon-cp icon {:size 14})
+     title]
+    (or title (:block/title block))))
 
 (defn edit-block!
   [block pos & {:keys [_container-id custom-content tail-len save-code-editor?]
@@ -174,7 +144,6 @@
                      save-code-editor? true}
                 :as opts}]
   (when (and (not config/publishing?) (:block/uuid block))
-    (util/mobile-keep-keyboard-open)
     (let [repo (state/get-current-repo)]
       (p/do!
        (db-async/<get-block repo (:db/id block) {:children? false})
@@ -196,8 +165,7 @@
                             content
 
                             :else
-                            (subs content 0 pos))
-               content (sanity-block-content repo (get block :block/format :markdown) content)]
+                            (subs content 0 pos))]
            (state/clear-selection!)
            (edit-block-aux repo block content text-range (assoc opts :pos pos))))))))
 
@@ -289,154 +257,113 @@
                     100))))))))
 
 (def *swipe (atom nil))
+(def *swiped? (atom false))
 
 (def *touch-start (atom nil))
 
-(defn- target-disable-swipe?
-  [target]
-  (let [user-defined-tags (get-in (state/get-config)
-                                  [:mobile :gestures/disabled-in-block-with-tags])]
-    (or (.closest target ".dsl-query")
-        (.closest target ".drawer")
-        (.closest target ".draw-wrap")
-        (some #(.closest target (util/format "[data-refs-self*=%s]" %))
-              user-defined-tags))))
-
 (defn on-touch-start
   [event uuid]
-  (let [target (.-target event)
-        input (state/get-input)
+  (util/stop-propagation event)
+  (let [input (state/get-input)
         input-id (state/get-edit-input-id)
         selection-type (.-type (.getSelection js/document))]
     (reset! *touch-start (js/Date.now))
     (when-not (and input
                    (string/ends-with? input-id (str uuid)))
       (state/clear-edit!))
-    (when-not (target-disable-swipe? target)
-      (when (not= selection-type "Range")
-        (when-let [touches (.-targetTouches event)]
-          (when (= (.-length touches) 1)
-            (let [touch (aget touches 0)
-                  x (.-clientX touch)
-                  y (.-clientY touch)]
-              (reset! *swipe {:x0 x :y0 y :xi x :yi y :tx x :ty y :direction nil}))))))))
+    (when (not= selection-type "Range")
+      (when-let [touches (.-targetTouches event)]
+        (when (= (.-length touches) 1)
+          (let [touch (aget touches 0)
+                x (.-clientX touch)
+                y (.-clientY touch)]
+            (reset! *swipe {:x0 x :y0 y :xi x :yi y :tx x :ty y :direction nil})))))))
 
 (defn on-touch-move
-  [event block uuid edit? *show-left-menu? *show-right-menu?]
-  (when-let [touches (.-targetTouches event)]
-    (let [selection-type (.-type (.getSelection js/document))]
-      (when-not (= selection-type "Range")
-        (when (or (not (state/editing?))
-                  (< (- (js/Date.now) @*touch-start) 600))
-          (when (and (= (.-length touches) 1) @*swipe)
-            (let [{:keys [x0 xi direction]} @*swipe
-                  touch (aget touches 0)
-                  tx (.-clientX touch)
-                  ty (.-clientY touch)
-                  direction (if (nil? direction)
-                              (if (> tx x0)
-                                :right
-                                :left)
-                              direction)]
-              (swap! *swipe #(-> %
-                                 (assoc :tx tx)
-                                 (assoc :ty ty)
-                                 (assoc :xi tx)
-                                 (assoc :yi ty)
-                                 (assoc :direction direction)))
-              (when (< (* (- xi x0) (- tx xi)) 0)
+  [^js goog-event]
+  (let [event (.-event_ goog-event)]
+    (when-let [touches (.-targetTouches event)]
+      (let [selection-type (.-type (.getSelection js/document))
+            target (.-target event)
+            block-container (util/rec-get-node target "ls-block")]
+        (when-not (= selection-type "Range")
+          (when (or (not (state/editing?))
+                    (< (- (js/Date.now) @*touch-start) 600))
+            (when (and (= (.-length touches) 1) @*swipe)
+              (let [{:keys [x0 xi direction]} @*swipe
+                    touch (aget touches 0)
+                    tx (.-clientX touch)
+                    ty (.-clientY touch)
+                    direction (if (nil? direction)
+                                (if (> tx x0)
+                                  :right
+                                  :left)
+                                direction)]
                 (swap! *swipe #(-> %
-                                   (assoc :x0 tx)
-                                   (assoc :y0 ty))))
-              (let [{:keys [x0 y0]} @*swipe
-                    dx (- tx x0)
-                    dy (- ty y0)]
-                (when (and (< (. js/Math abs dy) 30)
-                           (> (. js/Math abs dx) 30))
-                  (let [left (gdom/getElement (str "block-left-menu-" uuid))
-                        right (gdom/getElement (str "block-right-menu-" uuid))]
+                                   (assoc :tx tx)
+                                   (assoc :ty ty)
+                                   (assoc :xi tx)
+                                   (assoc :yi ty)
+                                   (assoc :direction direction)))
+                (when (< (* (- xi x0) (- tx xi)) 0)
+                  (swap! *swipe #(-> %
+                                     (assoc :x0 tx)
+                                     (assoc :y0 ty))))
+                (let [{:keys [x0 y0]} @*swipe
+                      dx (- tx x0)
+                      dy (- ty y0)]
+                  (when (and (< (. js/Math abs dy) 30)
+                             (> (. js/Math abs dx) 10)
+                             direction)
+                    (.preventDefault goog-event)
+                    (let [left (if (= direction :right)
+                                 (if (>= dx 0) (min dx 48) (max dx 0))
+                                 (if (<= dx 0) (- (min (js/Math.abs dx) 48)) (min dx 48)))]
+                      (reset! *swiped? true)
+                      (dom/set-style! block-container :transform (util/format "translateX(%dpx)" left)))))))))))))
 
-                    (cond
-                      (= direction :right)
-                      (do
-                        (reset! *show-left-menu? true)
-                        (when left
-                          (when (>= dx 0)
-                            (set! (.. left -style -width) (str dx "px")))
-                          (when (< dx 0)
-                            (set! (.. left -style -width) (str (max (+ 40 dx) 0) "px")))
-
-                          (let [indent (gdom/getFirstElementChild left)]
-                            (when (indentable? block)
-                              (if (>= (.-clientWidth left) 40)
-                                (set! (.. indent -style -opacity) "100%")
-                                (set! (.. indent -style -opacity) "30%"))))))
-
-                      (= direction :left)
-                      (do
-                        (reset! *show-right-menu? true)
-                        (when right
-                          (when (<= dx 0)
-                            (set! (.. right -style -width) (str (- dx) "px")))
-                          (when (> dx 0)
-                            (set! (.. right -style -width) (str (max (- 80 dx) 0) "px")))
-
-                          (let [outdent (gdom/getFirstElementChild right)
-                                more (when-not edit?
-                                       (gdom/getLastElementChild right))]
-                            (when (and outdent (outdentable? block))
-                              (if (and (>= (.-clientWidth right) 40)
-                                       (< (.-clientWidth right) 80))
-                                (set! (.. outdent -style -opacity) "100%")
-                                (set! (.. outdent -style -opacity) "30%")))
-
-                            (when more
-                              (if (>= (.-clientWidth right) 80)
-                                (set! (.. more -style -opacity) "100%")
-                                (set! (.. more -style -opacity) "30%"))))))
-                      :else
-                      nil)))))))))))
-
+(defonce ^:private *swipe-timeout (atom nil))
 (defn on-touch-end
-  [_event block uuid *show-left-menu? *show-right-menu?]
+  [event]
+  (when-let [timeout @*swipe-timeout]
+    (js/clearTimeout timeout))
+  (util/stop-propagation event)
   (when @*swipe
-    (let [left-menu (gdom/getElement (str "block-left-menu-" uuid))
-          right-menu (gdom/getElement (str "block-right-menu-" uuid))
-          {:keys [x0 tx]} @*swipe
-          dx (- tx x0)]
+    (let [target (.-target event)
+          swiped? @*swiped?
+          {:keys [x0 y0 tx ty]} @*swipe
+          dy (- ty y0)
+          dx (- tx x0)
+          block-container (util/rec-get-node target "ls-block")
+          select? (and (> (. js/Math abs dx) (. js/Math abs dy))
+                       (> (. js/Math abs dx) 10))]
       (try
-        (when (> (. js/Math abs dx) 10)
-          (cond
-            (and left-menu (>= (.-clientWidth left-menu) 40))
-            (when (indentable? block)
-              (haptics/with-haptics-impact
-                (indent-outdent-blocks! [block] true nil)
-                :light))
-
-            (and right-menu (<= 40 (.-clientWidth right-menu) 79))
-            (when (outdentable? block)
-              (haptics/with-haptics-impact
-                (indent-outdent-blocks! [block] false nil)
-                :light))
-
-            (and right-menu (>= (.-clientWidth right-menu) 80))
-            (haptics/with-haptics-impact
-              (do (state/set-state! :mobile/show-action-bar? true)
-                  (state/set-state! :mobile/actioned-block block)
-                  (select-block! uuid))
-              :light)
-
-            :else
-            nil))
+        (when (or select? swiped?)
+          (dom/set-style! block-container :transform "translateX(0)")
+          (when select?
+            (if (contains? (set (state/get-selection-block-ids)) (some-> (.getAttribute block-container "blockid") uuid))
+              (state/drop-selection-block! block-container)
+              (do
+                (state/clear-edit!)
+                (state/conj-selection-block! block-container nil)))
+            (if (seq (state/get-selection-blocks))
+              (state/set-state! :mobile/show-action-bar? true)
+              (when (:mobile/show-action-bar? @state/state)
+                (state/set-state! :mobile/show-action-bar? false)))
+            (haptics/haptics)))
         (catch :default e
           (js/console.error e))
         (finally
-          (reset! *show-left-menu? false)
-          (reset! *show-right-menu? false)
-          (reset! *swipe nil))))))
+          (reset! *swipe-timeout
+                  (js/setTimeout #(reset! *swiped? false) 50))
+          (reset! *swipe nil)
+          (reset! *touch-start nil))))))
 
 (defn on-touch-cancel
-  [*show-left-menu? *show-right-menu?]
-  (reset! *show-left-menu? false)
-  (reset! *show-right-menu? false)
-  (reset! *swipe nil))
+  [e]
+  (reset! *swipe nil)
+  (reset! *swiped? nil)
+  (reset! *touch-start nil)
+  (let [target (.-target e)
+        block-container (util/rec-get-node target "ls-block")]
+    (dom/set-style! block-container :transform "translateX(0)")))

@@ -1,6 +1,5 @@
 (ns logseq.db.common.sqlite
-  "Provides common sqlite util fns for file and DB graphs. These fns work on
-  browser and node"
+  "Provides common sqlite util fns that work on browser and node"
   (:require ["path" :as node-path]
             [clojure.string :as string]
             [datascript.core :as d]
@@ -17,27 +16,21 @@
   (or (d/restore-conn storage)
       (d/create-conn schema {:storage storage})))
 
-(defonce file-version-prefix "logseq_local_")
-
-(defn local-file-based-graph?
-  [s]
-  (and (string? s)
-       (string/starts-with? s file-version-prefix)))
-
 (defn sanitize-db-name
   [db-name]
-  (if (string/starts-with? db-name file-version-prefix)
-    (-> db-name
-        (string/replace ":" "+3A+")
-        (string/replace "/" "++"))
-    (-> db-name
-        (string/replace sqlite-util/db-version-prefix "")
-        (string/replace "/" "_")
-        (string/replace "\\" "_")
-        (string/replace ":" "_"))));; windows
+  (-> db-name
+      (string/replace sqlite-util/db-version-prefix "")
+      (string/replace "/" "_")
+      (string/replace "\\" "_")
+      (string/replace ":" "_")));; windows
 
 (defn get-db-full-path
   [graphs-dir db-name]
   (let [db-name' (sanitize-db-name db-name)
         graph-dir (node-path/join graphs-dir db-name')]
     [db-name' (node-path/join graph-dir "db.sqlite")]))
+
+(defn get-db-backups-path
+  [graphs-dir db-name]
+  (let [db-name' (sanitize-db-name db-name)]
+    (node-path/join graphs-dir db-name' "backups")))

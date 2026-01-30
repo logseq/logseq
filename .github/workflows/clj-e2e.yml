@@ -33,7 +33,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Node
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'yarn'
@@ -47,7 +47,7 @@ jobs:
           bb: ${{ env.BABASHKA_VERSION }}
 
       - name: Clojure cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         id: clojure-deps
         with:
           path: |
@@ -61,7 +61,7 @@ jobs:
         run: clojure -A:cljs -P
 
       - name: Shadow-cljs cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: .shadow-cljs
           # ensure update cache every time
@@ -78,9 +78,7 @@ jobs:
       # NOTE: require the app to be build with DEV-RELEASE flag
       - name: Prepare E2E test build
         run: |
-          yarn gulp:build && clojure -M:cljs release app --config-merge "{:closure-defines {frontend.config/DEV-RELEASE true}}" --debug
-          rsync -avz --exclude node_modules --exclude android --exclude ios ./static/ ./public/static/
-          ls -lR ./public
+          yarn gulp:build && clojure -M:cljs release app db-worker inference-worker --config-merge "{:closure-defines {frontend.config/DEV-RELEASE true}}" --debug && yarn webpack-app-build
 
       - name: Run e2e tests
         run: cd clj-e2e && timeout 30m bb dev
@@ -94,3 +92,13 @@ jobs:
           name: e2e-screenshots
           path: clj-e2e/e2e-dump/*
           retention-days: 1
+
+      - name: Mark success
+        if: ${{ success() }}
+        run: echo "E2E OK" > e2e-success.txt
+
+      - name: Upload success artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-success
+          path: e2e-success.txt

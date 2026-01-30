@@ -1,10 +1,12 @@
 (ns frontend.components.rtc.indicator
   "RTC state indicator"
   (:require [clojure.pprint :as pprint]
+            [clojure.string :as string]
             [frontend.common.missionary :as c.m]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.flows :as flows]
+            [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -18,8 +20,9 @@
   (def rtc-state-schema
     [:enum :open :close]))
 
-(defonce ^:private *detail-info
+(defonce *detail-info
   (atom {:pending-local-ops 0
+         :pending-asset-ops 0
          :graph-uuid nil
          :local-tx nil
          :remote-tx nil
@@ -49,6 +52,7 @@
                       (m/reduce (fn [_ state]
                                   (swap! *detail-info assoc
                                          :pending-local-ops (:unpushed-block-update-count state)
+                                         :pending-asset-ops (:pending-asset-ops-count state)
                                          :graph-uuid (:graph-uuid state)
                                          :local-tx (:local-tx state)
                                          :remote-tx (:remote-tx state)
@@ -106,8 +110,9 @@
             (:block/title block)])]])]))
 
 (rum/defc details
-  [online?]
-  (let [[expand-debug? set-expand-debug!] (hooks/use-state false)
+  []
+  (let [online? (hooks/use-flow-state flows/network-online-event-flow)
+        [expand-debug? set-expand-debug!] (hooks/use-state false)
         {:keys [graph-uuid local-tx remote-tx rtc-state
                 download-logs upload-logs misc-logs pending-local-ops pending-server-ops]}
         (hooks/use-flow-state (m/watch *detail-info))]
@@ -136,7 +141,15 @@
                remote-tx (assoc :remote-tx remote-tx)
                rtc-state (assoc :rtc-state rtc-state))
              pprint/pprint
-             with-out-str)]])]))
+             with-out-str)]])
+     (when-not (= rtc-state :open)
+       [:div.mt-4
+        (shui/button {:variant :default
+                      :size :sm
+                      :on-click (fn []
+                                  (rtc-handler/<rtc-start! (state/get-current-repo)
+                                                           {:stop-before-start? true}))}
+                     "Start sync")])]))
 
 (rum/defc indicator
   []
@@ -145,17 +158,22 @@
         online?                     (hooks/use-flow-state flows/network-online-event-flow)
         rtc-state                   (:rtc-state detail-info)
         unpushed-block-update-count (:pending-local-ops detail-info)
+        pending-asset-ops           (:pending-asset-ops detail-info)
         {:keys [local-tx remote-tx]} detail-info]
     [:div.cp__rtc-sync
      [:div.hidden {"data-testid" "rtc-tx"} (pr-str {:local-tx local-tx :remote-tx remote-tx})]
      [:div.cp__rtc-sync-indicator.flex.flex-row.items-center.gap-1
       (shui/button-ghost-icon :cloud
                               {:on-click #(shui/popup-show! (.-target %)
-                                                            (details online?)
-                                                            {:align "end"})
+                                                            (details)
+                                                            {:align "end"
+                                                             :dropdown-menu? true})
                                :class (util/classnames [{:cloud true
                                                          :on (and online? (= :open rtc-state))
-                                                         :idle (and online? (= :open rtc-state) (zero? unpushed-block-update-count))
+                                                         :idle (and online?
+                                                                    (= :open rtc-state)
+                                                                    (zero? unpushed-block-update-count)
+                                                                    (zero? pending-asset-ops))
                                                          :queuing (pos? unpushed-block-update-count)}])})]]))
 
 (def ^:private *accumulated-download-logs (atom []))
@@ -189,24 +207,24 @@
         (map (fn [logs]
                (when-let [first-log (first logs)]
                  (let [graph-uuid (:graph-uuid first-log)]
-                   (take-while (fn [log] (= graph-uuid (:graph-uuid log))) logs))))))))
+                   (take-while (fn [log] (= (str graph-uuid) (str (:graph-uuid log)))) logs))))))))
 
 (rum/defc downloading-logs
   []
   (let [download-logs-flow (accumulated-logs-flow *accumulated-download-logs)
         download-logs (hooks/use-flow-state download-logs-flow)]
     (when (seq download-logs)
-      [:div
+      [:div.flex.flex-col.gap-1
        (for [log download-logs]
-         [:div (:message log)])])))
+         [:div (string/capitalize (:message log))])])))
 
 (rum/defc uploading-logs
   []
   (let [upload-logs-flow (accumulated-logs-flow *accumulated-upload-logs)
         upload-logs (hooks/use-flow-state upload-logs-flow)]
     (when (seq upload-logs)
-      [:div
-       (for [log upload-logs]
+      [:div.capitalize.flex.flex-col.gap-1
+       (for [log (reverse upload-logs)]
          [:div (:message log)])])))
 
 (def ^:private downloading?-flow
@@ -230,6 +248,14 @@
   (->> rtc-flows/rtc-upload-log-flow
        (m/eduction (map (fn [log] (not= :upload-completed (:sub-type log)))))
        (c.m/continue-flow false)))
+
+(defn on-upload-finished-task
+  [on-success]
+  (let [task (->> rtc-flows/rtc-upload-log-flow
+                  (m/reduce (fn [_ log]
+                              (when (= :upload-completed (:sub-type log))
+                                (on-success)))))]
+    (task (fn []) (fn []))))
 
 (rum/defc uploading-detail
   []

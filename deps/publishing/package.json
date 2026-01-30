@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "devDependencies": {
-    "@logseq/nbb-logseq": "logseq/nbb-logseq#feat-db-v24",
+    "@logseq/nbb-logseq": "github:logseq/nbb-logseq#feat-db-v31",
     "mldoc": "^1.5.9"
   },
   "dependencies": {
@@ -11,6 +11,6 @@
     "fs-extra": "9.1.0"
   },
   "scripts": {
-    "test": "yarn nbb-logseq -cp test:../graph-parser/src -m nextjournal.test-runner"
+    "test": "yarn nbb-logseq -cp test -m nextjournal.test-runner"
   }
 }

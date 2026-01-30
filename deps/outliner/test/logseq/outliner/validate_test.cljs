@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [are deftest is testing]]
             [datascript.core :as d]
             [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.validate :as outliner-validate]))
 
@@ -47,6 +48,39 @@
           "Card"
           (d/entity @conn :user.class/Class1)))
         "Disallow duplicate class names even if it's built-in")))
+
+(deftest validate-block-title-unique-for-namespaced-pages
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Library"
+                        :block/uuid #uuid "d246c71a-3e71-42f0-928f-afe607ee5ce0"
+                        :build/keep-uuid? true
+                        :build/properties {:logseq.property/built-in? true}}}
+                {:page {:block/title "n1"
+                        :block/uuid #uuid "3aa1e950-5a9b-4efc-81d4-b6d89a504591"
+                        :build/keep-uuid? true
+                        :block/parent [:block/uuid #uuid "d246c71a-3e71-42f0-928f-afe607ee5ce0"]}}
+                {:page {:block/title "n2"
+                        :block/parent [:block/uuid #uuid "3aa1e950-5a9b-4efc-81d4-b6d89a504591"]}}
+                {:page {:block/title "n3"
+                        :block/parent [:block/uuid #uuid "3aa1e950-5a9b-4efc-81d4-b6d89a504591"]}}]
+               :build-existing-tx? true})]
+
+    (is (thrown-with-msg?
+         js/Error
+         #"Duplicate page"
+         (outliner-validate/validate-unique-by-name-and-tags
+          @conn
+          "n2"
+          (db-test/find-page-by-title @conn "n3")))
+        "Disallow duplicate namespace child")
+
+    (is (nil?
+         (outliner-validate/validate-unique-by-name-and-tags
+          @conn
+          "n4"
+          (db-test/find-page-by-title @conn "n3")))
+        "Allow namespace child if unique")))
 
 (deftest validate-block-title-unique-for-pages
   (let [conn (db-test/create-conn-with-blocks
@@ -97,10 +131,11 @@
         page1 (db-test/find-page-by-title @conn "page1")
         class1 (db-test/find-page-by-title @conn "Class1")
         class2 (db-test/find-page-by-title @conn "Class2")
-        property (db-test/find-page-by-title @conn "prop1")]
+        property (db-test/find-page-by-title @conn "prop1")
+        db @conn]
 
     (testing "valid parent and child combinations"
-      (is (nil? (outliner-validate/validate-extends-property class1 [class2]))
+      (is (nil? (outliner-validate/validate-extends-property db class1 [class2]))
           "parent class to child class is valid"))
 
     (testing "invalid parent and child combinations"
@@ -108,7 +143,7 @@
            (thrown-with-msg?
             js/Error
             #"Can't extend"
-            (outliner-validate/validate-extends-property parent [child]))
+            (outliner-validate/validate-extends-property db parent [child]))
 
         class1 page1
         page1 class1
@@ -118,16 +153,25 @@
       (is (thrown-with-msg?
            js/Error
            #"Can't change.*built-in"
-           (outliner-validate/validate-extends-property (entity-plus/entity-memoized @conn :logseq.class/Task)
+           (outliner-validate/validate-extends-property db
+                                                        (entity-plus/entity-memoized @conn :logseq.class/Task)
                                                         [(entity-plus/entity-memoized @conn :logseq.class/Cards)]))))))
 
 (deftest validate-tags-property
-  (let [conn (db-test/create-conn-with-blocks
-              {:classes {:SomeTag {}}
+  (let [class-uuid (random-uuid)
+        conn (db-test/create-conn-with-blocks
+              {:classes {:SomeTag {:block/uuid class-uuid :build/keep-uuid? true}}
                :pages-and-blocks
                [{:page {:block/title "page1"}
-                 :blocks [{:block/title "block"}]}]})
-        block (db-test/find-block-by-content @conn "block")]
+                 :blocks [{:block/title "block"
+                           :build/children [{:block/title "block - invalid location"}]}
+                          {:block/title "block / invalid title"}]}
+                {:page {:block/uuid class-uuid}
+                 :blocks [{:block/title "class block"}]}]
+               :build-existing-tx? true})
+        block (db-test/find-block-by-content @conn "block")
+        block-invalid-title (db-test/find-block-by-content @conn #"invalid title")
+        block-invalid-location (db-test/find-block-by-content @conn #"invalid location")]
 
     (is (thrown-with-msg?
          js/Error
@@ -149,15 +193,60 @@
 
     (is (thrown-with-msg?
          js/Error
-         #"Can't set tag.*Page"
-         (outliner-validate/validate-tags-property @conn [(:db/id block)] :logseq.class/Page))
+         #"Can't set tag.*Tag"
+         (outliner-validate/validate-tags-property @conn [(:db/id block)] :logseq.class/Tag))
         "Nodes can't be tagged with built-in private tags")
 
     (is (thrown-with-msg?
          js/Error
          #"Can't set tag.*Priority"
          (outliner-validate/validate-tags-property @conn [(:db/id block)] :logseq.property/priority))
-        "Nodes can't be tagged with built-in non tags")))
+        "Nodes can't be tagged with built-in non tags")
+
+    (is (nil? (outliner-validate/validate-tags-property @conn [(:db/id block)] :logseq.class/Page))
+        "Blocks can be tagged with #Page")
+
+    (is (thrown-with-msg?
+         js/Error
+         #"Page name can't.*/"
+         (outliner-validate/validate-tags-property @conn [(:db/id block-invalid-title)] :logseq.class/Page))
+        "Block with invalid title can't be tagged with #Page")
+
+    (is (thrown-with-msg?
+         js/Error
+         #"Can't convert this block to page"
+         (outliner-validate/validate-tags-property @conn [(:db/id block-invalid-location)] :logseq.class/Page))
+        "Block with invalid location can't be tagged with #Page")))
+
+(deftest validate-tags-property-deletion
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:SomeTag {}}
+               :pages-and-blocks
+               [{:page {:block/title "page1"}
+                 :blocks [{:block/title "block" :build/tags [:logseq.class/Page]}]}]})
+        page (db-test/find-page-by-title @conn "page1")
+        page-with-parent (db-test/find-block-by-content @conn "block")]
+
+    (is (thrown-with-msg?
+         js/Error
+         #"Can't remove tag.*Task"
+         (outliner-validate/validate-tags-property-deletion @conn [(:db/id (d/entity @conn :logseq.class/Task))] :logseq.class/Tag))
+        "built-in class must not have tag deleted by the user")
+
+    (is (thrown-with-msg?
+         js/Error
+         #"Can't remove tag.*Tag"
+         (outliner-validate/validate-tags-property-deletion @conn [(:db/id (d/entity @conn :user.class/SomeTag))] :logseq.class/Tag))
+        "Node can't have private tag deleted by user")
+
+    (is (nil? (outliner-validate/validate-tags-property-deletion @conn [(:db/id page-with-parent)] :logseq.class/Page))
+        "Page with parent can remove #Page")
+
+    (is (thrown-with-msg?
+         js/Error
+         #"This page cannot be converted"
+         (outliner-validate/validate-tags-property-deletion @conn [(:db/id page)] :logseq.class/Page))
+        "Page without parent can't remove #Page")))
 
 ;; Try as many of the validations against a new graph to confirm
 ;; that validations make sense and are valid for a new graph
@@ -176,6 +265,10 @@
             (outliner-validate/validate-unique-by-name-and-tags @conn (:block/title page) page)
             (outliner-validate/validate-page-title (:block/title page) {:node page})
             (outliner-validate/validate-page-title-characters (:block/title page) {:node page})
+            (when (entity-util/property? page) (outliner-validate/validate-property-title (:block/title page)))
+            (when (entity-util/class? page)
+              (doseq [parent (:logseq.property.class/extends page)]
+                (outliner-validate/validate-extends-property @conn parent [page] {:built-in? false})))
 
             (catch :default e
               (if (= :notification (:type (ex-data e)))

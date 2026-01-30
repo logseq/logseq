@@ -3,12 +3,18 @@
   (:require [frontend.db :as db]
             [frontend.handler.block :as block-handler]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.property :as property-handler]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.util.ref :as ref]
-            [frontend.state :as state]
             [logseq.db :as ldb]))
+
+(defn set-drag-image!
+  ([e image]
+   (set-drag-image! e image 0 0))
+  ([e image offset-x offset-y]
+   (let [dt (.-dataTransfer e)]
+     (.setDragImage dt image offset-x offset-y)
+     e)))
 
 (defn move-blocks
   [^js event blocks target-block original-block move-to]
@@ -18,27 +24,16 @@
         top? (= move-to :top)
         nested? (= move-to :nested)
         alt-key? (and event (.-altKey event))
-        current-format (get first-block :block/format :markdown)
-        target-format (get target-block :block/format :markdown)
         target-block (if nested? target-block
                          (or original-block target-block))]
     (cond
       ;; alt pressed, make a block-ref
       (and alt-key? (= (count blocks) 1))
-      (do
-        (property-handler/file-persist-block-id! (state/get-current-repo) (:block/uuid first-block))
-        (editor-handler/api-insert-new-block!
-         (ref/->block-ref (:block/uuid first-block))
-         {:block-uuid (:block/uuid target-block)
-          :sibling? (not nested?)
-          :before? top?}))
-
-;; format mismatch
-      (and current-format target-format (not= current-format target-format))
-      (state/pub-event! [:notification/show
-                         {:content [:div "Those two pages have different formats."]
-                          :status :warning
-                          :clear? true}])
+      (editor-handler/api-insert-new-block!
+       (ref/->block-ref (:block/uuid first-block))
+       {:block-uuid (:block/uuid target-block)
+        :sibling? (not nested?)
+        :before? top?})
 
       (every? map? (conj blocks' target-block))
       (let [blocks' (block-handler/get-top-level-blocks blocks')]
@@ -51,12 +46,13 @@
                     (:block/uuid (ldb/get-left-sibling target-block)))]
              (if first-child?
                (when-let [parent (:block/parent target-block)]
-                 (outliner-op/move-blocks! blocks' parent false))
+                 (outliner-op/move-blocks! blocks' parent {:sibling? false}))
                (if-let [before-node (ldb/get-left-sibling target-block)]
-                 (outliner-op/move-blocks! blocks' before-node true)
+                 (outliner-op/move-blocks! blocks' before-node {:sibling? true})
                  (when-let [parent (:block/parent target-block)]
-                   (outliner-op/move-blocks! blocks' parent false)))))
-           (outliner-op/move-blocks! blocks' target-block (not nested?)))))
+                   (outliner-op/move-blocks! blocks' parent {:sibling? false})))))
+           (outliner-op/move-blocks! blocks' target-block
+                                     {:sibling? (not nested?)}))))
 
       :else
       nil)))

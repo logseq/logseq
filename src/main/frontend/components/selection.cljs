@@ -1,7 +1,6 @@
 (ns frontend.components.selection
   "Block selection"
-  (:require [frontend.config :as config]
-            [frontend.db :as db]
+  (:require [frontend.db :as db]
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -9,23 +8,23 @@
             [logseq.shui.ui :as shui]
             [rum.core :as rum]))
 
-(rum/defc action-bar
-  [& {:keys [on-cut on-copy selected-blocks hide-dots? button-border?]
+(rum/defc action-bar < rum/reactive
+  [& {:keys [on-cut on-copy selected-blocks hide-dots? button-border? view-parent]
       :or {on-cut #(editor-handler/cut-selection-blocks true)}}]
-  (let [selected-blocks (map (fn [block] (if (number? block) (db/entity block) block)) selected-blocks)
-        on-copy (if (and selected-blocks (nil? on-copy))
-                  #(editor-handler/copy-selection-blocks true {:selected-blocks selected-blocks})
-                  (or on-copy #(editor-handler/copy-selection-blocks true)))
-        button-opts {:variant :outline
-                     :size :sm
-                     :class (str "p-2 text-xs h-8"
-                                 (when-not button-border?
-                                   " !border-b-0"))}
-        db-graph? (config/db-based-graph?)]
-    [:div.selection-action-bar
-     (shui/button-group
-      ;; set tag
-      (when db-graph?
+  (when-not (or (state/sub :search/mode)
+                (state/sub :ui/show-property-dialog?))
+    (let [selected-blocks (map (fn [block] (if (number? block) (db/entity block) block)) selected-blocks)
+          on-copy (if (and selected-blocks (nil? on-copy))
+                    #(editor-handler/copy-selection-blocks true {:selected-blocks selected-blocks})
+                    (or on-copy #(editor-handler/copy-selection-blocks true)))
+          button-opts {:variant :outline
+                       :size :sm
+                       :class (str "p-2 text-xs h-8"
+                                   (when-not button-border?
+                                     " !border-b-0"))}]
+      [:div.selection-action-bar
+       (shui/button-group
+        ;; set tag
         (shui/button
          (assoc button-opts
                 :on-pointer-down (fn [e]
@@ -35,16 +34,15 @@
                                                                             :property-key "Tags"
                                                                             :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])))
          (ui/tooltip (ui/icon "hash" {:size 13}) "Set tag"
-                     {:trigger-props {:class "flex"}})))
-      (shui/button
-       (assoc button-opts
-              :on-pointer-down (fn [e]
-                                 (util/stop e)
-                                 (on-copy)
-                                 (state/clear-selection!)
-                                 (state/pub-event! [:editor/hide-action-bar])))
-       "Copy")
-      (when db-graph?
+                     {:trigger-props {:class "flex"}}))
+        (shui/button
+         (assoc button-opts
+                :on-pointer-down (fn [e]
+                                   (util/stop e)
+                                   (on-copy)
+                                   (state/clear-selection!)
+                                   (state/pub-event! [:editor/hide-action-bar])))
+         "Copy")
         (shui/button
          (assoc button-opts
                 :on-pointer-down (fn [e]
@@ -52,8 +50,7 @@
                                    (state/pub-event! [:editor/new-property {:target (.-target e)
                                                                             :selected-blocks selected-blocks
                                                                             :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])))
-         "Set property"))
-      (when db-graph?
+         "Set property")
         (shui/button
          (assoc button-opts
                 :on-pointer-down (fn [e]
@@ -63,25 +60,26 @@
                                                                             :remove-property? true
                                                                             :select-opts {:show-new-when-not-exact-match? false}
                                                                             :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])))
-         "Unset property"))
-      (shui/button
-       (assoc button-opts
-              :on-pointer-down (fn [e]
-                                 (util/stop e)
-                                 (on-cut)
-                                 (state/pub-event! [:editor/hide-action-bar])))
-       (ui/icon "trash" {:size 13}))
-      (when-not hide-dots?
-        (shui/button
-         (assoc button-opts
-                :on-pointer-down (fn [e]
-                                   (util/stop e)
-                                   (shui/popup-hide!)
-                                   (shui/popup-show! e
-                                                     (fn [{:keys [id]}]
-                                                       [:div {:on-click #(shui/popup-hide! id)
-                                                              :data-keep-selection true}
-                                                        ((state/get-component :selection/context-menu))])
-                                                     {:content-props {:class "w-[280px] ls-context-menu-content"}
-                                                      :as-dropdown? true})))
-         (ui/icon "dots" {:size 13}))))]))
+         "Unset property")
+        (when-not (contains? #{:logseq.class/Page} (:db/ident view-parent))
+          (shui/button
+           (assoc button-opts
+                  :on-pointer-down (fn [e]
+                                     (util/stop e)
+                                     (on-cut)
+                                     (state/pub-event! [:editor/hide-action-bar])))
+           (ui/icon "trash" {:size 13})))
+        (when-not hide-dots?
+          (shui/button
+           (assoc button-opts
+                  :on-pointer-down (fn [e]
+                                     (util/stop e)
+                                     (shui/popup-hide!)
+                                     (shui/popup-show! e
+                                                       (fn [{:keys [id]}]
+                                                         [:div {:on-click #(shui/popup-hide! id)
+                                                                :data-keep-selection true}
+                                                          ((state/get-component :selection/context-menu))])
+                                                       {:content-props {:class "w-[280px] ls-context-menu-content"}
+                                                        :as-dropdown? true})))
+           (ui/icon "dots" {:size 13}))))])))

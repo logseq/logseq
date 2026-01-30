@@ -519,10 +519,6 @@ input[type='range'] {
 .ls-dialog-select {
   @apply w-auto !max-w-fit p-0;
 
-  .cp__select-main {
-    @apply m-0;
-  }
-
   .item-results-wrap {
     @apply px-2;
   }
@@ -536,4 +532,31 @@ input[type='range'] {
 
 .ls-foldable-title-control {
   margin-left: -27px;
+}
+
+.ls-foldable-content {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 200ms ease-in-out;
+
+  .ls-foldable-content-inner {
+    overflow: hidden;
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 200ms ease-in-out, transform 200ms ease-in-out;
+  }
+
+  &.is-collapsed {
+    grid-template-rows: 0fr;
+
+    .ls-foldable-content-inner {
+      opacity: 0;
+      transform: translateY(-2px);
+      pointer-events: none;
+    }
+  }
+}
+
+.ls-nlp-calendar {
+  @apply flex flex-col gap-2 relative;
 }

@@ -12,21 +12,6 @@
   (is (= ["some-song" ""] (path/split-ext "some-song")))
   (is (= ["some-file.edn" "txt"] (path/split-ext "some-file.edn.txt"))))
 
-(deftest safe-file-name?
-  (testing "safe-file-name"
-    (is (path/safe-filename? "foo"))
-    (is (path/safe-filename? "foo bar"))
-    (is (path/safe-filename? "foo-bar"))
-    (is (path/safe-filename? "foo_bar"))
-    (is (path/safe-filename? "foo.bar"))
-    (is (path/safe-filename? "foo..bar"))
-    (is (path/safe-filename? "foo...bar"))
-    (is (not (path/safe-filename? "foo/bar")))
-    (is (not (path/safe-filename? "foo?bar")))
-    (is (not (path/safe-filename? "foo<bar")))
-    (is (not (path/safe-filename? "foo>bar")))))
-
-
 (deftest path-join
   (testing "path-join"
     (is (= "foo/bar" (path/path-join "foo" "bar")))

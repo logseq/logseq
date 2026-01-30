@@ -2,10 +2,10 @@
   "Store client-ops in a persisted datascript"
   (:require [datascript.core :as d]
             [frontend.common.missionary :as c.m]
-            [frontend.worker.rtc.malli-schema :as rtc-schema]
             [frontend.worker.state :as worker-state]
             [lambdaisland.glogi :as log]
-            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq-schema.rtc-api-schema :as rtc-api-schema]
+            [logseq.db :as ldb]
             [malli.core :as ma]
             [malli.transform :as mt]
             [missionary.core :as m]))
@@ -20,6 +20,13 @@
      [:value [:map
               [:db-ident :keyword]
               [:value :any]]]]]
+   [:rename-db-ident
+    [:catn
+     [:op :keyword]
+     [:t :int]
+     [:value [:map
+              [:db-ident-or-block-uuid [:or :keyword :uuid]]
+              [:new-db-ident :keyword]]]]]
    [:move
     [:catn
      [:op :keyword]
@@ -50,7 +57,14 @@
      [:t :int]
      [:value [:map
               [:block-uuid :uuid]
-              [:av-coll [:sequential rtc-schema/av-schema]]]]]]
+              [:av-coll [:sequential rtc-api-schema/av-schema]]]]]]
+   [:add
+    [:catn
+     [:op :keyword]
+     [:t :int]
+     [:value [:map
+              [:block-uuid :uuid]
+              [:av-coll [:sequential rtc-api-schema/av-schema]]]]]]
 
    [:update-asset
     [:catn
@@ -70,30 +84,25 @@
                              #(do (log/error ::bad-ops (:value %))
                                   (ma/-fail! ::ops-schema (select-keys % [:value])))))
 
-(def ^:private block-op-types #{:move :remove :update-page :remove-page :update})
+(def ^:private block-op-types #{:move :remove :update-page :remove-page :update :add})
 (def ^:private asset-op-types #{:update-asset :remove-asset})
-(def ^:private db-ident-kv-op-types #{:update-kv-value})
+(def ^:private update-kv-value-op-types #{:update-kv-value})
+(def ^:private db-ident-rename-op-types #{:rename-db-ident})
 
 (def schema-in-db
   "TODO: rename this db-name from client-op to client-metadata+op.
   and move it to its own namespace."
   {:block/uuid {:db/unique :db.unique/identity}
    :db-ident {:db/unique :db.unique/identity}
+   :db-ident-or-block-uuid {:db/unique :db.unique/identity}
    :local-tx {:db/index true}
-   :graph-uuid {:db/index true}
-   :aes-key-jwk {:db/index true}
-
-   ;; device
-   :device/uuid {:db/unique :db.unique/identity}
-   :device/public-key-jwk {}
-   :device/private-key-jwk {}})
+   :graph-uuid {:db/index true}})
 
 (defn update-graph-uuid
   [repo graph-uuid]
   {:pre [(some? graph-uuid)]}
   (when-let [conn (worker-state/get-client-ops-conn repo)]
-    (assert (nil? (first (d/datoms @conn :avet :graph-uuid))))
-    (d/transact! conn [[:db/add "e" :graph-uuid graph-uuid]])))
+    (ldb/transact! conn [[:db/add "e" :graph-uuid graph-uuid]])))
 
 (defn get-graph-uuid
   [repo]
@@ -103,46 +112,99 @@
 (defn update-local-tx
   [repo t]
   {:pre [(some? t)]}
-  (when-let [conn (worker-state/get-client-ops-conn repo)]
+  (let [conn (worker-state/get-client-ops-conn repo)]
+    (assert (some? conn) repo)
     (let [tx-data
           (if-let [datom (first (d/datoms @conn :avet :local-tx))]
             [:db/add (:e datom) :local-tx t]
             [:db/add "e" :local-tx t])]
-      (d/transact! conn [tx-data]))))
+      (ldb/transact! conn [tx-data]))))
 
 (defn remove-local-tx
   [repo]
   (when-let [conn (worker-state/get-client-ops-conn repo)]
     (when-let [datom (first (d/datoms @conn :avet :local-tx))]
-      (d/transact! conn [[:db/retract (:e datom) :local-tx]]))))
+      (ldb/transact! conn [[:db/retract (:e datom) :local-tx]]))))
 
 (defn get-local-tx
   [repo]
-  (when-let [conn (worker-state/get-client-ops-conn repo)]
-    (:v (first (d/datoms @conn :avet :local-tx)))))
+  (let [conn (worker-state/get-client-ops-conn repo)]
+    (assert (some? conn) repo)
+    (let [r (:v (first (d/datoms @conn :avet :local-tx)))]
+      (assert (some? r))
+      r)))
 
 (defn- merge-update-ops
-  [update-op1 update-op2]
-  {:pre [(= :update (first update-op1))
-         (= :update (first update-op2))
-         (= (:block-uuid (last update-op1))
-            (:block-uuid (last update-op2)))]}
-  (let [t1 (second update-op1)
-        t2 (second update-op2)]
+  [op1 op2]
+  {:pre [(contains? #{:add :update} (first op1))
+         (= :update (first op2))
+         (= (:block-uuid (last op1))
+            (:block-uuid (last op2)))]}
+  (let [t1 (second op1)
+        t2 (second op2)
+        op-type1 (first op1)
+        op-type2 (first op2)]
     (if (> t1 t2)
-      (merge-update-ops update-op2 update-op1)
-      (let [{av-coll1 :av-coll block-uuid :block-uuid} (last update-op1)
-            {av-coll2 :av-coll} (last update-op2)]
-        [:update t2
+      (merge-update-ops op2 op1)
+      (let [{av-coll1 :av-coll block-uuid :block-uuid} (last op1)
+            {av-coll2 :av-coll} (last op2)
+            result-op-type (if (or (= :add op-type1) (= :add op-type2)) :add :update)]
+        [result-op-type t2
          {:block-uuid block-uuid
           :av-coll (concat av-coll1 av-coll2)}]))))
+
+(defn- merge-block-ops
+  "Carefully compare t among ops.
+  Return merged block-op-map."
+  [current-block-op-map op-to-add]
+  (let [[op-type op-t _value] op-to-add
+        {[_ remove-op-t _remove-op-value :as remove-op] :remove
+         [_ move-op-t _move-op-value :as move-op] :move
+         [_ update-op-t _update-op-value :as update-op] :update
+         [_ update-page-op-t _update-page-op-value :as update-page-op] :update-page
+         [_ remove-page-op-t _remove-page-op-value :as remove-page-op] :remove-page
+         [_ add-op-t _add-op-value :as add-op] :add}
+        (into {} (filter (fn [[_op-type op]] (some-> op (not= :retract))) current-block-op-map))]
+    (case op-type
+      :add
+      (if (>= remove-op-t op-t) current-block-op-map
+          (cond-> (assoc current-block-op-map :remove :retract)
+            (or (nil? add-op) (> op-t add-op-t)) (assoc :add op-to-add)))
+      :move
+      (if (>= remove-op-t op-t) current-block-op-map
+          (if add-op
+            (let [[_ add-t add-val] add-op
+                  new-t (max add-t op-t)]
+              (assoc current-block-op-map :add [:add new-t add-val]))
+            (cond-> (assoc current-block-op-map :remove :retract)
+              (or (nil? move-op) (> op-t move-op-t)) (assoc :move op-to-add))))
+      :update
+      (if (>= remove-op-t op-t) current-block-op-map
+          (if add-op
+            (assoc current-block-op-map :add (merge-update-ops add-op op-to-add))
+            (assoc current-block-op-map
+                   :remove :retract
+                   :update (if update-op (merge-update-ops update-op op-to-add) op-to-add))))
+      :remove
+      (if (or (>= move-op-t op-t) (>= update-op-t op-t) (and add-op (>= add-op-t op-t)))
+        current-block-op-map
+        (cond-> (assoc current-block-op-map :move :retract :update :retract :add :retract)
+          (or (nil? remove-op) (> op-t remove-op-t)) (assoc :remove op-to-add)))
+      :update-page
+      (if (>= remove-page-op-t op-t) current-block-op-map
+          (cond-> (assoc current-block-op-map :remove-page :retract)
+            (or (nil? update-page-op) (> op-t update-page-op-t)) (assoc :update-page op-to-add)))
+      :remove-page
+      (if (>= update-page-op-t op-t) current-block-op-map
+          (cond-> (assoc current-block-op-map :update-page :retract)
+            (or (nil? remove-page-op) (> op-t remove-page-op-t)) (assoc :remove-page op-to-add))))))
 
 (defn- generate-block-ops-tx-data
   [client-ops-db ops]
   (let [sorted-ops (sort-by second ops)
         block-uuids (map (fn [[_op-type _t value]] (:block-uuid value)) sorted-ops)
         ents (d/pull-many client-ops-db '[*] (map (fn [block-uuid] [:block/uuid block-uuid]) block-uuids))
-        op-types [:move :update :remove :update-page :remove-page]
+        op-types [:add :move :update :remove :update-page :remove-page]
         init-block-uuid->op-type->op
         (into {}
               (map (fn [ent]
@@ -157,33 +219,10 @@
         block-uuid->op-type->op
         (reduce
          (fn [r op]
-           (let [[op-type _t value] op
-                 block-uuid (:block-uuid value)]
-             (case op-type
-               :move
-               (-> r
-                   (update block-uuid assoc :remove :retract)
-                   (assoc-in [block-uuid :move] op))
-               :update
-               (-> r
-                   (update block-uuid assoc :remove :retract)
-                   (update-in [block-uuid :update] (fn [old-op]
-                                                     (if (and old-op
-                                                              (not (keyword-identical? :retract old-op)))
-                                                       (merge-update-ops old-op op)
-                                                       op))))
-               :remove
-               (-> r
-                   (update block-uuid assoc :move :retract :update :retract)
-                   (assoc-in [block-uuid :remove] op))
-               :update-page
-               (-> r
-                   (update block-uuid assoc :remove-page :retract)
-                   (assoc-in [block-uuid :update-page] op))
-               :remove-page
-               (-> r
-                   (update block-uuid assoc :update-page :retract)
-                   (assoc-in [block-uuid :remove-page] op)))))
+           (let [[_ _ value] op
+                 block-uuid (:block-uuid value)
+                 current-block-op-map (get r block-uuid)]
+             (assoc r block-uuid (merge-block-ops current-block-op-map op))))
          init-block-uuid->op-type->op sorted-ops)]
     (mapcat
      (fn [[block-uuid op-type->op]]
@@ -238,15 +277,33 @@
            (cons [:db/add tmpid :db-ident db-ident] tx-data))))
      db-ident->op-type->op)))
 
-(defn- partition-ops
-  "Return [db-ident-kv-ops block-ops]"
+(defn generate-rename-db-ident-ops-tx-data
   [ops]
-  ((juxt :db-ident :block-uuid)
+  (let [op-type :rename-db-ident
+        db-ident-or-block-uuid->op
+        (reduce
+         (fn [r op]
+           (let [[_op-type _t value] op
+                 db-ident-or-block-uuid (:db-ident-or-block-uuid value)]
+             (assoc r db-ident-or-block-uuid op)))
+         {} ops)]
+    (mapcat
+     (fn [[db-ident-or-block-uuid op]]
+       (let [tmpid (str db-ident-or-block-uuid "-rename-db-ident")]
+         [[:db/add tmpid :db-ident-or-block-uuid db-ident-or-block-uuid]
+          [:db/add tmpid op-type op]]))
+     db-ident-or-block-uuid->op)))
+
+(defn- partition-ops
+  "Return [:update-kv-value-ops :rename-db-ident-ops block-ops]"
+  [ops]
+  ((juxt :update-kv-value :rename-db-ident :block-uuid)
    (group-by
-    (fn [[_op-type _t value :as op]]
+    (fn [[op-type _t value :as op]]
       (cond
         (:block-uuid value) :block-uuid
-        (:db-ident value) :db-ident
+        (= :update-kv-value op-type) :update-kv-value
+        (= :rename-db-ident op-type) :rename-db-ident
         :else (throw (ex-info "invalid op" {:op op}))))
     ops)))
 
@@ -256,11 +313,12 @@
     (let [conn (worker-state/get-client-ops-conn repo)
           ops (ops-coercer ops)
           _ (assert (some? conn) repo)
-          [db-ident-kv-ops block-ops] (partition-ops ops)
+          [update-kv-value-ops rename-db-ident-ops block-ops] (partition-ops ops)
           tx-data1 (when (seq block-ops) (generate-block-ops-tx-data @conn block-ops))
-          tx-data2 (when (seq db-ident-kv-ops) (generate-ident-kv-ops-tx-data @conn db-ident-kv-ops))]
-      (when-let [tx-data (not-empty (concat tx-data1 tx-data2))]
-        (d/transact! conn tx-data)))))
+          tx-data2 (when (seq update-kv-value-ops) (generate-ident-kv-ops-tx-data @conn update-kv-value-ops))
+          tx-data3 (when (seq rename-db-ident-ops) (generate-rename-db-ident-ops-tx-data rename-db-ident-ops))]
+      (when-let [tx-data (not-empty (concat tx-data1 tx-data2 tx-data3))]
+        (ldb/transact! conn tx-data)))))
 
 (defn- get-all-block-ops*
   "Return e->op-map"
@@ -281,7 +339,7 @@
                    [e op-map]))))
        (into {})))
 
-(defn- get-all-db-ident-kv-ops*
+(defn- get-all-update-kv-value-ops*
   "Return e->op-map"
   [db]
   (let [db-ident-datoms (d/datoms db :avet :db-ident)
@@ -292,11 +350,27 @@
                                     (keep (fn [datom]
                                             (let [a (:a datom)]
                                               (when (or (keyword-identical? :db-ident a)
-                                                        (contains? db-ident-kv-op-types a))
+                                                        (contains? update-kv-value-op-types a))
                                                 [a (:v datom)]))))
                                     datoms)]
-                   (when (and (:db-ident op-map)
-                              (> (count op-map) 1))
+                   (when (and (:db-ident op-map) (> (count op-map) 1))
+                     [e op-map]))))
+         (into {}))))
+
+(defn- get-all-rename-db-ident-ops*
+  [db]
+  (let [db-ident-or-block-uuid-datoms (d/datoms db :avet :db-ident-or-block-uuid)
+        es (map :e db-ident-or-block-uuid-datoms)]
+    (->> (map (fn [e] [e (d/datoms db :eavt e)]) es)
+         (keep (fn [[e datoms]]
+                 (let [op-map (into {}
+                                    (keep (fn [datom]
+                                            (let [a (:a datom)]
+                                              (when (or (keyword-identical? :db-ident-or-block-uuid a)
+                                                        (contains? db-ident-rename-op-types a))
+                                                [a (:v datom)]))))
+                                    datoms)]
+                   (when (and (:db-ident-or-block-uuid op-map) (> (count op-map) 1))
                      [e op-map]))))
          (into {}))))
 
@@ -305,15 +379,23 @@
   (let [e->op-map (get-all-block-ops* @conn)
         retract-all-tx-data (mapcat (fn [e] (map (fn [a] [:db.fn/retractAttribute e a]) block-op-types))
                                     (keys e->op-map))]
-    (d/transact! conn retract-all-tx-data)
+    (ldb/transact! conn retract-all-tx-data)
     (vals e->op-map)))
 
-(defn- get&remove-all-db-ident-kv-ops*
+(defn- get&remove-all-update-kv-value-ops*
   [conn]
-  (let [e->op-map (get-all-db-ident-kv-ops* @conn)
-        retract-all-tx-data (mapcat (fn [e] (map (fn [a] [:db.fn/retractAttribute e a]) db-ident-kv-op-types))
+  (let [e->op-map (get-all-update-kv-value-ops* @conn)
+        retract-all-tx-data (mapcat (fn [e] (map (fn [a] [:db.fn/retractAttribute e a]) update-kv-value-op-types))
                                     (keys e->op-map))]
-    (d/transact! conn retract-all-tx-data)
+    (ldb/transact! conn retract-all-tx-data)
+    (vals e->op-map)))
+
+(defn- get&remove-all-rename-db-ident-ops*
+  [conn]
+  (let [e->op-map (get-all-rename-db-ident-ops* @conn)
+        retract-all-tx-data (mapcat (fn [e] (map (fn [a] [:db.fn/retractAttribute e a]) db-ident-rename-op-types))
+                                    (keys e->op-map))]
+    (ldb/transact! conn retract-all-tx-data)
     (vals e->op-map)))
 
 (defn get-all-block-ops
@@ -342,39 +424,45 @@
   (when-let [conn (worker-state/get-client-ops-conn repo)]
     (get&remove-all-block-ops* conn)))
 
-(defn get&remove-all-db-ident-kv-ops
+(defn get&remove-all-update-kv-value-ops
   [repo]
   (when-let [conn (worker-state/get-client-ops-conn repo)]
-    (get&remove-all-db-ident-kv-ops* conn)))
+    (get&remove-all-update-kv-value-ops* conn)))
 
-(defn get-unpushed-block-ops-count
+(defn get&remove-all-rename-db-ident-ops
   [repo]
   (when-let [conn (worker-state/get-client-ops-conn repo)]
-    (count (get-all-block-ops* @conn))))
+    (get&remove-all-rename-db-ident-ops* conn)))
+
+(defn get-unpushed-ops-count
+  "except asset-ops"
+  [repo]
+  (when-let [conn (worker-state/get-client-ops-conn repo)]
+    (+
+     (count (get-all-block-ops* @conn))
+     (count (get-all-rename-db-ident-ops* @conn))
+     (count (get-all-update-kv-value-ops* @conn)))))
 
 (defn rtc-db-graph?
-  "Is db-graph & RTC enabled"
+  "Is RTC enabled"
   [repo]
-  (and (sqlite-util/db-based-graph? repo)
-       (or (exists? js/process)
-           (some? (get-local-tx repo)))))
+  (or (exists? js/process)
+      (some? (get-graph-uuid repo))))
 
 (defn create-pending-block-ops-count-flow
   [repo]
   (when-let [conn (worker-state/get-client-ops-conn repo)]
-    (letfn [(datom-count [db]
-              (count (get-all-block-ops* db)))]
-      (let [db-updated-flow
-            (m/observe
-             (fn ctor [emit!]
-               (d/listen! conn :create-pending-ops-count-flow #(emit! true))
-               (emit! true)
-               (fn dtor []
-                 (d/unlisten! conn :create-pending-ops-count-flow))))]
-        (m/ap
-          (let [_ (m/?> (c.m/throttle 100 db-updated-flow))]
+    (let [db-updated-flow
+          (m/observe
+           (fn ctor [emit!]
+             (d/listen! conn :create-pending-ops-count-flow #(emit! true))
+             (emit! true)
+             (fn dtor []
+               (d/unlisten! conn :create-pending-ops-count-flow))))]
+      (m/ap
+        (let [_ (m/?> (c.m/throttle 200 db-updated-flow))]
             ;; throttle db-updated-flow, because `datom-count` is a time-consuming fn
-            (datom-count @conn)))))))
+          (get-unpushed-ops-count repo))))))
 
 ;;; asset ops
 (defn add-asset-ops
@@ -406,7 +494,7 @@
                             (cond-> [{:block/uuid block-uuid
                                       :remove-asset op}]
                               update-asset-op (conj [:db.fn/retractAttribute e :update-asset]))))))]
-            (d/transact! conn tx-data)))))))
+            (ldb/transact! conn tx-data)))))))
 
 (defn add-all-exists-asset-as-ops
   [repo]
@@ -454,14 +542,19 @@
   (when-let [conn (worker-state/get-client-ops-conn repo)]
     (let [ent (d/entity @conn [:block/uuid asset-uuid])]
       (when-let [e (:db/id ent)]
-        (d/transact! conn (map (fn [a] [:db.fn/retractAttribute e a]) asset-op-types))))))
+        (ldb/transact! conn (map (fn [a] [:db.fn/retractAttribute e a]) asset-op-types))))))
 
-(defn reset-client-op-conn
+(defn create-pending-asset-ops-count-flow
   [repo]
   (when-let [conn (worker-state/get-client-ops-conn repo)]
-    (let [tx-data (->> (concat (d/datoms @conn :avet :graph-uuid)
-                               (d/datoms @conn :avet :local-tx)
-                               (d/datoms @conn :avet :aes-key-jwk)
-                               (d/datoms @conn :avet :block/uuid))
-                       (map (fn [datom] [:db/retractEntity (:e datom)])))]
-      (d/transact! conn tx-data))))
+    (let [datom-count-fn (fn [db] (count (get-all-asset-ops* db)))
+          db-updated-flow
+          (m/observe
+           (fn ctor [emit!]
+             (d/listen! conn :create-pending-asset-ops-count-flow #(emit! true))
+             (emit! true)
+             (fn dtor []
+               (d/unlisten! conn :create-pending-asset-ops-count-flow))))]
+      (m/ap
+        (let [_ (m/?> (c.m/throttle 100 db-updated-flow))]
+          (datom-count-fn @conn))))))

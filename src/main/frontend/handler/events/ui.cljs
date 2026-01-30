@@ -2,29 +2,25 @@
   "UI events"
   (:require [clojure.core.async :as async]
             [clojure.core.async.interop :refer [p->c]]
+            [frontend.components.assets :as assets]
             [frontend.components.cmdk.core :as cmdk]
-            [frontend.components.file-sync :as file-sync]
             [frontend.components.page :as component-page]
+            [frontend.components.page-menu :as page-menu]
             [frontend.components.plugins :as plugin]
             [frontend.components.property.dialog :as property-dialog]
+            [frontend.components.quick-add :as quick-add]
             [frontend.components.repo :as repo]
             [frontend.components.select :as select]
             [frontend.components.selection :as selection]
             [frontend.components.settings :as settings]
             [frontend.components.shell :as shell]
             [frontend.components.user.login :as login]
-            [frontend.components.whiteboard :as whiteboard]
             [frontend.config :as config]
-            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.extensions.fsrs :as fsrs]
-            [frontend.extensions.srs :as srs]
-            [frontend.fs.sync :as sync]
             [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.events :as events]
-            [frontend.handler.file-based.native-fs :as nfs-handler]
-            [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
@@ -34,7 +30,6 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.sentry :as sentry-event]
             [frontend.state :as state]
-            [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.dom :as gdom]
             [logseq.common.util :as common-util]
@@ -42,17 +37,14 @@
             [promesa.core :as p]))
 
 (defmethod events/handle :go/search [_]
-  (shui/dialog-open!
-   cmdk/cmdk-modal
-   {:id :ls-dialog-cmdk
-    :align :top
-    :content-props {:class "ls-dialog-cmdk"}
-    :close-btn? false
-    :onEscapeKeyDown (fn [e] (.preventDefault e))}))
-
-(defmethod events/handle :command/run [_]
-  (when (util/electron?)
-    (shui/dialog-open! shell/shell)))
+  (when-not (editor-handler/dialog-exists? :ls-dialog-cmdk)
+    (shui/dialog-open!
+     cmdk/cmdk-modal
+     {:id :ls-dialog-cmdk
+      :align :top
+      :content-props {:class "ls-dialog-cmdk"}
+      :close-btn? false
+      :onEscapeKeyDown (fn [e] (.preventDefault e))})))
 
 (defmethod events/handle :notification/show [[_ {:keys [content status clear?]}]]
   (notification/show! content status clear?))
@@ -86,23 +78,33 @@
    {:id :https-proxy-panel :center? true :class "lg:max-w-2xl"}))
 
 (defmethod events/handle :redirect-to-home [_]
-  (page-handler/create-today-journal!))
+  (page-handler/create-today-journal!)
+  (when (util/capacitor?)
+    (state/pub-event! [:mobile/set-tab "home"])))
 
 (defmethod events/handle :page/show-delete-dialog [[_ selected-rows ok-handler]]
   (shui/dialog-open!
    (component-page/batch-delete-dialog selected-rows ok-handler)))
 
 (defmethod events/handle :modal/show-cards [[_ cards-id]]
-  (let [db-based? (config/db-based-graph? (state/get-current-repo))]
-    (shui/dialog-open!
-     (if db-based? (fn [] (fsrs/cards-view cards-id)) srs/global-cards)
-     {:id :srs
-      :label "flashcards__cp"})))
+  (shui/dialog-open!
+   (fn [] (fsrs/cards-view cards-id))
+   {:id :srs
+    :label "flashcards__cp"}))
 
 (defmethod events/handle :modal/show-themes-modal [[_ classic?]]
   (if classic?
     (plugin/open-select-theme!)
     (route-handler/go-to-search! :themes)))
+
+(defmethod events/handle :publish/open-dialog [_]
+  (when-not config/publishing?
+    (when-let [page-name (state/get-current-page)]
+      (when-let [page (db/get-page page-name)]
+        (when (db/page? page)
+          (shui/dialog-open!
+           (fn [] (page-menu/publish-page-dialog page))
+           {:class "w-auto max-w-md"}))))))
 
 (defmethod events/handle :ui/toggle-appearance [_]
   (let [popup-id "appearance_settings"]
@@ -160,24 +162,7 @@
      (plugin/perf-tip-content (.-id o) (.-name opts) (.-url opts))
      :warning false (.-id o))))
 
-(defn- refresh-cb []
-  (page-handler/create-today-journal!)
-  (events/file-sync-restart!))
-
-(defmethod events/handle :graph/ask-for-re-fresh [_]
-  (shui/dialog-open!
-   [:div {:style {:max-width 700}}
-    [:p (t :sync-from-local-changes-detected)]
-    [:div.flex.justify-end
-     (ui/button
-      (t :yes)
-      :autoFocus "on"
-      :class "ui__modal-enter"
-      :on-click (fn []
-                  (shui/dialog-close!)
-                  (nfs-handler/refresh! (state/get-current-repo) refresh-cb)))]]))
-
-(defn- editor-new-property [block target {:keys [selected-blocks] :as opts}]
+(defn- editor-new-property [block target {:keys [selected-blocks popup-id] :as opts}]
   (let [editing-block (state/get-edit-block)
         pos (state/get-edit-pos)
         edit-block-or-selected (cond
@@ -229,8 +214,9 @@
         (if target'
           (shui/popup-show! target'
                             #(property-dialog/dialog blocks opts')
-                            {:align "start"
-                             :auto-focus? true})
+                            (cond-> {:align "start"}
+                              popup-id
+                              (assoc :id popup-id)))
           (shui/dialog-open! #(property-dialog/dialog blocks opts')
                              {:id :property-dialog
                               :align "start"}))))))
@@ -246,6 +232,7 @@
    repo/new-db-graph
    {:id :new-db-graph
     :title [:h2 "Create a new graph"]
+    :align (if (util/mobile?) :top :center)
     :style {:max-width "500px"}}))
 
 (defmethod events/handle :dialog-select/graph-open []
@@ -257,11 +244,16 @@
 (defmethod events/handle :dialog-select/db-graph-replace []
   (select/dialog-select! :db-graph-replace))
 
+(defn- hide-action-bar!
+  []
+  (when (editor-handler/popup-exists? :selection-action-bar)
+    (shui/popup-hide! :selection-action-bar)))
+
 (defmethod events/handle :editor/show-action-bar []
   (let [selection (state/get-selection-blocks)
         first-visible-block (some #(when (util/el-visible-in-viewport? % true) %) selection)]
     (when first-visible-block
-      (shui/popup-hide! :selection-action-bar)
+      (hide-action-bar!)
       (shui/popup-show!
        first-visible-block
        (fn []
@@ -275,12 +267,10 @@
         :align :start}))))
 
 (defmethod events/handle :editor/hide-action-bar []
-  (shui/popup-hide! :selection-action-bar))
+  (hide-action-bar!)
+  (state/set-state! :mobile/show-action-bar? false))
 
 (defmethod events/handle :user/logout [[_]]
-  (file-sync-handler/reset-session-graphs)
-  (sync/remove-all-pwd!)
-  (file-sync-handler/reset-user-state!)
   (login/sign-out!))
 
 (defmethod events/handle :user/login [[_ host-ui?]]
@@ -290,23 +280,17 @@
       (route-handler/redirect! {:to :user-login})
       (login/open-login-modal!))))
 
-(defmethod events/handle :whiteboard/onboarding [[_ opts]]
+(defmethod events/handle :asset/dialog-edit-external-url [[_ asset-block pdf-current]]
   (shui/dialog-open!
-   (fn [{:keys [close]}] (whiteboard/onboarding-welcome close))
-   (merge {:close-btn?      false
-           :center?         true
-           :close-backdrop? false} opts)))
+   (assets/edit-external-url-content asset-block pdf-current)
+   {:id :edit-external-asset-source-dialog
+    :title (str (if asset-block "Edit" "Create") " asset")
+    :center? true}))
 
-(defn- enable-beta-features!
-  []
-  (when-not (false? (state/enable-sync?)) ; user turns it off
-    (file-sync-handler/set-sync-enabled! true)))
-
-;; TODO: separate rtc and file-based implementation
 (defmethod events/handle :user/fetch-info-and-graphs [[_]]
   (state/set-state! [:ui/loading? :login] false)
   (async/go
-    (let [result (async/<! (sync/<user-info sync/remoteapi))]
+    (let [result (async/<! (user-handler/<user-info user-handler/remoteapi))]
       (cond
         (instance? ExceptionInfo result)
         nil
@@ -317,26 +301,8 @@
             (sentry-event/set-user! uid))
           (let [status (if (user-handler/alpha-or-beta-user?) :welcome :unavailable)]
             (when (and (= status :welcome) (user-handler/logged-in?))
-              (enable-beta-features!)
               (async/<! (p->c (rtc-handler/<get-remote-graphs)))
-              (async/<! (file-sync-handler/load-session-graphs))
-              (p/let [repos (repo-handler/refresh-repos!)]
-                (when-let [repo (state/get-current-repo)]
-                  (when (some #(and (= (:url %) repo)
-                                    (vector? (:sync-meta %))
-                                    (util/uuid-string? (first (:sync-meta %)))
-                                    (util/uuid-string? (second (:sync-meta %)))) repos)
-                    (sync/<sync-start)))))
-            (file-sync/maybe-onboarding-show status)))))))
-
-(defmethod events/handle :file-sync/onboarding-tip [[_ type opts]]
-  (let [type (keyword type)]
-    (when-not (config/db-based-graph? (state/get-current-repo))
-      (shui/dialog-open!
-       (file-sync/make-onboarding-panel type)
-       (merge {:close-btn? false
-               :center? true
-               :close-backdrop? (not= type :welcome)} opts)))))
+              (repo-handler/refresh-repos!))))))))
 
 (defmethod events/handle :dialog/show-block [[_ block option]]
   (shui/dialog-open!
@@ -345,4 +311,13 @@
    {:id :ls-dialog-block
     :align :top
     :content-props {:class "ls-dialog-block"}
+    :onEscapeKeyDown (fn [e] (.preventDefault e))}))
+
+(defmethod events/handle :dialog/quick-add [_]
+  (shui/dialog-open!
+   [:div.w-full.h-full
+    (quick-add/quick-add)]
+   {:id :ls-dialog-quick-add
+    :align :top
+    :content-props {:class "ls-dialog-quick-add"}
     :onEscapeKeyDown (fn [e] (.preventDefault e))}))

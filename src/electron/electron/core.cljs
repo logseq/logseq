@@ -8,8 +8,6 @@
             [clojure.string :as string]
             [electron.db :as db]
             [electron.exceptions :as exceptions]
-            [electron.fs-watcher :as fs-watcher]
-            [electron.git :as git]
             [electron.handler :as handler]
             [electron.logger :as logger]
             [electron.server :as server]
@@ -257,8 +255,6 @@
 
            (db/ensure-graphs-dir!)
 
-           (git/configure-auto-commit!)
-
            (vreset! *setup-fn
                     (fn []
                       (let [t1 (setup-updater! win)
@@ -276,7 +272,6 @@
 
            ;; main window events
            (.on win "close" (fn [e]
-                              (git/before-graph-close-hook!)
                               (when @*quit-dirty? ;; when not updating
                                 (.preventDefault e)
 
@@ -286,7 +281,7 @@
                                   (cond
                                     (or multiple-windows? (not mac?) @win/*quitting?)
                                     (when window
-                                      (win/close-handler win handler/close-watcher-when-orphaned! e)
+                                      (win/close-handler win e)
                                       (reset! *win nil))
 
                                     (and mac? (not multiple-windows?))
@@ -331,10 +326,6 @@
 
       (.on app "window-all-closed" (fn []
                                      (logger/debug "window-all-closed" "Quitting...")
-                                     (try
-                                       (fs-watcher/close-watcher!)
-                                       (catch :default e
-                                         (logger/error "window-all-closed" e)))
                                      (.quit app)))
       (on-app-ready! app))))
 

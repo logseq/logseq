@@ -70,10 +70,7 @@
              electron.ipc ipc
              electron.utils utils
              frontend.commands commands
-             frontend.common.file-based.db common-file-db
              frontend.common.date common-date
-             frontend.common.file.core common-file
-             frontend.common.file.util wfu
              frontend.common.missionary-util c.m
              frontend.common.schema-register sr
              frontend.common.search-fuzzy fuzzy
@@ -86,7 +83,6 @@
              frontend.config config
              frontend.date date
              frontend.db db
-             frontend.db.file-based.model file-model
              frontend.db-mixins db-mixins
              frontend.db.query-custom query-custom
              frontend.db.query-dsl query-dsl
@@ -113,15 +109,6 @@
              frontend.handler.editor.property editor-property
              frontend.handler.events events
              frontend.handler.extract extract
-             frontend.handler.file-based.file file-handler
-             frontend.handler.file-based.native-fs nfs-handler
-             frontend.handler.file-based.page file-page-handler
-             frontend.handler.file-based.page-property file-page-property
-             frontend.handler.file-based.property file-property-handler
-             frontend.handler.file-based.property.util property-util
-             frontend.handler.file-based.recent file-recent-handler
-             frontend.handler.file-based.reset-file reset-file-handler
-             frontend.handler.file-based.repo file-repo-handler
              frontend.handler.global-config global-config-handler
              frontend.handler.notification notification
              frontend.handler.page page-handler
@@ -150,8 +137,6 @@
              frontend.test.helper test-helper
              frontend.ui ui
              frontend.util util
-             frontend.util.file-based.clock clock
-             frontend.util.file-based.drawer drawer
              frontend.util.page page-util
              frontend.util.persist-var persist-var
              frontend.util.property property
@@ -165,6 +150,14 @@
              frontend.worker.state worker-state
              frontend.worker.util worker-util
              lambdaisland.glogi log
+             logseq.api.db-based db-based-api
+             logseq.cli.common.graph cli-common-graph
+             logseq.cli.common.export.common cli-export-common
+             logseq.cli.common.export.text cli-export-text
+             logseq.cli.common.file common-file
+             logseq.cli.common.mcp.server cli-common-mcp-server
+             logseq.cli.common.mcp.tools cli-common-mcp-tools
+             logseq.cli.text-util cli-text-util
              logseq.common.config common-config
              logseq.common.date-time-util date-time-util
              logseq.common.graph common-graph
@@ -176,15 +169,10 @@
              logseq.common.util.page-ref page-ref
              logseq.db ldb
              logseq.db.common.entity-plus entity-plus
-             logseq.db.common.entity-util common-entity-util
              logseq.db.common.initial-data common-initial-data
              logseq.db.common.order db-order
-             logseq.db.common.property-util db-property-util
              logseq.db.common.sqlite common-sqlite
              logseq.db.common.view db-view
-             logseq.db.file-based.rules file-rules
-             logseq.db.file-based.schema file-schema
-             logseq.db.file-based.entity-util file-entity-util
              logseq.db.frontend.class db-class
              logseq.db.frontend.content db-content
              logseq.db.frontend.db db-db
@@ -203,9 +191,7 @@
              logseq.db.sqlite.export sqlite-export
              logseq.db.sqlite.util sqlite-util
              logseq.db.test.helper db-test
-             logseq.graph-parser graph-parser
              logseq.graph-parser.block gp-block
-             logseq.graph-parser.db gp-db
              logseq.graph-parser.mldoc gp-mldoc
              logseq.graph-parser.property gp-property
              logseq.graph-parser.text text
@@ -213,7 +199,9 @@
              logseq.outliner.core outliner-core
              logseq.outliner.datascript-report ds-report
              logseq.outliner.op outliner-op
+             logseq.outliner.page outliner-page
              logseq.outliner.pipeline outliner-pipeline
+             logseq.outliner.tree otree
              logseq.outliner.validate outliner-validate
              logseq.shui.popup.core shui-popup
              logseq.shui.ui shui

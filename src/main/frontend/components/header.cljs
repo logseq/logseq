@@ -7,7 +7,6 @@
             [frontend.common.missionary :as c.m]
             [frontend.components.block :as component-block]
             [frontend.components.export :as export]
-            [frontend.components.file-sync :as fs-sync]
             [frontend.components.page-menu :as page-menu]
             [frontend.components.plugins :as plugins]
             [frontend.components.right-sidebar :as sidebar]
@@ -20,13 +19,13 @@
             [frontend.db :as db]
             [frontend.handler :as handler]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
+            [frontend.handler.db-based.vector-search-flows :as vector-search-flows]
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
-            [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.version :refer [version]]
@@ -74,7 +73,8 @@
                                             (fn []
                                               [:div.p-2.-mb-8
                                                [:h1.text-3xl.-mt-2.-ml-2 "Collaborators:"]
-                                               (settings/settings-collaboration)]))})
+                                               (settings/settings-collaboration)])
+                                            {:id :rtc-collaborators})})
 
        (when (seq online-users)
          (for [{user-email :user/email
@@ -125,17 +125,19 @@
         page-menu (if (and working-page? (ldb/page? page))
                     (page-menu/page-menu page)
                     (when-not config/publishing?
-                      (when (config/db-based-graph?)
-                        (let [block-id-str (str (:block/uuid page))
-                              favorited? (page-handler/favorited? block-id-str)]
-                          [{:title   (if favorited?
-                                       (t :page/unfavorite)
-                                       (t :page/add-to-favorites))
-                            :options {:on-click
-                                      (fn []
-                                        (if favorited?
-                                          (page-handler/<unfavorite-page! block-id-str)
-                                          (page-handler/<favorite-page! block-id-str)))}}]))))
+                      (let [block-id-str (str (:block/uuid page))
+                            favorited? (page-handler/favorited? block-id-str)]
+                        [{:title   (if favorited?
+                                     (t :page/unfavorite)
+                                     (t :page/add-to-favorites))
+                          :options {:on-click
+                                    (fn []
+                                      (if favorited?
+                                        (page-handler/<unfavorite-page! block-id-str)
+                                        (page-handler/<favorite-page! block-id-str)))}}
+                         {:title   "Publish page"
+                          :options {:on-click #(shui/dialog-open! (fn [] (page-menu/publish-page-dialog page))
+                                                                  {:class "w-auto max-w-md"})}}])))
         page-menu-and-hr (concat page-menu [{:hr true}])
         login? (and (state/sub :auth/id-token) (user-handler/logged-in?))
         items (fn []
@@ -169,11 +171,7 @@
                      :options {:on-click #(state/toggle-theme!)}
                      :icon (ui/icon "bulb")})
 
-                  ;; Disable login on Web until RTC is ready
-                  (when (and (not login?)
-                             (or
-                              (storage/get :login-enabled)
-                              (not util/web-platform?)))
+                  (when-not (or config/publishing? login?)
                     {:title (t :login)
                      :options {:on-click #(state/pub-event! [:user/login])}
                      :icon (ui/icon "user")})
@@ -337,15 +335,41 @@
 
 (rum/defc block-breadcrumb
   [page-name]
-  [:div.ls-block-breadcrumb
-   (when-let [page (when (and page-name (common-util/uuid-string? page-name))
-                     (db/entity [:block/uuid (uuid page-name)]))]
-     (when (:block/parent page)
+  (when-let [page (when (and page-name (common-util/uuid-string? page-name))
+                    (db/entity [:block/uuid (uuid page-name)]))]
+    ;; FIXME: in publishing? :block/tags incorrectly returns integer until fully restored
+    (when (and (if config/publishing? (not (state/sub :db/restoring?)) true)
+               (ldb/page? page) (:block/parent page))
+      [:div.ls-block-breadcrumb
        [:div.text-sm
         (component-block/breadcrumb {}
                                     (state/get-current-repo)
                                     (:block/uuid page)
-                                    {:header? true})]))])
+                                    {:header? true})]])))
+
+(rum/defc semantic-search-progressing
+  [repo]
+  (let [[vec-search-state set-vec-search-state] (hooks/use-state nil)
+        {:keys [indexing?]} (get-in vec-search-state [:repo->index-info repo])]
+    (hooks/use-effect!
+     (fn []
+       (c.m/run-task
+         ::update-vec-search-state
+         (m/reduce
+          (fn [_ v]
+            (set-vec-search-state v))
+          (m/ap
+            (m/?> vector-search-flows/infer-worker-ready-flow)
+            (c.m/<? (state/<invoke-db-worker :thread-api/vec-search-update-index-info repo))
+            (m/?> vector-search-flows/vector-search-state-flow)))
+         :succ (constantly nil)))
+     [])
+    (when indexing?
+      (shui/button
+       {:class   "opacity-50"
+        :variant :ghost
+        :size    :sm}
+       "Embedding..."))))
 
 (rum/defc ^:large-vars/cleanup-todo header-aux < rum/reactive
   [{:keys [current-repo default-home new-block-mode]}]
@@ -373,7 +397,7 @@
       [left-menu
        (if (mobile-util/native-platform?)
          ;; back button for mobile
-         (when-not (or (state/home?) custom-home-page? (state/whiteboard-dashboard?))
+         (when-not (or (state/home?) custom-home-page?)
            (ui/with-shortcut :go/backward "bottom"
              [:button.it.navigation.nav-left.button.icon.opacity-70
               {:title (t :header/go-back) :on-click #(js/window.history.back)}
@@ -382,7 +406,8 @@
          (when current-repo
            (ui/with-shortcut :go/search "right"
              [:button.button.icon#search-button
-              {:title (t :header/search)
+              {:data-keep-selection true
+               :title (t :header/search)
                :on-click #(do (when (or (mobile-util/native-android?)
                                         (mobile-util/native-iphone?))
                                 (state/set-left-sidebar-open! false))
@@ -392,12 +417,11 @@
      [:div.r.flex.drag-region.justify-between.items-center.gap-2.overflow-x-hidden.w-full
       [:div.flex.flex-1
        (block-breadcrumb (state/get-current-page))]
-      [:div.flex
+      [:div.flex.items-center
        (when (and current-repo
                   (ldb/get-graph-rtc-uuid (db/get-db))
                   (user-handler/logged-in?)
-                  (config/db-based-graph? current-repo)
-                  (user-handler/team-member?))
+                  (user-handler/rtc-group?))
          [:<>
           (recent-slider)
           (rum/with-key (rtc-collaborators)
@@ -409,11 +433,7 @@
        (when (user-handler/logged-in?)
          (rtc-indicator/uploading-detail))
 
-       (when (and current-repo
-                  (not (config/demo-graph? current-repo))
-                  (not (config/db-based-graph? current-repo))
-                  (user-handler/alpha-or-beta-user?))
-         (fs-sync/indicator))
+       (semantic-search-progressing current-repo)
 
        (when (and (not= (state/get-current-route) :home)
                   (not custom-home-page?))

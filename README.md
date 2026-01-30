@@ -14,7 +14,7 @@
     <a href="https://logseq.com">Home Page</a> |
     <a href="https://blog.logseq.com/">Blog</a> |
     <a href="https://docs.logseq.com/">Documentation</a> |
-    <a href="https://trello.com/b/8txSM12G/roadmap">Roadmap</a>
+    <a href="https://discuss.logseq.com/t/logseq-product-roadmap/34267">Roadmap</a>
 </div>
 <br></br>
 
@@ -68,17 +68,20 @@
 
 ## 🚀 Database Version
 
-The Database version (DB version) of Logseq introduces DB graphs while maintaining support for file graphs. [See this page](https://github.com/logseq/docs/blob/master/db-version.md) to get an overview of the main features for DB graphs. If you are an existing user, [see this page](https://github.com/logseq/docs/blob/master/db-version-changes.md) to get an overview of changes with the DB version.
+The Database version (DB version) of Logseq introduces DB graphs. [See this page](https://github.com/logseq/docs/blob/master/db-version.md) to get an overview of the main features for DB graphs. If you are an existing user, [see changes with the DB version](https://github.com/logseq/docs/blob/master/db-version-changes.md). The DB version has its own new mobile app (on iOS, with Android coming soon)! To participate in the mobile app alpha, [please complete this brief form](https://forms.gle/nfefJv51jUuULbFB9). The DB version also has a new sync approach, RTC (Real Time Collaboration)! You can use it to sync graphs between multiple devices or collaborate with others. To participate in the RTC alpha, [please fill out this form](https://forms.gle/YSyF4WfKPSDuwyjH6).
 
-The DB version of Logseq is alpha software. When using DB graphs, we recommend you create a dedicated test graph and choose one project/workflow that’s not crucial for you. **Data loss is possible**, which is why we recommend [automated backups](https://github.com/logseq/docs/blob/master/db-version.md#automated-backup) or making [regular SQLite DB backups](https://github.com/logseq/docs/blob/master/db-version.md#graph-export). When using file graphs, **data corruption is possible** as some file content can be duplicated. We only recommend using file graphs if you are making regular backups with git.
+The DB version is in beta status while the new mobile app and RTC is in alpha. This means that **data loss is possible** so we recommend [automated backups](https://github.com/logseq/docs/blob/master/db-version.md#automated-backup) or [regular SQLite DB backups](https://github.com/logseq/docs/blob/master/db-version.md#graph-export). We recommend you create a dedicated test graph and choose one project that’s not crucial for you.
 
-To try the latest web version, go to https://test.logseq.com/. For DB version issues, please report them to https://github.com/logseq/db-test/issues. To try the latest desktop version, go to https://github.com/logseq/logseq/actions/workflows/build-desktop-release.yml and click on the latest release. Scroll to the bottom and under the `Artifacts` section download the artifact for your operating system.
+To get started with the DB version:
+* To try the latest web version, go to https://test.logseq.com/.
+* To try the latest desktop version, login to Github and go to https://github.com/logseq/logseq/actions/workflows/build-desktop-release.yml and click on the latest release. Scroll to the bottom and under the `Artifacts` section download the artifact for your operating system.
+* To report bugs, please file them at https://github.com/logseq/db-test/issues.
+* For feature or enhancement requests, please file them on Discord on the `#db-feedback` channel.
+* For discussion, see the `#db-chat` channel in Discord.
 
 ## 🤔 Why Logseq?
 
 [Logseq](https://logseq.com) is a **knowledge management** and **collaboration** platform. It focuses on **privacy**, **longevity**, and [**user control**](https://www.gnu.org/philosophy/free-sw.en.html). Logseq offers a range of **powerful tools** for **knowledge management**, **collaboration**, **PDF annotation**, and **task management** with support for multiple file formats, including **Markdown** and **Org-mode**, and **various features** for organizing and structuring your notes.
-
-Logseq's **Whiteboard** feature lets you organize your knowledge and ideas using a spatial **canvas** with **shapes**, **drawings**, **website embeds**, and **connectors**. You can **visually group** and **link** your **notes** and external media (such as **videos** and **images**), enabling visual thinkers to compose, remix, **annotate**, and connect content from their knowledge base and emerging thoughts in a new way.
 
 In addition to its core features, Logseq has a growing ecosystem of **plugins** and **themes** that enable a wide range of workflows and **customization** options. **Mobile apps** are also available, providing access to most of the features of the desktop application. Whether you're a student, a professional, or anyone who values a clear and organized approach to managing your ideas and notes, Logseq is an excellent choice for anyone looking to improve their productivity and streamline their workflow.
 
@@ -99,6 +102,19 @@ To start using Logseq, follow these simple steps:
 
 That's it! You can now enjoy the benefits of using Logseq to streamline your workflow, manage your projects, and stay on top of your goals. Have fun! 🎉
 
+**Linux users**: Use the automated installer script for the best experience:
+
+   ```bash
+   # Download and run the installer
+   curl -fsSL https://raw.githubusercontent.com/logseq/logseq/master/scripts/install-linux.sh | bash
+
+   # Or install a specific version
+   curl -fsSL https://raw.githubusercontent.com/logseq/logseq/master/scripts/install-linux.sh | bash -s -- 0.10.14
+
+   # For user-specific installation (no root required)
+   curl -fsSL https://raw.githubusercontent.com/logseq/logseq/master/scripts/install-linux.sh | bash -s -- --user
+   ```
+
 ## 📚 Learn more
 
 * Website: [logseq.com](https://logseq.com)
@@ -106,12 +122,11 @@ That's it! You can now enjoy the benefits of using Logseq to streamline your wor
   * FAQ page: [Logseq Docs:  FAQ](https://docs.logseq.com/#/page/faq)
 * Blog: [blog.logseq.com](https://blog.logseq.com)
   * Please visit our [About page](https://blog.logseq.com/about) for the latest updates.
-* Logseq Hub: [hub.logseq.com](https://hub.logseq.com)
 * Forum: [discuss.logseq.com](https://discuss.logseq.com) - Where we answer questions, discuss workflows, and share tips
   * FAQ forum section: [Logseq Forum: FAQ](https://discuss.logseq.com/c/faq/6)
 * [Awesome Logseq](https://github.com/logseq/awesome-logseq) - Awesome Logseq extensions and resources created by the community <3
 * Twitter: [@Logseq](https://twitter.com/logseq)
-* Discord: [discord.gg/logseq](https://discord.gg/logseq)
+* Discord: [https://discord.com/invite/KpN4eHY](https://discord.com/invite/KpN4eHY)
   * [中文 Discord](https://discord.gg/xYqcrXWymg)
 
 ## 🫶 Support Logseq Development
@@ -184,13 +199,6 @@ We want to express our sincere gratitude to our [Open Collective](https://openco
 <p align="center">
     <a href="https://github.com/logseq/logseq/graphs/contributors">
         <img src="https://contrib.rocks/image?repo=logseq/logseq&max=300&columns=14" width="600"/></a>
-</p>
-
-## 🫶 Backers
-
-<p align="center">
-    <a href="https://opencollective.com/logseq" alt="Backers on Open Collective">
-        <img src="https://opencollective.com/logseq/tiers/backers.svg?avatarHeight=24&width=600"/></a>
 </p>
 
 <!-- JetBrains Logo -->

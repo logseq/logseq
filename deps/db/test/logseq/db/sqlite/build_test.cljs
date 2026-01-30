@@ -3,6 +3,7 @@
             [datascript.core :as d]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
+            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.test.helper :as db-test]))
@@ -99,9 +100,17 @@
                        {:block/title "block 2"}]}]})
         block (db-test/find-block-by-content @conn "block 1")
         block2 (db-test/find-block-by-content @conn "block 2")
+        page1 (db-test/find-page-by-title @conn "page1")
+        built-in-page (db-test/find-page-by-title @conn "Quick add")
         {:keys [init-tx block-props-tx]}
         (sqlite-build/build-blocks-tx
-         {:pages-and-blocks [{:page (select-keys (:block/page block) [:block/uuid])
+         {:pages-and-blocks [{:page
+                              {:block/uuid (:block/uuid built-in-page)
+                               :build/keep-uuid? true
+                               :build/properties {:logseq.property/description "foo"}
+                               :block/title "Quick add"}
+                              :blocks []}
+                             {:page (select-keys (:block/page block) [:block/uuid])
                               :blocks [(merge {:block/title "imported task" :block/uuid (:block/uuid block)}
                                               {:build/properties {:logseq.property/status :logseq.property/status.todo}
                                                :build/tags [:logseq.class/Task]})]}]
@@ -122,9 +131,18 @@
         _ (d/transact! conn block-props-tx2)
         updated-block2 (d/entity @conn [:block/uuid (:block/uuid block2)])]
 ;;     (cljs.pprint/pprint _tx)
+    (testing "existing page cases"
+      (is (= (:block/updated-at page1)
+             (:block/updated-at (db-test/find-page-by-title @conn "page1")))
+          "Existing page with no property changes didn't get updated")
+      (is (not= (:block/updated-at built-in-page)
+                (:block/updated-at (db-test/find-page-by-title @conn "Quick add")))
+          "Existing page with property changes does get updated"))
+
     (testing "block with built-in properties and tags"
       (is (= []
-             (filter #(or (:db/id %) (:db/ident %))
+             (filter #(and (not= (:block/uuid %) (:block/uuid built-in-page))
+                           (or (:db/id %) (:db/ident %)))
                      (concat init-tx block-props-tx)))
           "Tx doesn't try to create new blocks or modify existing idents")
       (is (= "imported task" (:block/title updated-block)))
@@ -245,3 +263,14 @@
            (-> (db-test/find-block-by-content @conn "u1")
                db-test/readable-properties
                (dissoc :logseq.property/created-from-property))))))
+
+(deftest build-ontology-with-multiple-namespaces
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:user.property/p1 {:logseq.property/type :default}
+                            :other.property/p1 {:logseq.property/type :default}}
+               :classes {:user.class/C1 {}
+                         :other.class/C1 {}}})]
+    (is (entity-util/property? (d/entity @conn :user.property/p1)))
+    (is (entity-util/property? (d/entity @conn :other.property/p1)))
+    (is (entity-util/class? (d/entity @conn :user.class/C1)))
+    (is (entity-util/class? (d/entity @conn :other.class/C1)))))

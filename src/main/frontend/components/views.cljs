@@ -35,7 +35,6 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [goog.dom :as gdom]
             [logseq.common.config :as common-config]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
@@ -48,11 +47,25 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
+(def ^:private yyyy-MM-dd-formatter (tf/formatter "yyyy-MM-dd"))
+
+(defn- virtualized-list
+  [{:keys [total-count item-content compute-item-key] :as option}
+   disable-virtualized?]
+  (if disable-virtualized?
+    [:div.content
+     (for [i (range 0 total-count)]
+       (rum/with-key (item-content i)
+         (compute-item-key i)))]
+    (ui/virtualized-list option)))
+
 (defn- get-scroll-parent
   [config]
   (if (:sidebar? config)
     (dom/sel1 ".sidebar-item-list")
-    (gdom/getElement "main-content-container")))
+    (if-let [view-el (:viewel config)]
+      (util/app-scroll-container-node view-el)
+      (util/app-scroll-container-node))))
 
 (rum/defc header-checkbox < rum/static
   [{:keys [selected-all? selected-some? toggle-selected-all!] :as table}]
@@ -123,7 +136,6 @@
 (defn header-cp
   [{:keys [view-entity column-set-sorting! state]} column]
   (let [sorting (:sorting state)
-        db-based? (config/db-based-graph?)
         [asc?] (some (fn [item] (when (= (:id item) (:id column))
                                   (when-some [asc? (:asc? item)]
                                     [asc?]))) sorting)
@@ -144,15 +156,14 @@
                                             [:div.flex.flex-row.items-center.gap-1
                                              (ui/icon "arrow-down" {:size 15})
                                              [:div "Sort descending"]])
-                                           (when (and db-based? property)
+                                           (when property
                                              (shui/dropdown-menu-item
                                               {:on-click (fn [_e]
                                                            (if pinned?
                                                              (db-property-handler/delete-property-value! (:db/id view-entity)
                                                                                                          :logseq.property.table/pinned-columns
                                                                                                          (:db/id property))
-                                                             (property-handler/set-block-property! (state/get-current-repo)
-                                                                                                   (:db/id view-entity)
+                                                             (property-handler/set-block-property! (:db/id view-entity)
                                                                                                    :logseq.property.table/pinned-columns
                                                                                                    (:db/id property)))
                                                            (shui/popup-hide! id))}
@@ -182,6 +193,7 @@
                                           {:id popup-id
                                            :align "start"
                                            :as-dropdown? true
+                                           :dropdown-menu? true
                                            :on-before-hide (fn []
                                                              (reset! *last-header-action-target el)
                                                              (js/setTimeout #(reset! *last-header-action-target nil) 128))})))))}
@@ -227,7 +239,7 @@
      (state/exit-editing-and-set-selected-blocks! [cell])
      (set-focus-timeout! (js/setTimeout #(.focus cell) 100)))))
 
-(rum/defc block-title
+(rum/defc ^:large-vars/cleanup-todo block-title < rum/static
   "Used on table view"
   [block* {:keys [create-new-block width row property]}]
   (let [*ref (hooks/use-ref nil)
@@ -252,7 +264,7 @@
                   (p/let [block (or block (and (fn? create-new-block) (create-new-block)))]
                     (when block
                       (cond
-                        (util/meta-key? e)
+                        (or (util/meta-key? e) (util/mobile?))
                         (redirect!)
 
                         (.-shiftKey e)
@@ -273,9 +285,11 @@
                                             {:popup? true
                                              :view? true
                                              :table-block-title? true
+                                             :table? true
                                              :on-key-down
                                              (fn [e]
-                                               (when (= (util/ekey e) "Enter")
+                                               (when (and (= (util/ekey e) "Enter")
+                                                          (not (state/get-editor-action)))
                                                  (util/stop e)
                                                  (save-block-and-focus *ref set-focus-timeout! true)))}
                                             block)])))]
@@ -293,7 +307,8 @@
         (let [render (fn [block]
                        [:div
                         (inline-title
-                         {:table? true}
+                         {:table? true
+                          :block/uuid (:block/uuid block)}
                          (some->> (:block/title block)
                                   string/trim
                                   string/split-lines
@@ -304,29 +319,30 @@
             (render block*)))]
        [:div])
 
-     (let [class (str "h-6 w-6 !p-1 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 "
-                      "opacity-" opacity)]
-       [:div.absolute.-right-1
-        [:div.flex.flex-row.items-center
-         (shui/button
-          {:variant :ghost
-           :title "Open"
-           :on-click (fn [e]
-                       (util/stop-propagation e)
-                       (redirect!))
-           :class class}
-          (ui/icon "arrow-right"))
-         (shui/button
-          {:variant :ghost
-           :title "Open in sidebar"
-           :class class
-           :on-click (fn [e]
-                       (util/stop-propagation e)
-                       (add-to-sidebar!))}
-          (ui/icon "layout-sidebar-right"))]])]))
+     (when-not (util/mobile?)
+       (let [class (str "h-6 w-6 !p-1 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 "
+                        "opacity-" opacity)]
+         [:div.absolute.-right-1
+          [:div.flex.flex-row.items-center
+           (shui/button
+            {:variant :ghost
+             :title "Open"
+             :on-click (fn [e]
+                         (util/stop-propagation e)
+                         (redirect!))
+             :class class}
+            (ui/icon "arrow-right"))
+           (shui/button
+            {:variant :ghost
+             :title "Open in sidebar"
+             :class class
+             :on-click (fn [e]
+                         (util/stop-propagation e)
+                         (add-to-sidebar!))}
+            (ui/icon "layout-sidebar-right"))]]))]))
 
 (defn build-columns
-  [config properties & {:keys [with-object-name? with-id? add-tags-column?]
+  [config properties & {:keys [with-object-name? with-id? add-tags-column? advanced-query?]
                         :or {with-object-name? true
                              with-id? true
                              add-tags-column? true}}]
@@ -334,7 +350,10 @@
                      (if (or (some #(= (:db/ident %) :block/tags) properties) (not add-tags-column?))
                        properties
                        (conj properties (db/entity :block/tags)))
-                     (remove nil?))]
+                     (remove (fn [property]
+                               (or (nil? property)
+                                   (contains? #{:logseq.property/hide?} (:db/ident property))))))
+        property-keys (set (map :db/ident properties'))]
     (->> (concat
           [{:id :select
             :name "Select"
@@ -396,16 +415,20 @@
                     :type (:type property)}))))
            properties')
 
-          [{:id :block/created-at
-            :name (t :page/created-at)
-            :type :datetime
-            :header header-cp
-            :cell timestamp-cell-cp}
-           {:id :block/updated-at
-            :name (t :page/updated-at)
-            :type :datetime
-            :header header-cp
-            :cell timestamp-cell-cp}])
+          [(when (or (not advanced-query?)
+                     (and advanced-query? (property-keys :block/created-at)))
+             {:id :block/created-at
+              :name (t :page/created-at)
+              :type :datetime
+              :header header-cp
+              :cell timestamp-cell-cp})
+           (when (or (not advanced-query?)
+                     (and advanced-query? (property-keys :block/updated-at)))
+             {:id :block/updated-at
+              :name (t :page/updated-at)
+              :type :datetime
+              :header header-cp
+              :cell timestamp-cell-cp})])
          (remove nil?))))
 
 (defn- sort-columns
@@ -422,6 +445,53 @@
         columns)))
     columns))
 
+(defonce groups-sort-by-options
+  [["Journal date" :block/journal-day]
+   ["Page name" :block/title]
+   ["Page updated date" :block/updated-at]
+   ["Page created date" :block/created-at]])
+(defonce groups-sort-by-name->property-identity
+  (into {} groups-sort-by-options))
+(defonce groups-sort-by-property-identity->name
+  (set/map-invert groups-sort-by-name->property-identity))
+
+(rum/defc groups-sort
+  [view-entity sort-by-value]
+  (let [property-ident (or (:db/ident sort-by-value) :block/journal-day)]
+    (shui/dropdown-menu-sub
+     (shui/dropdown-menu-sub-trigger
+      "Sort groups by")
+     (shui/dropdown-menu-sub-content
+      (for [[option _] groups-sort-by-options]
+        (shui/dropdown-menu-checkbox-item
+         {:key option
+          :checked (= option (groups-sort-by-property-identity->name property-ident))
+          :onCheckedChange (fn [checked?]
+                             (let [property-id (:db/id (db/entity (groups-sort-by-name->property-identity option)))]
+                               (if checked?
+                                 (db-property-handler/set-block-property! (:db/id view-entity) :logseq.property.view/sort-groups-by-property
+                                                                          property-id)
+                                 (db-property-handler/remove-block-property! (:db/id view-entity) :logseq.property.view/sort-groups-by-property))))
+          :onSelect (fn [e] (.preventDefault e))}
+         option))))))
+
+(rum/defc groups-sort-order
+  [view-entity desc?]
+  (shui/dropdown-menu-sub
+   (shui/dropdown-menu-sub-trigger
+    "Sort groups order")
+   (shui/dropdown-menu-sub-content
+    (for [option ["Descending" "Ascending"]]
+      (shui/dropdown-menu-checkbox-item
+       {:key option
+        :checked (= option (if desc? "Descending" "Ascending"))
+        :onCheckedChange (fn [checked?]
+                           (db-property-handler/set-block-property! (:db/id view-entity) :logseq.property.view/sort-groups-desc?
+                                                                    (or (and checked? (= "Descending" option))
+                                                                        (and (not checked?) (not= "Descending" option)))))
+        :onSelect (fn [e] (.preventDefault e))}
+       option)))))
+
 (rum/defc more-actions
   [view-entity columns {:keys [column-visible? rows column-toggle-visibility]} {:keys [group-by-property-ident]}]
   (let [display-type (:db/ident (:logseq.property.view/type view-entity))
@@ -431,13 +501,14 @@
                                                    (:logseq.property.view/feature-type view-entity))
                                         (:logseq.property/query view-entity))
                                    [{:id :block/page
-                                     :name "Block Page"}])
+                                     :name "Page"}])
                                  (filter (fn [column]
                                            (when (:id column)
                                              (when-let [p (db/entity (:id column))]
                                                (and (not (db-property/many? p))
                                                     (contains? #{:default :number :checkbox :url :node :date}
-                                                               (:logseq.property/type p)))))) columns))]
+                                                               (:logseq.property/type p)))))) columns))
+        group-by-page? (some #{:block/page} (map :id group-by-columns))]
     (shui/dropdown-menu
      (shui/dropdown-menu-trigger
       {:asChild true}
@@ -480,6 +551,10 @@
                                     (db-property-handler/remove-block-property! (:db/id view-entity) :logseq.property.view/group-by-property)))
                :onSelect (fn [e] (.preventDefault e))}
               (:name column))))))
+       (when group-by-page?
+         (groups-sort view-entity (:logseq.property.view/sort-groups-by-property view-entity)))
+       (when group-by-property-ident
+         (groups-sort-order view-entity (:logseq.property.view/sort-groups-desc? view-entity)))
        (shui/dropdown-menu-item
         {:key "export-edn"
          :on-click #(db-export-handler/export-view-nodes-data rows {:group-by? (some? group-by-property-ident)})}
@@ -525,7 +600,8 @@
     {:on-cut #(on-delete-rows table selected-rows)
      :selected-blocks selected-rows
      :hide-dots? true
-     :button-border? true})))
+     :button-border? true
+     :view-parent (:logseq.property/view-for (:view-entity table))})))
 
 (rum/defc column-resizer
   [_column on-sized!]
@@ -655,9 +731,10 @@
       (case view-feature-type
         :class-objects
         (when (seq page-ids)
-          (let [tx-data (map (fn [pid] [:db/retract pid :block/tags (:db/id view-parent)]) page-ids)]
-            (when (seq tx-data)
-              (outliner-op/transact! tx-data {:outliner-op :save-block}))))
+          (when-not (= :logseq.class/Page (:db/ident view-parent))
+            (doseq [page pages]
+              (when-let [id (:block/uuid page)]
+                (outliner-op/delete-page! id)))))
 
         :property-objects
         ;; Relationships with built-in properties must not be deleted e.g. built-in? or parent
@@ -703,6 +780,7 @@
                          (mapv build-item unpinned))
         selection-rows-count (count selected-rows)]
     (shui/table-header
+     {:main-container (util/app-scroll-container-node)}
      (when (seq pinned-items)
        [:div.sticky-columns.flex.flex-row
         (dnd/items pinned-items {:vertical? false
@@ -733,8 +811,7 @@
 
 (defn- click-cell
   [node]
-  (when-let [trigger (or (dom/sel1 node ".jtrigger")
-                         (dom/sel1 node ".table-block-title"))]
+  (when-let [trigger (dom/sel1 node ".jtrigger")]
     (.click trigger)))
 
 (defn navigate-to-cell
@@ -911,15 +988,15 @@
 (rum/defc table-row < rum/reactive db-mixins/query
   [table row props option]
   (let [block (db/sub-block (:db/id row))
-        row' (some->
-              (if (:block.temp/load-status block)
-                (assoc block :block.temp/refs-count (:block.temp/refs-count row))
-                row)
-              (update :block/tags (fn [tags]
-                                    (keep (fn [tag]
-                                            (when-let [id (:db/id tag)]
-                                              (db/entity id)))
-                                          tags))))]
+        block' (if (contains? #{:self :full} (:block.temp/load-status block)) block row)
+        row' (when block'
+               (-> block'
+                   (update :block/tags (fn [tags]
+                                         (keep (fn [tag]
+                                                 (when-let [id (:db/id tag)]
+                                                   (db/entity id)))
+                                               tags)))
+                   (assoc :block.temp/refs-count (:block.temp/refs-count row))))]
     (table-row-inner table row' props option)))
 
 (rum/defc search
@@ -977,7 +1054,7 @@
    {:value "Custom date"
     :label "Custom date"}])
 
-(rum/defc filter-property < rum/static
+(rum/defc ^:large-vars/cleanup-todo filter-property < rum/static
   [view-entity columns {:keys [data-fns] :as table} opts]
   (let [[property set-property!] (rum/use-state nil)
         [values set-values!] (rum/use-state nil)
@@ -1073,7 +1150,24 @@
                                                              :filters filters'})))})))
                    :else
                    option)]
-      (select/select option))))
+      (if (and property (not (contains? #{:block/created-at :block/updated-at} (:db/ident property))))
+        [:div.flex.flex-col.gap-1.text-sm
+         (select/select option)
+         (shui/button {:variant :ghost :size :sm :class "justify-start"
+                       :on-click (fn []
+                                   (let [filters' (conj (:filters filters) [(:db/ident property) :is :empty])]
+                                     (set-filters! {:or? (:or? filters)
+                                                    :filters filters'})))}
+                      [:span.opacity-75.hover:opacity-100.font-normal.text-sm
+                       "Is Empty"])
+         (shui/button {:variant :ghost :size :sm :class "justify-start"
+                       :on-click (fn []
+                                   (let [filters' (conj (:filters filters) [(:db/ident property) :is-not :empty])]
+                                     (set-filters! {:or? (:or? filters)
+                                                    :filters filters'})))}
+                      [:span.opacity-75.hover:opacity-100.font-normal.text-sm
+                       "Is Not Empty"])]
+        (select/select option)))))
 
 (rum/defc filter-properties < rum/static
   [view-entity columns table opts]
@@ -1108,11 +1202,13 @@
 
 (defn get-property-operators
   [property]
-  (if (datetime-property? property)
+  (if (contains? #{:block/created-at :block/updated-at} (:db/ident property))
     [:before :after]
     (concat
      [:is :is-not]
      (case (:logseq.property/type property)
+       (:datetime)
+       [:before :after]
        (:default :url :node)
        [:text-contains :text-not-contains]
        (:date)
@@ -1278,8 +1374,22 @@
                                         many?
                                         (assoc
                                          :multiple-choices? true
-                                         :selected-choices value))]
-                           (select/select option)))
+                                         :selected-choices (when (coll? value) value)))]
+                           (if (and (contains? #{:is :is-not} operator)
+                                    (not (contains? #{:block/created-at :block/updated-at} (:db/ident property))))
+                             [:div.flex.flex-col.gap-1
+                              (select/select option)
+                              (shui/button {:variant :ghost :size :sm :class "justify-start"
+                                            :on-click (fn []
+                                                        (let [new-filters (update filters :filters
+                                                                                  (fn [col]
+                                                                                    (update col idx
+                                                                                            (fn [[property operator _value]]
+                                                                                              [property operator :empty]))))]
+                                                          (set-filters! new-filters)))}
+                                           [:span.opacity-75.hover:opacity-100.font-normal.text-sm
+                                            "Empty"])]
+                             (select/select option))))
                        {:align :start})))}
        (let [value (cond
                      (uuid? value)
@@ -1287,7 +1397,7 @@
                      (instance? js/Date value)
                      (some->> (tc/to-date value)
                               (t/to-default-time-zone)
-                              (tf/unparse (tf/formatter "yyyy-MM-dd")))
+                              (tf/unparse yyyy-MM-dd-formatter))
                      (and (coll? value) (every? uuid? value))
                      (keep #(db/entity [:block/uuid %]) value)
                      :else
@@ -1302,6 +1412,9 @@
 
             (boolean? value)
             [:div (str value)]
+
+            (= value :empty)
+            [:div "Empty"]
 
             (seq value)
             (->> (map (fn [v] [:div (get-property-value-content v)]) value)
@@ -1431,39 +1544,37 @@
 (defn- db-set-table-state!
   [entity {:keys [set-sorting! set-filters! set-visible-columns!
                   set-ordered-columns! set-sized-columns!]}]
-  (let [repo (state/get-current-repo)
-        db-based? (config/db-based-graph?)]
-    {:set-sorting!
-     (fn [sorting]
+  {:set-sorting!
+   (fn [sorting]
+     (p/do!
+      (property-handler/set-block-property! (:db/id entity) :logseq.property.table/sorting sorting)
+      (set-sorting! sorting)))
+   :set-filters!
+   (fn [filters]
+     (let [filters (-> (update filters :filters table-filters->persist-state)
+                       (update :or? boolean))]
        (p/do!
-        (when db-based? (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/sorting sorting))
-        (set-sorting! sorting)))
-     :set-filters!
-     (fn [filters]
-       (let [filters (-> (update filters :filters table-filters->persist-state)
-                         (update :or? boolean))]
-         (p/do!
-          (when db-based? (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/filters filters))
-          (set-filters! filters))))
-     :set-visible-columns!
-     (fn [columns]
-       (let [hidden-columns (vec (keep (fn [[column visible?]]
-                                         (when (false? visible?)
-                                           column)) columns))]
-         (p/do!
-          (when db-based?  (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/hidden-columns hidden-columns))
-          (set-visible-columns! columns))))
-     :set-ordered-columns!
-     (fn [ordered-columns]
-       (let [ids (vec (remove #{:select} ordered-columns))]
-         (p/do!
-          (when db-based? (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/ordered-columns ids))
-          (set-ordered-columns! ordered-columns))))
-     :set-sized-columns!
-     (fn [sized-columns]
+        (property-handler/set-block-property! (:db/id entity) :logseq.property.table/filters filters)
+        (set-filters! filters))))
+   :set-visible-columns!
+   (fn [columns]
+     (let [hidden-columns (vec (keep (fn [[column visible?]]
+                                       (when (false? visible?)
+                                         column)) columns))]
        (p/do!
-        (when db-based? (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/sized-columns sized-columns))
-        (set-sized-columns! sized-columns)))}))
+        (property-handler/set-block-property! (:db/id entity) :logseq.property.table/hidden-columns hidden-columns)
+        (set-visible-columns! columns))))
+   :set-ordered-columns!
+   (fn [ordered-columns]
+     (let [ids (vec (remove #{:select} ordered-columns))]
+       (p/do!
+        (property-handler/set-block-property! (:db/id entity) :logseq.property.table/ordered-columns ids)
+        (set-ordered-columns! ordered-columns))))
+   :set-sized-columns!
+   (fn [sized-columns]
+     (p/do!
+      (property-handler/set-block-property! (:db/id entity) :logseq.property.table/sized-columns sized-columns)
+      (set-sized-columns! sized-columns)))})
 
 (rum/defc lazy-item
   [data idx {:keys [properties list-view? scrolling?]} item-render]
@@ -1471,7 +1582,11 @@
         db-id (cond (map? item) (:db/id item)
                     (number? item) item
                     :else nil)
-        [item set-item!] (hooks/use-state nil)
+        entity (when db-id
+                 (let [e (db/entity db-id)]
+                   (when (= :full (:block.temp/load-status e))
+                     e)))
+        [item set-item!] (hooks/use-state entity)
         opts (if list-view?
                {:skip-refresh? true
                 :children? false}
@@ -1494,10 +1609,12 @@
   [table option rows *scroller-ref set-items-rendered!]
   (let [[scrolling? set-scrolling!] (hooks/use-state false)]
     (when (seq rows)
-      (ui/virtualized-list
+      (virtualized-list
        {:ref #(reset! *scroller-ref %)
         :increase-viewport-by {:top 300 :bottom 300}
-        :custom-scroll-parent (get-scroll-parent (:config option))
+        :custom-scroll-parent (get-scroll-parent
+                               (-> (:config option)
+                                   (assoc :viewel (js/document.getElementById (:viewid option)))))
         :compute-item-key (fn [idx]
                             (let [block-id (util/nth-safe rows idx)]
                               (str "table-row-" block-id)))
@@ -1507,14 +1624,15 @@
         :is-scrolling set-scrolling!
         :item-content (fn [idx _user ^js context]
                         (let [option (assoc option
-                                            :scrolling? (.-scrolling context)
+                                            :scrolling? (when context (.-scrolling context))
                                             :table-view? true)]
                           (lazy-item (:data table) idx option
                                      (fn [row]
                                        (table-row table row {} option)))))
         :items-rendered (fn [props]
                           (when (seq props)
-                            (set-items-rendered! true)))}))))
+                            (set-items-rendered! true)))}
+       (:disable-virtualized? option)))))
 
 (rum/defc table-view < rum/static
   [table option row-selection *scroller-ref]
@@ -1531,9 +1649,9 @@
          (when (and (get-in table [:data-fns :add-new-object!]) (or (empty? rows) items-rendered?))
            (shui/table-footer (add-new-row (:view-entity option) table)))]]))))
 
-(rum/defc list-view < rum/static
-  [{:keys [config ref-matched-children-ids view-feature-type] :as option} view-entity {:keys [rows]} *scroller-ref]
-  (let [references-view? (contains? #{:linked-references :unlinked-references} view-feature-type)
+(rum/defcs list-view < rum/static mixins/container-id
+  [state {:keys [config ref-matched-children-ids disable-virtualized?] :as option} view-entity {:keys [rows]} *scroller-ref]
+  (let [config (assoc config :container-id (:container-id state))
         lazy-item-render (fn [rows idx]
                            (lazy-item rows idx (assoc option :list-view? true)
                                       (fn [block]
@@ -1546,21 +1664,18 @@
                                           (block-container config' block)))))
         list-cp (fn [rows]
                   (when (seq rows)
-                    (if references-view?
-                      [:div.content
-                       (for [[idx _row] (medley/indexed rows)]
-                         (lazy-item-render rows idx))]
-                      (ui/virtualized-list
-                       {:ref #(reset! *scroller-ref %)
-                        :class "content"
-                        :custom-scroll-parent (get-scroll-parent config)
-                        :increase-viewport-by {:top 64 :bottom 64}
-                        :compute-item-key (fn [idx]
-                                            (let [block-id (util/nth-safe rows idx)]
-                                              (str "list-row-" block-id)))
-                        :total-count (count rows)
-                        :skipAnimationFrameInResizeObserver true
-                        :item-content (fn [idx] (lazy-item-render rows idx))}))))
+                    (virtualized-list
+                     {:ref #(reset! *scroller-ref %)
+                      :class "content"
+                      :custom-scroll-parent (get-scroll-parent config)
+                      :increase-viewport-by {:top 64 :bottom 64}
+                      :compute-item-key (fn [idx]
+                                          (let [block-id (util/nth-safe rows idx)]
+                                            (str "list-row-" block-id)))
+                      :total-count (count rows)
+                      :skipAnimationFrameInResizeObserver true
+                      :item-content (fn [idx] (lazy-item-render rows idx))}
+                     disable-virtualized?)))
         breadcrumb (state/get-component :block/breadcrumb)
         all-numbers? (every? number? rows)]
     (if all-numbers?
@@ -1608,12 +1723,13 @@
                                       (gallery-card-item view-entity block config'))))}))]))
 
 (defn- run-effects!
-  [option {:keys [data]} *scroller-ref gallery?]
+  [option {:keys [data]} *scroller-ref gallery? set-ready?]
   (hooks/use-effect!
    (fn []
      (when (and (:current-page? (:config option)) (seq data) (map? (first data)) (:block/uuid (first data)))
        (ui-handler/scroll-to-anchor-block @*scroller-ref data gallery?)
-       (state/set-state! :editor/virtualized-scroll-fn #(ui-handler/scroll-to-anchor-block @*scroller-ref data gallery?))))
+       (state/set-state! :editor/virtualized-scroll-fn #(ui-handler/scroll-to-anchor-block @*scroller-ref data gallery?)))
+     (util/schedule #(set-ready? true)))
    []))
 
 (rum/defc view-sorting-item
@@ -1693,20 +1809,25 @@
     :on-click (fn [e]
                 (shui/popup-show! (.-target e)
                                   (fn [] (view-sorting-config table sorting columns))
-                                  {:align :end}))}
+                                  {:align :end
+                                   :dropdown-menu? true}))}
    (ui/icon "arrows-up-down")))
 
-(defn- view-cp
+(rum/defc view-cp
   [view-entity table option* {:keys [*scroller-ref display-type row-selection]}]
-  (let [option (assoc option* :view-entity view-entity)]
-    (case display-type
-      :logseq.property.view/type.list
-      (list-view option view-entity table *scroller-ref)
+  (let [[viewid] (hooks/use-state #(random-uuid))
+        option (assoc option*
+                      :view-entity view-entity
+                      :viewid viewid)]
+    [:div {:id viewid}
+     (case display-type
+       :logseq.property.view/type.list
+       (list-view option view-entity table *scroller-ref)
 
-      :logseq.property.view/type.gallery
-      (gallery-view option table view-entity (:rows table) *scroller-ref)
+       :logseq.property.view/type.gallery
+       (gallery-view option table view-entity (:rows table) *scroller-ref)
 
-      (table-view table option row-selection *scroller-ref))))
+       (table-view table option row-selection *scroller-ref))]))
 
 (defn- get-views
   [ent view-feature-type]
@@ -1738,7 +1859,7 @@
                            :property-objects
                            "All"
                            :all-pages
-                           "All pages"
+                           "All"
                            ""))
             view-block-id (common-uuid/gen-uuid :view-block-uuid (str (:block/uuid view-parent) view-feature-type))
             result (editor-handler/api-insert-new-block! view-title
@@ -1751,66 +1872,73 @@
       (db/entity [:block/uuid (:block/uuid result)]))))
 
 (rum/defc views-tab < rum/reactive db-mixins/query
-  [view-parent current-view {:keys [views data items-count set-view-entity! set-data! set-views! view-feature-type show-items-count? references? opacity]}]
-  [:div.views
-   (for [view* views]
-     (let [view (db/sub-block (:db/id view*))
-           current-view? (= (:db/id current-view) (:db/id view))]
-       (shui/button
-        {:variant :text
-         :size :sm
-         :class (str "text-sm px-0 py-0 h-6 " (when-not current-view? "text-muted-foreground"))
-         :on-click (fn [e]
-                     (if (and current-view? (not= (:db/id view) (:db/id view-parent)))
-                       (shui/popup-show!
-                        (.-target e)
-                        (fn []
-                          [:<>
-                           (shui/dropdown-menu-sub
-                            (shui/dropdown-menu-sub-trigger
-                             "Rename")
-                            (shui/dropdown-menu-sub-content
-                             (when-let [block-container-cp (state/get-component :block/container)]
-                               (block-container-cp {} view))))
-                           (shui/dropdown-menu-item
-                            {:key "Delete"
-                             :on-click (fn []
-                                         (p/do!
-                                          (editor-handler/delete-block-aux! view)
-                                          (let [views' (remove (fn [v] (= (:db/id v) (:db/id view))) views)]
-                                            (set-views! views')
-                                            (set-view-entity! (first views'))
-                                            (shui/popup-hide!))))}
-                            "Delete")])
-                        {:as-dropdown? true
-                         :align "start"
-                         :content-props {:onClick shui/popup-hide!}})
-                       (do
-                         (set-view-entity! view)
-                         (set-data! nil))))}
-        (when-not references?
-          (let [display-type (or (:db/ident (get view :logseq.property.view/type))
-                                 :logseq.property.view/type.table)]
-            (when-let [icon (:logseq.property/icon (db/entity display-type))]
-              (icon-component/icon icon {:color? true
-                                         :size 15}))))
-        (let [title (:block/title view)]
-          (if (= title "")
-            "New view"
-            title))
-        (when (and current-view? show-items-count? (> items-count 0) (seq data))
-          [:span.text-muted-foreground.text-xs
-           items-count]))))
+  [view-parent current-view {:keys [views data items-count set-view-entity! set-data! set-views! view-feature-type show-items-count? config references? opacity]}]
+  (let [refs-total-count (:refs-total-count config)]
+    [:div.views
+     (for [view* views]
+       (let [view (db/sub-block (:db/id view*))
+             current-view? (= (:db/id current-view) (:db/id view))]
+         (shui/button
+          {:variant :text
+           :size :sm
+           :class (str "text-sm px-0 py-0 h-6 " (when-not current-view? "text-muted-foreground"))
+           :on-click (fn [e]
+                       (if (and current-view? (not= (:db/id view) (:db/id view-parent)))
+                         (shui/popup-show!
+                          (.-target e)
+                          (fn []
+                            [:<>
+                             (shui/dropdown-menu-sub
+                              (shui/dropdown-menu-sub-trigger
+                               "Rename")
+                              (shui/dropdown-menu-sub-content
+                               (when-let [block-container-cp (state/get-component :block/container)]
+                                 (block-container-cp {} view))))
+                             (shui/dropdown-menu-item
+                              {:key "Delete"
+                               :on-click (fn []
+                                           (p/do!
+                                            (editor-handler/delete-block-aux! view)
+                                            (let [views' (remove (fn [v] (= (:db/id v) (:db/id view))) views)]
+                                              (set-views! views')
+                                              (set-view-entity! (first views'))
+                                              (shui/popup-hide!))))}
+                              "Delete")])
+                          {:as-dropdown? true
+                           :dropdown-menu? true
+                           :align "start"
+                           :content-props {:onClick shui/popup-hide!}})
+                         (do
+                           (set-view-entity! view)
+                           (set-data! nil))))}
+          (when-not references?
+            (let [display-type (or (:db/ident (get view :logseq.property.view/type))
+                                   :logseq.property.view/type.table)]
+              (when-let [icon (:logseq.property/icon (db/entity display-type))]
+                (icon-component/icon icon {:color? true
+                                           :size 15}))))
+          (let [title (:block/title view)]
+            (if (= title "")
+              "New view"
+              title))
+          (when (and current-view? show-items-count? (> items-count 0) (seq data))
+            [:span.text-muted-foreground.text-xs
+             items-count
+             (when (and refs-total-count
+                        (> refs-total-count items-count))
+               [:span
+                [:span "/"]
+                [:span {:title "Total refs count"} refs-total-count]])]))))
 
-   (shui/button
-    {:variant :text
-     :size :sm
-     :title "Add new view"
-     :class (str "!px-1 -ml-1 text-muted-foreground hover:text-foreground transition-opacity ease-in duration-300 " opacity)
-     :on-click (fn []
-                 (p/let [view (create-view! view-parent view-feature-type {:auto-triggered? false})]
-                   (set-views! (concat views [view]))))}
-    (ui/icon "plus" {:size 15}))])
+     (shui/button
+      {:variant :text
+       :size :sm
+       :title "Add new view"
+       :class (str "!px-1 -ml-1 text-muted-foreground hover:text-foreground transition-opacity ease-in duration-300 " opacity)
+       :on-click (fn []
+                   (p/let [view (create-view! view-parent view-feature-type {:auto-triggered? false})]
+                     (set-views! (concat views [view]))))}
+      (ui/icon "plus" {:size 15}))]))
 
 (rum/defc view-head < rum/static
   [view-parent view-entity table columns input sorting
@@ -1818,33 +1946,25 @@
    {:keys [view-feature-type title-key additional-actions]
     :as option}]
   (let [[hover? set-hover?] (hooks/use-state nil)
-        db-based? (config/db-based-graph? (state/get-current-repo))
         references? (contains? #{:linked-references :unlinked-references} view-feature-type)
         opacity (cond
                   (and references? (not hover?)) "opacity-0"
                   hover? "opacity-100"
                   :else "opacity-75")]
-    [:div.flex.flex-1.flex-nowrap.items-center.justify-between.gap-1.overflow-hidden
+    [:div.ls-view-head.flex.flex-1.flex-nowrap.items-center.justify-between.gap-1.overflow-hidden
      {:on-mouse-over #(set-hover? true)
-      :on-mouse-out #(set-hover? false)}
+      :on-mouse-out #(when-not (or (ui/popup-exists?)
+                                   (ui/dropdown-exists?))
+                       (set-hover? false))}
      [:div.flex.flex-row.items-center.gap-2
-      (if db-based?
-        (if (= view-feature-type :query-result)
-          [:div.font-medium.opacity-50.text-sm
-           (t (or title-key :views.table/default-title)
-              (count (:rows table)))]
-          (views-tab view-parent view-entity (assoc option
-                                                    :hover? hover?
-                                                    :opacity opacity
-                                                    :references? references?)))
-        [:div.font-medium.text-sm
-         [:span
-          (case view-feature-type
-            :all-pages "All pages"
-            :linked-references "Linked references"
-            :unlinked-references "Unlinked references"
-            "Nodes")]
-         [:span.ml-1 (count (:rows table))]])]
+      (if (= view-feature-type :query-result)
+        [:div.font-medium.opacity-50.text-sm
+         (t (or title-key :views.table/default-title)
+            (count (:rows table)))]
+        (views-tab view-parent view-entity (assoc option
+                                                  :hover? hover?
+                                                  :opacity opacity
+                                                  :references? references?)))]
      [:div.view-actions.flex.items-center.gap-1.transition-opacity.ease-in.duration-300
       {:class opacity}
 
@@ -1854,26 +1974,59 @@
                  (action option)
                  action))])
 
-      (when (and db-based? (seq sorting))
+      (when (seq sorting)
         (view-sorting table columns sorting))
 
-      (when db-based? (filter-properties view-entity columns table option))
+      (filter-properties view-entity columns table option)
 
-      (search input {:on-change set-input!
-                     :set-input! set-input!})
+      [:div.view-action-search
+       (search input {:on-change set-input!
+                      :set-input! set-input!})]
 
-      (when db-based?
-        [:div.text-muted-foreground.text-sm
-         (pv/property-value view-entity (db/entity :logseq.property.view/type) {})])
+      [:div.view-action-type.text-muted-foreground.text-sm
+       (pv/property-value view-entity (db/entity :logseq.property.view/type) {:icon? true})]
 
-      (when db-based? (more-actions view-entity columns table option))
+      (more-actions view-entity columns table option)
 
-      (when (and db-based? add-new-object!) (new-record-button table view-entity))]]))
+      (when add-new-object! (new-record-button table view-entity))]]))
+
+(rum/defc group-item
+  [view-entity table' group group-by-property value option view-opts {:keys [list-view? group-by-page? readable-property-value]}]
+  (let [title [:div
+               {:class (when-not list-view? "my-2")}
+               (cond
+                 group-by-page?
+                 (if value
+                   (let [c (state/get-component :block/page-cp)]
+                     (c {:disable-preview? true} value))
+                   [:div.text-muted-foreground.text-sm
+                    "Pages"])
+
+                 (some? value)
+                 (let [icon (pu/get-block-property-value value :logseq.property/icon)]
+                   [:div.flex.flex-row.gap-1.items-center
+                    (when icon (icon-component/icon icon {:color? true}))
+                    (readable-property-value value)])
+                 :else
+                 (str "No " (:block/title group-by-property)))]
+        body-fn (fn []
+                  (let [render (view-cp view-entity
+                                        (assoc table' :rows group)
+                                        (assoc option
+                                                                      ;; disabled virtualization for nested view
+                                               :disable-virtualized? true)
+                                        view-opts)]
+                    (if (and list-view? (not (util/mobile?)))
+                      [:div.-ml-2 render]
+                      render)))]
+    (if (util/mobile?)
+      [:div.flex.flex-1.flex-col  title (body-fn)]
+      (ui/foldable title body-fn {:title-trigger? false}))))
 
 (rum/defc ^:large-vars/cleanup-todo view-inner < rum/static
-  [view-entity {:keys [view-parent data full-data set-data! columns add-new-object! foldable-options input set-input! sorting set-sorting! filters set-filters! display-type group-by-property-ident] :as option*}
+  [view-entity {:keys [view-parent data full-data set-data! columns add-new-object! foldable-options input set-input! sorting set-sorting! filters set-filters! display-type group-by-property-ident config] :as option*}
    *scroller-ref]
-  (let [db-based? (config/db-based-graph?)
+  (let [journals? (:journals? config)
         option (assoc option* :properties
                       (-> (remove #{:id :select} (map :id columns))
                           (conj :block/uuid :block/name)
@@ -1942,9 +2095,11 @@
         table (shui/table-option table-map)
         *view-ref (rum/use-ref nil)
         gallery? (= display-type :logseq.property.view/type.gallery)
-        list-view? (= display-type :logseq.property.view/type.list)]
+        list-view? (= display-type :logseq.property.view/type.list)
+        disable-virtualized? journals?
+        [ready? set-ready?] (hooks/use-state false)]
 
-    (run-effects! option table-map *scroller-ref gallery?)
+    (run-effects! option table-map *scroller-ref gallery? set-ready?)
 
     [:div.flex.flex-col.gap-2.grid
      {:ref *view-ref}
@@ -1959,52 +2114,45 @@
                           :row-selection row-selection
                           :add-new-object! add-new-object!}]
            (if (and group-by-property-ident (not (number? (first (:rows table)))))
-             (when (seq (:rows table))
+             (when (and ready? (seq (:rows table)))
                [:div.flex.flex-col.border-t.pt-2.gap-2
-                (map-indexed
-                 (fn [idx [value group]]
-                   (let [add-new-object! (when (fn? add-new-object!)
-                                           (fn [_]
-                                             (add-new-object! view-entity table
-                                                              {:properties {(:db/ident group-by-property) (or (and (map? value) (:db/id value)) value)}})))
-                         table' (shui/table-option (-> table-map
-                                                       (assoc-in [:data-fns :add-new-object!] add-new-object!)
-                                                       (assoc :data group ; data for this group
-                                                              )))
-                         readable-property-value #(cond (and (map? %) (or (:block/title %) (:logseq.property/value %)))
-                                                        (db-property/property-value-content %)
-                                                        (= (:db/ident %) :logseq.property/empty-placeholder)
-                                                        "Empty"
-                                                        :else
-                                                        (str %))
-                         group-by-page? (or (= :block/page group-by-property-ident)
-                                            (and (not db-based?) (contains? #{:linked-references :unlinked-references} display-type)))]
-                     (rum/with-key
-                       (ui/foldable
-                        [:div
-                         {:class (when-not list-view? "my-4")}
-                         (cond
-                           group-by-page?
-                           (if value
-                             (let [c (state/get-component :block/page-cp)]
-                               (c {:disable-preview? true} value))
-                             [:div.text-muted-foreground.text-sm
-                              "Pages"])
-
-                           (some? value)
-                           (let [icon (pu/get-block-property-value value :logseq.property/icon)]
-                             [:div.flex.flex-row.gap-1.items-center
-                              (when icon (icon-component/icon icon {:color? true}))
-                              (readable-property-value value)])
-                           :else
-                           (str "No " (:block/title group-by-property)))]
-                        (let [render (view-cp view-entity (assoc table' :rows group) option view-opts)]
-                          (if list-view? [:div.-ml-2 render] render))
-                        {:title-trigger? false})
-                       (str (:db/id view-entity) "-group-idx-" idx))))
-                 (:rows table))])
+                (virtualized-list
+                 {:class (when list-view? "group-list-view")
+                  :custom-scroll-parent (util/app-scroll-container-node (rum/deref *view-ref))
+                  :increase-viewport-by {:top 300 :bottom 300}
+                  :compute-item-key (fn [idx]
+                                      (str "table-group" idx))
+                  :skipAnimationFrameInResizeObserver true
+                  :total-count (count (:rows table))
+                  :item-content (fn [idx]
+                                  (let [[value group] (nth (:rows table) idx)
+                                        add-new-object! (when (fn? add-new-object!)
+                                                          (fn [_]
+                                                            (add-new-object! view-entity table
+                                                                             {:properties {(:db/ident group-by-property) (or (and (map? value) (:db/id value)) value)}})))
+                                        table' (shui/table-option (-> table-map
+                                                                      (assoc-in [:data-fns :add-new-object!] add-new-object!)
+                                                                      (assoc :data group ; data for this group
+                                                                             )))
+                                        readable-property-value #(cond (and (map? %) (or (:block/title %) (:logseq.property/value %)))
+                                                                       (db-property/property-value-content %)
+                                                                       (= (:db/ident %) :logseq.property/empty-placeholder)
+                                                                       "Empty"
+                                                                       :else
+                                                                       (str %))
+                                        group-by-page? (= :block/page group-by-property-ident)
+                                        key (str (:db/id view-entity) "-group-idx-" idx)]
+                                    (rum/with-key
+                                      (group-item view-entity table' group group-by-property value option view-opts
+                                                  {:list-view? list-view?
+                                                   :group-by-page? group-by-page?
+                                                   :readable-property-value readable-property-value})
+                                      key)))}
+                 disable-virtualized?)])
              (view-cp view-entity table
-                      (assoc option :group-by-property-ident group-by-property-ident)
+                      (assoc option
+                             :group-by-property-ident group-by-property-ident
+                             :disable-virtualized? disable-virtualized?)
                       view-opts)))])
       (merge {:title-trigger? false} foldable-options))]))
 
@@ -2034,16 +2182,21 @@
   (state/<invoke-db-worker :thread-api/get-view-data (state/get-current-repo) (:db/id view) opts))
 
 (defn- get-query-columns
-  [config properties]
-  (->> properties
-       (map db/entity)
-       (ldb/sort-by-order)
-       ((fn [cs] (build-columns config cs {:add-tags-column? false})))))
+  [config view-entity properties]
+  (let [advanced-query? (->> (:logseq.property/query view-entity)
+                             :logseq.property.node/display-type
+                             (= :code))]
+    (->> properties
+         (remove #{:logseq.property.embedding/hnsw-label-updated-at})
+         (map db/entity)
+         (ldb/sort-by-order)
+         ((fn [cs] (build-columns config cs {:add-tags-column? false
+                                             :advanced-query? advanced-query?}))))))
 
 (defn- load-view-data-aux
-  [config view-entity view-parent {:keys [query? query-entity-ids sorting filters input
-                                          view-feature-type group-by-property-ident
-                                          set-data! set-ref-pages-count! set-ref-matched-children-ids! set-properties! set-loading!]}]
+  [view-entity view-parent {:keys [query? query query-entity-ids sorting filters input
+                                   view-feature-type group-by-property-ident
+                                   set-data! set-ref-pages-count! set-ref-matched-children-ids! set-properties! set-loading!]}]
   (c.m/run-task*
    (m/sp
      (let [need-query? (and query? (seq query-entity-ids) (or sorting filters (not (string/blank? input))))]
@@ -2064,7 +2217,8 @@
                           :filters filters
                           :sorting sorting}
                           query?
-                          (assoc :query-entity-ids query-entity-ids))
+                          (assoc :query-entity-ids query-entity-ids
+                                 :query query))
                    {:keys [data ref-pages-count ref-matched-children-ids properties]}
                    (c.m/<? (<load-view-data view-entity opts))]
                (set-data! data)
@@ -2073,30 +2227,20 @@
                  (set-ref-matched-children-ids! ref-matched-children-ids))
                (set-properties! properties))
              (finally
-               (set-loading! false)
-               (when (contains? #{:class-objects :property-objects} view-feature-type)
-                 (when-let [*objects-ready? (:*objects-ready? config)]
-                   (reset! *objects-ready? true)))))))))))
+               (set-loading! false)))))))))
 
 (rum/defc view-aux
-  [view-entity {:keys [config view-parent view-feature-type data query-entity-ids set-view-entity!] :as option}]
+  [view-entity {:keys [config view-parent view-feature-type data query-entity-ids query set-view-entity!] :as option}]
   (let [[input set-input!] (hooks/use-state "")
         [properties set-properties!] (hooks/use-state nil)
-        db-based? (config/db-based-graph?)
         group-by-property (:logseq.property.view/group-by-property view-entity)
-        display-type (if (config/db-based-graph?)
-                       (or (:db/ident (get view-entity :logseq.property.view/type))
-                           (when (= (:view-type option) :linked-references)
-                             :logseq.property.view/type.list)
-                           :logseq.property.view/type.table)
-                       (if (= view-feature-type :all-pages)
-                         :logseq.property.view/type.table
-                         :logseq.property.view/type.list))
+        display-type (or (:db/ident (get view-entity :logseq.property.view/type))
+                         (when (= (:view-type option) :linked-references)
+                           :logseq.property.view/type.list)
+                         :logseq.property.view/type.table)
         list-view? (= display-type :logseq.property.view/type.list)
         group-by-property-ident (or (:db/ident group-by-property)
                                     (when (and list-view? (nil? group-by-property))
-                                      :block/page)
-                                    (when (and (not db-based?) (contains? #{:linked-references :unlinked-references} view-feature-type))
                                       :block/page))
         sorting* (:logseq.property.table/sorting view-entity)
         sorting (if (or (= sorting* :logseq.property/empty-placeholder) (empty? sorting*))
@@ -2106,14 +2250,15 @@
         view-filters (:logseq.property.table/filters view-entity)
         [filters set-filters!] (rum/use-state (or view-filters {}))
         query? (= view-feature-type :query-result)
-        option (if query? (assoc option :columns (get-query-columns config properties)) option)
+        option (if query? (assoc option :columns (get-query-columns config view-entity properties)) option)
         [loading? set-loading!] (hooks/use-state (not query?))
         [data set-data!] (hooks/use-state data)
         [ref-pages-count set-ref-pages-count!] (hooks/use-state nil)
         [ref-matched-children-ids set-ref-matched-children-ids!] (hooks/use-state nil)
         load-view-data (fn load-view-data []
-                         (load-view-data-aux config view-entity view-parent
+                         (load-view-data-aux view-entity view-parent
                                              {:query? query?
+                                              :query query
                                               :query-entity-ids query-entity-ids
                                               :sorting sorting :filters filters :input input
                                               :view-feature-type view-feature-type :group-by-property-ident group-by-property-ident
@@ -2153,11 +2298,15 @@
                                                          ;; grouped
                                                          (let [f (fn count-col
                                                                    [data]
-                                                                   (reduce (fn [total [_k col]]
-                                                                             (if (and (vector? (first col))
-                                                                                      (uuid? (ffirst col)))
-                                                                               (+ total (count-col col))
-                                                                               (+ total (count col)))) 0 data))]
+                                                                   (reduce (fn [total item]
+                                                                             (if (number? item)
+                                                                               (+ total 1)
+                                                                               (let [[_k col] item]
+                                                                                 (if (and (vector? (first col))
+                                                                                          (not (map? col))
+                                                                                          (uuid? (ffirst col)))
+                                                                                   (+ total (count-col col))
+                                                                                   (+ total (count col)))))) 0 data))]
                                                            (f data)))
                                           :group-by-property-ident group-by-property-ident
                                           :ref-pages-count ref-pages-count
@@ -2172,6 +2321,7 @@
     (when-let [repo (state/get-current-repo)]
       (when-let [k (case view-feature-type
                      :class-objects :frontend.worker.react/objects
+                     :property-objects :frontend.worker.react/objects
                      :linked-references :frontend.worker.react/refs
                      nil)]
         (let [*version (atom 0)]
@@ -2189,14 +2339,13 @@
   [{:keys [view-parent view-feature-type view-entity] :as option}]
   (let [[views set-views!] (hooks/use-state nil)
         [view-entity set-view-entity!] (hooks/use-state view-entity)
-        query? (= view-feature-type :query-result)
-        db-based? (config/db-based-graph?)]
+        query? (= view-feature-type :query-result)]
     (hooks/use-effect!
      #(c.m/run-task*
        (m/sp
          (when-not query?
            (let [repo (state/get-current-repo)]
-             (when (and db-based? (not view-entity))
+             (when-not view-entity
                (c.m/<? (db-async/<get-views repo (:db/id view-parent) view-feature-type))
                (let [views (get-views view-parent view-feature-type)]
                  (if-let [v (first views)]
@@ -2208,8 +2357,7 @@
                        (set-views! (concat views [new-view]))
                        (set-view-entity! new-view))))))))))
      [])
-    (when (if db-based? view-entity (or view-entity view-parent
-                                        (= view-feature-type :all-pages)))
+    (when view-entity
       (let [option' (assoc option
                            :view-feature-type (or view-feature-type
                                                   (:logseq.property.view/feature-type view-entity))

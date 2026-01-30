@@ -5,7 +5,8 @@
                                          :sha     "5d672bf84ed944414b9f61eeb83808ead7be9127"}
 
   datascript/datascript                 {:git/url "https://github.com/logseq/datascript" ;; fork
-                                         :sha     "b28f6574b9447bba9ccaa5d2b0cfd79308acf0e3"}
+                                         :sha     "ff5a7d5326e2546f40146e4a489343f557519bc3"}
+  ;; datascript/datascript                 {:local/root "../../datascript"}
 
   datascript-transit/datascript-transit {:mvn/version "0.3.0"}
   borkdude/rewrite-edn                  {:mvn/version "0.4.9"}
@@ -27,8 +28,8 @@
   org.clojure/core.async                {:mvn/version "1.6.673"}
   thheller/shadow-cljs                  {:mvn/version "2.28.23"}
   expound/expound                       {:mvn/version "0.8.6"}
-  com.lambdaisland/glogi                {:mvn/version "1.1.144"}
-  binaryage/devtools                    {:mvn/version "1.0.5"}
+  com.lambdaisland/glogi                {:git/url "https://github.com/lambdaisland/glogi"
+                                         :git/sha "30328a045141717aadbbb693465aed55f0904976"}
   camel-snake-kebab/camel-snake-kebab   {:mvn/version "0.4.3"}
   instaparse/instaparse                 {:mvn/version "1.4.10"}
   org.clojars.mmb90/cljs-cache          {:mvn/version "0.1.4"}
@@ -37,42 +38,36 @@
   logseq/graph-parser                   {:local/root "deps/graph-parser"}
   logseq/outliner                       {:local/root "deps/outliner"}
   logseq/publishing                     {:local/root "deps/publishing"}
+  logseq/cli                            {:local/root "deps/cli"}
   logseq/shui                           {:local/root "deps/shui"}
   metosin/malli                         {:mvn/version "0.16.1"}
   com.cognitect/transit-cljs            {:mvn/version "0.8.280"}
-  missionary/missionary                 {:mvn/version "b.44"}
+  missionary/missionary                 {:mvn/version "b.46"}
   meander/epsilon                       {:mvn/version "0.0.650"}
 
-  io.github.open-spaced-repetition/cljc-fsrs {:git/sha "0e70e96a73cf63c85dcc2df4d022edf12806b239"
-                                              ;; TODO: use https://github.com/open-spaced-repetition/cljc-fsrs
-                                              ;; when PR merged
-                                              ;; https://github.com/open-spaced-repetition/cljc-fsrs/pull/5
-                                              :git/url "https://github.com/rcmerci/cljc-fsrs"}
+  io.github.open-spaced-repetition/cljc-fsrs {:git/sha "eeef3520df664e51c3d0ba2031ec2ba071635442"
+                                              :git/url "https://github.com/open-spaced-repetition/cljc-fsrs"}
   tick/tick                              {:mvn/version "0.7.5"}
   io.github.rcmerci/cljs-http-missionary {:git/url "https://github.com/RCmerci/cljs-http-missionary"
-                                          :git/sha "d61ce7e29186de021a2a453a8cee68efb5a88440"}}
+                                          :git/sha "d61ce7e29186de021a2a453a8cee68efb5a88440"}
+
+  logseq/logseq-schema                   {:git/url "https://github.com/logseq/logseq-schema"
+                                          :git/sha "6eeb51cd6d80bbffa0873c1e79790dc1f4ff68cf"}}
 
  :aliases {:cljs {:extra-paths ["src/dev-cljs/" "src/test/" "src/electron/"]
-                  :extra-deps  {org.clojure/clojurescript        {:mvn/version "1.11.132"}
-                                org.clojure/tools.namespace      {:mvn/version "0.2.11"}
+                  :extra-deps  {org.clojure/tools.namespace      {:mvn/version "0.2.11"}
                                 cider/cider-nrepl                {:mvn/version "0.55.1"}
                                 org.clojars.knubie/cljs-run-test {:mvn/version "1.0.1"}
-                                tortue/spy                       {:mvn/version "2.14.0"}}
+                                tortue/spy                       {:mvn/version "2.14.0"}
+                                binaryage/devtools               {:mvn/version "1.0.5"}}
                   :main-opts   ["-m" "shadow.cljs.devtools.cli"]}
-
            :test {:extra-paths ["src/test/"]
-                  :extra-deps  {org.clojure/clojurescript        {:mvn/version "1.11.132"}
-                                org.clojure/test.check           {:mvn/version "1.1.1"}
+                  :extra-deps  {org.clojure/test.check           {:mvn/version "1.1.1"}
                                 pjstadig/humane-test-output      {:mvn/version "0.11.0"}
                                 org.clojars.knubie/cljs-run-test {:mvn/version "1.0.1"}
                                 tortue/spy                       {:mvn/version "2.14.0"}
                                 cider/cider-nrepl                {:mvn/version "0.55.1"}}
                   :main-opts   ["-m" "shadow.cljs.devtools.cli"]}
-
-           :rtc-e2e-test {:extra-paths ["src/rtc_e2e_test"]
-                          :extra-deps {org.clojure/clojurescript        {:mvn/version "1.11.132"}
-                                       cider/cider-nrepl                {:mvn/version "0.50.2"}}
-                          :main-opts ["-m" "shadow.cljs.devtools.cli"]}
 
            :bench {:extra-paths ["src/bench/"]
                    :extra-deps {olical/cljs-test-runner {:mvn/version "3.8.0"}

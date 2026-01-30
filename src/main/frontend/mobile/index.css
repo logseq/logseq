@@ -1,83 +1,34 @@
-.cp__footer {
-  @apply fixed bottom-0 left-0 px-5 py-2.5 z-10 flex flex-auto whitespace-nowrap h-20 items-start
-  bg-[var(--ls-primary-background-color)];
-
-  .bottom-action {
-    @apply w-6 h-6;
-  }
-
-  .ti, .timer {
-    color: var(--ls-primary-text-color);
-  }
-
-  .timer {
-    @apply absolute left-10;
-  }
-}
-
 .action-bar {
   @apply fixed bottom-[100px] h-[70px] p-1.5 rounded-md overflow-y-hidden overflow-x-auto
-  shadow-md bg-[var(--ls-secondary-background-color)] z-[100];
+  bg-[var(--ls-secondary-background-color)] z-[99999];
+
+  box-shadow: /* bottom = shadow-lg */ 0 10px 15px -3px rgba(0, 0, 0, 0.1),
+  0 4px 6px -4px rgba(0, 0, 0, 0.1),
+    /* top = lighter (closer to shadow-md) */ 0 -6px 10px -4px rgba(0, 0, 0, 0.08),
+  0 -2px 4px -4px rgba(0, 0, 0, 0.08);
 
   .action-bar-commands {
-    @apply relative flex justify-around w-[120%];
+    @apply relative flex w-full;
 
 
     .ti, .tie {
-      @apply text-[var(--ls-primary-text-color)] text-[23px] opacity-50;
+      @apply text-[var(--ls-primary-text-color)] text-[23px] opacity-90;
     }
 
     .description {
-      @apply text-[var(--ls-primary-text-color)] text-[13px] opacity-60;
+      @apply text-[var(--ls-primary-text-color)] text-[10px] opacity-100;
     }
 
     button {
-      @apply py-1 px-2;
+      @apply flex-1 flex flex-col items-center justify-center py-3 px-1
+      opacity-80 active:opacity-100;
     }
-  }
-}
-
-#mobile-editor-toolbar {
-  @apply fixed bottom-0 left-0 w-full z-[9999] flex justify-between;
-
-  button {
-    @apply flex items-center py-2 px-2;
-  }
-
-  .submenu {
-    @apply fixed left-0 bottom-0 w-full flex-row justify-evenly items-center z-10 bg-base-2
-    hidden overflow-x-auto overflow-y-hidden h-5 border;
-
-    &.show-submenu {
-      @apply flex;
-    }
-  }
-
-  .toolbar-commands {
-    @apply flex justify-between items-center w-[95%] overflow-y-hidden overflow-x-auto;
-
-    &::-webkit-scrollbar {
-      @apply h-1;
-    }
-  }
-
-  .toolbar-hide-keyboard {
-    border-left: 1px solid;
-    border-color: var(--ls-quaternary-background-color);
   }
 }
 
 html.is-native-ipad {
-  .cp__footer {
-    @apply h-[55px] right-0 shadow-none flex-1 z-0;
-  }
-
   .action-bar {
     @apply w-[70%] min-w-[550px];
-
-    .action-bar-commands {
-      @apply w-full;
-    }
 
     @media (orientation: landscape) {
       @apply w-1/2;
@@ -102,10 +53,6 @@ html.is-native-iphone {
       right: 15%;
       width: 70%;
       min-width: 450px;
-
-      .action-bar-commands {
-        width: 100%;
-      }
     }
   }
 }
@@ -128,10 +75,6 @@ html.is-native-android {
       left: 15%;
       right: 15%;
       width: 70%;
-
-      .action-bar-commands {
-        width: 100%;
-      }
     }
   }
 
@@ -167,4 +110,26 @@ html.is-zoomed-native-ios {
       @apply opacity-100;
     }
   }
+}
+
+.ui__dialog-content {
+    margin-top: 45px;
+}
+
+html.has-mobile-keyboard {
+  .ui__dialog-overlay {
+    &:has(.app-login-modal) {
+      @apply overflow-y-auto;
+    }
+  }
+
+  .ui__dialog-content {
+    &.app-login-modal {
+      margin-bottom: 460px;
+    }
+  }
+}
+
+.ui__dialog-content[label=user-login] {
+  @apply rounded-lg pb-3;
 }

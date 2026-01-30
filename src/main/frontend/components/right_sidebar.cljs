@@ -8,6 +8,8 @@
             [frontend.components.page :as page]
             [frontend.components.profiler :as profiler]
             [frontend.components.shortcut-help :as shortcut-help]
+            [frontend.components.vector-search.sidebar :as vector-search]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
@@ -148,6 +150,10 @@
         :profiler
         [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) "(Dev) Profiler"]
          (profiler/profiler)]
+
+        :vector-search
+        [[:.flex.items-center (ui/icon "file-search" {:class "text-md mr-2"}) "(Dev) VectorSearch"]
+         (vector-search/vector-search-sidebar)]
 
         ["" [:span]])))
    (p/catch (fn [error]
@@ -437,11 +443,17 @@
                                                                      (state/sidebar-add-block! repo "help" :help))}
           (t :right-side-bar/help)]]
 
-        (when (state/sub [:ui/developer-mode?])
+        (when (and (state/sub [:ui/developer-mode?]) (not config/publishing?))
           [:div.text-sm
            [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                                        (state/sidebar-add-block! repo "rtc" :rtc))}
             "(Dev) RTC"]])
+        (when (state/sub [:ui/developer-mode?])
+          [:div.text-sm
+           [:button.button.cp__right-sidebar-settings-btn
+            {:on-click (fn [_e]
+                         (state/sidebar-add-block! repo "vector-search" :vector-search))}
+            "(Dev) vector-search"]])
         (when (state/sub [:ui/developer-mode?])
           [:div.text-sm
            [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]

@@ -1,14 +1,19 @@
 (ns frontend.handler.db-based.rtc-flows
   "Flows related to RTC"
   (:require [frontend.common.missionary :as c.m]
+            [frontend.common.thread-api :as thread-api :refer [def-thread-api]]
             [frontend.flows :as flows]
+            [frontend.mobile.flows :as mobile-flows]
             [frontend.state :as state]
             [logseq.common.util :as common-util]
             [missionary.core :as m])
   (:import [missionary Cancelled]))
 
 (def rtc-log-flow
-  (m/watch (:rtc/log @state/state)))
+  (->> (m/watch (:rtc/log @state/state))
+       (m/eduction
+        (remove #(and (= :skip (:sub-type %))
+                      (= :rtc.log/apply-remote-update (:type %)))))))
 
 (def rtc-download-log-flow
   (m/eduction
@@ -42,39 +47,28 @@
     (dedupe)
     rtc-state-flow)))
 
-(def ^:private network-online-change-flow
-  (m/stream
-   (m/relieve
-    (m/observe
-     (fn ctor [emit!]
-       (let [origin-callback js/window.ononline]
-         (set! js/window.ononline emit!)
-         (emit! nil)
-         (fn dtor []
-           (set! js/window.ononline origin-callback))))))))
-
 (def rtc-try-restart-flow
   "emit an event when it's time to restart rtc loop.
 conditions:
 - user logged in
 - no rtc loop running now
 - last rtc stop-reason is websocket message timeout
-- current js/navigator.onLine=true
+- online
 - throttle 5000ms"
   (->> (m/latest
-        (fn [rtc-state _ login-user]
-          (assoc rtc-state :login-user login-user))
+        (fn [rtc-state online? login-user]
+          (assoc rtc-state :login-user login-user :online? online?))
         rtc-state-flow
-        (c.m/continue-flow network-online-change-flow)
+        flows/network-online-event-flow
         flows/current-login-user-flow)
        (m/eduction
         (keep (fn [m]
-                (let [{:keys [rtc-lock last-stop-exception-ex-data graph-uuid login-user]} m]
-                  (when (and (some? (:email login-user))
+                (let [{:keys [rtc-lock last-stop-exception-ex-data graph-uuid login-user online?]} m]
+                  (when (and online?
+                             (some? (:email login-user))
                              (some? graph-uuid)
                              (not rtc-lock) ; no rtc loop now
-                             (= :rtc.exception/ws-timeout (:type last-stop-exception-ex-data))
-                             (true? js/navigator.onLine))
+                             (= :rtc.exception/ws-timeout (:type last-stop-exception-ex-data)))
                     {:graph-uuid graph-uuid :t (common-util/time-ms)})))))
        (c.m/throttle 5000)))
 
@@ -92,6 +86,10 @@ conditions:
   [repo]
   (assert (some? repo))
   (reset! *rtc-start-trigger repo))
+
+(def-thread-api :thread-api/rtc-start-request
+  [repo]
+  (trigger-rtc-start repo))
 
 (def ^:private document-visible&rtc-not-running-flow
   (m/ap
@@ -111,13 +109,25 @@ conditions:
     (let [online? (m/?< flows/network-online-event-flow)]
       (try
         (if online?
-          (let [rtc-lock (:rtc-lock (m/? (c.m/snapshot-of-flow rtc-state-flow)))]
-            (if (not rtc-lock)
+          (let [rtc-running? (m/? (c.m/snapshot-of-flow rtc-running-flow))]
+            (if (not rtc-running?)
               :network-online&rtc-not-running
               (m/amb)))
           (m/amb))
         (catch Cancelled _
           (m/amb))))))
+
+(def ^:private mobile-app-active&rtc-not-running-flow
+  (m/ap
+    (let [app-active? (m/?< mobile-flows/mobile-app-state-flow)]
+      (try
+        (if app-active?
+          (let [rtc-running? (m/? (c.m/snapshot-of-flow rtc-running-flow))]
+            (if (not rtc-running?)
+              :mobile-app-active&rtc-not-running
+              (m/amb)))
+          (m/amb))
+        (catch Cancelled _ (m/amb))))))
 
 (def trigger-start-rtc-flow
   (->>
@@ -140,7 +150,11 @@ conditions:
     ;; network online->true
     (m/eduction
      (map vector)
-     network-online&rtc-not-running-flow)]
+     network-online&rtc-not-running-flow)
+    ;; for mobile, app active event + rtc-not-running
+    (m/eduction
+     (map vector)
+     mobile-app-active&rtc-not-running-flow)]
    (apply c.m/mix)
    (m/latest vector flows/current-login-user-flow)
    (m/eduction (keep (fn [[current-user trigger-event]] (when current-user trigger-event))))

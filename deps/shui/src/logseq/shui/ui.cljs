@@ -2,6 +2,7 @@
   (:require [logseq.shui.base.core :as base-core]
             [logseq.shui.dialog.core :as dialog-core]
             [logseq.shui.form.core :as form-core]
+            [logseq.shui.form.password :as form-password]
             [logseq.shui.icon.v2 :as icon-v2]
             [logseq.shui.popup.core :as popup-core]
             [logseq.shui.select.core :as select-core]
@@ -155,3 +156,5 @@
 (def table-cell table-core/table-cell)
 (def table-actions table-core/table-actions)
 (def table-get-selection-rows table-core/get-selection-rows)
+
+(def toggle-password form-password/toggle-password)

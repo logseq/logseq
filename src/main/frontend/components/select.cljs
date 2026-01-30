@@ -4,8 +4,6 @@
   new select-type, create an event that calls `select/dialog-select!` with the
   select-type. See the :graph/open command for a full example."
   (:require [clojure.string :as string]
-            [frontend.components.combobox :as combobox]
-            [frontend.components.list-item-icon :as list-item-icon]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.handler.common.developer :as dev-common-handler]
@@ -21,34 +19,30 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
 
-(defn- create-item-renderer-config
-  "Create unified item renderer config for select component."
-  [multiple-choices? *selected-choices extract-value-fn]
-  {:multi-select? multiple-choices?
-   :selected-choices *selected-choices
-   :extract-value-fn extract-value-fn
-   :icon-fn (fn [item]
-              ;; Return icon based on item type
-              (or (:icon item)
-                  (let [label (if (string? (:label item)) (:label item) "")]
-                    (cond
-                      (string/starts-with? label "New option:")
-                      "plus"
-                      (string/starts-with? label "Convert")
-                      "file" ; Page icon for convert items (they're pages being converted to properties)
-                      :else
-                      "letter-p")))) ; Default to property icon for all other items
-   :icon-variant-fn (fn [item]
-                      ;; Use :create variant only for "New option:" items
-                      (let [label (if (string? (:label item)) (:label item) "")]
-                        (if (string/starts-with? label "New option:")
-                          :create
-                          :default)))
-   :new-item-patterns ["New option:" "Convert"]
-   :show-breadcrumbs? true
-   :breadcrumb-fn (fn [item] (:header item)) ; Use :header as breadcrumb
-   :on-pointer-down util/stop-propagation
-   :gap-size 3})
+(rum/defc render-item < rum/reactive
+  [result chosen? multiple-choices? *selected-choices]
+  (let [value (if (map? result) (or (:label result)
+                                    (:value result)) result)
+        header (:header result)
+        selected-choices (rum/react *selected-choices)
+        row [:div.flex.flex-row.justify-between.w-full
+             {:class (when chosen? "chosen")
+              :on-pointer-down util/stop-propagation}
+             [:div.flex.flex-row.items-center.gap-1
+              (when multiple-choices?
+                (ui/checkbox {:checked (boolean (selected-choices (:value result)))
+                              :on-click (fn [e]
+                                          (.preventDefault e))
+                              :disabled (:disabled? result)}))
+              value]
+             (when (and (map? result) (:id result))
+               [:div.tip.flex
+                [:code.opacity-20.bg-transparent (:id result)]])]]
+    (if header
+      [:div.flex.flex-col.gap-1
+       header
+       row]
+      row)))
 
 (rum/defc search-input
   [*input {:keys [prompt-key input-default-placeholder input-opts on-input]}]
@@ -66,12 +60,11 @@
      [(hooks/use-debounced-value @*input 100)])
 
     [:div.input-wrap
-     {:style {:margin-bottom "-2px"}}
      [:input.cp__select-input.w-full
       (merge {:type "text"
               :class "!p-1.5"
               :placeholder (or input-default-placeholder (t prompt-key))
-              :auto-focus true
+              :auto-focus (not (util/mobile?))
               :value input
               :on-change (fn [e]
                            (let [v (util/evalue e)]
@@ -145,17 +138,29 @@
                                     (not (contains? selected-choices (:value item))))
                                   search-result')
                          search-result')
+        new-option {:value @*input
+                    :label (str "+ New option: " @*input)}
         search-result (if (and show-new-when-not-exact-match?
                                (not exact-match?)
                                (not (string/blank? @*input))
                                (not (exact-match-exclude-items @*input)))
-                        (->>
-                         (cons
-                          (first search-result')
-                          (cons {:value @*input
-                                 :label (str "New option: " @*input)}
-                                (rest search-result')))
-                         (remove nil?))
+                        (let [current-input (exact-transform-fn @*input)
+                              matches? (some (fn [item]
+                                               (and (string? item)
+                                                    (string? current-input)
+                                                    (string/includes?
+                                                     (string/lower-case item)
+                                                     (string/lower-case current-input))))
+                                             (set (map (comp exact-transform-fn str extract-fn) search-result')))]
+                          (->>
+                           (if matches?
+                             (cons
+                              (first search-result')
+                              (cons
+                               new-option
+                               (rest search-result')))
+                             (cons new-option search-result'))
+                           (remove nil?)))
                         search-result')
         input-opts' (if (fn? input-opts) (input-opts (empty? search-result)) input-opts)
         input-container (or
@@ -171,33 +176,32 @@
                                  (ui/loading "Loading ...")]
                                 [:div
                                  {:class (when (seq search-result) "py-1")}
-                                 (combobox/combobox
-                                  search-result
-                                  {:show-search-input? true
-                                   :show-separator? false
-                                   :grouped? grouped?
-                                   :width :default ; Fixed width to prevent jumping
-                                   :item-render item-cp ; Custom renderer takes precedence
-                                   :item-renderer-config (when (not item-cp)
-                                                           (create-item-renderer-config multiple-choices? *selected-choices extract-chosen-fn))
-                                   :on-chosen (fn [raw-chosen e]
-                                                (when clear-input-on-chosen?
-                                                  (reset! *input ""))
-                                                (let [chosen (extract-chosen-fn raw-chosen)]
-                                                  (if multiple-choices?
-                                                    (if (selected-choices chosen)
-                                                      (do
-                                                        (swap! *selected-choices disj chosen)
-                                                        (when on-chosen (on-chosen chosen false @*selected-choices e)))
-                                                      (do
-                                                        (swap! *selected-choices conj chosen)
-                                                        (when on-chosen (on-chosen chosen true @*selected-choices e))))
-                                                    (do
-                                                      (when (and close-modal? (not multiple-choices?))
-                                                        (state/close-modal!))
-                                                      (when on-chosen
-                                                        (on-chosen chosen true @*selected-choices e))))))
-                                   :empty-placeholder (empty-placeholder t)})
+                                 [:div.item-results-wrap
+                                  (ui/auto-complete
+                                   search-result
+                                   {:grouped? grouped?
+                                    :item-render       (or item-cp (fn [result chosen?]
+                                                                     (render-item result chosen? multiple-choices? *selected-choices)))
+                                    :class             "cp__select-results"
+                                    :on-chosen         (fn [raw-chosen e]
+                                                         (util/stop-propagation e)
+                                                         (when clear-input-on-chosen?
+                                                           (reset! *input ""))
+                                                         (let [chosen (extract-chosen-fn raw-chosen)]
+                                                           (if multiple-choices?
+                                                             (if (selected-choices chosen)
+                                                               (do
+                                                                 (swap! *selected-choices disj chosen)
+                                                                 (when on-chosen (on-chosen chosen false @*selected-choices e)))
+                                                               (do
+                                                                 (swap! *selected-choices conj chosen)
+                                                                 (when on-chosen (on-chosen chosen true @*selected-choices e))))
+                                                             (do
+                                                               (when (and close-modal? (not multiple-choices?))
+                                                                 (state/close-modal!))
+                                                               (when on-chosen
+                                                                 (on-chosen chosen true @*selected-choices e))))))
+                                    :empty-placeholder (empty-placeholder t)})]
 
                                  (when (and multiple-choices? (fn? on-apply))
                                    [:div.p-4 (ui/button "Apply"
@@ -221,8 +225,6 @@
          :*toggle-fn *toggle})
        [:<>
         (if (fn? input-container) (input-container) input-container)
-        (when (seq search-result) ; Only show separator if there are results
-          (shui/select-separator))
         (results-container-f)])]))
 
 (defn select-config
@@ -275,7 +277,7 @@
                   (->> (state/get-repos)
                        (remove (fn [{:keys [url]}]
                                 ;; Can't replace current graph as ui wouldn't reload properly
-                                 (or (= url current-repo) (not (config/db-based-graph? url)))))
+                                 (= url current-repo)))
                        (map (fn [{:keys [url] :as original-graph}]
                               {:value (text-util/get-graph-name-from-path url)
                                :id (config/get-repo-dir url)
@@ -296,6 +298,6 @@
                     (select-keys [:on-chosen :empty-placeholder :prompt-key])
                     (assoc :items ((:items-fn select-type-config)))))
        {:id :ls-select-modal
-        :close-btn? false
+        :close-btn?  false
         :align :top
         :content-props {:class "ls-dialog-select"}}))))

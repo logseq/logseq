@@ -239,3 +239,9 @@ html.is-native-ios {
 .ls-page-blocks {
   @apply min-h-[60px] overflow-hidden;
 }
+
+.block-add-button {
+  &.selected {
+    opacity: 1 !important;
+  }
+}

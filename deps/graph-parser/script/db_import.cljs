@@ -14,14 +14,15 @@
             [logseq.common.graph :as common-graph]
             [logseq.db.common.sqlite-cli :as sqlite-cli]
             [logseq.db.frontend.asset :as db-asset]
+            [logseq.db.frontend.validate :as db-validate]
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.outliner.cli :as outliner-cli]
-            [logseq.outliner.pipeline :as outliner-pipeline]
             [nbb.classpath :as cp]
             [nbb.core :as nbb]
             [promesa.core :as p]))
 
 (def tx-queue (atom cljs.core/PersistentQueue.EMPTY))
+;; This is a lower-level dev hook to inspect txs and shouldn't hook into ldb/transact!
 (def original-transact! d/transact!)
 (defn dev-transact! [conn tx-data tx-meta]
   (swap! tx-queue (fn [queue]
@@ -49,25 +50,31 @@
   (p/let [s (fsp/readFile (:path file))]
     (str s)))
 
-(defn- <read-asset-file [file assets]
-  (p/let [buffer (fs/readFileSync (:path file))
-          checksum (db-asset/<get-file-array-buffer-checksum buffer)]
-    (swap! assets assoc
-           (gp-exporter/asset-path->name (:path file))
-           {:size (.-length buffer)
-            :checksum checksum
-            :type (db-asset/asset-path->type (:path file))
-            :path (:path file)})))
+(defn- exceed-limit-size?
+  "Asset size no more than 100M"
+  [^js buffer]
+  (> (.-length buffer) (* 100 1024 1024)))
 
-(defn- <copy-asset-file [asset-m db-graph-dir]
-  (p/let [parent-dir (node-path/join db-graph-dir common-config/local-assets-dir)
-          _ (fsp/mkdir parent-dir #js {:recursive true})]
-    (if (:block/uuid asset-m)
-      (fsp/copyFile (:path asset-m) (node-path/join parent-dir (str (:block/uuid asset-m) "." (:type asset-m))))
-      (do
-        (println "[INFO]" "Copied asset" (pr-str (node-path/basename (:path asset-m)))
-                 "by its name since it was unused.")
-        (fsp/copyFile (:path asset-m) (node-path/join parent-dir (node-path/basename (:path asset-m))))))))
+(defn- <read-and-copy-asset [db-graph-dir file assets buffer-handler]
+  (p/let [buffer (fs/readFileSync (:path file))
+          checksum (db-asset/<get-file-array-buffer-checksum buffer)
+          asset-id (d/squuid)
+          asset-name (gp-exporter/asset-path->name (:path file))
+          asset-type (db-asset/asset-path->type (:path file))]
+    (if (exceed-limit-size? buffer)
+      (js/console.log (str "Skipped copying asset " (pr-str (:path file)) " because it is larger than the 100M max."))
+      (p/let [parent-dir (node-path/join db-graph-dir common-config/local-assets-dir)
+              {:keys [with-edn-content pdf-annotation?]} (buffer-handler buffer)]
+        (fsp/mkdir parent-dir #js {:recursive true})
+        (swap! assets assoc asset-name
+               (with-edn-content
+                 {:size (.-length buffer)
+                  :type asset-type
+                  :path (:path file)
+                  :checksum checksum
+                  :asset-id asset-id}))
+        (when-not pdf-annotation?
+          (fsp/copyFile (:path file) (node-path/join parent-dir (str asset-id "." asset-type))))))))
 
 (defn- notify-user [{:keys [continue debug]} m]
   (println (:msg m))
@@ -88,8 +95,7 @@
       (println (some-> (get-in m [:ex-data :error]) .-stack)))
     (when debug
       (when-let [matching-tx (seq (filter #(and (get-in m [:ex-data :path])
-                                                (or (= (get-in % [:tx-meta ::gp-exporter/path]) (get-in m [:ex-data :path]))
-                                                    (= (get-in % [:tx-meta ::outliner-pipeline/original-tx-meta ::gp-exporter/path]) (get-in m [:ex-data :path]))))
+                                                (= (get-in % [:tx-meta ::gp-exporter/path]) (get-in m [:ex-data :path])))
                                           @tx-queue))]
         (println (str "\n" (count matching-tx)) "Tx Maps for failing path:")
         (pprint/pprint matching-tx))))
@@ -105,7 +111,10 @@
    ;; :set-ui-state prn
    ;; config file options
    ;; TODO: Add actual default
-   :default-config {}})
+   :default-config {}
+   ;; TODO: Add zotero support
+   ;; :<get-file-stat (fn [path])
+   })
 
 (defn- import-file-graph-to-db
   "Import a file graph dir just like UI does. However, unlike the UI the
@@ -118,9 +127,7 @@
         options (merge options
                        (default-export-options options)
                         ;; asset file options
-                       {:<copy-asset (fn copy-asset [file]
-                                       (<copy-asset-file file db-graph-dir))
-                        :<read-asset <read-asset-file})]
+                       {:<read-and-copy-asset #(<read-and-copy-asset db-graph-dir %1 %2 %3)})]
     (p/with-redefs [d/transact! dev-transact!]
       (gp-exporter/export-file-graph conn conn config-file *files options))))
 
@@ -140,6 +147,19 @@
     (p/with-redefs [d/transact! dev-transact!]
       (p/let [_ (gp-exporter/export-doc-files conn files' <read-file doc-options)]
         {:import-state (:import-state doc-options)}))))
+
+(defn- validate-db [db db-name options]
+  (if-let [errors (:errors
+                   (db-validate/validate-local-db!
+                    db
+                    (merge options {:db-name db-name :verbose true})))]
+    (do
+      (println "Found" (count errors)
+               (if (= 1 (count errors)) "entity" "entities")
+               "with errors:")
+      (pprint/pprint errors)
+      (js/process.exit 1))
+    (println "Valid!")))
 
 (def spec
   "Options spec"
@@ -167,7 +187,10 @@
    :property-parent-classes
    {:alias :P
     :coerce []
-    :desc "List of properties whose values convert to a parent class"}})
+    :desc "List of properties whose values convert to a parent class"}
+   :validate
+   {:alias :V
+    :desc "Validate db after creation"}})
 
 (defn -main [args]
   (let [[file-graph db-graph-dir] args
@@ -193,7 +216,7 @@
                        (set/rename-keys {:all-tags :convert-all-tags? :remove-inline-tags :remove-inline-tags?}))
         _ (when (:verbose options) (prn :options user-options))
         options' (merge {:user-options user-options}
-                        (select-keys options [:files :verbose :continue :debug]))]
+                        (select-keys options [:files :verbose :continue :debug :validate]))]
     (p/let [{:keys [import-state]}
             (if directory?
               (import-file-graph-to-db file-graph' db-full-dir conn options')
@@ -206,7 +229,8 @@
       (when-let [ignored-files (seq @(:ignored-files import-state))]
         (println (count ignored-files) "ignored file(s):" (pr-str (vec ignored-files))))
       (when (:verbose options') (println "Transacted" (count (d/datoms @conn :eavt)) "datoms"))
-      (println "Created graph" (str db-name "!")))))
+      (println "Created graph" (str db-name "!"))
+      (when (:validate options') (validate-db @conn db-name {})))))
 
 (when (= nbb/*file* (nbb/invoked-file))
   (-main *command-line-args*))

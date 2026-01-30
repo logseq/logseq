@@ -6,7 +6,6 @@
             [cljs.reader :as reader]
             [clojure.edn :as edn]
             [clojure.string :as string]
-            [clojure.walk :as walk]
             [goog.string :as gstring]
             [logseq.common.log :as log]))
 
@@ -23,17 +22,6 @@
    Keep capitalization sensitivity"
   [s]
   (.normalize s "NFC"))
-
-(defn remove-nils
-  "remove pairs of key-value that has nil value from a (possibly nested) map or
-  coll of maps."
-  [nm]
-  (walk/postwalk
-   (fn [el]
-     (if (map? el)
-       (into {} (remove (comp nil? second)) el)
-       el))
-   nm))
 
 (defn remove-nils-non-nested
   "remove pairs of key-value that has nil value from a map (nested not supported)."
@@ -60,16 +48,6 @@
   (when (string? tag-name)
     (not (re-find #"[#\t\r\n]+" tag-name))))
 
-(defn tag?
-  "Whether `s` is a tag."
-  [s]
-  (and (string? s)
-       (string/starts-with? s "#")
-       (or
-        (not (string/includes? s " "))
-        (string/starts-with? s "#[[")
-        (string/ends-with? s "]]"))))
-
 (defn safe-subs
   ([s start]
    (let [c (count s)]
@@ -77,10 +55,6 @@
   ([s start end]
    (let [c (count s)]
      (subs s (min c start) (min c end)))))
-
-(defn unquote-string
-  [v]
-  (string/trim (subs v 1 (dec (count v)))))
 
 (defn wrapped-by
   [v start end]
@@ -113,7 +87,6 @@
       (js->clj :keywordize-keys true)))
 
 (defn zero-pad
-  "Copy of frontend.util/zero-pad. Too basic to couple to main app"
   [n]
   (if (< n 10)
     (str "0" n)
@@ -250,7 +223,7 @@
   {:malli/schema [:=> [:cat :any :string] [:or :nil :string [:vector [:maybe :string]]]]}
   [pattern s]
   (when-not (string? s)
-       ;; TODO: sentry
+    ;; TODO: sentry
     (js/console.trace))
   (when (string? s)
     (re-find pattern s)))
@@ -266,15 +239,6 @@
 (defn format
   [fmt & args]
   (apply gstring/format fmt args))
-
-(defn remove-first [pred coll]
-  ((fn inner [coll]
-     (lazy-seq
-      (when-let [[x & xs] (seq coll)]
-        (if (pred x)
-          xs
-          (cons x (inner xs))))))
-   coll))
 
 (defn concat-without-nil
   [& cols]
@@ -310,10 +274,6 @@
 (defn replace-ignore-case
   [s old-value new-value]
   (string/replace s (re-pattern (str "(?i)" (escape-regex-chars old-value))) new-value))
-
-(defn replace-first-ignore-case
-  [s old-value new-value]
-  (string/replace-first s (re-pattern (str "(?i)" (escape-regex-chars old-value))) new-value))
 
 (defn sort-coll-by-dependency
   "Sort the elements in the collection based on dependencies.

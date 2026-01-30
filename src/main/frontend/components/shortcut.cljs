@@ -27,7 +27,6 @@
           :shortcut.category/block-selection
           :shortcut.category/formatting
           :shortcut.category/toggle
-          :shortcut.category/whiteboard
           :shortcut.category/plugins
           :shortcut.category/others))
 
@@ -52,8 +51,8 @@
        (let [key-handler (KeyHandler. js/document)]
           ;; setup
          (util/profile
-          "[shortcuts] unlisten*"
-          (shortcut/unlisten-all! true))
+           "[shortcuts] unlisten*"
+           (shortcut/unlisten-all! true))
          (events/listen key-handler "key"
                         (fn [^js e]
                           (.preventDefault e)
@@ -62,8 +61,8 @@
           ;; teardown
          #(do
             (util/profile
-             "[shortcuts] listen*"
-             (shortcut/listen-all!))
+              "[shortcuts] listen*"
+              (shortcut/listen-all!))
             (.dispose key-handler))))
      [])
 

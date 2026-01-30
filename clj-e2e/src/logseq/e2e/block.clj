@@ -5,19 +5,27 @@
             [logseq.e2e.keyboard :as k]
             [logseq.e2e.locator :as loc]
             [logseq.e2e.util :as util]
-            [wally.main :as w]))
+            [wally.main :as w]
+            [wally.repl :as repl]))
 
 (defn open-last-block
   "Open the last existing block or pressing add button to create a new block"
-  []
+  [& {:keys [in-retry?]}]
   (util/double-esc)
   (assert/assert-in-normal-mode?)
+
   (let [blocks-count (util/page-blocks-count)
         last-block (-> (if (zero? blocks-count)
                          (w/query ".ls-page-blocks .block-add-button")
                          (w/query ".ls-page-blocks .page-blocks-inner .ls-block .block-content"))
                        (last))]
-    (w/click last-block)))
+    (w/click last-block)
+    (if in-retry?
+      (assert/assert-editor-mode)
+      (try
+        (assert/assert-editor-mode)
+        (catch Error _e
+          (open-last-block {:in-retry? true}))))))
 
 (defn save-block
   [text]
@@ -27,27 +35,35 @@
   (assert/assert-is-visible (loc/filter util/editor-q :has-text text)))
 
 (defn new-block
-  [title]
+  [title & [in-retry?]]
   (let [editor (util/get-editor)]
     (when-not editor (open-last-block))
-    (assert/assert-editor-mode)
     (let [last-id (.getAttribute (w/-query ".editor-wrapper textarea") "id")]
       (is (some? last-id))
       (k/press "Control+e")
       (k/enter)
-      (assert/assert-is-visible
-       (loc/filter ".editor-wrapper"
-                   :has "textarea"
-                   :has-not (str "#" last-id)))
-      (assert/assert-editor-mode)
-      (save-block title))))
+      (try
+        (assert/assert-is-visible
+         (loc/filter ".editor-wrapper"
+                     :has "textarea"
+                     :has-not (str "#" last-id)))
+        (assert/assert-editor-mode)
+        (save-block title)
+        (catch Throwable e
+          (if in-retry?
+            (throw (ex-info
+                    "new-block exception"
+                    {:current-id (.getAttribute (w/-query ".editor-wrapper textarea") "id")
+                     :last-id last-id}
+                    e))
+            (do (prn :retry-new-block title)
+                (new-block title true))))))))
 
 ;; TODO: support tree
 (defn new-blocks
   [titles]
   (let [editor? (util/get-editor)]
     (when-not editor? (open-last-block))
-    (assert/assert-editor-mode)
     (let [value (util/get-edit-content)]
       (if (string/blank? value)         ; empty block
         (save-block (first titles))
@@ -79,6 +95,8 @@
 
 (def copy #(k/press "ControlOrMeta+c" {:delay 100}))
 (def paste #(k/press "ControlOrMeta+v" {:delay 100}))
+(def undo #(k/press "ControlOrMeta+z" {:delay 100}))
+(def redo #(k/press "ControlOrMeta+y" {:delay 100}))
 
 (defn- indent-outdent
   [indent?]
@@ -97,3 +115,20 @@
 (defn outdent
   []
   (indent-outdent false))
+
+(defn toggle-property
+  [property-title property-value]
+  (k/press (if util/mac? "ControlOrMeta+p" "Control+Alt+p"))
+  (w/fill ".ls-property-dialog .ls-property-input input" property-title)
+  (w/wait-for (format "#ac-0.menu-link:has-text('%s')" property-title))
+  (k/enter)
+  (util/wait-timeout 100)
+  (w/click (w/-query ".ls-property-dialog .ls-property-input input"))
+  (util/wait-timeout 100)
+  (util/input property-value)
+  (w/wait-for (format "#ac-0.menu-link:has-text('%s')" property-value))
+  (k/enter))
+
+(defn select-blocks
+  [n]
+  (util/repeat-keyboard n "Shift+ArrowUp"))

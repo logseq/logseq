@@ -12,16 +12,13 @@
             ["os" :as os]
             ["path" :as node-path]
             [cljs-bean.core :as bean]
-            [cljs.reader :as reader]
             [clojure.string :as string]
             [electron.backup-file :as backup-file]
             [electron.configs :as cfgs]
             [electron.db :as db]
-            [electron.file-sync-rsapi :as rsapi]
             [electron.find-in-page :as find]
-            [electron.fs-watcher :as watcher]
-            [electron.git :as git]
             [electron.handler-interface :refer [handle]]
+            [electron.keychain :as keychain]
             [electron.logger :as logger]
             [electron.plugin :as plugin]
             [electron.server :as server]
@@ -29,9 +26,8 @@
             [electron.state :as state]
             [electron.utils :as utils]
             [electron.window :as win]
-            [goog.functions :refer [debounce]]
+            [logseq.cli.common.graph :as cli-common-graph]
             [logseq.common.graph :as common-graph]
-            [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
 
@@ -79,15 +75,6 @@
     (logger/info ::backup "backup db file" path)
     (backup-file/backup-file repo :backup-dir path (node-path/extname path) db-content)))
 
-(defmethod handle :addVersionFile [_window [_ repo path content]]
-  (backup-file/backup-file repo :version-file-dir path (node-path/extname path) content))
-
-(defmethod handle :openFileBackupDir [_window [_ repo path]]
-  (when (string? path)
-    (let [dir (backup-file/get-backup-dir repo path)
-          full-path (utils/to-native-win-path! dir)]
-      (.openPath shell full-path))))
-
 (defmethod handle :openFileInFolder [_window [_ full-path]]
   (when-let [full-path (utils/to-native-win-path! full-path)]
     (logger/info ::open-file-in-folder full-path)
@@ -95,6 +82,9 @@
 
 (defmethod handle :readFile [_window [_ path]]
   (utils/read-file path))
+
+(defmethod handle :readFileRaw [_window [_ path]]
+  (utils/read-file-raw path))
 
 (defn writable?
   [path]
@@ -203,59 +193,15 @@
     (bean/->js {:path path
                 :files files})))
 
-(defn- graph-name->path
-  [graph-name]
-  (when graph-name
-    (-> graph-name
-        (string/replace "+3A+" ":")
-        (string/replace "++" "/"))))
-
-(defn- get-graphs-dir
-  []
-  (let [dir (if utils/ci?
-              (.resolve node-path js/__dirname "../tmp/graphs")
-              (.join node-path (.homedir os) ".logseq" "graphs"))]
-    (fs-extra/ensureDirSync dir)
-    dir))
-
-(defn- get-db-based-graphs-dir
-  []
-  (let [dir (.join node-path (.homedir os) "logseq" "graphs")]
-    (fs-extra/ensureDirSync dir)
-    dir))
-
-(defn- get-file-based-graphs
-  "Returns all graph names in the cache directory (starting with `logseq_local_`)"
-  []
-  (let [dir (get-graphs-dir)]
-    (->> (common-graph/readdir dir)
-         (remove #{dir})
-         (map #(node-path/basename % ".transit"))
-         (map graph-name->path))))
-
-(defn- get-db-based-graphs
-  []
-  (let [dir (get-db-based-graphs-dir)]
-    (->> (common-graph/read-directories dir)
-         (remove (fn [s] (= s db/unlinked-graphs-dir)))
-         (map graph-name->path)
-         (map (fn [s]
-                (if (string/starts-with? s common-sqlite/file-version-prefix)
-                  s
-                  (str sqlite-util/db-version-prefix s)))))))
-
-(defn- get-graphs
+(defn get-graphs
   "Returns all graph names"
   []
-  (let [db-graphs (get-db-based-graphs)
-        file-graphs (get-file-based-graphs)]
-    (distinct (concat db-graphs file-graphs))))
+  (distinct (cli-common-graph/get-db-based-graphs)))
 
 ;; TODO support alias mechanism
 (defn get-graph-name
   "Given a graph's name of string, returns the graph's fullname. For example, given
-  `cat`, returns `logseq_local_<path_to_directory>/cat` for a file graph and
-  `logseq_db_cat` for a db graph.  Returns `nil` if no such graph exists."
+  `cat`, returns `logseq_db_cat`.  Returns `nil` if no such graph exists."
   [graph-identifier]
   (->> (get-graphs)
        (some #(when (or
@@ -267,36 +213,9 @@
 (defmethod handle :getGraphs [_window [_]]
   (get-graphs))
 
-(defn- read-txid-info!
-  [root]
-  (try
-    (let [txid-path (.join node-path root "logseq/graphs-txid.edn")]
-      (when (fs/existsSync txid-path)
-        (when-let [sync-meta (and (not (string/blank? root))
-                                  (.toString (.readFileSync fs txid-path)))]
-          (reader/read-string sync-meta))))
-    (catch :default e
-      (logger/error "[read txid meta] #" root (.-message e)))))
-
-(defmethod handle :inflateGraphsInfo [_win [_ graphs]]
-  (if (seq graphs)
-    (for [{:keys [root] :as graph} graphs]
-      (if-let [sync-meta (read-txid-info! root)]
-        (assoc graph
-               :sync-meta sync-meta
-               :GraphUUID (second sync-meta))
-        graph))
-    []))
-
-(defmethod handle :readGraphTxIdInfo [_win [_ root]]
-  (read-txid-info! root))
-
-(defmethod handle :deleteGraph [_window [_ graph graph-name _db-based?]]
-  (when graph-name
-    (db/unlink-graph! graph)
-    (let [old-transit-path (node-path/join (get-graphs-dir) (str (common-sqlite/sanitize-db-name graph) ".transit"))]
-      (when (fs/existsSync old-transit-path)
-        (fs/unlinkSync old-transit-path)))))
+(defmethod handle :deleteGraph [_window [_ graph]]
+  (when graph
+    (db/unlink-graph! graph)))
 
 ;; DB related IPCs start
 
@@ -309,38 +228,15 @@
 
 ;; DB related IPCs End
 
-(defn clear-cache!
-  [window]
-  (let [graphs-dir (get-graphs-dir)]
-    (fs-extra/removeSync graphs-dir))
-
-  (let [path (.getPath ^object app "userData")]
-    (doseq [dir ["search" "IndexedDB"]]
-      (let [path (node-path/join path dir)]
-        (try
-          (fs-extra/removeSync path)
-          (catch :default e
-            (logger/error "Clear cache:" e)))))
-    (utils/send-to-renderer window "redirect" {:payload {:to :home}})))
-
-(defmethod handle :clearCache [window _]
-  (logger/info ::clear-cache)
-  (clear-cache! window))
-
 (defmethod handle :openDialog [^js _window _messages]
   (open-dir-dialog))
 
-(defmethod handle :copyDirectory [^js _window [_ src dest opts]]
-  (fs-extra/copy src dest opts))
+(defmethod handle :showOpenDialog [_window [_ ^js options]]
+  (p/let [^js result (.showOpenDialog dialog options)]
+    result))
 
 (defmethod handle :getLogseqDotDirRoot []
   (utils/get-ls-dotdir-root))
-
-(defmethod handle :getSystemProxy [^js window]
-  (if-let [sess (.. window -webContents -session)]
-    (p/let [proxy (.resolveProxy sess "https://www.google.com")]
-      proxy)
-    (p/resolved nil)))
 
 (defmethod handle :setProxy [_win [_ options]]
   ;; options: {:type "system" | "direct" | "socks5" | "http" | ... }
@@ -396,9 +292,6 @@
         (cfgs/get-item k))
       config)))
 
-(defmethod handle :getDirname [_]
-  js/__dirname)
-
 (defmethod handle :getAppBaseInfo [^js win [_ _opts]]
   {:isFullScreen (.isFullScreen win)
    :isMaximized (.isMaximized win)})
@@ -410,32 +303,14 @@
         (p/let [^js files (js-utils/getAllFiles assets-path (clj->js exts))]
           files)))))
 
-(defn close-watcher-when-orphaned!
-  "When it's the last window for the directory, close the watcher."
-  [window graph-path]
-  (when (not (win/graph-has-other-windows? window graph-path))
-    (watcher/close-watcher! graph-path)))
-
 (defn set-current-graph!
   [window graph-path]
-  (let [old-path (state/get-window-graph-path window)]
-    (when (and old-path graph-path (not= old-path graph-path))
-      (close-watcher-when-orphaned! window old-path))
-    (swap! state/state assoc-in [:window/graph window] graph-path)
-    nil))
+  (swap! state/state assoc-in [:window/graph window] graph-path)
+  nil)
 
 (defmethod handle :setCurrentGraph [^js window [_ graph-name]]
   (when graph-name
     (set-current-graph! window (utils/get-graph-dir graph-name))))
-
-(defmethod handle :runGit [_ [_ {:keys [repo command]}]]
-  (when (seq command)
-    (git/raw! (utils/get-graph-dir repo) command)))
-
-(defmethod handle :runGitWithinCurrentGraph [_ [_ {:keys [repo command]}]]
-  (when (seq command)
-    (git/init! (utils/get-graph-dir repo))
-    (git/run-git2! (utils/get-graph-dir repo) (clj->js command))))
 
 (defmethod handle :runCli [window [_ {:keys [command args returnResult]}]]
   (try
@@ -454,17 +329,6 @@
       (utils/send-to-renderer window "notification"
                               {:type    "error"
                                :payload (.-message e)}))))
-
-(defmethod handle :gitCommitAll [_ [_ message]]
-  (git/add-all-and-commit! message))
-
-(defmethod handle :gitStatus [_ [_ repo]]
-  (git/short-status! (utils/get-graph-dir repo)))
-
-(def debounced-configure-auto-commit! (debounce git/configure-auto-commit! 5000))
-(defmethod handle :setGitAutoCommit []
-  (debounced-configure-auto-commit!)
-  nil)
 
 (defmethod handle :installMarketPlugin [_ [_ manifest]]
   (plugin/install-or-update! manifest))
@@ -522,6 +386,7 @@
   (logger/info ::quick-and-install)
   (.quitAndInstall autoUpdater))
 
+;; The graphHas* events are not used but maybe useful later?
 (defmethod handle :graphHasOtherWindow [^js win [_ graph]]
   (let [dir (utils/get-graph-dir graph)]
     (win/graph-has-other-windows? win dir)))
@@ -531,27 +396,10 @@
         windows (win/get-graph-all-windows dir)]
     (> (count windows) 1)))
 
-(defmethod handle :addDirWatcher [^js _window [_ dir options]]
-  ;; receive dir path (not repo / graph) from frontend
-  ;; Windows on same dir share the same watcher
-  ;; Only close file watcher when:
-  ;;    1. there is no one window on the same dir
-  ;;    2. reset file watcher to resend `add` event on window refreshing
-  (when dir
-    (logger/debug ::watch-dir {:path dir})
-    (watcher/watch-dir! dir options)
-    nil))
-
-(defmethod handle :unwatchDir [^js _window [_ dir]]
-  (when dir
-    (logger/debug ::unwatch-dir {:path dir})
-    (watcher/close-watcher! dir)
-    nil))
-
 (defn open-new-window!
   [repo]
   (let [win (win/create-main-window! win/MAIN_WINDOW_ENTRY {:graph repo})]
-    (win/on-close-actions! win close-watcher-when-orphaned!)
+    (win/on-close-actions! win)
     (win/setup-window-listeners! win)
     win))
 
@@ -583,57 +431,14 @@
   (.manage (windowStateKeeper) win)
   (.show win))
 
-;;;;;;;;;;;;;;;;;;;;;;;
-;; file-sync-rs-apis ;;
-;;;;;;;;;;;;;;;;;;;;;;;
+(defmethod handle :keychain/save-e2ee-password [_window [_ key encrypted-text]]
+  (keychain/<set-password! key encrypted-text))
 
-(defmethod handle :key-gen [_]
-  (rsapi/key-gen))
+(defmethod handle :keychain/get-e2ee-password [_window [_ key]]
+  (keychain/<get-password key))
 
-(defmethod handle :set-env [_ args]
-  (apply rsapi/set-env (rest args)))
-
-(defmethod handle :get-local-files-meta [_ args]
-  (apply rsapi/get-local-files-meta (rest args)))
-
-(defmethod handle :get-local-all-files-meta [_ args]
-  (apply rsapi/get-local-all-files-meta (rest args)))
-
-(defmethod handle :rename-local-file [_ args]
-  (apply rsapi/rename-local-file (rest args)))
-
-(defmethod handle :delete-local-files [_ args]
-  (apply rsapi/delete-local-files (rest args)))
-
-(defmethod handle :fetch-remote-files [_ args]
-  (apply rsapi/fetch-remote-files (rest args)))
-
-(defmethod handle :update-local-files [_ args]
-  (apply rsapi/update-local-files (rest args)))
-
-(defmethod handle :download-version-files [_ args]
-  (apply rsapi/download-version-files (rest args)))
-
-(defmethod handle :delete-remote-files [_ args]
-  (apply rsapi/delete-remote-files (rest args)))
-
-(defmethod handle :update-remote-files [_ args]
-  (apply rsapi/update-remote-files (rest args)))
-
-(defmethod handle :decrypt-fnames [_ args]
-  (apply rsapi/decrypt-fnames (rest args)))
-
-(defmethod handle :encrypt-fnames [_ args]
-  (apply rsapi/encrypt-fnames (rest args)))
-
-(defmethod handle :encrypt-with-passphrase [_ args]
-  (apply rsapi/encrypt-with-passphrase (rest args)))
-
-(defmethod handle :decrypt-with-passphrase [_ args]
-  (apply rsapi/decrypt-with-passphrase (rest args)))
-
-(defmethod handle :cancel-all-requests [_ args]
-  (apply rsapi/cancel-all-requests (rest args)))
+(defmethod handle :keychain/delete-e2ee-password [_window [_ key]]
+  (keychain/<delete-password! key))
 
 (defmethod handle :default [args]
   (logger/error "Error: no ipc handler for:" args))

@@ -1,12 +1,12 @@
 (ns logseq.e2e.tag-basic-test
   (:require [clojure.test :refer [deftest testing is use-fixtures run-test run-tests]]
+            [logseq.e2e.assert :as assert]
             [logseq.e2e.block :as b]
             [logseq.e2e.fixtures :as fixtures]
             [logseq.e2e.keyboard :as k]
             [logseq.e2e.util :as util]
             [wally.main :as w]
-            [wally.repl :as repl]
-            [logseq.e2e.assert :as assert]))
+            [wally.repl :as repl]))
 
 (use-fixtures :once fixtures/open-page)
 

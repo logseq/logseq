@@ -14,15 +14,41 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.mobile.util :as mobile-util]
-            [frontend.util.ref :as ref]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.util.fs :as fs-util]
             [goog.string :as gstring]
             [lambdaisland.glogi :as log]
-            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [promesa.core :as p]))
+
+(defn- normalize-native-file-path
+  "Normalize iOS shared file URLs to paths that Capacitor Filesystem can read.
+  iOS share extensions commonly provide `file://` URLs."
+  [url]
+  (let [url (some-> url common-util/safe-decode-uri-component)]
+    (cond
+      (string/blank? url)
+      url
+
+      (string/starts-with? url "file://")
+      (subs url (count "file://"))
+
+      ;; Some Capacitor APIs may provide `_capacitor_file_` URLs.
+      (string/starts-with? url "capacitor://localhost/_capacitor_file_")
+      (string/replace url "capacitor://localhost/_capacitor_file_" "")
+
+      :else
+      url)))
+
+(defn- <filesystem-read-file
+  [url]
+  (let [path (normalize-native-file-path url)]
+    (-> (.readFile Filesystem #js {:path path})
+        (p/catch (fn [error]
+                   ;; Fallback to the original string for older plugin versions.
+                   (if (= path url)
+                     (p/rejected error)
+                     (.readFile Filesystem #js {:path url})))))))
 
 (defn open-or-share-file
   "Share file to mobile platform"
@@ -83,77 +109,36 @@
   (let [args (transform-args args)]
     (state/pub-event! [:editor/quick-capture args])))
 
-(defn- embed-asset-file [url format]
+(defn- embed-asset-file [url _format]
   (p/let [basename (node-path/basename url)
-          label (-> basename util/node-path.name)
-          time (date/get-current-time)
-          date-ref-name (date/today)
-          path (assets-handler/get-asset-path basename)
-          _file (p/catch
-                 (.copy Filesystem (clj->js {:from url :to path}))
-                 (fn [error]
-                   (log/error :copy-file-error {:error error})))
-          url (util/format "../assets/%s" basename)
-          url (assets-handler/get-asset-file-link format url label true)
-          template (get-in (state/get-config)
-                           [:quick-capture-templates :media]
-                           "**{time}** [[quick capture]]: {url}")]
-    (-> template
-        (string/replace "{time}" time)
-        (string/replace "{date}" date-ref-name)
-        (string/replace "{text}" "")
-        (string/replace "{url}" (or url "")))))
-
-(defn- embed-text-file
-  "Store external content with url into Logseq repo"
-  [url title]
-  (p/let [time (date/get-current-time)
-          date-ref-name (date/today)
-          title (some-> (or title (node-path/basename url))
-                        common-util/safe-decode-uri-component
-                        util/node-path.name
-                        ;; make the title more user friendly
-                        common-util/page-name-sanity)
-          path (node-path/join (config/get-repo-dir (state/get-current-repo))
-                               (config/get-pages-directory)
-                               (str (js/encodeURI (fs-util/file-name-sanity title :markdown)) (node-path/extname url)))
-          _ (p/catch
-             (.copy Filesystem (clj->js {:from url :to path}))
-             (fn [error]
-               (log/error :copy-file-error {:error error})))
-          url (ref/->page-ref title)
-          template (get-in (state/get-config)
-                           [:quick-capture-templates :text]
-                           "**{time}** [[quick capture]]: {url}")]
-    (-> template
-        (string/replace "{time}" time)
-        (string/replace "{date}" date-ref-name)
-        (string/replace "{text}" "")
-        (string/replace "{url}" (or url "")))))
+          file (<filesystem-read-file url)
+          file-base64-str (some-> file (.-data))
+          file (some-> file-base64-str (util/base64string-to-unit8array)
+                       (vector) (clj->js) (js/File. basename #js {}))
+          result (editor-handler/db-based-save-assets!
+                  (state/get-current-repo) [file] {})]
+    (first result)))
 
 (defn- handle-received-media [result]
   (p/let [{:keys [url]} result
           page (or (state/get-current-page) (string/lower-case (date/journal-name)))
-          format (db/get-page-format page)
-          content (embed-asset-file url format)]
-    (if (state/get-edit-block)
-      (editor-handler/insert content)
-      (editor-handler/api-insert-new-block! content {:page page
-                                                     :edit-block? false
-                                                     :replace-empty-target? true}))))
+          format (db/get-page-format page)]
+    (-> (embed-asset-file url format)
+        (p/catch (fn [error]
+                   (log/error :share-import-media-failed {:error error :url url})
+                   (notification/show! "Failed to import the shared media. Please try again." :error false))))))
 
 (defn- handle-received-application [result]
-  (p/let [{:keys [title url type]} result
+  (p/let [{:keys [url type]} result
           page (or (state/get-current-page) (string/lower-case (date/journal-name)))
           format (db/get-page-format page)
           application-type (last (string/split type "/"))
           content (cond
-                    (common-config/mldoc-support? application-type)
-                    (embed-text-file url title)
-
                     (contains? (set/union config/doc-formats config/media-formats)
                                (keyword application-type))
-                    (embed-asset-file url format)
+                    (do
+                      (embed-asset-file url format)
+                      nil)
 
                     :else
                     (notification/show!
@@ -163,11 +148,12 @@
                            :target "_blank"} "Github"]
                       ". We will look into it soon."]
                      :warning false))]
-    (if (state/get-edit-block)
-      (editor-handler/insert content)
-      (editor-handler/api-insert-new-block! content {:page page
-                                                     :edit-block? false
-                                                     :replace-empty-target? true}))))
+    (when content
+      (if (state/get-edit-block)
+        (editor-handler/insert content)
+        (editor-handler/api-insert-new-block! content {:page page
+                                                       :edit-block? false
+                                                       :replace-empty-target? true})))))
 
 (defn decode-received-result [m]
   (into {} (for [[k v] m]
@@ -182,17 +168,20 @@
                         (common-util/safe-decode-uri-component v)
                         v))])))
 
-(defn- handle-asset-file [url format]
-  (p/let [basename (node-path/basename url)
-          label (-> basename util/node-path.name)
-          path (assets-handler/get-asset-path basename)
-          _file (p/catch
-                 (.copy Filesystem (clj->js {:from url :to path}))
-                 (fn [error]
-                   (log/error :copy-file-error {:error error})))
-          url (util/format "../assets/%s" basename)
-          url-link (assets-handler/get-asset-file-link format url label true)]
-    url-link))
+(defn- handle-asset-file [url _format]
+  (-> (p/let [basename (node-path/basename url)
+              _label (-> basename util/node-path.name)
+              _path (assets-handler/get-asset-path basename)
+              file (<filesystem-read-file url)
+              file-base64-str (some-> file (.-data))
+              file (some-> file-base64-str (util/base64string-to-unit8array)
+                           (vector) (clj->js) (js/File. basename #js {}))
+              result (editor-handler/db-based-save-assets!
+                      (state/get-current-repo) [file] {})]
+        result)
+      (p/catch (fn [error]
+                 (log/error :handle-asset-file {:error error :url url})
+                 (notification/show! "Failed to import the shared file. Please try again." :error false)))))
 
 (defn- handle-payload-resource
   [{:keys [type name ext url] :as resource} format]
@@ -233,14 +222,21 @@
 
           template (get-in (state/get-config)
                            [:quick-capture-templates :text]
-                           "**{time}** [[quick capture]]: {text} {url}")
+                           "**{time}** [[quick capture]]​ {text} {url}")
           {:keys [text resources]} payload
           text (or text "")
           rich-content (-> (p/all (map (fn [resource]
                                          (handle-payload-resource resource format))
                                        resources))
-                           (p/then (partial string/join "\n")))]
-    (when (or (not-empty text) (not-empty rich-content))
+                           (p/then (fn [result]
+                                     (when (every? string? result)
+                                       (string/join "\n" result)))))]
+    (when (and (or (not-empty text) (not-empty rich-content))
+               (not (every?
+                     (fn [resource]
+                       (contains? (set/union config/doc-formats config/media-formats)
+                                  (keyword (:ext resource))))
+                     resources)))
       (let [time (date/get-current-time)
             date-ref-name (date/today)
             content (-> template

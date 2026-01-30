@@ -153,7 +153,7 @@
         (p/then (fn [manifests]
                   (let [mft (some #(when (= (:id %) id) %) manifests)
                         opts (merge (dissoc pkg :logger) mft)]
-                  ;;TODO: (throw (js/Error. [:not-found-in-marketplace id]))
+                    ;;TODO: (throw (js/Error. [:not-found-in-marketplace id]))
                     (if (util/electron?)
                       (ipc/ipc :updateMarketPlugin opts)
                       (plugin-common-handler/async-install-or-update-for-web! opts)))
@@ -229,7 +229,7 @@
                                  (p/then
                                   (.reload pl)
                                   #(do
-                                      ;;(if theme (select-a-plugin-theme id))
+                                     ;;(if theme (select-a-plugin-theme id))
                                      (when (not (util/electron?))
                                        (set! (.-version (.-options pl)) (:version web-pkg))
                                        (set! (.-webPkg (.-options pl)) (bean/->js web-pkg))
@@ -441,13 +441,19 @@
   ([type *providers] (create-local-renderer-getter type *providers false))
   ([type *providers many?]
    (fn [key]
-     (when-let [key (and (seq @*providers) key (keyword key))]
-       (when-let [rs (->> @*providers
-                          (map (fn [pid] (state/get-plugin-resource pid type key)))
-                          (remove nil?)
-                          (flatten)
-                          (seq))]
-         (if many? rs (first rs)))))))
+     (when (seq @*providers)
+       (if key
+         (when-let [rs (->> @*providers
+                            (map (fn [pid] (state/get-plugin-resource pid type key)))
+                            (remove nil?)
+                            (flatten)
+                            (seq))]
+           (if many? rs (first rs)))
+         (->> @*providers
+              (mapcat (fn [pid]
+                        (some-> (state/get-plugin-resources-with-type pid type)
+                                (vals))))
+              (seq)))))))
 
 (defonce *fenced-code-providers (atom #{}))
 (def register-fenced-code-renderer
@@ -469,11 +475,13 @@
   (create-local-renderer-getter
    :extensions-enhancers *extensions-enhancer-providers true))
 
-(def *route-renderer-providers (atom #{}))
+(defonce *route-renderer-providers (atom #{}))
 (def register-route-renderer
+  ;; [pid key payload]
   (create-local-renderer-register
    :route-renderers *route-renderer-providers))
 (def get-route-renderers
+  ;; [key] optional
   (create-local-renderer-getter
    :route-renderers *route-renderer-providers true))
 
@@ -496,9 +504,9 @@
 (defn update-plugin-settings-state
   [id settings]
   (state/set-state! [:plugin/installed-plugins id :settings]
-    ;; TODO: force settings related ui reactive
-    ;; Sometimes toggle to `disable` not working
-    ;; But related-option data updated?
+                    ;; TODO: force settings related ui reactive
+                    ;; Sometimes toggle to `disable` not working
+                    ;; But related-option data updated?
                     (assoc settings :disabled (boolean (:disabled settings)))))
 
 (defn open-settings-file-in-default-app!
@@ -544,7 +552,7 @@
                            (string/replace matched link (util/node-path.join url link))
                            matched)))
                       content)]
-        (format/to-html content :markdown (gp-mldoc/default-config :markdown))))
+        (format/to-html content (gp-mldoc/default-config :markdown))))
     (catch :default e
       (log/error :parse-user-md-exception e)
       content)))
@@ -631,7 +639,7 @@
   [dirname ^js default]
   (fn [key]
     (when-let [key (and key (name key))]
-      (let [repo ""
+      (let [repo (state/get-current-repo)
             dotroot (get-ls-dotdir-root)
             filepath (util/node-path.join dotroot dirname (str key ".json"))]
         (if (util/electron?)
@@ -774,9 +782,10 @@
   (when (and type (fn? f))
     (when config/lsp-enabled?
       (hook-plugin-app (str :before-command-invoked type) nil))
-    (apply f args)
-    (when config/lsp-enabled?
-      (hook-plugin-app (str :after-command-invoked type) nil))))
+    (let [result (apply f args)]
+      (when config/lsp-enabled?
+        (hook-plugin-app (str :after-command-invoked type) nil))
+      result)))
 
 (defn load-plugin-from-web-url!
   [url]
@@ -829,7 +838,7 @@
          (str text)]]])))
 
 (defn ^:large-vars/cleanup-todo init-plugins!
-  [callback]
+  []
 
   (let [el (js/document.createElement "div")]
     (.appendChild js/document.body el)
@@ -891,13 +900,13 @@
 
                   (.on "themes-changed" (fn [^js themes]
                                           (swap! state/state assoc :plugin/installed-themes
-                                            (vec (mapcat (fn [[pid vs]] (mapv #(assoc % :pid pid) (bean/->clj vs))) (bean/->clj themes))))))
+                                                 (vec (mapcat (fn [[pid vs]] (mapv #(assoc % :pid pid) (bean/->clj vs))) (bean/->clj themes))))))
 
                   (.on "theme-selected" (fn [^js theme]
                                           (let [theme (bean/->clj theme)
                                                 theme (assets-theme-to-file theme)
-                                                url   (:url theme)
-                                                mode  (or (:mode theme) (state/sub :ui/theme))]
+                                                url (:url theme)
+                                                mode (or (:mode theme) (state/sub :ui/theme))]
                                             (when mode
                                               (state/set-custom-theme! mode theme)
                                               (state/set-theme-mode! mode))
@@ -909,7 +918,7 @@
                                                     custom-theme (dissoc themes :mode)
                                                     mode (:mode themes)]
                                                 (state/set-custom-theme! {:light (if (nil? (:light custom-theme)) {:mode "light"} (:light custom-theme))
-                                                                          :dark  (if (nil? (:dark custom-theme)) {:mode "dark"} (:dark custom-theme))})
+                                                                          :dark (if (nil? (:dark custom-theme)) {:mode "dark"} (:dark custom-theme))})
                                                 (state/set-theme-mode! mode))))
 
                   (.on "settings-changed" (fn [id ^js settings]
@@ -926,9 +935,9 @@
                                            (when-let [end (and (some-> v (.-o) (.-disabled) (not))
                                                                (.-e v))]
                                              (when (and (number? end)
-                                                         ;; valid end time
+                                                        ;; valid end time
                                                         (> end 0)
-                                                         ;; greater than 6s
+                                                        ;; greater than 6s
                                                         (> (- end (.-s v)) 6000))
                                                v))))
                                         ((fn [perfs]
@@ -947,11 +956,11 @@
 
       (p/then
        (fn [plugins-async]
-          ;; true indicate for preboot finished
+         ;; true indicate for preboot finished
          (state/set-state! :plugin/indicator-text true)
-          ;; wait for the plugin register async messages
+         ;; wait for the plugin register async messages
          (js/setTimeout
-          (fn [] (callback)
+          (fn []
             (some-> (seq plugins-async)
                     (p/delay 16)
                     (p/then #(.register js/LSPluginCore (bean/->js plugins-async) true))))
@@ -963,13 +972,10 @@
 
 (defn setup!
   "setup plugin core handler"
-  [callback]
-  (if (not config/lsp-enabled?)
-    (callback)
-    (do
-      (idb/start)
-      (setup-global-apis-for-web!)
-      (init-plugins! callback))))
+  []
+  (when config/lsp-enabled?
+    (setup-global-apis-for-web!)
+    (init-plugins!)))
 
 (comment
   {:pending (count (:plugin/updates-pending @state/state))

@@ -2,7 +2,6 @@
   "Custom queries."
   (:require [clojure.string :as string]
             [clojure.walk :as walk]
-            [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db.conn :as conn]
             [frontend.db.model :as model]
@@ -10,10 +9,8 @@
             [frontend.db.utils :as db-utils]
             [frontend.extensions.sci :as sci]
             [frontend.state :as state]
-            [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [logseq.common.util.page-ref :as page-ref]
-            [logseq.db :as ldb]
             [logseq.db.frontend.inputs :as db-inputs]))
 
 (defn resolve-input
@@ -25,9 +22,7 @@
                             input
                             (merge {:current-page-fn (fn []
                                                        (or (when-let [name-or-uuid (state/get-current-page)]
-                                                             (if (ldb/db-based-graph? db)
-                                                               (:block/title (model/get-block-by-uuid name-or-uuid))
-                                                               name-or-uuid))
+                                                             (:block/title (model/get-block-by-uuid name-or-uuid)))
                                                            (:page (state/get-default-home))
                                                            (date/today)))}
                                    opts))))
@@ -67,14 +62,6 @@
     (walk/postwalk
      (fn [f]
        (cond
-         ;; backward compatible
-         ;; 1. replace :page/ => :block/
-         (and (keyword? f) (= "page" (namespace f)))
-         (keyword "block" (name f))
-
-         (and (keyword? f) (contains? #{:block/ref-pages :block/ref-blocks} f))
-         :block/refs
-
          (and (list? f)
               (= (first f) '=)
               (= 3 (count f))
@@ -84,34 +71,21 @@
                page-ref (string/lower-case page-ref)]
            (list 'contains? sym (page-ref/get-page-name page-ref)))
 
-         (and (vector? f)
-              (= (first f) 'page-property)
-              (keyword? (util/nth-safe f 2)))
-         (update f 2 (fn [k] (keyword (string/replace (name k) "_" "-"))))
-
          :else
          f)) query)))
 
 (defn react-query
   [repo {:keys [query inputs rules] :as query'} query-opts]
-  (let [pprint (if config/dev? #(when (state/developer-mode?) (apply prn %&)) (fn [_] nil))
-        start-time (.now js/performance)]
-    (when config/dev? (js/console.groupCollapsed "react-query logs:"))
-    (pprint "================")
-    (pprint "Use the following to debug your datalog queries:")
-    (pprint query')
-
-    (let [query (resolve-query query)
-          repo (or repo (state/get-current-repo))
-          db (conn/get-db repo)
-          resolve-with (select-keys query-opts [:current-page-fn :current-block-uuid])
-          resolved-inputs (mapv #(resolve-input db % resolve-with) inputs)
-          inputs (cond-> resolved-inputs
-                   rules
-                   (conj rules))
-          k [:custom (or (:query-string query') query') inputs]]
-      (pprint "inputs (post-resolution):" resolved-inputs)
-      (pprint "query-opts:" query-opts)
-      (pprint (str "time elapsed: " (.toFixed (- (.now js/performance) start-time) 2) "ms"))
-      (when config/dev? (js/console.groupEnd))
-      [k (apply react/q repo k query-opts query inputs)])))
+  (let [query (resolve-query query)
+        repo (or repo (state/get-current-repo))
+        db (conn/get-db repo)
+        resolve-with (select-keys query-opts [:current-page-fn :current-block-uuid])
+        resolved-inputs (mapv #(resolve-input db % resolve-with) inputs)
+        inputs (cond-> resolved-inputs
+                 rules
+                 (conj rules))
+        k [:custom
+           (or (:query-string query') (dissoc query' :title))
+           (:today-query? query-opts)
+           inputs]]
+    [k (apply react/q repo k query-opts query inputs)]))

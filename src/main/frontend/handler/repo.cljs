@@ -1,14 +1,12 @@
 (ns frontend.handler.repo
   "System-component-like ns that manages user's repos/graphs"
   (:refer-clojure :exclude [clone])
-  (:require [cljs-bean.core :as bean]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.persist :as db-persist]
-            [frontend.db.react :as react]
             [frontend.db.restore :as db-restore]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.graph :as graph-handler]
@@ -16,16 +14,12 @@
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.idb :as idb]
-            [frontend.mobile.util :as mobile-util]
             [frontend.persist-db :as persist-db]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.undo-redo :as undo-redo]
             [frontend.util :as util]
-            [frontend.util.fs :as util-fs]
             [frontend.util.text :as text-util]
-            [logseq.common.config :as common-config]
             [logseq.db.frontend.schema :as db-schema]
             [promesa.core :as p]))
 
@@ -36,33 +30,30 @@
 (defn remove-repo!
   [{:keys [url] :as repo} & {:keys [switch-graph?]
                              :or {switch-graph? true}}]
-  (let [current-repo (state/get-current-repo)
-        db-based? (config/db-based-graph? url)]
-    (when (or (config/local-file-based-graph? url) db-based?)
-      (p/do!
-       (idb/clear-local-db! url)     ; clear file handles
-       (db/remove-conn! url)
-       (db-persist/delete-graph! url)
-       (search/remove-db! url)
-       (state/delete-repo! repo)
-       (when switch-graph?
-         (if (= current-repo url)
-           (do
-             (state/set-current-repo! nil)
-             (when-let [graph (:url (first (state/get-repos)))]
-               (notification/show! (str "Removed graph "
-                                        (pr-str (text-util/get-graph-name-from-path url))
-                                        ". Redirecting to graph "
-                                        (pr-str (text-util/get-graph-name-from-path graph)))
-                                   :success)
-               (state/pub-event! [:graph/switch graph {:persist? false}])))
-           (notification/show! (str "Removed graph " (pr-str (text-util/get-graph-name-from-path url))) :success)))))))
+  (let [current-repo (state/get-current-repo)]
+    (p/do!
+     (db/remove-conn! url)
+     (db-persist/delete-graph! url)
+     (search/remove-db! url)
+     (state/delete-repo! repo)
+     (when switch-graph?
+       (if (= current-repo url)
+         (do
+           (state/set-current-repo! nil)
+           (when-let [graph (:url (first (state/get-repos)))]
+             (notification/show! (str "Removed graph "
+                                      (pr-str (text-util/get-graph-name-from-path url))
+                                      ". Redirecting to graph "
+                                      (pr-str (text-util/get-graph-name-from-path graph)))
+                                 :success)
+             (state/pub-event! [:graph/switch graph {:persist? false}])))
+         (notification/show! (str "Removed graph " (pr-str (text-util/get-graph-name-from-path url))) :success))))))
 
 (defn start-repo-db-if-not-exists!
   [repo & {:as opts}]
   (state/set-current-repo! repo)
   (db/start-db-conn! repo (assoc opts
-                                 :db-graph? (config/db-based-graph? repo)
+                                 :db-graph? true
                                  :listen-handler (fn [conn]
                                                    (undo-redo/listen-db-changes! repo conn)))))
 
@@ -77,56 +68,21 @@
    (when (config/global-config-enabled?)
      (global-config-handler/restore-global-config!))
     ;; Don't have to unlisten the old listener, as it will be destroyed with the conn
-   (ui-handler/add-style-if-exists!)
+   (when-not (true? (:ignore-style? opts))
+     (ui-handler/add-style-if-exists!))
    (when-not config/publishing?
      (state/set-db-restoring! false))))
 
-(defn rebuild-index!
-  [url]
-  (when-not (state/unlinked-dir? (config/get-repo-dir url))
-    (when url
-      (search/reset-indice! url)
-      (db/remove-conn! url)
-      (react/clear-query-state!)
-      (-> (p/do! (db-persist/delete-graph! url))
-          (p/catch (fn [error]
-                     (prn "Delete repo failed, error: " error)))))))
-
-(defn re-index!
-  [nfs-rebuild-index! ok-handler]
-  (when-let [repo (state/get-current-repo)]
-    (state/reset-parsing-state!)
-    (let [dir (config/get-repo-dir repo)]
-      (when-not (state/unlinked-dir? dir)
-        (route-handler/redirect-to-home!)
-        (let [local? (config/local-file-based-graph? repo)]
-          (if local?
-            (nfs-rebuild-index! repo ok-handler)
-            (rebuild-index! repo))
-          (js/setTimeout
-           (route-handler/redirect-to-home!)
-           500))))))
-
 (defn get-repos
   []
-  (p/let [nfs-dbs (db-persist/get-all-graphs)
-          nfs-dbs (map (fn [db]
-                         (let [graph-name (:name db)]
-                           {:url graph-name
-                            :metadata (:metadata db)
-                            :root (config/get-local-dir graph-name)
-                            :nfs? true}))
-                       nfs-dbs)
-          nfs-dbs (and (seq nfs-dbs)
-                       (cond (util/electron?)
-                             (ipc/ipc :inflateGraphsInfo nfs-dbs)
-
-                             (mobile-util/native-platform?)
-                             (util-fs/inflate-graphs-info nfs-dbs)
-
-                             :else
-                             nfs-dbs))]
-    (seq (bean/->clj nfs-dbs))))
+  (p/let [dbs (db-persist/get-all-graphs)]
+    (map (fn [db]
+           (let [graph-name (:name db)]
+             {:url graph-name
+              :metadata (:metadata db)
+              :root (config/get-local-dir graph-name)
+              :nfs? true}))
+         dbs)))
 
 (defn combine-local-&-remote-graphs
   [local-repos remote-repos]
@@ -138,7 +94,7 @@
                                  (some->> remote-repos
                                           (map #(assoc % :remote? true)))))]
     (let [app-major-schema-version (str (:major (db-schema/parse-schema-version db-schema/version)))
-          repos' (group-by :GraphUUID repos')
+          repos' (group-by :url repos')
           repos'' (mapcat (fn [[k vs]]
                             (if (some? k)
                               (let [remote-repos (filter :remote? vs)
@@ -155,22 +111,12 @@
                                       (last (string/split (:root repo) #"/")))]
                    [(:remote? repo) (string/lower-case graph-name)])) repos''))))
 
-(defn get-detail-graph-info
-  [url]
-  (when-let [graphs (seq (and url (combine-local-&-remote-graphs
-                                   (state/get-repos)
-                                   (state/get-remote-file-graphs))))]
-    (first (filter #(when-let [url' (:url %)]
-                      (= url url')) graphs))))
-
 (defn refresh-repos!
   []
   (p/let [repos (get-repos)
           repos' (combine-local-&-remote-graphs
                   repos
-                  (concat
-                   (state/get-rtc-graphs)
-                   (state/get-remote-file-graphs)))]
+                  (state/get-rtc-graphs))]
     (state/set-repos! repos')
     repos'))
 
@@ -188,14 +134,14 @@
 
 (defn- create-db [full-graph-name {:keys [file-graph-import?]}]
   (->
-   (p/let [config (common-config/create-config-for-db-graph config/config-default-content)
+   (p/let [config config/config-default-content
            _ (persist-db/<new full-graph-name
                               (cond-> {:config config
                                        :graph-git-sha config/revision}
                                 file-graph-import? (assoc :import-type :file-graph)))
            _ (start-repo-db-if-not-exists! full-graph-name)
            _ (state/add-repo! {:url full-graph-name :root (config/get-local-dir full-graph-name)})
-           _ (restore-and-setup-repo! full-graph-name)
+           _ (restore-and-setup-repo! full-graph-name {:file-graph-import? file-graph-import?})
            _ (when-not file-graph-import? (route-handler/redirect-to-home!))
            _ (repo-config-handler/set-repo-config-state! full-graph-name config/config-default-content)
           ;; TODO: handle global graph
@@ -221,10 +167,6 @@
                           {:content (str "The graph '" graph "' already exists. Please try again with another name.")
                            :status :error}])
        (create-db full-graph-name opts)))))
-
-(defn fix-broken-graph!
-  [graph]
-  (state/<invoke-db-worker :thread-api/fix-broken-graph graph))
 
 (defn gc-graph!
   [graph]
