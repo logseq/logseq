@@ -41,13 +41,8 @@
               (constantly nil)
               (m/ap
                 (let [m (m/?> (m/relieve state-flow))]
-                  (when (and (contains? m :git/current-repo)
-                             (nil? (:git/current-repo m)))
-                    (log/error :sync-app-state
-                               [m (select-keys @state/state
-                                               [:git/current-repo
-                                                :auth/id-token :auth/access-token :auth/refresh-token])]))
-                  (c.m/<? (state/<invoke-db-worker :thread-api/sync-app-state m))
+                  (when (:git/current-repo m)
+                    (c.m/<? (state/<invoke-db-worker :thread-api/sync-app-state m)))
                   (p/resolve! <init-sync-done?))))]
     (c.m/run-task* task)
     <init-sync-done?))
