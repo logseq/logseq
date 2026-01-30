@@ -8,6 +8,25 @@
             [logseq.cli.transport :as transport]
             [promesa.core :as p]))
 
+(defn- command-lines
+  [summary]
+  (let [lines (string/split-lines summary)
+        section (if (some #{"Commands:"} lines) "Commands:" "Subcommands:")
+        start (inc (.indexOf lines section))
+        end (.indexOf lines "Global options:")
+        entries (subvec (vec lines) start end)]
+    (->> entries
+         (filter #(string/starts-with? % "  "))
+         (remove string/blank?))))
+
+(defn- contains-block-uuid?
+  [value]
+  (cond
+    (map? value) (or (contains? value :block/uuid)
+                     (some contains-block-uuid? (vals value)))
+    (sequential? value) (some contains-block-uuid? value)
+    :else false))
+
 (deftest test-help-output
   (testing "top-level help lists command groups"
     (let [result (commands/parse-args ["--help"])
@@ -25,6 +44,12 @@
       (is (string/includes? summary "show"))
       (is (string/includes? summary "graph"))
       (is (string/includes? summary "server"))))
+
+  (testing "top-level help command list omits [options]"
+    (let [summary (:summary (commands/parse-args ["--help"]))
+          lines (command-lines summary)]
+      (is (seq lines))
+      (is (every? #(not (string/includes? % "[options]")) lines))))
 
   (testing "top-level help separates global and command options"
     (let [summary (:summary (commands/parse-args ["--help"]))]
@@ -84,7 +109,13 @@
           summary (:summary result)]
       (is (true? (:help? result)))
       (is (string/includes? summary "query list"))
-      (is (string/includes? summary "query [options]")))))
+      (is (string/includes? summary "query"))))
+
+  (testing "group help command list omits [options]"
+    (let [summary (:summary (commands/parse-args ["list"]))
+          lines (command-lines summary)]
+      (is (seq lines))
+      (is (every? #(not (string/includes? % "[options]")) lines)))))
 
 (deftest test-parse-args-help-alignment
   (testing "graph group aligns subcommand columns"
@@ -301,6 +332,36 @@
                                    (string/lower-case nested) "Inner"}}]
       (is (= (str "1 See [[Target [[Inner]]]]")
              (tree->text tree-data))))))
+
+(deftest test-help-tags-properties-identifiers
+  (testing "add help mentions tag and property identifiers"
+    (let [summary (:summary (commands/parse-args ["add" "block" "--help"]))]
+      (is (string/includes? summary "Identifiers can be id, :db/ident, or :block/title.")))
+    (let [summary (:summary (commands/parse-args ["add" "page" "--help"]))]
+      (is (string/includes? summary "Identifiers can be id, :db/ident, or :block/title.")))))
+
+(deftest test-show-json-edn-strips-block-uuid
+  (testing "show json/edn removes :block/uuid recursively while keeping :db/id"
+    (let [tree-data {:root {:db/id 1
+                            :block/uuid "root-uuid"
+                            :block/title "Root"
+                            :block/children [{:db/id 2
+                                              :block/uuid "child-uuid"
+                                              :block/title "Child"
+                                              :block/tags [{:db/id 3
+                                                            :block/uuid "tag-uuid"
+                                                            :block/title "Tag"}]}]}
+                     :linked-references {:count 1
+                                         :blocks [{:db/id 4
+                                                   :block/uuid "ref-uuid"
+                                                   :block/page {:db/id 5
+                                                                :block/uuid "page-uuid"
+                                                                :block/title "Page"}}]}
+                     :uuid->label {"root-uuid" "Root"}}
+          stripped (#'show-command/strip-block-uuid tree-data)]
+      (is (not (contains-block-uuid? stripped)))
+      (is (= 1 (get-in stripped [:root :db/id])))
+      (is (= 2 (get-in stripped [:root :block/children 0 :db/id]))))))
 
 (deftest test-tree->text-uuid-ref-recursion-limit
   (testing "show tree text limits uuid ref replacement depth"
