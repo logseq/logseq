@@ -1,6 +1,7 @@
 (ns logseq.cli.command.show
   "Show-related CLI commands."
   (:require [clojure.string :as string]
+            [clojure.walk :as walk]
             [logseq.cli.command.id :as id-command]
             [logseq.cli.command.core :as core]
             [logseq.cli.server :as cli-server]
@@ -508,6 +509,15 @@
       (walk root #{})
       #{})))
 
+(defn- strip-block-uuid
+  [tree-data]
+  (walk/postwalk
+   (fn [entry]
+     (if (map? entry)
+       (dissoc entry :block/uuid)
+       entry))
+   tree-data))
+
 (defn execute-show
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
@@ -539,12 +549,14 @@
                   results (vec (remove (fn [{:keys [ok? id]}]
                                          (and ok? (contained? id)))
                                        results))
+                  sanitize-tree (fn [tree]
+                                  (strip-block-uuid tree))
                   payload (case format
                             :edn
                             {:status :ok
                              :data (mapv (fn [{:keys [ok? tree id error]}]
                                            (if ok?
-                                             tree
+                                             (sanitize-tree tree)
                                              (multi-id-error-entry id error)))
                                          results)
                              :output-format :edn}
@@ -553,7 +565,7 @@
                             {:status :ok
                              :data (mapv (fn [{:keys [ok? tree id error]}]
                                            (if ok?
-                                             tree
+                                             (sanitize-tree tree)
                                              (multi-id-error-entry id error)))
                                          results)
                              :output-format :json}
@@ -568,15 +580,17 @@
             payload)
           (p/let [tree-data (build-tree-data cfg action)]
             (case format
-              :edn
-              {:status :ok
-               :data tree-data
-               :output-format :edn}
+             :edn
+              (let [tree-data (strip-block-uuid tree-data)]
+                {:status :ok
+                 :data tree-data
+                 :output-format :edn})
 
-              :json
-              {:status :ok
-               :data tree-data
-               :output-format :json}
+             :json
+              (let [tree-data (strip-block-uuid tree-data)]
+                {:status :ok
+                 :data tree-data
+                 :output-format :json})
 
               {:status :ok
                :data {:message (tree->text-with-linked-refs tree-data)}}))))))
