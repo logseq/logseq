@@ -72,7 +72,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: 2553ea8236c11ea0f88de28fce1cbfee
-          projectName: "sync"
+          projectName: "test-sync"
           directory: "public"
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
           branch: ${{ inputs.branch }}
