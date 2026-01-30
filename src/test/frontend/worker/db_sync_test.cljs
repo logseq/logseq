@@ -1,11 +1,14 @@
 (ns frontend.worker.db-sync-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require [cljs.test :refer [deftest is testing async]]
             [datascript.core :as d]
+            [frontend.common.crypt :as crypt]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync :as db-sync]
             [frontend.worker.sync.client-op :as client-op]
+            [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]
-            [logseq.outliner.core :as outliner-core]))
+            [logseq.outliner.core :as outliner-core]
+            [promesa.core :as p]))
 
 (def ^:private test-repo "test-db-sync-repo")
 
@@ -299,3 +302,145 @@
              [[:db/add (:db/id block) :block/updated-at 1710000000000]])
             (let [block' (d/entity @conn (:db/id block))]
               (is (= "test" (:block/title block'))))))))))
+
+(deftest offload-large-title-test
+  (testing "large titles are offloaded to object storage with placeholder"
+    (async done
+           (let [large-title (apply str (repeat 5000 "a"))
+                 tx-data [[:db/add 1 :block/title large-title]]
+                 upload-calls (atom [])
+                 upload-fn (fn [_repo _graph-id title _aes-key]
+                             (swap! upload-calls conj title)
+                             (p/resolved {:asset-uuid "title-1"
+                                          :asset-type "txt"}))]
+             (-> (p/let [result (#'db-sync/offload-large-titles
+                                 tx-data
+                                 {:repo test-repo
+                                  :graph-id "graph-1"
+                                  :upload-fn upload-fn
+                                  :aes-key nil})]
+                   (is (= [large-title] @upload-calls))
+                   (is (= [[:db/add 1 :block/title ""]
+                           [:db/add 1 :logseq.property.sync/large-title-object
+                            {:asset-uuid "title-1"
+                             :asset-type "txt"}]]
+                          result)))
+                 (p/finally done))))))
+
+(deftest offload-small-title-test
+  (testing "small titles are not offloaded"
+    (async done
+           (let [tx-data [[:db/add 1 :block/title "short"]]
+                 upload-fn (fn [_repo _graph-id _title _aes-key]
+                             (p/rejected (ex-info "unexpected upload" {})))]
+             (-> (p/let [result (#'db-sync/offload-large-titles
+                                 tx-data
+                                 {:repo test-repo
+                                  :graph-id "graph-1"
+                                  :upload-fn upload-fn
+                                  :aes-key nil})]
+                   (is (= tx-data result)))
+                 (p/finally done))))))
+
+(deftest upload-large-title-encrypts-transit-payload-test
+  (testing "encrypted large title uploads transit-encoded payload"
+    (async done
+           (let [title (apply str (repeat 5000 "a"))
+                 captured-body (atom nil)
+                 fetch-prev js/fetch
+                 config-prev @worker-state/*db-sync-config]
+             (set! js/fetch
+                   (fn [_url opts]
+                     (reset! captured-body (.-body opts))
+                     (js/Promise.resolve #js {:ok true})))
+             (reset! worker-state/*db-sync-config {:http-base "https://example.com"})
+             (-> (p/let [aes-key (crypt/<generate-aes-key)
+                         _ (#'db-sync/upload-large-title! test-repo "graph-1" title aes-key)
+                         body @captured-body]
+                   (is (instance? js/Uint8Array body))
+                   (let [decoded (.decode (js/TextDecoder.) body)
+                         encrypted (ldb/read-transit-str decoded)]
+                     (p/let [decrypted (crypt/<decrypt-uint8array aes-key encrypted)
+                             title' (.decode (js/TextDecoder.) decrypted)]
+                       (is (= title title')))))
+                 (p/finally
+                   (fn []
+                     (set! js/fetch fetch-prev)
+                     (reset! worker-state/*db-sync-config config-prev)
+                     (done))))))))
+
+(deftest download-large-title-decrypts-transit-payload-test
+  (testing "encrypted large title downloads transit-encoded payload"
+    (async done
+           (let [title (apply str (repeat 5000 "b"))
+                 fetch-prev js/fetch
+                 config-prev @worker-state/*db-sync-config]
+             (reset! worker-state/*db-sync-config {:http-base "https://example.com"})
+             (-> (p/let [aes-key (crypt/<generate-aes-key)
+                         encrypted (crypt/<encrypt-uint8array aes-key (.encode (js/TextEncoder.) title))
+                         payload-str (ldb/write-transit-str encrypted)
+                         payload-bytes (.encode (js/TextEncoder.) payload-str)]
+                   (set! js/fetch
+                         (fn [_url _opts]
+                           (js/Promise.resolve
+                            #js {:ok true
+                                 :arrayBuffer (fn [] (js/Promise.resolve (.-buffer payload-bytes)))})))
+                   (p/let [result (#'db-sync/download-large-title!
+                                   test-repo
+                                   "graph-1"
+                                   {:asset-uuid "title-1" :asset-type "txt"}
+                                   aes-key)]
+                     (is (= title result))))
+                 (p/catch (fn [e]
+                            (is false (str "unexpected error " e))))
+                 (p/finally
+                   (fn []
+                     (set! js/fetch fetch-prev)
+                     (reset! worker-state/*db-sync-config config-prev)
+                     (done))))))))
+
+(deftest rehydrate-large-title-test
+  (testing "rehydrate fills empty title from object storage"
+    (async done
+           (let [conn (db-test/create-conn)
+                 block-uuid (random-uuid)
+                 _ (d/transact! conn [{:db/id (d/tempid :db.part/user)
+                                       :block/uuid block-uuid}])
+                 block-id (d/entid @conn [:block/uuid block-uuid])
+                 tx-data [[:db/add block-id :block/title ""]
+                          [:db/add block-id :logseq.property.sync/large-title-object
+                           {:asset-uuid "title-1" :asset-type "txt"}]]
+                 download-calls (atom [])
+                 download-fn (fn [_repo _graph-id obj _aes-key]
+                               (swap! download-calls conj obj)
+                               (p/resolved "rehydrated-title"))]
+             (with-datascript-conns conn nil
+               (fn []
+                 (d/transact! conn tx-data)
+                 (is (some? (worker-state/get-datascript-conn test-repo)))
+                 (let [obj-datoms (filter #(= :logseq.property.sync/large-title-object (:a %))
+                                          (d/datoms @conn :eavt))
+                       obj (some-> obj-datoms first :v)]
+                   (is (= 1 (count obj-datoms)))
+                   (is (true? (#'db-sync/large-title-object? obj))))
+                 (let [items (->> tx-data
+                                  (keep (fn [item]
+                                          (when (and (vector? item)
+                                                     (= :db/add (nth item 0))
+                                                     (= :logseq.property.sync/large-title-object (nth item 2))
+                                                     (true? (#'db-sync/large-title-object? (nth item 3))))
+                                            {:e (nth item 1)
+                                             :obj (nth item 3)})))
+                                  (distinct))]
+                   (is (= 1 (count items))))
+                 (-> (p/let [result (#'db-sync/rehydrate-large-titles!
+                                     test-repo
+                                     {:tx-data tx-data
+                                      :graph-id "graph-1"
+                                      :download-fn download-fn
+                                      :aes-key nil})
+                             _ (is (some? result))
+                             block (d/entity @conn block-id)]
+                       (is (= [{:asset-uuid "title-1" :asset-type "txt"}] @download-calls))
+                       (is (= "rehydrated-title" (:block/title block))))
+                     (p/finally done))))))))
