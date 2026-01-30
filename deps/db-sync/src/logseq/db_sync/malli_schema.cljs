@@ -74,7 +74,7 @@
     [:map
      [:type [:= "presence"]]
      [:user-id :string]
-     [:editing-block-uuid :string]]]
+     [:editing-block-uuid [:maybe :string]]]]
    ["pull/ok" pull-ok-schema]
    ["tx/batch/ok" tx-batch-ok-schema]
    ["changed"
