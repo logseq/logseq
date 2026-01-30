@@ -5,7 +5,6 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [datascript.storage :refer [IStorage]]
-            [frontend.common.crypt :as crypt]
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.shared-service :as shared-service]
@@ -185,8 +184,8 @@
 
 (defn- assoc-datom-value
   [datom new-value]
-  (let [[op e a _v & rest] datom]
-    (into [op e a new-value] rest)))
+  (let [[op e a _v & others] datom]
+    (into [op e a new-value] others)))
 
 (defn- large-title-object
   [asset-uuid asset-type]
@@ -571,8 +570,7 @@
           asset-type large-title-asset-type
           url (asset-url base graph-id asset-uuid asset-type)]
       (p/let [payload (if aes-key
-                        (p/let [payload-str (sync-crypt/<encrypt-text-value aes-key
-                                                                            (ldb/write-transit-str title))]
+                        (p/let [payload-str (sync-crypt/<encrypt-text-value aes-key title)]
                           (.encode text-encoder payload-str))
                         (p/resolved title))
               headers (merge {"content-type" "text/plain; charset=utf-8"
@@ -602,11 +600,12 @@
                      {:repo repo :status (.-status resp)}))
         (p/let [buf (.arrayBuffer resp)
                 payload (js/Uint8Array. buf)
+                payload-str (.decode text-decoder payload)
                 data (if aes-key
-                       (p/let [payload-str (.decode text-decoder payload)]
-                         (sync-crypt/<decrypt-text-value aes-key payload-str))
-                       (p/resolved payload))]
-          (.decode text-decoder data))))))
+                       (-> (sync-crypt/<decrypt-text-value aes-key payload-str)
+                           (p/catch (fn [_] payload-str)))
+                       (p/resolved payload-str))]
+          data)))))
 
 (defn- offload-large-titles
   [tx-data {:keys [repo graph-id upload-fn aes-key]}]
@@ -632,18 +631,28 @@
             (p/recur (rest remaining) (conj acc item))))))))
 
 (defn- rehydrate-large-titles!
-  [repo {:keys [graph-id download-fn aes-key]}]
+  [repo {:keys [graph-id download-fn aes-key tx-data]}]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (let [download-fn (or download-fn download-large-title!)
           graph-id (or graph-id (get-graph-id repo))
-          items (->> (d/datoms @conn :eavt)
-                     (keep (fn [datom]
-                             (when (= large-title-object-attr (:a datom))
-                               (let [obj (:v datom)]
-                                 (when (large-title-object? obj)
-                                   {:e (:e datom)
-                                    :obj obj})))))
-                     (distinct))]
+          items (if (seq tx-data)
+                  (->> tx-data
+                       (keep (fn [item]
+                               (when (and (vector? item)
+                                          (= :db/add (nth item 0))
+                                          (= large-title-object-attr (nth item 2))
+                                          (large-title-object? (nth item 3)))
+                                 {:e (nth item 1)
+                                  :obj (nth item 3)})))
+                       (distinct))
+                  (->> (d/datoms @conn :eavt)
+                       (keep (fn [datom]
+                               (when (= large-title-object-attr (:a datom))
+                                 (let [obj (:v datom)]
+                                   (when (large-title-object? obj)
+                                     {:e (:e datom)
+                                      :obj obj})))))
+                       (distinct)))]
       (when (seq items)
         (p/let [aes-key (or aes-key
                             (when (sync-crypt/graph-e2ee? repo)
