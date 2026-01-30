@@ -612,6 +612,7 @@
                                    :message "Saving data to DB"})
        ((@thread-api/*thread-apis :thread-api/create-or-open-db) repo {:close-other-db? true
                                                                        :datoms datoms})
+       (db-sync/rehydrate-large-titles-from-db! repo graph-id)
        (rtc-log-and-state/rtc-log :rtc.log/download
                                   {:sub-type :download-completed
                                    :graph-uuid graph-id

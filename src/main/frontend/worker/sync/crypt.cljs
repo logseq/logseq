@@ -330,13 +330,13 @@
                                 {:response-schema :e2ee/grant-access})]
             nil))))))
 
-(defn- <encrypt-text-value
+(defn <encrypt-text-value
   [aes-key value]
   (assert (string? value) (str "encrypting value should be a string, value: " value))
   (p/let [encrypted (crypt/<encrypt-text aes-key (ldb/write-transit-str value))]
     (ldb/write-transit-str encrypted)))
 
-(defn- <decrypt-text-value
+(defn <decrypt-text-value
   [aes-key value]
   (assert (string? value) (str "encrypted value should be a string, value: " value))
   (let [decoded (ldb/read-transit-str value)]
