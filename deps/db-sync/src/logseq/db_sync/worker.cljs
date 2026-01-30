@@ -1,8 +1,8 @@
 (ns logseq.db-sync.worker
   (:require ["cloudflare:workers" :refer [DurableObject]]
             [lambdaisland.glogi :as log]
-            [lambdaisland.glogi.console :as glogi-console]
             [logseq.db-sync.common :as common]
+            [logseq.db-sync.logging :as logging]
             [logseq.db-sync.worker.dispatch :as dispatch]
             [logseq.db-sync.worker.handler.sync :as sync-handler]
             [logseq.db-sync.worker.handler.ws :as ws-handler]
@@ -10,7 +10,7 @@
             [logseq.db-sync.worker.ws :as ws]
             [shadow.cljs.modern :refer (defclass)]))
 
-(glogi-console/install!)
+(logging/install!)
 
 (def worker
   #js {:fetch (fn [request env _ctx]

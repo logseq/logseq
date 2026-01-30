@@ -3,8 +3,8 @@
             ["path" :as node-path]
             ["ws" :as ws]
             [lambdaisland.glogi :as log]
-            [lambdaisland.glogi.console :as glogi-console]
             [logseq.db-sync.index :as index]
+            [logseq.db-sync.logging :as logging]
             [logseq.db-sync.node.assets :as assets]
             [logseq.db-sync.node.config :as config]
             [logseq.db-sync.node.dispatch :as dispatch]
@@ -18,7 +18,7 @@
             [logseq.db-sync.worker.presence :as presence]
             [promesa.core :as p]))
 
-(glogi-console/install!)
+(logging/install!)
 
 (defn- make-env [cfg index-db assets-bucket]
   (doto (js-obj)
