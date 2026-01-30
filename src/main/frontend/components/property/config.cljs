@@ -317,9 +317,19 @@
                           (db-property-handler/delete-closed-value! (:db/id property) (:db/id block))
                           (re-init-commands! property)))
         update-icon! (fn [icon]
-                       (property-handler/set-block-property!
-                        (:block/uuid block) :logseq.property/icon
-                        (select-keys icon [:id :type :color])))
+                       (let [;; Handle text/avatar icons with :data nested structure
+                             icon-data (cond
+                                         (= :text (:type icon))
+                                         {:type :text :data (:data icon)}
+
+                                         (= :avatar (:type icon))
+                                         {:type :avatar :data (:data icon)}
+
+                                         :else
+                                         (select-keys icon [:id :type :color]))]
+                         (property-handler/set-block-property!
+                          (:block/uuid block) :logseq.property/icon
+                          icon-data)))
         icon (:logseq.property/icon block)
         value (db-property/closed-value-content block)
         owner-class? (ldb/class? owner-block)

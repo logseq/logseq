@@ -100,7 +100,27 @@
   }
 
   .page-icon {
-    @apply flex items-center text-center align-baseline leading-none;
+    @apply flex items-center leading-none mr-2;
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+
+    /* Avatar font size in sidebar: 8px */
+    .avatar-fallback {
+      font-size: 8px !important;
+      font-weight: 500 !important;
+    }
+
+    /* Text icon in sidebar should fit in the icon box */
+    .ui__icon {
+      @apply w-full justify-center items-center;
+      max-width: 20px;
+      overflow: hidden;
+    }
+  }
+
+  .icon-cp-container {
+    width: 20px;
   }
 
   .ui__icon {
