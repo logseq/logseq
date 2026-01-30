@@ -6,12 +6,18 @@
     "dev": "cd ./worker && npx wrangler dev",
     "watch": "clojure -M:cljs watch db-sync",
     "release": "clojure -M:cljs release db-sync",
+    "build:node-adapter": "clojure -M:cljs release db-sync-node",
+    "dev:node-adapter": "clojure -M:cljs watch db-sync-node",
+    "start:node-adapter": "node worker/dist/node-adapter.js",
+    "test:node-adapter": "clojure -M:cljs compile db-sync-test && node worker/dist/worker-test.js",
     "test": "clojure -M:cljs compile db-sync-test && node worker/dist/worker-test.js",
     "clean": "rm -rf ./worker/dist/",
     "deploy-prod": "yarn clean && yarn release && cd ./worker && wrangler deploy --env prod",
     "deploy-staging": "yarn clean && yarn release && cd ./worker && wrangler deploy --env staging"
   },
   "dependencies": {
+    "better-sqlite3": "^11.10.0",
+    "ws": "^8.18.3",
     "shadow-cljs": "^3.3.4"
   }
 }
