@@ -13,6 +13,7 @@
             [frontend.worker.sync.const :as rtc-const]
             [frontend.worker.sync.crypt :as sync-crypt]
             [lambdaisland.glogi :as log]
+            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db-sync.cycle :as sync-cycle]
             [logseq.db-sync.malli-schema :as db-sync-schema]
@@ -56,15 +57,13 @@
 (defn- normalize-online-users
   [users]
   (->> users
-       (keep (fn [{:keys [user-id email username name editing-block-uuid]}]
+       (keep (fn [{:keys [user-id email username name]}]
                (when (string? user-id)
                  (let [display-name (or username name user-id)]
                    (cond-> {:user/uuid user-id
                             :user/name display-name}
-                     (string? email) (assoc :user/email email)
-                     (and (string? editing-block-uuid)
-                          (not (string/blank? editing-block-uuid)))
-                     (assoc :user/editing-block-uuid editing-block-uuid))))))
+                     (string? email) (assoc :user/email email))))))
+       (common-util/distinct-by :user/uuid)
        (vec)))
 
 (defn- broadcast-rtc-state!
@@ -97,6 +96,18 @@
   (when-let [*online-users (:online-users client)]
     (reset! *online-users (normalize-online-users users))
     (broadcast-rtc-state! client)))
+
+(defn- update-user-presence!
+  [client user-id* editing-block-uuid]
+  (when (and user-id* editing-block-uuid)
+    (when-let [*online-users (:online-users client)]
+      (swap! *online-users
+             (fn [users]
+               (mapv (fn [user]
+                       (if (= user-id* (:user/uuid user))
+                         (assoc user :user/editing-block-uuid editing-block-uuid)
+                         user)) users)))
+      (broadcast-rtc-state! client))))
 
 (defn- enabled?
   []
@@ -868,6 +879,8 @@
                            (fail-fast :db-sync/invalid-field
                                       {:repo repo :type "online-users" :field :online-users}))
                          (update-online-users! client (or users [])))
+        "presence" (let [{:keys [user-id editing-block-uuid]} message]
+                     (update-user-presence! client user-id editing-block-uuid))
         ;; Upload response
         "tx/batch/ok" (do
                         (require-non-negative remote-tx {:repo repo :type "tx/batch/ok"})
