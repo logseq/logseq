@@ -5,6 +5,7 @@
             [logseq.db-sync.worker.auth :as auth]
             [logseq.db-sync.worker.http :as http]
             [logseq.db-sync.worker.routes.index :as routes]
+            [logseq.db-sync.worker.timing :as timing]
             [promesa.core :as p]))
 
 (defn- index-db [^js self]
@@ -285,7 +286,8 @@
         env (.-env self)
         url (js/URL. (.-url request))
         path (.-pathname url)
-        method (.-method request)]
+        method (.-method request)
+        start-ms (common/now-ms)]
     (try
       (cond
         (contains? #{"OPTIONS" "HEAD"} method)
@@ -296,24 +298,41 @@
 
         :else
         (p/let [_ (index/<index-init! db)
+                init-ms (common/now-ms)
                 claims (auth/auth-claims request env)
+                auth-ms (common/now-ms)
                 _ (when claims
-                    (index/<user-upsert! db claims))]
-          (let [route (routes/match-route method path)]
-            (cond
-              (nil? claims)
-              (http/unauthorized)
+                    (index/<user-upsert! db claims))
+                upsert-ms (common/now-ms)
+                route (routes/match-route method path)
+                response (cond
+                           (nil? claims)
+                           (http/unauthorized)
 
-              route
-              (handle {:db db
-                       :env env
-                       :request request
-                       :url url
-                       :claims claims
-                       :route route})
+                           route
+                           (handle {:db db
+                                    :env env
+                                    :request request
+                                    :url url
+                                    :claims claims
+                                    :route route})
 
-              :else
-              (http/not-found)))))
+                           :else
+                           (http/not-found))
+                handler-end-ms (common/now-ms)
+                end-ms (common/now-ms)]
+          (when (and (= "GET" method) (= "/graphs" path))
+            (prn :db-sync/index-request-timing
+                 (merge {:method method
+                         :path path
+                         :handler (some-> route :handler)}
+                        (timing/summary start-ms
+                                        [[:index-init init-ms]
+                                         [:auth auth-ms]
+                                         [:upsert upsert-ms]
+                                         [:handler handler-end-ms]]
+                                        end-ms))))
+          response))
       (catch :default error
         (log/error :db-sync/index-error error)
         (http/error-response "server error" 500)))))
