@@ -1229,9 +1229,10 @@
 (defn- build-pdf-annotations-tx
   "Builds tx for pdf annotations when a pdf has an annotations EDN file under assets/"
   [parent-asset-path assets parent-asset pdf-annotation-pages opts]
-  (let [asset-edn-path (node-path/join common-config/local-assets-dir
-                                       (safe-sanitize-file-name
-                                        (node-path/basename (string/replace-first parent-asset-path #"(?i)\.pdf$" ".edn"))))
+  (let [asset-edn-path (path/path-normalize
+                        (node-path/join common-config/local-assets-dir
+                                        (safe-sanitize-file-name
+                                         (node-path/basename (string/replace-first parent-asset-path #"(?i)\.pdf$" ".edn")))))
         asset-md-name (str "hls__" (safe-sanitize-file-name
                                     (node-path/basename (string/replace-first parent-asset-path #"(?i)\.pdf$" ".md"))))]
     (when-let [asset-edn-map (get @assets asset-edn-path)]
@@ -2168,8 +2169,10 @@
                    (-> (select-keys options [:notify-user :default-config :<save-config-file])
                        (set/rename-keys {:<save-config-file :<save-file})))]
      (let [files (common-config/remove-hidden-files *files config rpath-key)
-           logseq-file? #(string/starts-with? (get % rpath-key) "logseq/")
-           asset-file? #(string/starts-with? (get % rpath-key) "assets/")
+           normalized-rpath (fn [f]
+                              (some-> (get f rpath-key) path/path-normalize))
+           logseq-file? #(string/starts-with? (normalized-rpath %) "logseq/")
+           asset-file? #(string/starts-with? (normalized-rpath %) "assets/")
            doc-files (->> files
                           (remove #(or (logseq-file? %) (asset-file? %)))
                           (filter #(contains? #{"md" "org" "markdown" "edn"} (path/file-ext (:path %)))))
