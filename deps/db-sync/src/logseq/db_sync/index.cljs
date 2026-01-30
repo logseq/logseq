@@ -2,6 +2,31 @@
   (:require [logseq.db-sync.common :as common]
             [promesa.core :as p]))
 
+(def ^:private user-upsert-cache-ttl-ms (* 60 60 1000))
+(def ^:private user-upsert-cache-max 1024)
+(defonce ^:private *user-upsert-cache (atom {}))
+
+(defn- prune-user-upsert-cache! [now-ms]
+  (swap! *user-upsert-cache
+         (fn [cache]
+           (let [cache (into {}
+                             (remove (fn [[_ {:keys [cached-at]}]]
+                                       (>= (- now-ms cached-at) user-upsert-cache-ttl-ms)))
+                             cache)
+                 count-cache (count cache)]
+             (if (> count-cache user-upsert-cache-max)
+               (into {}
+                     (drop (- count-cache user-upsert-cache-max)
+                           (sort-by (comp :cached-at val) cache)))
+               cache)))))
+
+(defn- cache-user-upsert! [user-id email email-verified username now-ms]
+  (swap! *user-upsert-cache assoc user-id {:email email
+                                           :email-verified email-verified
+                                           :username username
+                                           :cached-at now-ms})
+  (prune-user-upsert-cache! now-ms))
+
 (defn <index-init! [db]
   (p/do!
    (common/<d1-run db
@@ -114,18 +139,28 @@
             email-verified (cond
                              (true? email-verified) 1
                              (false? email-verified) 0
-                             :else nil)]
-        (common/<d1-run db
-                        (str "insert into users (id, email, email_verified, username) "
-                             "values (?, ?, ?, ?) "
-                             "on conflict(id) do update set "
-                             "email = excluded.email, "
-                             "email_verified = excluded.email_verified, "
-                             "username = excluded.username")
-                        user-id
-                        email
-                        email-verified
-                        username)))))
+                             :else nil)
+            now (common/now-ms)
+            cached (get @*user-upsert-cache user-id)]
+        (if (and cached
+                 (= email (:email cached))
+                 (= email-verified (:email-verified cached))
+                 (= username (:username cached))
+                 (< (- now (:cached-at cached)) user-upsert-cache-ttl-ms))
+          (cache-user-upsert! user-id email email-verified username now)
+          (p/let [result (common/<d1-run db
+                                         (str "insert into users (id, email, email_verified, username) "
+                                              "values (?, ?, ?, ?) "
+                                              "on conflict(id) do update set "
+                                              "email = excluded.email, "
+                                              "email_verified = excluded.email_verified, "
+                                              "username = excluded.username")
+                                         user-id
+                                         email
+                                         email-verified
+                                         username)]
+            (cache-user-upsert! user-id email email-verified username now)
+            result))))))
 
 (defn <user-id-by-email [db email]
   (when (string? email)
