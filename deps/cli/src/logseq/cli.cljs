@@ -6,17 +6,35 @@
             [clojure.string :as string]
             [logseq.cli.common.graph :as cli-common-graph]
             [logseq.cli.spec :as cli-spec]
+            [logseq.cli.style :as style]
             [logseq.cli.text-util :as cli-text-util]
             [nbb.error]
             [promesa.core :as p]))
 
+(defn- escape-regex
+  [value]
+  (string/replace value #"[\\.^$|?*+()\\[\\]{}]" "\\\\$&"))
+
+(defn- bold-command-names
+  [value commands]
+  (reduce (fn [acc command]
+            (let [pattern (re-pattern (str "(?m)^(\\s*)" (escape-regex command) "(\\s+)"))]
+              (string/replace acc pattern (fn [[_ prefix spacing]]
+                                            (str prefix (style/bold command) spacing)))))
+          value
+          commands))
+
 (defn- format-commands [{:keys [table]}]
-  (let [table (mapv (fn [{:keys [cmds desc spec]}]
-                      (cond-> [(str (string/join " " cmds)
-                                    (when spec " [options]"))]
-                        desc (conj desc)))
-                    (filter (comp seq :cmds) table))]
-    (cli/format-table {:rows table})))
+  (let [entries (->> table
+                     (filter (comp seq :cmds)))
+        rows (mapv (fn [{:keys [cmds desc spec]}]
+                     (cond-> [(str (string/join " " cmds)
+                                   (when spec " [options]"))]
+                       desc (conj desc)))
+                   entries)
+        commands (map (comp #(string/join " " %) :cmds) entries)]
+    (-> (cli/format-table {:rows rows})
+        (bold-command-names commands))))
 
 (def ^:private default-spec
   {:version {:coerce :boolean
@@ -25,9 +43,10 @@
 
 (declare table)
 (defn- print-general-help [_m]
-  (println (str "Usage: logseq [command] [options]\n\nOptions:\n"
-                (cli/format-opts {:spec default-spec})))
-  (println (str "\nCommands:\n" (format-commands {:table table}))))
+  (println (str "Usage: logseq [command] [options]\n\n"
+                (style/bold "Options") ":\n"
+                (style/bold-options (cli/format-opts {:spec default-spec}))))
+  (println (str "\n" (style/bold "Commands") ":\n" (format-commands {:table table}))))
 
 (defn- default-command
   [{{:keys [version]} :opts :as m}]
@@ -45,10 +64,11 @@
                   (str " " (string/join " "
                                         (map #(str "[" (name %) "]") (:args->opts cmd-map)))))
                 (when (:spec cmd-map)
-                  (str " [options]\n\nOptions:\n"
-                       (cli/format-opts {:spec (:spec cmd-map)})))
+                  (str " [options]\n\n" (style/bold "Options") ":\n"
+                       (style/bold-options (cli/format-opts {:spec (:spec cmd-map)}))))
                 (when (:description cmd-map)
-                  (str "\n\nDescription:\n" (cli-text-util/wrap-text (:description cmd-map) 80))))))
+                  (str "\n\n" (style/bold "Description") ":\n"
+                       (cli-text-util/wrap-text (:description cmd-map) 80))))))
 
 (defn- help-command [{{:keys [command help]} :opts}]
   (if-let [cmd-map (and command (some #(when (= command (first (:cmds %))) %) table))]
@@ -56,7 +76,7 @@
     ;; handle help --help
     (if-let [cmd-map (and help (some #(when (= "help" (first (:cmds %))) %) table))]
       (print-command-help "help" cmd-map)
-      (println "Command" (pr-str command) "does not exist"))))
+      (println (style/bold "Command") (pr-str command) "does not exist"))))
 
 (defn- lazy-load-fn
   "Lazy load fn to speed up start time. After nbb requires ~30 namespaces, start time gets close to 1s.
@@ -146,9 +166,12 @@
                                  (if (and (= :org.babashka/cli type')
                                           (= :require cause))
                                    (do
-                                     (println "Error: Command missing required"
-                                              (if (get-in data [:spec option]) "option" "argument")
-                                              (pr-str (name option)))
+                                     (println (style/bold-keywords
+                                               (str "Error: Command missing required "
+                                                    (if (get-in data [:spec option]) "option" "argument")
+                                                    " "
+                                                    (style/bold (pr-str (name option))))
+                                               ["command" "option" "argument"]))
                                      (when-let [cmd-m (some #(when (= {:spec (:spec %)
                                                                        :require (:require %)}
                                                                       (select-keys data [:spec :require])) %) table)]
