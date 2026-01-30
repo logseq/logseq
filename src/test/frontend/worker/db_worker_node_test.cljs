@@ -1,15 +1,16 @@
 (ns frontend.worker.db-worker-node-test
-  (:require ["http" :as http]
+  (:require ["fs" :as fs]
+            ["http" :as http]
+            ["path" :as node-path]
             [cljs.test :refer [async deftest is]]
             [clojure.string :as string]
             [frontend.test.node-helper :as node-helper]
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.db-worker-node :as db-worker-node]
             [goog.object :as gobj]
+            [logseq.cli.style :as style]
             [logseq.db :as ldb]
-            [promesa.core :as p]
-            ["fs" :as fs]
-            ["path" :as node-path]))
+            [promesa.core :as p]))
 
 (defn- http-request
   [opts body]
@@ -27,6 +28,17 @@
                      (.end req))]
        (.on req "error" reject)
        (finish!)))))
+
+(defn- escape-regex
+  [value]
+  (let [pattern (js/RegExp. "[.*+?^${}()|[\\]\\\\]" "g")]
+    (string/replace value pattern "\\\\$&")))
+
+(defn- contains-bold?
+  [value token]
+  (let [token (escape-regex token)
+        pattern (re-pattern (str "\\u001b\\[[0-9;]*m" token "\\u001b\\[[0-9;]*m"))]
+    (boolean (re-find pattern value))))
 
 (defn- http-get
   [host port path]
@@ -97,60 +109,60 @@
 
 (deftest db-worker-node-data-dir-permission-error
   (async done
-    (let [data-dir (node-helper/create-tmp-dir "db-worker-readonly")
-          repo (str "logseq_db_perm_" (subs (str (random-uuid)) 0 8))]
-      (fs/chmodSync data-dir 365)
-      (-> (db-worker-node/start-daemon! {:data-dir data-dir
-                                         :repo repo})
-          (p/then (fn [_]
-                    (is false "expected data-dir permission error")))
-          (p/catch (fn [e]
-                     (let [data (ex-data e)]
-                       (is (= :data-dir-permission (:code data)))
-                       (is (= (node-path/resolve data-dir) (:path data))))))
-          (p/finally (fn [] (done)))))))
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-readonly")
+               repo (str "logseq_db_perm_" (subs (str (random-uuid)) 0 8))]
+           (fs/chmodSync data-dir 365)
+           (-> (db-worker-node/start-daemon! {:data-dir data-dir
+                                              :repo repo})
+               (p/then (fn [_]
+                         (is false "expected data-dir permission error")))
+               (p/catch (fn [e]
+                          (let [data (ex-data e)]
+                            (is (= :data-dir-permission (:code data)))
+                            (is (= (node-path/resolve data-dir) (:path data))))))
+               (p/finally (fn [] (done)))))))
 
 (deftest db-worker-node-creates-log-file
   (async done
-    (let [daemon (atom nil)
-          data-dir (node-helper/create-tmp-dir "db-worker-log")
-          repo (str "logseq_db_log_" (subs (str (random-uuid)) 0 8))
-          log-file (log-path data-dir repo)]
-      (-> (p/let [{:keys [stop!]}
-                  (db-worker-node/start-daemon! {:data-dir data-dir
-                                                 :repo repo})
-                  _ (reset! daemon {:stop! stop!})
-                  _ (p/delay 50)]
-            (is (fs/existsSync log-file)))
-          (p/catch (fn [e]
-                     (is false (str "unexpected error: " e))))
-          (p/finally (fn []
-                       (if-let [stop! (:stop! @daemon)]
-                         (-> (stop!) (p/finally (fn [] (done))))
-                         (done))))))))
+         (let [daemon (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-log")
+               repo (str "logseq_db_log_" (subs (str (random-uuid)) 0 8))
+               log-file (log-path data-dir repo)]
+           (-> (p/let [{:keys [stop!]}
+                       (db-worker-node/start-daemon! {:data-dir data-dir
+                                                      :repo repo})
+                       _ (reset! daemon {:stop! stop!})
+                       _ (p/delay 50)]
+                 (is (fs/existsSync log-file)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!) (p/finally (fn [] (done))))
+                              (done))))))))
 
 (deftest db-worker-node-log-file-has-entries
   (async done
-    (let [daemon (atom nil)
-          data-dir (node-helper/create-tmp-dir "db-worker-log-entries")
-          repo (str "logseq_db_log_entries_" (subs (str (random-uuid)) 0 8))
-          log-file (log-path data-dir repo)]
-      (-> (p/let [{:keys [host port stop!]}
-                  (db-worker-node/start-daemon! {:data-dir data-dir
-                                                 :repo repo})
-                  _ (reset! daemon {:stop! stop!})
-                  _ (invoke host port "thread-api/create-or-open-db" [repo {}])
-                  _ (p/delay 50)
-                  contents (when (fs/existsSync log-file)
-                             (.toString (fs/readFileSync log-file) "utf8"))]
-            (is (fs/existsSync log-file))
-            (is (pos? (count contents))))
-          (p/catch (fn [e]
-                     (is false (str "unexpected error: " e))))
-          (p/finally (fn []
-                       (if-let [stop! (:stop! @daemon)]
-                         (-> (stop!) (p/finally (fn [] (done))))
-                         (done))))))))
+         (let [daemon (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-log-entries")
+               repo (str "logseq_db_log_entries_" (subs (str (random-uuid)) 0 8))
+               log-file (log-path data-dir repo)]
+           (-> (p/let [{:keys [host port stop!]}
+                       (db-worker-node/start-daemon! {:data-dir data-dir
+                                                      :repo repo})
+                       _ (reset! daemon {:stop! stop!})
+                       _ (invoke host port "thread-api/create-or-open-db" [repo {}])
+                       _ (p/delay 50)
+                       contents (when (fs/existsSync log-file)
+                                  (.toString (fs/readFileSync log-file) "utf8"))]
+                 (is (fs/existsSync log-file))
+                 (is (pos? (count contents))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!) (p/finally (fn [] (done))))
+                              (done))))))))
 
 (deftest db-worker-node-log-retention
   (let [enforce-log-retention! #'db-worker-node/enforce-log-retention!
@@ -201,8 +213,15 @@
 
 (deftest db-worker-node-help-omits-auth-token
   (let [show-help! #'db-worker-node/show-help!
-        output (with-out-str (show-help!))]
-    (is (not (string/includes? output "--auth-token")))))
+        output (binding [style/*color-enabled?* true]
+                 (with-out-str (show-help!)))]
+    (is (not (string/includes? (style/strip-ansi output) "--auth-token")))
+    (is (re-find #"\u001b\[[0-9;]*moptions\u001b\[[0-9;]*m:" output))
+    (is (contains-bold? output "db-worker-node"))
+    (is (contains-bold? output "--data-dir"))
+    (is (contains-bold? output "--repo"))
+    (is (contains-bold? output "--rtc-ws-url"))
+    (is (contains-bold? output "--log-level"))))
 
 (deftest db-worker-node-repo-error-handles-keyword-methods
   (let [repo-error #'db-worker-node/repo-error
@@ -222,233 +241,233 @@
 
 (deftest db-worker-node-daemon-smoke-test
   (async done
-    (let [daemon (atom nil)
-          data-dir (node-helper/create-tmp-dir "db-worker-daemon")
-          repo (str "logseq_db_smoke_" (subs (str (random-uuid)) 0 8))
-          now (js/Date.now)
-          page-uuid (random-uuid)
-          block-uuid (random-uuid)]
-      (-> (p/let [{:keys [host port stop!]}
-                  (db-worker-node/start-daemon!
-                   {:data-dir data-dir
-                    :repo repo})
-                  health (http-get host port "/healthz")
-                  ready (http-get host port "/readyz")
-                  _ (do
-                      (reset! daemon {:host host :port port :stop! stop!})
-                      (println "[db-worker-node-test] daemon started" {:host host :port port})
-                      (println "[db-worker-node-test] /healthz" health)
-                      (is (= 200 (:status health)))
-                      (println "[db-worker-node-test] /readyz" ready)
-                      (is (= 200 (:status ready)))
-                      (println "[db-worker-node-test] repo" repo))
-                  _ (invoke host port "thread-api/create-or-open-db" [repo {}])
-                  dbs (invoke host port "thread-api/list-db" [])
-                  _ (do
-                      (println "[db-worker-node-test] list-db" dbs)
-                      (is (some #(= repo (:name %)) dbs)))
-                  lock-file (lock-path data-dir repo)
-                  _ (is (fs/existsSync lock-file))
-                  lock-contents (js/JSON.parse (.toString (fs/readFileSync lock-file) "utf8"))
-                  _ (is (= repo (gobj/get lock-contents "repo")))
-                  _ (is (= host (gobj/get lock-contents "host")))
-                  _ (invoke host port "thread-api/transact"
-                            [repo
-                             [{:block/uuid page-uuid
-                               :block/title "Smoke Page"
-                               :block/name "smoke-page"
-                               :block/tags #{:logseq.class/Page}
-                               :block/created-at now
-                               :block/updated-at now}
-                              {:block/uuid block-uuid
-                               :block/title "Smoke Test"
-                               :block/page [:block/uuid page-uuid]
-                               :block/parent [:block/uuid page-uuid]
-                               :block/order "a0"
-                               :block/created-at now
-                               :block/updated-at now}]
-                             {}
-                             nil])
-                  result (invoke host port "thread-api/q"
+         (let [daemon (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-daemon")
+               repo (str "logseq_db_smoke_" (subs (str (random-uuid)) 0 8))
+               now (js/Date.now)
+               page-uuid (random-uuid)
+               block-uuid (random-uuid)]
+           (-> (p/let [{:keys [host port stop!]}
+                       (db-worker-node/start-daemon!
+                        {:data-dir data-dir
+                         :repo repo})
+                       health (http-get host port "/healthz")
+                       ready (http-get host port "/readyz")
+                       _ (do
+                           (reset! daemon {:host host :port port :stop! stop!})
+                           (println "[db-worker-node-test] daemon started" {:host host :port port})
+                           (println "[db-worker-node-test] /healthz" health)
+                           (is (= 200 (:status health)))
+                           (println "[db-worker-node-test] /readyz" ready)
+                           (is (= 200 (:status ready)))
+                           (println "[db-worker-node-test] repo" repo))
+                       _ (invoke host port "thread-api/create-or-open-db" [repo {}])
+                       dbs (invoke host port "thread-api/list-db" [])
+                       _ (do
+                           (println "[db-worker-node-test] list-db" dbs)
+                           (is (some #(= repo (:name %)) dbs)))
+                       lock-file (lock-path data-dir repo)
+                       _ (is (fs/existsSync lock-file))
+                       lock-contents (js/JSON.parse (.toString (fs/readFileSync lock-file) "utf8"))
+                       _ (is (= repo (gobj/get lock-contents "repo")))
+                       _ (is (= host (gobj/get lock-contents "host")))
+                       _ (invoke host port "thread-api/transact"
                                  [repo
-                                  ['[:find ?e
-                                     :in $ ?uuid
-                                     :where [?e :block/uuid ?uuid]]
-                                   block-uuid]])]
-            (println "[db-worker-node-test] q result" result)
-            (is (seq result)))
-          (p/catch (fn [e]
-                     (println "[db-worker-node-test] e:" e)
-                     (is false (str e))))
-          (p/finally (fn []
-                       (if-let [stop! (:stop! @daemon)]
-                         (-> (stop!)
-                             (p/finally (fn []
-                                          (is (not (fs/existsSync (lock-path data-dir repo))))
-                                          (done))))
-                         (done))))))))
+                                  [{:block/uuid page-uuid
+                                    :block/title "Smoke Page"
+                                    :block/name "smoke-page"
+                                    :block/tags #{:logseq.class/Page}
+                                    :block/created-at now
+                                    :block/updated-at now}
+                                   {:block/uuid block-uuid
+                                    :block/title "Smoke Test"
+                                    :block/page [:block/uuid page-uuid]
+                                    :block/parent [:block/uuid page-uuid]
+                                    :block/order "a0"
+                                    :block/created-at now
+                                    :block/updated-at now}]
+                                  {}
+                                  nil])
+                       result (invoke host port "thread-api/q"
+                                      [repo
+                                       ['[:find ?e
+                                          :in $ ?uuid
+                                          :where [?e :block/uuid ?uuid]]
+                                        block-uuid]])]
+                 (println "[db-worker-node-test] q result" result)
+                 (is (seq result)))
+               (p/catch (fn [e]
+                          (println "[db-worker-node-test] e:" e)
+                          (is false (str e))))
+               (p/finally (fn []
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!)
+                                  (p/finally (fn []
+                                               (is (not (fs/existsSync (lock-path data-dir repo))))
+                                               (done))))
+                              (done))))))))
 
 (deftest db-worker-node-import-edn
   (async done
-    (let [daemon-a (atom nil)
-          daemon-b (atom nil)
-          data-dir (node-helper/create-tmp-dir "db-worker-import-edn")
-          repo-a (str "logseq_db_import_edn_a_" (subs (str (random-uuid)) 0 8))
-          repo-b (str "logseq_db_import_edn_b_" (subs (str (random-uuid)) 0 8))
-          now (js/Date.now)
-          page-uuid (random-uuid)]
-      (-> (p/let [{:keys [host port stop!]}
-                  (db-worker-node/start-daemon! {:data-dir data-dir
-                                                 :repo repo-a})
-                  _ (reset! daemon-a {:stop! stop!})
-                  _ (invoke host port "thread-api/create-or-open-db" [repo-a {}])
-                  _ (invoke host port "thread-api/transact"
-                            [repo-a
-                             [{:block/uuid page-uuid
-                               :block/title "Import Page"
-                               :block/name "import-page"
-                               :block/tags #{:logseq.class/Page}
-                               :block/created-at now
-                               :block/updated-at now}]
-                             {}
-                             nil])
-                  export-edn (invoke host port "thread-api/export-edn" [repo-a {:export-type :graph}])]
-            (is (map? export-edn))
-            (p/let [_ ((:stop! @daemon-a))
-                    {:keys [host port stop!]}
-                    (db-worker-node/start-daemon! {:data-dir data-dir
-                                                   :repo repo-b})
-                    _ (reset! daemon-b {:stop! stop!})
-                    _ (invoke host port "thread-api/create-or-open-db" [repo-b {}])
-                    _ (invoke host port "thread-api/import-edn" [repo-b export-edn])
-                    result (invoke host port "thread-api/q"
-                                   [repo-b
-                                    ['[:find ?e
-                                       :in $ ?title
-                                       :where [?e :block/title ?title]]
-                                     "Import Page"]])]
-              (is (seq result))))
-          (p/catch (fn [e]
-                     (println "[db-worker-node-test] import-edn error:" e)
-                     (is false (str e))))
-          (p/finally (fn []
-                       (let [stop-a (:stop! @daemon-a)
-                             stop-b (:stop! @daemon-b)]
-                         (cond
-                           (and stop-a stop-b)
-                           (-> (stop-a)
-                               (p/finally (fn [] (-> (stop-b) (p/finally (fn [] (done)))))))
+         (let [daemon-a (atom nil)
+               daemon-b (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-import-edn")
+               repo-a (str "logseq_db_import_edn_a_" (subs (str (random-uuid)) 0 8))
+               repo-b (str "logseq_db_import_edn_b_" (subs (str (random-uuid)) 0 8))
+               now (js/Date.now)
+               page-uuid (random-uuid)]
+           (-> (p/let [{:keys [host port stop!]}
+                       (db-worker-node/start-daemon! {:data-dir data-dir
+                                                      :repo repo-a})
+                       _ (reset! daemon-a {:stop! stop!})
+                       _ (invoke host port "thread-api/create-or-open-db" [repo-a {}])
+                       _ (invoke host port "thread-api/transact"
+                                 [repo-a
+                                  [{:block/uuid page-uuid
+                                    :block/title "Import Page"
+                                    :block/name "import-page"
+                                    :block/tags #{:logseq.class/Page}
+                                    :block/created-at now
+                                    :block/updated-at now}]
+                                  {}
+                                  nil])
+                       export-edn (invoke host port "thread-api/export-edn" [repo-a {:export-type :graph}])]
+                 (is (map? export-edn))
+                 (p/let [_ ((:stop! @daemon-a))
+                         {:keys [host port stop!]}
+                         (db-worker-node/start-daemon! {:data-dir data-dir
+                                                        :repo repo-b})
+                         _ (reset! daemon-b {:stop! stop!})
+                         _ (invoke host port "thread-api/create-or-open-db" [repo-b {}])
+                         _ (invoke host port "thread-api/import-edn" [repo-b export-edn])
+                         result (invoke host port "thread-api/q"
+                                        [repo-b
+                                         ['[:find ?e
+                                            :in $ ?title
+                                            :where [?e :block/title ?title]]
+                                          "Import Page"]])]
+                   (is (seq result))))
+               (p/catch (fn [e]
+                          (println "[db-worker-node-test] import-edn error:" e)
+                          (is false (str e))))
+               (p/finally (fn []
+                            (let [stop-a (:stop! @daemon-a)
+                                  stop-b (:stop! @daemon-b)]
+                              (cond
+                                (and stop-a stop-b)
+                                (-> (stop-a)
+                                    (p/finally (fn [] (-> (stop-b) (p/finally (fn [] (done)))))))
 
-                           stop-a
-                           (-> (stop-a) (p/finally (fn [] (done))))
+                                stop-a
+                                (-> (stop-a) (p/finally (fn [] (done))))
 
-                           stop-b
-                           (-> (stop-b) (p/finally (fn [] (done))))
+                                stop-b
+                                (-> (stop-b) (p/finally (fn [] (done))))
 
-                           :else
-                           (done)))))))))
+                                :else
+                                (done)))))))))
 
 (deftest db-worker-node-import-db-base64
   (async done
-    (let [daemon-a (atom nil)
-          daemon-b (atom nil)
-          data-dir (node-helper/create-tmp-dir "db-worker-import-sqlite")
-          repo-a (str "logseq_db_import_sqlite_a_" (subs (str (random-uuid)) 0 8))
-          repo-b (str "logseq_db_import_sqlite_b_" (subs (str (random-uuid)) 0 8))
-          now (js/Date.now)
-          page-uuid (random-uuid)]
-      (-> (p/let [{:keys [host port stop!]}
-                  (db-worker-node/start-daemon! {:data-dir data-dir
-                                                 :repo repo-a})
-                  _ (reset! daemon-a {:stop! stop!})
-                  _ (invoke host port "thread-api/create-or-open-db" [repo-a {}])
-                  _ (invoke host port "thread-api/transact"
-                            [repo-a
-                             [{:block/uuid page-uuid
-                               :block/title "SQLite Import Page"
-                               :block/name "sqlite-import-page"
-                               :block/tags #{:logseq.class/Page}
-                               :block/created-at now
-                               :block/updated-at now}]
-                             {}
-                             nil])
-                  export-base64 (invoke host port "thread-api/export-db-base64" [repo-a])]
-            (is (string? export-base64))
-            (is (pos? (count export-base64)))
-            (p/let [_ ((:stop! @daemon-a))
-                    {:keys [host port stop!]}
-                    (db-worker-node/start-daemon! {:data-dir data-dir
-                                                   :repo repo-b})
-                    _ (reset! daemon-b {:stop! stop!})
-                    _ (invoke host port "thread-api/import-db-base64" [repo-b export-base64])
-                    _ (invoke host port "thread-api/create-or-open-db" [repo-b {}])
-                    result (invoke host port "thread-api/q"
-                                   [repo-b
-                                    ['[:find ?e
-                                       :in $ ?title
-                                       :where [?e :block/title ?title]]
-                                     "SQLite Import Page"]])]
-              (is (seq result))))
-          (p/catch (fn [e]
-                     (println "[db-worker-node-test] import-sqlite error:" e)
-                     (is false (str e))))
-          (p/finally (fn []
-                       (let [stop-a (:stop! @daemon-a)
-                             stop-b (:stop! @daemon-b)]
-                         (cond
-                           (and stop-a stop-b)
-                           (-> (stop-a)
-                               (p/finally (fn [] (-> (stop-b) (p/finally (fn [] (done)))))))
+         (let [daemon-a (atom nil)
+               daemon-b (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-import-sqlite")
+               repo-a (str "logseq_db_import_sqlite_a_" (subs (str (random-uuid)) 0 8))
+               repo-b (str "logseq_db_import_sqlite_b_" (subs (str (random-uuid)) 0 8))
+               now (js/Date.now)
+               page-uuid (random-uuid)]
+           (-> (p/let [{:keys [host port stop!]}
+                       (db-worker-node/start-daemon! {:data-dir data-dir
+                                                      :repo repo-a})
+                       _ (reset! daemon-a {:stop! stop!})
+                       _ (invoke host port "thread-api/create-or-open-db" [repo-a {}])
+                       _ (invoke host port "thread-api/transact"
+                                 [repo-a
+                                  [{:block/uuid page-uuid
+                                    :block/title "SQLite Import Page"
+                                    :block/name "sqlite-import-page"
+                                    :block/tags #{:logseq.class/Page}
+                                    :block/created-at now
+                                    :block/updated-at now}]
+                                  {}
+                                  nil])
+                       export-base64 (invoke host port "thread-api/export-db-base64" [repo-a])]
+                 (is (string? export-base64))
+                 (is (pos? (count export-base64)))
+                 (p/let [_ ((:stop! @daemon-a))
+                         {:keys [host port stop!]}
+                         (db-worker-node/start-daemon! {:data-dir data-dir
+                                                        :repo repo-b})
+                         _ (reset! daemon-b {:stop! stop!})
+                         _ (invoke host port "thread-api/import-db-base64" [repo-b export-base64])
+                         _ (invoke host port "thread-api/create-or-open-db" [repo-b {}])
+                         result (invoke host port "thread-api/q"
+                                        [repo-b
+                                         ['[:find ?e
+                                            :in $ ?title
+                                            :where [?e :block/title ?title]]
+                                          "SQLite Import Page"]])]
+                   (is (seq result))))
+               (p/catch (fn [e]
+                          (println "[db-worker-node-test] import-sqlite error:" e)
+                          (is false (str e))))
+               (p/finally (fn []
+                            (let [stop-a (:stop! @daemon-a)
+                                  stop-b (:stop! @daemon-b)]
+                              (cond
+                                (and stop-a stop-b)
+                                (-> (stop-a)
+                                    (p/finally (fn [] (-> (stop-b) (p/finally (fn [] (done)))))))
 
-                           stop-a
-                           (-> (stop-a) (p/finally (fn [] (done))))
+                                stop-a
+                                (-> (stop-a) (p/finally (fn [] (done))))
 
-                           stop-b
-                           (-> (stop-b) (p/finally (fn [] (done))))
+                                stop-b
+                                (-> (stop-b) (p/finally (fn [] (done))))
 
-                           :else
-                           (done)))))))))
+                                :else
+                                (done)))))))))
 
 (deftest db-worker-node-repo-mismatch-test
   (async done
-    (let [daemon (atom nil)
-          data-dir (node-helper/create-tmp-dir "db-worker-repo-mismatch")
-          repo (str "logseq_db_mismatch_" (subs (str (random-uuid)) 0 8))
-          other-repo (str repo "_other")]
-      (-> (p/let [{:keys [host port stop!]}
-                  (db-worker-node/start-daemon! {:data-dir data-dir
-                                                 :repo repo})
-                  _ (reset! daemon {:host host :port port :stop! stop!})
-                  {:keys [status body]} (invoke-raw host port "thread-api/create-or-open-db" [other-repo {}])
-                  parsed (js->clj (js/JSON.parse body) :keywordize-keys true)]
-            (is (= 409 status))
-            (is (= false (:ok parsed)))
-            (is (= "repo-mismatch" (get-in parsed [:error :code]))))
-          (p/catch (fn [e]
-                     (is false (str "unexpected error: " e))))
-          (p/finally (fn []
-                       (if-let [stop! (:stop! @daemon)]
-                         (-> (stop!) (p/finally (fn [] (done))))
-                         (done))))))))
+         (let [daemon (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-repo-mismatch")
+               repo (str "logseq_db_mismatch_" (subs (str (random-uuid)) 0 8))
+               other-repo (str repo "_other")]
+           (-> (p/let [{:keys [host port stop!]}
+                       (db-worker-node/start-daemon! {:data-dir data-dir
+                                                      :repo repo})
+                       _ (reset! daemon {:host host :port port :stop! stop!})
+                       {:keys [status body]} (invoke-raw host port "thread-api/create-or-open-db" [other-repo {}])
+                       parsed (js->clj (js/JSON.parse body) :keywordize-keys true)]
+                 (is (= 409 status))
+                 (is (= false (:ok parsed)))
+                 (is (= "repo-mismatch" (get-in parsed [:error :code]))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!) (p/finally (fn [] (done))))
+                              (done))))))))
 
 (deftest db-worker-node-lock-prevents-multiple-daemons
   (async done
-    (let [daemon (atom nil)
-          data-dir (node-helper/create-tmp-dir "db-worker-lock")
-          repo (str "logseq_db_lock_" (subs (str (random-uuid)) 0 8))]
-      (-> (p/let [{:keys [stop!]}
-                  (db-worker-node/start-daemon! {:data-dir data-dir
-                                                 :repo repo})
-                  _ (reset! daemon {:stop! stop!})]
-            (-> (db-worker-node/start-daemon! {:data-dir data-dir
-                                               :repo repo})
-                (p/then (fn [_]
-                          (is false "expected lock error")))
-                (p/catch (fn [e]
-                           (is (= :repo-locked (-> (ex-data e) :code)))))))
-          (p/catch (fn [e]
-                     (is false (str "unexpected error: " e))))
-          (p/finally (fn []
-                       (if-let [stop! (:stop! @daemon)]
-                         (-> (stop!) (p/finally (fn [] (done))))
-                         (done))))))))
+         (let [daemon (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-lock")
+               repo (str "logseq_db_lock_" (subs (str (random-uuid)) 0 8))]
+           (-> (p/let [{:keys [stop!]}
+                       (db-worker-node/start-daemon! {:data-dir data-dir
+                                                      :repo repo})
+                       _ (reset! daemon {:stop! stop!})]
+                 (-> (db-worker-node/start-daemon! {:data-dir data-dir
+                                                    :repo repo})
+                     (p/then (fn [_]
+                               (is false "expected lock error")))
+                     (p/catch (fn [e]
+                                (is (= :repo-locked (-> (ex-data e) :code)))))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!) (p/finally (fn [] (done))))
+                              (done))))))))

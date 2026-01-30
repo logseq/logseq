@@ -14,3 +14,14 @@
         (p/catch (fn [e]
                    (is false (str "unexpected error: " e))
                    (done))))))
+
+(deftest test-help-output-omits-command-list
+  (async done
+    (-> (p/let [result (cli-main/run! ["--help"] {:exit? false})
+                output (:output result)]
+          (is (= 0 (:exit-code result)))
+          (is (not (string/includes? output "Commands: list page"))))
+        (p/catch (fn [e]
+                   (is false (str "unexpected error: " e))
+                   (done)))
+        (p/finally done))))
