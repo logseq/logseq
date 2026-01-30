@@ -259,16 +259,17 @@
   (or (get name->uuid name)
       (get name->uuid (common-util/page-name-sanity-lc name))))
 
-(defn entity->link-node
-  [entity ctx]
+(defn- entity->link-node
+  [entity ctx prop-key]
   (let [title (publish-model/entity->title entity)
         uuid (:block/uuid entity)
         graph-uuid (:graph-uuid ctx)]
     (cond
       (and uuid graph-uuid (publish-model/page-entity? entity))
-      [[:a.page-ref {:href (str "/page/" graph-uuid "/" uuid)} title]]
+      [[:a.page-ref {:href (str "/page/" graph-uuid "/" uuid)}
+        (str (when (= prop-key :block/tags) "#") title)]]
       (common-util/url? title)
-      [:a {:href title} title]
+      [[:a {:href title} title]]
       :else
       [title])))
 
@@ -313,7 +314,7 @@
         (and ref-type? (get entities value))
         (let [entity (get entities value)]
           (with-icon (:logseq.property/icon entity)
-            (entity->link-node entity ctx)))
+            (entity->link-node entity ctx prop-key)))
 
         :else
         [(str value)])

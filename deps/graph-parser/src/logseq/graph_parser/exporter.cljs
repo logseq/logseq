@@ -133,9 +133,12 @@
               db
               (ns-util/get-last-part full-name))
          (map #(d/entity db %))
-         (some #(let [parents (->> (ldb/get-class-extends %)
-                                   (remove (fn [e] (= :logseq.class/Root (:db/ident e))))
-                                   vec)]
+         (some #(let [parent (->> (ldb/get-class-extends %)
+                                  (remove (fn [e] (= :logseq.class/Root (:db/ident e))))
+                                  first)
+                      parent-ancestors (when parent (ldb/get-page-parents parent))
+                      parents (cond-> (or parent-ancestors [])
+                                parent (conj parent))]
                   (when (= full-name (string/join ns-util/namespace-char (map :block/name (conj parents %))))
                     (:block/uuid %)))))
     (first
@@ -563,6 +566,12 @@
                            (translate-linked-ref-filters prop-value page-names-to-uuids)
                            :ls-type
                            [[:logseq.property/ls-type (keyword prop-value)]]
+                           :hl-color
+                           (let [color-text-idents
+                                 (->> (get-in db-property/built-in-properties [:logseq.property.pdf/hl-color :closed-values])
+                                      (map (juxt :value :db-ident))
+                                      (into {}))]
+                             [[:logseq.property.pdf/hl-color (get color-text-idents prop-value)]])
                            ;; else
                            [[(built-in-property-file-to-db-idents prop) prop-value]]))))
              (into {}))]
