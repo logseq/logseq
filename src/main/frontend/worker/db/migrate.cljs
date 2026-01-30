@@ -166,6 +166,37 @@
 (defn- deprecated-ensure-graph-uuid
   [_db])
 
+(def ^:private old-hex-to-radix-variable
+  "Mapping of old hardcoded hex colors to Radix CSS variable equivalents."
+  {"#6e7b8b" "var(--rx-gray-09)"
+   "#5e69d2" "var(--rx-indigo-09)"
+   "#00b5ed" "var(--rx-cyan-09)"
+   "#00b55b" "var(--rx-green-09)"
+   "#f2be00" "var(--rx-orange-09)"
+   "#e47a00" "var(--rx-tomato-09)"
+   "#f38e81" "var(--rx-pink-09)"
+   "#fb434c" "var(--rx-red-09)"})
+
+(defn- migrate-icon-colors
+  "Update icon colors from old hardcoded hex values to Radix CSS variables."
+  [db]
+  (->> (d/datoms db :avet :logseq.property/icon)
+       (keep (fn [datom]
+               (let [icon-value (:v datom)
+                     entity-id (:e datom)]
+                 (when (map? icon-value)
+                   (let [data (:data icon-value)
+                         bg-color (:backgroundColor data)
+                         text-color (:color data)
+                         new-bg (get old-hex-to-radix-variable bg-color)
+                         new-color (get old-hex-to-radix-variable text-color)]
+                     (when (or new-bg new-color)
+                       (let [updated-data (cond-> data
+                                            new-bg (assoc :backgroundColor new-bg)
+                                            new-color (assoc :color new-color))
+                             updated-icon (assoc icon-value :data updated-data)]
+                         [:db/add entity-id :logseq.property/icon updated-icon])))))))))
+
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
@@ -186,7 +217,9 @@
    ["65.17" {:properties [:logseq.property.publish/published-url]}]
    ["65.18" {:fix deprecated-ensure-graph-uuid}]
    ["65.19" {:properties [:logseq.property/choice-classes :logseq.property/choice-exclusions]}]
-   ["65.20" {:properties [:logseq.property.class/bidirectional-property-title :logseq.property.class/enable-bidirectional?]}]])
+   ["65.20" {:properties [:logseq.property.class/bidirectional-property-title :logseq.property.class/enable-bidirectional?]}]
+   ["65.21" {:properties [:logseq.property.class/default-icon-type]}]
+   ["65.22" {:fix migrate-icon-colors}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]

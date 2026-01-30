@@ -25,7 +25,7 @@
 
 (defonce emojis (vals (bean/->clj (gobj/get emoji-data "emojis"))))
 
-(declare normalize-icon)
+(declare normalize-icon derive-initials derive-avatar-initials)
 
 (defn- convert-bg-color-to-rgba
   "Convert background color to rgba format with opacity ~0.314.
@@ -85,14 +85,15 @@
 
                (and (map? normalized) (= :avatar (:type normalized)) (get-in normalized [:data :value]))
                (let [avatar-value (get-in normalized [:data :value])
+                     ;; Default to gray Radix color
                      backgroundColor (or (get-in normalized [:data :backgroundColor])
-                                         (colors/variable :indigo :09))
+                                         (colors/variable :gray :09))
                      color (or (get-in normalized [:data :color])
-                               (colors/variable :indigo :10 true))
+                               (colors/variable :gray :09))
                      display-text (subs avatar-value 0 (min 3 (count avatar-value)))
                      bg-color-rgba (convert-bg-color-to-rgba backgroundColor)
-                     ;; Determine font size based on context: sidebar (:size 16 = 8px) or page title (14px)
-                     font-size (if (= (:size opts) 16) "8px" "14px")]
+                     ;; Font size: 8px for sidebar contexts, 14px for page titles
+                     font-size (if (<= (:size opts 20) 16) "8px" "14px")]
                  (shui/avatar
                   {:class "w-5 h-5"}
                   (shui/avatar-fallback
@@ -123,22 +124,44 @@
 
 (defn get-node-icon
   [node-entity]
-  (let [first-tag-icon (some :logseq.property/icon (sort-by :db/id (:block/tags node-entity)))]
-    (or (get node-entity :logseq.property/icon)
-        (let [asset-type (:logseq.property.asset/type node-entity)]
-          (cond
-            (some? first-tag-icon)
-            first-tag-icon
-            (ldb/class? node-entity)
-            "hash"
-            (ldb/property? node-entity)
-            "letter-p"
-            (ldb/page? node-entity)
-            "file"
-            (= asset-type "pdf")
-            "book"
-            :else
-            "point-filled")))))
+  (let [sorted-tags (sort-by :db/id (:block/tags node-entity))
+        first-tag-icon (some :logseq.property/icon sorted-tags)
+        ;; Check for default-icon-type on tags (for auto-generated icons)
+        default-icon-type (some (fn [tag]
+                                  (when-let [dit (:logseq.property.class/default-icon-type tag)]
+                                    ;; dit is a reference to the closed value entity
+                                    ;; closed values store their value in :block/title or :logseq.property/value
+                                    (or (:block/title dit)
+                                        (:logseq.property/value dit))))
+                                sorted-tags)]
+    (or
+     ;; 1. Instance's own icon takes precedence
+     (get node-entity :logseq.property/icon)
+     ;; 2. Check for default-icon-type from tags (generates icon from page title)
+     (when (and default-icon-type (:block/title node-entity))
+       (let [title (:block/title node-entity)]
+         (case default-icon-type
+           "avatar" {:type :avatar
+                     :data {:value (derive-avatar-initials title)}}
+           "text" {:type :text
+                   :data {:value (derive-initials title)}}
+           nil)))
+     ;; 3. Fall back to first tag's explicit icon (existing inheritance)
+     (when (some? first-tag-icon)
+       first-tag-icon)
+     ;; 4. Type-based defaults
+     (let [asset-type (:logseq.property.asset/type node-entity)]
+       (cond
+         (ldb/class? node-entity)
+         "hash"
+         (ldb/property? node-entity)
+         "letter-p"
+         (ldb/page? node-entity)
+         "file"
+         (= asset-type "pdf")
+         "book"
+         :else
+         "point-filled")))))
 
 (rum/defc get-node-icon-cp < rum/reactive db-mixins/query
   [node-entity opts]
@@ -223,9 +246,9 @@
                :data (cond-> {:value value}
                        color (assoc :color color))}
         :avatar (let [backgroundColor (or (:backgroundColor v)
-                                          (colors/variable :indigo :09))
+                                          (colors/variable :gray :09))
                       color (or (:color v)
-                                (colors/variable :indigo :10 true))]
+                                (colors/variable :gray :09))]
                   {:type :avatar
                    :id (or id (str "avatar-" value))
                    :label (or label value)
@@ -369,9 +392,9 @@
   [icon-item {:keys [on-chosen hover]}]
   (let [avatar-value (get-in icon-item [:data :value])
         backgroundColor (or (get-in icon-item [:data :backgroundColor])
-                            (colors/variable :indigo :09))
+                            (colors/variable :gray :09))
         color (or (get-in icon-item [:data :color])
-                  (colors/variable :indigo :10 true))
+                  (colors/variable :gray :09))
         display-text (subs avatar-value 0 (min 3 (count avatar-value)))
         bg-color-rgba (convert-bg-color-to-rgba backgroundColor)]
     [:button.w-9.h-9.transition-opacity.flex.items-center.justify-center
@@ -557,7 +580,7 @@
                    (cons normalized))]
     (storage/set :ui/ls-icons-used-v2 s)))
 
-(defn- derive-initials
+(defn derive-initials
   "Derive initials from a page title (max 8 chars)"
   [title]
   (when title
@@ -570,7 +593,7 @@
                      (subs (first words) 0 (min 2 (count (first words)))))]
       (subs initials 0 (min 8 (count initials))))))
 
-(defn- derive-avatar-initials
+(defn derive-avatar-initials
   "Derive initials from a page title (max 2-3 chars for avatars, always uppercase)"
   [title]
   (when title
@@ -623,10 +646,10 @@
                          (derive-avatar-initials title))
                        ;; Use query (max 2-3 chars)
                        (subs query 0 (min 3 (count query))))
-        ;; Use selected color if available, otherwise default to indigo
+        ;; Use selected color if available, otherwise default to gray
         selected-color (when-not (string/blank? @*color) @*color)
-        backgroundColor (or selected-color (colors/variable :indigo :09))
-        color (or selected-color (colors/variable :indigo :10 true))
+        backgroundColor (or selected-color (colors/variable :gray :09))
+        color (or selected-color (colors/variable :gray :09))
         icon-item (when avatar-value
                     {:type :avatar
                      :id (str "avatar-" avatar-value)
@@ -785,8 +808,16 @@
   (let [[color, set-color!] (rum/use-state @*color)
         *el (rum/use-ref nil)
         content-fn (fn []
-                     (let [colors ["#6e7b8b" "#5e69d2" "#00b5ed" "#00b55b"
-                                   "#f2be00" "#e47a00" "#f38e81" "#fb434c" nil]]
+                     ;; Use Radix color variables for consistency with design system
+                     (let [colors [(colors/variable :gray :09)
+                                   (colors/variable :indigo :09)
+                                   (colors/variable :cyan :09)
+                                   (colors/variable :green :09)
+                                   (colors/variable :orange :09)
+                                   (colors/variable :tomato :09)
+                                   (colors/variable :pink :09)
+                                   (colors/variable :red :09)
+                                   nil]]
                        [:div.color-picker-presets
                         (for [c colors]
                           (shui/button

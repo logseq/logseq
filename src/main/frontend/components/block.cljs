@@ -2967,9 +2967,24 @@
         order-list? (boolean own-number-list?)
         children (ldb/get-children block)
         page-icon (when (:page-title? config)
-                    (let [icon' (get block :logseq.property/icon)]
+                    (let [icon' (get block :logseq.property/icon)
+                          ;; Check for default-icon-type on tags (for auto-generated icons)
+                          sorted-tags (sort-by :db/id (:block/tags block))
+                          default-icon-type (some (fn [tag]
+                                                    (when-let [dit (:logseq.property.class/default-icon-type tag)]
+                                                      (or (:block/title dit)
+                                                          (:logseq.property/value dit))))
+                                                  sorted-tags)]
                       (when-let [icon (and (ldb/page? block)
                                            (or icon'
+                                               ;; Generate icon from default-icon-type
+                                               (when (and default-icon-type (:block/title block))
+                                                 (case default-icon-type
+                                                   "avatar" {:type :avatar
+                                                             :data {:value (icon-component/derive-avatar-initials (:block/title block))}}
+                                                   "text" {:type :text
+                                                           :data {:value (icon-component/derive-initials (:block/title block))}}
+                                                   nil))
                                                (some :logseq.property/icon (:block/tags block))
                                                (when (ldb/class? block)
                                                  {:type :tabler-icon
