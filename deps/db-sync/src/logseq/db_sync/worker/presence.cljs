@@ -50,6 +50,10 @@
                (assoc presence ws user'))
              presence))))
 
+(defn get-user
+  [^js self ^js ws]
+  (get @(presence* self) ws))
+
 (defn remove-presence!
   [^js self ^js ws]
   (swap! (presence* self) dissoc ws))
