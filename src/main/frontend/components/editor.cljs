@@ -2,8 +2,10 @@
   (:require [clojure.string :as string]
             [dommy.core :as dom]
             [frontend.commands :as commands :refer [*matched-commands]]
+            [frontend.components.combobox :as combobox]
             [frontend.components.datepicker :as datepicker]
             [frontend.components.icon :as icon-component]
+            [frontend.components.list-item-icon :as list-item-icon]
             [frontend.components.svg :as svg]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -97,20 +99,32 @@
         page? (db/page? (db/entity (:db/id (state/get-edit-block))))
         matched (or (filter-commands page? @*matched) no-matched-commands)
         filtered? (not= matched @commands/*initial-commands)]
-    (ui/auto-complete
+    (combobox/combobox
      matched
      (cond->
-      {:item-render
+      {:show-search-input? false
+       :item-renderer-config
+       {:icon-fn (fn [item]
+                   (let [options (get item 3)
+                         icon (if (map? options) (:icon options) options)]
+                     (some-> icon name)))
+        :icon-variant :raw
+        :text-fn (fn [item]
+                   (let [command-name (first item)]
+                     [:strong.font-normal command-name]))
+        :gap-size 1
+        :class "has-help"}
+       :item-render
        (fn [item]
          (let [command-name (first item)
                command-doc (get item 2)
                plugin-id (get-in item [1 1 1 :pid])
                doc (when (state/show-command-doc?) command-doc)
                options (some-> item (get 3))
-               icon-name (some-> (if (map? options) (:icon options) options) (name))
+               icon-name (some-> (if (map? options) (:icon options) options) name)
                command-name (if icon-name
                               [:span.flex.items-center.gap-1
-                               (shui/tabler-icon icon-name)
+                               (list-item-icon/root {:variant :raw :icon icon-name})
                                [:strong.font-normal command-name]]
                               command-name)]
            (cond
@@ -142,8 +156,7 @@
                                              format
                                              {:restore? restore-slash?
                                               :command command}))))
-       :class
-       "cp__commands-slash"}
+       :class "cp__commands-slash"}
        (not filtered?)
        (assoc :get-group-name
               (fn [item]
@@ -229,25 +242,77 @@
                              (cons (first matched-pages)
                                    (matched-pages-with-new-page (rest matched-pages) db-tag? q))
                              (matched-pages-with-new-page matched-pages db-tag? q)))]
-      [:<>
-       (ui/auto-complete
-        matched-pages'
-        {:on-chosen   (page-on-chosen-handler embed? input id q pos format)
-         :on-enter    (fn []
-                        (page-handler/page-not-exists-handler input))
-         :item-render (fn [block _chosen?]
-                        (node-render block q {:db-tag? db-tag?}))
-         :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
-                                                                    "Search for a tag"
-                                                                    "Search for a node")]
-         :class "black"})
+      (let [new-tag-pattern (str (t :new-tag) " ")
+            new-page-pattern (str (t :new-page) " ")]
+        [:<>
+         (combobox/combobox
+          matched-pages'
+          {:show-search-input? false
+           :width :wide
+           :on-chosen (page-on-chosen-handler embed? input id q pos format)
+           :on-enter (fn []
+                       (page-handler/page-not-exists-handler input))
+           :item-renderer-config
+           {:icon-fn (fn [block]
+                       (let [block' (if-let [id (:block/uuid block)]
+                                      (if-let [e (db/entity [:block/uuid id])]
+                                        (assoc e
+                                               :block/title (:block/title block)
+                                               :alias (:alias block))
+                                        block)
+                                      block)]
+                         (cond
+                           (:nlp-date? block') "calendar"
+                           (ldb/class? block') "hash"
+                           (ldb/property? block') "letter-p"
+                           (or (ldb/page? block') (:page? block)) "file"
+                           (or (string/starts-with? (str (:block/title block')) new-tag-pattern)
+                               (string/starts-with? (str (:block/title block')) new-page-pattern)) "plus"
+                           :else "letter-n")))
+            :icon-variant-fn (fn [block]
+                               (let [block' (if-let [id (:block/uuid block)]
+                                              (if-let [e (db/entity [:block/uuid id])]
+                                                (assoc e
+                                                       :block/title (:block/title block)
+                                                       :alias (:alias block))
+                                                block)
+                                              block)
+                                     title (str (:block/title block'))]
+                                 (if (or (string/starts-with? title new-tag-pattern)
+                                         (string/starts-with? title new-page-pattern))
+                                   :create
+                                   :default)))
+            :show-breadcrumbs? true
+            :breadcrumb-fn (fn [block]
+                             (when (and (:block/uuid block) (or (:block/parent block) (not (:page? block))))
+                               (when-let [breadcrumb (state/get-component :block/breadcrumb)]
+                                 (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid block)
+                                             {:disabled? true}))))
+            :text-fn (fn [block]
+                       (let [block' (if-let [id (:block/uuid block)]
+                                      (if-let [e (db/entity [:block/uuid id])]
+                                        (assoc e
+                                               :block/title (:block/title block)
+                                               :alias (:alias block))
+                                        block)
+                                      block)
+                             alias (get-in block' [:alias :block/title])
+                             title (block-handler/block-unique-title block' {:alias alias})]
+                         (search-handler/highlight-exact-query title q)))
+            :highlight-query? true
+            :query-fn (fn [] q)
+            :gap-size 2}
+           :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
+                                                                      "Search for a tag"
+                                                                      "Search for a node")]
+           :class "black"})
 
-       (when (and db-tag?
-                  (not (string/blank? q))
-                  (not= "page" (string/lower-case q)))
-         [:p.px-1.opacity-50.text-sm
-          [:code (if util/mac? "Cmd+Enter" "Ctrl+Enter")]
-          [:span " to display this tag inline instead of at the end of this node."]])])))
+         (when (and db-tag?
+                    (not (string/blank? q))
+                    (not= "page" (string/lower-case q)))
+           [:p.px-1.opacity-50.text-sm.flex.items-center.gap-1
+            (shui/shortcut ["cmd" "return"] {:interactive? false})
+            [:span " to display this tag inline instead of at the end of this node."]])]))))
 
 (rum/defcs page-search < rum/reactive
   {:init (fn [state]
@@ -468,7 +533,6 @@
                 :auto-complete (if (util/chrome?) "chrome-off" "off")
                 :on-change (fn [e]
                              (swap! input-value assoc id (util/evalue e)))}
-
                 placeholder
                 (assoc :placeholder placeholder))))
            (ui/button

@@ -4,6 +4,7 @@
   new select-type, create an event that calls `select/dialog-select!` with the
   select-type. See the :graph/open command for a full example."
   (:require [clojure.string :as string]
+            [frontend.components.combobox :as combobox]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.handler.common.developer :as dev-common-handler]
@@ -19,30 +20,37 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
 
-(rum/defc render-item < rum/reactive
-  [result chosen? multiple-choices? *selected-choices]
-  (let [value (if (map? result) (or (:label result)
-                                    (:value result)) result)
-        header (:header result)
-        selected-choices (rum/react *selected-choices)
-        row [:div.flex.flex-row.justify-between.w-full
-             {:class (when chosen? "chosen")
-              :on-pointer-down util/stop-propagation}
-             [:div.flex.flex-row.items-center.gap-1
-              (when multiple-choices?
-                (ui/checkbox {:checked (boolean (selected-choices (:value result)))
-                              :on-click (fn [e]
-                                          (.preventDefault e))
-                              :disabled (:disabled? result)}))
-              value]
-             (when (and (map? result) (:id result))
-               [:div.tip.flex
-                [:code.opacity-20.bg-transparent (:id result)]])]]
-    (if header
-      [:div.flex.flex-col.gap-1
-       header
-       row]
-      row)))
+(defn- create-item-renderer-config
+  "Create unified item renderer config for select component."
+  [multiple-choices? *selected-choices extract-value-fn]
+  {:multi-select? multiple-choices?
+   :selected-choices *selected-choices
+   :extract-value-fn extract-value-fn
+   :icon-fn (fn [item]
+              ;; Return icon based on item type
+              (or (:icon item)
+                  (let [label (if (string? (:label item)) (:label item) "")]
+                    (cond
+                      (string/starts-with? label "+ New option:")
+                      "plus"
+                      (string/starts-with? label "New tag:")
+                      "plus"
+                      (string/starts-with? label "Convert")
+                      "file" ; Page icon for convert items
+                      :else
+                      "letter-p")))) ; Default to property icon
+   :icon-variant-fn (fn [item]
+                      ;; Use :create variant for "New option:" and "New tag:" items
+                      (let [label (if (string? (:label item)) (:label item) "")]
+                        (if (or (string/starts-with? label "+ New option:")
+                                (string/starts-with? label "New tag:"))
+                          :create
+                          :default)))
+   :new-item-patterns ["+ New option:" "New tag:" "Convert"]
+   :show-breadcrumbs? true
+   :breadcrumb-fn (fn [item] (:header item))
+   :on-pointer-down util/stop-propagation
+   :gap-size 3})
 
 (rum/defc search-input
   [*input {:keys [prompt-key input-default-placeholder input-opts on-input]}]
@@ -176,32 +184,33 @@
                                  (ui/loading "Loading ...")]
                                 [:div
                                  {:class (when (seq search-result) "py-1")}
-                                 [:div.item-results-wrap
-                                  (ui/auto-complete
-                                   search-result
-                                   {:grouped? grouped?
-                                    :item-render       (or item-cp (fn [result chosen?]
-                                                                     (render-item result chosen? multiple-choices? *selected-choices)))
-                                    :class             "cp__select-results"
-                                    :on-chosen         (fn [raw-chosen e]
-                                                         (util/stop-propagation e)
-                                                         (when clear-input-on-chosen?
-                                                           (reset! *input ""))
-                                                         (let [chosen (extract-chosen-fn raw-chosen)]
-                                                           (if multiple-choices?
-                                                             (if (selected-choices chosen)
-                                                               (do
-                                                                 (swap! *selected-choices disj chosen)
-                                                                 (when on-chosen (on-chosen chosen false @*selected-choices e)))
-                                                               (do
-                                                                 (swap! *selected-choices conj chosen)
-                                                                 (when on-chosen (on-chosen chosen true @*selected-choices e))))
-                                                             (do
-                                                               (when (and close-modal? (not multiple-choices?))
-                                                                 (state/close-modal!))
-                                                               (when on-chosen
-                                                                 (on-chosen chosen true @*selected-choices e))))))
-                                    :empty-placeholder (empty-placeholder t)})]
+                                 (combobox/combobox
+                                  search-result
+                                  {:show-search-input? true
+                                   :show-separator? false
+                                   :grouped? grouped?
+                                   :width :default
+                                   :item-render item-cp
+                                   :item-renderer-config (when (not item-cp)
+                                                           (create-item-renderer-config multiple-choices? *selected-choices extract-chosen-fn))
+                                   :on-chosen (fn [raw-chosen e]
+                                                (when clear-input-on-chosen?
+                                                  (reset! *input ""))
+                                                (let [chosen (extract-chosen-fn raw-chosen)]
+                                                  (if multiple-choices?
+                                                    (if (selected-choices chosen)
+                                                      (do
+                                                        (swap! *selected-choices disj chosen)
+                                                        (when on-chosen (on-chosen chosen false @*selected-choices e)))
+                                                      (do
+                                                        (swap! *selected-choices conj chosen)
+                                                        (when on-chosen (on-chosen chosen true @*selected-choices e))))
+                                                    (do
+                                                      (when (and close-modal? (not multiple-choices?))
+                                                        (state/close-modal!))
+                                                      (when on-chosen
+                                                        (on-chosen chosen true @*selected-choices e))))))
+                                   :empty-placeholder (empty-placeholder t)})
 
                                  (when (and multiple-choices? (fn? on-apply))
                                    [:div.p-4 (ui/button "Apply"
@@ -225,6 +234,8 @@
          :*toggle-fn *toggle})
        [:<>
         (if (fn? input-container) (input-container) input-container)
+        (when (seq search-result)
+          (shui/select-separator))
         (results-container-f)])]))
 
 (defn select-config

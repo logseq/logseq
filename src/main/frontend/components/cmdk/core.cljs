@@ -3,7 +3,6 @@
             [clojure.string :as string]
             [frontend.components.block :as block]
             [frontend.components.cmdk.list-item :as list-item]
-            [frontend.components.icon :as icon-component]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -200,6 +199,14 @@
           (:source-theme highlighted-item) :theme
           :else nil)))
 
+(defn- get-page-icon
+  "Returns a string icon name for the entity type."
+  [entity]
+  (cond
+    (ldb/class? entity) "hash"
+    (ldb/property? entity) "letter-p"
+    :else "file"))
+
 ;; Each result group has it's own load-results function
 (defmulti load-results (fn [group _state] group))
 
@@ -208,7 +215,7 @@
     (let [!results (::results state)
           recent-pages (map (fn [block]
                               (let [text (block-handler/block-unique-title block)
-                                    icon (icon-component/get-node-icon-cp block {:ignore-current-icon? true})]
+                                    icon (get-page-icon block)]
                                 {:icon icon
                                  :icon-theme :gray
                                  :text text
@@ -246,7 +253,7 @@
       (->> search-results
            (map (fn [block]
                   (let [text (block-handler/block-unique-title block)
-                        icon (icon-component/get-node-icon-cp block {:ignore-current-icon? true})]
+                        icon (get-page-icon block)]
                     {:icon icon
                      :icon-theme :gray
                      :text text
@@ -279,7 +286,7 @@
                                                   tag)) tags))))
         source-page (or (model/get-alias-source-page repo (:db/id entity))
                         (:alias page))
-        icon (icon-component/get-node-icon-cp entity {:ignore-current-icon? true})
+        icon (get-page-icon entity)
         title (block-handler/block-unique-title entity
                                                 {:alias (:block/title source-page)})]
     (hash-map :icon icon
@@ -299,7 +306,7 @@
   [repo block current-page input]
   (let [id (:block/uuid block)
         text (block-handler/block-unique-title block)
-        icon (icon-component/get-node-icon-cp block {:ignore-current-icon? true})]
+        icon "letter-n"]
     {:icon icon
      :icon-theme :gray
      :text (highlight-content-query text input)
@@ -812,7 +819,7 @@
                  (util/stop e)
                  (handle-input-change state nil ""))))
       (and meta? (= keyname "c")) (do
-                                    (shui/shortcut-press! (if goog.userAgent/MAC "cmd+c" "ctrl+c") true)
+                                    (shui/shortcut-press! (if util/mac? "cmd+c" "ctrl+c") true)
                                     (copy-block-ref state)
                                     (util/stop-propagation e))
       (and meta? (= keyname "o"))

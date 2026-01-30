@@ -52,9 +52,11 @@
         ;; Extract quoted text from "Convert \"text\" to property"
         (when-let [match (re-find #"Convert\s+\"([^\"]+)\"\s+to\s+property" text)]
           (second match))
-        ;; Extract text after pattern like "New option: "
-        (let [parts (string/split text (re-pattern (str pattern " ")) 2)]
-          (second parts))))))
+        ;; Extract text after pattern like "New option: " using string operations instead of regex
+        ;; to avoid issues with special regex characters like +
+        (let [prefix-len (+ (count pattern) 1)] ; +1 for the space after pattern
+          (when (> (count text) prefix-len)
+            (subs text prefix-len)))))))
 
 (defn- highlight-query
   "Highlight query terms in text."
