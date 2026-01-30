@@ -1,0 +1,560 @@
+{:accessibility/skip-to-main-content "تخطى إلى المحتوى الرئيسي"
+ :handbook/title "المساعدة"
+ :handbook/topics "المواضيع"
+ :handbook/popular-topics "المواضيع الشائعة"
+ :handbook/help-categories "قائمة المساعدة"
+ :handbook/search "البحث"
+ :handbook/home "الصفحة الرئيسية"
+ :handbook/settings "الإعدادات"
+ :handbook/close "إغلاق"
+ :on-boarding/importing-main-title "استيراد الملاحظات الحالية"
+ :on-boarding/importing-main-desc "يمكنك القيام بهذا لاحقاً في التطبيق."
+ :on-boarding/importing-title "هل لديك ملاحظات لاستيرادها؟"
+ :on-boarding/importing-desc "إذا كانت بتنسيق EDN أو Markdown، فإن Logseq يقبلها."
+ :on-boarding/importing-sqlite-desc "استيراد ملف SQLite مٌصدر من مخططك في Logseq إلى قاعدة بيانات مخطط جديدة"
+ :on-boarding/main-title (fn [] ["مرحباً بك في " [:strong "Logseq!"]])
+ :on-boarding/main-desc "أولاً، عليك اختيار مجلد حيث يخزن logseq أفكارك، ملاحظاتك، وخواطرك."
+ :bug-report/main-title "التبليغ عن خطأ"
+ :bug-report/clipboard-inspector-title "فاحص بيانات الحافظة"
+ :bug-report/main-desc "هل يمكنك مساعدتنا بالتبليغ عن خطأ؟ سنقوم بحله في أسرع ما نقدر عليه."
+ :bug-report/section-clipboard-title "هل الخطأ الذي واجهته مرتبط بهذه الميزات؟"
+ :bug-report/section-clipboard-desc "يمكنك استخدام هذه الأدوات المفيدة لتزويدنا بمعلومات إضافية."
+ :bug-report/section-clipboard-btn-title "مساعد الحافظة"
+ :bug-report/section-clipboard-btn-desc "فحص وجمع بيانات الحافظة"
+ :bug-report/section-issues-title "أو..."
+ :bug-report/section-issues-desc "إذا لم تتوفر لديك أدوات لجمع معلومات إضافية، فيرجى الإبلاغ عن الخطأ مباشرة."
+ :bug-report/section-issues-btn-title "إرسال التقرير عن الخطأ"
+ :bug-report/section-issues-btn-desc "ساعد في تحسين Logseq!"
+ :bug-report/inspector-page-desc-1 "اضغط Ctrl+V / ⌘+V لفحص بيانات حافظتك"
+ :bug-report/inspector-page-desc-2 "أو انقر هنا للصق إذا كنت تستخدم نسخة الهاتف"
+ :bug-report/inspector-page-placeholder "اضغط مطولاً هنا للصق إذا كنت تستخدم نسخة الهاتف"
+ :bug-report/inspector-page-tip "هل هناك خطأ؟ لا مشكلة، انقر هنا للعودة إلى الخطوة السابقة."
+ :bug-report/inspector-page-btn-back "عد للخلف"
+ :bug-report/inspector-page-btn-copy "انسخ النتيجة"
+ :bug-report/inspector-page-copy-notif "تم النسخ إلى الحافظة!"
+ :bug-report/inspector-page-btn-create-issue "إنشاء قضية"
+ :bug-report/inspector-page-desc-clipboard "هذه هي البيانات المقروءة من الحافظة"
+ :bug-report/inspector-page-desc-copy "إذا كان هذا مناسباً للمشاركة، فانقر على زر النسخ."
+ :bug-report/inspector-page-desc-create-issue "يمكنك الآن عن النتيجة التي تم نسخها في الحافظة. يرجى لصق النتيجة في قسم 'Additional Context' وتحديد مصدر المحتوى الأصلي. شكراً!"
+ :help/title-usage "الاستخدام"
+ :help/title-community "المجتمع"
+ :help/title-development "التطور"
+ :help/title-about "حول"
+ :help/title-terms "الشروط والأحكام"
+ :help/start "البدأ"
+ :help/about "حول Logseq"
+ :help/roadmap "جدولة"
+ :help/bug "تقرير عن خطأ"
+ :help/feature "طلب ميزة"
+ :help/changelog "سجل التغييرات"
+ :help/blog "مدونة Logesq"
+ :help/docs "الوثائق"
+ :help/privacy "سياسة الخصوصية"
+ :help/terms "الشروط والأحكام"
+ :help/forum-community "منتدى المجتمع"
+ :help/awesome-logseq "Logseq الرائع"
+ :help/shortcuts "اختصارات لوحة المفاتيح"
+ :help/shortcuts-triggers "المحفزات"
+ :help/shortcut "الاختصارات"
+ :help/search "البحث في الصفحات/الكتل/الأوامر"
+ :help/slash-autocomplete "إكمال تلقائي للشرطة المائلة"
+ :help/reference-autocomplete "مرجع الصفحة للإكمال التلقائي"
+ :help/block-reference "مرجع الكتلة"
+ :help/open-link-in-sidebar "افتح الرابط في النافذة الجانبية"
+ :search-item/page "صفحة"
+ :search-item/no-result "لا توجد نتيجة متطابقة"
+ :help/context-menu "قائمة سياق الكتلة"
+ :help/markdown-syntax "بناءالجملة في Markdown"
+ :bold "عريض"
+ :italics "مائل"
+ :highlight "نص مظلل"
+ :strikethrough "خط في المنتصف"
+ :code "كود"
+ :untitled "بدون عنوان"
+ :right-side-bar/help "مساعدة"
+ :right-side-bar/switch-theme "وضع السمة"
+ :right-side-bar/contents "المحتويات"
+ :right-side-bar/page-graph "مخطط الصفحة"
+ :right-side-bar/block-ref "مرجع الكتلة"
+ :right-side-bar/graph-view "عرض المخطط"
+ :right-side-bar/all-pages "الصفحات"
+ :right-side-bar/flashcards "بطاقات تعليمية"
+ :right-side-bar/show-journals "عرض اليوميات"
+ :right-side-bar/separator "معالج تغيير حجم النافذة الجانبية اليمنى"
+ :right-side-bar/toggle-right-sidebar "تبديل النافذة الجانبية اليمنى"
+ :right-side-bar/pane-close "إغلاق"
+ :right-side-bar/pane-close-others "إغلاق نوافذ آخرى"
+ :right-side-bar/pane-close-all "إغلاق الكل"
+ :right-side-bar/pane-collapse "طي"
+ :right-side-bar/pane-collapse-others "طي النوافذ الأخرى"
+ :right-side-bar/pane-collapse-all "طي الجميع"
+ :right-side-bar/pane-expand "توسيع"
+ :right-side-bar/pane-expand-all "توسيع الكل"
+ :right-side-bar/pane-open-as-page "افتح كصفحة"
+ :right-side-bar/pane-more "المزيد"
+ :left-side-bar/switch "التبديل إلى:"
+ :left-side-bar/journals "اليوميات"
+ :left-side-bar/assets "الأصول"
+ :left-side-bar/tasks "المهام"
+ :left-side-bar/nav-favorites "المفضلة"
+ :left-side-bar/nav-recent-pages "حديث"
+ :page/something-went-wrong "حدث خطأ ما"
+ :page/logseq-is-having-a-problem "Logseq يواجه مشكلة. لمحاولة إعادته إلى حالة العمل، يرجى اتباع الخطوات الآمنة التالية بالترتيب:"
+ :page/step "الخطوة {1}"
+ :page/try "حاول"
+ :page/delete-confirmation "هل أنت متأكد من رغبتك في حذف هذه الصفحة؟"
+ :page/db-delete-confirmation "هل أنت متأكد من رغبتك في حذف هذه الصفحة؟"
+ :page/make-public "اجعلها متاحة للنشر"
+ :page/make-private "اجعله خاصاً"
+ :page/delete "حذف الصفحة"
+ :page/add-to-favorites "أضف إلى المفضلة"
+ :page/unfavorite "إزالة من المفضلة"
+ :block/name "اسم الصفحة"
+ :page/copy-page-url "انسخ رابط الصفحة"
+ :page/convert-to-tag "التحويل إلى وسم"
+ :page/convert-tag-to-page "تحويل الوسم إلى صفحة"
+ :file/name "اسم الملف"
+ :file/last-modified-at "آخر تعديل في"
+ :file/no-data "لا توجد بيانات"
+ :file/format-not-supported "التنسيق .{1} ليس مدعوماً."
+ :page/created-at "تم إنشاؤه في"
+ :page/updated-at "تم التحديث في"
+ :page/backlinks "الروابط الخلفية"
+ :linked-references/filter-search "ابحث في الصفحات المرتبطة"
+ :linked-references/filter-heading "مرشح"
+ :linked-references/filter-directions "انقر للإضافة، وانقر على مفتاح shift لاستبعاده. انقر مرة أخرى لإزالته."
+ :linked-references/filter-includes "يتضمن: "
+ :linked-references/filter-excludes "المستبعد: "
+ :editor/block-search "ابحث عن كتلة"
+ :text/image "صورة"
+ :asset/show-in-folder "عرض الصورة في المجلد"
+ :asset/open-in-browser "افتح الصورة في المتصفح"
+ :asset/delete "احذف الصورة"
+ :asset/copy "انسخ الصورة"
+ :asset/maximize "تكبير الصورة"
+ :asset/ref-block "كتلة مرجع للمرفق"
+ :asset/confirm-delete "هل أنت متأكد من رغبتك في حذف {1}؟"
+ :asset/physical-delete "قم بإزالة الملف أيضاً (لا يمكن استعادته)"
+ :color/gray "رمادي"
+ :color/red "أحمر"
+ :color/yellow "أصفر"
+ :color/green "أخضر"
+ :color/blue "أزرق"
+ :color/purple "أرجواني"
+ :color/pink "وردي"
+ :editor/copy "نسخ"
+ :editor/cut "قص"
+ :editor/expand-block-children "توسيع الجميع"
+ :editor/collapse-block-children "طي الجميع"
+ :editor/delete-selection "احذف الكتل المحددة"
+ :editor/cycle-todo "تدوير حالة TODO"
+ :dev/show-page-data "(للمطورين) إظهار بيانات الصفحة"
+ :dev/show-block-data "(للمطورين) إظهار بيانات الكتلة"
+ :dev/show-block-ast "(للمطورين) إظهار شجرة البناء النحوي (AST) للكتلة"
+ :content/copy-export-as "نسخ / تصدير باسم"
+ :content/copy-block-url "نسخ رابط الكتلة"
+ :content/copy-block-ref "نسخ مرجع الكتلة"
+ :content/copy-ref "انسخ هذا المرجع"
+ :content/delete-ref "احذف هذا المرجع"
+ :content/replace-with-text "الاستبدال كنص"
+ :content/replace-with-embed "الاستبدال بتضمين"
+ :content/open-in-sidebar "افتح في النافذة الجانبية"
+ :content/click-to-edit "انقر للتعديل"
+ :context-menu/make-a-flashcard "اصنع بطاقة تعليمية"
+ :context-menu/toggle-number-list "إظهار/إخفاء قائمة الأرقام"
+ :settings-page/ai "الذكاء الاصطناعي"
+ :settings-page/tab-ai "الذكاء الاصطناعي"
+ :settings-page/enable-mcp-server "خادم برتوكول سياق النموذج (MCP)"
+ :settings-page/enable-mcp-server-desc "تفعيل خادم برتوكول سياق النموذج (MCP) للسماح بالاتصال مع تطبيقات الذكاء الاصطناعي. يعتمد خادم برتوكول سياق النموذج (MCP) على واجهة برمجة تطبيقات HTTP (HTTP API)"
+ :settings-page/edit-config-edn "تعديل ملف config.edn"
+ :settings-page/edit-global-config-edn "تعديل ملف التكوين العام config.edn"
+ :settings-page/edit-custom-css "تحرير ملف custom.css"
+ :settings-page/edit-export-css "تحرير ملف export.css"
+ :settings-page/custom-configuration "تكوين مخصص"
+ :settings-page/custom-global-configuration "تكوين عام مخصص"
+ :settings-page/theme-light "فاتح"
+ :settings-page/theme-dark "داكن"
+ :settings-page/theme-system "النظام"
+ :settings-page/custom-theme "تخصيص السمة"
+ :settings-page/export-theme "تصدير السمة"
+ :settings-page/show-brackets "إظهار الأقواس المربعة"
+ :settings-page/wide-mode "الوضع الواسع"
+ :settings-page/editor-font "الخط"
+ :settings-page/accent-color "لون التمييز"
+ :settings-page/accent-color-alert "اختيار لون تمييز قد يؤدي إلى إلغاء أي سمة قمت باختيارها."
+ :settings-page/spell-checker "المدقق الإملائي"
+ :settings-page/auto-updater "تحديث تلقائي"
+ :settings-page/disable-sentry "إرسال بيانات الاستخدام والتشخيصات إلى Logseq"
+ :settings-page/disable-sentry-desc "لن يقوم برنامج Logseq أبداً بجمع قاعدة بيانات المخطط المحلية الخاصة بك أو يبيع بياناتك."
+ :settings-page/preferred-outdenting "رفع الرتبة"
+ :settings-page/preferred-outdenting-tip "يظهر الجانب الأيسر إزاحة المسافة البادئة بالإعدادات الافتراضية، ويظهر الجانب الأيمن إزاحة المسافة البادئة المنطقية، رفع/وخفض الرتبة."
+ :settings-page/preferred-outdenting-tip-more "→ افهم أكثر"
+ :settings-page/show-full-blocks "عرض جميع أسطر مرجع الكتلة"
+ :settings-page/auto-expand-block-refs "توسيع مرجع الكتلة تلقائياً عند التكبير"
+ :settings-page/auto-expand-block-refs-tip "يتحكم هذا الخيار في توسيع مرجع الكتلة تلقائياً عند التكبير"
+ :settings-page/custom-date-format "تنسيق التاريخ المفضل"
+ :settings-page/preferred-pasting-file-hint "عند التفعيل، سيتم تنزيل الصورة وإدراجها عند نسخها من الإنترنت. وعند التعطيل، سيتم لصق رابط الصورة."
+ :settings-page/preferred-pasting-file "تفضيل لصق الملف"
+ :settings-page/enable-shortcut-tooltip "تفعيل تلميحات الاختصارات"
+ :settings-page/enable-tooltip "تلميحات الأدوات"
+ :settings-page/enable-journals "اليوميات"
+ :settings-page/enable-all-pages-public "جميع الصفحات عامة عند النشر"
+ :settings-page/home-default-page "تعيين الصفحة الرئيسية الافتراضية"
+ :settings-page/clear-cache "مسح ذاكرة التخزين المؤقت"
+ :settings-page/clear "مسح"
+ :settings-page/clear-cache-warning "سيؤدي مسح ذاكرة التخزين المؤقت إلى حذف المخططات البيانية المفتوحة. ستفقد التغييرات غير المحفوظة."
+ :settings-page/developer-mode "وضع المطور"
+ :settings-page/developer-mode-desc "يساعد وضع المطورين المساهمين ومطوري الإضافات على اختبار عمليات التكامل الخاصة بهم مع Logseq بكفاءة أكبر."
+ :settings-page/current-version "الإصدار الحالي"
+ :settings-page/tab-general "عام"
+ :settings-page/tab-editor "المحرر"
+ :settings-page/tab-keymap "مخطط المفاتيح"
+ :settings-page/tab-account "الحساب"
+ :settings-page/tab-advanced "الإعدادات المتقدمة"
+ :settings-page/tab-features "الخصائص"
+ :settings-page/tab-collaboration "التعاون"
+ :settings-page/tab-encryption "التشفير"
+ :settings-page/plugin-system "الإضافات"
+ :settings-page/enable-flashcards "البطائق التعليمية"
+ :settings-page/network-proxy "وكيل الشبكة (proxy)"
+ :settings-page/login-prompt "للوصول إلى الميزات الجديدة قبل الجميع، يجب أن تكون راعياً أو داعماً لـ Logseq عبر منصة Open Collective، وبالتالي يجب عليك تسجيل الدخول أولاً."
+ :settings-page/native-titlebar "شريط عنوان النافذة"
+ :settings-page/native-titlebar-desc "تفعيل شريط عنوان النافذة الخاص بالنظام على Windows و Linux."
+ :settings-page/check-for-updates "تحقق من وجود تحديثات"
+ :settings-page/checking "جار التحقق..."
+ :settings-page/revision "مراجعة: "
+ :settings-page/changelog "ما الجديد؟"
+ :settings-page/app-updated "التطبيق محدث 🎉"
+ :settings-page/update-available "تم العثور على إصدار جديد "
+ :settings-page/update-error-1 "⚠️ عفواً، حدث خطأ ما!"
+ :settings-page/update-error-2 " الرجاء التحقق من "
+
+ :settings-page/auto-chmod "تغيير صلاحيات الملفات تلقائياً"
+ :settings-page/auto-chmod-desc "عطل هذا الخيار للسماح للمستخدمين بالتحرير بناء على صلاحيات عضوية المجموعة."
+ :yes "نعم"
+
+ :cancel "إلغاء"
+ :close "إغلاق"
+ :delete "حذف"
+ :save "حفظ"
+ :type "النوع"
+ :host "المضيف"
+ :port "المنفذ"
+ :flashcards/modal-welcome-title "حان وقت إنشاء بطاقتك التعليمية الأولى!"
+ :flashcards/modal-welcome-desc-1 "يمكنك إضافة \"{1}\" إلى أي كتلة لتحويلها إلى بطاقة أو تشغيل \"/cloze\" لإضافة بعض الفراغات."
+ :flashcards/modal-finished "تهانينا، لقد راجعت جميع البطاقات التعليمية لهذا الاستعلام، نراك في المرة القادمة! 💯"
+ :flashcards/modal-btn-show-answers "عرض الإجابات"
+ :flashcards/modal-btn-hide-answers "إخفاء الإجابات"
+ :flashcards/modal-btn-show-clozes "عرض ما في الفراغات"
+
+ :home "الصفحة الرئيسية"
+ :new-page "صفحة جديدة: "
+ :new-tag "وسم جديد: "
+ :graph "مخطط بياني"
+ :graph/all-graphs "جميع المخططات البيانية"
+ :graph/local-graphs "المخططات البيانية المحلية:"
+ :graph/remote-graphs "المخططات البيانية البعيدة:"
+ :graph/shared-graphs "شاركها الآخرين:"
+ :export "تصدير"
+ :export-graph "تصدير المخطط البياني"
+ :export-page "تصدير الصفحة"
+ :export-markdown "تصدير كملف Markdown قياسي (بدون خصائص الكتلة)"
+ :export-public-pages "تصدير الصفحات العام"
+ :export-db-edn "تصدير ملف EDN"
+ :export-sqlite-db "تصدير قاعدة بيانات SQlite"
+ :export-zip "تصدير قاعدة بيانات SQLite و الأصول"
+ :export-transparent-background "خلفية شفافة"
+ :export-copy-to-clipboard "نسخ إلى الحافظة"
+ :export-copied-to-clipboard "تم النسخ إلى الحافظة!"
+ :export-save-to-file "حفظ في ملف"
+ :all-graphs "جميع المخططات البيانية"
+ :all-pages "الصفحات"
+  ;; E.g. 1 Page or 2 Pages
+ :all-pages/table-title (fn [total] (str total (if (= total 1) " صفحة" " صفحات")))
+ :all-pages/failed-to-delete-pages "تعذر حذف محتوى هذه الصفحات {1}. راجع وحدة تحكم جافا سكريبت لمزيد من التفاصيل."
+ :all-files "جميع الملفات"
+ :all-journals "جميع اليوميات"
+ :settings "الإعدادات"
+ :settings-of-plugins "الإضافات"
+ :plugins "الإضافات"
+ :themes "السمات"
+ :appearance "المظهر"
+ :relaunch-confirm-to-work "يجب إعادة تشغيل التطبيق لكي يعمل. هل تريد إعادة تشغيله الآن؟"
+ :import-notes "استيراد الملاحظات الحالية"
+ :import "استيراد"
+ :importing "الاستيراد"
+ :help-shortcut-title "انقر للاطلاع على الاختصارات والنصائح الأخرى"
+ :loading "تحميل..."
+ :login "تسجيل الدخول"
+ :logout "تسجيل الخروج"
+ :download "تنزيل"
+ :language "اللغة"
+ :remove-background "إزالة الخلفية"
+ :remove-heading "إزالة العنوان"
+ :heading "العنوان {1}"
+ :auto-heading "عنوان تلقائي"
+ :toggle-theme      "تبديل المظهر"
+
+ :help/shortcut-page-title "اختصارات لوحة المفاتيح"
+
+ :plugin/installed "المثبت"
+ :plugin/installed-plugin "الإضافات المثبتة: {1}"
+ :plugin/not-installed "غير المثبتة"
+ :plugin/installing "يتم التثبيت"
+ :plugin/install "تثبيت"
+ :plugin/reload "إعادة تحميل"
+ :plugin/update "تحديث"
+ :plugin/update-plugin "تحديث الإضافة: {1} - {2}"
+ :plugin/check-update "تحقق من وجود التحديثات"
+ :plugin/check-all-updates "تحقق من جميع التحديثات"
+ :plugin/found-updates "تحديثات جديدة"
+ :plugin/found-n-updates "تم العثور على {1} تحديثات"
+ :plugin/update-all-selected "تحديث جميع العناصر المحددة"
+ :plugin/all-updated "تم التحديث بالكامل!"
+ :plugin/updates-downloading "جار تنزيل التحديثات"
+ :plugin/refresh-lists "تحديث القوائم"
+ :plugin/enabled "تفعيل"
+ :plugin/disabled "تعطيل"
+ :plugin/update-available "يتوفر تحديث"
+ :plugin/updating "جار التحديث"
+ :plugin/uninstall "إلغاء التثبيت"
+ :plugin/marketplace "المتجر"
+ :plugin/downloads "التنزيلات"
+ :plugin/date-added "تمت إضافته حديثاً"
+ :plugin/supports-db "يدعم مخططات قواعد البيانات"
+ :plugin/popular "رائج"
+ :plugin/stars "النجوم"
+ :plugin/title "العنوان ({1})"
+ :plugin/all "الجميع"
+ :plugin/unpacked "غير مضغوطة"
+ :plugin/delete-alert "هل أنت متأكد من رغبتك في إلغاء تثبيت الإضافة [{1}]؟"
+ :plugin/open-settings "افتح الإعدادات"
+ :plugin/open-package "افتح الحزمة"
+ :plugin/report-security "الإبلاغ عن إضافة"
+ :plugin/load-unpacked "تحميل الإضافة غير المضغوطة"
+ :plugin/restart "إعادة تشغيل التطبيق"
+ :plugin/unpacked-tips "حدد مسار الإضافة"
+ :plugin/contribute "✨ برمجة وتقديم إضافة جديدة"
+ :plugin/up-to-date "محدث {1}"
+ :plugin/custom-js-alert "تم العثور على ملف custom.js، هل تسمح بتشغيله؟ (إذا كنت لا تفهم محتوى هذا الملف، نوصي بعدم السماح بالتشغيل، لما قد ينطوي عليه من مخاطر أمنية)."
+ :plugin/security-warning "يمكن للإضافات الوصول إلى مخططك وملفاتك المحلية، وإجراء طلبات عبر الشبكة.
+       كما يمكنها أن تتسبب في تلف البيانات أو فقدانها. نحن نعمل حالياً على وضع قواعد وصول مناسبة لمخططاتك.
+       في هذه الأثناء، تأكد من امتلاكك لنسخ احتياطية منتظمة لمخططاتك، ولا تقم بتثبيت الإضافات إلا عندما يمكنك قراءة وفهم شفرة المصدر."
+ :plugin/search-plugin "البحث في الإضافات"
+ :plugin/open-preferences "فتح التفضيلات"
+ :plugin/open-logseq-dir "فتح"
+ :plugin/remote-error "خطأ في الاتصال الخارجي: "
+ :plugin/checking-for-updates "جار التحقق من تحديثات الإضافات..."
+ :plugin/list-of-updates "تحديثات الإضافة: "
+ :plugin/auto-check-for-updates "التحقق التلقائي من وجود تحديثات"
+ :plugin/load-from-web-url "تحميل الإضافة من رابط من الإنترنت (URL)"
+ :plugin.install-from-file/menu-title "التثبيت من ملف plugins.edn"
+ :plugin.install-from-file/title "تثبيت الإضافات من ملف plugins.edn"
+ :plugin.install-from-file/notice "ستحل الإضافات التالية محل إضافاتك الحالية:"
+ :plugin.install-from-file/success "تم تثبيت جميع الإضافات!"
+
+ :pdf/copy-ref "نسخ المرجع"
+ :pdf/copy-text "نسخ النص"
+ :pdf/linked-ref "مرجع مرتبط"
+ :pdf/toggle-dashed "نمط التظليل المتقطع لمنطقة"
+ :pdf/hl-block-colored "عنوان ملون لكتلة التظليل"
+ :pdf/auto-open-context-menu "إظهار قائمة الخيارات تلقائياً عند التحديد"
+ :pdf/doc-metadata "بيانات المستند الوصفية"
+
+ :updater/new-version-install "تم تنزيل نسخة جديدة."
+ :updater/quit-and-install "أعد تشغيل البرنامج للتثبيت"
+
+ :tips/all-done "كل شيء جاهز!"
+
+ :select/default-prompt "اختر واحداً"
+ :select/default-select-multiple "اختر واحداً أو أكثر"
+ :select.graph/prompt "اختر مخطط"
+ :select.graph/empty-placeholder-description "لا توجد مخططات مطابقة. هل تريد إضافة مخطط جديد؟"
+ :select.graph/add-graph "نعم، أضف مخطط جديد"
+
+ :notification/clear-all "مسح الجميع"
+
+ :shortcut.category/basics "الأساسيات"
+ :shortcut.category/formatting "التنسيق"
+ :shortcut.category/navigating "التنقل"
+ :shortcut.category/block-editing "تحرير الكتل (عام)"
+ :shortcut.category/block-command-editing "تحرير أوامر الكتل"
+ :shortcut.category/block-selection "تحديد الكتل (اضغط Esc للخروج من التحديد)"
+ :shortcut.category/toggle "مفاتيح التبديل"
+ :shortcut.category/others "أخرى"
+ :shortcut.category/plugins "الإضافات"
+
+ :keymap/all "الجميع"
+ :keymap/disabled "المعطلة"
+ :keymap/unset "غير المعينة"
+ :keymap/custom "مخصصة"
+ :keymap/search "البحث"
+ :keymap/total "إجمالي الاختصارات"
+ :keymap/keystroke-filter "ترشيح ضغطات المفاتيح"
+ :keymap/keystroke-record-desc "اضغط على أي تسلسل من المفاتيح لترشيح الاختصارات"
+ :keymap/keystroke-record-setup-label "اضغط على أي تسلسل من المفاتيح لتعيين اختصار"
+ :keymap/restore-to-default "إستعادة الإعدادات الافتراضية"
+ :keymap/customize-for-label "تخصيص الاختصارات"
+ :keymap/conflicts-for-label "تعارضات في الاختصارات لـ"
+
+ :window/minimize "تصغير"
+ :window/maximize "تكبير"
+ :window/restore "استعادة"
+ :window/close "إغلاق"
+ :window/exit-fullscreen "الخروج من وضع ملء الشاشة"
+
+ :header/toggle-left-sidebar         "إظهار/إخفاء الشريط الجانبي الأيسر"
+ :header/search                      "البحث"
+ :header/more                        "المزيد"
+ :header/go-back                     "ارجع"
+ :header/go-forward                  "امض"
+
+ ;; E.g. 1 node or 2 nodes
+ :views.table/live-query-title (fn [total] (str "استعلام مباشر (" total ")"))
+ :views.table/default-title (fn [total] (str total (if (<= total 1) " عقدة" " عقد")))
+
+ ;; Commands are nested for now to stay in sync with the shortcuts system.
+ ;; Other languages should not nest keys under :commands
+
+  :command.pdf/previous-page            "Pdf: الصفحة السابقة في المستند الحالي"
+  :command.pdf/next-page                "Pdf: الصفحة التالية في المستند الحالي"
+  :command.pdf/close                    "Pdf: إغلاق المستند الحالي"
+  :command.pdf/find                     "Pdf: بحث في النصوص في المستند الحالي"
+  :command.auto-complete/complete       "الإكمال-التلقائي: اختيار العنصر المحدد"
+  :command.auto-complete/prev           "الإكمال-التلقائي: اختيار العنصر السابق"
+  :command.auto-complete/next           "الإكمال-التلقائي: اختيار العنصر التالي"
+  :command.auto-complete/shift-complete "الإكمال-التلقائي: فتح العنصر المحدد في النافذة الجانبية"
+  :command.auto-complete/meta-complete  "الإكمال-التلقائي: اضغط Cmd + Enter لاختيار العنصر المحدد"
+  :command.cards/toggle-answers         "البطاقات: إظهار/إخفاء الإجابات/الفراغات"
+  :command.cards/again                  "البطاقات مجدداً"
+  :command.cards/hard                   "البطاقات: صعبة"
+  :command.cards/good                   "البطاقات: جيدة"
+  :command.cards/easy                   "البطاقات: سهلة"
+  :command.editor/escape-editing        "الخروج من المحرر"
+  :command.editor/backspace             "مسح/حذف للخلف (Backspace)"
+  :command.editor/delete                "حذف / حذف للأمام"
+  :command.editor/new-block             "إنشاء كتلة جديدة"
+  :command.editor/new-line              "إنشاء سطر جديد في الكتلة الحالية"
+  :command.editor/follow-link           "اتبع الرابط تحت المؤشر"
+  :command.editor/open-link-in-sidebar  "افتح الرابط في النافذة الجانبية"
+  :command.editor/bold                  "عريض"
+  :command.editor/italics               "مائل"
+  :command.editor/highlight             "مظلل"
+  :command.editor/strike-through        "خط في المنتصف"
+  :command.editor/clear-block           "حذف محتوى الكتلة بالكامل"
+  :command.editor/kill-line-before      "حذف السطر قبل موقع المؤشر"
+  :command.editor/copy-embed            "نسخ رابط تضمين يشير إلى الكتلة الحالية"
+  :command.editor/kill-line-after       "حذف السطر بعد موقع المؤشر"
+  :command.editor/beginning-of-block    "نقل المؤشر إلى بداية الكتلة"
+  :command.editor/end-of-block          "نقل المؤشر إلى نهاية الكتلة"
+  :command.editor/forward-word          "نقل المؤشر كلمة للأمام"
+  :command.editor/backward-word         "نقل المؤشر كلمة للخلف"
+  :command.editor/forward-kill-word     "حذف كلمة للأمام"
+  :command.editor/backward-kill-word    "حذف كلمة للخلف"
+  :command.editor/paste-text-in-one-block-at-point "لصق النص في كتلة واحدة عند نقطة المؤشر"
+  :command.editor/insert-youtube-timestamp "إدراج الطابع الزمني ليوتيوب"
+  :command.editor/cycle-todo              "تبديل حالة قائمة المهام (TODO)"
+  :command.editor/up                      "نقل المؤشر للأعلى / تحديد للأعلى"
+  :command.editor/down                    "نقل المؤشر للأسفل / تحديد للأسفل"
+  :command.editor/left                    "نقل المؤشر لليسار / فتح الكتلة المحددة من بدايتها"
+  :command.editor/right                   "نقل المؤشر لليمين / فتح الكتلة المحددة من نهايتها"
+  :command.editor/select-up               "تحديد المحتوى أعلاه"
+  :command.editor/select-down             "تحديد المحتوى أدناه"
+  :command.editor/move-block-up           "نقل الكتلة للأعلى"
+  :command.editor/move-block-down         "نقل الكتلة للأسفل"
+  :command.editor/move-blocks             "نقل الكتل إلى"
+  :command.editor/open-edit               "تحرير الكتلة المحددة"
+  :command.editor/open-selected-blocks-in-sidebar "فتح الكتل/ة المحددة في النافذة الجانبية"
+  :command.editor/select-block-up         "تحديد الكتلة أعلاه"
+  :command.editor/select-block-down       "تحديد الكتلة أدناه"
+  :command.editor/delete-selection        "حذف الكتل المحددة"
+  :command.editor/expand-block-children   "توسيع"
+  :command.editor/collapse-block-children "طي"
+  :command.editor/toggle-block-children   "تبديل التوسيع/الطي"
+  :command.editor/indent                  "رفع رتبة الكتلة"
+  :command.editor/outdent                 "خفض رتبة الكتلة"
+  :command.editor/copy                    "نسخ (ينسخ النص المحدد أو مرجع الكتلة)"
+  :command.editor/copy-text               "نسخ المحدد كنص"
+  :command.editor/cut                     "قص"
+  :command.editor/undo                    "تراجع"
+  :command.editor/redo                    "إعادة"
+  :command.editor/quick-add               "إضافة سريعة"
+  :command.editor/insert-link             "رابط HTML"
+  :command.editor/select-all-blocks       "تحديد جميع الكتل"
+  :command.editor/select-parent           "تحديد الكتلة الأم"
+  :command.editor/zoom-in                 "التركيز على الكتلة المحررة / أو الانتقال للأمام"
+  :command.editor/zoom-out                "الخروج من تركيز الكتلة / أو الرجوع للخلف"
+  :command.editor/toggle-number-list      "تبديل حالة قائمة الأرقام"
+  :command.editor/add-property            "إضافة ميزة"
+  :command.editor/set-tags                "تعيين الوسوم للكتل/ة المحددة"
+  :command.editor/add-property-deadline   "إضافة موعد نهائي للمهمة في الكتلة المحددة"
+  :command.editor/add-property-status     "إضافة حالة للمهمة في الكتلة المحددة"
+  :command.editor/add-property-priority   "إضافة أولوية للمهمة في الكتلة المحددة"
+  :command.editor/add-property-icon       "إضافة أيقونة"
+  :command.editor/jump                    "الانتقال إلى مفتاح أو قيمة خاصية"
+  :command.ui/toggle-brackets             "تبديل إظهار/إخفاء الأقواس"
+  :command.go/electron-find-in-page       "البحث عن نص في الصفحة"
+  :command.go/electron-jump-to-the-next   "الانتقال إلى النتيجة التالية في شريط البحث"
+  :command.go/electron-jump-to-the-previous "الانتقال إلى النتيجة السابقة في شريط البحث"
+  :command.go/search                      "البحث في الصفحات والكتل"
+  :command.go/search-themes               "البحث عن السمات"
+  :command.go/search-in-page              "البحث عن الكتل في الصفحة"
+  :command.command-palette/toggle         "بحث عن الأوامر"
+  :command.go/journals                    "الذهاب إلى اليوميات"
+  :command.go/backward                    "للخلف"
+  :command.go/forward                     "للأمام"
+  :command.search/re-index                "إعادة بناء فهرس البحث"
+  :command.sidebar/open-today-page        "فتح صفحة اليوم في النافذة الجانبية اليمنى"
+  :command.sidebar/close-top              "إغلاق العنصر الأعلى في النافذة الجانبية اليمنى"
+  :command.sidebar/clear                  "مسح كافة العناصر في النافذة الجانبية اليمنى"
+  :command.misc/copy                      "نسخ"
+  :command.publish/open-dialog            "فتح نافذة النشر للصفحة الحالية"
+  :command.graph/export-as-html           "تصدير صفحات المخطط العامة بصيغة HTML"
+  :command.graph/open                     "اختر مخطط لفتحه"
+  :command.graph/remove                   "إزالة مخطط"
+  :command.graph/add                      "إضافة مخطط"
+  :command.graph/db-add                   "إضافة مخطط قاعدة بيانات"
+  :command.graph/db-save                  "حفظ قاعدة البيانات الحلية على القرص (~/logseq/graphs/your-current-graph)"
+  :command.command/run                    "تشغيل أمر git"
+  :command.go/home                        "الانتقال إلى الصفحة الرئيسية"
+  :command.go/all-graphs                  "الانتقال إلى كافة المخططات"
+  :command.go/all-pages                   "الانتقال إلى كافة الصفحات"
+  :command.go/graph-view                  "الانتقال إلى عرض المخطط"
+  :command.go/keyboard-shortcuts          "الانتقال إلى اختصارات لوحة المفاتيح"
+  :command.go/tomorrow                    "الانتقال إلى تاريخ الغد"
+  :command.go/next-journal                "الانتقال إلى اليومية التالية"
+  :command.go/prev-journal                "الانتقال إلى اليومية السابقة"
+  :command.go/flashcards                  "تبديل عرض البطاقات التعليمية"
+  :command.ui/toggle-document-mode        "تبديل وضع المستند"
+  :command.ui/toggle-settings             "تبديل إظهار الإعدادات"
+  :command.ui/toggle-right-sidebar        "إظهار/إخفاء النافذة الجانبية اليمنى"
+  :command.ui/toggle-left-sidebar         "إظهار/إخفاء النافذة الجانبية اليسرى"
+  :command.ui/toggle-help                 "تبديل (مساعدة)"
+  :command.ui/toggle-theme                "التبديل في المظهر فاتح/داكن"
+  :command.ui/toggle-contents             "تبديل عرض المحتويات في النافذة الجانبية"
+  :command.ui/customize-appearance        "تخصيص المظهر"
+  ;;  :ui/open-new-window             "Open another window"
+  :command.command/toggle-favorite "إضافة إلى/إزالة من المفضلة"
+  :command.editor/copy-page-url "نسخ رابط الصفحة"
+  :command.ui/toggle-wide-mode "تبديل الوضع العريض"
+  :command.ui/highlight-recent-blocks "تبديل تظليل الكتل الحديثة"
+  :command.editor/toggle-display-hidden-properties "تبديل عرض الخصائص المخفية"
+  :command.ui/select-theme-color "اختيار ألوان السمات المتاحة"
+  :command.ui/goto-plugins "الانتقال إلى لوحة الإضافات"
+  :command.ui/install-plugins-from-file "تثبيت الإضافات من ملف plugins.edn"
+  :command.ui/install-plugin-from-github "تثبيت إضافة من إصدارات GitHub"
+  :command.editor/toggle-open-blocks "تبديل فتح الكتل (طي أو توسيع كافة الكتل)"
+  :command.ui/clear-all-notifications "مسح كافة الإشعارات"
+  :command.misc/export-block-data "تصدير بيانات EDN للكتلة"
+  :command.misc/export-page-data "تصدير بيانات EDN للصفحة"
+  :command.misc/export-graph-ontology-data "تصدير بيانات EDN لوسوم وخصائص المخطط"
+  :command.misc/import-edn-data "استيراد بيانات EDN"
+  :command.dev/show-block-data "(للمطورين) عرض بيانات الكتلة"
+  :command.dev/show-block-ast "(للمطورين) عرض بنية الكتلة (AST)"
+  :command.dev/show-page-data "(للمطورين) عرض بيانات الصفحة"
+  :command.dev/replace-graph-with-db-file "(للمطورين) استبدال المخطط بملف قاعدة البيانات الخاص به db.sqlite"
+  :command.dev/validate-db "(للمطورين) التحقق من صحة بيانات المخطط الحالي"
+  :command.dev/gc-graph "(للمطورين) تنظيف المخطط (إزالة البيانات غير المستخدمة من SQLite)"
+  :command.dev/rtc-stop "(للمطورين) إيقاف ساعة الوقت الحقيقي RTC"
+  :command.dev/rtc-start "(للمطورين) تشغيل ساعة الوقت الحقيقي RTC"
+  :command.window/close "إغلاق النافذة"}

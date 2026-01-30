@@ -176,3 +176,46 @@
 
     :else
     content))
+
+(defn remove-logbook
+  [content]
+  (when (string? content)
+    (let [lines (string/split-lines content)
+          [result _in-logbook?]
+          (reduce (fn [[acc in-logbook?] line]
+                    (let [trimmed (string/trim line)
+                          upper (string/upper-case trimmed)]
+                      (cond
+                        (string/starts-with? upper ":LOGBOOK:")
+                        [acc true]
+
+                        (and in-logbook? (string/starts-with? upper ":END:"))
+                        [acc false]
+
+                        in-logbook?
+                        [acc true]
+
+                        :else
+                        [(conj acc line) in-logbook?])))
+                  [[] false]
+                  lines)]
+      (string/join "\n" result))))
+
+(defn remove-deadline-scheduled
+  [content]
+  (when (string? content)
+    (let [lines (string/split-lines content)]
+      (if (= 1 (count lines))
+        content
+        (let [first-line (first lines)
+              rest-lines (rest lines)
+              rest-lines (keep (fn [line]
+                                 (let [upper (string/upper-case (string/triml line))]
+                                   (if (or (string/starts-with? upper "DEADLINE: ")
+                                           (string/starts-with? upper "SCHEDULED: "))
+                                     (let [cleaned (-> line (string/replace #"(?i)(?:^|\s)(DEADLINE|SCHEDULED):\s+<[^>]*>" "") string/trim)]
+                                       (when-not (string/blank? cleaned)
+                                         cleaned))
+                                     line)))
+                               rest-lines)]
+          (string/join "\n" (cons first-line rest-lines)))))))

@@ -26,11 +26,10 @@
             [frontend.util :as util]
             [frontend.util.page :as page-util]
             [frontend.util.text :as text-util]
+            [frontend.util.ref :as ref]
             [goog.functions :as gfun]
             [goog.object :as gobj]
-            [goog.userAgent]
             [logseq.common.util :as common-util]
-            [logseq.common.util.block-ref :as block-ref]
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
@@ -427,7 +426,7 @@
 
 (defn- copy-block-ref [state]
   (when-let [block-uuid (some-> state state->highlighted-item :source-block :block/uuid)]
-    (editor-handler/copy-block-ref! block-uuid block-ref/->block-ref)
+    (editor-handler/copy-block-ref! block-uuid ref/->block-ref)
     (shui/dialog-close! :ls-dialog-cmdk)))
 
 (defmulti handle-action (fn [action _state _event] action))
@@ -916,7 +915,7 @@
       (for [key shortcut]
         [:div.ui__button-shortcut-key
          (case key
-           "cmd" [:div (if goog.userAgent/MAC "⌘" "Ctrl")]
+           "cmd" [:div (if util/mac? "⌘" "Ctrl")]
            "shift" [:div "⇧"]
            "return" [:div "⏎"]
            "esc" [:div.tracking-tightest {:style {:transform   "scaleX(0.8) scaleY(1.2) "
@@ -944,7 +943,7 @@
           [:<>
            (button-fn "Open" ["return"])
            (button-fn "Open in sidebar" ["shift" "return"] {:open-sidebar? true})
-           (when (:source-block @(::highlighted-item state)) (button-fn "Copy ref" ["⌘" "c"]))]
+           (when (:source-block @(::highlighted-item state)) (button-fn "Copy ref" ["cmd" "c"]))]
 
           :search
           [:<>
