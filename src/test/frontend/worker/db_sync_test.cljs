@@ -5,7 +5,7 @@
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync :as db-sync]
             [frontend.worker.sync.client-op :as client-op]
-            [logseq.db :as ldb]
+            [frontend.worker.sync.crypt :as sync-crypt]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]
             [promesa.core :as p]))
@@ -22,11 +22,15 @@
       (d/listen! db-conn ::listen-db
                  (fn [tx-report]
                    (db-sync/enqueue-local-tx! test-repo tx-report))))
-    (try
-      (f)
-      (finally
-        (reset! worker-state/*datascript-conns db-prev)
-        (reset! worker-state/*client-ops-conns ops-prev)))))
+    (let [result (f)
+          cleanup (fn []
+                    (reset! worker-state/*datascript-conns db-prev)
+                    (reset! worker-state/*client-ops-conns ops-prev))]
+      (if (p/promise? result)
+        (p/finally result cleanup)
+        (do
+          (cleanup)
+          result)))))
 
 (defn- setup-parent-child
   []
@@ -358,10 +362,8 @@
                          _ (#'db-sync/upload-large-title! test-repo "graph-1" title aes-key)
                          body @captured-body]
                    (is (instance? js/Uint8Array body))
-                   (let [decoded (.decode (js/TextDecoder.) body)
-                         encrypted (ldb/read-transit-str decoded)]
-                     (p/let [decrypted (crypt/<decrypt-uint8array aes-key encrypted)
-                             title' (.decode (js/TextDecoder.) decrypted)]
+                   (let [payload-str (.decode (js/TextDecoder.) body)]
+                     (p/let [title' (sync-crypt/<decrypt-text-value aes-key payload-str)]
                        (is (= title title')))))
                  (p/finally
                    (fn []
@@ -377,8 +379,7 @@
                  config-prev @worker-state/*db-sync-config]
              (reset! worker-state/*db-sync-config {:http-base "https://example.com"})
              (-> (p/let [aes-key (crypt/<generate-aes-key)
-                         encrypted (crypt/<encrypt-uint8array aes-key (.encode (js/TextEncoder.) title))
-                         payload-str (ldb/write-transit-str encrypted)
+                         payload-str (sync-crypt/<encrypt-text-value aes-key title)
                          payload-bytes (.encode (js/TextEncoder.) payload-str)]
                    (set! js/fetch
                          (fn [_url _opts]
@@ -402,11 +403,12 @@
 (deftest rehydrate-large-title-test
   (testing "rehydrate fills empty title from object storage"
     (async done
-           (let [conn (db-test/create-conn)
-                 block-uuid (random-uuid)
-                 _ (d/transact! conn [{:db/id (d/tempid :db.part/user)
-                                       :block/uuid block-uuid}])
-                 block-id (d/entid @conn [:block/uuid block-uuid])
+           (let [conn (db-test/create-conn-with-blocks
+                       {:pages-and-blocks
+                        [{:page {:block/title "rehydrate-page"}
+                          :blocks [{:block/title "rehydrate-block"}]}]})
+                 block (db-test/find-block-by-content @conn "rehydrate-block")
+                 block-id (:db/id block)
                  tx-data [[:db/add block-id :block/title ""]
                           [:db/add block-id :logseq.property.sync/large-title-object
                            {:asset-uuid "title-1" :asset-type "txt"}]]
