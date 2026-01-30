@@ -10,6 +10,10 @@
             :js-options {:js-provider :import}
             :closure-defines {shadow.cljs.devtools.client.env/enabled false}
             :devtools {:enabled false}}
+  :db-sync-node {:target :node-script
+                 :output-to "worker/dist/node-adapter.js"
+                 :main logseq.db-sync.node.entry/main
+                 :devtools {:enabled false}}
   :db-sync-test {:target :node-test
                  :output-to "worker/dist/worker-test.js"
                  :devtools {:enabled false}

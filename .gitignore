@@ -79,3 +79,4 @@ clj-e2e/.wally
 clj-e2e/e2e-dump
 .dir-locals.el
 .projectile
+deps/db-sync/data

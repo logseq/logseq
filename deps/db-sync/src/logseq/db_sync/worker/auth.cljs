@@ -11,6 +11,26 @@
       (let [url (js/URL. (.-url request))]
         (.get (.-searchParams url) "token"))))
 
+(defn- static-claims [env token]
+  (let [expected (aget env "DB_SYNC_AUTH_TOKEN")
+        user-id (or (aget env "DB_SYNC_STATIC_USER_ID") "user")
+        email (aget env "DB_SYNC_STATIC_EMAIL")
+        username (aget env "DB_SYNC_STATIC_USERNAME")]
+    (when (and (string? expected) (string? token) (= expected token))
+      (let [claims #js {"sub" user-id}]
+        (when (string? email) (aset claims "email" email))
+        (when (string? username) (aset claims "username" username))
+        claims))))
+
+(defn- none-claims [env]
+  (let [user-id (or (aget env "DB_SYNC_STATIC_USER_ID") "user")
+        email (aget env "DB_SYNC_STATIC_EMAIL")
+        username (aget env "DB_SYNC_STATIC_USERNAME")
+        claims #js {"sub" user-id}]
+    (when (string? email) (aset claims "email" email))
+    (when (string? username) (aset claims "username" username))
+    claims))
+
 (defn- decode-jwt-part [part]
   (let [pad (if (pos? (mod (count part) 4))
               (apply str (repeat (- 4 (mod (count part) 4)) "="))
@@ -31,7 +51,15 @@
       nil)))
 
 (defn auth-claims [request env]
-  (let [token (token-from-request request)]
-    (if (string? token)
-      (.catch (authorization/verify-jwt token env) (fn [_] nil))
-      (js/Promise.resolve nil))))
+  (let [token (token-from-request request)
+        driver (some-> (aget env "DB_SYNC_AUTH_DRIVER") string/lower-case)]
+    (case driver
+      "static"
+      (js/Promise.resolve (static-claims env token))
+
+      "none"
+      (js/Promise.resolve (none-claims env))
+
+      (if (string? token)
+        (.catch (authorization/verify-jwt token env) (fn [_] nil))
+        (js/Promise.resolve nil)))))
