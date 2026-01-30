@@ -1,8 +1,8 @@
-name: Deploy DB Test Version to Cloud
+name: Deploy new sync test
 
 on:
   push:
-    branches: ["test/db"]
+    branches: ["feat/worker-sync"]
 
 env:
   CLOJURE_VERSION: "1.11.1.1413"
@@ -79,7 +79,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: 2553ea8236c11ea0f88de28fce1cbfee
-          projectName: "logseq-db-test"
+          projectName: "sync"
           directory: "public"
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
           branch: "main"
