@@ -13,7 +13,7 @@
             [logseq.db-sync.malli-schema :as db-sync-schema]
             [promesa.core :as p]))
 
-(defonce ^:private *repo->aes-key (atom {}))
+(defonce ^:private *graph->aes-key (atom {}))
 (defonce ^:private e2ee-store (delay (idb-keyval/newStore "localforage" "keyvaluepairs" 2)))
 (defonce ^:private e2ee-password-file "e2ee-password")
 (defonce ^:private native-env?
@@ -250,7 +250,7 @@
   [repo graph-id]
   (if-not (graph-e2ee? repo)
     (p/resolved nil)
-    (if-let [cached (get @*repo->aes-key repo)]
+    (if-let [cached (get @*graph->aes-key graph-id)]
       (p/resolved cached)
       (let [base (e2ee-base)
             user-id (get-user-uuid)]
@@ -276,11 +276,11 @@
                             aes-key))
                 _ (when (and graph-id encrypted-aes-key (nil? local-encrypted))
                     (<set-item! (graph-encrypted-aes-key-idb-key graph-id) encrypted-aes-key))]
-          (swap! *repo->aes-key assoc repo aes-key)
+          (swap! *graph->aes-key assoc graph-id aes-key)
           aes-key)))))
 
 (defn <fetch-graph-aes-key-for-download
-  [repo graph-id]
+  [graph-id]
   (let [base (e2ee-base)
         aes-key-k (graph-encrypted-aes-key-idb-key graph-id)]
     (when-not (and (string? base) (string? graph-id))
@@ -297,7 +297,7 @@
           (fail-fast :db-sync/missing-field {:graph-id graph-id :field :encrypted-aes-key})
           (<set-item! aes-key-k encrypted-aes-key))
         (p/let [aes-key (crypt/<decrypt-aes-key private-key encrypted-aes-key)]
-          (swap! *repo->aes-key assoc repo aes-key)
+          (swap! *graph->aes-key assoc graph-id aes-key)
           aes-key)))))
 
 (defn <grant-graph-access!

@@ -626,7 +626,7 @@
 (def-thread-api :thread-api/db-sync-import-kvs-rows
   [repo rows reset? graph-id remote-tx]
   (p/let [_ (when reset? (close-db! repo))
-          aes-key (sync-crypt/<fetch-graph-aes-key-for-download repo graph-id)
+          aes-key (sync-crypt/<fetch-graph-aes-key-for-download graph-id)
           _ (when (nil? aes-key)
               (db-sync/fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
           db (ensure-db-sync-import-db! repo reset?)
