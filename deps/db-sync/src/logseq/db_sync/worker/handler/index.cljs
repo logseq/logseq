@@ -297,8 +297,7 @@
         (http/error-response "server error" 500)
 
         :else
-        (p/let [_ (index/<index-init! db)
-                init-ms (common/now-ms)
+        (p/let [init-ms start-ms
                 claims (auth/auth-claims request env)
                 auth-ms (common/now-ms)
                 _ (when claims
