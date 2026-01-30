@@ -41,7 +41,7 @@
                        ;; thread atoms, these atoms' value are syncing from ui-thread
                        :thread-atom/online-event (atom nil)}))
 
-(defonce *db-sync-config (atom {:enabled? true :ws-url nil}))
+(defonce *db-sync-config (atom {:ws-url nil}))
 (defonce *db-sync-client (atom nil))
 
 (defonce *sqlite (atom nil))

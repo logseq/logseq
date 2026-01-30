@@ -553,9 +553,6 @@
                        tx-data)
             _ (when context (worker-state/set-context! context))
             tx-meta' (cond-> tx-meta
-                       (not (:rtc-download-graph? tx-meta)) ; delay writes to the disk
-                       (assoc :skip-store? true)
-
                        true
                        (dissoc :insert-blocks?))]
         (when-not (and (:create-today-journal? tx-meta)
