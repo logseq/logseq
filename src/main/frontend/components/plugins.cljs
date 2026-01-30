@@ -1591,16 +1591,22 @@
 (rum/defc renderer-resolver < rum/static
   [key']
   (when-let [[pid key] (some-> key' (string/split "."))]
-    ;; TODO: resolve pid renderer from registered plugins
-    (let [pid (or pid "UnknownPlugin")
-          render (if (not (string/blank? key))
-                   (fn [opts]
-                     [:div.p-6
-                      [:h2.bold.text-lg "Renderer for key: " key]
-                      [:p "Plugin ID: " pid]
-                      [:pre (pr-str opts)]])
-                   #(do [:div "No renderer found for key: " key]))]
-      (renderer-container {:key key :pid pid :render render}))))
+    (let [[renderer set-renderer!] (rum/use-state nil)]
+
+      (hooks/use-effect!
+       (fn []
+         (try
+           (when-let [renderer (plugin-handler/resolve-hosted-render pid key :sidebar)]
+             (let [r (bean/->clj renderer)
+                   title (:title r)]
+               (when-let [^js dom (and title (js/document.getElementById key'))]
+                 (set! (. dom -textContent) title))
+               (set-renderer! r)))
+           (catch js/Error e (js/console.error "Failed to resolve renderer:" key' e))))
+       [pid key])
+
+      (when renderer
+        (renderer-container renderer)))))
 
 (defn hook-custom-routes
   [routes]

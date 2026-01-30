@@ -95,6 +95,37 @@ export class LSPluginExperiments {
     )
   }
 
+  registerHostedRenderer(
+    key: string,
+    opts: {
+      title?: string,
+      subs?: Array<string>
+      type?: string,
+      render: (props: {}) => any
+    }
+  ) {
+    return this.invokeExperMethod(
+      'registerHostedRenderer',
+      this.ctx.baseInfo.id,
+      key,
+      opts
+    )
+  }
+
+  registerSidebarRenderer(
+    key: string,
+    opts: {
+      title?: string,
+      subs?: Array<string>
+      render: (props: {}) => any,
+      [k: string]: any
+    }
+  ) {
+    key = `_sidebar.${key}`
+    opts.type = 'sidebar'
+    return this.registerHostedRenderer(key, opts)
+  }
+
   registerRouteRenderer(
     key: string,
     opts: {

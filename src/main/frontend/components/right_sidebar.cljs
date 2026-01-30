@@ -138,7 +138,7 @@
         :plugin
         [[:.flex.items-center.page-title
           (ui/icon "puzzle" {:class "text-md mr-2"})
-          (str db-id)]
+          [:h3 {:id db-id} (str db-id)]]
          (plugins/renderer-resolver db-id)]
 
         :search
