@@ -109,10 +109,6 @@
                          user)) users)))
       (broadcast-rtc-state! client))))
 
-(defn- enabled?
-  []
-  (true? (:enabled? @worker-state/*db-sync-config)))
-
 (defn- ws-base-url
   []
   (:ws-url @worker-state/*db-sync-config))
@@ -1112,24 +1108,22 @@
 (declare connect!)
 
 (defn- schedule-reconnect! [repo client url reason]
-  (when (enabled?)
-    (when-let [reconnect (:reconnect client)]
-      (let [{:keys [attempt timer]} @reconnect]
-        (when (nil? timer)
-          (let [delay (reconnect-delay-ms attempt)
-                timeout-id (js/setTimeout
-                            (fn []
-                              (swap! reconnect assoc :timer nil)
-                              (when (enabled?)
-                                (when-let [current @worker-state/*db-sync-client]
-                                  (when (and (= (:repo current) repo)
-                                             (= (:graph-id current) (:graph-id client)))
-                                    (let [updated (connect! repo current url)]
-                                      (reset! worker-state/*db-sync-client updated))))))
-                            delay)]
-            (swap! reconnect assoc :timer timeout-id :attempt (inc attempt))
-            (log/info :db-sync/ws-reconnect-scheduled
-                      {:repo repo :delay delay :attempt attempt :reason reason})))))))
+  (when-let [reconnect (:reconnect client)]
+    (let [{:keys [attempt timer]} @reconnect]
+      (when (nil? timer)
+        (let [delay (reconnect-delay-ms attempt)
+              timeout-id (js/setTimeout
+                          (fn []
+                            (swap! reconnect assoc :timer nil)
+                            (when-let [current @worker-state/*db-sync-client]
+                              (when (and (= (:repo current) repo)
+                                         (= (:graph-id current) (:graph-id client)))
+                                (let [updated (connect! repo current url)]
+                                  (reset! worker-state/*db-sync-client updated)))))
+                          delay)]
+          (swap! reconnect assoc :timer timeout-id :attempt (inc attempt))
+          (log/info :db-sync/ws-reconnect-scheduled
+                    {:repo repo :delay delay :attempt attempt :reason reason}))))))
 
 (defn- attach-ws-handlers! [repo client ws url]
   (set! (.-onmessage ws)
@@ -1189,23 +1183,21 @@
 
 (defn start!
   [repo]
-  (if-not (enabled?)
-    (p/resolved nil)
-    (p/do!
-     (stop!)
-     (let [base (ws-base-url)
-           graph-id (get-graph-id repo)]
-       (if (and (string? base) (seq base) (seq graph-id))
-         (let [client (ensure-client-state! repo)
-               url (format-ws-url base graph-id)
-               _ (ensure-client-graph-uuid! repo graph-id)
-               connected (assoc client :graph-id graph-id)
-               connected (connect! repo connected url)]
-           (reset! worker-state/*db-sync-client connected)
-           (p/resolved nil))
-         (do
-           (log/info :db-sync/start-skipped {:repo repo :graph-id graph-id :base base})
-           (p/resolved nil)))))))
+  (p/do!
+   (stop!)
+   (let [base (ws-base-url)
+         graph-id (get-graph-id repo)]
+     (if (and (string? base) (seq base) (seq graph-id))
+       (let [client (ensure-client-state! repo)
+             url (format-ws-url base graph-id)
+             _ (ensure-client-graph-uuid! repo graph-id)
+             connected (assoc client :graph-id graph-id)
+             connected (connect! repo connected url)]
+         (reset! worker-state/*db-sync-client connected)
+         (p/resolved nil))
+       (do
+         (log/info :db-sync/start-skipped {:repo repo :graph-id graph-id :base base})
+         (p/resolved nil))))))
 
 (defn enqueue-local-tx!
   [repo {:keys [tx-meta tx-data db-after db-before]}]
@@ -1232,7 +1224,7 @@
 
 (defn handle-local-tx!
   [repo {:keys [tx-data tx-meta db-after] :as tx-report}]
-  (when (and (enabled?) (seq tx-data)
+  (when (and (seq tx-data)
              (not (:rtc-tx? tx-meta))
              (:persist-op? tx-meta true)
              (:kv/value (d/entity db-after :logseq.kv/graph-remote?)))
