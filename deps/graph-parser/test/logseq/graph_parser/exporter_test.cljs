@@ -213,7 +213,7 @@
       (is (= 32 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
 
       (is (= 5 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Asset]] @conn))))
-      (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
+      (is (= 5 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
       (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Card]] @conn))))
       (is (= 5 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Quote-block]] @conn))))
@@ -589,9 +589,36 @@
 
     (testing "multiline blocks"
       (is (= "|markdown| table|\n|some|thing|" (:block/title (db-test/find-block-by-content @conn #"markdown.*table"))))
-      (is (= "multiline block\na 2nd\nand a 3rd" (:block/title (db-test/find-block-by-content @conn #"^multiline block"))))
-      (is (= "props multiline block\nlast line" (:block/title (db-test/find-block-by-content @conn #"props multiline block"))))
-      (is (= "logbook block" (:block/title (db-test/find-block-by-content @conn #"logbook block")))))
+      (is (= "normal multiline block\na 2nd\nand a 3rd" (:block/title (db-test/find-block-by-content @conn #"normal multiline block"))))
+      (is (= "colored multiline block\nlast line" (:block/title (db-test/find-block-by-content @conn #"colored multiline block"))))
+
+      (let [block (db-test/find-block-by-content @conn #"multiline block with prop and deadline")]
+        (is (= "multiline block with prop and deadline\nlast line" (:block/title block)))
+        (is (= 20221126
+               (-> (db-test/readable-properties block)
+                   :logseq.property/deadline
+                   date-time-util/ms->journal-day))
+            "multiline block has correct journal as property value")
+        (is (= "red"
+               (-> (db-test/readable-properties block)
+                   :logseq.property/background-color))
+            "multiline block has correct background color as property value"))
+
+      (let [block (db-test/find-block-by-content @conn #"multiline block with deadline and scheduled in 1 line and sth else")]
+        (is (= "multiline block with deadline and scheduled in 1 line and sth else\nsomething else\nlast line" (:block/title block)))
+        (is (= 20221126
+               (-> (db-test/readable-properties block)
+                   :logseq.property/deadline
+                   date-time-util/ms->journal-day))
+            "multiline block with deadline and scheduled has correct deadline journal as property value")
+        (is (= 20221126
+               (-> (db-test/readable-properties block)
+                   :logseq.property/scheduled
+                   date-time-util/ms->journal-day))
+            "multiline block with deadline and scheduled has correct scheduled journal as property value"))
+
+      (is (= "logbook block" (:block/title (db-test/find-block-by-content @conn #"^logbook block"))))
+      (is (= "multiline logbook block\nlast line" (:block/title (db-test/find-block-by-content @conn #"multiline logbook block")))))
 
     (testing ":block/refs"
       (let [page (db-test/find-page-by-title @conn "chat-gpt")]
@@ -624,7 +651,7 @@
                   count))
         "Correct number of user classes")
 
-    (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
+    (is (= 5 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
     (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
     (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Card]] @conn))))
 

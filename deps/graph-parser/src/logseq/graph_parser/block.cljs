@@ -645,7 +645,7 @@
     properties))
 
 (defn- construct-block
-  [block properties* timestamps body encoded-content format pos-meta {:keys [block-pattern db date-formatter remove-properties? db-graph-mode? export-to-db-graph?]}]
+  [block properties* timestamps body encoded-content format pos-meta {:keys [block-pattern db date-formatter remove-properties? remove-logbook? remove-deadline-scheduled? db-graph-mode? export-to-db-graph?]}]
   (let [id (get-custom-id-or-new-id properties*)
         block-tags (and export-to-db-graph? (get-in properties* [:properties :tags]))
         ;; For export, remove tags from properties as they are being converted to classes
@@ -687,7 +687,11 @@
                 block)
         title (cond->> (get-block-content encoded-content block format pos-meta block-pattern)
                 remove-properties?
-                (gp-property/remove-properties (get block :format :markdown)))
+                (gp-property/remove-properties (get block :format :markdown))
+                remove-logbook?
+                (gp-property/remove-logbook)
+                remove-deadline-scheduled?
+                (gp-property/remove-deadline-scheduled))
         block (assoc block :block/title title)
         block (if (seq timestamps)
                 (merge block (timestamps->scheduled-and-deadline timestamps))
@@ -757,30 +761,23 @@
                block-idx 0
                timestamps {}
                properties {}
-               body []]
+               body []
+               prev-block-num 0]
           (if (seq ast-blocks)
             (let [[ast-block pos-meta] (first ast-blocks)]
               (cond
                 (paragraph-timestamp-block? ast-block)
-                (let [timestamps (extract-timestamps ast-block)
-                      timestamps' (merge timestamps timestamps)]
-                  (recur headings (rest ast-blocks) (inc block-idx) timestamps' properties body))
+                (let [ts (extract-timestamps ast-block)
+                      timestamps' (merge timestamps ts)]
+                  (recur headings (rest ast-blocks) (inc block-idx) timestamps' properties body (inc prev-block-num)))
 
                 (gp-property/properties-ast? ast-block)
                 (let [properties (extract-properties (second ast-block) (assoc user-config :format format))]
-                  (recur headings (rest ast-blocks) (inc block-idx) timestamps properties body))
+                  (recur headings (rest ast-blocks) (inc block-idx) timestamps properties body (inc prev-block-num)))
 
                 (heading-block? ast-block)
-                ;; for db-graphs cut multi-line when there is deadline/scheduled or logbook text in :block/title
-                (let [prev-block (first (get all-blocks (dec block-idx)))
-                      prev-block-properties? (and prev-block (gp-property/properties-ast? prev-block))
-                      prev-block-custom-query? (and prev-block-properties?
-                                                    (= "Custom" (ffirst (get all-blocks (- block-idx 2)))))
-                      cut-multiline? (and export-to-db-graph?
-                                          (when prev-block
-                                            (or (= ["Drawer" "logbook"] (take 2 prev-block))
-                                                (and (= "Paragraph" (first prev-block))
-                                                     (seq (set/intersection (set (flatten prev-block)) #{"Deadline" "Scheduled"}))))))
+                (let [cut-multiline? (and export-to-db-graph? (= prev-block-num 0))
+                      prev-blocks (map first (subvec all-blocks (max 0 (- block-idx prev-block-num)) block-idx))
                       pos-meta' (if cut-multiline?
                                   pos-meta
                                   ;; fix start_pos
@@ -788,12 +785,14 @@
                                          (if (seq headings)
                                            (get-in (last headings) [:meta :start_pos])
                                            nil)))
-                      ;; Remove properties text from custom queries in db graphs
+                      ;; Remove properties, deadline/scheduled and logbook text from title in db graphs
                       options' (assoc options
                                       :remove-properties?
-                                      (and export-to-db-graph?
-                                           (or prev-block-custom-query?
-                                               (and prev-block-properties? (not prev-block-custom-query?)))))
+                                      (and export-to-db-graph? (some gp-property/properties-ast? prev-blocks))
+                                      :remove-logbook?
+                                      (and export-to-db-graph? (some #(= ["Drawer" "logbook"] (take 2 %)) prev-blocks))
+                                      :remove-deadline-scheduled?
+                                      (and export-to-db-graph? (some #(seq (set/intersection (set (flatten %)) #{"Deadline" "Scheduled"})) prev-blocks)))
                       block' (construct-block ast-block properties timestamps body encoded-content format pos-meta' options')
                       block'' (cond
                                 db-graph-mode?
@@ -802,11 +801,10 @@
                                 (assoc block' :block.temp/ast-blocks (cons ast-block body))
                                 :else
                                 (assoc block' :macros (extract-macros-from-ast (cons ast-block body))))]
-
-                  (recur (conj headings block'') (rest ast-blocks) (inc block-idx) {} {} []))
+                  (recur (conj headings block'') (rest ast-blocks) (inc block-idx) {} {} [] 0))
 
                 :else
-                (recur headings (rest ast-blocks) (inc block-idx) timestamps properties (conj body ast-block))))
+                (recur headings (rest ast-blocks) (inc block-idx) timestamps properties (conj body ast-block) (inc prev-block-num))))
             [(-> (reverse headings)
                  sanity-blocks-data)
              body
