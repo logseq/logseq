@@ -8,7 +8,7 @@
     "release": "clojure -M:cljs release db-sync",
     "test": "clojure -M:cljs compile db-sync-test && node worker/dist/worker-test.js",
     "clean": "rm -rf ./worker/dist/",
-    "deploy": "yarn clean && yarn release && cd ./worker && wrangler deploy",
+    "deploy-prod": "yarn clean && yarn release && cd ./worker && wrangler deploy --env prod",
     "deploy-staging": "yarn clean && yarn release && cd ./worker && wrangler deploy --env staging"
   },
   "dependencies": {

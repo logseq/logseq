@@ -15,12 +15,12 @@ class_name = "SyncDO"
 
 [[r2_buckets]]
 binding = "LOGSEQ_SYNC_ASSETS"
-bucket_name = "logseq-sync-assets-dev"
+bucket_name = "logseq-sync-assets-prod"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "logseq-sync-graph-meta-dev"
-database_id = "c020574a-5623-407b-be0c-cd192bab9545"
+database_name = "logseq-sync-graph-meta-prod"
+database_id = "00325aa2-c805-4693-b599-900a25dcde42"
 
 [[migrations]]
 tag = "v1"
@@ -32,7 +32,7 @@ COGNITO_ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju
 COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"
 
 [env.staging]
-name = "logseq-sync"
+name = "logseq-sync-staging"
 
 [env.staging.vars]
 COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
@@ -49,7 +49,7 @@ new_sqlite_classes = [ "SyncDO" ]
 
 [[env.staging.migrations]]
 tag = "v2"
-deleted_classes = ["SyncIndexDO"]
+deleted_classes = [ "SyncIndexDO" ]
 
 [[env.staging.r2_buckets]]
 binding = "LOGSEQ_SYNC_ASSETS"
@@ -58,4 +58,29 @@ bucket_name = "logseq-sync-assets-dev"
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "logseq-sync-graph-meta-staging"
+database_id = "00325aa2-c805-4693-b599-900a25dcde42"
+
+[env.prod]
+name = "logseq-sync-prod"
+
+[env.prod.vars]
+COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
+COGNITO_ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
+COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"
+
+[[env.prod.durable_objects.bindings]]
+name = "LOGSEQ_SYNC_DO"
+class_name = "SyncDO"
+
+[[env.prod.migrations]]
+tag = "v1"
+new_sqlite_classes = [ "SyncDO" ]
+
+[[env.prod.r2_buckets]]
+binding = "LOGSEQ_SYNC_ASSETS"
+bucket_name = "logseq-sync-assets-prod"
+
+[[env.prod.d1_databases]]
+binding = "DB"
+database_name = "logseq-sync-graph-meta-prod"
 database_id = "00325aa2-c805-4693-b599-900a25dcde42"
