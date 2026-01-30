@@ -129,7 +129,7 @@
 
 (defn <user-id-by-email [db email]
   (when (string? email)
-    (p/let [result (common/<d1-all db
+    (p/let [result (common/<d1-all db {:session "first-primary"}
                                    "select id from users where email = ?"
                                    email)
             rows (common/get-sql-rows result)
@@ -157,7 +157,7 @@
 (defn <user-rsa-key-pair
   [db user-id]
   (when (string? user-id)
-    (p/let [result (common/<d1-all db
+    (p/let [result (common/<d1-all db {:session "first-primary"}
                                    "select public_key, encrypted_private_key from user_rsa_keys where user_id = ?"
                                    user-id)
             rows (common/get-sql-rows result)
@@ -169,7 +169,7 @@
 (defn <user-rsa-public-key-by-email
   [db email]
   (when (string? email)
-    (p/let [result (common/<d1-all db
+    (p/let [result (common/<d1-all db {:session "first-primary"}
                                    (str "select k.public_key from user_rsa_keys k "
                                         "left join users u on k.user_id = u.id "
                                         "where u.email = ?")
@@ -222,7 +222,7 @@
                     now)))
 
 (defn <graph-members-list [db graph-id]
-  (p/let [result (common/<d1-all db
+  (p/let [result (common/<d1-all db {:session "first-primary"}
                                  (str "select m.user_id, m.graph_id, m.role, m.invited_by, m.created_at, "
                                       "u.email, u.username "
                                       "from graph_members m "
