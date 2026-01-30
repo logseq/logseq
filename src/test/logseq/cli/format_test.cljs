@@ -1,6 +1,9 @@
 (ns logseq.cli.format-test
   (:require [cljs.test :refer [deftest is testing]]
-            [logseq.cli.format :as format]))
+            [clojure.string :as string]
+            [logseq.cli.command.show :as show-command]
+            [logseq.cli.format :as format]
+            [logseq.cli.style :as style]))
 
 (deftest test-format-success
   (testing "json output via output-format"
@@ -166,6 +169,61 @@
                                         :data {:message "Line 1\nLine 2"}}
                                        {:output-format nil})]
       (is (= "Line 1\nLine 2" result)))))
+
+(deftest test-human-output-show-styled-prefixes
+  (testing "show preserves styled status and tags in human output"
+    (let [tree->text #'show-command/tree->text
+          tree-data {:root {:db/id 1
+                            :block/title "Root"
+                            :block/children [{:db/id 2
+                                              :block/title "Child"
+                                              :logseq.property/status {:db/ident :logseq.property/status.todo
+                                                                       :block/title "TODO"}
+                                              :block/tags [{:block/title "TagA"}]}]}}
+          styled (binding [style/*color-enabled?* true]
+                   (tree->text tree-data))
+          result (format/format-result {:status :ok
+                                        :command :show
+                                        :data {:message styled}}
+                                       {:output-format nil})]
+      (is (string/includes? result (style/bold "TODO")))
+      (is (string/includes? result (style/bold "#TagA")))
+      (is (= (str "1 Root\n"
+                  "2 └── TODO Child #TagA")
+             (style/strip-ansi result))))))
+
+(deftest test-human-output-show-preserves-styling
+  (testing "show returns styled text without stripping ANSI"
+    (let [tree->text #'show-command/tree->text
+          tree-data {:root {:db/id 1
+                            :block/title "Root"
+                            :block/children [{:db/id 2
+                                              :block/title "Child"}]}}
+          styled (binding [style/*color-enabled?* true]
+                   (tree->text tree-data))
+          result (format/format-result {:status :ok
+                                        :command :show
+                                        :data {:message styled}}
+                                       {:output-format nil})]
+      (is (= styled result))
+      (is (re-find #"\u001b\[[0-9;]*m" result)))))
+
+(deftest test-show-json-edn-output-ignores-styled-message
+  (testing "show json/edn outputs serialize data without ANSI styling"
+    (let [tree-data {:root {:db/id 1
+                            :block/title "Root"}}
+          json-result (format/format-result {:status :ok
+                                             :command :show
+                                             :data tree-data}
+                                            {:output-format :json})
+          edn-result (format/format-result {:status :ok
+                                            :command :show
+                                            :data tree-data}
+                                           {:output-format :edn})]
+      (is (string/includes? json-result "\"root\""))
+      (is (string/includes? edn-result ":root"))
+      (is (not (re-find #"\u001b\[[0-9;]*m" json-result)))
+      (is (not (re-find #"\u001b\[[0-9;]*m" edn-result))))))
 
 (deftest test-human-output-query
   (testing "query renders raw result"
