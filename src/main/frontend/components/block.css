@@ -991,7 +991,7 @@ html.is-mac {
 }
 
 .inline-block-icon .ui__button {
-  @apply px-0.5 py-0.5 h-auto;
+  @apply w-6 h-6 p-0;
 }
 
 .positioned-properties {

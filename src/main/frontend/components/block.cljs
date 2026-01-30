@@ -1792,7 +1792,9 @@
                              (not top?)
                              (not bottom?)
                              (not (util/react *control-show?))
-                             (not (:logseq.property/created-from-property block)))
+                             (not (:logseq.property/created-from-property block))
+                             ;; Don't hide bullet if block has tags (may have inline icon)
+                             (empty? (:block/tags block)))
                         (and doc-mode?
                              (not collapsed?)
                              (not (util/react *control-show?))))
