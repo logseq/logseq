@@ -233,6 +233,18 @@
   @apply absolute top-1/2 -translate-y-1/2 pointer-events-none;
   left: 6px;
   z-index: 2;
+  opacity: 0;
+  animation: block-editing-avatar-fade-in 160ms ease-out forwards;
+}
+
+@keyframes block-editing-avatar-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 .ls-page-title .block-control-wrap {

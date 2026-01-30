@@ -7,6 +7,7 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
+            [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [logseq.db-sync.malli-schema :as db-sync-schema]
@@ -166,9 +167,15 @@
   (log/info :db-sync/stop true)
   (state/<invoke-db-worker :thread-api/db-sync-stop))
 
+(defonce ^:private debounced-update-presence
+  (util/debounce
+   (fn [editing-block-uuid]
+     (state/<invoke-db-worker :thread-api/db-sync-update-presence editing-block-uuid))
+   1000))
+
 (defn <rtc-update-presence!
   [editing-block-uuid]
-  (state/<invoke-db-worker :thread-api/db-sync-update-presence editing-block-uuid))
+  (debounced-update-presence editing-block-uuid))
 
 (defn <rtc-get-users-info
   []
