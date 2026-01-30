@@ -17,9 +17,12 @@
         (ws/send! ws {:type "pong"})
 
         "presence"
-        (let [editing-block-uuid (:editing-block-uuid message)]
+        (let [editing-block-uuid (:editing-block-uuid message)
+              user (presence/get-user self ws)]
           (presence/update-presence! self ws {:editing-block-uuid editing-block-uuid})
-          (presence/broadcast-online-users! self))
+          (ws/broadcast! self nil {:type "presence"
+                                   :editing-block-uuid editing-block-uuid
+                                   :user-id (:user-id user)}))
 
         "pull"
         (let [raw-since (:since message)

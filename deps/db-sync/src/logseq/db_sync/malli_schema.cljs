@@ -45,8 +45,7 @@
    [:user-id :string]
    [:email {:optional true} [:maybe :string]]
    [:username {:optional true} [:maybe :string]]
-   [:name {:optional true} [:maybe :string]]
-   [:editing-block-uuid {:optional true} [:maybe :string]]])
+   [:name {:optional true} [:maybe :string]]])
 
 (def online-users-schema
   [:map
@@ -71,6 +70,11 @@
      [:type [:= "hello"]]
      [:t :int]]]
    ["online-users" online-users-schema]
+   ["presence"
+    [:map
+     [:type [:= "presence"]]
+     [:user-id :string]
+     [:editing-block-uuid :string]]]
    ["pull/ok" pull-ok-schema]
    ["tx/batch/ok" tx-batch-ok-schema]
    ["changed"

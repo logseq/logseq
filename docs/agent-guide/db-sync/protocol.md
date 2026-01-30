@@ -22,7 +22,7 @@
 - `{"type":"hello","t":<t>}`
   - Server hello with current t.
 - `{"type":"online-users","online-users":[{"user-id":"...","email":"...","username":"...","name":"..."}...]}`
-  - Presence update with currently online users (fields may be omitted).
+  - Presence update
   - Optional `editing-block-uuid` indicates the block the user is editing.
 - `{"type":"pull/ok","t":<t>,"txs":[{"t":<t>,"tx":"<tx-transit>"}...]}`
   - Pull response with txs.
