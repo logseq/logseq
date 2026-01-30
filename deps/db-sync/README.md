@@ -20,6 +20,17 @@ cd deps/db-sync/worker
 wrangler dev
 ```
 
+### D1 Schema (Worker)
+
+The worker no longer initializes schema at request time. Apply the D1 schema
+via migrations during deployment/CI.
+
+```bash
+cd deps/db-sync/worker
+wrangler d1 migrations apply logseq-sync-graph-meta-staging --env staging
+wrangler d1 migrations apply logseq-sync-graphs-prod --env prod
+```
+
 ### Node.js Adapter (self-hosted)
 
 Build the adapter:
