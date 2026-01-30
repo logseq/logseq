@@ -82,5 +82,5 @@ bucket_name = "logseq-sync-assets-prod"
 
 [[env.prod.d1_databases]]
 binding = "DB"
-database_name = "logseq-sync-graph-meta-prod"
-database_id = "00325aa2-c805-4693-b599-900a25dcde42"
+database_name = "logseq-sync-graphs-prod"
+database_id = "4c80e058-69b5-4985-88d1-f53711d817ba"
