@@ -1,9 +1,5 @@
 name: Deploy new sync test
 
-on:
-  push:
-    branches: ["feat/worker-sync"]
-
 env:
   CLOJURE_VERSION: "1.11.1.1413"
   NODE_VERSION: '22'
