@@ -57,12 +57,12 @@
 (defonce db-sync-ws-url
   (if db-sync-local?
     "ws://127.0.0.1:8787/sync/%s"
-    "wss://logseq-sync.logseq.workers.dev/sync/%s"))
+    "wss://logseq-sync-prod.logseq.workers.dev/sync/%s"))
 
 (defonce db-sync-http-base
   (if db-sync-local?
     "http://127.0.0.1:8787"
-    "https://logseq-sync.logseq.workers.dev"))
+    "https://logseq-sync-prod.logseq.workers.dev"))
 
 ;; Feature flags
 ;; =============
