@@ -73,13 +73,13 @@
                      text-color (get-in normalized [:data :color])
                      display-text (if (> (count text-value) 8)
                                     (subs text-value 0 8)
-                                    text-value)]
-                 [:span.ui__icon
-                  [:span.text-sm.font-medium
-                   {:style (cond-> {:max-width "20px"
-                                    :overflow "hidden"
-                                    :text-overflow "clip"
-                                    :white-space "nowrap"}
+                                    text-value)
+                     ;; Sidebar (:size 16) uses 10px font, page title uses 14px font
+                     sidebar? (= (:size opts) 16)
+                     font-size (if sidebar? "10px" "14px")]
+                 [:span.inline-flex.items-center.justify-center.flex-shrink-0
+                  [:span.font-medium.text-center.whitespace-nowrap
+                   {:style (cond-> {:font-size font-size}
                              text-color (assoc :color text-color))}
                    display-text]])
 
@@ -156,7 +156,7 @@
                     :else
                     (get-node-icon entity))]
     (when-not (or (string/blank? node-icon) (and (contains? #{"letter-n" "file"} node-icon) (:not-text-or-page? opts)))
-      [:div.icon-cp-container.flex.items-center
+      [:div.icon-cp-container.flex.items-center.justify-center
        (merge {:style {:color (or (:color node-icon) "inherit")}}
               (select-keys opts [:class]))
        (icon node-icon opts')])))
@@ -309,13 +309,16 @@
         :tabIndex "0"
         :title icon-name
         :on-click (fn [e]
-                    (on-chosen e {:type :icon
-                                  :data {:value icon-id'
-                                         :color color}}))
+                    ;; Use legacy format like emoji-cp for consistent normalization
+                    (on-chosen e (cond-> {:type :tabler-icon
+                                          :id icon-id'
+                                          :value icon-id'}
+                                   color (assoc :color color))))
         :on-mouse-over #(some-> hover
-                                (reset! {:type :icon
-                                         :data {:value icon-id'
-                                                :color color}}))
+                                (reset! (cond-> {:type :tabler-icon
+                                                 :id icon-id'
+                                                 :value icon-id'}
+                                          color (assoc :color color))))
         :on-mouse-out #()})
      (when icon-id'
        (ui/icon icon-id' {:size 24}))]))
