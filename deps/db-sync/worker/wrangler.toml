@@ -6,9 +6,6 @@ compatibility_flags = [ "nodejs_compat" ]
 [observability]
 enabled = true
 
-[placement]
-mode = "smart"
-
 [[durable_objects.bindings]]
 name = "LOGSEQ_SYNC_DO"
 class_name = "SyncDO"
