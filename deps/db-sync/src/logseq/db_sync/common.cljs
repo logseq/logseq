@@ -1,5 +1,6 @@
 (ns logseq.db-sync.common
   (:require [clojure.string :as string]
+            [logseq.db-sync.platform.core :as platform]
             [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
 
@@ -14,7 +15,7 @@
 (defn json-response
   ([data] (json-response data 200))
   ([data status]
-   (js/Response.
+   (platform/response
     (js/JSON.stringify (clj->js data))
     #js {:status status
          :headers (js/Object.assign
@@ -22,7 +23,7 @@
                    (cors-headers))})))
 
 (defn options-response []
-  (js/Response. nil #js {:status 204 :headers (cors-headers)}))
+  (platform/response nil #js {:status 204 :headers (cors-headers)}))
 
 (defn bad-request [message]
   (json-response {:error message} 400))

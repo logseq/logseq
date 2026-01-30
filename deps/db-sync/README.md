@@ -1,0 +1,77 @@
+# Logseq DB Sync (deps/db-sync)
+
+This package contains the DB sync server code and tests used by Logseq.
+It includes the Cloudflare Worker implementation and a Node.js adapter for self-hosting.
+
+## Requirements
+- Node.js (see repo root for required version)
+- Clojure (for shadow-cljs builds)
+
+## Build and Test
+
+### Cloudflare Worker
+
+```bash
+cd deps/db-sync
+yarn watch
+
+# open another terminal
+cd deps/db-sync/worker
+wrangler dev
+```
+
+### Node.js Adapter (self-hosted)
+
+Build the adapter:
+
+```bash
+cd deps/db-sync
+npm run build:node-adapter
+```
+
+Run the adapter with Cognito auth:
+
+```bash
+./start.sh
+```
+
+Run the adapter with a static token (local dev):
+
+```bash
+export DB_SYNC_AUTH_DRIVER=static
+export DB_SYNC_AUTH_TOKEN=dev-token
+export DB_SYNC_STATIC_USER_ID=user-1
+export DB_SYNC_PORT=8787
+node worker/dist/node-adapter.js
+```
+
+### Tests
+
+Run db-sync tests (includes Node adapter tests):
+
+```bash
+cd deps/db-sync
+npm run test:node-adapter
+```
+
+## Environment Variables
+
+| Variable | Purpose |
+| --- | --- |
+| DB_SYNC_PORT | HTTP server port |
+| DB_SYNC_BASE_URL | External base URL for asset links |
+| DB_SYNC_DATA_DIR | Data directory for sqlite + assets |
+| DB_SYNC_STORAGE_DRIVER | Storage backend selection (sqlite) |
+| DB_SYNC_ASSETS_DRIVER | Assets backend selection (filesystem) |
+| DB_SYNC_AUTH_DRIVER | Auth driver (cognito, static, none) |
+| DB_SYNC_AUTH_TOKEN | Static token for local dev |
+| DB_SYNC_STATIC_USER_ID | Static user id for local dev |
+| DB_SYNC_STATIC_EMAIL | Static user email for local dev |
+| DB_SYNC_STATIC_USERNAME | Static username for local dev |
+| COGNITO_ISSUER | Cognito issuer URL |
+| COGNITO_CLIENT_ID | Cognito client id |
+| COGNITO_JWKS_URL | Cognito JWKS URL |
+
+## Notes
+- Protocol definitions live in `docs/agent-guide/db-sync/protocol.md`.
+- DB sync implementation guide is in `docs/agent-guide/db-sync/db-sync-guide.md`.
