@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [clojure.walk :as walk]
             [logseq.cli.command.core :as command-core]
+            [logseq.cli.style :as style]
             [logseq.common.util :as common-util]))
 
 (defn- normalize-json
@@ -94,8 +95,9 @@
 (defn- format-error
   [error]
   (let [{:keys [code message]} error
-        hint (error-hint error)]
-    (cond-> (str "Error (" (name (or code :error)) "): " message)
+        hint (error-hint error)
+        message* (style/bold-keywords message ["option" "command" "argument"])]
+    (cond-> (str "Error (" (name (or code :error)) "): " message*)
       hint (str "\nHint: " hint))))
 
 (defn- maybe-ident-header

@@ -5,12 +5,32 @@
             [logseq.cli.command.show :as show-command]
             [logseq.cli.commands :as commands]
             [logseq.cli.server :as cli-server]
+            [logseq.cli.style :as style]
             [logseq.cli.transport :as transport]
             [promesa.core :as p]))
 
+(defn- strip-ansi
+  [value]
+  (style/strip-ansi value))
+
+(defn- contains-ansi?
+  [value]
+  (boolean (re-find style/ansi-pattern value)))
+
+(defn- escape-regex
+  [value]
+  (let [pattern (js/RegExp. "[.*+?^${}()|[\\]\\\\]" "g")]
+    (string/replace value pattern "\\\\$&")))
+
+(defn- contains-bold?
+  [value token]
+  (let [token (escape-regex token)
+        pattern (re-pattern (str "\\u001b\\[[0-9;]*m" token "\\u001b\\[[0-9;]*m"))]
+    (boolean (re-find pattern value))))
+
 (defn- command-lines
   [summary]
-  (let [lines (string/split-lines summary)
+  (let [lines (string/split-lines (strip-ansi summary))
         section (if (some #{"Commands:"} lines) "Commands:" "Subcommands:")
         start (inc (.indexOf lines section))
         end (.indexOf lines "Global options:")
@@ -29,98 +49,157 @@
 
 (deftest test-help-output
   (testing "top-level help lists command groups"
-    (let [result (commands/parse-args ["--help"])
-          summary (:summary result)]
+    (let [result (binding [style/*color-enabled?* true]
+                   (commands/parse-args ["--help"]))
+          summary (:summary result)
+          plain-summary (strip-ansi summary)]
       (is (true? (:help? result)))
-      (is (not (string/includes? summary "--auth-token")))
-      (is (not (string/includes? summary "--retries")))
-      (is (string/includes? summary "Graph Inspect and Edit"))
-      (is (string/includes? summary "Graph Management"))
-      (is (string/includes? summary "list"))
-      (is (string/includes? summary "add"))
-      (is (string/includes? summary "remove"))
-      (is (string/includes? summary "move"))
-      (is (string/includes? summary "query"))
-      (is (string/includes? summary "show"))
-      (is (string/includes? summary "graph"))
-      (is (string/includes? summary "server"))))
+      (is (not (string/includes? plain-summary "--auth-token")))
+      (is (not (string/includes? plain-summary "--retries")))
+      (is (string/includes? plain-summary "Graph Inspect and Edit"))
+      (is (string/includes? plain-summary "Graph Management"))
+      (is (string/includes? plain-summary "list"))
+      (is (string/includes? plain-summary "add"))
+      (is (string/includes? plain-summary "remove"))
+      (is (string/includes? plain-summary "move"))
+      (is (string/includes? plain-summary "query"))
+      (is (string/includes? plain-summary "show"))
+      (is (string/includes? plain-summary "graph"))
+      (is (string/includes? plain-summary "server"))
+      (is (contains-bold? summary "list page"))
+      (is (contains-bold? summary "list tag"))
+      (is (contains-bold? summary "list property"))
+      (is (contains-bold? summary "add block"))
+      (is (contains-bold? summary "add page"))
+      (is (contains-bold? summary "remove"))
+      (is (contains-bold? summary "move"))
+      (is (contains-bold? summary "query"))
+      (is (contains-bold? summary "query list"))
+      (is (contains-bold? summary "show"))
+      (is (contains-bold? summary "graph list"))
+      (is (contains-bold? summary "graph create"))
+      (is (contains-bold? summary "server list"))
+      (is (contains-bold? summary "server start"))
+      (is (contains-bold? summary "--help"))
+      (is (contains-bold? summary "--repo"))
+      (is (re-find #"\u001b\[[0-9;]*mCommands\u001b\[[0-9;]*m:" summary))
+      (is (re-find #"\u001b\[[0-9;]*moptions\u001b\[[0-9;]*m:" summary))))
 
   (testing "top-level help command list omits [options]"
-    (let [summary (:summary (commands/parse-args ["--help"]))
+    (let [summary (:summary (binding [style/*color-enabled?* true]
+                              (commands/parse-args ["--help"])))
           lines (command-lines summary)]
       (is (seq lines))
       (is (every? #(not (string/includes? % "[options]")) lines))))
 
   (testing "top-level help separates global and command options"
-    (let [summary (:summary (commands/parse-args ["--help"]))]
-      (is (string/includes? summary "Global options:"))
-      (is (string/includes? summary "Command options:")))))
+    (let [summary (:summary (binding [style/*color-enabled?* true]
+                              (commands/parse-args ["--help"])))
+          plain-summary (strip-ansi summary)]
+      (is (string/includes? plain-summary "Global options:"))
+      (is (string/includes? plain-summary "Command options:")))))
 
 (deftest test-parse-args-help
   (testing "graph group shows subcommands"
-    (let [result (commands/parse-args ["graph"])
-          summary (:summary result)]
+    (let [result (binding [style/*color-enabled?* true]
+                   (commands/parse-args ["graph"]))
+          summary (:summary result)
+          plain-summary (strip-ansi summary)]
       (is (true? (:help? result)))
-      (is (string/includes? summary "graph list"))
-      (is (string/includes? summary "graph create"))
-      (is (string/includes? summary "graph export"))
-      (is (string/includes? summary "graph import"))))
+      (is (string/includes? plain-summary "graph list"))
+      (is (string/includes? plain-summary "graph create"))
+      (is (string/includes? plain-summary "graph export"))
+      (is (string/includes? plain-summary "graph import"))
+      (is (contains-bold? summary "graph list"))
+      (is (contains-bold? summary "graph create"))
+      (is (contains-bold? summary "graph export"))
+      (is (contains-bold? summary "graph import"))))
 
   (testing "list group shows subcommands"
-    (let [result (commands/parse-args ["list"])
-          summary (:summary result)]
+    (let [result (binding [style/*color-enabled?* true]
+                   (commands/parse-args ["list"]))
+          summary (:summary result)
+          plain-summary (strip-ansi summary)]
       (is (true? (:help? result)))
-      (is (string/includes? summary "list page"))
-      (is (string/includes? summary "list tag"))
-      (is (string/includes? summary "list property"))
-      (is (string/includes? summary "Global options:"))
-      (is (string/includes? summary "Command options:"))))
+      (is (string/includes? plain-summary "list page"))
+      (is (string/includes? plain-summary "list tag"))
+      (is (string/includes? plain-summary "list property"))
+      (is (contains-bold? summary "list page"))
+      (is (contains-bold? summary "list tag"))
+      (is (contains-bold? summary "list property"))
+      (is (string/includes? plain-summary "Global options:"))
+      (is (string/includes? plain-summary "Command options:"))))
 
   (testing "add group shows subcommands"
-    (let [result (commands/parse-args ["add"])
-          summary (:summary result)]
+    (let [result (binding [style/*color-enabled?* true]
+                   (commands/parse-args ["add"]))
+          summary (:summary result)
+          plain-summary (strip-ansi summary)]
       (is (true? (:help? result)))
-      (is (string/includes? summary "add block"))
-      (is (string/includes? summary "add page"))))
+      (is (string/includes? plain-summary "add block"))
+      (is (string/includes? plain-summary "add page"))
+      (is (contains-bold? summary "add block"))
+      (is (contains-bold? summary "add page"))))
 
   (testing "remove command shows help"
-    (let [result (commands/parse-args ["remove" "--help"])
-          summary (:summary result)]
+    (let [result (binding [style/*color-enabled?* true]
+                   (commands/parse-args ["remove" "--help"]))
+          summary (:summary result)
+          plain-summary (strip-ansi summary)]
       (is (true? (:help? result)))
-      (is (string/includes? summary "Usage: logseq remove"))
-      (is (string/includes? summary "Command options:"))))
+      (is (string/includes? plain-summary "Usage: logseq remove"))
+      (is (string/includes? plain-summary "Command options:"))
+      (is (contains-bold? summary "--id"))
+      (is (contains-bold? summary "--uuid"))
+      (is (contains-bold? summary "--page"))))
 
   (testing "move command shows help"
-    (let [result (commands/parse-args ["move" "--help"])
-          summary (:summary result)]
+    (let [result (binding [style/*color-enabled?* true]
+                   (commands/parse-args ["move" "--help"]))
+          summary (:summary result)
+          plain-summary (strip-ansi summary)]
       (is (true? (:help? result)))
-      (is (string/includes? summary "Usage: logseq move"))
-      (is (string/includes? summary "Command options:"))))
+      (is (string/includes? plain-summary "Usage: logseq move"))
+      (is (string/includes? plain-summary "Command options:"))
+      (is (contains-bold? summary "--id"))
+      (is (contains-bold? summary "--uuid"))
+      (is (contains-bold? summary "--target-id"))
+      (is (contains-bold? summary "--target-uuid"))))
 
   (testing "server group shows subcommands"
-    (let [result (commands/parse-args ["server"])
-          summary (:summary result)]
+    (let [result (binding [style/*color-enabled?* true]
+                   (commands/parse-args ["server"]))
+          summary (:summary result)
+          plain-summary (strip-ansi summary)]
       (is (true? (:help? result)))
-      (is (string/includes? summary "server list"))
-      (is (string/includes? summary "server start"))))
+      (is (string/includes? plain-summary "server list"))
+      (is (string/includes? plain-summary "server start"))
+      (is (contains-bold? summary "server list"))
+      (is (contains-bold? summary "server start"))))
 
   (testing "query group shows subcommands"
-    (let [result (commands/parse-args ["query"])
-          summary (:summary result)]
+    (let [result (binding [style/*color-enabled?* true]
+                   (commands/parse-args ["query"]))
+          summary (:summary result)
+          plain-summary (strip-ansi summary)]
       (is (true? (:help? result)))
-      (is (string/includes? summary "query list"))
-      (is (string/includes? summary "query"))))
+      (is (string/includes? plain-summary "query list"))
+      (is (string/includes? plain-summary "query"))
+      (is (contains-bold? summary "query list"))
+      (is (contains-bold? summary "query"))))
 
   (testing "group help command list omits [options]"
-    (let [summary (:summary (commands/parse-args ["list"]))
+    (let [summary (:summary (binding [style/*color-enabled?* true]
+                              (commands/parse-args ["list"])))
           lines (command-lines summary)]
       (is (seq lines))
       (is (every? #(not (string/includes? % "[options]")) lines)))))
 
 (deftest test-parse-args-help-alignment
   (testing "graph group aligns subcommand columns"
-    (let [result (commands/parse-args ["graph"])
-          summary (:summary result)
+    (let [result (binding [style/*color-enabled?* true]
+                   (commands/parse-args ["graph"]))
+          summary (strip-ansi (:summary result))
           subcommand-lines (let [lines (string/split-lines summary)
                                  start (inc (.indexOf lines "Subcommands:"))]
                              (->> lines
@@ -134,8 +213,9 @@
       (is (apply = desc-starts))))
 
   (testing "list group aligns subcommand columns"
-    (let [result (commands/parse-args ["list"])
-          summary (:summary result)
+    (let [result (binding [style/*color-enabled?* true]
+                   (commands/parse-args ["list"]))
+          summary (strip-ansi (:summary result))
           subcommand-lines (let [lines (string/split-lines summary)
                                  start (inc (.indexOf lines "Subcommands:"))]
                              (->> lines
@@ -208,12 +288,18 @@
                                               :block/children [{:db/id 3
                                                                 :block/title "Grandchild A1"}]}
                                              {:db/id 4
-                                              :block/title "Child B"}]}}]
+                                              :block/title "Child B"}]}}
+          output (binding [style/*color-enabled?* true]
+                   (tree->text tree-data))]
+      (is (contains-ansi? output))
+      (is (string/includes? output (style/dim "├── ")))
+      (is (string/includes? output (style/dim "└── ")))
+      (is (string/includes? output (style/dim "│   ")))
       (is (= (str "1 Root\n"
                   "2 ├── Child A\n"
                   "3 │   └── Grandchild A1\n"
                   "4 └── Child B")
-             (tree->text tree-data))))))
+             (strip-ansi output))))))
 
 (deftest test-tree->text-aligns-mixed-id-widths
   (testing "show tree text aligns glyph column with mixed-width ids"
@@ -225,12 +311,14 @@
                                               :block/children [{:db/id 3
                                                                 :block/title "Grand"}]}
                                              {:db/id 1000
-                                              :block/title "Child B"}]}}]
+                                              :block/title "Child B"}]}}
+          output (binding [style/*color-enabled?* true]
+                   (tree->text tree-data))]
       (is (= (str "7    Root\n"
                   "88   ├── Child A\n"
                   "3    │   └── Grand\n"
                   "1000 └── Child B")
-             (tree->text tree-data))))))
+             (strip-ansi output))))))
 
 (deftest test-tree->text-multiline
   (testing "show tree text renders multiline blocks under glyph column"
@@ -244,14 +332,16 @@
                                              {:db/id 174
                                               :block/title "block-line1\nblock-line2"}
                                              {:db/id 175
-                                              :block/title "cccc"}]}}]
+                                              :block/title "cccc"}]}}
+          output (binding [style/*color-enabled?* true]
+                   (tree->text tree-data))]
       (is (= (str "168 Jan 18th, 2026\n"
                   "169 ├── b1\n"
                   "173 ├── aaaxx\n"
                   "174 ├── block-line1\n"
                   "    │   block-line2\n"
                   "175 └── cccc")
-             (tree->text tree-data))))))
+             (strip-ansi output))))))
 
 (deftest test-tree->text-prefixes-status
   (testing "show tree text prefixes status before block titles"
@@ -263,10 +353,14 @@
                             :block/children [{:db/id 2
                                               :block/title "Child"
                                               :logseq.property/status {:db/ident :logseq.property/status.canceled
-                                                                       :block/title "CANCELED"}}]}}]
+                                                                       :block/title "CANCELED"}}]}}
+          output (binding [style/*color-enabled?* true]
+                   (tree->text tree-data))]
+      (is (string/includes? output (style/bold "TODO")))
+      (is (string/includes? output (style/bold "CANCELED")))
       (is (= (str "1 TODO Root\n"
                   "2 └── CANCELED Child")
-             (tree->text tree-data))))))
+             (strip-ansi output))))))
 
 (deftest test-tree->text-status-multiline-alignment
   (testing "show tree text keeps multiline alignment when status prefix is present"
@@ -276,11 +370,13 @@
                             :block/children [{:db/id 22
                                               :block/title "line1\nline2"
                                               :logseq.property/status {:db/ident :logseq.property/status.todo
-                                                                       :block/title "TODO"}}]}}]
+                                                                       :block/title "TODO"}}]}}
+          output (binding [style/*color-enabled?* true]
+                   (tree->text tree-data))]
       (is (= (str "1  Root\n"
                   "22 └── TODO line1\n"
                   "       line2")
-             (tree->text tree-data))))))
+             (strip-ansi output))))))
 
 (deftest test-tree->text-linked-references-tree
   (testing "show tree text renders linked references as trees with db/id in first column"
@@ -297,7 +393,10 @@
                                                   {:db/id 11
                                                    :block/title "Ref B"
                                                    :block/page {:db/id 101
-                                                                :block/title "Page B"}}]}}]
+                                                                :block/title "Page B"}}]}}
+          output (binding [style/*color-enabled?* true]
+                   (tree->text-with-linked-refs tree-data))]
+      (is (re-find #"\u001b\[[0-9;]*mTODO" output))
       (is (= (str "1 Root\n"
                   "\n"
                   "Linked References (2)\n"
@@ -306,7 +405,7 @@
                   "\n"
                   "101 Page B\n"
                   "11  └── Ref B")
-             (tree->text-with-linked-refs tree-data))))))
+             (strip-ansi output))))))
 
 (deftest test-tree->text-appends-tags
   (testing "show tree text appends block tags to content"
@@ -316,10 +415,30 @@
                             :block/children [{:db/id 2
                                               :block/title "Child"
                                               :block/tags [{:block/title "RTC"}
-                                                           {:block/name "task"}]}]}}]
+                                                           {:block/name "task"}]}]}}
+          output (binding [style/*color-enabled?* true]
+                   (tree->text tree-data))]
+      (is (string/includes? output (style/bold "#RTC")))
+      (is (string/includes? output (style/bold "#task")))
       (is (= (str "1 Root\n"
                   "2 └── Child #RTC #task")
-             (tree->text tree-data))))))
+             (strip-ansi output))))))
+
+(deftest test-tree->text-status-colors
+  (testing "show tree text uses green for DONE status"
+    (let [tree->text #'show-command/tree->text
+          tree-data {:root {:db/id 1
+                            :block/title "Root"
+                            :block/children [{:db/id 2
+                                              :block/title "Child"
+                                              :logseq.property/status {:db/ident :logseq.property/status.done
+                                                                       :block/title "DONE"}}]}}
+          output (binding [style/*color-enabled?* true]
+                   (tree->text tree-data))]
+      (is (string/includes? output (style/green "DONE")))
+      (is (= (str "1 Root\n"
+                  "2 └── DONE Child")
+             (strip-ansi output))))))
 
 (deftest test-tree->text-replaces-uuid-refs
   (testing "show tree text replaces inline [[uuid]] with referenced block content recursively"
@@ -329,16 +448,22 @@
           tree-data {:root {:db/id 1
                             :block/title (str "See [[" uuid "]]")}
                      :uuid->label {(string/lower-case uuid) (str "Target [[" nested "]]")
-                                   (string/lower-case nested) "Inner"}}]
+                                   (string/lower-case nested) "Inner"}}
+          output (binding [style/*color-enabled?* true]
+                   (tree->text tree-data))]
       (is (= (str "1 See [[Target [[Inner]]]]")
-             (tree->text tree-data))))))
+             (strip-ansi output))))))
 
 (deftest test-help-tags-properties-identifiers
   (testing "add help mentions tag and property identifiers"
-    (let [summary (:summary (commands/parse-args ["add" "block" "--help"]))]
-      (is (string/includes? summary "Identifiers can be id, :db/ident, or :block/title.")))
-    (let [summary (:summary (commands/parse-args ["add" "page" "--help"]))]
-      (is (string/includes? summary "Identifiers can be id, :db/ident, or :block/title.")))))
+    (let [summary (:summary (binding [style/*color-enabled?* true]
+                              (commands/parse-args ["add" "block" "--help"])))]
+      (is (string/includes? (strip-ansi summary)
+                            "Identifiers can be id, :db/ident, or :block/title.")))
+    (let [summary (:summary (binding [style/*color-enabled?* true]
+                              (commands/parse-args ["add" "page" "--help"])))]
+      (is (string/includes? (strip-ansi summary)
+                            "Identifiers can be id, :db/ident, or :block/title.")))))
 
 (deftest test-show-json-edn-strips-block-uuid
   (testing "show json/edn removes :block/uuid recursively while keeping :db/id"
@@ -623,7 +748,7 @@
   (testing "show rejects invalid id edn"
     (let [result (commands/parse-args ["show" "--id" "[1"])]
       (is (false? (:ok? result)))
-      (is (= :invalid-options (get-in result [:error :code]))))))
+      (is (= :invalid-options (get-in result [:error :code])))))
 
   (testing "show rejects legacy page-name option"
     (let [result (commands/parse-args ["show" "--page-name" "Home"])]
@@ -633,7 +758,7 @@
   (testing "show rejects format option"
     (let [result (commands/parse-args ["show" "--format" "json" "--page" "Home"])]
       (is (false? (:ok? result)))
-      (is (= :invalid-options (get-in result [:error :code])))))
+      (is (= :invalid-options (get-in result [:error :code]))))))
 
 (deftest test-verb-subcommand-parse-query
   (testing "query shows group help"

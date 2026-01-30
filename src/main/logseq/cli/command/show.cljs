@@ -5,6 +5,7 @@
             [logseq.cli.command.id :as id-command]
             [logseq.cli.command.core :as core]
             [logseq.cli.server :as cli-server]
+            [logseq.cli.style :as style]
             [logseq.cli.transport :as transport]
             [logseq.common.util :as common-util]
             [promesa.core :as p]))
@@ -97,7 +98,7 @@
                     (map tag-label)
                     (remove string/blank?))]
     (when (seq labels)
-      (string/join " " (map #(str "#" %) labels)))))
+      (string/join " " (map #(style/bold (str "#" %)) labels)))))
 
 (defn- status-from-ident
   [ident]
@@ -105,6 +106,24 @@
         parts (string/split name* #"\.")
         status (or (last parts) name*)]
     (string/upper-case status)))
+
+(def ^:private status-color-map
+  {"TODO" style/yellow
+   "DOING" style/blue
+   "NOW" style/cyan
+   "LATER" style/magenta
+   "WAITING" style/magenta
+   "DONE" style/green
+   "CANCELED" style/red
+   "CANCELLED" style/red})
+
+(defn- style-status
+  [status]
+  (when (seq status)
+    (let [label (str status)
+          lookup (string/upper-case label)
+          color-fn (get status-color-map lookup identity)]
+      (style/bold (color-fn label)))))
 
 (defn- status-label
   [node]
@@ -123,10 +142,11 @@
   (let [title (:block/title node)
         content (:block/content node)
         status (status-label node)
+        status* (style-status status)
         uuid->label (:uuid->label node)
         text (or title content)
         base (cond
-               (and text (seq status)) (str status " " text)
+               (and text (seq status)) (str status* " " text)
                text text
                (:block/name node) (:block/name node)
                (:block/uuid node) (some-> (:block/uuid node) str))
@@ -397,6 +417,8 @@
         id-padding (apply str (repeat (inc id-width) " "))
         split-lines (fn [value]
                       (string/split (or value "") #"\n"))
+        style-glyph (fn [value]
+                      (style/dim value))
         lines (atom [])
         walk (fn walk [node prefix]
                (let [children (:block/children node)
@@ -408,10 +430,13 @@
                          rows (split-lines (label child))
                          first-row (first rows)
                          rest-rows (rest rows)
-                         line (str (pad-id child) " " prefix branch first-row)]
+                         line (str (pad-id child) " "
+                                   (style-glyph prefix)
+                                   (style-glyph branch)
+                                   first-row)]
                      (swap! lines conj line)
                      (doseq [row rest-rows]
-                       (swap! lines conj (str id-padding next-prefix row)))
+                       (swap! lines conj (str id-padding (style-glyph next-prefix) row)))
                      (walk child next-prefix)))))]
     (let [rows (split-lines (label root))
           first-row (first rows)

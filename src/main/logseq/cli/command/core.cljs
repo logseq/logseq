@@ -2,6 +2,7 @@
   "Shared CLI parsing utilities."
   (:require [babashka.cli :as cli]
             [clojure.string :as string]
+            [logseq.cli.style :as style]
             [logseq.common.config :as common-config]))
 
 (def ^:private global-spec*
@@ -58,14 +59,19 @@
                   (map (fn [{:keys [cmds desc]}]
                          (let [command (command-label cmds)]
                            {:command command
+                            :command-styled (style/bold command)
                             :desc desc}))))
         width (apply max 0 (map (comp count :command) rows))]
     (->> rows
-         (map (fn [{:keys [command desc]}]
+         (map (fn [{:keys [command command-styled desc]}]
                 (let [padding (apply str (repeat (- width (count command)) " "))]
-                  (cond-> (str "  " command padding)
+                  (cond-> (str "  " command-styled padding)
                     (seq desc) (str "  " desc)))))
          (string/join "\n"))))
+
+(defn- format-opts
+  [spec]
+  (style/bold-options (cli/format-opts {:spec spec})))
 
 (defn group-summary
   [group table]
@@ -73,13 +79,13 @@
     (string/join "\n"
                  [(str "Usage: logseq " group " <subcommand> [options]")
                   ""
-                  "Subcommands:"
+                  (str (style/bold "Subcommands") ":")
                   (format-commands group-table)
                   ""
-                  "Global options:"
-                  (cli/format-opts {:spec global-spec*})
+                  (str "Global " (style/bold "options") ":")
+                  (format-opts global-spec*)
                   ""
-                  "Command options:"
+                  (str "Command " (style/bold "options") ":")
                   (str "  See `logseq " group " <subcommand> --help`")])))
 
 (defn top-level-summary
@@ -94,13 +100,13 @@
     (string/join "\n"
                  ["Usage: logseq <command> [options]"
                   ""
-                  "Commands:"
+                  (str (style/bold "Commands") ":")
                   (string/join "\n\n" (map render-group groups))
                   ""
-                  "Global options:"
-                  (cli/format-opts {:spec global-spec*})
+                  (str "Global " (style/bold "options") ":")
+                  (format-opts global-spec*)
                   ""
-                  "Command options:"
+                  (str "Command " (style/bold "options") ":")
                   "  See `logseq <command> --help`"])))
 
 (defn command-summary
@@ -109,11 +115,11 @@
     (string/join "\n"
                  [(str "Usage: logseq " (command-usage cmds spec))
                   ""
-                  "Global options:"
-                  (cli/format-opts {:spec global-spec*})
+                  (str "Global " (style/bold "options") ":")
+                  (format-opts global-spec*)
                   ""
-                  "Command options:"
-                  (cli/format-opts {:spec command-spec})])))
+                  (str "Command " (style/bold "options") ":")
+                  (format-opts command-spec)])))
 
 (defn normalize-opts
   [opts]
@@ -139,7 +145,7 @@
   [summary message]
   {:ok? false
    :error {:code :invalid-options
-           :message message}
+           :message (style/bold-options message)}
    :summary summary})
 
 (defn unknown-command-result
