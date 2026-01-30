@@ -47,12 +47,16 @@
     (cond-> base
       has-options? (str " [options]"))))
 
+(defn- command-label
+  [cmds]
+  (string/join " " cmds))
+
 (defn- format-commands
   [table]
   (let [rows (->> table
                   (filter (comp seq :cmds))
-                  (map (fn [{:keys [cmds desc spec]}]
-                         (let [command (command-usage cmds spec)]
+                  (map (fn [{:keys [cmds desc]}]
+                         (let [command (command-label cmds)]
                            {:command command
                             :desc desc}))))
         width (apply max 0 (map (comp count :command) rows))]
