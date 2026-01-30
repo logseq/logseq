@@ -67,12 +67,19 @@
     (.run stmt)))
 
 (defn <d1-all
-  [^js db sql-str & args]
-  (p/let [^js stmt (.prepare db sql-str)
-          ^js stmt (if (seq args)
-                     (.apply (.-bind stmt) stmt (to-array args))
-                     stmt)]
-    (.all stmt)))
+  [^js db sql-or-opts & more]
+  (let [[opts sql-str args] (if (map? sql-or-opts)
+                              [sql-or-opts (first more) (rest more)]
+                              [nil sql-or-opts more])
+        session-mode (:session opts)
+        session (if (some? session-mode)
+                  (.withSession db session-mode)
+                  (.withSession db))]
+    (p/let [^js stmt (.prepare session sql-str)
+            ^js stmt (if (seq args)
+                       (.apply (.-bind stmt) stmt (to-array args))
+                       stmt)]
+      (.all stmt))))
 
 (defn read-json [request]
   (p/let [body (.text request)]
