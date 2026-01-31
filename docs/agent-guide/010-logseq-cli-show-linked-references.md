@@ -17,7 +17,7 @@ I will add a unit test in /Users/rcmerci/gh-repos/logseq/src/test/logseq/cli/com
 I will add a unit test in /Users/rcmerci/gh-repos/logseq/src/test/logseq/cli/commands_test.cljs that asserts tree->text appends :block/tags in `#Tag` format to the rendered block content.
 I will add a unit test in /Users/rcmerci/gh-repos/logseq/src/test/logseq/cli/commands_test.cljs that asserts tree->text keeps multiline alignment when the status prefix is present.
 I will add an integration test in /Users/rcmerci/gh-repos/logseq/src/test/logseq/cli/integration_test.cljs that creates a page and a referencing block, runs show with --format json, and asserts that linked references are present and include the referencing block uuid and page title.
-I will run the new unit tests with bb dev:test -v logseq.cli.commands-test and the new integration test namespace with bb dev:test -v logseq.cli.integration-test to confirm failures, then again to confirm passing.
+I will run the new unit tests with bb dev:test -v 'logseq.cli.commands-test' and the new integration test namespace with bb dev:test -v 'logseq.cli.integration-test' to confirm failures, then again to confirm passing.
 I will run bb dev:lint-and-test after implementation to ensure no regressions.
 NOTE: I will write *all* tests before I add any implementation behavior.
 
