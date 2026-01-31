@@ -270,7 +270,8 @@
     (let [result (commands/parse-args ["--graph" "demo" "graph" "list"])]
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code])))
-      (is (= "unknown option: --graph" (get-in result [:error :message]))))))
+      (is (= "unknown option: --graph"
+             (strip-ansi (get-in result [:error :message])))))))
 
 (deftest test-parse-args-global-options
   (testing "global output option is accepted"
@@ -372,8 +373,12 @@
                                                                        :block/title "CANCELED"}}]}}
           output (binding [style/*color-enabled?* true]
                    (tree->text tree-data))]
-      (is (string/includes? output (style/bold "TODO")))
-      (is (string/includes? output (style/bold "CANCELED")))
+      (is (string/includes? output
+                            (binding [style/*color-enabled?* true]
+                              (style/bold (style/yellow "TODO")))))
+      (is (string/includes? output
+                            (binding [style/*color-enabled?* true]
+                              (style/bold (style/red "CANCELED")))))
       (is (= (str "1 TODO Root\n"
                   "2 └── CANCELED Child")
              (strip-ansi output))))))
@@ -504,60 +509,30 @@
       (is (= 1 (get-in stripped [:root :db/id])))
       (is (= 2 (get-in stripped [:root :block/children 0 :db/id]))))))
 
-(deftest test-fetch-tree-includes-db-ident
+(deftest test-show-selectors-include-db-ident
   (async done
-         (let [fetch-tree #'show-command/fetch-tree
-               selectors (atom [])
+         (let [selectors (atom [])
+               orig-ensure-server! cli-server/ensure-server!
                orig-invoke transport/invoke]
-           (set! transport/invoke (fn [_ method _ args]
-                                    (when (= method :thread-api/pull)
-                                      (swap! selectors conj (second args)))
-                                    (case method
-                                      :thread-api/pull (p/resolved {:db/id 1
-                                                                    :block/page {:db/id 2}})
-                                      :thread-api/q (p/resolved [])
-                                      (p/resolved nil))))
-           (-> (p/let [_ (fetch-tree {} {:repo "demo" :id 1})]
-                 (is (some #(some #{:db/ident} %) @selectors)))
-               (p/catch (fn [e]
-                          (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (set! transport/invoke orig-invoke)
-                            (done)))))))
-
-(deftest test-fetch-blocks-for-page-includes-db-ident
-  (async done
-         (let [fetch-blocks-for-page #'show-command/fetch-blocks-for-page
-               selectors (atom [])
-               orig-invoke transport/invoke]
-           (set! transport/invoke (fn [_ method _ args]
-                                    (when (= method :thread-api/q)
-                                      (let [[_ [query _]] args
-                                            pull-form (second query)
-                                            selector (nth pull-form 2)]
-                                        (swap! selectors conj selector)))
-                                    (p/resolved [])))
-           (-> (p/let [_ (fetch-blocks-for-page {} "demo" 1)]
-                 (is (some #(some #{:db/ident} %) @selectors)))
-               (p/catch (fn [e]
-                          (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (set! transport/invoke orig-invoke)
-                            (done)))))))
-
-(deftest test-fetch-linked-references-includes-db-ident
-  (async done
-         (let [fetch-linked-references #'show-command/fetch-linked-references
-               selectors (atom [])
-               orig-invoke transport/invoke]
+           (set! cli-server/ensure-server! (fn [config _] config))
            (set! transport/invoke (fn [_ method _ args]
                                     (case method
-                                      :thread-api/get-block-refs (p/resolved [{:db/id 10}])
                                       :thread-api/pull (let [[_ selector _] args]
                                                          (swap! selectors conj selector)
-                                                         (p/resolved {:db/id 10}))
+                                                         (p/resolved {:db/id 1
+                                                                      :block/page {:db/id 2}}))
+                                      :thread-api/q (let [[_ [query _]] args
+                                                          pull-form (second query)
+                                                          selector (nth pull-form 2)]
+                                                      (swap! selectors conj selector)
+                                                      (p/resolved []))
+                                      :thread-api/get-block-refs (p/resolved [{:db/id 10}])
                                       (p/resolved nil))))
-           (-> (p/let [_ (fetch-linked-references {} "demo" 1)]
+           (-> (p/let [_ (show-command/execute-show {:type :show
+                                                     :repo "demo"
+                                                     :id 1}
+                                                    {:output-format :json})]
+                 (is (some #(some #{:db/ident} %) @selectors))
                  (is (some #(and (some #{:db/ident} %)
                                  (some (fn [entry]
                                          (and (map? entry)
@@ -567,64 +542,66 @@
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally (fn []
+                            (set! cli-server/ensure-server! orig-ensure-server!)
                             (set! transport/invoke orig-invoke)
                             (done)))))))
 
-(deftest test-build-tree-data-linked-references-disabled
+(deftest test-show-linked-references-disabled
   (async done
-         (let [build-tree-data #'show-command/build-tree-data
-               linked-called? (atom false)
-               orig-fetch-tree show-command/fetch-tree
-               orig-fetch-linked show-command/fetch-linked-references
-               orig-collect-uuid-refs show-command/collect-uuid-refs
-               orig-fetch-uuid-labels show-command/fetch-uuid-labels]
-           (set! show-command/fetch-tree (fn [_ _]
-                                           (p/resolved {:root {:db/id 1}})))
-           (set! show-command/fetch-linked-references (fn [& _]
-                                                        (reset! linked-called? true)
-                                                        (p/resolved {:count 1 :blocks []})))
-           (set! show-command/collect-uuid-refs (fn [_ _] []))
-           (set! show-command/fetch-uuid-labels (fn [& _] (p/resolved {})))
-           (-> (p/let [result (build-tree-data {} {:repo "demo"
-                                                   :linked-references? false})]
-                 (is (false? @linked-called?))
-                 (is (not (contains? result :linked-references))))
+         (let [method-calls (atom [])
+               orig-ensure-server! cli-server/ensure-server!
+               orig-invoke transport/invoke]
+           (set! cli-server/ensure-server! (fn [config _] config))
+           (set! transport/invoke (fn [_ method _ _]
+                                    (swap! method-calls conj method)
+                                    (case method
+                                      :thread-api/pull (p/resolved {:db/id 1
+                                                                    :block/page {:db/id 2}})
+                                      :thread-api/q (p/resolved [])
+                                      :thread-api/get-block-refs (p/resolved [{:db/id 10}])
+                                      (p/resolved nil))))
+           (-> (p/let [result (show-command/execute-show {:type :show
+                                                          :repo "demo"
+                                                          :id 1
+                                                          :linked-references? false}
+                                                         {:output-format :json})]
+                 (is (= :ok (:status result)))
+                 (is (not (contains? (:data result) :linked-references)))
+                 (is (not (some #{:thread-api/get-block-refs} @method-calls))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally (fn []
-                            (set! show-command/fetch-tree orig-fetch-tree)
-                            (set! show-command/fetch-linked-references orig-fetch-linked)
-                            (set! show-command/collect-uuid-refs orig-collect-uuid-refs)
-                            (set! show-command/fetch-uuid-labels orig-fetch-uuid-labels)
+                            (set! cli-server/ensure-server! orig-ensure-server!)
+                            (set! transport/invoke orig-invoke)
                             (done)))))))
 
-(deftest test-build-tree-data-linked-references-enabled
+(deftest test-show-linked-references-enabled
   (async done
-         (let [build-tree-data #'show-command/build-tree-data
-               linked-called? (atom false)
-               linked {:count 1 :blocks []}
-               orig-fetch-tree show-command/fetch-tree
-               orig-fetch-linked show-command/fetch-linked-references
-               orig-collect-uuid-refs show-command/collect-uuid-refs
-               orig-fetch-uuid-labels show-command/fetch-uuid-labels]
-           (set! show-command/fetch-tree (fn [_ _]
-                                           (p/resolved {:root {:db/id 1}})))
-           (set! show-command/fetch-linked-references (fn [& _]
-                                                        (reset! linked-called? true)
-                                                        (p/resolved linked)))
-           (set! show-command/collect-uuid-refs (fn [_ _] []))
-           (set! show-command/fetch-uuid-labels (fn [& _] (p/resolved {})))
-           (-> (p/let [result (build-tree-data {} {:repo "demo"
-                                                   :linked-references? true})]
-                 (is (true? @linked-called?))
-                 (is (= linked (:linked-references result))))
+         (let [method-calls (atom [])
+               orig-ensure-server! cli-server/ensure-server!
+               orig-invoke transport/invoke]
+           (set! cli-server/ensure-server! (fn [config _] config))
+           (set! transport/invoke (fn [_ method _ _]
+                                    (swap! method-calls conj method)
+                                    (case method
+                                      :thread-api/pull (p/resolved {:db/id 1
+                                                                    :block/page {:db/id 2}})
+                                      :thread-api/q (p/resolved [])
+                                      :thread-api/get-block-refs (p/resolved [{:db/id 10}])
+                                      (p/resolved nil))))
+           (-> (p/let [result (show-command/execute-show {:type :show
+                                                          :repo "demo"
+                                                          :id 1
+                                                          :linked-references? true}
+                                                         {:output-format :json})]
+                 (is (= :ok (:status result)))
+                 (is (contains? (:data result) :linked-references))
+                 (is (some #{:thread-api/get-block-refs} @method-calls)))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally (fn []
-                            (set! show-command/fetch-tree orig-fetch-tree)
-                            (set! show-command/fetch-linked-references orig-fetch-linked)
-                            (set! show-command/collect-uuid-refs orig-collect-uuid-refs)
-                            (set! show-command/fetch-uuid-labels orig-fetch-uuid-labels)
+                            (set! cli-server/ensure-server! orig-ensure-server!)
+                            (set! transport/invoke orig-invoke)
                             (done)))))))
 
 (deftest test-tree->text-uuid-ref-recursion-limit
