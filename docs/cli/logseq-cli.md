@@ -78,6 +78,8 @@ Inspect and edit commands:
 - `remove --id <id>|--uuid <uuid>|--page <name>` - remove blocks (by db/id or UUID) or pages
 - `search <query> [--type page|block|tag|property|all] [--tag <name>] [--case-sensitive] [--sort updated-at|created-at] [--order asc|desc]` - search across pages, blocks, tags, and properties (query is positional)
 - `query --query <edn> [--inputs <edn-vector>]` - run a Datascript query against the graph
+- `query --name <query-name> [--inputs <edn-vector>]` - run a named query (built-in or from `cli.edn`)
+- `query list` - list available named queries
 - `show --page <name> [--level <n>]` - show page tree
 - `show --uuid <uuid> [--level <n>]` - show block tree
 - `show --id <id> [--level <n>]` - show block tree by db/id
@@ -113,6 +115,7 @@ Output formats:
 - For `graph export`, `--output` refers to the destination file path. Output formatting is controlled via `:output-format` in config or `LOGSEQ_CLI_OUTPUT`.
 - Human output is plain text. List/search commands render tables with a final `Count: N` line. For list and search subcommands, the ID column uses `:db/id` (not UUID). If `:db/ident` exists, an `IDENT` column is included. Search table columns are `ID` and `TITLE`. Block titles can include multiple lines; multi-line rows align additional lines under the `TITLE` column. Times such as list `UPDATED-AT`/`CREATED-AT` and `graph info` `Created at` are shown in human-friendly relative form. Errors include error codes and may include a `Hint:` line. Use `--output json|edn` for structured output.
 - `query` human output returns a plain string (the query result rendered via `pr-str`), which is convenient for pipelines like `logseq query ... | xargs logseq show --id`.
+- Built-in named queries currently include `block-search`, `task-search`, `recent-updated`, `list-status`, and `list-priority`. Use `query list` to see the full set for your config.
 - Show and search outputs resolve block reference UUIDs inside text, replacing `[[<uuid>]]` with the referenced block content. Nested references are resolved recursively up to 10 levels to avoid excessive expansion. For example: `[[<uuid1>]]` → `[[some text [[<uuid2>]]]]` and then `<uuid2>` is also replaced.
 - `show` human output prints the `:db/id` as the first column followed by a tree:
 

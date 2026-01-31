@@ -621,6 +621,59 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
+(deftest test-cli-query-list-status-priority
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-status-query")]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       create-result (run-cli ["graph" "create" "--repo" "status-query-graph"] data-dir cfg-path)
+                       create-payload (parse-json-output create-result)
+                       _ (p/delay 100)
+                       list-result (run-cli ["query" "list"] data-dir cfg-path)
+                       list-payload (parse-json-output list-result)
+                       names (set (map :name (get-in list-payload [:data :queries])))
+                       status-result (run-cli ["--repo" "status-query-graph"
+                                               "query"
+                                               "--name" "list-status"]
+                                              data-dir cfg-path)
+                       status-payload (parse-json-output status-result)
+                       status-values (get-in status-payload [:data :result])
+                       priority-result (run-cli ["--repo" "status-query-graph"
+                                                 "query"
+                                                 "--name" "list-priority"]
+                                                data-dir cfg-path)
+                       priority-payload (parse-json-output priority-result)
+                       priority-values (get-in priority-payload [:data :result])
+                       stop-result (run-cli ["server" "stop" "--repo" "status-query-graph"] data-dir cfg-path)
+                       stop-payload (parse-json-output stop-result)]
+                 (is (= "ok" (:status create-payload)))
+                 (is (= "ok" (:status list-payload)))
+                 (is (contains? names "list-status"))
+                 (is (contains? names "list-priority"))
+                 (is (= 0 (:exit-code status-result)))
+                 (is (= "ok" (:status status-payload)))
+                 (is (vector? status-values))
+                 (when (seq status-values)
+                   (let [row (first status-values)
+                         value (if (vector? row) (first row) row)]
+                     (is (map? value))
+                     (is (contains? value :ident))
+                     (is (contains? value :id))))
+                 (is (= 0 (:exit-code priority-result)))
+                 (is (= "ok" (:status priority-payload)))
+                 (is (vector? priority-values))
+                 (when (seq priority-values)
+                   (let [row (first priority-values)
+                         value (if (vector? row) (first row) row)]
+                     (is (map? value))
+                     (is (contains? value :ident))
+                     (is (contains? value :id))))
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
 (deftest test-cli-query-recent-updated
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-recent-updated")]

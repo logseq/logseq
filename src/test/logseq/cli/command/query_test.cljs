@@ -79,7 +79,7 @@
                                              "logseq_db_demo"
                                              config)]
       (is (true? (:ok? result)))
-      (is (= ["doing" nil nil] (get-in result [:action :inputs])))))
+      (is (= [:logseq.property/status.doing nil nil] (get-in result [:action :inputs])))))
 
   (testing "missing required inputs returns invalid-options"
     (let [config {:custom-queries {"task-search"
@@ -109,7 +109,7 @@
                                              "logseq_db_demo"
                                              config)]
       (is (true? (:ok? result)))
-      (is (= ["doing" "fallback-title" 7] (get-in result [:action :inputs])))))
+      (is (= [:logseq.property/status.doing "fallback-title" 7] (get-in result [:action :inputs])))))
 
   (testing "built-in task-search uses defaults for optional inputs"
     (let [result (query-command/build-action {:name "task-search"
@@ -118,8 +118,35 @@
                                              {})]
       (is (true? (:ok? result)))
       (let [inputs (get-in result [:action :inputs])]
-        (is (= ["doing" "" 0] (subvec inputs 0 3)))
+        (is (= [:logseq.property/status.doing "" 0] (subvec inputs 0 3)))
         (is (number? (nth inputs 3)))))))
+
+(deftest test-build-action-closed-value-queries
+  (testing "list-status builds standard query action"
+    (let [result (query-command/build-action {:name "list-status"}
+                                             "logseq_db_demo"
+                                             {})]
+      (is (true? (:ok? result)))
+      (is (= :query (get-in result [:action :type])))
+      (is (= "logseq_db_demo" (get-in result [:action :repo])))
+      (is (= '[:find [(pull ?value [:db/id :db/ident :block/order]) ...]
+               :where
+               [?property :db/ident :logseq.property/status]
+               [?value :block/closed-value-property ?property]]
+             (get-in result [:action :query])))))
+
+  (testing "list-priority builds standard query action"
+    (let [result (query-command/build-action {:name "list-priority"}
+                                             "logseq_db_demo"
+                                             {})]
+      (is (true? (:ok? result)))
+      (is (= :query (get-in result [:action :type])))
+      (is (= :logseq.property/priority (get-in result [:action :query 3 2])))
+      (is (= '[:find [(pull ?value [:db/id :db/ident :block/order]) ...]
+               :where
+               [?property :db/ident :logseq.property/priority]
+               [?value :block/closed-value-property ?property]]
+             (get-in result [:action :query]))))))
 
 (deftest test-query-list-merges-built-in-and-custom
   (testing "built-in and custom queries are both listed"
@@ -127,9 +154,17 @@
           names (set (map :name queries))]
       (is (contains? names "block-search"))
       (is (contains? names "task-search"))
+      (is (contains? names "list-status"))
+      (is (contains? names "list-priority"))
       (is (contains? names "custom-q"))))
 
   (testing "custom query overrides built-in name"
     (let [queries (query-command/list-queries {:custom-queries {"block-search" {:query '[:find ?e]}}})
           block-search (first (filter #(= "block-search" (:name %)) queries))]
-      (is (= :custom (:source block-search))))))
+      (is (= :custom (:source block-search)))))
+
+  (testing "list-status and list-priority have empty inputs"
+    (let [queries (query-command/list-queries {})
+          by-name (into {} (map (fn [entry] [(:name entry) entry]) queries))]
+      (is (= [] (get-in by-name ["list-status" :inputs])))
+      (is (= [] (get-in by-name ["list-priority" :inputs]))))))
