@@ -934,7 +934,7 @@
       (when (and link id label)
         (when-let [zotero-data-dir (get-in config [:zotero/settings-v2 "default" :zotero-data-directory])]
           {:link (str "zotero://" link)
-           :path (node-path/join zotero-data-dir "storage" id label)
+           :path (path/path-join zotero-data-dir "storage" id label)
            :base label})))))
 
 (defn- walk-ast-blocks
@@ -1245,10 +1245,10 @@
 (defn- build-pdf-annotations-tx
   "Builds tx for pdf annotations when a pdf has an annotations EDN file under assets/"
   [parent-asset-path assets parent-asset pdf-annotation-pages opts]
-  (let [asset-edn-path (path/path-normalize
-                        (node-path/join common-config/local-assets-dir
-                                        (safe-sanitize-file-name
-                                         (node-path/basename (string/replace-first parent-asset-path #"(?i)\.pdf$" ".edn")))))
+  (let [asset-edn-path (path/path-join
+                        common-config/local-assets-dir
+                        (safe-sanitize-file-name
+                         (node-path/basename (string/replace-first parent-asset-path #"(?i)\.pdf$" ".edn"))))
         asset-md-name (str "hls__" (safe-sanitize-file-name
                                     (node-path/basename (string/replace-first parent-asset-path #"(?i)\.pdf$" ".md"))))]
     (when-let [asset-edn-map (get @assets asset-edn-path)]
@@ -1324,7 +1324,7 @@
                          (when-let [metadata (not-empty (common-util/safe-read-map-string (:metadata (second asset-link))))]
                            {:logseq.property.asset/resize-metadata metadata}))
         pdf-annotations-path (if (and zotero-asset? (string? asset-name))
-                               (node-path/join common-config/local-assets-dir asset-name)
+                               (path/path-join common-config/local-assets-dir asset-name)
                                (or asset-name asset-link-or-name))
         pdf-annotations-tx (when (= "pdf" (path/file-ext pdf-annotations-path))
                              (build-pdf-annotations-tx pdf-annotations-path assets new-asset pdf-annotation-pages opts))
@@ -2040,6 +2040,22 @@
                                  :level :error
                                  :ex-data {:error error}}))))))
 
+(defn- resolve-zotero-config-path
+  [config config-file]
+  (let [config-path (:path config-file)
+        base-dir (when (and (string? config-path)
+                            (node-path/isAbsolute config-path))
+                   ;; config.edn lives in <graph-root>/logseq/config.edn
+                   (node-path/dirname (node-path/dirname config-path)))
+        to-abs (fn [p]
+                 (if (and base-dir (string? p) (not (string/blank? p)) (not (node-path/isAbsolute p)))
+                   (path/path-join base-dir p)
+                   p))]
+    (run! prn ["resolve-zotero-config-path" config-file config-path base-dir])
+    (-> config
+        (update-in [:zotero/settings-v2 "default" :zotero-data-directory] to-abs)
+        (update-in [:zotero/settings-v2 "default" :zotero-linked-attachment-base-directory] to-abs))))
+
 (defn export-config-file
   "Exports logseq/config.edn by saving to database and setting any properties related to config"
   [repo-or-conn config-file <read-file {:keys [<save-file notify-user default-config]
@@ -2052,7 +2068,7 @@
                             ;; Converts a file graph config.edn for use with DB graphs. Unlike common-config/create-config-for-db-graph,
                             ;; manually dissoc deprecated keys for config to be valid
                             (pretty-print-dissoc % (keys common-config/file-only-config)))
-                (let [config (edn/read-string %)]
+                (let [config (resolve-zotero-config-path (edn/read-string %) config-file)]
                   (when-let [title-format (or (:journal/page-title-format config) (:date-formatter config))]
                     (ldb/transact! repo-or-conn [{:db/ident :logseq.class/Journal
                                                   :logseq.property.journal/title-format title-format}]))
