@@ -50,7 +50,7 @@ I will add unit tests to ensure all CLI thread-api method invocations use keywor
 
 16. Update tests in `src/test/logseq/cli/commands_test.cljs` to import any moved namespaces or use the facade namespace, and ensure all help summary snapshots still pass.
 
-17. Run unit tests for CLI and db-worker-node with `bb dev:test -v logseq.cli.commands-test`, `bb dev:test -v logseq.cli.transport-test`, and `bb dev:test -v frontend.worker.db-worker-node-test` and fix failures.
+17. Run unit tests for CLI and db-worker-node with `bb dev:test -v 'logseq.cli.commands-test'`, `bb dev:test -v 'logseq.cli.transport-test'`, and `bb dev:test -v 'frontend.worker.db-worker-node-test'` and fix failures.
 
 18. Run the full lint and unit test suite with `bb dev:lint-and-test` after all changes are complete.
 

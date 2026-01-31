@@ -58,11 +58,11 @@ This plan does not alter vector search or inference-worker behavior.
 
 1. Read @test-driven-development and follow TDD for every behavior change in this plan.
 2. Update CLI parsing tests in `src/test/logseq/cli/commands_test.cljs` to use positional search text and verify default types are all when --type is omitted.
-3. Run `bb dev:test -v logseq.cli.commands-test` and confirm the new tests fail for the expected reasons.
+3. Run `bb dev:test -v 'logseq.cli.commands-test'` and confirm the new tests fail for the expected reasons.
 4. Update integration tests in `src/test/logseq/cli/integration_test.cljs` to call search without --text and to assert results still return ok with data.
-5. Run `bb dev:test -v logseq.cli.integration-test` and confirm the new tests fail for the expected reasons.
+5. Run `bb dev:test -v 'logseq.cli.integration-test'` and confirm the new tests fail for the expected reasons.
 6. Update formatting expectations in `src/test/logseq/cli/format_test.cljs` if missing-search-text hints change.
-7. Run `bb dev:test -v logseq.cli.format-test` and confirm the new tests fail for the expected reasons.
+7. Run `bb dev:test -v 'logseq.cli.format-test'` and confirm the new tests fail for the expected reasons.
 8. Remove the :text, :include-content, and :limit options from search spec in `src/main/logseq/cli/command/search.cljs` and update help text accordingly.
 9. Update `src/main/logseq/cli/commands.cljs` to require positional search text and to stop referencing :text in missing-search-text logic.
 10. Update `src/main/logseq/cli/command/search.cljs` build-action to use the first positional argument as text and ignore any additional positional args for search text.
