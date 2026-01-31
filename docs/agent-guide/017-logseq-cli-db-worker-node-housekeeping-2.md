@@ -24,7 +24,7 @@ I will rerun the CLI tests after each behavioral change to confirm they pass.
 Command to run tests is shown below.
 
 ```bash
-bb dev:test -v logseq.cli.commands-test
+bb dev:test -v 'logseq.cli.commands-test'
 ```
 
 Expected test output is described below.
