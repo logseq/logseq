@@ -134,7 +134,7 @@ Show has no subcommands and returns the block tree for a page or block.
 3. Add failing unit tests that assert list subtype option parsing and validation for list page, list tag, and list property.
 4. Add failing unit tests that assert search defaults to all types and respects --type and positional text.
 5. Add failing unit tests that assert show accepts --page-name, --uuid, or --id and rejects missing targets.
-6. Run bb dev:test -v logseq.cli.commands-test/test-parse-args and confirm failures are about the new verbs and options.
+6. Run bb dev:test -v 'logseq.cli.commands-test/test-parse-args' and confirm failures are about the new verbs and options.
 7. Update src/main/logseq/cli/commands.cljs to replace block subcommands with verb-first entries and to add list subcommand group.
 8. Update summary helpers in src/main/logseq/cli/commands.cljs to show group help for list, add, and remove instead of block, and to render help groups as Graph Inspect and Edit first, Graph Management last.
 9. Update src/main/logseq/cli/main.cljs usage string to reflect the verb-first command surface.
@@ -144,7 +144,7 @@ Show has no subcommands and returns the block tree for a page or block.
 13. Update search logic in src/main/logseq/cli/commands.cljs to query all resource types and honor --type, --tag, --sort, and --order.
 14. Update show logic in src/main/logseq/cli/commands.cljs to support --id, --uuid, --page-name, and --level.
 15. Add failing integration tests in src/test/logseq/cli/integration_test.cljs for list page, list tag, list property, add page, remove page, search all, and show.
-16. Run bb dev:test -v logseq.cli.integration-test/test-cli-list-and-search and confirm failures before implementation.
+16. Run bb dev:test -v 'logseq.cli.integration-test/test-cli-list-and-search' and confirm failures before implementation.
 17. Implement behavior for list, add, remove, search, and show until all tests pass.
 18. Update docs/cli/logseq-cli.md with new verb-first commands and examples.
 19. Run bb dev:test -r logseq.cli.* and confirm 0 failures and 0 errors.
@@ -167,7 +167,7 @@ Show should return a deterministic order based on :block/order.
 Run a single unit test in red phase.
 
 ```bash
-bb dev:test -v logseq.cli.commands-test/test-parse-args
+bb dev:test -v 'logseq.cli.commands-test/test-parse-args'
 ```
 
 Expected output includes failing assertions about the new verb-first commands and ends with a non-zero exit code.
@@ -175,7 +175,7 @@ Expected output includes failing assertions about the new verb-first commands an
 Run the integration tests in red phase.
 
 ```bash
-bb dev:test -v logseq.cli.integration-test/test-cli-list-add-search-show-remove
+bb dev:test -v 'logseq.cli.integration-test/test-cli-list-add-search-show-remove'
 ```
 
 Expected output includes failing assertions about list and search output and ends with a non-zero exit code.
