@@ -1,11 +1,13 @@
 (ns logseq.cli.integration-test
-  (:require ["fs" :as fs]
+  (:require ["child_process" :as child-process]
+            ["fs" :as fs]
             ["path" :as node-path]
             [cljs.reader :as reader]
             [cljs.test :refer [deftest is async]]
             [clojure.string :as string]
             [frontend.worker-common.util :as worker-util]
             [frontend.test.node-helper :as node-helper]
+            [logseq.cli.command.show :as show-command]
             [logseq.cli.command.core :as command-core]
             [logseq.cli.main :as cli-main]
             [logseq.common.util :as common-util]
@@ -43,6 +45,28 @@
 (defn- parse-edn-output
   [result]
   (reader/read-string (:output result)))
+
+(defn- shell-escape
+  [value]
+  (let [text (str value)]
+    (str "'" (string/replace text #"'" "'\"'\"'") "'")))
+
+(defn- run-shell
+  [command]
+  (try
+    (child-process/execSync command #js {:encoding "utf8"
+                                         :shell "/bin/bash"})
+    (catch :default e
+      (let [err ^js e
+            stdout (some-> (.-stdout err) (.toString "utf8"))
+            stderr (some-> (.-stderr err) (.toString "utf8"))]
+        (throw (ex-info (str "shell command failed: " command
+                             "\nstdout: " (or stdout "")
+                             "\nstderr: " (or stderr ""))
+                        {:command command
+                         :stdout stdout
+                         :stderr stderr}
+                        e))))))
 
 (defn- node-title
   [node]
@@ -1156,30 +1180,91 @@
                                        " :where"
                                        " [?e :block/title ?title]"
                                        " [(clojure.string/includes? ?title ?q)]]")
-                       query-result (run-cli ["--repo" "query-pipe-graph"
+                       node-bin (shell-escape (.-execPath js/process))
+                       cli-bin (shell-escape (node-path/resolve "static/logseq-cli.js"))
+                       data-arg (shell-escape data-dir)
+                       cfg-arg (shell-escape cfg-path)
+                       repo-arg (shell-escape "query-pipe-graph")
+                       query-arg (shell-escape query-text)
+                       inputs-arg (shell-escape (pr-str ["Pipe"]))
+                       query-cmd (string/join " "
+                                              [node-bin cli-bin
+                                               "--data-dir" data-arg
+                                               "--config" cfg-arg
+                                               "--repo" repo-arg
+                                               "--output" "human"
+                                               "query"
+                                               "--query" query-arg
+                                               "--inputs" inputs-arg])
+                       show-cmd (string/join " "
+                                             [node-bin cli-bin
+                                              "--data-dir" data-arg
+                                              "--config" cfg-arg
+                                              "--repo" repo-arg
+                                              "--output" "human"
+                                              "show"
+                                              "--id"])
+                       pipeline (str query-cmd " | xargs -I{} " show-cmd " {}")
+                       output (run-shell pipeline)
+                       stop-result (run-cli ["server" "stop" "--repo" "query-pipe-graph"]
+                                            data-dir cfg-path)
+                       stop-payload (parse-json-output stop-result)]
+                 (is (string/includes? output "Pipe One"))
+                 (is (string/includes? output "Pipe Two"))
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
+(deftest test-cli-query-human-output-pipes-to-show-stdin
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-query-stdin")]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       _ (run-cli ["graph" "create" "--repo" "query-stdin-graph"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "query-stdin-graph" "add" "page" "--page" "PipePage"]
+                                  data-dir cfg-path)
+                       _ (run-cli ["--repo" "query-stdin-graph" "add" "block"
+                                   "--target-page-name" "PipePage"
+                                   "--content" "Pipe One"]
+                                  data-dir cfg-path)
+                       _ (run-cli ["--repo" "query-stdin-graph" "add" "block"
+                                   "--target-page-name" "PipePage"
+                                   "--content" "Pipe Two"]
+                                  data-dir cfg-path)
+                       _ (p/delay 100)
+                       query-text (str "[:find [?e ...]"
+                                       " :in $ ?q"
+                                       " :where"
+                                       " [?e :block/title ?title]"
+                                       " [(clojure.string/includes? ?title ?q)]]")
+                       query-result (run-cli ["--repo" "query-stdin-graph"
                                               "--output" "human"
                                               "query"
                                               "--query" query-text
                                               "--inputs" (pr-str ["Pipe"])]
                                              data-dir cfg-path)
-                       ids-edn (string/trim (:output query-result))
-                       show-json-result (run-cli ["--repo" "query-pipe-graph" "show"
-                                                  "--id" ids-edn
-                                                  "--format" "json"]
-                                                 data-dir cfg-path)
-                       show-json-payload (parse-json-output show-json-result)
-                       show-data (:data show-json-payload)
+                       ids-text (string/trim (:output query-result))
+                       show-result (with-redefs [show-command/read-stdin (fn [] ids-text)]
+                                     (run-cli ["--repo" "query-stdin-graph"
+                                               "--output" "json"
+                                               "show"
+                                               "--id"]
+                                              data-dir cfg-path))
+                       show-payload (parse-json-output show-result)
+                       show-data (:data show-payload)
+                       root (some-> show-data first :root)
                        root-titles (set (map (comp node-title :root) show-data))
-                       stop-result (run-cli ["server" "stop" "--repo" "query-pipe-graph"]
+                       pipe-one (find-block-by-title root "Pipe One")
+                       pipe-two (find-block-by-title root "Pipe Two")
+                       stop-result (run-cli ["server" "stop" "--repo" "query-stdin-graph"]
                                             data-dir cfg-path)
                        stop-payload (parse-json-output stop-result)]
-                 (is (= 0 (:exit-code query-result)))
-                 (is (seq ids-edn))
-                 (is (= 0 (:exit-code show-json-result)))
-                 (is (= "ok" (:status show-json-payload)))
-                 (is (vector? show-data))
-                 (is (contains? root-titles "Pipe One"))
-                 (is (contains? root-titles "Pipe Two"))
+                 (is (= "ok" (:status show-payload)))
+                 (is (contains? root-titles "PipePage"))
+                 (is (some? pipe-one))
+                 (is (some? pipe-two))
                  (is (= "ok" (:status stop-payload)))
                  (done))
                (p/catch (fn [e]

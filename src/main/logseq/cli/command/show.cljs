@@ -1,6 +1,7 @@
 (ns logseq.cli.command.show
   "Show-related CLI commands."
-  (:require [clojure.string :as string]
+  (:require ["fs" :as fs]
+            [clojure.string :as string]
             [clojure.walk :as walk]
             [logseq.cli.command.id :as id-command]
             [logseq.cli.command.core :as core]
@@ -24,15 +25,47 @@
 
 (def ^:private multi-id-delimiter "\n================================================================\n")
 
+(defn read-stdin
+  []
+  (.toString (fs/readFileSync 0) "utf8"))
+
+(defn- normalize-stdin-id
+  [value]
+  (let [text (string/trim (or value ""))]
+    (cond
+      (string/blank? text) text
+      (string/starts-with? text "[") text
+      (re-matches #"-?\d+" text) text
+      :else
+      (let [tokens (->> (string/split text #"\s+")
+                        (remove string/blank?))]
+        (if (and (seq tokens) (every? #(re-matches #"-?\d+" %) tokens))
+          (str "[" (string/join " " tokens) "]")
+          text)))))
+
+(defn- resolve-stdin-id
+  [options]
+  (if (:id-from-stdin? options)
+    (let [stdin (if (contains? options :stdin)
+                  (:stdin options)
+                  (read-stdin))]
+      (assoc options :id (normalize-stdin-id stdin)))
+    options))
+
 (defn invalid-options?
   [opts]
   (let [level (:level opts)
-        id-result (id-command/parse-id-option (:id opts))]
+        id-value (:id opts)
+        id-missing? (and (:id-from-stdin? opts)
+                         (or (nil? id-value)
+                             (and (string? id-value) (string/blank? id-value))))
+        id-result (when-not id-missing?
+                    (id-command/parse-id-option id-value))]
     (cond
       (and (some? level) (< level 1))
       "level must be >= 1"
 
-      (and (some? (:id opts)) (not (:ok? id-result)))
+      (and (some? id-value) (not id-missing?) (not (:ok? id-result)))
       (:message id-result)
 
       :else
@@ -469,7 +502,8 @@
     {:ok? false
      :error {:code :missing-repo
              :message "repo is required for show"}}
-    (let [id-result (id-command/parse-id-option (:id options))
+    (let [options (resolve-stdin-id options)
+          id-result (id-command/parse-id-option (:id options))
           ids (:value id-result)
           multi-id? (:multi? id-result)
           targets (filter some? [(:id options) (:uuid options) (:page options)])]

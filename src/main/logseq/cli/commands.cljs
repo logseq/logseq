@@ -105,6 +105,28 @@
 
 ;; Global option parsing lives in logseq.cli.command.core.
 
+(defn- index-of
+  [coll value]
+  (first (keep-indexed (fn [idx item]
+                         (when (= item value) idx))
+                       coll)))
+
+(defn- inject-stdin-id-arg
+  [args]
+  (if (and (seq args) (= "show" (first args)))
+    (if-let [idx (index-of args "--id")]
+      (let [next-token (nth args (inc idx) nil)
+            missing-value? (or (nil? next-token)
+                               (string/starts-with? next-token "-"))]
+        (if missing-value?
+          {:args (vec (concat (subvec args 0 (inc idx))
+                              [""]
+                              (subvec args (inc idx))))
+           :id-from-stdin? true}
+          {:args args :id-from-stdin? false}))
+      {:args args :id-from-stdin? false})
+    {:args args :id-from-stdin? false}))
+
 (defn- unknown-command-message
   [{:keys [dispatch wrong-input]}]
   (string/join " " (cond-> (vec dispatch)
@@ -223,44 +245,53 @@
   [raw-args]
   (let [summary (command-core/top-level-summary table)
         legacy-graph-opt? (command-core/legacy-graph-opt? raw-args)
-        {:keys [opts args]} (command-core/parse-leading-global-opts raw-args)]
-    (if legacy-graph-opt?
+        {:keys [opts args]} (command-core/parse-leading-global-opts raw-args)
+        {:keys [args id-from-stdin?]} (inject-stdin-id-arg (vec args))]
+    (cond
+      legacy-graph-opt?
       (command-core/invalid-options-result summary "unknown option: --graph")
-    (if (:version opts)
+
+      (:version opts)
       (command-core/ok-result :version opts [] summary)
-    (if (empty? args)
+
+      (empty? args)
       (if (:help opts)
         (command-core/help-result summary)
         {:ok? false
          :error {:code :missing-command
                  :message "missing command"}
-           :summary summary})
-    (if (and (= 1 (count args)) (#{"graph" "server" "list" "add" "query"} (first args)))
-        (command-core/help-result (command-core/group-summary (first args) table))
-        (try
-          (let [result (cli/dispatch table args {:spec global-spec})]
-            (if (nil? result)
-              (command-core/unknown-command-result summary (str "unknown command: " (string/join " " args)))
-              (finalize-command summary (update result :opts #(merge opts (or % {}))))))
-          (catch :default e
-            (let [{:keys [cause] :as data} (ex-data e)]
-              (cond
-                (= cause :input-exhausted)
-                (if (:help opts)
-                  (command-core/help-result summary)
-                  {:ok? false
-                   :error {:code :missing-command
-                           :message "missing command"}
-                   :summary summary})
+         :summary summary})
 
-                (= cause :no-match)
-                (command-core/unknown-command-result summary (str "unknown command: " (unknown-command-message data)))
+      (and (= 1 (count args)) (#{"graph" "server" "list" "add" "query"} (first args)))
+      (command-core/help-result (command-core/group-summary (first args) table))
 
-                (some? data)
-                (command-core/cli-error->result summary data)
+      :else
+      (try
+        (let [result (cli/dispatch table args {:spec global-spec})]
+          (if (nil? result)
+            (command-core/unknown-command-result summary (str "unknown command: " (string/join " " args)))
+            (finalize-command summary
+                              (update result :opts #(cond-> (merge opts (or % {}))
+                                                      id-from-stdin? (assoc :id-from-stdin? true))))))
+        (catch :default e
+          (let [{:keys [cause] :as data} (ex-data e)]
+            (cond
+              (= cause :input-exhausted)
+              (if (:help opts)
+                (command-core/help-result summary)
+                {:ok? false
+                 :error {:code :missing-command
+                         :message "missing command"}
+                 :summary summary})
 
-                :else
-                (command-core/unknown-command-result summary (str "unknown command: " (string/join " " args)))))))))))))
+              (= cause :no-match)
+              (command-core/unknown-command-result summary (str "unknown command: " (unknown-command-message data)))
+
+              (some? data)
+              (command-core/cli-error->result summary data)
+
+              :else
+              (command-core/unknown-command-result summary (str "unknown command: " (string/join " " args))))))))))
 
 ;; Repo/graph helpers live in logseq.cli.command.core.
 
@@ -295,8 +326,6 @@
 ;; Add/remove helpers live in logseq.cli.command.add/remove.
 
 ;; Show helpers live in logseq.cli.command.show.
-
-
 
 ;; Show helpers live in logseq.cli.command.show.
 

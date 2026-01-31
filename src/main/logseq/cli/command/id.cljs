@@ -39,7 +39,7 @@
               (every? valid-id? parsed) {:ok? true :value (vec parsed) :multi? true}
               :else (invalid "id vector must contain only integers")))
 
-          (re-matches #"-?\\d+" text)
+          (re-matches #"-?\d+" text)
           {:ok? true :value [(js/parseInt text 10)] :multi? false}
 
           :else
