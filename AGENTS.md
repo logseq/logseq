@@ -18,7 +18,7 @@
 ## Testing Commands
 - Run linters and unit-tests: `bb dev:lint-and-test`
 - Run a single unit-test:
-  - `bb dev:test -v <namespace/testcase-name>`
+  - `bb dev:test -v '<namespace/testcase-name>'`
 - E2E tests files are located in `/clj-e2e`
 
 ## db-worker-node

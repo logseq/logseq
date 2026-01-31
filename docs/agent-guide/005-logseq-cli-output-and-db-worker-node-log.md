@@ -90,7 +90,7 @@ ASCII diagram:
 23. Update help text in src/main/frontend/worker/db_worker_node.cljs to document the log file location and log-level flag behavior.
 24. Update docs/cli/logseq-cli.md with the new human output expectations and any new formatting options.
 25. Run unit tests in the red phase to confirm failures, then implement minimal changes to make them pass.
-26. Run bb dev:test -v logseq.cli.* and bb dev:test -v frontend.worker.db-worker-node-test in the green phase.
+26. Run bb dev:test -v 'logseq.cli.commands-test' and bb dev:test -v 'frontend.worker.db-worker-node-test' in the green phase.
 27. Run bb dev:lint-and-test after all changes to validate lint and unit tests.
 
 ## Edge cases
@@ -107,7 +107,7 @@ The human formatter should avoid printing large nested maps by default for searc
 Run a focused unit test during the red phase.
 
 ```bash
-bb dev:test -v logseq.cli.format-test/test-human-output-list
+bb dev:test -v 'logseq.cli.format-test/test-human-output-list'
 ```
 
 Expected output includes a failing assertion and exits with a non-zero status code.
@@ -115,7 +115,7 @@ Expected output includes a failing assertion and exits with a non-zero status co
 Run the db-worker-node log integration test in the green phase.
 
 ```bash
-bb dev:test -v frontend.worker.db-worker-node-test/test-log-file-created
+bb dev:test -v 'frontend.worker.db-worker-node-test/test-log-file-created'
 ```
 
 Expected output includes 0 failures and 0 errors.
