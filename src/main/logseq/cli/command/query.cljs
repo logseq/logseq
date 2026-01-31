@@ -69,7 +69,23 @@
              [(missing? $ ?e :logseq.property/built-in?)]
              [(* ?recent-days 86400000) ?recent-days-ms]
              [(- ?now-ms ?recent-days-ms) ?days-ago]
-             [(>= ?updated-at ?days-ago)]]}})
+             [(>= ?updated-at ?days-ago)]]}
+
+  "list-status"
+  {:doc "List closed values for the Status property."
+   :inputs []
+   :query '[:find [(pull ?value [:db/id :db/ident :block/order]) ...]
+            :where
+            [?property :db/ident :logseq.property/status]
+            [?value :block/closed-value-property ?property]]}
+
+  "list-priority"
+  {:doc "List closed values for the Priority property."
+   :inputs []
+   :query '[:find [(pull ?value [:db/id :db/ident :block/order]) ...]
+            :where
+            [?property :db/ident :logseq.property/priority]
+            [?value :block/closed-value-property ?property]]}})
 
 (defn- parse-edn
   [label value]
@@ -264,11 +280,12 @@
 
 (defn execute-query
   [action config]
-  (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
-              args (into [(:query action)] (:inputs action))
-              results (transport/invoke cfg :thread-api/q false [(:repo action) args])]
-        {:status :ok
-         :data {:result results}})))
+  (case (:type action)
+    (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
+                args (into [(:query action)] (:inputs action))
+                results (transport/invoke cfg :thread-api/q false [(:repo action) args])]
+          {:status :ok
+           :data {:result results}}))))
 
 (defn execute-query-list
   [_action config]
