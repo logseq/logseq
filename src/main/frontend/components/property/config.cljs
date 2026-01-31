@@ -684,7 +684,7 @@
                                                       (property-type-sub-pane property ops))}))
 
       (when (and (= property-type :node)
-                 (not (contains? #{:logseq.property.class/extends} (:db/ident property))))
+                 (not (contains? #{:logseq.property.class/extends :logseq.property.class/default-icon} (:db/ident property))))
         (dropdown-editor-menuitem {:icon :hash
                                    :disabled? disabled?
                                    :title "Specify node tags"
@@ -739,7 +739,7 @@
       (when (and (not= :logseq.property/enable-history? (:db/ident property))
                  (not special-built-in-prop?))
         (let [property-type (:logseq.property/type property)
-              group' (->> [(when (and (not (contains? #{:logseq.property.class/extends :logseq.property.class/properties} (:db/ident property)))
+              group' (->> [(when (and (not (contains? #{:logseq.property.class/extends :logseq.property.class/properties :logseq.property.class/default-icon} (:db/ident property)))
                                       (contains? #{:default :number :date :checkbox :node} property-type)
                                       (not
                                        (and (= :default property-type)
@@ -751,13 +751,13 @@
                                                           :disabled? config/publishing?
                                                           :submenu-content (fn [ops] (ui-position-sub-pane property (assoc ops :ui-position position)))})))
 
-                           (when (not (contains? #{:logseq.property.class/extends :logseq.property.class/properties} (:db/ident property)))
+                           (when (not (contains? #{:logseq.property.class/extends :logseq.property.class/properties :logseq.property.class/default-icon} (:db/ident property)))
                              (dropdown-editor-menuitem {:icon :eye-off :title "Hide by default" :toggle-checked? (boolean (:logseq.property/hide? property))
                                                         :disabled? config/publishing?
                                                         :on-toggle-checked-change #(db-property-handler/set-block-property! (:db/id property)
                                                                                                                             :logseq.property/hide?
                                                                                                                             %)}))
-                           (when (not (contains? #{:logseq.property.class/extends :logseq.property.class/properties} (:db/ident property)))
+                           (when (not (contains? #{:logseq.property.class/extends :logseq.property.class/properties :logseq.property.class/default-icon} (:db/ident property)))
                              (dropdown-editor-menuitem
                               {:icon :eye-off :title "Hide empty value"
                                :toggle-checked? (boolean (:logseq.property/hide-empty-value property))
@@ -804,7 +804,7 @@
                 ;; Any property should be removable from Tag Properties
                  (if class-schema?
                    (contains? (set (map :db/id (:logseq.property.class/properties owner-block))) (:db/id property))
-                   (not (contains? #{:logseq.property.class/extends :logseq.property.class/properties} (:db/ident property)))))
+                   (not (contains? #{:logseq.property.class/extends :logseq.property.class/properties :logseq.property.class/default-icon} (:db/ident property)))))
 
         (dropdown-editor-menuitem
          {:id :delete-property :icon :x

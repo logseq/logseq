@@ -5,6 +5,7 @@
             [frontend.commands :as commands]
             [frontend.components.editor :as editor]
             [frontend.components.export :as export]
+            [frontend.components.icon :as icon-component]
             [frontend.components.page-menu :as page-menu]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -133,6 +134,41 @@
                         #(editor-handler/set-heading! block-id %)
                         #(editor-handler/set-heading! block-id true)
                         #(editor-handler/remove-heading! block-id))
+
+       ;; Set icon menu item
+       (let [current-icon (:logseq.property/icon block)]
+         (shui/dropdown-menu-item
+          {:key "Set icon"
+           :on-click (fn [^js e]
+                       (shui/popup-show!
+                        (.-target e)
+                        (fn [{:keys [id]}]
+                          (icon-component/icon-search
+                           {:on-chosen (fn [_e icon-value]
+                                         (let [icon-data (when icon-value
+                                                           (cond
+                                                             (= :text (:type icon-value))
+                                                             {:type :text :data (:data icon-value)}
+
+                                                             (= :avatar (:type icon-value))
+                                                             {:type :avatar :data (:data icon-value)}
+
+                                                             :else
+                                                             (select-keys icon-value [:type :id :color])))]
+                                           (property-handler/set-block-property!
+                                            block-id
+                                            :logseq.property/icon
+                                            icon-data))
+                                         (shui/popup-hide! id))
+                            :icon-value current-icon
+                            :del-btn? (some? current-icon)}))
+                        {:align :start
+                         :id :ls-icon-picker
+                         :content-props {:class "ls-icon-picker"
+                                         :onEscapeKeyDown #(.preventDefault %)}}))}
+          (if current-icon
+            (t :content/change-icon)
+            (t :content/set-icon))))
 
        (shui/dropdown-menu-separator)
 

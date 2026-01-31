@@ -124,44 +124,47 @@
 
 (defn get-node-icon
   [node-entity]
-  (let [sorted-tags (sort-by :db/id (:block/tags node-entity))
-        first-tag-icon (some :logseq.property/icon sorted-tags)
-        ;; Check for default-icon-type on tags (for auto-generated icons)
-        default-icon-type (some (fn [tag]
-                                  (when-let [dit (:logseq.property.class/default-icon-type tag)]
-                                    ;; dit is a reference to the closed value entity
-                                    ;; closed values store their value in :block/title or :logseq.property/value
-                                    (or (:block/title dit)
-                                        (:logseq.property/value dit))))
-                                sorted-tags)]
-    (or
-     ;; 1. Instance's own icon takes precedence
-     (get node-entity :logseq.property/icon)
-     ;; 2. Check for default-icon-type from tags (generates icon from page title)
-     (when (and default-icon-type (:block/title node-entity))
-       (let [title (:block/title node-entity)]
-         (case default-icon-type
-           "avatar" {:type :avatar
-                     :data {:value (derive-avatar-initials title)}}
-           "text" {:type :text
-                   :data {:value (derive-initials title)}}
-           nil)))
-     ;; 3. Fall back to first tag's explicit icon (existing inheritance)
-     (when (some? first-tag-icon)
-       first-tag-icon)
-     ;; 4. Type-based defaults
-     (let [asset-type (:logseq.property.asset/type node-entity)]
-       (cond
-         (ldb/class? node-entity)
-         "hash"
-         (ldb/property? node-entity)
-         "letter-p"
-         (ldb/page? node-entity)
-         "file"
-         (= asset-type "pdf")
-         "book"
-         :else
-         "point-filled")))))
+  (let [block-icon (get node-entity :logseq.property/icon)
+        sorted-tags (sort-by :db/id (:block/tags node-entity))
+        ;; Check for default-icon on tags (unified icon inheritance)
+        default-icon (some (fn [tag]
+                             (:logseq.property.class/default-icon tag))
+                           sorted-tags)]
+    (cond
+      ;; 1. Explicit "no icon" override - hide icon even if inherited
+      (= :none (:type block-icon))
+      nil
+
+      ;; 2. Instance's own icon takes precedence
+      block-icon
+      block-icon
+
+      ;; 3. Resolve from tag's default-icon (unified inheritance)
+      default-icon
+      (case (:type default-icon)
+        :avatar (when (:block/title node-entity)
+                  {:type :avatar
+                   :data {:value (derive-avatar-initials (:block/title node-entity))}})
+        :text (when (:block/title node-entity)
+                {:type :text
+                 :data {:value (derive-initials (:block/title node-entity))}})
+        ;; For tabler-icon and emoji, use the stored icon value directly
+        default-icon)
+
+      ;; 4. Type-based defaults (for classes, properties, pages, etc.)
+      :else
+      (let [asset-type (:logseq.property.asset/type node-entity)]
+        (cond
+          (ldb/class? node-entity)
+          "hash"
+          (ldb/property? node-entity)
+          "letter-p"
+          (ldb/page? node-entity)
+          "file"
+          (= asset-type "pdf")
+          "book"
+          :else
+          "point-filled")))))
 
 (rum/defc get-node-icon-cp < rum/reactive db-mixins/query
   [node-entity opts]

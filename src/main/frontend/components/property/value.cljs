@@ -141,6 +141,100 @@
                                     :del-btn? (some? icon-value)
                                     :on-chosen on-chosen!})])))
 
+(def ^:private default-icon-type-options
+  [{:value :tabler-icon :label "Icon"}
+   {:value :emoji :label "Emoji"}
+   {:value :avatar :label "Avatar"}
+   {:value :text :label "Text"}])
+
+(rum/defc default-icon-row < rum/reactive
+  "Renders the unified Default Icon property for classes.
+   Shows a type dropdown and icon picker side by side."
+  [block _editing?]
+  ;; Subscribe to block changes for reactivity
+  (let [block (or (model/sub-block (:db/id block)) block)
+        current-value (:logseq.property.class/default-icon block)
+        ;; Only show a type if we have a value, otherwise show empty state
+        has-value? (some? current-value)
+        current-type (when has-value? (:type current-value))
+        shows-picker? (contains? #{:tabler-icon :emoji} current-type)
+        set-default-icon! (fn [icon-data]
+                            (property-handler/set-block-property!
+                             (:db/id block)
+                             :logseq.property.class/default-icon
+                             icon-data))
+        on-type-change (fn [new-type]
+                         ;; When changing type, preserve icon data if switching between icon/emoji
+                         ;; For avatar/text, just store the type marker
+                         (cond
+                           (contains? #{:avatar :text} new-type)
+                           (set-default-icon! {:type new-type})
+
+                           ;; Switching to icon/emoji - keep existing icon if compatible
+                           (and (contains? #{:tabler-icon :emoji} new-type)
+                                (contains? #{:tabler-icon :emoji} current-type))
+                           (set-default-icon! (assoc current-value :type new-type))
+
+                           ;; Switching to icon/emoji from avatar/text - clear and let user pick
+                           :else
+                           (set-default-icon! {:type new-type})))
+        on-icon-chosen (fn [_e icon]
+                         (if icon
+                           (let [icon-data (cond
+                                             (= :text (:type icon))
+                                             {:type :text :data (:data icon)}
+
+                                             (= :avatar (:type icon))
+                                             {:type :avatar :data (:data icon)}
+
+                                             :else
+                                             (select-keys icon [:type :id :color]))]
+                             (set-default-icon! icon-data))
+                           ;; Delete - remove the property
+                           (property-handler/remove-block-property!
+                            (:db/id block)
+                            :logseq.property.class/default-icon)))
+        type-label (some #(when (= (:value %) current-type) (:label %)) default-icon-type-options)]
+    [:div.col-span-3.flex.flex-row.items-center.gap-2
+     ;; Type dropdown
+     (shui/dropdown-menu
+      (shui/dropdown-menu-trigger
+       {:asChild true}
+       (shui/button {:variant :ghost :size :sm :class "h-6 px-2 gap-1"}
+                    [:span.text-sm (or type-label "Empty")]
+                    (shui/tabler-icon "chevron-down" {:size 14})))
+      (shui/dropdown-menu-content
+       {:align "start"}
+       (doall
+        (for [{:keys [value label]} default-icon-type-options]
+          (shui/dropdown-menu-item
+           {:key (name value)
+            :onSelect (fn [_e] (on-type-change value))}
+           [:span {:class (when (= value current-type) "font-medium")} label])))))
+     ;; Icon picker (only for icon/emoji types)
+     (when (and has-value? shows-picker?)
+       [:span.text-muted-foreground.text-sm ">"])
+     (cond
+       ;; No value set yet
+       (not has-value?)
+       nil
+
+       ;; Icon/emoji type - show picker
+       shows-picker?
+       (icon-component/icon-picker current-value
+                                   {:disabled? config/publishing?
+                                    :del-btn? (some? (:id current-value))
+                                    :on-chosen on-icon-chosen
+                                    :icon-props {:size 18}})
+
+       ;; Avatar/text type - show preview indicator
+       :else
+       [:span.text-muted-foreground.text-xs.italic
+        (case current-type
+          :avatar "(auto from title)"
+          :text "(auto from title)"
+          "")])]))
+
 (defn select-type?
   [block property]
   (let [type (:logseq.property/type property)]
@@ -1441,6 +1535,9 @@
     (cond
       (= :logseq.property/icon (:db/ident property))
       (icon-row block editing?)
+
+      (= :logseq.property.class/default-icon (:db/ident property))
+      (default-icon-row block editing?)
 
       (and (= type :number) (not editing?) (not closed-values?))
       (single-number-input block property value (:table-view? opts))

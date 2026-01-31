@@ -43,7 +43,7 @@
     :logseq.property/page-tags :logseq.property.class/extends
     :logseq.property.class/bidirectional-property-title
     :logseq.property.class/enable-bidirectional?
-    :logseq.property.class/default-icon-type
+    :logseq.property.class/default-icon
     :logseq.property/publishing-public? :logseq.property.user/avatar
     :logseq.property.user/email :logseq.property.user/name})
 

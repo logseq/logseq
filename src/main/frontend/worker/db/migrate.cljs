@@ -197,6 +197,76 @@
                              updated-icon (assoc icon-value :data updated-data)]
                          [:db/add entity-id :logseq.property/icon updated-icon])))))))))
 
+(defn- migrate-class-icons-to-default-icon-type-value
+  "Migrate class icons to use default-icon-type/default-icon-value.
+   For classes with tabler-icon or emoji icons, set default-icon-type to 'icon' or 'emoji'
+   and copy the icon to default-icon-value for inheritance to instances.
+   NOTE: This is an intermediate migration step, later consolidated into default-icon."
+  [db]
+  (let [;; Get the closed value entities for default-icon-type
+        icon-type-entity (db-property/get-closed-value-entity-by-name
+                          db :logseq.property.class/default-icon-type "icon")
+        emoji-type-entity (db-property/get-closed-value-entity-by-name
+                           db :logseq.property.class/default-icon-type "emoji")]
+    (->> (d/datoms db :avet :logseq.property/icon)
+         (mapcat (fn [datom]
+                   (let [icon-value (:v datom)
+                         entity-id (:e datom)
+                         entity (d/entity db entity-id)]
+                     ;; Only process classes that have icons
+                     (when (and (map? icon-value)
+                                (ldb/class? entity)
+                                ;; Don't override if already set
+                                (nil? (:logseq.property.class/default-icon-type entity)))
+                       (let [icon-type (:type icon-value)]
+                         (cond
+                           ;; Tabler icons -> default-icon-type "icon"
+                           (= :tabler-icon icon-type)
+                           (when icon-type-entity
+                             [[:db/add entity-id :logseq.property.class/default-icon-type (:db/id icon-type-entity)]
+                              [:db/add entity-id :logseq.property.class/default-icon-value icon-value]])
+
+                           ;; Emoji icons -> default-icon-type "emoji"
+                           (= :emoji icon-type)
+                           (when emoji-type-entity
+                             [[:db/add entity-id :logseq.property.class/default-icon-type (:db/id emoji-type-entity)]
+                              [:db/add entity-id :logseq.property.class/default-icon-value icon-value]])
+
+                           ;; Other types (avatar, text) - skip, as they're handled differently
+                           :else nil)))))))))
+
+(defn- migrate-to-unified-default-icon
+  "Migrate from two-property system (default-icon-type + default-icon-value)
+   to unified single property (default-icon).
+   Also migrates classes with :logseq.property/icon to use default-icon."
+  [db]
+  (let [tx-data
+        (->> (d/datoms db :avet :logseq.property/icon)
+             (mapcat (fn [datom]
+                       (let [icon-value (:v datom)
+                             entity-id (:e datom)
+                             entity (d/entity db entity-id)]
+                         ;; Only process classes that have icons
+                         (when (and (map? icon-value)
+                                    (ldb/class? entity)
+                                    ;; Don't override if already set
+                                    (nil? (:logseq.property.class/default-icon entity)))
+                           ;; Set the unified default-icon property
+                           [[:db/add entity-id :logseq.property.class/default-icon icon-value]])))))]
+    ;; Also migrate any existing default-icon-type avatar/text settings
+    (concat tx-data
+            (->> (d/datoms db :avet :logseq.property.class/default-icon-type)
+                 (keep (fn [datom]
+                         (let [entity-id (:e datom)
+                               entity (d/entity db entity-id)
+                               type-entity (:logseq.property.class/default-icon-type entity)
+                               type-value (or (:block/title type-entity) (:logseq.property/value type-entity))]
+                           ;; For avatar/text types, create the marker icon
+                           (when (and (contains? #{"avatar" "text"} type-value)
+                                      (nil? (:logseq.property.class/default-icon entity)))
+                             [:db/add entity-id :logseq.property.class/default-icon
+                              {:type (keyword type-value)}]))))))))
+
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
@@ -219,7 +289,15 @@
    ["65.19" {:properties [:logseq.property/choice-classes :logseq.property/choice-exclusions]}]
    ["65.20" {:properties [:logseq.property.class/bidirectional-property-title :logseq.property.class/enable-bidirectional?]}]
    ["65.21" {:properties [:logseq.property.class/default-icon-type]}]
-   ["65.22" {:fix migrate-icon-colors}]])
+   ["65.22" {:fix migrate-icon-colors}]
+   ["65.23" {:properties [:logseq.property.class/default-icon-value]}]
+   ["65.24" {:fix migrate-class-icons-to-default-icon-type-value}]
+   ["65.25" {:properties [:logseq.property.class/default-icon]
+             :fix migrate-to-unified-default-icon}]
+   ;; 65.26: Update default-icon property type from :default to :map so it can store map values
+   ["65.26" {:fix (fn [db]
+                    (when-let [property (d/entity db :logseq.property.class/default-icon)]
+                      [[:db/add (:db/id property) :logseq.property/type :map]]))}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]

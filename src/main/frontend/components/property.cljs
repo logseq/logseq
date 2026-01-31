@@ -706,8 +706,13 @@
                           (not (ldb/built-in? block)))
                      (-> (assoc :logseq.property.class/enable-bidirectional?
                                 (:logseq.property.class/enable-bidirectional? block))
-                         (assoc :logseq.property.class/default-icon-type
-                                (:logseq.property.class/default-icon-type block))))
+                         (assoc :logseq.property.class/default-icon
+                                (:logseq.property.class/default-icon block)))
+                     ;; Show icon properties on built-in classes too
+                     (and (ldb/class? block)
+                          (ldb/built-in? block))
+                     (assoc :logseq.property.class/default-icon
+                            (:logseq.property.class/default-icon block)))
         remove-built-in-or-other-position-properties
         (fn [properties show-in-hidden-properties?]
           (remove (fn [property]
@@ -738,7 +743,7 @@
         ;; This section produces own-properties and full-hidden-properties
         ;; Class properties that should always show even when empty
         always-show-class-properties #{:logseq.property.class/enable-bidirectional?
-                                       :logseq.property.class/default-icon-type}
+                                       :logseq.property.class/default-icon}
         hide-with-property-id (fn [property-id]
                                 (let [property (db/entity property-id)]
                                   (boolean

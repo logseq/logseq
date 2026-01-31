@@ -2518,49 +2518,56 @@
      ;; Inline block icon - displayed BEFORE positioned properties like Status
      (when-not (or table? (:page-title? config))
        (let [block-icon (:logseq.property/icon block)
-             tag-icon (some :logseq.property/icon (:block/tags block))
-             ;; Check for default-icon-type on tags (for auto-generated icons)
+             ;; Check for :none override - explicitly hidden icon
+             icon-hidden? (= :none (:type block-icon))
+             ;; Check for default-icon on tags (unified icon inheritance)
              sorted-tags (sort-by :db/id (:block/tags block))
-             default-icon-type (some (fn [tag]
-                                       (when-let [dit (:logseq.property.class/default-icon-type tag)]
-                                         (or (:block/title dit)
-                                             (:logseq.property/value dit))))
-                                     sorted-tags)
-             has-icon? (or block-icon tag-icon default-icon-type)]
+             default-icon (some (fn [tag]
+                                  (:logseq.property.class/default-icon tag))
+                                sorted-tags)
+             ;; Determine if we have an icon to show
+             has-icon? (and (not icon-hidden?)
+                            (or (and block-icon (not= :none (:type block-icon)))
+                                default-icon))]
          (when has-icon?
-           (let [icon (or block-icon
-                          (when (and default-icon-type (:block/title block))
-                            (case default-icon-type
-                              "avatar" {:type :avatar
-                                        :data {:value (icon-component/derive-avatar-initials (:block/title block))}}
-                              "text" {:type :text
-                                      :data {:value (icon-component/derive-initials (:block/title block))}}
-                              nil))
-                          tag-icon)]
-             [:div.inline-block-icon.flex.items-center.h-6.select-none
-              (icon-component/icon-picker
-               icon
-               {:on-chosen (fn [_e new-icon]
-                             (if new-icon
-                               (let [icon-data (cond
-                                                 (= :text (:type new-icon))
-                                                 {:type :text :data (:data new-icon)}
+           (let [icon (or (when (and block-icon (not= :none (:type block-icon)))
+                            block-icon)
+                          (when default-icon
+                            (case (:type default-icon)
+                              :avatar (when (:block/title block)
+                                        {:type :avatar
+                                         :data {:value (icon-component/derive-avatar-initials (:block/title block))}})
+                              :text (when (:block/title block)
+                                      {:type :text
+                                       :data {:value (icon-component/derive-initials (:block/title block))}})
+                              ;; For tabler-icon and emoji, use the stored value directly
+                              default-icon)))]
+             (when icon
+               [:div.inline-block-icon.flex.items-center.h-6.select-none
+                (icon-component/icon-picker
+                 icon
+                 {:on-chosen (fn [_e new-icon]
+                               (if new-icon
+                                 (let [icon-data (cond
+                                                   (= :text (:type new-icon))
+                                                   {:type :text :data (:data new-icon)}
 
-                                                 (= :avatar (:type new-icon))
-                                                 {:type :avatar :data (:data new-icon)}
+                                                   (= :avatar (:type new-icon))
+                                                   {:type :avatar :data (:data new-icon)}
 
-                                                 :else
-                                                 (select-keys new-icon [:id :type :color]))]
+                                                   :else
+                                                   (select-keys new-icon [:id :type :color]))]
+                                   (db-property-handler/set-block-property!
+                                    (:db/id block)
+                                    :logseq.property/icon
+                                    icon-data))
+                                 ;; Delete = set :none to override inheritance
                                  (db-property-handler/set-block-property!
                                   (:db/id block)
                                   :logseq.property/icon
-                                  icon-data))
-                               ;; Delete icon
-                               (db-property-handler/remove-block-property!
-                                (:db/id block)
-                                :logseq.property/icon)))
-                :del-btn? (boolean block-icon)
-                :icon-props {:size 16}})]))))
+                                  {:type :none})))
+                  :del-btn? true  ;; Always show delete when icon displayed
+                  :icon-props {:size 16}})])))))
 
      (when-not table?
        (block-positioned-properties config block :block-left))
@@ -3005,23 +3012,22 @@
         children (ldb/get-children block)
         page-icon (when (:page-title? config)
                     (let [icon' (get block :logseq.property/icon)
-                          ;; Check for default-icon-type on tags (for auto-generated icons)
+                          ;; Check for default-icon on tags (for auto-generated icons)
                           sorted-tags (sort-by :db/id (:block/tags block))
-                          default-icon-type (some (fn [tag]
-                                                    (when-let [dit (:logseq.property.class/default-icon-type tag)]
-                                                      (or (:block/title dit)
-                                                          (:logseq.property/value dit))))
-                                                  sorted-tags)]
+                          default-icon (some (fn [tag]
+                                               (:logseq.property.class/default-icon tag))
+                                             sorted-tags)]
                       (when-let [icon (and (ldb/page? block)
                                            (or icon'
-                                               ;; Generate icon from default-icon-type
-                                               (when (and default-icon-type (:block/title block))
-                                                 (case default-icon-type
-                                                   "avatar" {:type :avatar
-                                                             :data {:value (icon-component/derive-avatar-initials (:block/title block))}}
-                                                   "text" {:type :text
-                                                           :data {:value (icon-component/derive-initials (:block/title block))}}
-                                                   nil))
+                                               ;; Generate icon from default-icon
+                                               (when (and default-icon (:block/title block))
+                                                 (case (:type default-icon)
+                                                   :avatar {:type :avatar
+                                                            :data {:value (icon-component/derive-avatar-initials (:block/title block))}}
+                                                   :text {:type :text
+                                                          :data {:value (icon-component/derive-initials (:block/title block))}}
+                                                   ;; For tabler-icon and emoji, use the stored value
+                                                   default-icon))
                                                (some :logseq.property/icon (:block/tags block))
                                                (when (ldb/class? block)
                                                  {:type :tabler-icon
@@ -3043,14 +3049,27 @@
 
                                                                                        :else
                                                                                        (select-keys icon [:id :type :color]))]
+                                                                       ;; Set the icon on the page
                                                                        (db-property-handler/set-block-property!
                                                                         (:db/id block)
                                                                         :logseq.property/icon
-                                                                        icon-data))
+                                                                        icon-data)
+                                                                       ;; For classes, also set default-icon for inheritance
+                                                                       (when (ldb/class? block)
+                                                                         (db-property-handler/set-block-property!
+                                                                          (:db/id block)
+                                                                          :logseq.property.class/default-icon
+                                                                          icon-data)))
                                                                      ;; del
-                                                                     (db-property-handler/remove-block-property!
-                                                                      (:db/id block)
-                                                                      :logseq.property/icon)))
+                                                                     (do
+                                                                       (db-property-handler/remove-block-property!
+                                                                        (:db/id block)
+                                                                        :logseq.property/icon)
+                                                                       ;; For classes, also remove default-icon
+                                                                       (when (ldb/class? block)
+                                                                         (db-property-handler/remove-block-property!
+                                                                          (:db/id block)
+                                                                          :logseq.property.class/default-icon)))))
                                                       :del-btn? (boolean icon')
                                                       :icon-props {:style {:width "1lh"
                                                                            :height "1lh"
