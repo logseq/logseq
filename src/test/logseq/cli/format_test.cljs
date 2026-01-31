@@ -101,7 +101,7 @@
 
   (testing "remove page renders a succinct success line"
     (let [result (format/format-result {:status :ok
-                                        :command :remove-page
+                                        :command :remove
                                         :context {:repo "demo-repo"
                                                   :page "Home"}
                                         :data {:result {:ok true}}}
@@ -170,6 +170,38 @@
                                        {:output-format nil})]
       (is (= "Line 1\nLine 2" result)))))
 
+(deftest test-human-output-query-results
+  (testing "scalar id collections render one id per line"
+    (let [result (format/format-result {:status :ok
+                                        :command :query
+                                        :data {:result [1 2 3]}}
+                                       {:output-format nil})]
+      (is (= "1\n2\n3" result))))
+
+  (testing "non-scalar collections preserve EDN formatting"
+    (let [value [{:db/id 1 :block/title "Alpha"}
+                 {:db/id 2 :block/title "Beta"}]
+          result (format/format-result {:status :ok
+                                        :command :query
+                                        :data {:result value}}
+                                       {:output-format nil})]
+      (is (= (pr-str value) result))))
+
+  (testing "mixed scalar collections preserve EDN formatting"
+    (let [value [1 "two" 3]
+          result (format/format-result {:status :ok
+                                        :command :query
+                                        :data {:result value}}
+                                       {:output-format nil})]
+      (is (= (pr-str value) result))))
+
+  (testing "nil results render as nil"
+    (let [result (format/format-result {:status :ok
+                                        :command :query
+                                        :data {:result nil}}
+                                       {:output-format nil})]
+      (is (= "nil" result)))))
+
 (deftest test-human-output-show-styled-prefixes
   (testing "show preserves styled status and tags in human output"
     (let [tree->text #'show-command/tree->text
@@ -231,7 +263,7 @@
                                         :command :query
                                         :data {:result [[1] [2] [3]]}}
                                        {:output-format nil})]
-      (is (= "[[1],[2],[3]]" result)))))
+      (is (= "[[1] [2] [3]]" result)))))
 
 (deftest test-human-output-query-list
   (testing "query list renders a table with count"
