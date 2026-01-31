@@ -301,6 +301,22 @@
                   "4 └── Child B")
              (strip-ansi output))))))
 
+(deftest test-tree->text-dims-id-column
+  (testing "show tree text dims the id column"
+    (let [tree->text #'show-command/tree->text
+          tree-data {:root {:db/id 1
+                            :block/title "Root"
+                            :block/children [{:db/id 2
+                                              :block/title "Child"}]}}
+          output (binding [style/*color-enabled?* true]
+                   (tree->text tree-data))]
+      (is (contains-ansi? output))
+      (is (string/includes? output (style/dim "1")))
+      (is (string/includes? output (style/dim "2")))
+      (is (= (str "1 Root\n"
+                  "2 └── Child")
+             (strip-ansi output))))))
+
 (deftest test-tree->text-aligns-mixed-id-widths
   (testing "show tree text aligns glyph column with mixed-width ids"
     (let [tree->text #'show-command/tree->text
@@ -487,6 +503,129 @@
       (is (not (contains-block-uuid? stripped)))
       (is (= 1 (get-in stripped [:root :db/id])))
       (is (= 2 (get-in stripped [:root :block/children 0 :db/id]))))))
+
+(deftest test-fetch-tree-includes-db-ident
+  (async done
+         (let [fetch-tree #'show-command/fetch-tree
+               selectors (atom [])
+               orig-invoke transport/invoke]
+           (set! transport/invoke (fn [_ method _ args]
+                                    (when (= method :thread-api/pull)
+                                      (swap! selectors conj (second args)))
+                                    (case method
+                                      :thread-api/pull (p/resolved {:db/id 1
+                                                                    :block/page {:db/id 2}})
+                                      :thread-api/q (p/resolved [])
+                                      (p/resolved nil))))
+           (-> (p/let [_ (fetch-tree {} {:repo "demo" :id 1})]
+                 (is (some #(some #{:db/ident} %) @selectors)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (set! transport/invoke orig-invoke)
+                            (done)))))))
+
+(deftest test-fetch-blocks-for-page-includes-db-ident
+  (async done
+         (let [fetch-blocks-for-page #'show-command/fetch-blocks-for-page
+               selectors (atom [])
+               orig-invoke transport/invoke]
+           (set! transport/invoke (fn [_ method _ args]
+                                    (when (= method :thread-api/q)
+                                      (let [[_ [query _]] args
+                                            pull-form (second query)
+                                            selector (nth pull-form 2)]
+                                        (swap! selectors conj selector)))
+                                    (p/resolved [])))
+           (-> (p/let [_ (fetch-blocks-for-page {} "demo" 1)]
+                 (is (some #(some #{:db/ident} %) @selectors)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (set! transport/invoke orig-invoke)
+                            (done)))))))
+
+(deftest test-fetch-linked-references-includes-db-ident
+  (async done
+         (let [fetch-linked-references #'show-command/fetch-linked-references
+               selectors (atom [])
+               orig-invoke transport/invoke]
+           (set! transport/invoke (fn [_ method _ args]
+                                    (case method
+                                      :thread-api/get-block-refs (p/resolved [{:db/id 10}])
+                                      :thread-api/pull (let [[_ selector _] args]
+                                                         (swap! selectors conj selector)
+                                                         (p/resolved {:db/id 10}))
+                                      (p/resolved nil))))
+           (-> (p/let [_ (fetch-linked-references {} "demo" 1)]
+                 (is (some #(and (some #{:db/ident} %)
+                                 (some (fn [entry]
+                                         (and (map? entry)
+                                              (contains? entry :block/page)))
+                                       %))
+                           @selectors)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (set! transport/invoke orig-invoke)
+                            (done)))))))
+
+(deftest test-build-tree-data-linked-references-disabled
+  (async done
+         (let [build-tree-data #'show-command/build-tree-data
+               linked-called? (atom false)
+               orig-fetch-tree show-command/fetch-tree
+               orig-fetch-linked show-command/fetch-linked-references
+               orig-collect-uuid-refs show-command/collect-uuid-refs
+               orig-fetch-uuid-labels show-command/fetch-uuid-labels]
+           (set! show-command/fetch-tree (fn [_ _]
+                                           (p/resolved {:root {:db/id 1}})))
+           (set! show-command/fetch-linked-references (fn [& _]
+                                                        (reset! linked-called? true)
+                                                        (p/resolved {:count 1 :blocks []})))
+           (set! show-command/collect-uuid-refs (fn [_ _] []))
+           (set! show-command/fetch-uuid-labels (fn [& _] (p/resolved {})))
+           (-> (p/let [result (build-tree-data {} {:repo "demo"
+                                                   :linked-references? false})]
+                 (is (false? @linked-called?))
+                 (is (not (contains? result :linked-references))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (set! show-command/fetch-tree orig-fetch-tree)
+                            (set! show-command/fetch-linked-references orig-fetch-linked)
+                            (set! show-command/collect-uuid-refs orig-collect-uuid-refs)
+                            (set! show-command/fetch-uuid-labels orig-fetch-uuid-labels)
+                            (done)))))))
+
+(deftest test-build-tree-data-linked-references-enabled
+  (async done
+         (let [build-tree-data #'show-command/build-tree-data
+               linked-called? (atom false)
+               linked {:count 1 :blocks []}
+               orig-fetch-tree show-command/fetch-tree
+               orig-fetch-linked show-command/fetch-linked-references
+               orig-collect-uuid-refs show-command/collect-uuid-refs
+               orig-fetch-uuid-labels show-command/fetch-uuid-labels]
+           (set! show-command/fetch-tree (fn [_ _]
+                                           (p/resolved {:root {:db/id 1}})))
+           (set! show-command/fetch-linked-references (fn [& _]
+                                                        (reset! linked-called? true)
+                                                        (p/resolved linked)))
+           (set! show-command/collect-uuid-refs (fn [_ _] []))
+           (set! show-command/fetch-uuid-labels (fn [& _] (p/resolved {})))
+           (-> (p/let [result (build-tree-data {} {:repo "demo"
+                                                   :linked-references? true})]
+                 (is (true? @linked-called?))
+                 (is (= linked (:linked-references result))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (set! show-command/fetch-tree orig-fetch-tree)
+                            (set! show-command/fetch-linked-references orig-fetch-linked)
+                            (set! show-command/collect-uuid-refs orig-collect-uuid-refs)
+                            (set! show-command/fetch-uuid-labels orig-fetch-uuid-labels)
+                            (done)))))))
 
 (deftest test-tree->text-uuid-ref-recursion-limit
   (testing "show tree text limits uuid ref replacement depth"
@@ -758,7 +897,12 @@
   (testing "show rejects format option"
     (let [result (commands/parse-args ["show" "--format" "json" "--page" "Home"])]
       (is (false? (:ok? result)))
-      (is (= :invalid-options (get-in result [:error :code]))))))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "show help lists linked references option"
+    (let [summary (:summary (binding [style/*color-enabled?* true]
+                              (commands/parse-args ["show" "--help"])))]
+      (is (string/includes? (strip-ansi summary) "--linked-references")))))
 
 (deftest test-verb-subcommand-parse-query
   (testing "query shows group help"

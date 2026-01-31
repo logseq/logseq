@@ -14,6 +14,8 @@
   {:id {:desc "Block db/id or EDN vector of ids"}
    :uuid {:desc "Block UUID"}
    :page {:desc "Page name"}
+   :linked-references {:desc "Include linked references (default true)"
+                       :coerce :boolean}
    :level {:desc "Limit tree depth (default 10)"
            :coerce :long}})
 
@@ -38,6 +40,7 @@
 
 (def ^:private tree-block-selector
   [:db/id
+   :db/ident
    :block/uuid
    :block/title
    :block/content
@@ -48,6 +51,7 @@
 
 (def ^:private linked-ref-selector
   [:db/id
+   :db/ident
    :block/uuid
    :block/title
    :block/content
@@ -342,7 +346,7 @@
     (cond
       (some? id)
       (p/let [entity (transport/invoke config :thread-api/pull false
-                                       [repo [:db/id :block/name :block/uuid :block/title
+                                       [repo [:db/id :db/ident :block/name :block/uuid :block/title
                                               {:logseq.property/status [:db/ident :block/name :block/title]}
                                               {:block/page [:db/id :block/title]}
                                               {:block/tags [:db/id :block/name :block/title :block/uuid]}] id])]
@@ -360,7 +364,7 @@
       (if-not (common-util/uuid-string? uuid-str)
         (p/rejected (ex-info "block must be a uuid" {:code :invalid-block}))
         (p/let [entity (transport/invoke config :thread-api/pull false
-                                         [repo [:db/id :block/name :block/uuid :block/title
+                                         [repo [:db/id :db/ident :block/name :block/uuid :block/title
                                                 {:logseq.property/status [:db/ident :block/name :block/title]}
                                                 {:block/page [:db/id :block/title]}
                                                 {:block/tags [:db/id :block/name :block/title :block/uuid]}]
@@ -368,7 +372,7 @@
                 entity (if (:db/id entity)
                          entity
                          (transport/invoke config :thread-api/pull false
-                                           [repo [:db/id :block/name :block/uuid :block/title
+                                           [repo [:db/id :db/ident :block/name :block/uuid :block/title
                                                   {:logseq.property/status [:db/ident :block/name :block/title]}
                                                   {:block/page [:db/id :block/title]}
                                                   {:block/tags [:db/id :block/name :block/title :block/uuid]}]
@@ -385,7 +389,7 @@
 
       (seq page)
       (p/let [page-entity (transport/invoke config :thread-api/pull false
-                                            [repo [:db/id :block/uuid :block/title
+                                            [repo [:db/id :db/ident :block/uuid :block/title
                                                    {:logseq.property/status [:db/ident :block/name :block/title]}
                                                    {:block/tags [:db/id :block/name :block/title :block/uuid]}]
                                              [:block/name page]])]
@@ -414,7 +418,7 @@
                  (let [id-str (str (node-id node))
                        padding (max 0 (- id-width (count id-str)))]
                    (str id-str (apply str (repeat padding " ")))))
-        id-padding (apply str (repeat (inc id-width) " "))
+        id-padding (style/dim (apply str (repeat (inc id-width) " ")))
         split-lines (fn [value]
                       (string/split (or value "") #"\n"))
         style-glyph (fn [value]
@@ -430,7 +434,7 @@
                          rows (split-lines (label child))
                          first-row (first rows)
                          rest-rows (rest rows)
-                         line (str (pad-id child) " "
+                         line (str (style/dim (pad-id child)) " "
                                    (style-glyph prefix)
                                    (style-glyph branch)
                                    first-row)]
@@ -441,7 +445,7 @@
     (let [rows (split-lines (label root))
           first-row (first rows)
           rest-rows (rest rows)]
-      (swap! lines conj (str (pad-id root) " " first-row))
+      (swap! lines conj (str (style/dim (pad-id root)) " " first-row))
       (doseq [row rest-rows]
         (swap! lines conj (str id-padding row))))
     (walk root "")
@@ -483,6 +487,9 @@
                     :id (when (and (seq ids) (not multi-id?)) (first ids))
                     :ids ids
                     :multi-id? multi-id?
+                    :linked-references? (if (contains? options :linked-references)
+                                          (:linked-references options)
+                                          true)
                     :uuid (:uuid options)
                     :page (:page options)
                     :level (:level options)}})))))
@@ -491,14 +498,16 @@
   [config action]
   (p/let [tree-data (fetch-tree config action)
           root-id (get-in tree-data [:root :db/id])
-          linked-refs (if root-id
-                        (fetch-linked-references config (:repo action) root-id)
-                        {:count 0 :blocks []})
-          uuid-refs (collect-uuid-refs tree-data linked-refs)
+          linked-enabled? (not= false (:linked-references? action))
+          linked-refs (when (and linked-enabled? root-id)
+                        (fetch-linked-references config (:repo action) root-id))
+          linked-refs* (if linked-enabled?
+                         (or linked-refs {:count 0 :blocks []})
+                         {:count 0 :blocks []})
+          uuid-refs (collect-uuid-refs tree-data linked-refs*)
           uuid->label (fetch-uuid-labels config (:repo action) uuid-refs)
-          tree-data (assoc tree-data
-                           :linked-references linked-refs
-                           :uuid->label uuid->label)
+          tree-data (cond-> (assoc tree-data :uuid->label uuid->label)
+                      linked-enabled? (assoc :linked-references linked-refs*))
           tree-data (resolve-uuid-refs-in-tree-data tree-data uuid->label)]
     tree-data))
 
@@ -576,6 +585,9 @@
                                        results))
                   sanitize-tree (fn [tree]
                                   (strip-block-uuid tree))
+                  render-tree (if (false? (:linked-references? action))
+                                tree->text
+                                tree->text-with-linked-refs)
                   payload (case format
                             :edn
                             {:status :ok
@@ -599,7 +611,7 @@
                              :data {:message (string/join multi-id-delimiter
                                                           (map (fn [{:keys [ok? tree id error]}]
                                                                  (if ok?
-                                                                   (tree->text-with-linked-refs tree)
+                                                                   (render-tree tree)
                                                                    (multi-id-error-message id error)))
                                                                results))}})]
             payload)
@@ -618,4 +630,6 @@
                  :output-format :json})
 
               {:status :ok
-               :data {:message (tree->text-with-linked-refs tree-data)}}))))))
+               :data {:message (if (false? (:linked-references? action))
+                                 (tree->text tree-data)
+                                 (tree->text-with-linked-refs tree-data))}}))))))
