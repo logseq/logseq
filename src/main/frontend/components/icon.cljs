@@ -1,14 +1,22 @@
 (ns frontend.components.icon
   (:require ["@emoji-mart/data" :as emoji-data]
             ["emoji-mart" :refer [SearchIndex]]
+            ["path" :as node-path]
             [camel-snake-kebab.core :as csk]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.colors :as colors]
             [frontend.config :as config]
+            [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
+            [frontend.db.async :as db-async]
             [frontend.db.model :as model]
+            [frontend.db.utils :as db-utils]
+            [frontend.fs :as fs]
+            [frontend.handler.assets :as assets-handler]
+            [frontend.handler.editor :as editor-handler]
+            [electron.ipc :as ipc]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.storage :as storage]
@@ -16,7 +24,10 @@
             [frontend.util :as util]
             [goog.functions :refer [debounce]]
             [goog.object :as gobj]
+            [logseq.common.config :as common-config]
+            [logseq.common.path :as path]
             [logseq.db :as ldb]
+            [logseq.db.frontend.asset :as db-asset]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
@@ -51,6 +62,121 @@
     (str "color-mix(in srgb, " backgroundColor " 31.4%, transparent)")
    ;; Default: use as-is (might be a color name or other format)
     :else backgroundColor))
+
+(defn- get-asset-type-from-db
+  "Get asset type from DB using a direct Datalog query.
+   This works even when db/entity returns nil due to lazy loading."
+  [asset-uuid]
+  (when (and asset-uuid (string? asset-uuid))
+    (try
+      (let [parsed-uuid (uuid asset-uuid)
+            result (db-utils/q '[:find ?type .
+                                 :in $ ?uuid
+                                 :where
+                                 [?e :block/uuid ?uuid]
+                                 [?e :logseq.property.asset/type ?type]]
+                               parsed-uuid)]
+        result)
+      (catch :default _e
+        nil))))
+
+(def ^:private common-image-extensions
+  "Common image extensions to try when asset-type is unknown"
+  ["png" "jpg" "jpeg" "gif" "webp" "svg" "bmp" "ico"])
+
+(defn- try-load-image-with-extensions!
+  "Try loading image with common extensions until one works"
+  [asset-uuid extensions *url *error *loaded-for]
+  (if (empty? extensions)
+    ;; No more extensions to try, mark as error
+    (reset! *error true)
+    ;; Try current extension
+    (let [ext (first extensions)
+          file (str asset-uuid "." ext)
+          asset-path (path/path-join (str "../" common-config/local-assets-dir) file)]
+      (-> (assets-handler/<make-asset-url asset-path)
+          (p/then (fn [url]
+                    ;; Success! Store the URL
+                    (reset! *loaded-for [asset-uuid ext])
+                    (reset! *url url)))
+          (p/catch (fn [_]
+                     ;; Failed, try next extension
+                     (try-load-image-with-extensions! asset-uuid (rest extensions) *url *error *loaded-for)))))))
+
+(defn- load-image-url!
+  "Load image URL for an asset, updating the url/error atoms.
+   If asset-type is nil, tries common image extensions."
+  [asset-uuid asset-type *url *error *loaded-for]
+  (when (and asset-uuid
+             (not= @*loaded-for [asset-uuid asset-type]))
+    (reset! *loaded-for [asset-uuid asset-type])
+    (reset! *url nil)
+    (reset! *error false)
+    (if asset-type
+      ;; Known extension - load directly
+      (let [file (str asset-uuid "." asset-type)
+            asset-path (path/path-join (str "../" common-config/local-assets-dir) file)]
+        (-> (assets-handler/<make-asset-url asset-path)
+            (p/then #(reset! *url %))
+            (p/catch #(reset! *error true))))
+      ;; Unknown extension - try common ones
+      (try-load-image-with-extensions! asset-uuid common-image-extensions *url *error *loaded-for))))
+
+(rum/defcs image-icon-cp < rum/reactive
+  (rum/local nil ::url)
+  (rum/local false ::error)
+  (rum/local nil ::loaded-uuid)
+  {:did-mount (fn [state]
+                (let [[asset-uuid asset-type-arg _opts] (:rum/args state)
+                      asset-type (or asset-type-arg
+                                     (get-asset-type-from-db asset-uuid))
+                      *url (::url state)
+                      *error (::error state)
+                      *loaded-uuid (::loaded-uuid state)]
+                  ;; Only load if not already loaded for this uuid
+                  (when (and asset-uuid (not= @*loaded-uuid asset-uuid))
+                    (reset! *loaded-uuid asset-uuid)
+                    (load-image-url! asset-uuid asset-type *url *error (atom nil))))
+                state)
+   :did-update (fn [state]
+                 (let [[asset-uuid asset-type-arg _opts] (:rum/args state)
+                       *loaded-uuid (::loaded-uuid state)]
+                   ;; Only reload if asset-uuid changed
+                   (when (and asset-uuid (not= @*loaded-uuid asset-uuid))
+                     (let [asset-type (or asset-type-arg
+                                          (get-asset-type-from-db asset-uuid))
+                           *url (::url state)
+                           *error (::error state)]
+                       (reset! *loaded-uuid asset-uuid)
+                       (reset! *url nil)
+                       (reset! *error false)
+                       (load-image-url! asset-uuid asset-type *url *error (atom nil)))))
+                 state)}
+  "Renders an image icon by loading the asset URL asynchronously.
+   Tries common extensions if asset-type is unknown."
+  [state asset-uuid _asset-type-arg opts]
+  (let [url @(::url state)
+        error? @(::error state)
+        size (or (:size opts) 20)]
+    (cond
+      error?
+      [:span.ui__icon.image-icon.bg-gray-04.flex.items-center.justify-center
+       {:style {:width size :height size}}
+       (shui/tabler-icon "photo-off" {:size (* size 0.6)})]
+
+      url
+      [:span.ui__icon.image-icon.flex.items-center.justify-center
+       {:style {:max-width size :max-height size}}
+       [:img
+        {:src url
+         :loading "lazy"
+         :style {:width "100%"
+                 :height "100%"
+                 :object-fit "contain"}}]]
+
+      :else
+      [:span.ui__icon.image-icon.bg-gray-04.animate-pulse
+       {:style {:width size :height size}}])))
 
 (defn icon
   [icon' & [opts]]
@@ -102,6 +228,11 @@
                             :font-weight "500"
                             :color color}}
                    display-text)))
+
+               (and (map? normalized) (= :image (:type normalized)) (get-in normalized [:data :asset-uuid]))
+               (let [asset-uuid (get-in normalized [:data :asset-uuid])
+                     asset-type (get-in normalized [:data :asset-type])]
+                 (image-icon-cp asset-uuid asset-type opts))
 
                ;; Legacy format support (fallback if normalization failed)
                (and (map? icon') (= :emoji (:type icon')) (:id icon'))
@@ -258,6 +389,20 @@
                    :data {:value value
                           :backgroundColor backgroundColor
                           :color color}})
+        :image (let [;; Extract asset-uuid, stripping "image-" prefix if present (from :id fallback)
+                     raw-uuid (or (get-in v [:data :asset-uuid]) (:asset-uuid v) value)
+                     asset-uuid (if (and (string? raw-uuid) (string/starts-with? raw-uuid "image-"))
+                                  (subs raw-uuid 6)
+                                  raw-uuid)
+                     ;; Try to get asset-type from data, or look up from DB using Datalog query
+                     asset-type (or (get-in v [:data :asset-type])
+                                    (:asset-type v)
+                                    (get-asset-type-from-db asset-uuid))]
+                 {:type :image
+                  :id (or id (str "image-" asset-uuid))
+                  :label (or label asset-uuid)
+                  :data {:asset-uuid asset-uuid
+                         :asset-type asset-type}})
         ;; Fallback: try to guess from value
         (or (guess-from-value v)
             {:type :icon
@@ -278,6 +423,88 @@
        :data {:value v}})
 
     :else nil))
+
+(defn get-image-assets
+  "Get image assets from frontend Datascript (fast, but may be empty on cold start)"
+  []
+  (let [image-extensions (set (map name config/image-formats))
+        results (db-utils/q '[:find ?uuid ?type ?title ?updated
+                              :where
+                              [?e :logseq.property.asset/type ?type]
+                              [?e :block/uuid ?uuid]
+                              [(get-else $ ?e :block/title "") ?title]
+                              [(get-else $ ?e :block/updated-at 0) ?updated]])]
+    (->> results
+         (filter (fn [[_uuid type _title _updated]]
+                   (contains? image-extensions (some-> type string/lower-case))))
+         (sort-by (fn [[_uuid _type _title updated]] updated) >)
+         (map (fn [[uuid type title _updated]]
+                {:block/uuid uuid
+                 :block/title (if (string/blank? title) (str uuid) title)
+                 :logseq.property.asset/type type})))))
+
+(defn <get-image-assets
+  "Async fetch image assets from DB worker (works on cold start).
+   Returns a promise that resolves to a list of asset maps."
+  []
+  (when-let [graph (state/get-current-repo)]
+    (p/let [results (db-async/<q graph
+                                 {:transact-db? true}
+                                 '[:find (pull ?e [:block/uuid :block/title :logseq.property.asset/type :block/updated-at])
+                                   :where
+                                   [?e :logseq.property.asset/type ?type]])]
+      (let [image-extensions (set (map name config/image-formats))
+            ;; Results from pull queries come as [[{map}] [{map}] ...], extract the maps
+            assets (map (fn [r] (if (vector? r) (first r) r)) results)]
+        (->> assets
+             (filter (fn [asset]
+                       (contains? image-extensions
+                                  (some-> (:logseq.property.asset/type asset) string/lower-case))))
+             (sort-by :block/updated-at >))))))
+
+(defn- write-asset-file!
+  "Write an asset file to disk"
+  [repo dir file file-rpath]
+  (p/let [buffer (.arrayBuffer file)]
+    (if (util/electron?)
+      (ipc/ipc "writeFile" repo (path/path-join dir file-rpath) buffer)
+      ;; web
+      (p/let [buffer (.arrayBuffer file)
+              content (js/Uint8Array. buffer)]
+        (fs/write-plain-text-file! repo dir file-rpath content nil)))))
+
+(defn save-image-asset!
+  "Save an image file as an asset using api-insert-new-block! approach.
+   Creates the asset as a child of the Asset class page (like tag tables do),
+   avoiding journal entries."
+  [repo ^js file]
+  (p/let [[repo-dir asset-dir-rpath] (assets-handler/ensure-assets-dir! repo)
+          file-name (node-path/basename (.-name file))
+          file-name-without-ext* (db-asset/asset-name->title file-name)
+          file-name-without-ext (if (= file-name-without-ext* "image")
+                                  (date/get-date-time-string-2)
+                                  file-name-without-ext*)
+          checksum (assets-handler/get-file-checksum file)
+          size (.-size file)
+          ext (db-asset/asset-path->type file-name)
+          asset-class (db/entity :logseq.class/Asset)
+          block-id (ldb/new-block-id)]
+    (when (and ext asset-class)
+      ;; Write file to disk
+      (p/let [_ (let [file-path (str block-id "." ext)
+                      file-rpath (str asset-dir-rpath "/" file-path)]
+                  (write-asset-file! repo repo-dir file file-rpath))
+              ;; Create block using api-insert-new-block! (same approach as tag tables)
+              block (editor-handler/api-insert-new-block!
+                     file-name-without-ext
+                     {:page (:block/uuid asset-class)
+                      :custom-uuid block-id
+                      :properties {:block/tags (:db/id asset-class)
+                                   :logseq.property.asset/type ext
+                                   :logseq.property.asset/checksum checksum
+                                   :logseq.property.asset/size size}
+                      :edit-block? false})]
+        (db/entity [:block/uuid (:block/uuid block)])))))
 
 (defn- search-emojis
   [q]
@@ -666,6 +893,227 @@
        [:div.text-sm.text-gray-07.dark:opacity-80
         "Enter initials or use page initials"]])))
 
+(rum/defc custom-tab-cp
+  "Combined tab showing Text, Avatar, and Image options side by side"
+  [*q page-title *color *view icon-value opts]
+  (let [query @*q
+        ;; Text item
+        text-value (if (string/blank? query)
+                     (let [title (or page-title
+                                     (some-> (state/get-current-page)
+                                             (db/get-page)
+                                             (:block/title)))]
+                       (derive-initials title))
+                     (subs query 0 (min 8 (count query))))
+        selected-color (when-not (string/blank? @*color) @*color)
+        text-item (when text-value
+                    {:type :text
+                     :id (str "text-" text-value)
+                     :label text-value
+                     :data (cond-> {:value text-value}
+                             selected-color (assoc :color selected-color))})
+        ;; Avatar item
+        avatar-value (if (string/blank? query)
+                       (let [title (or page-title
+                                       (some-> (state/get-current-page)
+                                               (db/get-page)
+                                               (:block/title)))]
+                         (derive-avatar-initials title))
+                       (subs query 0 (min 3 (count query))))
+        backgroundColor (or selected-color (colors/variable :gray :09))
+        color (or selected-color (colors/variable :gray :09))
+        avatar-item (when avatar-value
+                      {:type :avatar
+                       :id (str "avatar-" avatar-value)
+                       :label avatar-value
+                       :data {:value avatar-value
+                              :backgroundColor backgroundColor
+                              :color color}})
+        ;; Image item - check if current icon is an image
+        current-image-icon (when (= :image (:type (normalize-icon icon-value)))
+                             (normalize-icon icon-value))
+        on-chosen (:on-chosen opts)]
+    [:div.custom-tab-content
+     ;; Text option
+     (when text-item
+       [:button.custom-tab-item
+        {:on-click #(on-chosen % text-item)}
+        [:div.custom-tab-item-preview
+         (icon text-item {:size 24})]
+        [:span.custom-tab-item-label "Text"]])
+
+     ;; Avatar option
+     (when avatar-item
+       [:button.custom-tab-item
+        {:on-click #(on-chosen % avatar-item)}
+        [:div.custom-tab-item-preview
+         (icon avatar-item {:size 24})]
+        [:span.custom-tab-item-label "Avatar"]])
+
+     ;; Image option - clicking navigates to asset picker
+     [:button.custom-tab-item
+      {:on-click #(reset! *view :asset-picker)}
+      [:div.custom-tab-item-preview
+       (if current-image-icon
+         (icon current-image-icon {:size 32})
+         (shui/tabler-icon "photo" {:size 24 :class "text-gray-08"}))]
+      [:span.custom-tab-item-label "Image"]]]))
+
+(rum/defcs image-asset-item < rum/reactive
+  (rum/local nil ::url)
+  {:did-mount (fn [state]
+                (let [[asset _opts] (:rum/args state)
+                      *url (::url state)
+                      asset-type (:logseq.property.asset/type asset)
+                      asset-uuid (:block/uuid asset)]
+                  (when (and asset-uuid asset-type)
+                    (let [file (str asset-uuid "." asset-type)
+                          asset-path (path/path-join (str "../" common-config/local-assets-dir) file)]
+                      (-> (assets-handler/<make-asset-url asset-path)
+                          (p/then #(reset! *url %))
+                          (p/catch #(js/console.error "Failed to load asset URL" %))))))
+                state)}
+  "Renders a single image asset thumbnail in the asset picker grid"
+  [state asset {:keys [on-chosen]}]
+  (let [url @(::url state)
+        asset-type (:logseq.property.asset/type asset)
+        asset-uuid (:block/uuid asset)
+        asset-title (or (:block/title asset) (str asset-uuid))]
+    [:button.image-asset-item
+     {:title asset-title
+      :on-click (fn [e]
+                  (on-chosen e {:type :image
+                                :id (str "image-" asset-uuid)
+                                :label asset-title
+                                :data {:asset-uuid (str asset-uuid)
+                                       :asset-type asset-type}}))}
+     (if url
+       [:img
+        {:src url
+         :loading "lazy"}]
+       [:div.bg-gray-04.animate-pulse])]))
+
+(rum/defcs asset-picker < rum/reactive db-mixins/query
+  (rum/local "" ::search-q)
+  (rum/local true ::loading?) ;; Start with loading state
+  (rum/local nil ::loaded-assets) ;; Cached assets loaded async
+  {:did-mount (fn [state]
+                ;; Fetch assets - prefer sync query, fall back to async for cold start
+                (let [*loaded-assets (::loaded-assets state)
+                      *loading? (::loading? state)
+                      sync-assets (get-image-assets)]
+                  (if (seq sync-assets)
+                    ;; Sync has data - use it immediately
+                    (do
+                      (reset! *loaded-assets sync-assets)
+                      (reset! *loading? false))
+                    ;; No sync data - fetch from DB worker (cold start case)
+                    (-> (<get-image-assets)
+                        (p/then (fn [async-assets]
+                                  (reset! *loaded-assets (vec async-assets))
+                                  (reset! *loading? false)))
+                        (p/catch (fn [_err]
+                                   (reset! *loading? false))))))
+                state)}
+  [state {:keys [on-chosen on-back]}]
+  (let [*search-q (::search-q state)
+        *loading? (::loading? state)
+        *loaded-assets (::loaded-assets state)
+        loading? (rum/react *loading?)
+        ;; Use cached assets if available, otherwise try to get them
+        assets (or (rum/react *loaded-assets) [])
+        search-q @*search-q
+        ;; Filter assets by search query
+        filtered-assets (if (string/blank? search-q)
+                          assets
+                          (filter (fn [asset]
+                                    (let [title (or (:block/title asset) "")]
+                                      (string/includes?
+                                       (string/lower-case title)
+                                       (string/lower-case search-q))))
+                                  assets))
+        asset-count (count filtered-assets)
+        ;; Handle file upload - uses api-insert-new-block! approach like tag tables
+        ;; to avoid adding assets to today's journal
+        handle-upload (fn [files]
+                        (let [repo (state/get-current-repo)
+                              image-files (filter (fn [file]
+                                                    (let [file-type (.-type file)
+                                                          ext (some-> file-type
+                                                                      (string/split "/")
+                                                                      second
+                                                                      keyword)]
+                                                      (contains? config/image-formats ext)))
+                                                  files)]
+                          (when (seq image-files)
+                            ;; Save each image file using the tag-table approach
+                            (p/let [entities (p/all (map #(save-image-asset! repo %) image-files))]
+                              ;; Refresh assets list
+                              (p/let [updated-assets (<get-image-assets)]
+                                (reset! *loaded-assets (or (seq updated-assets) [])))
+                              ;; Auto-select the first uploaded image
+                              (when-let [first-asset (first (remove nil? entities))]
+                                (on-chosen nil {:type :image
+                                                :id (str "image-" (:block/uuid first-asset))
+                                                :label (or (:block/title first-asset) "")
+                                                :data {:asset-uuid (str (:block/uuid first-asset))
+                                                       :asset-type (:logseq.property.asset/type first-asset)}}))))))]
+    [:div.asset-picker
+     ;; Header with back button
+     [:div.asset-picker-header
+      [:button.back-button
+       {:on-click on-back}
+       (shui/tabler-icon "arrow-left" {:size 16})]
+      [:span.text-sm.font-medium "Select image"]]
+
+     ;; Search input
+     [:div.asset-picker-search
+      (shui/input
+       {:placeholder "Search images..."
+        :value search-q
+        :auto-focus true
+        :on-change #(reset! *search-q (util/evalue %))})]
+
+     ;; Section header with count
+     [:div.asset-picker-section-header
+      [:span (str "Images · " asset-count)]]
+
+     ;; Asset grid
+     [:div.asset-picker-grid
+      (cond
+        ;; Show loading state while fetching from DB worker
+        loading?
+        [:div.flex.flex-col.items-center.justify-center.h-32.text-gray-08
+         [:div.animate-spin (shui/tabler-icon "loader-2" {:size 32})]
+         [:span.text-sm.mt-2 "Loading assets..."]]
+
+        ;; Show assets if we have them
+        (seq filtered-assets)
+        (for [asset filtered-assets]
+          (rum/with-key
+            (image-asset-item asset {:on-chosen on-chosen})
+            (str (:block/uuid asset))))
+
+        ;; No assets found
+        :else
+        [:div.flex.flex-col.items-center.justify-center.h-32.text-gray-08
+         (shui/tabler-icon "photo-off" {:size 32})
+         [:span.text-sm.mt-2 "No image assets found"]
+         [:span.text-xs.mt-1 "Upload an image to get started"]])]
+
+     ;; Upload button at bottom
+     [:div.asset-picker-actions
+      [:label.upload-button
+       [:input.hidden
+        {:type "file"
+         :accept "image/*"
+         :multiple true
+         :on-change (fn [e]
+                      (let [files (array-seq (.-files (.-target e)))]
+                        (handle-upload files)))}]
+       (shui/tabler-icon "upload" {:size 16})
+       [:span "Upload asset"]]]]))
+
 (rum/defc all-cp < rum/reactive
   [opts]
   (let [used-items (->> (get-used-items)
@@ -853,6 +1301,7 @@
   (rum/local false ::select-mode?)
   (rum/local :all ::tab)
   (rum/local false ::input-focused?)
+  (rum/local :icon-picker ::view)  ;; :icon-picker or :asset-picker
   {:init (fn [s]
            (assoc s ::color (atom (storage/get :ls-icon-color-preset))))}
   [state {:keys [on-chosen del-btn? icon-value page-title] :as opts}]
@@ -861,6 +1310,7 @@
         *tab (::tab state)
         *color (::color state)
         *input-focused? (::input-focused? state)
+        *view (::view state)
         *input-ref (rum/create-ref)
         *result-ref (rum/create-ref)
         result @*result
@@ -896,11 +1346,18 @@
                        (when (not= js/document.activeElement input)
                          (.focus input))
                        (util/scroll-to (rum/deref *result-ref) 0 false))))]
-    [:div.cp__emoji-icon-picker
-     {:data-keep-selection true}
-     ;; search section
-     [:div.search-section
-      (tab-observer @*tab {:reset-q! reset-q!})
+    (if (= @*view :asset-picker)
+      ;; Level 2: Asset Picker view
+      (asset-picker {:on-chosen (fn [e icon-data]
+                                  ((:on-chosen opts) e icon-data)
+                                  (reset! *view :icon-picker))
+                     :on-back #(reset! *view :icon-picker)})
+      ;; Level 1: Icon Picker view
+      [:div.cp__emoji-icon-picker
+       {:data-keep-selection true}
+       ;; search section
+       [:div.search-section
+        (tab-observer @*tab {:reset-q! reset-q!})
       (keyboard-shortcut-observer @*tab *input-focused?)
       (when @*select-mode?
         (select-observer *input-ref))
@@ -962,7 +1419,7 @@
 
      ;; tabs section
      [:div.tabs-section
-      (let [tabs [[:all "All"] [:emoji "Emojis"] [:icon "Icons"] [:text "Text"] [:avatar "Avatar"]]]
+      (let [tabs [[:all "All"] [:emoji "Emojis"] [:icon "Icons"] [:custom "Custom"]]]
         (for [[id label] tabs
               :let [active? (= @*tab id)]]
           [:button.tab-item
@@ -1008,9 +1465,8 @@
           (case @*tab
             :emoji (emojis-cp emojis opts)
             :icon (icons-cp (get-tabler-icons) opts)
-            :text (text-tab-cp *q page-title *color opts)
-            :avatar (avatar-tab-cp *q page-title *color opts)
-            (all-cp opts))])]]]))
+            :custom (custom-tab-cp *q page-title *color *view icon-value opts)
+            (all-cp opts))])]]])))
 
 (rum/defc icon-picker
   [icon-value {:keys [empty-label disabled? initial-open? del-btn? on-chosen icon-props popup-opts button-opts page-title]}]

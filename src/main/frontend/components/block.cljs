@@ -2555,6 +2555,9 @@
                                                    (= :avatar (:type new-icon))
                                                    {:type :avatar :data (:data new-icon)}
 
+                                                   (= :image (:type new-icon))
+                                                   {:type :image :id (:id new-icon) :data (:data new-icon)}
+
                                                    :else
                                                    (select-keys new-icon [:id :type :color]))]
                                    (db-property-handler/set-block-property!
@@ -3046,6 +3049,9 @@
 
                                                                                        (= :avatar (:type icon))
                                                                                        {:type :avatar :data (:data icon)}
+
+                                                                                       (= :image (:type icon))
+                                                                                       {:type :image :id (:id icon) :data (:data icon)}
 
                                                                                        :else
                                                                                        (select-keys icon [:id :type :color]))]
