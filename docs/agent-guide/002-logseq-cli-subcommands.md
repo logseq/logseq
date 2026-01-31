@@ -94,7 +94,7 @@ Each subcommand uses a nested path and its own options.
 14. Update src/main/logseq/cli/config.cljs to add a unified output format option and ensure json and edn are both supported.
 15. Update src/main/logseq/cli/format.cljs so that all commands emit consistent human, json, or edn output using a single option path.
 16. Update docs/cli/logseq-cli.md to document subcommands, shared output flags, and per-subcommand help examples.
-17. Run the unit test suite with bb dev:test -v logseq.cli.* and confirm 0 failures and 0 errors.
+17. Run the unit test suite with bb dev:test -v 'logseq.cli.commands-test' and confirm 0 failures and 0 errors.
 18. Run lint and tests with bb dev:lint-and-test and confirm a zero exit code.
 19. Refactor for naming clarity, shared helpers, and reduced duplication while keeping tests green.
 
@@ -117,7 +117,7 @@ Windows quoting should be covered for block add subcommand with multi-word conte
 Run a single failing unit test in red phase.
 
 ```bash
-bb dev:test -v logseq.cli.commands-test/test-help-output
+bb dev:test -v 'logseq.cli.commands-test/test-help-output'
 ```
 
 Expected output includes a failing assertion about subcommand help text and ends with a non-zero exit code.

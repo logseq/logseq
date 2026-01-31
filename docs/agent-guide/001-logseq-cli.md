@@ -113,7 +113,7 @@ Graph removal is attempted while a graph is open.
 Run a single unit test in red phase.
 
 ```bash
-bb dev:test -v logseq.cli.config-test/test-config-precedence
+bb dev:test -v 'logseq.cli.config-test/test-config-precedence'
 ```
 
 Expected output includes a failing assertion and ends with a non-zero exit code.
@@ -121,7 +121,7 @@ Expected output includes a failing assertion and ends with a non-zero exit code.
 Run the full unit test suite in green phase.
 
 ```bash
-bb dev:test -v logseq.cli.*
+bb dev:test -v 'logseq.cli.commands-test'
 ```
 
 Expected output includes 0 failures and 0 errors.
