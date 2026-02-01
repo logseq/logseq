@@ -23,7 +23,23 @@
       (is (= [1 2 3] (get-in result [:action :ids])))
       (is (true? (get-in result [:action :multi-id?])))))
 
-  (testing "blank stdin returns invalid options"
+  (testing "stdin overrides explicit id when present"
+    (let [result (show-command/build-action {:id "99"
+                                             :stdin "[1 2]"}
+                                            "logseq_db_demo")]
+      (is (true? (:ok? result)))
+      (is (= [1 2] (get-in result [:action :ids])))
+      (is (true? (get-in result [:action :multi-id?])))))
+
+  (testing "blank stdin falls back to explicit id"
+    (let [result (show-command/build-action {:id "99"
+                                             :stdin "   "}
+                                            "logseq_db_demo")]
+      (is (true? (:ok? result)))
+      (is (= 99 (get-in result [:action :id])))
+      (is (= [99] (get-in result [:action :ids])))))
+
+  (testing "blank stdin returns invalid options when id is missing"
     (let [result (show-command/build-action {:id ""
                                              :id-from-stdin? true
                                              :stdin "   "}
