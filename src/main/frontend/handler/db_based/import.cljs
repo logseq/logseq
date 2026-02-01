@@ -171,7 +171,8 @@
                    (state/set-state! :graph/importing nil)
                    (state/set-state! :graph/importing-state nil)
                    (p/delay 2000)
-                   (finished-ok-handler))))))))
+                   ;; (finished-ok-handler)
+                   )))))))
       (p/catch
        (fn [e]
          (js/console.error e)
