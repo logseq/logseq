@@ -429,11 +429,12 @@
 
 (rum/defc indicator-progress < rum/reactive
   []
-  (let [{:keys [total current-idx current-page]} (state/sub :graph/importing-state)
+  (let [{:keys [total current-idx current-page label]} (state/sub :graph/importing-state)
+        label (or label (t :importing))
         left-label (if (and current-idx total (= current-idx total))
                      [:div.flex.flex-row.font-bold "Loading ..."]
                      [:div.flex.flex-row.font-bold
-                      (t :importing)
+                      label
                       [:div.hidden.md:flex.flex-row
                        [:span.mr-1 ": "]
                        [:div.text-ellipsis-wrapper {:style {:max-width 300}}
