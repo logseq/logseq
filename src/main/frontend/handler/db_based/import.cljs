@@ -38,7 +38,7 @@
   [entries]
   (let [candidates (filter (fn [{:keys [name dir?]}]
                              (let [name (-> name
-                                            (string/replace #"\\+" "/")
+                                            (string/replace #"\+" "/")
                                             string/lower-case)]
                                (and (not dir?)
                                     (string/ends-with? name "db.sqlite"))))
