@@ -47,12 +47,17 @@
 
 (defn- asset-entry?
   [name]
-  (or (string/starts-with? name "assets/")
-      (string/includes? name "/assets/")))
+  (let [name (-> name
+                 (string/replace #"\+" "/")
+                 string/lower-case)]
+    (or (string/starts-with? name "assets/")
+        (string/includes? name "/assets/"))))
 
 (defn- asset-file-name
   [name]
-  (let [name (if-let [idx (string/last-index-of name "/assets/")]
+  (let [name (-> name
+                 (string/replace #"\+" "/"))
+        name (if-let [idx (string/last-index-of name "/assets/")]
                (subs name (+ idx (count "/assets/")))
                (string/replace-first name #"^assets/" ""))]
     (last (string/split name #"/"))))
@@ -158,8 +163,14 @@
                       (str "Skipped " (count failed) " assets. See console for details.")
                       :warning false)
                      (js/console.warn "Zip import skipped assets:" (clj->js failed)))
+                   (when (and (pos? asset-total)
+                              (not= asset-total (+ copied (count failed))))
+                     (notification/show!
+                      (str "Imported " copied " of " asset-total " assets. See console for details.")
+                      :warning false))
                    (state/set-state! :graph/importing nil)
                    (state/set-state! :graph/importing-state nil)
+                   (p/delay 2000)
                    (finished-ok-handler))))))))
       (p/catch
        (fn [e]
