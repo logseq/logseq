@@ -2051,7 +2051,6 @@
                  (if (and base-dir (string? p) (not (string/blank? p)) (not (node-path/isAbsolute p)))
                    (path/path-join base-dir p)
                    p))]
-    (run! prn ["resolve-zotero-config-path" config-file config-path base-dir])
     (-> config
         (update-in [:zotero/settings-v2 "default" :zotero-data-directory] to-abs)
         (update-in [:zotero/settings-v2 "default" :zotero-linked-attachment-base-directory] to-abs))))

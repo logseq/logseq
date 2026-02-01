@@ -19,7 +19,7 @@
                                    :width 702,
                                    :height 993.418487394958}),
                           :page 6},
-               :content {:text "EXPLAIN is a really nice command that gives you lots of informations but it's often easy to not know what to do with all this"},
+               :content {:text "EXPLAIN is a really nice command that gives you lots of information but it's often easy to not know what to do with all this"},
                :properties {:color "yellow"}}
               {:id #uuid "69787518-9eb8-4fd0-ad3b-b394e28bb547",
                :page 8,
