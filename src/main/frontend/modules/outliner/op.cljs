@@ -118,6 +118,11 @@
   (op-transact!
    [:add-existing-values-to-closed-values [property-id values]]))
 
+(defn toggle-reaction!
+  [target-uuid emoji-id user-uuid]
+  (op-transact!
+   [:toggle-reaction [target-uuid emoji-id user-uuid]]))
+
 (defn batch-import-edn!
   [import-edn options]
   (op-transact!
