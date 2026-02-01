@@ -61,7 +61,7 @@
       (is (string/includes? plain-summary "list"))
       (is (string/includes? plain-summary "add"))
       (is (string/includes? plain-summary "remove"))
-      (is (string/includes? plain-summary "move"))
+      (is (string/includes? plain-summary "update"))
       (is (string/includes? plain-summary "query"))
       (is (string/includes? plain-summary "show"))
       (is (string/includes? plain-summary "graph"))
@@ -72,7 +72,7 @@
       (is (contains-bold? summary "add block"))
       (is (contains-bold? summary "add page"))
       (is (contains-bold? summary "remove"))
-      (is (contains-bold? summary "move"))
+      (is (contains-bold? summary "update"))
       (is (contains-bold? summary "query"))
       (is (contains-bold? summary "query list"))
       (is (contains-bold? summary "show"))
@@ -153,18 +153,22 @@
       (is (contains-bold? summary "--uuid"))
       (is (contains-bold? summary "--page"))))
 
-  (testing "move command shows help"
+  (testing "update command shows help"
     (let [result (binding [style/*color-enabled?* true]
-                   (commands/parse-args ["move" "--help"]))
+                   (commands/parse-args ["update" "--help"]))
           summary (:summary result)
           plain-summary (strip-ansi summary)]
       (is (true? (:help? result)))
-      (is (string/includes? plain-summary "Usage: logseq move"))
+      (is (string/includes? plain-summary "Usage: logseq update"))
       (is (string/includes? plain-summary "Command options:"))
       (is (contains-bold? summary "--id"))
       (is (contains-bold? summary "--uuid"))
       (is (contains-bold? summary "--target-id"))
-      (is (contains-bold? summary "--target-uuid"))))
+      (is (contains-bold? summary "--target-uuid"))
+      (is (contains-bold? summary "--update-tags"))
+      (is (contains-bold? summary "--update-properties"))
+      (is (contains-bold? summary "--remove-tags"))
+      (is (contains-bold? summary "--remove-properties"))))
 
   (testing "server group shows subcommands"
     (let [result (binding [style/*color-enabled?* true]
@@ -743,23 +747,39 @@
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code])))))
 
-  (testing "move requires source selector"
-    (let [result (commands/parse-args ["move" "--target-id" "10"])]
+  (testing "update requires source selector"
+    (let [result (commands/parse-args ["update" "--target-id" "10"])]
       (is (false? (:ok? result)))
       (is (= :missing-source (get-in result [:error :code])))))
 
-  (testing "move requires target selector"
-    (let [result (commands/parse-args ["move" "--id" "1"])]
+  (testing "update requires target or update/remove options"
+    (let [result (commands/parse-args ["update" "--id" "1"])]
       (is (false? (:ok? result)))
-      (is (= :missing-target (get-in result [:error :code])))))
+      (is (= :invalid-options (get-in result [:error :code])))))
 
-  (testing "move parses with source and target"
-    (let [result (commands/parse-args ["move" "--uuid" "abc" "--target-uuid" "def" "--pos" "last-child"])]
+  (testing "update parses with source and target"
+    (let [result (commands/parse-args ["update" "--uuid" "abc" "--target-uuid" "def" "--pos" "last-child"])]
       (is (true? (:ok? result)))
-      (is (= :move-block (:command result)))
+      (is (= :update-block (:command result)))
       (is (= "abc" (get-in result [:options :uuid])))
       (is (= "def" (get-in result [:options :target-uuid])))
-      (is (= "last-child" (get-in result [:options :pos]))))))
+      (is (= "last-child" (get-in result [:options :pos])))))
+
+  (testing "update parses with tags and properties"
+    (let [result (commands/parse-args ["update" "--id" "1"
+                                       "--update-tags" "[\"TagA\"]"
+                                       "--update-properties" "{:logseq.property/publishing-public? true}"])]
+      (is (true? (:ok? result)))
+      (is (= :update-block (:command result)))
+      (is (= "[\"TagA\"]" (get-in result [:options :update-tags])))
+      (is (= "{:logseq.property/publishing-public? true}" (get-in result [:options :update-properties])))))
+
+  (testing "update allows update without move target"
+    (let [result (commands/parse-args ["update" "--uuid" "abc"
+                                       "--update-tags" "[\"TagA\"]"])]
+      (is (true? (:ok? result)))
+      (is (= :update-block (:command result)))
+      (is (= "abc" (get-in result [:options :uuid]))))))
 
 (deftest test-verb-subcommand-parse-add
   (testing "add block requires content source"
@@ -835,11 +855,11 @@
       (is (= "[\"TagA\"]" (get-in result [:options :tags])))
       (is (= "{:logseq.property/publishing-public? true}" (get-in result [:options :properties]))))))
 
-(deftest test-verb-subcommand-parse-move-target-page
-  (testing "move parses with target page"
-    (let [result (commands/parse-args ["move" "--id" "1" "--target-page" "Home"])]
+(deftest test-verb-subcommand-parse-update-target-page
+  (testing "update parses with target page"
+    (let [result (commands/parse-args ["update" "--id" "1" "--target-page" "Home"])]
       (is (true? (:ok? result)))
-      (is (= :move-block (:command result)))
+      (is (= :update-block (:command result)))
       (is (= 1 (get-in result [:options :id])))
       (is (= "Home" (get-in result [:options :target-page]))))))
 
@@ -953,7 +973,7 @@
     (doseq [args [["list" "page" "--wat"]
                   ["add" "block" "--wat"]
                   ["remove" "--wat"]
-                  ["move" "--wat"]
+                  ["update" "--wat"]
                   ["show" "--wat"]]]
       (let [result (commands/parse-args args)]
         (is (false? (:ok? result)))
@@ -1126,44 +1146,118 @@
   (let [normalize-property-key-input #'add-command/normalize-property-key-input]
     (is (= {:type :id :value 42} (normalize-property-key-input 42)))))
 
-(deftest test-build-action-move
-  (testing "move requires source selector"
-    (let [parsed {:ok? true :command :move-block :options {:target-id 2}}
+(deftest test-build-action-update
+  (testing "update requires source selector"
+    (let [parsed {:ok? true :command :update-block :options {:target-id 2}}
           result (commands/build-action parsed {:repo "demo"})]
       (is (false? (:ok? result)))
       (is (= :missing-source (get-in result [:error :code])))))
 
-  (testing "move requires target selector"
-    (let [parsed {:ok? true :command :move-block :options {:id 1}}
+  (testing "update requires target or update/remove options"
+    (let [parsed {:ok? true :command :update-block :options {:id 1}}
           result (commands/build-action parsed {:repo "demo"})]
       (is (false? (:ok? result)))
-      (is (= :missing-target (get-in result [:error :code]))))))
-
-(deftest test-move-parse-validation
-  (testing "move rejects multiple source selectors"
-    (let [result (commands/parse-args ["move" "--id" "1" "--uuid" "abc" "--target-id" "2"])]
-      (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code])))))
 
-  (testing "move rejects multiple target selectors"
-    (let [result (commands/parse-args ["move" "--id" "1" "--target-id" "2" "--target-uuid" "def"])]
-      (is (false? (:ok? result)))
-      (is (= :invalid-options (get-in result [:error :code])))))
+  (testing "update accepts update tags without target"
+    (let [parsed {:ok? true
+                  :command :update-block
+                  :options {:id 1 :update-tags "[\"TagA\"]"}}
+          result (commands/build-action parsed {:repo "demo"})]
+      (is (true? (:ok? result)))
+      (is (= :update-block (get-in result [:action :type])))
+      (is (= ["TagA"] (get-in result [:action :update-tags])))))
 
-  (testing "move rejects invalid position"
-    (let [result (commands/parse-args ["move" "--id" "1" "--target-id" "2" "--pos" "middle"])]
-      (is (false? (:ok? result)))
-      (is (= :invalid-options (get-in result [:error :code])))))
-
-  (testing "move rejects sibling pos for page target"
-    (let [result (commands/parse-args ["move" "--id" "1" "--target-page" "Home" "--pos" "sibling"])]
-      (is (false? (:ok? result)))
-      (is (= :invalid-options (get-in result [:error :code])))))
-
-  (testing "move rejects legacy target-page-name option"
-    (let [result (commands/parse-args ["move" "--id" "1" "--target-page-name" "Home"])]
+  (testing "update rejects invalid update tags"
+    (let [parsed {:ok? true
+                  :command :update-block
+                  :options {:id 1 :update-tags "{:tag \"no\"}"}}
+          result (commands/build-action parsed {:repo "demo"})]
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code]))))))
+
+(deftest test-update-parse-validation
+  (testing "update rejects multiple source selectors"
+    (let [result (commands/parse-args ["update" "--id" "1" "--uuid" "abc" "--target-id" "2"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "update rejects multiple target selectors"
+    (let [result (commands/parse-args ["update" "--id" "1" "--target-id" "2" "--target-uuid" "def"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "update rejects invalid position"
+    (let [result (commands/parse-args ["update" "--id" "1" "--target-id" "2" "--pos" "middle"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "update rejects sibling pos for page target"
+    (let [result (commands/parse-args ["update" "--id" "1" "--target-page" "Home" "--pos" "sibling"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "update rejects legacy target-page-name option"
+    (let [result (commands/parse-args ["update" "--id" "1" "--target-page-name" "Home"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "update rejects pos without target"
+    (let [result (commands/parse-args ["update" "--id" "1" "--pos" "last-child" "--update-tags" "[\"TagA\"]"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code]))))))
+
+(deftest test-execute-update-builds-batch-ops
+  (async done
+         (let [ops* (atom nil)
+               calls* (atom [])
+               action {:type :update-block
+                       :repo "demo"
+                       :id 1
+                       :target-id 2
+                       :pos "last-child"
+                       :update-tags [:tag/new]
+                       :remove-tags [:tag/old]
+                       :update-properties {:logseq.property/deadline "2026-01-25T12:00:00Z"}
+                       :remove-properties [:logseq.property/publishing-public?]}]
+           (with-redefs [cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                         add-command/resolve-tags (fn [_ _ tags]
+                                                    (p/resolved (cond
+                                                                  (= tags [:tag/new]) [{:db/id 101}]
+                                                                  (= tags [:tag/old]) [{:db/id 202}]
+                                                                  :else nil)))
+                         add-command/resolve-properties (fn [_ _ properties] (p/resolved properties))
+                         add-command/resolve-property-identifiers (fn [_ _ properties] (p/resolved properties))
+                         transport/invoke (fn [_ method _ args]
+                                            (swap! calls* conj {:method method :args args})
+                                            (case method
+                                              :thread-api/pull (let [[_ _ lookup] args]
+                                                                 (cond
+                                                                   (= lookup 1)
+                                                                   {:db/id 1
+                                                                    :block/name nil
+                                                                    :block/uuid (uuid "00000000-0000-0000-0000-000000000001")}
+                                                                   (= lookup 2)
+                                                                   {:db/id 2
+                                                                    :block/name nil
+                                                                    :block/uuid (uuid "00000000-0000-0000-0000-000000000002")}
+                                                                   :else {}))
+                                              :thread-api/apply-outliner-ops (let [[_ ops _] args]
+                                                                               (reset! ops* ops)
+                                                                               {:result :ok})
+                                              (throw (ex-info "unexpected invoke" {:method method :calls @calls*}))))]
+             (-> (p/let [result (commands/execute action {})]
+                   (is (= :ok (:status result)))
+                   (is (= [[:move-blocks [[1] 2 {:sibling? false :bottom? true}]]
+                           [:batch-delete-property-value [[1] :block/tags 202]]
+                           [:batch-remove-property [[1] :logseq.property/publishing-public?]]
+                           [:batch-set-property [[1] :block/tags 101 {}]]
+                           [:batch-set-property [[1] :logseq.property/deadline "2026-01-25T12:00:00Z" {}]]]
+                          @ops*))
+                   (done))
+                 (p/catch (fn [e]
+                            (is false (str "unexpected error: " e " calls: " @calls*))
+                            (done))))))))
 
 (deftest test-execute-requires-existing-graph
   (async done

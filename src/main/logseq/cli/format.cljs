@@ -246,17 +246,25 @@
     (some? id) (str "Removed block: " id " (repo: " repo ")")
     :else (str "Removed item (repo: " repo ")")))
 
-(defn- format-move-block
-  [{:keys [repo source target]}]
-  (str "Moved block: " source " -> " target " (repo: " repo ")"))
+(defn- format-update-block
+  [{:keys [repo source target update-tags update-properties remove-tags remove-properties]}]
+  (let [change-parts (cond-> []
+                       (seq update-tags) (conj (str "tags:+" (count update-tags)))
+                       (seq update-properties) (conj (str "properties:+" (count update-properties)))
+                       (seq remove-tags) (conj (str "remove-tags:+" (count remove-tags)))
+                       (seq remove-properties) (conj (str "remove-properties:+" (count remove-properties))))
+        changes (when (seq change-parts)
+                  (str ", " (string/join ", " change-parts)))
+        move-fragment (when (seq target)
+                        (str " -> " target))]
+    (str "Updated block: " source (or move-fragment "") " (repo: " repo (or changes "") ")")))
 
 (defn- format-graph-export
   [{:keys [export-type output]}]
   (str "Exported " export-type " to " output))
 
 (defn- format-graph-import
-  [{:keys [import-type input] :as xxx}]
-  (prn :xxx xxx)
+  [{:keys [import-type input]}]
   (str "Imported " import-type " from " input))
 
 (defn- format-graph-action
@@ -288,7 +296,7 @@
         :add-block (format-add-block context)
         :add-page (format-add-page context)
         :remove (format-remove context)
-        :move-block (format-move-block context)
+        :update-block (format-update-block context)
         :graph-export (format-graph-export context)
         :graph-import (format-graph-import context)
         :query (format-query-results (:result data))
