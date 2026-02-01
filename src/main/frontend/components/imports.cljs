@@ -66,12 +66,15 @@
                  [".md" ".markdown" ".org" ".js" ".edn" ".css"]))))))))
 
 (defn- finished-cb
-  []
+  [& {:keys [reload?]
+      :or {reload? true}}]
   (notification/show! "Import finished!" :success)
   (shui/dialog-close! :import-indicator)
   (route-handler/redirect-to-home!)
   (if util/web-platform?
-    (js/window.location.reload)
+    (if reload?
+      (js/window.location.reload)
+      (js/setTimeout ui-handler/re-render-root! 500))
     (js/setTimeout ui-handler/re-render-root! 500)))
 
 (defn- lsq-import-handler
@@ -110,7 +113,9 @@
           (notification/show! "Please specify another name as another graph with this name already exists!" :error)
 
           :else
-          (db-import-handler/import-from-sqlite-zip! file graph-name finished-cb)))
+          (db-import-handler/import-from-sqlite-zip! file graph-name
+                                                     (fn []
+                                                       (finished-cb false)))))
 
       (or debug-transit? db-edn?)
       (let [graph-name (string/trim graph-name)]
