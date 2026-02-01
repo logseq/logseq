@@ -56,6 +56,11 @@
                                            (not (entity-util/page? (d/entity db id))))))]
     (when (seq retracted-block-ids)
       (let [retracted-blocks (map #(d/entity db %) retracted-block-ids)
+            reaction-entities (->> retracted-blocks
+                                   (mapcat :logseq.property.reaction/_target)
+                                   (common-util/distinct-by :db/id))
+            retract-reactions-tx (map (fn [reaction] [:db/retractEntity (:db/id reaction)])
+                                      reaction-entities)
             retracted-tx (build-retracted-tx retracted-blocks)
             retract-history-tx (mapcat (fn [e]
                                          (map (fn [history] [:db/retractEntity (:db/id history)])
@@ -67,4 +72,4 @@
                                (:logseq.property/_view-for block)))
                            retracted-blocks)
                           (map (fn [b] [:db/retractEntity (:db/id b)])))]
-        (concat retracted-tx delete-views retract-history-tx)))))
+        (concat retracted-tx delete-views retract-history-tx retract-reactions-tx)))))

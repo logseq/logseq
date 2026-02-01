@@ -35,3 +35,5 @@
 - Review notes live in `prompts/review.md`; check them when preparing changes.
 - DB-sync feature guide for AI agents: `docs/agent-guide/db-sync/db-sync-guide.md`.
 - DB-sync protocol reference: `docs/agent-guide/db-sync/protocol.md`.
+- New properties should be added to `logseq.db.frontend.property/built-in-properties`.
+- Avoid creating new class or property unless you have to.
