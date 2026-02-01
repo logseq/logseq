@@ -79,6 +79,10 @@ npm run test:node-adapter
 | DB_SYNC_STATIC_USER_ID | Static user id for local dev |
 | DB_SYNC_STATIC_EMAIL | Static user email for local dev |
 | DB_SYNC_STATIC_USERNAME | Static username for local dev |
+| SENTRY_DSN | Sentry DSN |
+| SENTRY_RELEASE | Release identifier for Sentry events and sourcemaps |
+| SENTRY_ENVIRONMENT | Sentry environment name (prod, staging, etc.) |
+| SENTRY_TRACES_SAMPLE_RATE | Traces sample rate (0.0 - 1.0) |
 | COGNITO_ISSUER | Cognito issuer URL |
 | COGNITO_CLIENT_ID | Cognito client id |
 | COGNITO_JWKS_URL | Cognito JWKS URL |
