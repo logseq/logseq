@@ -1,7 +1,7 @@
 file:: [Understanding EXPLAIN.pdf](../../book/it/Understanding EXPLAIN.pdf)
 file-path:: ../../book/it/Understanding EXPLAIN.pdf
 
-- EXPLAIN is a really nice command that gives you lots of informations but it's often easy to not know what to do with all this
+- EXPLAIN is a really nice command that gives you lots of information but it's often easy to not know what to do with all this
   ls-type:: annotation
   hl-page:: 6
   hl-color:: yellow
