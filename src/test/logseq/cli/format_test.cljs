@@ -108,15 +108,29 @@
                                        {:output-format nil})]
       (is (= "Removed page: Home (repo: demo-repo)" result))))
 
-  (testing "move block renders a succinct success line"
+  (testing "update block renders a succinct success line"
     (let [result (format/format-result {:status :ok
-                                        :command :move-block
+                                        :command :update-block
                                         :context {:repo "demo-repo"
                                                   :source "source-uuid"
-                                                  :target "target-uuid"}
+                                                  :target "target-uuid"
+                                                  :update-tags ["TagA"]
+                                                  :update-properties {:logseq.property/publishing-public? true}
+                                                  :remove-tags ["TagB"]
+                                                  :remove-properties [:logseq.property/deadline]}
                                         :data {:result {:ok true}}}
                                        {:output-format nil})]
-      (is (= "Moved block: source-uuid -> target-uuid (repo: demo-repo)" result)))))
+      (is (= "Updated block: source-uuid -> target-uuid (repo: demo-repo, tags:+1, properties:+1, remove-tags:+1, remove-properties:+1)" result))))
+
+  (testing "update without move target renders a succinct success line"
+    (let [result (format/format-result {:status :ok
+                                        :command :update-block
+                                        :context {:repo "demo-repo"
+                                                  :source "source-uuid"
+                                                  :update-tags ["TagA"]}
+                                        :data {:result {:ok true}}}
+                                       {:output-format nil})]
+      (is (= "Updated block: source-uuid (repo: demo-repo, tags:+1)" result)))))
 
 (deftest test-human-output-graph-import-export
   (testing "graph export renders a succinct success line"

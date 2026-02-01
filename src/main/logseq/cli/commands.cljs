@@ -6,11 +6,11 @@
             [logseq.cli.command.core :as command-core]
             [logseq.cli.command.graph :as graph-command]
             [logseq.cli.command.list :as list-command]
-            [logseq.cli.command.move :as move-command]
             [logseq.cli.command.query :as query-command]
             [logseq.cli.command.remove :as remove-command]
             [logseq.cli.command.server :as server-command]
             [logseq.cli.command.show :as show-command]
+            [logseq.cli.command.update :as update-command]
             [logseq.cli.server :as cli-server]
             [promesa.core :as p]))
 
@@ -98,8 +98,8 @@
                server-command/entries
                list-command/entries
                add-command/entries
-               move-command/entries
                remove-command/entries
+               update-command/entries
                query-command/entries
                show-command/entries)))
 
@@ -147,10 +147,7 @@
         remove-targets (filter some? [(:id opts)
                                       (some-> (:uuid opts) string/trim)
                                       (some-> (:page opts) string/trim)])
-        move-sources (filter some? [(:id opts) (some-> (:uuid opts) string/trim)])
-        move-targets (filter some? [(:target-id opts)
-                                    (some-> (:target-uuid opts) string/trim)
-                                    (some-> (:target-page opts) string/trim)])]
+        update-sources (filter some? [(:id opts) (some-> (:uuid opts) string/trim)])]
     (cond
       (:help opts)
       (command-core/help-result cmd-summary)
@@ -177,14 +174,11 @@
       (and (= command :remove) (> (count remove-targets) 1))
       (command-core/invalid-options-result summary "only one of --id, --uuid, or --page is allowed")
 
-      (and (= command :move-block) (move-command/invalid-options? opts))
-      (command-core/invalid-options-result summary (move-command/invalid-options? opts))
+      (and (= command :update-block) (update-command/invalid-options? opts))
+      (command-core/invalid-options-result summary (update-command/invalid-options? opts))
 
-      (and (= command :move-block) (empty? move-sources))
+      (and (= command :update-block) (empty? update-sources))
       (missing-source-result summary)
-
-      (and (= command :move-block) (empty? move-targets))
-      (missing-target-result summary)
 
       (and (= command :show) (empty? show-targets))
       (missing-target-result summary)
@@ -366,8 +360,8 @@
         :add-page
         (add-command/build-add-page-action options repo)
 
-        :move-block
-        (move-command/build-action options repo)
+        :update-block
+        (update-command/build-action options repo)
 
         :remove
         (remove-command/build-action options repo)
@@ -411,7 +405,7 @@
                          :list-property (list-command/execute-list-property action config)
                          :add-block (add-command/execute-add-block action config)
                          :add-page (add-command/execute-add-page action config)
-                         :move-block (move-command/execute-move action config)
+                         :update-block (update-command/execute-update action config)
                          :remove (remove-command/execute-remove action config)
                          :query (query-command/execute-query action config)
                          :query-list (query-command/execute-query-list action config)
@@ -426,4 +420,6 @@
                                   :message "unknown action"}}))]
         (assoc result
                :command (or (:command action) (:type action))
-               :context (select-keys action [:repo :graph :page :id :ids :uuid :block :blocks :source :target])))))
+               :context (select-keys action [:repo :graph :page :id :ids :uuid :block :blocks
+                                             :source :target :update-tags :update-properties
+                                             :remove-tags :remove-properties])))))
