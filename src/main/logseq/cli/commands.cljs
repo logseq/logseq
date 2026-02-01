@@ -422,4 +422,5 @@
                :command (or (:command action) (:type action))
                :context (select-keys action [:repo :graph :page :id :ids :uuid :block :blocks
                                              :source :target :update-tags :update-properties
-                                             :remove-tags :remove-properties])))))
+                                             :remove-tags :remove-properties
+                                             :export-type :output :import-type :input])))))
