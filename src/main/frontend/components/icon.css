@@ -99,7 +99,7 @@
   }
 
   .pane-section {
-    @apply pl-2 overflow-y-auto h-full;
+    @apply px-2 overflow-y-auto h-full;
 
     color: var(--ls-color-icon-preset);
 
@@ -271,6 +271,16 @@
   min-height: 320px;
   max-height: 440px;
   background-color: var(--lx-gray-02);
+
+  /* Body content - 4px padding top/bottom */
+  > .bd {
+    @apply py-1;
+  }
+
+  /* Sections - 8px padding on both sides (symmetric) */
+  .pane-section {
+    @apply px-2;
+  }
 }
 
 /* Topbar wrapper for easier inspection */
@@ -278,9 +288,9 @@
   @apply flex-shrink-0;
 }
 
-/* Back button as link-style button */
+/* Back button row with delete button on right */
 .asset-picker-back {
-  @apply flex-shrink-0;
+  @apply flex-shrink-0 flex items-center justify-between;
   /* py-2 + content height matches icon-picker topbar */
   padding-top: 8px;
   padding-bottom: 7px;
@@ -300,6 +310,12 @@
     &:hover {
       color: var(--rx-gray-12);
     }
+  }
+
+  /* Delete button - matching icon picker styling */
+  .ui__button[data-action=del] {
+    @apply !w-6 !h-6 overflow-hidden rounded-md opacity-60;
+    @apply hover:text-red-rx-09 hover:opacity-90;
   }
 }
 
@@ -322,26 +338,6 @@
       @apply leading-none pl-8 outline-none border-none bg-gray-03;
       @apply focus:bg-gray-03 !h-8;
       box-shadow: none !important;
-    }
-  }
-}
-
-/* Section header matching icon picker */
-.asset-picker-section-header {
-  @apply flex items-center justify-between px-4 py-1;
-  @apply text-[10px] tracking-tight;
-  @apply flex-shrink-0;
-  color: var(--rx-gray-11);
-
-  .section-title {
-    @apply flex items-center gap-0.5;
-  }
-
-  .section-actions {
-    @apply flex items-center gap-2;
-
-    .shortcut {
-      @apply text-xs;
     }
   }
 }
@@ -381,7 +377,7 @@
     inset: 0;
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain;
     border-radius: 4px;
   }
 
@@ -399,22 +395,45 @@
 
     img {
       @apply rounded-full;
+      object-fit: cover;
     }
 
     > div {
       @apply rounded-full;
     }
   }
+
+  /* Selected state - blue outline */
+  &.selected {
+    border-color: var(--rx-blue-09);
+    box-shadow: 0 0 0 1px var(--rx-blue-09);
+  }
 }
 
-/* Action buttons - floating at bottom */
+/* Current selection section - single item display */
+.asset-picker-current {
+  @apply px-3 py-2;
+  @apply flex-shrink-0;
+
+  .image-asset-item {
+    width: 64px;
+    height: 64px;
+    padding-bottom: 0; /* Override aspect ratio hack for fixed size */
+  }
+}
+
+/* Action buttons - floating at bottom with fade effect */
 .asset-picker-actions {
-  @apply flex items-center justify-center gap-2 px-3 py-2;
-  @apply absolute bottom-2 left-1/2 -translate-x-1/2;
-  @apply rounded-lg;
-  background-color: var(--lx-gray-03);
-  border: 1px solid var(--rx-gray-06);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  @apply flex items-center justify-end gap-2;
+  @apply absolute bottom-0 left-0 right-0;
+  @apply py-3 pr-3;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--lx-gray-03) 30%, transparent) 30%,
+    color-mix(in srgb, var(--lx-gray-03) 70%, transparent) 60%,
+    var(--lx-gray-03) 100%
+  );
 
   .secondary-button {
     @apply flex items-center gap-1.5 px-2.5 py-1.5 rounded-md;

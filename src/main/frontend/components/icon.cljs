@@ -732,19 +732,21 @@
 (defonce *section-states (atom {}))
 
 (rum/defc section-header
-  [{:keys [title count total-count expanded? keyboard-hint on-toggle input-focused?]}]
+  [{:keys [title count total-count expanded? keyboard-hint on-toggle input-focused? simple?]}]
   [:div.section-header.text-xs.py-1.5.px-3.flex.justify-between.items-center.gap-2.bg-gray-02.h-8
    {:style {:color "var(--lx-gray-11)"}}
-   ;; Left: Title · total-count · Chevron
-   [:div.flex.items-center.gap-1.cursor-pointer.select-none
-    {:on-click on-toggle}
+   ;; Left: Title · total-count · Chevron (chevron and count hidden in simple mode)
+   [:div.flex.items-center.gap-1.select-none
+    (when-not simple? {:class "cursor-pointer"
+                       :on-click on-toggle})
     [:span.font-bold title]
-    (when (or total-count count)
+    (when (and (not simple?) (or total-count count))
       [:<>
        [:span "·"]
        [:span {:style {:font-size "0.7rem"}}
         (or total-count count)]])
-    (ui/icon (if expanded? "chevron-down" "chevron-right") {:size 14})]
+    (when-not simple?
+      (ui/icon (if expanded? "chevron-down" "chevron-right") {:size 14}))]
 
    [:div.flex-1] ; Spacer
 
@@ -1041,7 +1043,7 @@
   "Renders a single image asset thumbnail in the asset picker grid.
    When avatar-context is provided, renders circular previews and returns avatar data.
    Returns nil if asset file doesn't exist (ghost asset)."
-  [state asset {:keys [on-chosen avatar-context]}]
+  [state asset {:keys [on-chosen avatar-context selected?]}]
   (let [url @(::url state)
         error? @(::error state)
         asset-type (:logseq.property.asset/type asset)
@@ -1052,7 +1054,8 @@
     (when-not error?
       [:button.image-asset-item
        {:title asset-title
-        :class (when avatar-mode? "avatar-mode")
+        :class (util/classnames [{:avatar-mode avatar-mode?
+                                  :selected selected?}])
         :on-click (fn [e]
                     (let [image-data {:asset-uuid (str asset-uuid)
                                       :asset-type asset-type}]
@@ -1094,7 +1097,7 @@
                         (p/catch (fn [_err]
                                    (reset! *loading? false))))))
                 state)}
-  [state {:keys [on-chosen on-back avatar-context]}]
+  [state {:keys [on-chosen on-back on-delete del-btn? current-icon avatar-context]}]
   (let [*search-q (::search-q state)
         *loading? (::loading? state)
         *loaded-assets (::loaded-assets state)
@@ -1102,6 +1105,14 @@
         ;; Use cached assets if available, otherwise try to get them
         assets (or (rum/react *loaded-assets) [])
         search-q @*search-q
+        ;; Extract current image UUID from the icon (works for both :image and :avatar with image)
+        current-asset-uuid (or (get-in current-icon [:data :asset-uuid])
+                               (when (= :image (:type current-icon))
+                                 (get-in current-icon [:data :asset-uuid])))
+        ;; Find the current asset from the list
+        current-asset (when current-asset-uuid
+                        (some #(when (= (str (:block/uuid %)) current-asset-uuid) %)
+                              assets))
         ;; Filter assets by search query
         filtered-assets (if (string/blank? search-q)
                           assets
@@ -1150,7 +1161,12 @@
        [:button.back-button
         {:on-click on-back}
         (shui/tabler-icon "chevron-left" {:size 16})
-        [:span "Back"]]]
+        [:span "Back"]]
+       ;; Delete button (aligned to right)
+       (when del-btn?
+         (shui/button {:variant :outline :size :sm :data-action "del"
+                       :on-click on-delete}
+                      (shui/tabler-icon "trash" {:size 17})))]
       (shui/separator {:class "my-0 opacity-50"})
       [:div.asset-picker-search
        [:div.search-input
@@ -1161,33 +1177,47 @@
           :auto-focus true
           :on-change #(reset! *search-q (util/evalue %))})]]]
 
-     ;; Section header (matching icon picker style)
-     [:div.asset-picker-section-header
-      [:div.section-title
-       [:span.font-bold "Images"]
-       [:span.font-medium (str " · " asset-count)]]]
+     ;; Body - scrollable content area with top/bottom margin
+     [:div.bd.bd-scroll
+      ;; "Current" section - shows currently selected image (only when not searching)
+      (when (and current-asset (string/blank? search-q))
+        [:div.pane-section
+         (section-header {:title "Selected"
+                          :simple? true})
+         [:div.asset-picker-current
+          {:class (when avatar-mode? "avatar-mode")}
+          (image-asset-item current-asset {:on-chosen on-chosen
+                                           :avatar-context avatar-context
+                                           :selected? true})]])
 
-     ;; Asset grid
-     [:div.asset-picker-grid
-      {:class (when avatar-mode? "avatar-mode")}
-      (cond
-        loading?
-        [:div.flex.flex-col.items-center.justify-center.h-32.text-gray-08
-         [:div.animate-spin (shui/tabler-icon "loader-2" {:size 32})]
-         [:span.text-sm.mt-2 "Loading assets..."]]
+      ;; "Images" section
+      [:div.pane-section
+       (section-header {:title "Images"
+                        :count asset-count
+                        :expanded? true})
 
-        (seq filtered-assets)
-        (for [asset filtered-assets]
-          (rum/with-key
-            (image-asset-item asset {:on-chosen on-chosen
-                                     :avatar-context avatar-context})
-            (str (:block/uuid asset))))
+       ;; Asset grid
+       [:div.asset-picker-grid
+        {:class (when avatar-mode? "avatar-mode")}
+        (cond
+          loading?
+          [:div.flex.flex-col.items-center.justify-center.h-32.text-gray-08
+           [:div.animate-spin (shui/tabler-icon "loader-2" {:size 32})]
+           [:span.text-sm.mt-2 "Loading assets..."]]
 
-        :else
-        [:div.flex.flex-col.items-center.justify-center.h-32.text-gray-08
-         (shui/tabler-icon "photo-off" {:size 32})
-         [:span.text-sm.mt-2 "No image assets found"]
-         [:span.text-xs.mt-1 "Upload an image to get started"]])]
+          (seq filtered-assets)
+          (for [asset filtered-assets]
+            (rum/with-key
+              (image-asset-item asset {:on-chosen on-chosen
+                                       :avatar-context avatar-context
+                                       :selected? (= (str (:block/uuid asset)) current-asset-uuid)})
+              (str (:block/uuid asset))))
+
+          :else
+          [:div.flex.flex-col.items-center.justify-center.h-32.text-gray-08
+           (shui/tabler-icon "photo-off" {:size 32})
+           [:span.text-sm.mt-2 "No image assets found"]
+           [:span.text-xs.mt-1 "Upload an image to get started"]])]]]
 
      ;; Action buttons (floating at bottom)
      [:div.asset-picker-actions
@@ -1456,6 +1486,9 @@
                                   ((:on-chosen opts) e icon-data)
                                   (reset! *view :icon-picker))
                      :on-back #(reset! *view :icon-picker)
+                     :on-delete #(on-chosen nil)
+                     :del-btn? del-btn?
+                     :current-icon normalized-icon-value
                      :avatar-context (when (= :avatar (:type normalized-icon-value))
                                        normalized-icon-value)})
       ;; Level 1: Icon Picker view
