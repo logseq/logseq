@@ -230,7 +230,6 @@
    [:source agent-task-source-schema]
    [:intent {:optional true} :map]
    [:agent {:optional true} :map]
-   [:execution {:optional true} :map]
    [:audit {:optional true} :map]])
 
 (def sessions-create-request-schema agent-task-schema)
@@ -254,6 +253,15 @@
    [:audit :map]
    [:created-at :int]
    [:updated-at :int]])
+
+(def sessions-events-response-schema
+  [:map
+   [:events [:sequential :map]]])
+
+(def sessions-resume-response-schema
+  [:map
+   [:ok :boolean]
+   [:flushed {:optional true} :int]])
 
 (def http-request-schemas
   {:graphs/create graph-create-request-schema
@@ -292,7 +300,11 @@
    :sessions/create sessions-create-response-schema
    :sessions/get sessions-get-response-schema
    :sessions/message http-ok-response-schema
+   :sessions/pause http-ok-response-schema
+   :sessions/resume sessions-resume-response-schema
+   :sessions/interrupt http-ok-response-schema
    :sessions/cancel http-ok-response-schema
+   :sessions/events sessions-events-response-schema
    :error http-error-response-schema})
 
 (def ^:private json-transformer

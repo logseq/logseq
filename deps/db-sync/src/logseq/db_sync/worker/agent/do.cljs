@@ -36,6 +36,10 @@
 (defn- <put-events! [^js self events]
   (<storage-put! (.-storage self) "events" events))
 
+(defn- <save-session! [^js self session]
+  (p/let [_ (<put-session! self session)]
+    session))
+
 (defn- stream-url [request session-id]
   (let [base (or (header request "x-stream-base")
                  (.-origin (platform/request-url request)))]
@@ -61,6 +65,24 @@
           (broadcast-event! self event)
           {:session session :event event})))))
 
+(defn- session-conflict [message]
+  (http/error-response message 409))
+
+(defn- <transition! [^js self to-status event-type data]
+  (p/let [session (<get-session self)]
+    (cond
+      (nil? session)
+      (http/not-found)
+
+      (not (session/transition-allowed? (:status session) to-status))
+      (session-conflict (str "cannot transition from " (:status session) " to " to-status))
+
+      :else
+      (p/let [res (<append-event! self {:type event-type :data data})]
+        (if (= (:error res) :missing-session)
+          (http/not-found)
+          (http/json-response :sessions/pause {:ok true}))))))
+
 (defn- sandbox-base [^js env]
   (aget env "SANDBOX_AGENT_URL"))
 
@@ -71,27 +93,25 @@
   (let [base (sandbox-base (.-env self))]
     (if-not (string? base)
       (p/resolved nil)
-      (p/let [payload {:agent (:agent task)
-                       :repo (get-in task [:execution :repo])
-                       :workdir (get-in task [:execution :workdir])
-                       :env (get-in task [:execution :env])
-                       :task-id session-id}
-              response (sandbox/<create-session base (sandbox-token (.-env self)) payload)
-              sandbox-session-id (:session-id response)
-              runtime {:sandbox {:base (sandbox/normalize-base-url base)
-                                 :session-id sandbox-session-id
-                                 :stream-url (sandbox/stream-url base sandbox-session-id)}}]
-        (p/let [session (<get-session self)
-                events (<get-events self)]
-          (if (nil? session)
-            nil
-            (let [session (assoc session :runtime runtime)
-                  [session events _event] (session/append-event session events {:type "session.provisioned"
-                                                                                :data {:sandbox-session-id sandbox-session-id}
-                                                                                :ts (common/now-ms)})]
-              (p/let [_ (<put-session! self session)
-                      _ (<put-events! self events)]
-                runtime))))))))
+      (let [sandbox-base (sandbox/normalize-base-url base)]
+        (p/let [payload {:agent (:agent task)
+                         :model (get-in task [:agent :model])
+                         :permission-mode (get-in task [:agent :permission-mode])}
+                response (sandbox/<create-session sandbox-base (sandbox-token (.-env self)) session-id payload)
+                sandbox-session-id (:session-id response)
+                runtime {:sandbox {:base sandbox-base
+                                   :session-id sandbox-session-id}}]
+          (p/let [session (<get-session self)
+                  events (<get-events self)]
+            (if (nil? session)
+              nil
+              (let [session (assoc session :runtime runtime)
+                    [session events _event] (session/append-event session events {:type "session.provisioned"
+                                                                                  :data {:sandbox-session-id sandbox-session-id}
+                                                                                  :ts (common/now-ms)})]
+                (p/let [_ (<put-session! self session)
+                        _ (<put-events! self events)]
+                  runtime)))))))))
 
 (defn- handle-init [^js self request]
   (p/let [existing (<get-session self)]
@@ -166,17 +186,30 @@
                                                    :data {:message message
                                                           :kind (:kind body)
                                                           :by user-id}})
-                         session (<get-session self)
-                         runtime (get-in session [:runtime :sandbox])
-                         _ (when (and runtime (string? (:session-id runtime)))
-                             (sandbox/<send-message (sandbox/normalize-base-url (:base runtime))
-                                                    (sandbox-token (.-env self))
-                                                    (:session-id runtime)
-                                                    {:message message
-                                                     :kind (:kind body)}))]
-                   (if (= (:error res) :missing-session)
+                         current-session (<get-session self)]
+                   (cond
+                     (= (:error res) :missing-session)
                      (http/not-found)
-                     (http/json-response :sessions/message {:ok true})))))))))
+
+                     (contains? #{"completed" "failed" "canceled"} (:status current-session))
+                     (session-conflict "session is not writable")
+
+                     (= "paused" (:status current-session))
+                     (let [next-session (session/enqueue-order current-session {:message message
+                                                                                :kind (:kind body)
+                                                                                :by user-id})]
+                       (p/let [_ (<save-session! self next-session)]
+                         (http/json-response :sessions/message {:ok true})))
+
+                     :else
+                     (let [runtime (get-in current-session [:runtime :sandbox])]
+                       (p/let [_ (when (and runtime (string? (:session-id runtime)))
+                                   (sandbox/<send-message (:base runtime)
+                                                          (sandbox-token (.-env self))
+                                                          (:session-id runtime)
+                                                          {:message message
+                                                           :kind (:kind body)}))]
+                         (http/json-response :sessions/message {:ok true})))))))))))
 
 (defn- handle-cancel [^js self request]
   (let [user-id (user-id-from-request request)]
@@ -187,6 +220,47 @@
         (if (= (:error res) :missing-session)
           (http/not-found)
           (http/json-response :sessions/cancel {:ok true}))))))
+
+(defn- <flush-pending-orders! [^js self]
+  (p/let [current-session (<get-session self)]
+    (if (nil? current-session)
+      nil
+      (let [[orders next-session] (session/drain-orders current-session)
+            runtime (get-in current-session [:runtime :sandbox])]
+        (p/let [_ (<save-session! self next-session)
+                _ (when (and runtime (string? (:session-id runtime)))
+                    (p/all
+                     (map (fn [order]
+                            (sandbox/<send-message (:base runtime)
+                                                   (sandbox-token (.-env self))
+                                                   (:session-id runtime)
+                                                   {:message (:message order)
+                                                    :kind (:kind order)}))
+                          orders)))]
+          (count orders))))))
+
+(defn- handle-pause [^js self request]
+  (let [user-id (user-id-from-request request)]
+    (if-not (string? user-id)
+      (http/unauthorized)
+      (<transition! self "paused" "session.paused" {:by user-id :reason "user-pause"}))))
+
+(defn- handle-resume [^js self request]
+  (let [user-id (user-id-from-request request)]
+    (if-not (string? user-id)
+      (http/unauthorized)
+      (p/let [resp (<transition! self "running" "session.running" {:by user-id :reason "user-resume"})]
+        (if-not (= 200 (.-status resp))
+          resp
+          (p/let [flushed (<flush-pending-orders! self)]
+            (http/json-response :sessions/resume {:ok true
+                                                  :flushed (or flushed 0)})))))))
+
+(defn- handle-interrupt [^js self request]
+  (let [user-id (user-id-from-request request)]
+    (if-not (string? user-id)
+      (http/unauthorized)
+      (<transition! self "paused" "session.paused" {:by user-id :reason "interrupt"}))))
 
 (defn- handle-stream [^js self request]
   (let [streams (.-streams self)
@@ -210,6 +284,26 @@
                          "connection" "keep-alive"}
                     (common/cors-headers))})))
 
+(defn- parse-int [value]
+  (when (string? value)
+    (let [parsed (js/parseInt value 10)]
+      (when (js/Number.isFinite parsed) parsed))))
+
+(defn- handle-events [^js self request]
+  (let [url (platform/request-url request)
+        since-ts (parse-int (.get (.-searchParams url) "since"))
+        limit (parse-int (.get (.-searchParams url) "limit"))
+        user-id (user-id-from-request request)]
+    (log/info :agent/session-events-request {:user-id user-id
+                                             :since since-ts
+                                             :limit limit})
+    (p/let [session (<get-session self)]
+      (if (nil? session)
+        (http/not-found)
+        (p/let [events (<get-events self)
+                filtered (session/filter-events events {:since-ts since-ts :limit limit})]
+          (http/json-response :sessions/events {:events filtered}))))))
+
 (defn handle-fetch [^js self request]
   (let [url (platform/request-url request)
         path (.-pathname url)
@@ -228,11 +322,23 @@
         (= path "/__session__/messages")
         (handle-messages self request)
 
+        (= path "/__session__/pause")
+        (handle-pause self request)
+
+        (= path "/__session__/resume")
+        (handle-resume self request)
+
+        (= path "/__session__/interrupt")
+        (handle-interrupt self request)
+
         (= path "/__session__/cancel")
         (handle-cancel self request)
 
         (= path "/__session__/stream")
         (handle-stream self request)
+
+        (= path "/__session__/events")
+        (handle-events self request)
 
         :else
         (http/not-found))

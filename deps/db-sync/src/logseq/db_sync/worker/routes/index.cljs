@@ -27,7 +27,11 @@
     ["/:session-id"
      ["" {:methods {"GET" :sessions/get}}]
      ["/messages" {:methods {"POST" :sessions/messages}}]
+     ["/pause" {:methods {"POST" :sessions/pause}}]
+     ["/resume" {:methods {"POST" :sessions/resume}}]
+     ["/interrupt" {:methods {"POST" :sessions/interrupt}}]
      ["/cancel" {:methods {"POST" :sessions/cancel}}]
+     ["/events" {:methods {"GET" :sessions/events}}]
      ["/stream" {:methods {"GET" :sessions/stream}}]]]])
 
 (def ^:private router

@@ -109,6 +109,16 @@
           (forward-request stub do-url "POST" headers nil))
         (http/error-response "server error" 500)))))
 
+(defn- handle-control [{:keys [env request url claims route]} control-path]
+  (let [session-id (get-in route [:path-params :session-id])]
+    (if-not (string? session-id)
+      (http/bad-request "invalid session id")
+      (if-let [^js stub (session-stub env session-id)]
+        (let [headers (base-headers request claims)
+              do-url (str (.-origin url) control-path)]
+          (forward-request stub do-url "POST" headers nil))
+        (http/error-response "server error" 500)))))
+
 (defn- handle-stream [{:keys [env request url claims route]}]
   (let [session-id (get-in route [:path-params :session-id])]
     (if-not (string? session-id)
@@ -119,12 +129,26 @@
           (forward-request stub do-url "GET" headers nil))
         (http/error-response "server error" 500)))))
 
+(defn- handle-events [{:keys [env request url claims route]}]
+  (let [session-id (get-in route [:path-params :session-id])]
+    (if-not (string? session-id)
+      (http/bad-request "invalid session id")
+      (if-let [^js stub (session-stub env session-id)]
+        (let [headers (base-headers request claims)
+              do-url (str (.-origin url) "/__session__/events" (.-search url))]
+          (forward-request stub do-url "GET" headers nil))
+        (http/error-response "server error" 500)))))
+
 (defn handle [{:keys [route] :as ctx}]
   (case (:handler route)
     :sessions/create (handle-create ctx)
     :sessions/get (handle-get ctx)
     :sessions/messages (handle-messages ctx)
+    :sessions/pause (handle-control ctx "/__session__/pause")
+    :sessions/resume (handle-control ctx "/__session__/resume")
+    :sessions/interrupt (handle-control ctx "/__session__/interrupt")
     :sessions/cancel (handle-cancel ctx)
+    :sessions/events (handle-events ctx)
     :sessions/stream (handle-stream ctx)
     (http/not-found)))
 

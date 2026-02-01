@@ -41,3 +41,35 @@
       (is (= 1 (count events1)))
       (is (string? (:event-id e1)))
       (is (number? (:ts e1))))))
+
+(deftest session-event-filter-test
+  (testing "filters events by since-ts and limit"
+    (let [events [{:event-id "e1" :ts 10}
+                  {:event-id "e2" :ts 20}
+                  {:event-id "e3" :ts 30}
+                  {:event-id "e4" :ts 40}]]
+      (is (= ["e3" "e4"]
+             (map :event-id (session/filter-events events {:since-ts 25}))))
+      (is (= ["e2" "e3"]
+             (map :event-id (session/filter-events events {:since-ts 15 :limit 2}))))
+      (is (= ["e1"]
+             (map :event-id (session/filter-events events {:limit 1})))))))
+
+(deftest session-transition-allowed-test
+  (testing "pause/resume transitions are state-aware"
+    (is (true? (session/transition-allowed? "created" "running")))
+    (is (true? (session/transition-allowed? "running" "paused")))
+    (is (true? (session/transition-allowed? "paused" "running")))
+    (is (false? (session/transition-allowed? "completed" "running")))
+    (is (false? (session/transition-allowed? "failed" "paused")))))
+
+(deftest session-pending-orders-test
+  (testing "pending orders queue is append-only and clearable"
+    (let [base {:id "task-1"
+                :status "paused"
+                :pending-orders []}
+          with-one (session/enqueue-order base {:message "one"})
+          with-two (session/enqueue-order with-one {:message "two"})
+          [orders cleared] (session/drain-orders with-two)]
+      (is (= ["one" "two"] (map :message orders)))
+      (is (= [] (:pending-orders cleared))))))

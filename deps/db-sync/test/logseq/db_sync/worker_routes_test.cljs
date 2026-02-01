@@ -63,3 +63,21 @@
     (let [match (routes/match-route "GET" "/sessions/session-4/stream")]
       (is (= :sessions/stream (:handler match)))
       (is (= "session-4" (get-in match [:path-params :session-id]))))))
+
+(deftest match-route-sessions-events-test
+  (testing "sessions events routes"
+    (let [match (routes/match-route "GET" "/sessions/session-9/events")]
+      (is (= :sessions/events (:handler match)))
+      (is (= "session-9" (get-in match [:path-params :session-id]))))))
+
+(deftest match-route-sessions-control-test
+  (testing "sessions control routes"
+    (let [match (routes/match-route "POST" "/sessions/session-10/pause")]
+      (is (= :sessions/pause (:handler match)))
+      (is (= "session-10" (get-in match [:path-params :session-id]))))
+    (let [match (routes/match-route "POST" "/sessions/session-11/resume")]
+      (is (= :sessions/resume (:handler match)))
+      (is (= "session-11" (get-in match [:path-params :session-id]))))
+    (let [match (routes/match-route "POST" "/sessions/session-12/interrupt")]
+      (is (= :sessions/interrupt (:handler match)))
+      (is (= "session-12" (get-in match [:path-params :session-id]))))))

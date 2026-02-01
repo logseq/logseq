@@ -12,9 +12,9 @@
   (testing "builds sandbox session endpoints"
     (let [base "https://sandbox.example"
           session-id "sess-1"]
-      (is (= "https://sandbox.example/sandbox/sessions"
-             (sandbox/sessions-url base)))
-      (is (= "https://sandbox.example/sandbox/sessions/sess-1/messages"
-             (sandbox/messages-url base session-id)))
-      (is (= "https://sandbox.example/sandbox/sessions/sess-1/stream"
-             (sandbox/stream-url base session-id))))))
+      (is (= "https://sandbox.example/v1/sessions"
+             (sandbox/sessions-base-url base)))
+      (is (= "https://sandbox.example/v1/sessions/sess-1"
+             (sandbox/session-url base session-id)))
+      (is (= "https://sandbox.example/v1/sessions/sess-1/messages"
+             (sandbox/messages-url base session-id))))))

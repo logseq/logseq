@@ -65,6 +65,27 @@ cd deps/db-sync
 npm run test:node-adapter
 ```
 
+### Local Sandbox Agent (for agent sessions)
+
+Use the local sandbox-agent repo at `~/Codes/projects/sandbox-agent`:
+
+```bash
+cd deps/db-sync
+./scripts/start-local-sandbox-agent.sh
+```
+
+Then run db-sync worker with:
+
+```bash
+SANDBOX_AGENT_URL=http://127.0.0.1:2468
+```
+
+If sandbox-agent runs with token auth, also set:
+
+```bash
+SANDBOX_AGENT_TOKEN=...
+```
+
 ## Environment Variables
 
 | Variable | Purpose |
@@ -82,6 +103,8 @@ npm run test:node-adapter
 | COGNITO_ISSUER | Cognito issuer URL |
 | COGNITO_CLIENT_ID | Cognito client id |
 | COGNITO_JWKS_URL | Cognito JWKS URL |
+| SANDBOX_AGENT_URL | sandbox-agent base URL for agent sessions |
+| SANDBOX_AGENT_TOKEN | Optional bearer token for sandbox-agent |
 
 ## Notes
 - Protocol definitions live in `docs/agent-guide/db-sync/protocol.md`.

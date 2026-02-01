@@ -69,25 +69,8 @@ centralize session persistence, and keep execution isolated from production.
 - Add observability (logs, metrics, session replay) and a permission model.
 
 ## Milestones
-1) Architecture + API shape (M1)
-   - Confirm document-driven workflow entrypoints and task schema.
-   - Define session lifecycle, event model, and required auth surfaces.
-   - Draft API contracts for control plane and agent runtime.
-
-2) Control plane prototype (M2)
-   - Implement Durable Object session coordination.
-   - Add streaming and multi-client observation.
-   - Wire basic auth and session persistence.
-
-3) Sandbox + agent integration (M3)
-   - Provision sandbox per session and run Sandbox Agent inside it.
-   - Implement adapter to select Codex/Claude Code backends.
-   - Run end-to-end task execution from Logseq doc to agent output.
-
-4) Operational readiness (M4)
-   - Add logs, metrics, and session replay.
-   - Add permission model and audit trails.
-   - Document setup and rollout for internal dogfooding.
+Milestones moved to:
+- `docs/milestones/agents/00-index.md`
 
 ## References
 - https://github.com/rivet-dev/sandbox-agent

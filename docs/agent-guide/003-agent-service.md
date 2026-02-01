@@ -189,3 +189,39 @@ Errors and idempotency:
   }
 }
 ```
+
+## Sandbox Agent Integration Milestones
+1) M3.1 Runtime handshake
+   - Finalize Sandbox Agent auth/config (`SANDBOX_AGENT_URL`, token handling).
+   - Ensure session provisioning always records sandbox session metadata.
+
+2) M3.2 Event bridge
+   - Consume `/sandbox/sessions/:id/stream` and map runtime events into the
+     control-plane event model (`agent.message`, `agent.tool_call`,
+     `agent.tool_result`, `agent.artifact`, `agent.summary`).
+   - Persist bridged events and broadcast to `/sessions/:id/stream`.
+
+3) M3.3 Tool approvals
+   - Add approval flow for privileged tool calls.
+   - Emit `agent.approval_requested` / `agent.approval_granted` /
+     `agent.approval_denied` events and enforce decision before continuing.
+
+4) M3.4 Reliability
+   - Add retry/backoff for sandbox create/message calls.
+   - Add reconciliation for disconnected streams and delayed event delivery.
+   - Add idempotent replay cursor for stream resume.
+
+5) M4.1 Observability and audit
+   - Emit structured logs and metrics for session lifecycle and sandbox calls.
+   - Add event replay endpoint with filters and pagination.
+   - Ensure actor identity is attached to all audit events.
+
+6) M4.2 Security hardening
+   - Enforce per-session scoped credentials and expiry.
+   - Add policy checks for allowed tools and repo/workdir boundaries.
+   - Add rate limiting and abuse safeguards per user/workspace.
+
+7) M4.3 Production readiness
+   - Add integration tests for provisioning, message roundtrip, stream bridge,
+     approvals, and replay.
+   - Add runbook, dashboards, alert thresholds, and rollback procedure.
