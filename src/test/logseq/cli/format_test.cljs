@@ -171,12 +171,12 @@
       (is (= "Line 1\nLine 2" result)))))
 
 (deftest test-human-output-query-results
-  (testing "scalar id collections render one id per line"
+  (testing "scalar id collections preserve EDN formatting"
     (let [result (format/format-result {:status :ok
                                         :command :query
                                         :data {:result [1 2 3]}}
                                        {:output-format nil})]
-      (is (= "1\n2\n3" result))))
+      (is (= "[1 2 3]" result))))
 
   (testing "non-scalar collections preserve EDN formatting"
     (let [value [{:db/id 1 :block/title "Alpha"}
