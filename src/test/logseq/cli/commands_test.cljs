@@ -1329,6 +1329,10 @@
                                                        {})]
                  (is (= :ok (:status edn-result)))
                  (is (= :ok (:status sqlite-result)))
+                 (is (= "edn" (get-in edn-result [:context :export-type])))
+                 (is (= "/tmp/export.edn" (get-in edn-result [:context :output])))
+                 (is (= "sqlite" (get-in sqlite-result [:context :export-type])))
+                 (is (= "/tmp/export.sqlite" (get-in sqlite-result [:context :output])))
                  (is (= [[:thread-api/export-edn false ["logseq_db_demo" {:export-type :graph}]]
                          [:thread-api/export-db-base64 true ["logseq_db_demo"]]]
                         @invoke-calls))
@@ -1393,6 +1397,10 @@
                                                        {})]
                  (is (= :ok (:status edn-result)))
                  (is (= :ok (:status sqlite-result)))
+                 (is (= "edn" (get-in edn-result [:context :import-type])))
+                 (is (= "/tmp/import.edn" (get-in edn-result [:context :input])))
+                 (is (= "sqlite" (get-in sqlite-result [:context :import-type])))
+                 (is (= "/tmp/import.sqlite" (get-in sqlite-result [:context :input])))
                  (is (= [[:edn "/tmp/import.edn"]
                          [:sqlite "/tmp/import.sqlite"]]
                         @read-calls))
