@@ -15,6 +15,14 @@
 - `bb dev:lint-and-test` runs linters and unit tests.
 - `bb dev:test -v <namespace/testcase-name>` runs a single unit test (example: `bb dev:test -v logseq.some-test/foo`).
 - E2E tests live in `clj-e2e/`; run them from that directory if needed.
+- Do not use `npx shadow-cljs compile test` — it does not activate the
+  `:test` alias from `deps.edn`, so `src/test/` is not on the source path
+  and compilation fails. Use the `bb` commands above instead.
+- `pixi-graph-fork` and its `@pixi/*` dependencies crash at module load in
+  Node.js (`self is not defined` in `@pixi/settings`). Any namespace that
+  requires it — including `frontend.extensions.graph.pixi` — is untestable
+  in the unit-test environment. Extract testable logic into a separate
+  namespace with no browser-only dependencies before writing tests.
 
 ## Coding Style & Naming Conventions
 - ClojureScript keywords are defined via `logseq.common.defkeywords/defkeyword`; use existing keywords and add new ones in the shared definitions.

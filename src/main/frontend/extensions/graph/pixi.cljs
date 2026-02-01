@@ -5,6 +5,7 @@
              :as force]
             [goog.object :as gobj]
             [frontend.colors :as colors]
+            [frontend.extensions.graph.position-cache :as position-cache]
             ["graphology" :as graphology]
             ["pixi-graph-fork" :as Pixi-Graph]))
 
@@ -58,6 +59,13 @@
 (defn layout!
   "Node forces documentation can be read in more detail here https://d3js.org/d3-force"
   [nodes links link-dist charge-strength charge-range]
+  ;; Seed cached positions so d3 starts from known layout instead of
+  ;; randomizing. forceSimulation reads pre-existing .x/.y at construction.
+  (let [positions @position-cache/*cached-node-positions]
+    (doseq [^js node nodes]
+      (when-let [cached (get positions (.-label node))]
+        (set! (.-x node) (:x cached))
+        (set! (.-y node) (:y cached)))))
   (let [simulation (forceSimulation nodes)]
     (-> simulation
         (.force "link"
@@ -112,6 +120,7 @@
 
 (defn destroy-instance!
   []
+  (position-cache/capture-positions! (:nodes @*graph-instance))
   (when-let [instance (:pixi @*graph-instance)]
     (.destroy instance)
     (reset! *graph-instance nil)
@@ -236,7 +245,8 @@
                                 :height     height}))]
           (reset! *graph-instance
                   {:graph graph
-                   :pixi  pixi-graph})
+                   :pixi  pixi-graph
+                   :nodes nodes-js})
           (when register-handlers-fn
             (register-handlers-fn pixi-graph))
           (set-up-listeners! pixi-graph)
