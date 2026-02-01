@@ -1,7 +1,6 @@
 (ns logseq.outliner.op
   "Transact outliner ops"
   (:require [datascript.core :as d]
-            [datascript.impl.entity :as de]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.sqlite.export :as sqlite-export]
