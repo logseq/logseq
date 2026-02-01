@@ -808,8 +808,18 @@
         parallelism 10]
     (if (and (seq graph-id) asset-ops)
       (let [queue (atom (vec asset-ops))
+            pop-queue! (fn []
+                         (let [selected (atom nil)]
+                           (swap! queue
+                                  (fn [q]
+                                    (if (seq q)
+                                      (do
+                                        (reset! selected (first q))
+                                        (subvec q 1))
+                                      q)))
+                           @selected))
             asset-worker (fn worker []
-                           (if-let [asset-op (first (swap! queue subvec 1))]
+                           (if-let [asset-op (pop-queue!)]
                              (-> (process-asset-op! repo graph-id asset-op)
                                  (p/then (fn [_] (worker)))
                                  (p/catch (fn [e]
