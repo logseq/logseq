@@ -182,25 +182,13 @@
             (:pid server)])
          (or servers []))))
 
-(defn- scalar-id?
-  [value]
-  (and (number? value) (integer? value)))
-
-(defn- scalar-id-seq?
-  [value]
-  (and (sequential? value)
-       (seq value)
-       (every? scalar-id? value)))
-
 (defn- format-query-results
   [result]
   (let [edn-str (pr-str result)
         parsed (common-util/safe-read-string {:log-error? false} edn-str)
         valid? (or (some? parsed) (= "nil" (string/trim edn-str)))]
     (if valid?
-      (if (scalar-id-seq? result)
-        (string/join "\n" (map str result))
-        edn-str)
+      edn-str
       edn-str)))
 
 (defn- format-query-list
