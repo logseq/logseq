@@ -961,6 +961,30 @@
      :on-chosen (:on-chosen opts)
      :on-hover (:on-hover opts))))
 
+;; ============================================================================
+;; Recently Used Assets
+;; ============================================================================
+
+(defn get-used-assets
+  "Get list of recently used asset UUIDs from storage"
+  []
+  (or (storage/get :ui/ls-assets-used) []))
+
+(defn add-used-asset!
+  "Add an asset UUID to the recently used list (max 10 items)"
+  [asset-uuid]
+  (when asset-uuid
+    (let [uuid-str (str asset-uuid)
+          current (get-used-assets)
+          ;; Remove if already exists, then add to front
+          filtered (remove #(= % uuid-str) current)
+          updated (take 10 (cons uuid-str filtered))]
+      (storage/set :ui/ls-assets-used updated))))
+
+;; ============================================================================
+;; Recently Used Icons
+;; ============================================================================
+
 (defn get-used-items
   []
   (let [v2-items (storage/get :ui/ls-icons-used-v2)]
@@ -1176,6 +1200,8 @@
         :class (util/classnames [{:avatar-mode avatar-mode?
                                   :selected selected?}])
         :on-click (fn [e]
+                    ;; Track as recently used
+                    (add-used-asset! asset-uuid)
                     (let [image-data {:asset-uuid (str asset-uuid)
                                       :asset-type asset-type}]
                       (on-chosen e
@@ -1439,46 +1465,66 @@
           :on-change #(reset! *search-q (util/evalue %))})]]]
 
      ;; Body - scrollable content area with top/bottom margin
-     [:div.bd.bd-scroll
-      ;; "Current" section - shows currently selected image (only when not searching)
-      (when (and current-asset (string/blank? search-q))
+     (let [;; Get recently used asset UUIDs and resolve to asset entities
+           used-uuids (get-used-assets)
+           used-assets (->> used-uuids
+                            (map (fn [uuid-str]
+                                   (some #(when (= (str (:block/uuid %)) uuid-str) %)
+                                         assets)))
+                            (remove nil?))
+           ;; Build the "Recently used" row: current selection first (if not already in list), then recently used
+           recently-used-row (if current-asset
+                               ;; Put current asset first, then others (excluding current)
+                               (take 5 (cons current-asset
+                                             (remove #(= (:block/uuid %) (:block/uuid current-asset))
+                                                     used-assets)))
+                               ;; No current selection, just show recently used
+                               (take 5 used-assets))
+           recently-used-count (count recently-used-row)]
+       [:div.bd.bd-scroll
+        ;; "Recently used" section - shows current + recently used in one row (only when not searching)
+        (when (and (seq recently-used-row) (string/blank? search-q))
+          [:div.pane-section
+           (section-header {:title "Recently used"
+                            :count recently-used-count
+                            :expanded? true})
+           [:div.asset-picker-grid.recently-used-row
+            {:class (when avatar-mode? "avatar-mode")}
+            (for [asset recently-used-row]
+              (rum/with-key
+                (image-asset-item asset {:on-chosen on-chosen
+                                         :avatar-context avatar-context
+                                         :selected? (= (str (:block/uuid asset)) current-asset-uuid)})
+                (str "recent-" (:block/uuid asset))))]])
+
+        ;; "Available assets" section
         [:div.pane-section
-         (section-header {:title "Selected"
-                          :simple? true})
-         [:div.asset-picker-current
+         (section-header {:title "Available assets"
+                          :count asset-count
+                          :expanded? true})
+
+         ;; Asset grid
+         [:div.asset-picker-grid
           {:class (when avatar-mode? "avatar-mode")}
-          (image-asset-item current-asset {:on-chosen on-chosen
-                                           :avatar-context avatar-context
-                                           :selected? true})]])
+          (cond
+            loading?
+            [:div.flex.flex-col.items-center.justify-center.h-32.text-gray-08
+             [:div.animate-spin (shui/tabler-icon "loader-2" {:size 32})]
+             [:span.text-sm.mt-2 "Loading assets..."]]
 
-      ;; "Images" section
-      [:div.pane-section
-       (section-header {:title "Available assets"
-                        :count asset-count
-                        :expanded? true})
+            (seq filtered-assets)
+            (for [asset filtered-assets]
+              (rum/with-key
+                (image-asset-item asset {:on-chosen on-chosen
+                                         :avatar-context avatar-context
+                                         :selected? (= (str (:block/uuid asset)) current-asset-uuid)})
+                (str (:block/uuid asset))))
 
-       ;; Asset grid
-       [:div.asset-picker-grid
-        {:class (when avatar-mode? "avatar-mode")}
-        (cond
-          loading?
-          [:div.flex.flex-col.items-center.justify-center.h-32.text-gray-08
-           [:div.animate-spin (shui/tabler-icon "loader-2" {:size 32})]
-           [:span.text-sm.mt-2 "Loading assets..."]]
-
-          (seq filtered-assets)
-          (for [asset filtered-assets]
-            (rum/with-key
-              (image-asset-item asset {:on-chosen on-chosen
-                                       :avatar-context avatar-context
-                                       :selected? (= (str (:block/uuid asset)) current-asset-uuid)})
-              (str (:block/uuid asset))))
-
-          :else
-          [:div.flex.flex-col.items-center.justify-center.h-32.text-gray-08
-           (shui/tabler-icon "photo-off" {:size 32})
-           [:span.text-sm.mt-2 "No image assets found"]
-           [:span.text-xs.mt-1 "Upload an image to get started"]])]]]
+            :else
+            [:div.flex.flex-col.items-center.justify-center.h-32.text-gray-08
+             (shui/tabler-icon "photo-off" {:size 32})
+             [:span.text-sm.mt-2 "No image assets found"]
+             [:span.text-xs.mt-1 "Upload an image to get started"]])]]])
 
      ;; Action buttons (floating at bottom)
      [:div.asset-picker-actions
@@ -1545,13 +1591,13 @@
         ;; Read section states reactively
         section-states (rum/react *section-states)]
     [:div.all-pane.pb-10
-     ;; Frequently used - collapsible
+     ;; Recently used - collapsible
      (when (seq used-items)
-       (pane-section "Frequently used" used-items
+       (pane-section "Recently used" used-items
                      (assoc opts
                             :collapsible? true
                             :keyboard-hint "alt mod 1"
-                            :expanded? (get section-states "Frequently used" true))))
+                            :expanded? (get section-states "Recently used" true))))
 
      ;; Emojis - collapsible
      (pane-section "Emojis"
@@ -1596,8 +1642,8 @@
                                   (not @input-focused?)
                                   (not= "INPUT" (.-tagName (.-target e))))
                          (case (.-keyCode e)
-                           49 (do ; Option+Command+1 -> Toggle "Frequently used"
-                                (swap! *section-states update "Frequently used" (fn [v] (if (nil? v) false (not v))))
+                           49 (do ; Option+Command+1 -> Toggle "Recently used"
+                                (swap! *section-states update "Recently used" (fn [v] (if (nil? v) false (not v))))
                                 (util/stop e))
                            50 (do ; Option+Command+2 -> Toggle "Emojis"
                                 (swap! *section-states update "Emojis" (fn [v] (if (nil? v) false (not v))))

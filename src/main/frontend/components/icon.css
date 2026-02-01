@@ -352,6 +352,13 @@
   align-content: start;
   /* Add padding at bottom for floating action buttons */
   padding-bottom: 56px;
+
+  /* Recently used row - single row, no extra padding */
+  &.recently-used-row {
+    @apply flex-none overflow-visible;
+    min-height: auto;
+    padding-bottom: 12px;
+  }
 }
 
 /* Image items - fill grid cell with proper aspect ratio */
@@ -408,18 +415,6 @@
   &.selected {
     border-color: var(--rx-blue-09);
     box-shadow: 0 0 0 1px var(--rx-blue-09);
-  }
-}
-
-/* Current selection section - single item display */
-.asset-picker-current {
-  @apply px-3 py-2;
-  @apply flex-shrink-0;
-
-  .image-asset-item {
-    width: 64px;
-    height: 64px;
-    padding-bottom: 0; /* Override aspect ratio hack for fixed size */
   }
 }
 
