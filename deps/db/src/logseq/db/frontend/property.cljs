@@ -615,6 +615,14 @@
                                       :schema {:type :entity
                                                :hide? true}
                                       :queryable? true}
+     :logseq.property.reaction/emoji-id {:title "Reaction emoji"
+                                         :schema {:type :string
+                                                  :public? false
+                                                  :hide? true}}
+     :logseq.property.reaction/target {:title "Reaction target"
+                                       :schema {:type :node
+                                                :public? false
+                                                :hide? true}}
      :logseq.property/used-template {:title "Used template"
                                      :schema {:type :node
                                               :public? false
@@ -687,6 +695,7 @@
     "logseq.property.code" "logseq.property.repeat"
     "logseq.property.journal" "logseq.property.class" "logseq.property.view"
     "logseq.property.user" "logseq.property.history" "logseq.property.embedding"
+    "logseq.property.reaction"
     "logseq.property.publish"})
 
 (defn logseq-property?
