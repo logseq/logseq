@@ -2,6 +2,7 @@
   (:require [lambdaisland.glogi :as log]
             [logseq.db-sync.common :as common]
             [logseq.db-sync.platform.core :as platform]
+            [logseq.db-sync.worker.agent.sandbox :as sandbox]
             [logseq.db-sync.worker.agent.session :as session]
             [logseq.db-sync.worker.http :as http]
             [promesa.core :as p]))
@@ -60,6 +61,38 @@
           (broadcast-event! self event)
           {:session session :event event})))))
 
+(defn- sandbox-base [^js env]
+  (aget env "SANDBOX_AGENT_URL"))
+
+(defn- sandbox-token [^js env]
+  (aget env "SANDBOX_AGENT_TOKEN"))
+
+(defn- <provision-sandbox! [^js self task session-id]
+  (let [base (sandbox-base (.-env self))]
+    (if-not (string? base)
+      (p/resolved nil)
+      (p/let [payload {:agent (:agent task)
+                       :repo (get-in task [:execution :repo])
+                       :workdir (get-in task [:execution :workdir])
+                       :env (get-in task [:execution :env])
+                       :task-id session-id}
+              response (sandbox/<create-session base (sandbox-token (.-env self)) payload)
+              sandbox-session-id (:session-id response)
+              runtime {:sandbox {:base (sandbox/normalize-base-url base)
+                                 :session-id sandbox-session-id
+                                 :stream-url (sandbox/stream-url base sandbox-session-id)}}]
+        (p/let [session (<get-session self)
+                events (<get-events self)]
+          (if (nil? session)
+            nil
+            (let [session (assoc session :runtime runtime)
+                  [session events _event] (session/append-event session events {:type "session.provisioned"
+                                                                                :data {:sandbox-session-id sandbox-session-id}
+                                                                                :ts (common/now-ms)})]
+              (p/let [_ (<put-session! self session)
+                      _ (<put-events! self events)]
+                runtime))))))))
+
 (defn- handle-init [^js self request]
   (p/let [existing (<get-session self)]
     (if existing
@@ -94,11 +127,12 @@
                      (let [session (session/initial-session task audit now)
                            [session events _event] (session/append-event session [] {:type "session.created" :data {:requested-by user-id} :ts now})]
                        (p/let [_ (<put-session! self session)
-                               _ (<put-events! self events)]
+                               _ (<put-events! self events)
+                               _ (<provision-sandbox! self task task-id)]
                          (http/json-response :sessions/create
                                              {:session-id task-id
                                               :status (:status session)
-                                              :stream-url (stream-url request task-id)}))))))))))
+                                              :stream-url (stream-url request task-id)})))))))))))
 
 (defn- handle-status [^js self _request]
   (p/let [session (<get-session self)]
@@ -131,7 +165,15 @@
                  (p/let [res (<append-event! self {:type "audit.log"
                                                    :data {:message message
                                                           :kind (:kind body)
-                                                          :by user-id}})]
+                                                          :by user-id}})
+                         session (<get-session self)
+                         runtime (get-in session [:runtime :sandbox])
+                         _ (when (and runtime (string? (:session-id runtime)))
+                             (sandbox/<send-message (sandbox/normalize-base-url (:base runtime))
+                                                    (sandbox-token (.-env self))
+                                                    (:session-id runtime)
+                                                    {:message message
+                                                     :kind (:kind body)}))]
                    (if (= (:error res) :missing-session)
                      (http/not-found)
                      (http/json-response :sessions/message {:ok true})))))))))
