@@ -1,11 +1,13 @@
 (ns logseq.db-sync.node.entry
   (:require [logseq.db-sync.node.config :as config]
             [logseq.db-sync.node.server :as server]
+            [logseq.db-sync.sentry.node :as sentry]
             [promesa.core :as p]))
 
 (defonce ^:private *server (atom nil))
 
 (defn main [& _args]
+  (sentry/init!)
   (let [cfg (config/normalize-config {})]
     (js/console.log "Starting Logseq sync...")
     (-> (server/start! cfg)
