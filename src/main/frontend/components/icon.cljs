@@ -142,10 +142,11 @@
     {:tabIndex "0"
      :title name
      :on-click (fn [e]
-                 (on-chosen e (assoc emoji :type :emoji)))}
+                 (on-chosen e (assoc emoji :type :emoji)))
      (not (nil? hover))
-     (assoc :on-mouse-over #(reset! hover emoji)
-            :on-mouse-out #()))
+     (merge
+      {:on-mouse-over #(reset! hover emoji)
+       :on-mouse-out #()})})
    [:em-emoji {:id id
                :style {:line-height 1}}]])
 
@@ -193,19 +194,31 @@
        [:div.its
         (map #(item-render % opts) items)])]))
 
-(rum/defc emojis-cp < rum/static
-  [emojis* opts]
-  (pane-section
-   (util/format "Emojis (%s)" (count emojis*))
-   emojis*
-   opts))
+(defn- normalize-tabs
+  [tabs default-tab]
+  (let [tabs (or tabs [[:all "All"] [:emoji "Emojis"] [:icon "Icons"]])
+        default-tab (or default-tab (ffirst tabs) :all)
+        default-tab (if (some #(= (first %) default-tab) tabs)
+                      default-tab
+                      (ffirst tabs))]
+    {:tabs tabs
+     :default-tab default-tab
+     :has-icon-tab? (boolean (some #(= (first %) :icon) tabs))}))
 
-(rum/defc icons-cp < rum/static
-  [icons opts]
-  (pane-section
-   (util/format "Icons (%s)" (count icons))
-   icons
-   opts))
+(defn- emoji-sections
+  [emojis* used-items show-used?]
+  (let [emoji-used-items (when (seq used-items)
+                           (filterv #(= :emoji (:type %)) used-items))
+        sections (cond-> []
+                   (and show-used? (seq emoji-used-items))
+                   (conj {:title "Frequently used"
+                          :items emoji-used-items
+                          :virtual-list? false})
+                   true
+                   (conj {:title (util/format "Emojis (%s)" (count emojis*))
+                          :items emojis*
+                          :virtual-list? true}))]
+    sections))
 
 (defn get-used-items
   []
@@ -218,6 +231,20 @@
                    (filter #(not= m %))
                    (cons m))]
     (storage/set :ui/ls-icons-used s)))
+
+(rum/defc emojis-cp < rum/static
+  [emojis* opts]
+  (let [sections (emoji-sections emojis* (get-used-items) (:show-used? opts))]
+    [:div.flex.flex-1.flex-col.gap-1
+     (for [{:keys [title items virtual-list?]} sections]
+       (pane-section title items (assoc opts :virtual-list? virtual-list?)))]))
+
+(rum/defc icons-cp < rum/static
+  [icons opts]
+  (pane-section
+   (util/format "Icons (%s)" (count icons))
+   icons
+   opts))
 
 (rum/defc all-cp
   [opts]
@@ -264,21 +291,20 @@
         down-handler!
         (hooks/use-callback
          (fn [^js e]
-           (let []
-             (if (= 13 (.-keyCode e))
+           (if (= 13 (.-keyCode e))
                 ;; enter
-               (some-> (second (rum/deref *current-ref)) (.click))
-               (let [[idx _node] (rum/deref *current-ref)]
-                 (case (.-keyCode e)
+             (some-> (second (rum/deref *current-ref)) (.click))
+             (let [[idx _node] (rum/deref *current-ref)]
+               (case (.-keyCode e)
                     ;;left
-                   37 (focus! (dec idx) :prev)
+                 37 (focus! (dec idx) :prev)
                     ;; tab & right
-                   (9 39) (focus! (inc idx) :next)
+                 (9 39) (focus! (inc idx) :next)
                     ;; up
-                   38 (do (focus! (- idx 9) :prev) (util/stop e))
+                 38 (do (focus! (- idx 9) :prev) (util/stop e))
                     ;; down
-                   40 (do (focus! (+ idx 9) :next) (util/stop e))
-                   :dune))))) [])]
+                 40 (do (focus! (+ idx 9) :next) (util/stop e))
+                 :dune)))) [])]
 
     (hooks/use-effect!
      (fn []
@@ -336,7 +362,7 @@
   (rum/local "" ::q)
   (rum/local nil ::result)
   (rum/local false ::select-mode?)
-  (rum/local :all ::tab)
+  (rum/local nil ::tab)
   {:init (fn [s]
            (assoc s ::color (atom (storage/get :ls-icon-color-preset))))}
   [state {:keys [on-chosen del-btn? icon-value] :as opts}]
@@ -347,6 +373,13 @@
         *input-ref (rum/create-ref)
         *result-ref (rum/create-ref)
         result @*result
+        {:keys [tabs default-tab has-icon-tab?]}
+        (normalize-tabs (:tabs opts) (:default-tab opts))
+        show-tabs? (if (contains? opts :show-tabs?) (:show-tabs? opts) true)
+        _ (when (or (nil? @*tab)
+                    (not (some #(= (first %) @*tab) tabs)))
+            (reset! *tab default-tab))
+        tab @*tab
         opts (assoc opts
                     :on-chosen (fn [e m]
                                  (let [icon? (= (:type m) :tabler-icon)
@@ -369,7 +402,7 @@
      {:data-keep-selection true}
      ;; header
      [:div.hd.bg-popover
-      (tab-observer @*tab {:reset-q! reset-q!})
+      (tab-observer tab {:reset-q! reset-q!})
       (when @*select-mode?
         (select-observer *input-ref))
       [:div.search-input
@@ -377,7 +410,7 @@
        [(shui/input
          {:auto-focus true
           :ref *input-ref
-          :placeholder (util/format "Search %s items" (string/lower-case (name @*tab)))
+          :placeholder (util/format "Search %ss" (string/lower-case (name tab)))
           :default-value ""
           :on-focus #(reset! *select-mode? false)
           :on-key-down (fn [^js e]
@@ -388,7 +421,7 @@
                                    ;(some-> (rum/deref *input-ref) (.blur))
                                     (shui/popup-hide!)
                                     (reset-q!)))
-                           38 (do (util/stop e))
+                           38 (util/stop e)
                            (9 40) (do
                                     (reset! *select-mode? true)
                                     (util/stop e))
@@ -418,38 +451,39 @@
                matched
                opts)))]
          [:div.flex.flex-1.flex-col.gap-1
-          (case @*tab
+          (case tab
             :emoji (emojis-cp emojis opts)
             :icon (icons-cp (get-tabler-icons) opts)
             (all-cp opts))])]]
 
      ;; footer
-     [:div.ft
-      ;; tabs
-      [:<>
-       [:div.flex.flex-1.flex-row.items-center.gap-2
-        (let [tabs [[:all "All"] [:emoji "Emojis"] [:icon "Icons"]]]
-          (for [[id label] tabs
-                :let [active? (= @*tab id)]]
-            (shui/button
-             {:variant :ghost
-              :size :sm
-              :class (util/classnames [{:active active?} "tab-item"])
-              :on-mouse-down (fn [e]
-                               (util/stop e)
-                               (reset! *tab id))}
-             label)))]
+     (when (or show-tabs? del-btn? (and has-icon-tab? (not= :emoji tab)))
+       [:div.ft
+        ;; tabs
+        [:<>
+         (when show-tabs?
+           [:div.flex.flex-1.flex-row.items-center.gap-2
+            (for [[id label] tabs
+                  :let [active? (= @*tab id)]]
+              (shui/button
+               {:variant :ghost
+                :size :sm
+                :class (util/classnames [{:active active?} "tab-item"])
+                :on-mouse-down (fn [e]
+                                 (util/stop e)
+                                 (reset! *tab id))}
+               label))])
 
-       (when (not= :emoji @*tab)
-         (color-picker *color (fn [c]
-                                (when (= :tabler-icon (some-> icon-value :type))
-                                  (on-chosen nil (assoc icon-value :color c) true)))))
+         (when (and show-tabs? has-icon-tab? (not= :emoji tab))
+           (color-picker *color (fn [c]
+                                  (when (= :tabler-icon (some-> icon-value :type))
+                                    (on-chosen nil (assoc icon-value :color c) true)))))
 
-       ;; action buttons
-       (when del-btn?
-         (shui/button {:variant :outline :size :sm :data-action "del"
-                       :on-click #(on-chosen nil)}
-                      (shui/tabler-icon "trash" {:size 17})))]]]))
+         ;; action buttons
+         (when del-btn?
+           (shui/button {:variant :outline :size :sm :data-action "del"
+                         :on-click #(on-chosen nil)}
+                        (shui/tabler-icon "trash" {:size 17})))]])]))
 
 (rum/defc icon-picker
   [icon-value {:keys [empty-label disabled? initial-open? del-btn? on-chosen icon-props popup-opts button-opts]}]

@@ -28,6 +28,7 @@
             [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
             [frontend.db.model :as model]
+            [frontend.db.react :as react]
             [frontend.extensions.highlight :as highlight]
             [frontend.extensions.latex :as latex]
             [frontend.extensions.lightbox :as lightbox]
@@ -48,6 +49,7 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
+            [frontend.handler.reaction :as reaction-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
@@ -58,6 +60,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.tree :as tree]
             [frontend.modules.shortcut.utils :as shortcut-utils]
+            [frontend.reaction :as reaction]
             [frontend.security :as security]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -2396,6 +2399,73 @@
              (pv/property-value block property (assoc opts :show-tooltip? true))
              (str (:db/id block) "-" (:db/id property))))]))))
 
+(rum/defc block-reactions < rum/reactive db-mixins/query
+  [block]
+  (let [repo (state/get-current-repo)
+        target-id (:db/id block)
+        reactions-ref (react/q repo [:frontend.worker.react/block-reactions target-id]
+                               {}
+                               '[:find (pull ?r [*])
+                                 :in $ ?target
+                                 :where
+                                 [?r :logseq.property.reaction/target ?target]]
+                               target-id)
+        reactions (->> (or (util/react reactions-ref) [])
+                       (map first))
+        user-db-id (when-let [id-str (user-handler/user-uuid)]
+                     (when-let [user-id (uuid id-str)]
+                       (:db/id (db/entity repo [:block/uuid user-id]))))
+        summary (reaction/summarize reactions user-db-id)
+        read-only? config/publishing?
+        on-pick (fn [popup-id emoji]
+                  (reaction-handler/toggle-reaction! (:block/uuid block) (:id emoji))
+                  (shui/popup-hide! popup-id))
+        open-picker! (fn [^js e]
+                       (util/stop e)
+                       (shui/popup-show!
+                        (.-target e)
+                        (fn [{:keys [id]}]
+                          (icon-component/icon-search
+                           {:on-chosen (fn [_emoji-event emoji _keep-popup?] (on-pick id emoji))
+                            :tabs [[:emoji "Emojis"]]
+                            :default-tab :emoji
+                            :show-used? true
+                            :icon-value nil}))
+                        {:align :start
+                         :content-props {:class "ls-icon-picker"}}))]
+    (when (seq summary)
+      [:div.ls-block-reactions.flex.flex-row.flex-wrap.items-center.mt-1
+       (for [{:keys [emoji-id count reacted-by-me? usernames]} summary]
+         (let [btn-classes (util/classnames
+                            ["px-2 py-0 h-6 text-xs rounded-full"
+                             (when reacted-by-me? "bg-accent/10 text-foreground")])
+               title (string/join ", " usernames)
+               btn (shui/button
+                    {:variant :ghost
+                     :key (str "reaction-" (:block/uuid block) "-" emoji-id)
+                     :size :sm
+                     :class btn-classes
+                     :on-click (fn [e]
+                                 (when-not read-only?
+                                   (util/stop e)
+                                   (reaction-handler/toggle-reaction! (:block/uuid block) emoji-id)))}
+                    [:span.text-sm.leading-none
+                     [:em-emoji {:id emoji-id
+                                 :style {:line-height 1}}]]
+
+                    [:span count])]
+           (ui/tooltip btn [:div title])))
+       (when-not read-only?
+         (shui/button
+          {:variant :ghost
+           :size :sm
+           :class "px-1 py-0 h-6 text-muted-foreground hover:text-foreground"
+           :title "Add reaction"
+           :on-click open-picker!
+           :on-pointer-down (fn [e]
+                              (util/stop e))}
+          (ui/icon "plus" {:size 14})))])))
+
 (rum/defc status-history-cp
   [status-history]
   (let [[sort-desc? set-sort-desc!] (rum/use-state true)]
@@ -3206,7 +3276,10 @@
                                        :*show-query? *show-query?}))]]
 
          (when (and (not collapsed?) (not (or table? property?)))
-           (block-positioned-properties config block :block-below))]])
+           (block-positioned-properties config block :block-below))
+
+         (when-not (or (:table? config) (:property? config))
+           (block-reactions block))]])
 
      (when (and (not (:library? config))
                 (or (:tag-dialog? config)
