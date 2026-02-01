@@ -75,7 +75,7 @@
     (js/setTimeout ui-handler/re-render-root! 500)))
 
 (defn- lsq-import-handler
-  [e & {:keys [sqlite? debug-transit? graph-name db-edn?]}]
+  [e & {:keys [sqlite? sqlite-zip? debug-transit? graph-name db-edn?]}]
   (let [file      (first (array-seq (.-files (.-target e))))]
     (cond
       sqlite?
@@ -99,6 +99,18 @@
                                        (prn :debug :aborted)
                                        (js/console.error e)))
             (.readAsArrayBuffer reader file))))
+
+      sqlite-zip?
+      (let [graph-name (string/trim graph-name)]
+        (cond
+          (string/blank? graph-name)
+          (notification/show! "Empty graph name." :error)
+
+          (repo-handler/graph-already-exists? graph-name)
+          (notification/show! "Please specify another name as another graph with this name already exists!" :error)
+
+          :else
+          (db-import-handler/import-from-sqlite-zip! file graph-name finished-cb)))
 
       (or debug-transit? db-edn?)
       (let [graph-name (string/trim graph-name)]
@@ -472,6 +484,19 @@
              :on-change (fn [e]
                           (shui/dialog-open!
                            #(set-graph-name-dialog e {:sqlite? true})))}]]
+
+          [:label.action-input.flex.items-center.mx-2.my-2
+           [:span.as-flex-center [:i (svg/logo 28)]]
+           [:span.flex.flex-col
+            [[:strong "SQLite + assets (.zip)"]
+             [:small "Import a zip containing db.sqlite and an assets folder"]]]
+           [:input.absolute.hidden
+            {:id "import-sqlite-zip"
+             :type "file"
+             :accept ".zip"
+             :on-change (fn [e]
+                          (shui/dialog-open!
+                           #(set-graph-name-dialog e {:sqlite-zip? true})))}]]
 
           (when-not (util/mobile?)
             [:label.action-input.flex.items-center.mx-2.my-2
