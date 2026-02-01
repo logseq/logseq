@@ -29,6 +29,13 @@
   []
   (.toString (fs/readFileSync 0) "utf8"))
 
+(defn- stdin-available?
+  []
+  (try
+    (let [stat (fs/fstatSync 0)]
+      (or (.isFIFO stat) (.isFile stat)))
+    (catch :default _ false)))
+
 (defn- normalize-stdin-id
   [value]
   (let [text (string/trim (or value ""))]
@@ -45,12 +52,16 @@
 
 (defn- resolve-stdin-id
   [options]
-  (if (:id-from-stdin? options)
-    (let [stdin (if (contains? options :stdin)
-                  (:stdin options)
-                  (read-stdin))]
-      (assoc options :id (normalize-stdin-id stdin)))
-    options))
+  (let [id-present? (or (contains? options :id) (some? (:id options)))
+        stdin (cond
+                (contains? options :stdin) (:stdin options)
+                (:id-from-stdin? options) (read-stdin)
+                (and id-present? (stdin-available?)) (read-stdin)
+                :else nil)
+        normalized (normalize-stdin-id stdin)]
+    (if (string/blank? normalized)
+      options
+      (assoc options :id normalized))))
 
 (defn invalid-options?
   [opts]
