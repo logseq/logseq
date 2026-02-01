@@ -1180,6 +1180,20 @@
                                        " :where"
                                        " [?e :block/title ?title]"
                                        " [(clojure.string/includes? ?title ?q)]]")
+                       query-json-result (run-cli ["--repo" "query-pipe-graph"
+                                                   "query"
+                                                   "--query" query-text
+                                                   "--inputs" (pr-str ["Pipe"])]
+                                                  data-dir cfg-path)
+                       query-json-payload (parse-json-output query-json-result)
+                       query-ids (get-in query-json-payload [:data :result])
+                       query-human-result (run-cli ["--repo" "query-pipe-graph"
+                                                    "--output" "human"
+                                                    "query"
+                                                    "--query" query-text
+                                                    "--inputs" (pr-str ["Pipe"])]
+                                                   data-dir cfg-path)
+                       query-human-output (string/trim (:output query-human-result))
                        node-bin (shell-escape (.-execPath js/process))
                        cli-bin (shell-escape (node-path/resolve "static/logseq-cli.js"))
                        data-arg (shell-escape data-dir)
@@ -1209,6 +1223,7 @@
                        stop-result (run-cli ["server" "stop" "--repo" "query-pipe-graph"]
                                             data-dir cfg-path)
                        stop-payload (parse-json-output stop-result)]
+                 (is (= (pr-str query-ids) query-human-output))
                  (is (string/includes? output "Pipe One"))
                  (is (string/includes? output "Pipe Two"))
                  (is (= "ok" (:status stop-payload)))
@@ -1239,6 +1254,13 @@
                                        " :where"
                                        " [?e :block/title ?title]"
                                        " [(clojure.string/includes? ?title ?q)]]")
+                       query-json-result (run-cli ["--repo" "query-stdin-graph"
+                                                   "query"
+                                                   "--query" query-text
+                                                   "--inputs" (pr-str ["Pipe"])]
+                                                  data-dir cfg-path)
+                       query-json-payload (parse-json-output query-json-result)
+                       query-ids (get-in query-json-payload [:data :result])
                        query-result (run-cli ["--repo" "query-stdin-graph"
                                               "--output" "human"
                                               "query"
@@ -1261,6 +1283,7 @@
                        stop-result (run-cli ["server" "stop" "--repo" "query-stdin-graph"]
                                             data-dir cfg-path)
                        stop-payload (parse-json-output stop-result)]
+                 (is (= (pr-str query-ids) ids-text))
                  (is (= "ok" (:status show-payload)))
                  (is (contains? root-titles "PipePage"))
                  (is (some? pipe-one))
