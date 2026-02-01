@@ -133,32 +133,34 @@
                                                             :current-page "Assets"}))]
         (if-not entry
           (notification/show! "Zip missing db.sqlite. Please check the archive structure." :error)
-          (p/let [sqlite-buffer (.async ^js (:entry entry) "arraybuffer")]
-            (import-from-sqlite-db!
-             sqlite-buffer
-             bare-graph-name
-             (fn []
-               (p/let [repo (state/get-current-repo)
-                       {:keys [copied failed]}
-                       (<copy-zip-assets!
-                        repo
-                        entries
-                        {:total asset-total
-                         :progress-fn (fn [current total]
-                                        (when (pos? total)
-                                          (state/set-state! :graph/importing-state {:total total
-                                                                                    :current-idx current
-                                                                                    :current-page "Assets"})))})]
-                 (when (pos? copied)
-                   (notification/show! (str "Imported " copied " assets.") :success))
-                 (when (seq failed)
-                   (notification/show!
-                    (str "Skipped " (count failed) " assets. See console for details.")
-                    :warning false)
-                   (js/console.warn "Zip import skipped assets:" (clj->js failed)))
-                 (state/set-state! :graph/importing nil)
-                 (state/set-state! :graph/importing-state nil)
-                 (finished-ok-handler)))))))
+          (do
+            (shui/dialog-close!)
+            (p/let [sqlite-buffer (.async ^js (:entry entry) "arraybuffer")]
+              (import-from-sqlite-db!
+               sqlite-buffer
+               bare-graph-name
+               (fn []
+                 (p/let [repo (state/get-current-repo)
+                         {:keys [copied failed]}
+                         (<copy-zip-assets!
+                          repo
+                          entries
+                          {:total asset-total
+                           :progress-fn (fn [current total]
+                                          (when (pos? total)
+                                            (state/set-state! :graph/importing-state {:total total
+                                                                                      :current-idx current
+                                                                                      :current-page "Assets"})))})]
+                   (when (pos? copied)
+                     (notification/show! (str "Imported " copied " assets.") :success))
+                   (when (seq failed)
+                     (notification/show!
+                      (str "Skipped " (count failed) " assets. See console for details.")
+                      :warning false)
+                     (js/console.warn "Zip import skipped assets:" (clj->js failed)))
+                   (state/set-state! :graph/importing nil)
+                   (state/set-state! :graph/importing-state nil)
+                   (finished-ok-handler))))))))
       (p/catch
        (fn [e]
          (js/console.error e)
