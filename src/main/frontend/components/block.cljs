@@ -2570,6 +2570,7 @@
                                   :logseq.property/icon
                                   {:type :none})))
                   :del-btn? true  ;; Always show delete when icon displayed
+                  :page-title (:block/title block)
                   :icon-props {:size 16}})])))))
 
      (when-not table?
@@ -3077,6 +3078,7 @@
                                                                           (:db/id block)
                                                                           :logseq.property.class/default-icon)))))
                                                       :del-btn? (boolean icon')
+                                                      :page-title (:block/title block)
                                                       :icon-props {:style {:width "1lh"
                                                                            :height "1lh"
                                                                            :font-size (cond

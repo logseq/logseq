@@ -8,7 +8,12 @@
     background-color: var(--rx-gray-05) !important;
   }
 
-  > .search-section {
+  /* Topbar wrapper for easier inspection */
+  .icon-picker-topbar {
+    @apply flex-shrink-0;
+  }
+
+  .search-section {
     @apply flex items-center gap-2 py-1 pr-3;
     @apply flex-shrink-0;
     background-color: var(--lx-gray-03);
@@ -176,6 +181,11 @@
   @apply -m-1;
 }
 
+/* Same negative margin to counteract dropdown p-1 padding */
+.ui__dropdown-menu-content .asset-picker {
+  @apply -m-1;
+}
+
 .ls-icon {
   &-Backlog {
     @apply text-gray-05;
@@ -252,9 +262,10 @@
   color: var(--rx-gray-11);
 }
 
-/* Asset Picker (Level 2 view) */
+/* Asset Picker (Level 2 view) - Figma aligned */
 .asset-picker {
-  @apply flex flex-col overflow-hidden;
+  @apply flex flex-col overflow-hidden relative;
+  /* Match icon-picker width for visual continuity */
   width: 380px;
   min-width: 380px;
   min-height: 320px;
@@ -262,65 +273,97 @@
   background-color: var(--lx-gray-02);
 }
 
-.asset-picker-header {
-  @apply flex items-center gap-2 px-3 py-2;
+/* Topbar wrapper for easier inspection */
+.asset-picker-topbar {
   @apply flex-shrink-0;
+}
+
+/* Back button as link-style button */
+.asset-picker-back {
+  @apply flex-shrink-0;
+  /* py-2 + content height matches icon-picker topbar */
+  padding-top: 8px;
+  padding-bottom: 7px;
+  /* 14px aligns chevron icon with search icon below */
+  padding-left: 14px;
+  padding-right: 14px;
   background-color: var(--lx-gray-03);
-  border-bottom: 1px solid var(--rx-gray-06);
+  border-bottom: 1px solid var(--rx-gray-05);
 
   .back-button {
-    @apply p-1 rounded cursor-pointer;
+    @apply flex items-center gap-0.5;
+    @apply text-sm cursor-pointer;
+    @apply border-none bg-transparent p-0;
     @apply transition-colors duration-150;
-    @apply border-none bg-transparent;
-    color: var(--rx-gray-11);
+    color: var(--rx-gray-10);
 
     &:hover {
-      background-color: var(--rx-gray-04);
+      color: var(--rx-gray-12);
     }
   }
 }
 
+/* Search input matching icon picker */
 .asset-picker-search {
-  @apply px-3 py-2;
+  @apply py-1;
   @apply flex-shrink-0;
   background-color: var(--lx-gray-03);
+  /* Grey line at bottom of header section, matching icon picker */
+  border-bottom: 1px solid var(--rx-gray-06);
 
-  .ui__input {
-    @apply h-8 text-sm;
-    @apply bg-gray-03 border-none;
-    box-shadow: none !important;
+  .search-input {
+    @apply relative flex-1 px-2;
 
-    &:focus {
-      @apply bg-gray-03;
+    .ls-icon-search {
+      @apply absolute left-[14px] top-[8px] opacity-50;
+    }
+
+    .ui__input {
+      @apply leading-none pl-8 outline-none border-none bg-gray-03;
+      @apply focus:bg-gray-03 !h-8;
+      box-shadow: none !important;
     }
   }
 }
 
+/* Section header matching icon picker */
 .asset-picker-section-header {
-  @apply px-3 py-2 text-xs font-medium;
+  @apply flex items-center justify-between px-4 py-1;
+  @apply text-[10px] tracking-tight;
   @apply flex-shrink-0;
-  color: var(--rx-gray-10);
-  background-color: var(--lx-gray-02);
-  border-bottom: 1px solid var(--rx-gray-05);
+  color: var(--rx-gray-11);
+
+  .section-title {
+    @apply flex items-center gap-0.5;
+  }
+
+  .section-actions {
+    @apply flex items-center gap-2;
+
+    .shortcut {
+      @apply text-xs;
+    }
+  }
 }
 
+/* Grid layout - 5 columns for larger, scannable images */
 .asset-picker-grid {
   @apply grid gap-2 p-3;
   @apply flex-1 overflow-y-auto;
   grid-template-columns: repeat(5, 1fr);
   min-height: 120px;
   align-content: start;
+  /* Add padding at bottom for floating action buttons */
+  padding-bottom: 56px;
 }
 
+/* Image items - fill grid cell with proper aspect ratio */
 .image-asset-item {
-  @apply overflow-hidden rounded;
-  @apply cursor-pointer;
+  @apply overflow-hidden rounded cursor-pointer;
   @apply transition-all duration-150;
-  @apply border-none p-0;
-  /* Square aspect ratio - explicit since aspect-square not available */
-  width: 100%;
-  padding-bottom: 100%;
   position: relative;
+  width: 100%;
+  padding-bottom: 100%; /* Square aspect ratio */
   border: 2px solid transparent;
   background-color: var(--rx-gray-04);
 
@@ -333,28 +376,69 @@
     border-color: var(--rx-accent-09);
   }
 
-  img,
+  img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 4px;
+  }
+
   > div {
-    @apply absolute inset-0 w-full h-full object-cover;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 4px;
+  }
+
+  /* Avatar mode - circular previews */
+  &.avatar-mode {
+    @apply rounded-full;
+
+    img {
+      @apply rounded-full;
+    }
+
+    > div {
+      @apply rounded-full;
+    }
   }
 }
 
+/* Action buttons - floating at bottom */
 .asset-picker-actions {
-  @apply px-3 py-2;
-  @apply flex-shrink-0;
-  border-top: 1px solid var(--rx-gray-06);
+  @apply flex items-center justify-center gap-2 px-3 py-2;
+  @apply absolute bottom-2 left-1/2 -translate-x-1/2;
+  @apply rounded-lg;
   background-color: var(--lx-gray-03);
+  border: 1px solid var(--rx-gray-06);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 
-  .upload-button {
-    @apply flex items-center justify-center gap-2;
-    @apply w-full py-2 px-3 rounded-md;
-    @apply text-sm font-medium cursor-pointer;
-    @apply transition-colors duration-150;
-    background-color: var(--rx-gray-04);
-    color: var(--rx-gray-11);
+  .secondary-button {
+    @apply flex items-center gap-1.5 px-2.5 py-1.5 rounded-md;
+    @apply text-xs font-medium cursor-pointer;
+    @apply transition-colors duration-150 whitespace-nowrap;
+    background-color: var(--rx-gray-06);
+    color: var(--rx-gray-12);
+    border: none;
 
     &:hover {
-      background-color: var(--rx-gray-05);
+      background-color: var(--rx-gray-07);
+    }
+  }
+
+  .primary-button {
+    @apply flex items-center gap-1.5 px-2.5 py-1.5 rounded-md;
+    @apply text-xs font-medium cursor-pointer;
+    @apply transition-colors duration-150 whitespace-nowrap;
+    background-color: var(--rx-blue-09);
+    color: white;
+    border: none;
+
+    &:hover {
+      background-color: var(--rx-blue-10);
     }
   }
 }

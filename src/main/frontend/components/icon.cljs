@@ -5,6 +5,7 @@
             [camel-snake-kebab.core :as csk]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
+            [electron.ipc :as ipc]
             [frontend.colors :as colors]
             [frontend.config :as config]
             [frontend.date :as date]
@@ -16,7 +17,6 @@
             [frontend.fs :as fs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.editor :as editor-handler]
-            [electron.ipc :as ipc]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.storage :as storage]
@@ -166,7 +166,7 @@
 
       url
       [:span.ui__icon.image-icon.flex.items-center.justify-center
-       {:style {:max-width size :max-height size}}
+       {:style {:width size :height size}}
        [:img
         {:src url
          :loading "lazy"
@@ -177,6 +177,52 @@
       :else
       [:span.ui__icon.image-icon.bg-gray-04.animate-pulse
        {:style {:width size :height size}}])))
+
+(rum/defcs avatar-image-cp < rum/reactive
+  (rum/local nil ::url)
+  (rum/local false ::error)
+  (rum/local nil ::loaded-for)
+  {:did-mount (fn [state]
+                (let [[asset-uuid asset-type _avatar-data _opts] (:rum/args state)
+                      *url (::url state)
+                      *error (::error state)
+                      *loaded-for (::loaded-for state)]
+                  (load-image-url! asset-uuid asset-type *url *error *loaded-for))
+                state)
+   :did-update (fn [state]
+                 (let [[asset-uuid asset-type _avatar-data _opts] (:rum/args state)
+                       *loaded-for (::loaded-for state)]
+                   (when (not= @*loaded-for [asset-uuid asset-type])
+                     (let [*url (::url state)
+                           *error (::error state)]
+                       (load-image-url! asset-uuid asset-type *url *error *loaded-for))))
+                 state)}
+  "Renders an avatar with an image, with initials as fallback.
+   Uses shui/avatar for circular display with object-fit: cover."
+  [state _asset-uuid _asset-type avatar-data opts]
+  (let [url @(::url state)
+        ;; Fallback data from avatar
+        avatar-value (get avatar-data :value "")
+        backgroundColor (or (get avatar-data :backgroundColor)
+                            (colors/variable :gray :09))
+        color (or (get avatar-data :color)
+                  (colors/variable :gray :09))
+        display-text (subs avatar-value 0 (min 3 (count avatar-value)))
+        bg-color-rgba (convert-bg-color-to-rgba backgroundColor)
+        font-size (if (<= (:size opts 20) 16) "8px" "14px")]
+    (shui/avatar
+     {:class "w-5 h-5"}
+     ;; Image (shows when loaded, circular with cover fit)
+     (when url
+       (shui/avatar-image {:src url
+                           :style {:object-fit "cover"}}))
+     ;; Fallback (shows while loading or on error)
+     (shui/avatar-fallback
+      {:style {:background-color bg-color-rgba
+               :font-size font-size
+               :font-weight "500"
+               :color color}}
+      display-text))))
 
 (defn icon
   [icon' & [opts]]
@@ -210,24 +256,29 @@
                    display-text]])
 
                (and (map? normalized) (= :avatar (:type normalized)) (get-in normalized [:data :value]))
-               (let [avatar-value (get-in normalized [:data :value])
-                     ;; Default to gray Radix color
-                     backgroundColor (or (get-in normalized [:data :backgroundColor])
-                                         (colors/variable :gray :09))
-                     color (or (get-in normalized [:data :color])
-                               (colors/variable :gray :09))
-                     display-text (subs avatar-value 0 (min 3 (count avatar-value)))
-                     bg-color-rgba (convert-bg-color-to-rgba backgroundColor)
-                     ;; Font size: 8px for sidebar contexts, 14px for page titles
-                     font-size (if (<= (:size opts 20) 16) "8px" "14px")]
-                 (shui/avatar
-                  {:class "w-5 h-5"}
-                  (shui/avatar-fallback
-                   {:style {:background-color bg-color-rgba
-                            :font-size font-size
-                            :font-weight "500"
-                            :color color}}
-                   display-text)))
+               (let [avatar-data (get normalized :data)
+                     asset-uuid (get avatar-data :asset-uuid)
+                     asset-type (get avatar-data :asset-type)]
+                 (if asset-uuid
+                   ;; Avatar with image - use async loading component
+                   (avatar-image-cp asset-uuid asset-type avatar-data opts)
+                   ;; Text-only avatar
+                   (let [avatar-value (get avatar-data :value)
+                         backgroundColor (or (get avatar-data :backgroundColor)
+                                             (colors/variable :gray :09))
+                         color (or (get avatar-data :color)
+                                   (colors/variable :gray :09))
+                         display-text (subs avatar-value 0 (min 3 (count avatar-value)))
+                         bg-color-rgba (convert-bg-color-to-rgba backgroundColor)
+                         font-size (if (<= (:size opts 20) 16) "8px" "14px")]
+                     (shui/avatar
+                      {:class "w-5 h-5"}
+                      (shui/avatar-fallback
+                       {:style {:background-color bg-color-rgba
+                                :font-size font-size
+                                :font-weight "500"
+                                :color color}}
+                       display-text)))))
 
                (and (map? normalized) (= :image (:type normalized)) (get-in normalized [:data :asset-uuid]))
                (let [asset-uuid (get-in normalized [:data :asset-uuid])
@@ -382,13 +433,18 @@
         :avatar (let [backgroundColor (or (:backgroundColor v)
                                           (colors/variable :gray :09))
                       color (or (:color v)
-                                (colors/variable :gray :09))]
+                                (colors/variable :gray :09))
+                      ;; Preserve image data if present
+                      asset-uuid (or (get-in v [:data :asset-uuid]) (:asset-uuid v))
+                      asset-type (or (get-in v [:data :asset-type]) (:asset-type v))]
                   {:type :avatar
                    :id (or id (str "avatar-" value))
                    :label (or label value)
-                   :data {:value value
-                          :backgroundColor backgroundColor
-                          :color color}})
+                   :data (cond-> {:value value
+                                  :backgroundColor backgroundColor
+                                  :color color}
+                           asset-uuid (assoc :asset-uuid asset-uuid)
+                           asset-type (assoc :asset-type asset-type))})
         :image (let [;; Extract asset-uuid, stripping "image-" prefix if present (from :id fallback)
                      raw-uuid (or (get-in v [:data :asset-uuid]) (:asset-uuid v) value)
                      asset-uuid (if (and (string? raw-uuid) (string/starts-with? raw-uuid "image-"))
@@ -701,8 +757,8 @@
       (shui/shortcut keyboard-hint {:style :compact})])])
 
 (rum/defc pane-section
-  [label icon-items & {:keys [collapsible? keyboard-hint total-count searching? virtual-list? render-item-fn expanded? input-focused?]
-                       :or {virtual-list? true collapsible? false expanded? true input-focused? false}
+  [label icon-items & {:keys [collapsible? keyboard-hint total-count searching? virtual-list? render-item-fn expanded? input-focused? show-header?]
+                       :or {virtual-list? true collapsible? false expanded? true input-focused? false show-header? true}
                        :as opts}]
   (let [*el-ref (rum/use-ref nil)
         render-fn (or render-item-fn render-item)
@@ -714,17 +770,18 @@
               [{:has-virtual-list virtual-list?
                 :searching-result searching?}])}
      ;; Use new collapsible header when collapsible? is true
-     (if collapsible?
-       (section-header {:title label
-                        :count (count icon-items)
-                        :total-count total-count
-                        :expanded? expanded?
-                        :keyboard-hint keyboard-hint
-                        :on-toggle toggle-fn
-                        :input-focused? input-focused?})
-       ;; Simple header (current style) for non-collapsible
-       [:div.hd.px-1.pb-1.leading-none
-        [:strong.text-xs.font-medium.text-gray-07.dark:opacity-80 label]])
+     (when show-header?
+       (if collapsible?
+         (section-header {:title label
+                          :count (count icon-items)
+                          :total-count total-count
+                          :expanded? expanded?
+                          :keyboard-hint keyboard-hint
+                          :on-toggle toggle-fn
+                          :input-focused? input-focused?})
+         ;; Simple header (current style) for non-collapsible
+         [:div.hd.px-1.pb-1.leading-none
+          [:strong.text-xs.font-medium.text-gray-07.dark:opacity-80 label]]))
 
      ;; Content - only render if expanded or not collapsible
      (when (or (not collapsible?) expanded?)
@@ -762,9 +819,11 @@
                            :data {:value (:id emoji)}})
                         emojis*)]
     (pane-section
-     (util/format "Emojis (%s)" (count emojis*))
+     "Emojis"
      icon-items
-     opts)))
+     :show-header? false
+     :on-chosen (:on-chosen opts)
+     :on-hover (:on-hover opts))))
 
 (rum/defc icons-cp < rum/static
   [icons opts]
@@ -775,9 +834,11 @@
                            :data {:value icon-name}})
                         icons)]
     (pane-section
-     (util/format "Icons (%s)" (count icons))
+     "Icons"
      icon-items
-     opts)))
+     :show-header? false
+     :on-chosen (:on-chosen opts)
+     :on-hover (:on-hover opts))))
 
 (defn get-used-items
   []
@@ -961,9 +1022,11 @@
 
 (rum/defcs image-asset-item < rum/reactive
   (rum/local nil ::url)
+  (rum/local false ::error)
   {:did-mount (fn [state]
                 (let [[asset _opts] (:rum/args state)
                       *url (::url state)
+                      *error (::error state)
                       asset-type (:logseq.property.asset/type asset)
                       asset-uuid (:block/uuid asset)]
                   (when (and asset-uuid asset-type)
@@ -971,27 +1034,43 @@
                           asset-path (path/path-join (str "../" common-config/local-assets-dir) file)]
                       (-> (assets-handler/<make-asset-url asset-path)
                           (p/then #(reset! *url %))
-                          (p/catch #(js/console.error "Failed to load asset URL" %))))))
+                          (p/catch (fn [_err]
+                                     ;; Mark as error so we don't show ghost placeholder
+                                     (reset! *error true)))))))
                 state)}
-  "Renders a single image asset thumbnail in the asset picker grid"
-  [state asset {:keys [on-chosen]}]
+  "Renders a single image asset thumbnail in the asset picker grid.
+   When avatar-context is provided, renders circular previews and returns avatar data.
+   Returns nil if asset file doesn't exist (ghost asset)."
+  [state asset {:keys [on-chosen avatar-context]}]
   (let [url @(::url state)
+        error? @(::error state)
         asset-type (:logseq.property.asset/type asset)
         asset-uuid (:block/uuid asset)
-        asset-title (or (:block/title asset) (str asset-uuid))]
-    [:button.image-asset-item
-     {:title asset-title
-      :on-click (fn [e]
-                  (on-chosen e {:type :image
-                                :id (str "image-" asset-uuid)
-                                :label asset-title
-                                :data {:asset-uuid (str asset-uuid)
-                                       :asset-type asset-type}}))}
-     (if url
-       [:img
-        {:src url
-         :loading "lazy"}]
-       [:div.bg-gray-04.animate-pulse])]))
+        asset-title (or (:block/title asset) (str asset-uuid))
+        avatar-mode? (some? avatar-context)]
+    ;; Don't render ghost assets (db entry exists but file doesn't)
+    (when-not error?
+      [:button.image-asset-item
+       {:title asset-title
+        :class (when avatar-mode? "avatar-mode")
+        :on-click (fn [e]
+                    (let [image-data {:asset-uuid (str asset-uuid)
+                                      :asset-type asset-type}]
+                      (on-chosen e
+                                 (if avatar-context
+                                   ;; Merge image into existing avatar
+                                   {:type :avatar
+                                    :id (:id avatar-context)
+                                    :label (:label avatar-context)
+                                    :data (merge (:data avatar-context) image-data)}
+                                   ;; Standard image selection
+                                   {:type :image
+                                    :id (str "image-" asset-uuid)
+                                    :label asset-title
+                                    :data image-data}))))}
+       (if url
+         [:img {:src url :loading "lazy"}]
+         [:div.bg-gray-04.animate-pulse])])))
 
 (rum/defcs asset-picker < rum/reactive db-mixins/query
   (rum/local "" ::search-q)
@@ -1015,7 +1094,7 @@
                         (p/catch (fn [_err]
                                    (reset! *loading? false))))))
                 state)}
-  [state {:keys [on-chosen on-back]}]
+  [state {:keys [on-chosen on-back avatar-context]}]
   (let [*search-q (::search-q state)
         *loading? (::loading? state)
         *loaded-assets (::loaded-assets state)
@@ -1033,8 +1112,8 @@
                                        (string/lower-case search-q))))
                                   assets))
         asset-count (count filtered-assets)
-        ;; Handle file upload - uses api-insert-new-block! approach like tag tables
-        ;; to avoid adding assets to today's journal
+        avatar-mode? (some? avatar-context)
+        ;; Handle file upload
         handle-upload (fn [files]
                         (let [repo (state/get-current-repo)
                               image-files (filter (fn [file]
@@ -1046,64 +1125,77 @@
                                                       (contains? config/image-formats ext)))
                                                   files)]
                           (when (seq image-files)
-                            ;; Save each image file using the tag-table approach
                             (p/let [entities (p/all (map #(save-image-asset! repo %) image-files))]
-                              ;; Refresh assets list
                               (p/let [updated-assets (<get-image-assets)]
                                 (reset! *loaded-assets (or (seq updated-assets) [])))
-                              ;; Auto-select the first uploaded image
                               (when-let [first-asset (first (remove nil? entities))]
-                                (on-chosen nil {:type :image
+                                (let [image-data {:asset-uuid (str (:block/uuid first-asset))
+                                                  :asset-type (:logseq.property.asset/type first-asset)}]
+                                  (on-chosen nil
+                                             (if avatar-context
+                                               {:type :avatar
+                                                :id (:id avatar-context)
+                                                :label (:label avatar-context)
+                                                :data (merge (:data avatar-context) image-data)}
+                                               {:type :image
                                                 :id (str "image-" (:block/uuid first-asset))
                                                 :label (or (:block/title first-asset) "")
-                                                :data {:asset-uuid (str (:block/uuid first-asset))
-                                                       :asset-type (:logseq.property.asset/type first-asset)}}))))))]
+                                                :data image-data}))))))))]
     [:div.asset-picker
-     ;; Header with back button
-     [:div.asset-picker-header
-      [:button.back-button
-       {:on-click on-back}
-       (shui/tabler-icon "arrow-left" {:size 16})]
-      [:span.text-sm.font-medium "Select image"]]
+     {:class (when avatar-mode? "avatar-mode")}
 
-     ;; Search input
-     [:div.asset-picker-search
-      (shui/input
-       {:placeholder "Search images..."
-        :value search-q
-        :auto-focus true
-        :on-change #(reset! *search-q (util/evalue %))})]
+     ;; Topbar: back button + search
+     [:div.asset-picker-topbar
+      [:div.asset-picker-back
+       [:button.back-button
+        {:on-click on-back}
+        (shui/tabler-icon "chevron-left" {:size 16})
+        [:span "Back"]]]
+      (shui/separator {:class "my-0 opacity-50"})
+      [:div.asset-picker-search
+       [:div.search-input
+        (shui/tabler-icon "search" {:size 16 :class "ls-icon-search"})
+        (shui/input
+         {:placeholder "Search images"
+          :value search-q
+          :auto-focus true
+          :on-change #(reset! *search-q (util/evalue %))})]]]
 
-     ;; Section header with count
+     ;; Section header (matching icon picker style)
      [:div.asset-picker-section-header
-      [:span (str "Images · " asset-count)]]
+      [:div.section-title
+       [:span.font-bold "Images"]
+       [:span.font-medium (str " · " asset-count)]]]
 
      ;; Asset grid
      [:div.asset-picker-grid
+      {:class (when avatar-mode? "avatar-mode")}
       (cond
-        ;; Show loading state while fetching from DB worker
         loading?
         [:div.flex.flex-col.items-center.justify-center.h-32.text-gray-08
          [:div.animate-spin (shui/tabler-icon "loader-2" {:size 32})]
          [:span.text-sm.mt-2 "Loading assets..."]]
 
-        ;; Show assets if we have them
         (seq filtered-assets)
         (for [asset filtered-assets]
           (rum/with-key
-            (image-asset-item asset {:on-chosen on-chosen})
+            (image-asset-item asset {:on-chosen on-chosen
+                                     :avatar-context avatar-context})
             (str (:block/uuid asset))))
 
-        ;; No assets found
         :else
         [:div.flex.flex-col.items-center.justify-center.h-32.text-gray-08
          (shui/tabler-icon "photo-off" {:size 32})
          [:span.text-sm.mt-2 "No image assets found"]
          [:span.text-xs.mt-1 "Upload an image to get started"]])]
 
-     ;; Upload button at bottom
+     ;; Action buttons (floating at bottom)
      [:div.asset-picker-actions
-      [:label.upload-button
+      [:button.secondary-button
+       {:on-click #(js/console.log "TODO: Add asset via URL")}
+       (shui/tabler-icon "link" {:size 16})
+       [:span "Add asset via URL"]]
+      [:label.primary-button
        [:input.hidden
         {:type "file"
          :accept "image/*"
@@ -1111,7 +1203,7 @@
          :on-change (fn [e]
                       (let [files (array-seq (.-files (.-target e)))]
                         (handle-upload files)))}]
-       (shui/tabler-icon "upload" {:size 16})
+       (shui/tabler-icon "square-plus" {:size 16})
        [:span "Upload asset"]]]]))
 
 (rum/defc all-cp < rum/reactive
@@ -1163,10 +1255,15 @@
                           :expanded? (get section-states "Icons" true)))]))
 
 (rum/defc tab-observer
-  [tab {:keys [reset-q!]}]
+  "Re-runs the search when tab changes (if there's a query), preserving the search text."
+  [tab {:keys [q *result]}]
   (hooks/use-effect!
-   #(reset-q!)
-   [tab])
+   (fn []
+     ;; Re-run search with existing query for new tab context
+     (when-not (string/blank? q)
+       (p/let [result (search q tab)]
+         (reset! *result result))))
+   [tab q])
   nil)
 
 (rum/defc keyboard-shortcut-observer
@@ -1301,9 +1398,16 @@
   (rum/local false ::select-mode?)
   (rum/local :all ::tab)
   (rum/local false ::input-focused?)
-  (rum/local :icon-picker ::view)  ;; :icon-picker or :asset-picker
-  {:init (fn [s]
-           (assoc s ::color (atom (storage/get :ls-icon-color-preset))))}
+  (rum/local :icon-picker ::view) ;; Default view, updated in :will-mount for avatars/images
+  {:will-mount (fn [s]
+                 (let [opts (first (:rum/args s))
+                       icon-value (:icon-value opts)
+                       normalized (normalize-icon icon-value)
+                       *view (::view s)]
+                   ;; Avatar and image icons open asset picker directly for image selection
+                   (when (contains? #{:avatar :image} (:type normalized))
+                     (reset! *view :asset-picker))
+                   (assoc s ::color (atom (storage/get :ls-icon-color-preset)))))}
   [state {:keys [on-chosen del-btn? icon-value page-title] :as opts}]
   (let [*q (::q state)
         *result (::result state)
@@ -1351,122 +1455,126 @@
       (asset-picker {:on-chosen (fn [e icon-data]
                                   ((:on-chosen opts) e icon-data)
                                   (reset! *view :icon-picker))
-                     :on-back #(reset! *view :icon-picker)})
+                     :on-back #(reset! *view :icon-picker)
+                     :avatar-context (when (= :avatar (:type normalized-icon-value))
+                                       normalized-icon-value)})
       ;; Level 1: Icon Picker view
       [:div.cp__emoji-icon-picker
        {:data-keep-selection true}
-       ;; search section
-       [:div.search-section
-        (tab-observer @*tab {:reset-q! reset-q!})
-      (keyboard-shortcut-observer @*tab *input-focused?)
-      (when @*select-mode?
-        (select-observer *input-ref))
-      [:div.search-input
-       (shui/tabler-icon "search" {:size 16})
-       [(shui/input
-         {:auto-focus true
-          :ref *input-ref
-          :placeholder "Search emojis, icons, assets..."
-          :default-value ""
-          :on-focus #(do (reset! *select-mode? false)
-                         (reset! *input-focused? true))
-          :on-blur #(reset! *input-focused? false)
-          :on-key-down (fn [^js e]
-                         (case (.-keyCode e)
-                            ;; esc
-                           27 (do (util/stop e)
-                                  (if (string/blank? @*q)
-                                   ;(some-> (rum/deref *input-ref) (.blur))
-                                    (shui/popup-hide!)
-                                    (reset-q!)))
-                           38 (do (util/stop e))
-                           (9 40) (do
-                                    (reset! *select-mode? true)
-                                    (util/stop e))
-                           :dune))
-          :on-change (debounce
-                      (fn [e]
-                        (reset! *q (util/evalue e))
-                        (reset! *select-mode? false)
-                        (if (string/blank? @*q)
-                          (reset! *result {})
-                          (p/let [result (search @*q @*tab)]
-                            (reset! *result result))))
-                      200)})]
-       (when-not (string/blank? @*q)
-         [:a.x {:on-click reset-q!} (shui/tabler-icon "x" {:size 14})])]
 
-      ;; color picker (always visible)
-      (color-picker *color (fn [c]
-                             (cond
-                               (or (= :icon (:type normalized-icon-value))
-                                   (= :text (:type normalized-icon-value)))
-                               (on-chosen nil (assoc-in normalized-icon-value [:data :color] c) true)
+       ;; Topbar: search + separator + tabs
+       [:div.icon-picker-topbar
+        [:div.search-section
+         (tab-observer @*tab {:q @*q :*result *result})
+         (keyboard-shortcut-observer @*tab *input-focused?)
+         (when @*select-mode?
+           (select-observer *input-ref))
+         [:div.search-input
+          (shui/tabler-icon "search" {:size 16})
+          [(shui/input
+            {:auto-focus true
+             :ref *input-ref
+             :placeholder "Search emojis, icons, assets..."
+             :default-value ""
+             :on-focus #(do (reset! *select-mode? false)
+                            (reset! *input-focused? true))
+             :on-blur #(reset! *input-focused? false)
+             :on-key-down (fn [^js e]
+                            (case (.-keyCode e)
+                              ;; esc
+                              27 (do (util/stop e)
+                                     (if (string/blank? @*q)
+                                       (shui/popup-hide!)
+                                       (reset-q!)))
+                              38 (do (util/stop e))
+                              (9 40) (do
+                                       (reset! *select-mode? true)
+                                       (util/stop e))
+                              :dune))
+             :on-change (debounce
+                         (fn [e]
+                           (reset! *q (util/evalue e))
+                           (reset! *select-mode? false)
+                           (if (string/blank? @*q)
+                             (reset! *result {})
+                             (p/let [result (search @*q @*tab)]
+                               (reset! *result result))))
+                         200)})]
+          (when-not (string/blank? @*q)
+            [:a.x {:on-click reset-q!} (shui/tabler-icon "x" {:size 14})])]
 
-                               (= :avatar (:type normalized-icon-value))
-                               (on-chosen nil (-> normalized-icon-value
-                                                  (assoc-in [:data :color] c)
-                                                  (assoc-in [:data :backgroundColor] c)) true))))
+         ;; color picker (always visible)
+         (color-picker *color (fn [c]
+                                (cond
+                                  (or (= :icon (:type normalized-icon-value))
+                                      (= :text (:type normalized-icon-value)))
+                                  (on-chosen nil (assoc-in normalized-icon-value [:data :color] c) true)
 
-      ;; delete button
-      (when del-btn?
-        (shui/button {:variant :outline :size :sm :data-action "del"
-                      :on-click #(on-chosen nil)}
-                     (shui/tabler-icon "trash" {:size 17})))]
+                                  (= :avatar (:type normalized-icon-value))
+                                  (on-chosen nil (-> normalized-icon-value
+                                                     (assoc-in [:data :color] c)
+                                                     (assoc-in [:data :backgroundColor] c)) true))))
 
-     ;; separator
-     (shui/separator {:class "my-0 icon-picker-separator"})
+         ;; delete button
+         (when del-btn?
+           (shui/button {:variant :outline :size :sm :data-action "del"
+                         :on-click #(on-chosen nil)}
+                        (shui/tabler-icon "trash" {:size 17})))]
 
-     ;; tabs section
-     [:div.tabs-section
-      (let [tabs [[:all "All"] [:emoji "Emojis"] [:icon "Icons"] [:custom "Custom"]]]
-        (for [[id label] tabs
-              :let [active? (= @*tab id)]]
-          [:button.tab-item
-           {:key (name id)
-            :data-active (when active? "true")
-            :on-mouse-down (fn [e]
-                             (util/stop e)
-                             (reset! *tab id))}
-           label]))]
+        (shui/separator {:class "my-0 icon-picker-separator"})
 
-     ;; body
-     [:div.bd.bd-scroll
-      {:ref *result-ref
-       :class (or (some-> @*tab (name)) "other")}
-      [:div.content-pane
-       (if (seq result)
-         (let [section-states (rum/react *section-states)]
-           [:div.flex.flex-1.flex-col.search-result
-            ;; Emojis section
-            (when (seq (:emojis result))
-              (pane-section
-               "Emojis"
-               (:emojis result)
-               (assoc opts
-                      :collapsible? true
-                      :keyboard-hint "alt mod 2"
-                      :total-count (count (:emojis result))
-                      :virtual-list? false
-                      :expanded? (get section-states "Emojis" true))))
+        [:div.tabs-section
+         (let [tabs [[:all "All"] [:emoji "Emojis"] [:icon "Icons"] [:custom "Custom"]]]
+           (for [[id label] tabs
+                 :let [active? (= @*tab id)]]
+             [:button.tab-item
+              {:key (name id)
+               :data-active (when active? "true")
+               :on-mouse-down (fn [e]
+                                (util/stop e)
+                                (reset! *tab id))}
+              label]))]]
 
-            ;; Icons section
-            (when (seq (:icons result))
-              (pane-section
-               "Icons"
-               (:icons result)
-               (assoc opts
-                      :collapsible? true
-                      :keyboard-hint "alt mod 3"
-                      :total-count (count (:icons result))
-                      :virtual-list? false
-                      :expanded? (get section-states "Icons" true))))])
-         [:div.flex.flex-1.flex-col.gap-1
-          (case @*tab
-            :emoji (emojis-cp emojis opts)
-            :icon (icons-cp (get-tabler-icons) opts)
-            :custom (custom-tab-cp *q page-title *color *view icon-value opts)
-            (all-cp opts))])]]])))
+       ;; Body
+       [:div.bd.bd-scroll
+        {:ref *result-ref
+         :class (or (some-> @*tab (name)) "other")}
+        [:div.content-pane
+         ;; Custom tab always shows its own content (Text/Avatar/Image buttons)
+         (if (= @*tab :custom)
+           (custom-tab-cp *q page-title *color *view icon-value opts)
+           ;; Other tabs: show search results if present, else show tab content
+           (if (seq result)
+             (let [section-states (rum/react *section-states)]
+               [:div.flex.flex-1.flex-col.search-result
+                ;; Emojis section
+                (when (seq (:emojis result))
+                  (pane-section
+                   "Emojis"
+                   (:emojis result)
+                   (assoc opts
+                          :collapsible? true
+                          :keyboard-hint "alt mod 2"
+                          :total-count (count (:emojis result))
+                          :virtual-list? false
+                          :expanded? (get section-states "Emojis" true))))
+
+                ;; Icons section
+                (when (seq (:icons result))
+                  (pane-section
+                   "Icons"
+                   (:icons result)
+                   (assoc opts
+                          :collapsible? true
+                          :keyboard-hint "alt mod 3"
+                          :total-count (count (:icons result))
+                          :virtual-list? false
+                          :expanded? (get section-states "Icons" true))))])
+             [:div.flex.flex-1.flex-col.gap-1
+              (case @*tab
+                :emoji (emojis-cp emojis opts)
+                :icon (icons-cp (get-tabler-icons) opts)
+                (all-cp opts))]))]]])))
 
 (rum/defc icon-picker
   [icon-value {:keys [empty-label disabled? initial-open? del-btn? on-chosen icon-props popup-opts button-opts page-title]}]

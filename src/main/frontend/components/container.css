@@ -244,6 +244,18 @@
         > .ui__icon {
           @apply mr-0;
         }
+
+        /* Image icons in sidebar - fit without cropping, match container width */
+        .image-icon {
+          width: 20px !important;
+          height: 20px !important;
+
+          img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+          }
+        }
       }
     }
 

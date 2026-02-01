@@ -213,6 +213,15 @@
   height: initial;
 }
 
+/* Ensure page title has correct font-size in both editing and non-editing mode */
+.ls-page-title-container {
+  font-size: var(--ls-page-title-size, 32px) !important;
+}
+
+.ls-page-title-container .block-title-wrap {
+  font-size: inherit;
+}
+
 .block-title-wrap {
   @apply w-full inline;
 
@@ -1095,6 +1104,21 @@ html.is-mac {
 .ls-page-title .ls-page-icon svg, .ls-page-title .ls-page-icon button {
   width: 38px;
   height: 38px;
+}
+
+/* Image icons in page title - fill the button like avatars do */
+.ls-page-title .ls-page-icon .image-icon {
+  width: 2rem !important; /* 32px, matching avatar size */
+  height: 2rem !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ls-page-title .ls-page-icon .image-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 /* Scale up avatars in page title context */
