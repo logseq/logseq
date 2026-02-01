@@ -272,9 +272,10 @@
   max-height: 440px;
   background-color: var(--lx-gray-02);
 
-  /* Body content - 4px padding top/bottom */
+  /* Body content - scrollable area */
   > .bd {
-    @apply py-1;
+    @apply flex-1 py-1 overflow-y-auto;
+    min-height: 0;
   }
 
   /* Sections - 8px padding on both sides (symmetric) */
@@ -459,5 +460,44 @@
     &:hover {
       background-color: var(--rx-blue-10);
     }
+  }
+}
+
+/* URL Asset Pane - popover for adding images from URL */
+.url-asset-pane-popup {
+  @apply overflow-visible;
+}
+
+.url-asset-pane {
+  @apply flex flex-col gap-3 p-3;
+  width: 320px;
+  background-color: var(--lx-gray-02);
+
+  .form-group {
+    @apply flex flex-col gap-1;
+
+    label {
+      @apply text-xs font-medium;
+      color: var(--rx-gray-11);
+    }
+
+    .ui__input {
+      @apply text-sm;
+    }
+  }
+
+  .format-note {
+    @apply text-xs leading-relaxed;
+    color: var(--rx-gray-09);
+  }
+
+  .error-message {
+    @apply text-xs px-2 py-1.5 rounded;
+    color: var(--rx-red-11);
+    background-color: var(--rx-red-03);
+  }
+
+  .pane-footer {
+    @apply flex justify-end gap-2 pt-1;
   }
 }

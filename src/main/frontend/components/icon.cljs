@@ -529,6 +529,107 @@
               content (js/Uint8Array. buffer)]
         (fs/write-plain-text-file! repo dir file-rpath content nil)))))
 
+;; ============================================================================
+;; URL Asset Download Helpers
+;; ============================================================================
+
+(def ^:private max-url-asset-size
+  "Maximum allowed size for URL assets (10MB)"
+  (* 10 1024 1024))
+
+(defn- valid-url?
+  "Check if string is a valid HTTP/HTTPS URL"
+  [url]
+  (and (string? url)
+       (not (string/blank? url))
+       (or (string/starts-with? url "http://")
+           (string/starts-with? url "https://"))))
+
+(defn- valid-image-content-type?
+  "Check if content-type header indicates an image"
+  [content-type]
+  (and (string? content-type)
+       (string/starts-with? content-type "image/")))
+
+(defn- content-type->extension
+  "Convert content-type to file extension"
+  [content-type]
+  (when (string? content-type)
+    (case (string/lower-case content-type)
+      "image/png" "png"
+      "image/jpeg" "jpg"
+      "image/jpg" "jpg"
+      "image/gif" "gif"
+      "image/webp" "webp"
+      "image/svg+xml" "svg"
+      "image/bmp" "bmp"
+      "image/heic" "heic"
+      "image/x-icon" "ico"
+      "image/vnd.microsoft.icon" "ico"
+      ;; Fallback: extract from content-type (e.g., "image/tiff" -> "tiff")
+      (second (re-find #"image/(\w+)" content-type)))))
+
+(defn- extract-filename-from-url
+  "Extract a filename from URL path, stripping extension"
+  [url]
+  (try
+    (let [url-obj (js/URL. url)
+          pathname (.-pathname url-obj)
+          basename (node-path/basename pathname)
+          ;; Use db-asset utility to strip extension
+          name-without-ext (db-asset/asset-name->title basename)]
+      (if (or (string/blank? name-without-ext)
+              (= name-without-ext "image"))
+        ;; Fallback to timestamp if no meaningful name
+        (date/get-date-time-string-2)
+        name-without-ext))
+    (catch :default _
+      (date/get-date-time-string-2))))
+
+(defn- <validate-url-asset
+  "Validate URL by making a HEAD request. Returns promise with {:content-type :size} or rejects."
+  [url]
+  (p/create
+   (fn [resolve reject]
+     (-> (js/fetch url #js {:method "HEAD"
+                            :mode "cors"
+                            :credentials "omit"})
+         (.then (fn [^js response]
+                  (if (.-ok response)
+                    (let [content-type (.get (.-headers response) "content-type")
+                          content-length (.get (.-headers response) "content-length")
+                          size (when content-length (js/parseInt content-length 10))]
+                      (resolve {:content-type content-type
+                                :size size
+                                :url url}))
+                    (reject (ex-info "Failed to fetch URL" {:status (.-status response)})))))
+         (.catch (fn [err]
+                   (reject (ex-info "Network error" {:error (.-message err)}))))))))
+
+(defn- <download-url-asset
+  "Download image from URL. Returns promise with {:data (ArrayBuffer) :content-type :size}."
+  [url]
+  (p/create
+   (fn [resolve reject]
+     (-> (js/fetch url #js {:method "GET"
+                            :mode "cors"
+                            :credentials "omit"})
+         (.then (fn [^js response]
+                  (if (.-ok response)
+                    (let [content-type (.get (.-headers response) "content-type")]
+                      (-> (.arrayBuffer response)
+                          (.then (fn [buffer]
+                                   (resolve {:data buffer
+                                             :content-type content-type
+                                             :size (.-byteLength buffer)})))))
+                    (reject (ex-info "Failed to download" {:status (.-status response)})))))
+         (.catch (fn [err]
+                   (reject (ex-info "Network error" {:error (.-message err)}))))))))
+
+;; ============================================================================
+;; Asset Saving
+;; ============================================================================
+
 (defn save-image-asset!
   "Save an image file as an asset using api-insert-new-block! approach.
    Creates the asset as a child of the Asset class page (like tag tables do),
@@ -561,6 +662,24 @@
                                    :logseq.property.asset/size size}
                       :edit-block? false})]
         (db/entity [:block/uuid (:block/uuid block)])))))
+
+(defn- <save-url-asset!
+  "Download image from URL and save as asset. Returns promise with asset entity."
+  [repo url asset-name]
+  (p/let [{:keys [data content-type size]} (<download-url-asset url)]
+    ;; Validate content-type
+    (when-not (valid-image-content-type? content-type)
+      (throw (ex-info "Not an image" {:content-type content-type})))
+    ;; Validate size
+    (when (> size max-url-asset-size)
+      (throw (ex-info "File too large" {:size size :max max-url-asset-size})))
+    ;; Create a File object from the ArrayBuffer
+    (let [ext (or (content-type->extension content-type) "png")
+          filename (str asset-name "." ext)
+          blob (js/Blob. #js [data] #js {:type content-type})
+          file (js/File. #js [blob] filename #js {:type content-type})]
+      ;; Delegate to existing save function
+      (save-image-asset! repo file))))
 
 (defn- search-emojis
   [q]
@@ -1075,6 +1194,148 @@
          [:img {:src url :loading "lazy"}]
          [:div.bg-gray-04.animate-pulse])])))
 
+;; ============================================================================
+;; URL Asset Pane (Popover content for "Add asset via URL")
+;; ============================================================================
+
+(rum/defcs url-asset-pane < rum/reactive
+  (rum/local "" ::url)
+  (rum/local "" ::name)
+  (rum/local nil ::error)
+  (rum/local false ::loading?)
+  (rum/local nil ::validated?)
+  [state {:keys [on-close on-asset-added]}]
+  (let [*url (::url state)
+        *name (::name state)
+        *error (::error state)
+        *loading? (::loading? state)
+        *validated? (::validated? state)
+        url @*url
+        asset-name @*name
+        error @*error
+        loading? @*loading?
+        validated? @*validated?
+        url-valid? (valid-url? url)
+        can-save? (and url-valid?
+                       (not (string/blank? asset-name))
+                       (not loading?))
+
+        ;; Validate URL on blur
+        validate-url!
+        (fn []
+          (when (valid-url? url)
+            (reset! *loading? true)
+            (reset! *error nil)
+            (-> (<validate-url-asset url)
+                (p/then (fn [{:keys [content-type size]}]
+                          (cond
+                            (not (valid-image-content-type? content-type))
+                            (reset! *error "URL does not point to a supported image format")
+
+                            (and size (> size max-url-asset-size))
+                            (reset! *error (str "Image exceeds " (/ max-url-asset-size 1024 1024) "MB size limit"))
+
+                            :else
+                            (do
+                              (reset! *validated? true)
+                              ;; Auto-extract filename if empty
+                              (when (string/blank? @*name)
+                                (reset! *name (extract-filename-from-url url)))))))
+                (p/catch (fn [err]
+                           (let [msg (or (ex-message err) "Failed to validate URL")]
+                             (if (string/includes? msg "Network")
+                               (reset! *error "This website doesn't allow direct downloads. Try using a direct image URL (e.g., ending in .png or .jpg)")
+                               (reset! *error msg)))))
+                (p/finally #(reset! *loading? false)))))
+
+        ;; Save handler
+        handle-save!
+        (fn []
+          (reset! *loading? true)
+          (reset! *error nil)
+          (let [repo (state/get-current-repo)]
+            (-> (<save-url-asset! repo url asset-name)
+                (p/then (fn [asset-entity]
+                          (when asset-entity
+                            (on-asset-added asset-entity))
+                          (on-close)))
+                (p/catch (fn [err]
+                           (let [msg (ex-message err)]
+                             (cond
+                               (string/includes? (str msg) "Not an image")
+                               (reset! *error "URL does not point to a valid image")
+
+                               (string/includes? (str msg) "too large")
+                               (reset! *error "Image exceeds 10MB size limit")
+
+                               (string/includes? (str msg) "Network")
+                               (do
+                                 (reset! *error nil)
+                                 (shui/toast! "Download blocked. Try using a direct image URL" :error))
+
+                               :else
+                               (do
+                                 (reset! *error nil)
+                                 (shui/toast! (str "Failed to download: " msg) :error))))))
+                (p/finally #(reset! *loading? false)))))]
+
+    [:div.url-asset-pane
+     ;; URL input
+     [:div.form-group
+      [:label "URL"]
+      (shui/input
+       {:placeholder "https://example.com/image.png"
+        :value url
+        :auto-focus true
+        :on-change (fn [e]
+                     (reset! *url (util/evalue e))
+                     (reset! *validated? false)
+                     (reset! *error nil))
+        :on-blur validate-url!
+        :on-key-down (fn [^js e]
+                       (when (= 13 (.-keyCode e))
+                         (validate-url!)))})]
+
+     ;; Name input
+     [:div.form-group
+      [:label "Name"]
+      (shui/input
+       {:placeholder "image"
+        :value asset-name
+        :on-change #(reset! *name (util/evalue %))})]
+
+     ;; Format note
+     [:div.format-note
+      "Supported: PNG, JPG, GIF, WebP, SVG, BMP"
+      [:br]
+      "Max size: 10MB"]
+
+     ;; Error display
+     (when error
+       [:div.error-message error])
+
+     ;; Action buttons
+     [:div.pane-footer
+      (shui/button
+       {:variant :outline
+        :size :sm
+        :on-click on-close}
+       "Cancel")
+      (shui/button
+       {:variant :default
+        :size :sm
+        :disabled (not can-save?)
+        :on-click handle-save!}
+       (if loading?
+         [:span.flex.items-center.gap-1
+          [:span.animate-spin (shui/tabler-icon "loader-2" {:size 14})]
+          "Saving..."]
+         "Save"))]]))
+
+;; ============================================================================
+;; Asset Picker
+;; ============================================================================
+
 (rum/defcs asset-picker < rum/reactive db-mixins/query
   (rum/local "" ::search-q)
   (rum/local true ::loading?) ;; Start with loading state
@@ -1192,7 +1453,7 @@
 
       ;; "Images" section
       [:div.pane-section
-       (section-header {:title "Images"
+       (section-header {:title "Available assets"
                         :count asset-count
                         :expanded? true})
 
@@ -1222,7 +1483,33 @@
      ;; Action buttons (floating at bottom)
      [:div.asset-picker-actions
       [:button.secondary-button
-       {:on-click #(js/console.log "TODO: Add asset via URL")}
+       {:on-click (fn [^js e]
+                    (shui/popup-show!
+                     (.-target e)
+                     (fn [{:keys [id]}]
+                       (url-asset-pane
+                        {:on-close #(shui/popup-hide! id)
+                         :on-asset-added (fn [asset-entity]
+                                           ;; Refresh asset list
+                                           (p/let [updated-assets (<get-image-assets)]
+                                             (reset! *loaded-assets (or (seq updated-assets) [])))
+                                           ;; Select the new asset
+                                           (let [image-data {:asset-uuid (str (:block/uuid asset-entity))
+                                                             :asset-type (:logseq.property.asset/type asset-entity)}]
+                                             (on-chosen nil
+                                                        (if avatar-context
+                                                          {:type :avatar
+                                                           :id (:id avatar-context)
+                                                           :label (:label avatar-context)
+                                                           :data (merge (:data avatar-context) image-data)}
+                                                          {:type :image
+                                                           :id (str "image-" (:block/uuid asset-entity))
+                                                           :label (or (:block/title asset-entity) "")
+                                                           :data image-data}))))}))
+                     {:align :end
+                      :side "top"
+                      :content-props {:class "url-asset-pane-popup"
+                                      :sideOffset 8}}))}
        (shui/tabler-icon "link" {:size 16})
        [:span "Add asset via URL"]]
       [:label.primary-button
