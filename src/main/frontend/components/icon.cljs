@@ -681,6 +681,153 @@
       ;; Delegate to existing save function
       (save-image-asset! repo file))))
 
+;; ============================================================================
+;; Web Image Search (Wikipedia Commons)
+;; ============================================================================
+
+(def ^:private web-image-skip-confirm-key "ls-web-image-skip-confirm")
+
+(defn- get-web-image-skip-confirm
+  "Get user preference for skipping web image confirmation"
+  []
+  (boolean (storage/get web-image-skip-confirm-key)))
+
+(defn- set-web-image-skip-confirm!
+  "Set user preference for skipping web image confirmation"
+  [skip?]
+  (storage/set web-image-skip-confirm-key skip?))
+
+(defn- license->description
+  "Convert license code to human-readable description"
+  [license]
+  (when license
+    (let [license-lower (string/lower-case license)]
+      (cond
+        (or (string/includes? license-lower "public domain")
+            (string/includes? license-lower "cc0")
+            (string/includes? license-lower "pd"))
+        "Free for any use"
+
+        (or (string/includes? license-lower "cc by-nc")
+            (string/includes? license-lower "cc-by-nc"))
+        "Personal use only"
+
+        (or (string/includes? license-lower "cc by")
+            (string/includes? license-lower "cc-by")
+            (string/includes? license-lower "gfdl"))
+        "Free for commercial use"
+
+        :else
+        "Check license terms"))))
+
+(defn- <search-wikipedia-image
+  "Fetch the main/best image for a Wikipedia article via PageImages API.
+   Returns a promise with image data or nil if not found."
+  [query]
+  (p/create
+   (fn [resolve _reject]
+     (let [url (str "https://en.wikipedia.org/w/api.php?"
+                    "action=query"
+                    "&titles=" (js/encodeURIComponent query)
+                    "&prop=pageimages"
+                    "&piprop=thumbnail|original"
+                    "&pithumbsize=200"
+                    "&format=json"
+                    "&origin=*")]
+       (-> (js/fetch url #js {:method "GET"
+                              :mode "cors"
+                              :credentials "omit"})
+           (.then (fn [^js response]
+                    (if (.-ok response)
+                      (.json response)
+                      (resolve nil))))
+           (.then (fn [data]
+                    (when data
+                      (let [pages (some-> data
+                                          (gobj/getValueByKeys "query" "pages")
+                                          js->clj)
+                            page (first (vals pages))]
+                        (if-let [original (get page "original")]
+                          (resolve {:url (get original "source")
+                                    :thumb-url (get-in page ["thumbnail" "source"])
+                                    :title query
+                                    :source :wikipedia
+                                    :license nil ; PageImages doesn't return license
+                                    :license-desc nil})
+                          (resolve nil))))))
+           (.catch (fn [_err]
+                     (resolve nil))))))))
+
+(defn- <search-commons-images
+  "Search Wikimedia Commons for images matching query.
+   Returns a promise with vector of image data."
+  [query limit]
+  (p/create
+   (fn [resolve _reject]
+     (let [url (str "https://commons.wikimedia.org/w/api.php?"
+                    "action=query"
+                    "&generator=search"
+                    "&gsrnamespace=6"
+                    "&gsrsearch=" (js/encodeURIComponent query)
+                    "&gsrlimit=" limit
+                    "&prop=imageinfo"
+                    "&iiprop=url|extmetadata"
+                    "&iiextmetadatafilter=LicenseShortName"
+                    "&iiurlwidth=200"
+                    "&format=json"
+                    "&origin=*")]
+       (-> (js/fetch url #js {:method "GET"
+                              :mode "cors"
+                              :credentials "omit"})
+           (.then (fn [^js response]
+                    (if (.-ok response)
+                      (.json response)
+                      (resolve []))))
+           (.then (fn [data]
+                    (when data
+                      (let [pages (some-> data
+                                          (gobj/getValueByKeys "query" "pages")
+                                          js->clj
+                                          vals)]
+                        (resolve
+                         (->> pages
+                              (map (fn [page]
+                                     (let [imageinfo (first (get page "imageinfo"))
+                                           license (get-in imageinfo ["extmetadata" "LicenseShortName" "value"])
+                                           title (-> (get page "title" "")
+                                                     (string/replace #"^File:" "")
+                                                     (string/replace #"\.[^.]+$" ""))]
+                                       {:url (get imageinfo "url")
+                                        :thumb-url (get imageinfo "thumburl")
+                                        :title title
+                                        :source :wikipedia-commons
+                                        :license license
+                                        :license-desc (license->description license)})))
+                              (filter :url)
+                              vec))))))
+           (.catch (fn [_err]
+                     (resolve []))))))))
+
+(defn- <search-web-images
+  "Combined web image search. Returns up to 5 images from Wikipedia + Commons.
+   Wikipedia PageImages result is prioritized (slot 1), Commons fills remaining."
+  [query]
+  (when-not (string/blank? query)
+    (p/let [;; Fire both requests in parallel
+            [wiki-image commons-images] (p/all [(<search-wikipedia-image query)
+                                                (<search-commons-images query 5)])]
+      ;; Combine results: Wikipedia first, then Commons (deduplicated)
+      (let [wiki-url (:url wiki-image)
+            ;; Filter out Commons images that match the Wikipedia image
+            filtered-commons (if wiki-url
+                               (remove #(= (:url %) wiki-url) commons-images)
+                               commons-images)
+            ;; Combine and take up to 5
+            combined (if wiki-image
+                       (cons wiki-image filtered-commons)
+                       filtered-commons)]
+        (vec (take 5 combined))))))
+
 (defn- search-emojis
   [q]
   (p/let [result (.search SearchIndex q)]
@@ -1220,6 +1367,208 @@
          [:img {:src url :loading "lazy"}]
          [:div.bg-gray-04.animate-pulse])])))
 
+(rum/defc web-image-item
+  "Renders a single web image thumbnail with external indicator and tooltip.
+   Shows license description on hover (simplified for glanceability)."
+  [{:keys [url thumb-url title license license-desc source] :as web-image}
+   {:keys [on-click avatar-mode?]}]
+  (let [display-url (or thumb-url url)]
+    (shui/tooltip-provider
+     {:delay-duration 300}
+     (shui/tooltip
+      (shui/tooltip-trigger
+       {:as-child true}
+       [:button.web-image-item
+        {:class (util/classnames [{:avatar-mode avatar-mode?}])
+         :on-click (fn [e] (on-click e web-image))}
+        (if display-url
+          [:img {:src display-url :loading "lazy"}]
+          [:div.bg-gray-04.animate-pulse])
+        ;; External indicator badge
+        [:div.external-badge
+         (shui/tabler-icon "world" {:size 10})]])
+      (shui/tooltip-content
+       {:side "top" :align "center" :class "web-image-tooltip-content"}
+       (shui/tooltip-arrow {:class "web-image-tooltip-arrow"})
+       [:div.web-image-tooltip {:style {:text-align "center"}}
+        [:div.font-medium (or title "Web image")]
+        ;; Show license description only (more glanceable than code)
+        (when license-desc
+          [:div.text-xs {:style {:color "var(--lx-gray-11)"}} license-desc])])))))
+
+(rum/defcs web-image-confirm-pane < rum/reactive
+  (rum/local false ::skip-confirm)
+  (rum/local false ::saving?)
+  [state {:keys [web-image on-close on-save avatar-context]}]
+  (let [*skip-confirm (::skip-confirm state)
+        *saving? (::saving? state)
+        skip-confirm? @*skip-confirm
+        saving? @*saving?
+        {:keys [url thumb-url title license license-desc source]} web-image
+        avatar-mode? (some? avatar-context)
+        ;; Build source string with optional license code
+        source-text (str (case source
+                           :wikipedia "From: Wikipedia"
+                           :wikipedia-commons "From: Wikipedia Commons"
+                           "From: Web")
+                         (when license (str " · " license)))]
+    [:div.web-image-confirm-pane
+     ;; Preview image
+     [:div.preview-image
+      {:class (when avatar-mode? "avatar-mode")}
+      [:img {:src (or thumb-url url)}]]
+
+     ;; Image info
+     [:div.image-info
+      [:div.image-title (or title "Web image")]
+      [:div.image-source {:style {:color "var(--lx-gray-11)"}} source-text]
+      ;; License description badge
+      (when license-desc
+        [:div.license-badge license-desc])]
+
+     ;; Skip confirmation checkbox
+     [:label.skip-confirm-checkbox
+      (shui/checkbox
+       {:checked skip-confirm?
+        :on-checked-change #(reset! *skip-confirm %)})
+      [:span "Always add without asking"]]
+
+     ;; Action buttons
+     [:div.pane-footer
+      (shui/button
+       {:variant :outline
+        :size :sm
+        :on-click on-close}
+       "Cancel")
+      (shui/button
+       {:variant :default
+        :size :sm
+        :disabled saving?
+        :on-click (fn []
+                    (reset! *saving? true)
+                    ;; Save preference if checkbox was checked
+                    (when skip-confirm?
+                      (set-web-image-skip-confirm! true))
+                    ;; Delegate saving to parent
+                    (on-save web-image))}
+       (if saving?
+         [:span.flex.items-center.gap-1
+          [:span.animate-spin (shui/tabler-icon "loader-2" {:size 14})]
+          "Adding..."]
+         "Add to assets"))]]))
+
+(rum/defcs web-images-section < rum/reactive
+  (rum/local nil ::images)
+  (rum/local true ::loading?)
+  (rum/local nil ::current-query)
+  {:did-mount (fn [state]
+                (let [[{:keys [query]}] (:rum/args state)
+                      *images (::images state)
+                      *loading? (::loading? state)
+                      *current-query (::current-query state)]
+                  (when-not (string/blank? query)
+                    (reset! *current-query query)
+                    (reset! *loading? true)
+                    (-> (<search-web-images query)
+                        (p/then (fn [results]
+                                  (reset! *images results)
+                                  (reset! *loading? false)))
+                        (p/catch (fn [_err]
+                                   (reset! *images [])
+                                   (reset! *loading? false))))))
+                state)
+   :did-update (fn [state]
+                 (let [[{:keys [query]}] (:rum/args state)
+                       *images (::images state)
+                       *loading? (::loading? state)
+                       *current-query (::current-query state)
+                       current-query @*current-query]
+                   ;; Only refetch if query changed
+                   (when (and (not= query current-query)
+                              (not (string/blank? query)))
+                     (reset! *current-query query)
+                     (reset! *loading? true)
+                     (-> (<search-web-images query)
+                         (p/then (fn [results]
+                                   (reset! *images results)
+                                   (reset! *loading? false)))
+                         (p/catch (fn [_err]
+                                    (reset! *images [])
+                                    (reset! *loading? false))))))
+                 state)}
+  "Renders the web images section with loading states.
+   query: search query (page title or user input)
+   on-select: callback when user selects a web image
+   avatar-context: if set, picker is in avatar mode
+   on-popover-change: callback when confirmation popover opens/closes"
+  [state {:keys [query on-select avatar-context on-popover-change]}]
+  (let [*images (::images state)
+        *loading? (::loading? state)
+        images (rum/react *images)
+        loading? (rum/react *loading?)
+        avatar-mode? (some? avatar-context)
+        skip-confirm? (get-web-image-skip-confirm)]
+    ;; Don't render section if no query or empty results after loading
+    (when-not (and (not loading?) (empty? images) (not (string/blank? query)))
+      [:div.pane-section.web-images-section
+       ;; Section header with info icon
+       [:div.section-header-row
+        (section-header {:title "Web images"
+                         :count (when-not loading? (count images))
+                         :expanded? true})
+        (shui/tooltip-provider
+         {:delay-duration 200}
+         (shui/tooltip
+          (shui/tooltip-trigger
+           {:as-child true}
+           [:button.info-icon
+            (shui/tabler-icon "info-circle" {:size 14})])
+          (shui/tooltip-content
+           {:side "top"}
+           [:span "Images from Wikipedia Commons. Check licensing before commercial use."])))]
+
+       ;; Image grid
+       [:div.asset-picker-grid.web-images-row
+        {:class (when avatar-mode? "avatar-mode")}
+        (if loading?
+          ;; Loading skeletons
+          (for [i (range 5)]
+            [:div.web-image-placeholder {:key (str "skeleton-" i)}
+             (shui/skeleton {:class "w-full h-full rounded"})])
+          ;; Actual images
+          (for [web-image images]
+            (rum/with-key
+              (web-image-item
+               web-image
+               {:on-click (fn [e img]
+                            (if skip-confirm?
+                              ;; Skip confirmation, save immediately
+                              (on-select e img true)
+                              ;; Show confirmation popover
+                              (do
+                                (when on-popover-change (on-popover-change true))
+                                (shui/popup-show!
+                                 (.-target e)
+                                 (fn [{:keys [id]}]
+                                   (web-image-confirm-pane
+                                    {:web-image img
+                                     :avatar-context avatar-context
+                                     :on-close (fn []
+                                                 (when on-popover-change (on-popover-change false))
+                                                 (shui/popup-hide! id))
+                                     :on-save (fn [confirmed-img]
+                                                (when on-popover-change (on-popover-change false))
+                                                (shui/popup-hide! id)
+                                                (on-select e confirmed-img false))}))
+                                 {:align :center
+                                  :side "top"
+                                  :content-props {:class "web-image-confirm-popup"
+                                                  :sideOffset 8}
+                                  :on-after-hide (fn []
+                                                   (when on-popover-change (on-popover-change false)))}))))
+                :avatar-mode? avatar-mode?})
+              (str "web-" (:url web-image)))))]])))
+
 ;; ============================================================================
 ;; URL Asset Pane (Popover content for "Add asset via URL")
 ;; ============================================================================
@@ -1366,6 +1715,8 @@
   (rum/local "" ::search-q)
   (rum/local true ::loading?) ;; Start with loading state
   (rum/local nil ::loaded-assets) ;; Cached assets loaded async
+  (rum/local nil ::web-query-debounced) ;; Debounced web search query
+  (rum/local false ::popover-open?) ;; Track if any popover is open
   {:did-mount (fn [state]
                 ;; Fetch assets - prefer sync query, fall back to async for cold start
                 (let [*loaded-assets (::loaded-assets state)
@@ -1384,14 +1735,22 @@
                         (p/catch (fn [_err]
                                    (reset! *loading? false))))))
                 state)}
-  [state {:keys [on-chosen on-back on-delete del-btn? current-icon avatar-context]}]
+  [state {:keys [on-chosen on-back on-delete del-btn? current-icon avatar-context page-title]}]
   (let [*search-q (::search-q state)
         *loading? (::loading? state)
         *loaded-assets (::loaded-assets state)
+        *web-query-debounced (::web-query-debounced state)
+        *popover-open? (::popover-open? state)
         loading? (rum/react *loading?)
+        popover-open? (rum/react *popover-open?)
         ;; Use cached assets if available, otherwise try to get them
         assets (or (rum/react *loaded-assets) [])
         search-q @*search-q
+        ;; Web search query: use search input if typing, otherwise use page title
+        web-query (rum/react *web-query-debounced)
+        effective-web-query (if (string/blank? search-q)
+                              (or page-title "")
+                              (or web-query page-title ""))
         ;; Extract current image UUID from the icon (works for both :image and :avatar with image)
         current-asset-uuid (or (get-in current-icon [:data :asset-uuid])
                                (when (= :image (:type current-icon))
@@ -1411,6 +1770,42 @@
                                   assets))
         asset-count (count filtered-assets)
         avatar-mode? (some? avatar-context)
+        ;; Debounced update of web query
+        update-web-query-debounced
+        (memoize
+         (fn []
+           (debounce
+            (fn [q] (reset! *web-query-debounced q))
+            500)))
+        ;; Handle web image selection (download and save)
+        handle-web-image-select
+        (fn [_e web-image skip-confirm?]
+          (let [repo (state/get-current-repo)
+                {:keys [url title]} web-image
+                asset-name (or title "web-image")]
+            (-> (<save-url-asset! repo url asset-name)
+                (p/then (fn [asset-entity]
+                          (when asset-entity
+                            ;; Track as recently used
+                            (add-used-asset! (:block/uuid asset-entity))
+                            ;; Refresh asset list
+                            (p/let [updated-assets (<get-image-assets)]
+                              (reset! *loaded-assets (or (seq updated-assets) [])))
+                            ;; Select the new asset
+                            (let [image-data {:asset-uuid (str (:block/uuid asset-entity))
+                                              :asset-type (:logseq.property.asset/type asset-entity)}]
+                              (on-chosen nil
+                                         (if avatar-context
+                                           {:type :avatar
+                                            :id (:id avatar-context)
+                                            :label (:label avatar-context)
+                                            :data (merge (:data avatar-context) image-data)}
+                                           {:type :image
+                                            :id (str "image-" (:block/uuid asset-entity))
+                                            :label (or (:block/title asset-entity) "")
+                                            :data image-data}))))))
+                (p/catch (fn [err]
+                           (shui/toast! (str "Failed to save image: " (ex-message err)) :error))))))
         ;; Handle file upload
         handle-upload (fn [files]
                         (let [repo (state/get-current-repo)
@@ -1462,7 +1857,11 @@
          {:placeholder "Search images"
           :value search-q
           :auto-focus true
-          :on-change #(reset! *search-q (util/evalue %))})]]]
+          :on-change (fn [e]
+                       (let [v (util/evalue e)]
+                         (reset! *search-q v)
+                         ;; Update debounced web query
+                         ((update-web-query-debounced) v)))})]]]
 
      ;; Body - scrollable content area with top/bottom margin
      (let [;; Get recently used asset UUIDs and resolve to asset entities
@@ -1497,6 +1896,14 @@
                                          :selected? (= (str (:block/uuid asset)) current-asset-uuid)})
                 (str "recent-" (:block/uuid asset))))]])
 
+        ;; "Web images" section - Wikipedia Commons images
+        (when-not (string/blank? effective-web-query)
+          (web-images-section
+           {:query effective-web-query
+            :avatar-context avatar-context
+            :on-select handle-web-image-select
+            :on-popover-change #(reset! *popover-open? %)}))
+
         ;; "Available assets" section
         [:div.pane-section
          (section-header {:title "Available assets"
@@ -1526,15 +1933,20 @@
              [:span.text-sm.mt-2 "No image assets found"]
              [:span.text-xs.mt-1 "Upload an image to get started"]])]]])
 
-     ;; Action buttons (floating at bottom)
+     ;; Action buttons (floating at bottom) - using shui buttons
      [:div.asset-picker-actions
-      [:button.secondary-button
-       {:on-click (fn [^js e]
+      (shui/button
+       {:variant :outline
+        :size :sm
+        :on-click (fn [^js e]
+                    (reset! *popover-open? true)
                     (shui/popup-show!
                      (.-target e)
                      (fn [{:keys [id]}]
                        (url-asset-pane
-                        {:on-close #(shui/popup-hide! id)
+                        {:on-close (fn []
+                                     (reset! *popover-open? false)
+                                     (shui/popup-hide! id))
                          :on-asset-added (fn [asset-entity]
                                            ;; Refresh asset list
                                            (p/let [updated-assets (<get-image-assets)]
@@ -1555,19 +1967,24 @@
                      {:align :end
                       :side "top"
                       :content-props {:class "url-asset-pane-popup"
-                                      :sideOffset 8}}))}
+                                      :sideOffset 8}
+                      :on-after-hide (fn [] (reset! *popover-open? false))}))}
        (shui/tabler-icon "link" {:size 16})
-       [:span "Add asset via URL"]]
-      [:label.primary-button
-       [:input.hidden
-        {:type "file"
-         :accept "image/*"
-         :multiple true
-         :on-change (fn [e]
-                      (let [files (array-seq (.-files (.-target e)))]
-                        (handle-upload files)))}]
-       (shui/tabler-icon "square-plus" {:size 16})
-       [:span "Upload asset"]]]]))
+       [:span "Add asset via URL"])
+      (shui/button
+       {:variant (if popover-open? :secondary :default)
+        :size :sm
+        :as-child true}
+       [:label
+        [:input.hidden
+         {:type "file"
+          :accept "image/*"
+          :multiple true
+          :on-change (fn [e]
+                       (let [files (array-seq (.-files (.-target e)))]
+                         (handle-upload files)))}]
+        (shui/tabler-icon "square-plus" {:size 16})
+        [:span "Upload asset"]])]]))
 
 (rum/defc all-cp < rum/reactive
   [opts]
@@ -1823,7 +2240,8 @@
                      :del-btn? del-btn?
                      :current-icon normalized-icon-value
                      :avatar-context (when (= :avatar (:type normalized-icon-value))
-                                       normalized-icon-value)})
+                                       normalized-icon-value)
+                     :page-title page-title})
       ;; Level 1: Icon Picker view
       [:div.cp__emoji-icon-picker
        {:data-keep-selection true}

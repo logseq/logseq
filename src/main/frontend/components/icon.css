@@ -354,7 +354,8 @@
   padding-bottom: 56px;
 
   /* Recently used row - single row, no extra padding */
-  &.recently-used-row {
+  &.recently-used-row,
+  &.web-images-row {
     @apply flex-none overflow-visible;
     min-height: auto;
     padding-bottom: 12px;
@@ -423,6 +424,7 @@
   @apply flex items-center justify-end gap-2;
   @apply absolute bottom-0 left-0 right-0;
   @apply py-3 pr-3;
+  @apply transition-opacity duration-200;
   background: linear-gradient(
     to bottom,
     transparent 0%,
@@ -431,29 +433,22 @@
     var(--lx-gray-03) 100%
   );
 
-  .secondary-button {
-    @apply flex items-center gap-1.5 px-2.5 py-1.5 rounded-md;
-    @apply text-xs font-medium cursor-pointer;
-    @apply transition-colors duration-150 whitespace-nowrap;
-    background-color: var(--rx-gray-06);
-    color: var(--rx-gray-12);
-    border: none;
+  /* Style shui buttons inside action bar */
+  .ui__button {
+    @apply gap-1.5 transition-colors duration-150;
 
-    &:hover {
-      background-color: var(--rx-gray-07);
+    /* Make label inside upload button flex */
+    > label {
+      @apply flex items-center gap-1.5 cursor-pointer;
     }
-  }
 
-  .primary-button {
-    @apply flex items-center gap-1.5 px-2.5 py-1.5 rounded-md;
-    @apply text-xs font-medium cursor-pointer;
-    @apply transition-colors duration-150 whitespace-nowrap;
-    background-color: var(--rx-blue-09);
-    color: white;
-    border: none;
+    /* Override button variant transparency */
+    &.as-secondary {
+      @apply bg-secondary;
+    }
 
-    &:hover {
-      background-color: var(--rx-blue-10);
+    &.as-classic {
+      @apply bg-primary;
     }
   }
 }
@@ -490,6 +485,173 @@
     @apply text-xs px-2 py-1.5 rounded;
     color: var(--rx-red-11);
     background-color: var(--rx-red-03);
+  }
+
+  .pane-footer {
+    @apply flex justify-end gap-2 pt-1;
+  }
+}
+
+/* ============================================================================
+   Web Image Search Section
+   ============================================================================ */
+
+/* Section header row with info icon */
+.section-header-row {
+  @apply flex items-center gap-1;
+
+  .info-icon {
+    @apply p-0.5 rounded opacity-50 border-none bg-transparent cursor-help;
+    @apply hover:opacity-70;
+    color: var(--rx-gray-10);
+  }
+}
+
+/* Web image item - similar to image-asset-item */
+.web-image-item {
+  @apply overflow-hidden rounded cursor-pointer;
+  @apply transition-all duration-150;
+  position: relative;
+  width: 100%;
+  padding-bottom: 100%; /* Square aspect ratio */
+  border: 2px solid transparent;
+  background-color: var(--rx-gray-04);
+
+  &:hover {
+    border-color: var(--rx-accent-09);
+  }
+
+  &:focus {
+    @apply outline-none;
+    border-color: var(--rx-accent-09);
+  }
+
+  img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 4px;
+  }
+
+  > div:not(.external-badge) {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 4px;
+  }
+
+  /* Avatar mode - circular previews */
+  &.avatar-mode {
+    @apply rounded-full;
+
+    img {
+      @apply rounded-full;
+    }
+
+    .external-badge {
+      /* Position at bottom-right for circular items */
+      bottom: 0;
+      right: 0;
+    }
+  }
+
+  /* External indicator badge */
+  .external-badge {
+    @apply flex items-center justify-center;
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    background-color: rgba(0, 0, 0, 0.6);
+    color: white;
+  }
+}
+
+/* Web image placeholder (loading skeleton) */
+.web-image-placeholder {
+  position: relative;
+  width: 100%;
+  padding-bottom: 100%; /* Square aspect ratio */
+  border-radius: 6px;
+  overflow: hidden;
+
+  > * {
+    position: absolute;
+    inset: 0;
+  }
+}
+
+/* Web image tooltip - borderless design for seamless arrow integration */
+.web-image-tooltip-content {
+  @apply border-0;
+}
+
+.web-image-tooltip-arrow {
+  fill: var(--popover);
+}
+
+.web-image-tooltip {
+  @apply flex flex-col gap-0.5;
+  max-width: 200px;
+}
+
+/* Web image confirm pane (popover) */
+.web-image-confirm-popup {
+  @apply overflow-visible;
+}
+
+.web-image-confirm-pane {
+  @apply flex flex-col gap-3 p-3;
+  width: 280px;
+  background-color: var(--lx-gray-02);
+
+  .preview-image {
+    @apply flex justify-center;
+
+    img {
+      width: 80px;
+      height: 80px;
+      object-fit: cover;
+      border-radius: 8px;
+    }
+
+    &.avatar-mode img {
+      border-radius: 50%;
+    }
+  }
+
+  .image-info {
+    @apply flex flex-col gap-1 text-center;
+
+    .image-title {
+      @apply font-medium text-sm;
+      color: var(--rx-gray-12);
+    }
+
+    .image-source {
+      @apply text-xs;
+    }
+
+    .license-badge {
+      @apply text-xs px-2 py-1 rounded mt-1 text-center;
+      background-color: var(--lx-gray-04);
+      color: var(--lx-gray-11);
+    }
+  }
+
+  .skip-confirm-checkbox {
+    @apply flex items-center gap-2 cursor-pointer;
+    @apply text-xs py-1;
+    color: var(--rx-gray-11);
+
+    &:hover {
+      color: var(--rx-gray-12);
+    }
   }
 
   .pane-footer {
