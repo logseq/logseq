@@ -10,6 +10,10 @@ enabled = true
 name = "LOGSEQ_SYNC_DO"
 class_name = "SyncDO"
 
+[[durable_objects.bindings]]
+name = "LOGSEQ_AGENT_SESSION_DO"
+class_name = "AgentSessionDO"
+
 [[r2_buckets]]
 binding = "LOGSEQ_SYNC_ASSETS"
 bucket_name = "logseq-sync-assets-prod"
@@ -22,6 +26,10 @@ database_id = "00325aa2-c805-4693-b599-900a25dcde42"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = [ "SyncDO" ]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = [ "AgentSessionDO" ]
 
 [vars]
 COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
@@ -40,6 +48,10 @@ COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"
 name = "LOGSEQ_SYNC_DO"
 class_name = "SyncDO"
 
+[[env.staging.durable_objects.bindings]]
+name = "LOGSEQ_AGENT_SESSION_DO"
+class_name = "AgentSessionDO"
+
 [[env.staging.migrations]]
 tag = "v1"
 new_sqlite_classes = [ "SyncDO" ]
@@ -47,6 +59,10 @@ new_sqlite_classes = [ "SyncDO" ]
 [[env.staging.migrations]]
 tag = "v2"
 deleted_classes = [ "SyncIndexDO" ]
+
+[[env.staging.migrations]]
+tag = "v3"
+new_sqlite_classes = [ "AgentSessionDO" ]
 
 [[env.staging.r2_buckets]]
 binding = "LOGSEQ_SYNC_ASSETS"
@@ -69,9 +85,17 @@ COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"
 name = "LOGSEQ_SYNC_DO"
 class_name = "SyncDO"
 
+[[env.prod.durable_objects.bindings]]
+name = "LOGSEQ_AGENT_SESSION_DO"
+class_name = "AgentSessionDO"
+
 [[env.prod.migrations]]
 tag = "v1"
 new_sqlite_classes = [ "SyncDO" ]
+
+[[env.prod.migrations]]
+tag = "v2"
+new_sqlite_classes = [ "AgentSessionDO" ]
 
 [[env.prod.r2_buckets]]
 binding = "LOGSEQ_SYNC_ASSETS"

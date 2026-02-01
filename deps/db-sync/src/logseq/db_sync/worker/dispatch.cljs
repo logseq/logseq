@@ -2,6 +2,7 @@
   (:require [clojure.string :as string]
             [logseq.db-sync.common :as common]
             [logseq.db-sync.platform.core :as platform]
+            [logseq.db-sync.worker.handler.agent :as agent-handler]
             [logseq.db-sync.worker.handler.assets :as assets-handler]
             [logseq.db-sync.worker.handler.index :as index-handler]
             [logseq.db-sync.worker.http :as http]
@@ -21,6 +22,9 @@
 
       (string/starts-with? path "/e2ee")
       (index-handler/handle-fetch #js {:env env :d1 (aget env "DB")} request)
+
+      (string/starts-with? path "/sessions")
+      (agent-handler/handle-fetch #js {:env env} request)
 
       (string/starts-with? path "/assets/")
       (if (= method "OPTIONS")

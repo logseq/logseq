@@ -217,6 +217,44 @@
    :any
    http-error-response-schema])
 
+(def agent-task-source-schema
+  [:map
+   [:node-id :string]
+   [:node-title :string]
+   [:node-revision :any]
+   [:snapshot {:optional true} :any]])
+
+(def agent-task-schema
+  [:map
+   [:id :string]
+   [:source agent-task-source-schema]
+   [:intent {:optional true} :map]
+   [:agent {:optional true} :map]
+   [:execution {:optional true} :map]
+   [:audit {:optional true} :map]])
+
+(def sessions-create-request-schema agent-task-schema)
+
+(def sessions-message-request-schema
+  [:map
+   [:message :string]
+   [:kind {:optional true} :string]])
+
+(def sessions-create-response-schema
+  [:map
+   [:session-id :string]
+   [:status :string]
+   [:stream-url :string]])
+
+(def sessions-get-response-schema
+  [:map
+   [:session-id :string]
+   [:status :string]
+   [:task :map]
+   [:audit :map]
+   [:created-at :int]
+   [:updated-at :int]])
+
 (def http-request-schemas
   {:graphs/create graph-create-request-schema
    :graph-members/create graph-member-create-request-schema
@@ -224,7 +262,9 @@
    :sync/tx-batch tx-batch-request-schema
    :e2ee/user-keys e2ee-user-key-request-schema
    :e2ee/graph-aes-key e2ee-graph-aes-key-request-schema
-   :e2ee/grant-access e2ee-grant-access-request-schema})
+   :e2ee/grant-access e2ee-grant-access-request-schema
+   :sessions/create sessions-create-request-schema
+   :sessions/message sessions-message-request-schema})
 
 (def http-response-schemas
   {:graphs/list graphs-list-response-schema
@@ -249,6 +289,10 @@
    :assets/get asset-get-response-schema
    :assets/put http-ok-response-schema
    :assets/delete http-ok-response-schema
+   :sessions/create sessions-create-response-schema
+   :sessions/get sessions-get-response-schema
+   :sessions/message http-ok-response-schema
+   :sessions/cancel http-ok-response-schema
    :error http-error-response-schema})
 
 (def ^:private json-transformer

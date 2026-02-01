@@ -46,3 +46,20 @@
   (testing "method mismatch returns nil"
     (is (nil? (routes/match-route "GET" "/graphs/graph-1/members/user-9")))
     (is (nil? (routes/match-route "PUT" "/e2ee/user-keys")))))
+
+(deftest match-route-sessions-test
+  (testing "sessions routes"
+    (let [match (routes/match-route "POST" "/sessions")]
+      (is (= :sessions/create (:handler match))))
+    (let [match (routes/match-route "GET" "/sessions/session-1")]
+      (is (= :sessions/get (:handler match)))
+      (is (= "session-1" (get-in match [:path-params :session-id]))))
+    (let [match (routes/match-route "POST" "/sessions/session-2/messages")]
+      (is (= :sessions/messages (:handler match)))
+      (is (= "session-2" (get-in match [:path-params :session-id]))))
+    (let [match (routes/match-route "POST" "/sessions/session-3/cancel")]
+      (is (= :sessions/cancel (:handler match)))
+      (is (= "session-3" (get-in match [:path-params :session-id]))))
+    (let [match (routes/match-route "GET" "/sessions/session-4/stream")]
+      (is (= :sessions/stream (:handler match)))
+      (is (= "session-4" (get-in match [:path-params :session-id]))))))

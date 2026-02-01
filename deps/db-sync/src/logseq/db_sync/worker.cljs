@@ -3,6 +3,7 @@
             [lambdaisland.glogi :as log]
             [logseq.db-sync.common :as common]
             [logseq.db-sync.logging :as logging]
+            [logseq.db-sync.worker.agent.do :as agent-do]
             [logseq.db-sync.worker.dispatch :as dispatch]
             [logseq.db-sync.worker.handler.sync :as sync-handler]
             [logseq.db-sync.worker.handler.ws :as ws-handler]
@@ -55,3 +56,17 @@
                   (presence/remove-presence! this ws)
                   (presence/broadcast-online-users! this)
                   (log/error :db-sync/ws-error {:error error})))
+
+(defclass AgentSessionDO
+  (extends DurableObject)
+
+  (constructor [this ^js state env]
+               (super state env)
+               (set! (.-state this) state)
+               (set! (.-env this) env)
+               (set! (.-storage this) (.-storage state))
+               (set! (.-streams this) (js/Map.)))
+
+  Object
+  (fetch [this request]
+         (agent-do/handle-fetch this request)))

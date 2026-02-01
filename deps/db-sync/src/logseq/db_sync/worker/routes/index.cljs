@@ -20,7 +20,15 @@
     ["/graphs/:graph-id"
      ["/aes-key" {:methods {"GET" :e2ee/graph-aes-key-get
                             "POST" :e2ee/graph-aes-key-post}}]
-     ["/grant-access" {:methods {"POST" :e2ee/grant-access}}]]]])
+     ["/grant-access" {:methods {"POST" :e2ee/grant-access}}]]]
+
+   ["/sessions"
+    ["" {:methods {"POST" :sessions/create}}]
+    ["/:session-id"
+     ["" {:methods {"GET" :sessions/get}}]
+     ["/messages" {:methods {"POST" :sessions/messages}}]
+     ["/cancel" {:methods {"POST" :sessions/cancel}}]
+     ["/stream" {:methods {"GET" :sessions/stream}}]]]])
 
 (def ^:private router
   (r/router route-data))
