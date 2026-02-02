@@ -17,4 +17,14 @@
       (is (= "https://sandbox.example/v1/sessions/sess-1"
              (sandbox/session-url base session-id)))
       (is (= "https://sandbox.example/v1/sessions/sess-1/messages"
-             (sandbox/messages-url base session-id))))))
+             (sandbox/messages-url base session-id)))
+      (is (= "https://sandbox.example/v1/sessions/sess-1/messages/stream"
+             (sandbox/messages-stream-url base session-id))))))
+
+(deftest normalize-agent-id-test
+  (testing "normalizes known sandbox-agent aliases"
+    (is (= "claude" (sandbox/normalize-agent-id "claude-code")))
+    (is (= "claude" (sandbox/normalize-agent-id "CLAUDE_CODE")))
+    (is (= "opencode" (sandbox/normalize-agent-id "open-code")))
+    (is (= "codex" (sandbox/normalize-agent-id "codex")))
+    (is (nil? (sandbox/normalize-agent-id "   ")))))

@@ -229,7 +229,7 @@
    [:id :string]
    [:source agent-task-source-schema]
    [:intent {:optional true} :map]
-   [:agent {:optional true} :map]
+   [:agent {:optional true} [:or :string :map]]
    [:audit {:optional true} :map]])
 
 (def sessions-create-request-schema agent-task-schema)

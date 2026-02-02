@@ -1,6 +1,5 @@
 (ns logseq.db-sync.test-runner
   (:require [cljs.test :as ct]
-            [logseq.db-sync.node-adapter-test]
             [logseq.db-sync.node-config-test]
             [logseq.db-sync.platform-test]
             [shadow.test :as st]

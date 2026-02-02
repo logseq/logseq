@@ -26,7 +26,7 @@ Make agent sessions reliable, observable, secure, and controllable end-to-end:
 ## Workstreams
 
 ### WS1: Event Bridge Completion
-- Consume sandbox runtime stream (`/v1/sessions/:id/events/sse`) in the DO.
+- Consume turn runtime stream from sandbox-agent (`POST /v1/sessions/:id/messages/stream`) in the DO.
 - Map runtime events into control-plane canonical events:
   - `agent.message`
   - `agent.tool_call`

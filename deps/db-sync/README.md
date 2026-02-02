@@ -86,6 +86,17 @@ If sandbox-agent runs with token auth, also set:
 SANDBOX_AGENT_TOKEN=...
 ```
 
+Smoke test a Codex-backed session:
+
+```bash
+cd deps/db-sync
+BASE_URL=http://127.0.0.1:8787 ./scripts/start-weather-session.sh
+```
+
+The control plane forwards each task message through sandbox-agent
+`/v1/sessions/{id}/messages/stream` and relays runtime events to
+`/sessions/{id}/stream`.
+
 ## Environment Variables
 
 | Variable | Purpose |

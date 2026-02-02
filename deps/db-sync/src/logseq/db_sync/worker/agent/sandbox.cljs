@@ -15,6 +15,20 @@
 (defn messages-url [base session-id]
   (str (session-url base session-id) "/messages"))
 
+(defn messages-stream-url [base session-id]
+  (str (session-url base session-id) "/messages/stream"))
+
+(def ^:private agent-aliases
+  {"claude-code" "claude"
+   "claude_code" "claude"
+   "open-code" "opencode"
+   "open_code" "opencode"})
+
+(defn normalize-agent-id [agent]
+  (let [agent (some-> agent str string/lower-case string/trim)]
+    (when-not (string/blank? agent)
+      (get agent-aliases agent agent))))
+
 (defn- json-request [url method headers body]
   (let [init (cond-> {:method method :headers headers}
                (some? body)
@@ -28,26 +42,36 @@
       (js/Promise.resolve fallback))))
 
 (defn <create-session
-  [base token session-id {:keys [agent model permission-mode]}]
+  [base token session-id {:keys [agent agent-mode permission-mode]}]
   (let [headers (js/Headers.)
         _ (.set headers "content-type" "application/json")
         _ (when (string? token) (.set headers "authorization" (str "Bearer " token)))
-        req (json-request (session-url base session-id) "POST" headers
-                          {:agent agent
-                           :model model
-                           :permissionMode permission-mode})]
-    (p/let [resp (js/fetch req)
-            json (parse-json-or-default resp {})]
-      (assoc json :session-id session-id))))
-
-(defn <send-message
-  [base token session-id message]
-  (let [headers (js/Headers.)
-        _ (.set headers "content-type" "application/json")
-        _ (when (string? token) (.set headers "authorization" (str "Bearer " token)))
-        req (json-request (messages-url base session-id) "POST" headers
-                          {:message (:message message)})]
+        body (cond-> {:agent (normalize-agent-id agent)}
+               (string? agent-mode) (assoc :agentMode agent-mode)
+               (string? permission-mode) (assoc :permissionMode permission-mode))
+        req (json-request (session-url base session-id) "POST" headers body)]
     (p/let [resp (js/fetch req)
             status (.-status resp)
-            json (parse-json-or-default resp {:ok (<= 200 status 299) :status status})]
-      json)))
+            json (parse-json-or-default resp {})]
+      (if (<= 200 status 299)
+        (assoc json :session-id session-id)
+        (throw (ex-info "sandbox create-session failed"
+                        {:status status
+                         :session-id session-id
+                         :response json}))))))
+
+(defn <open-message-stream
+  [base token session-id message]
+  (let [headers (js/Headers.)
+        _ (.set headers "accept" "text/event-stream")
+        _ (.set headers "content-type" "application/json")
+        _ (when (string? token) (.set headers "authorization" (str "Bearer " token)))
+        req (json-request (messages-stream-url base session-id) "POST" headers
+                          {:message (:message message)})]
+    (p/let [resp (js/fetch req)
+            status (.-status resp)]
+      (if (<= 200 status 299)
+        resp
+        (throw (ex-info "sandbox open-message-stream failed"
+                        {:status status
+                         :session-id session-id}))))))

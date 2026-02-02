@@ -21,6 +21,8 @@
      :static-user-id (env-value env "DB_SYNC_STATIC_USER_ID")
      :static-email (env-value env "DB_SYNC_STATIC_EMAIL")
      :static-username (env-value env "DB_SYNC_STATIC_USERNAME")
+     :sandbox-agent-url (env-value env "SANDBOX_AGENT_URL")
+     :sandbox-agent-token (env-value env "SANDBOX_AGENT_TOKEN")
      :log-level (or (env-value env "DB_SYNC_LOG_LEVEL") "info")
      :cognito-issuer (env-value env "COGNITO_ISSUER")
      :cognito-client-id (env-value env "COGNITO_CLIENT_ID")

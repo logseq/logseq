@@ -13,6 +13,7 @@
             [logseq.db-sync.node.storage :as storage]
             [logseq.db-sync.platform.core :as platform]
             [logseq.db-sync.platform.node :as platform-node]
+            [logseq.db-sync.worker.agent.do :as agent-do]
             [logseq.db-sync.worker.auth :as auth]
             [logseq.db-sync.worker.handler.ws :as ws-handler]
             [logseq.db-sync.worker.presence :as presence]
@@ -20,18 +21,46 @@
 
 (logging/install!)
 
+(defn- make-agent-storage []
+  (let [data (js/Map.)]
+    #js {:get (fn [k]
+                (js/Promise.resolve (.get data k)))
+         :put (fn [k v]
+                (.set data k v)
+                (js/Promise.resolve nil))}))
+
+(defn- make-agent-session-stub [env]
+  (let [self #js {:env env
+                  :storage (make-agent-storage)
+                  :streams (js/Map.)}]
+    #js {:fetch (fn [request]
+                  (agent-do/handle-fetch self request))}))
+
+(defn- make-agent-session-namespace [env]
+  (let [sessions (js/Map.)]
+    #js {:idFromName (fn [session-id] session-id)
+         :get (fn [session-id]
+                (or (.get sessions session-id)
+                    (let [stub (make-agent-session-stub env)]
+                      (.set sessions session-id stub)
+                      stub)))}))
+
 (defn- make-env [cfg index-db assets-bucket]
-  (doto (js-obj)
-    (aset "DB" index-db)
-    (aset "LOGSEQ_SYNC_ASSETS" assets-bucket)
-    (aset "DB_SYNC_AUTH_DRIVER" (:auth-driver cfg))
-    (aset "DB_SYNC_AUTH_TOKEN" (:auth-token cfg))
-    (aset "DB_SYNC_STATIC_USER_ID" (:static-user-id cfg))
-    (aset "DB_SYNC_STATIC_EMAIL" (:static-email cfg))
-    (aset "DB_SYNC_STATIC_USERNAME" (:static-username cfg))
-    (aset "COGNITO_ISSUER" (:cognito-issuer cfg))
-    (aset "COGNITO_CLIENT_ID" (:cognito-client-id cfg))
-    (aset "COGNITO_JWKS_URL" (:cognito-jwks-url cfg))))
+  (let [env (doto (js-obj)
+              (aset "DB" index-db)
+              (aset "LOGSEQ_SYNC_ASSETS" assets-bucket)
+              (aset "DB_SYNC_AUTH_DRIVER" (:auth-driver cfg))
+              (aset "DB_SYNC_AUTH_TOKEN" (:auth-token cfg))
+              (aset "DB_SYNC_STATIC_USER_ID" (:static-user-id cfg))
+              (aset "DB_SYNC_STATIC_EMAIL" (:static-email cfg))
+              (aset "DB_SYNC_STATIC_USERNAME" (:static-username cfg))
+              (aset "SANDBOX_AGENT_URL" (:sandbox-agent-url cfg))
+              (aset "SANDBOX_AGENT_TOKEN" (:sandbox-agent-token cfg))
+              (aset "COGNITO_ISSUER" (:cognito-issuer cfg))
+              (aset "COGNITO_CLIENT_ID" (:cognito-client-id cfg))
+              (aset "COGNITO_JWKS_URL" (:cognito-jwks-url cfg)))]
+    (aset env "LOGSEQ_AGENT_SESSION_DO" (make-agent-session-namespace env))
+    env))
 
 (defn- access-allowed?
   [env graph-id request]
@@ -138,6 +167,27 @@
                   (graph/close-graphs! registry)
                   (when-let [close (.-close index-db)]
                     (close))
+                  (when-let [clients (.-clients wss)]
+                    (.forEach clients
+                              (fn [^js client]
+                                (when-let [terminate (.-terminate client)]
+                                  (terminate)))))
+                  (when-let [close-wss (.-close wss)]
+                    (close-wss))
+                  (when-let [close-all (.-closeAllConnections server)]
+                    (close-all))
                   (js/Promise.
                    (fn [resolve]
-                     (.close server (fn [] (resolve nil))))))}))))
+                     (let [finished? (atom false)
+                           finish! (fn []
+                                     (when-not @finished?
+                                       (reset! finished? true)
+                                       (resolve nil)))
+                           timer (js/setTimeout finish! 1000)]
+                       (try
+                         (.close server (fn []
+                                          (js/clearTimeout timer)
+                                          (finish!)))
+                         (catch :default _
+                           (js/clearTimeout timer)
+                           (finish!)))))))}))))

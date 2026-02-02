@@ -1,5 +1,6 @@
 (ns logseq.db-sync.worker.agent.do
-  (:require [lambdaisland.glogi :as log]
+  (:require [clojure.string :as string]
+            [lambdaisland.glogi :as log]
             [logseq.db-sync.common :as common]
             [logseq.db-sync.platform.core :as platform]
             [logseq.db-sync.worker.agent.sandbox :as sandbox]
@@ -68,6 +69,63 @@
 (defn- session-conflict [message]
   (http/error-response message 409))
 
+(defn- sandbox-base [^js env]
+  (aget env "SANDBOX_AGENT_URL"))
+
+(defn- sandbox-token [^js env]
+  (aget env "SANDBOX_AGENT_TOKEN"))
+
+(defn- parse-sse-data [frame]
+  (let [lines (string/split frame #"\n")
+        data-lines (keep (fn [line]
+                           (when (string/starts-with? line "data:")
+                             (string/trim (subs line 5))))
+                         lines)
+        payload (string/join "\n" data-lines)]
+    (when (seq payload)
+      (try
+        (js->clj (js/JSON.parse payload) :keywordize-keys true)
+        (catch :default _
+          {:raw payload})))))
+
+(defn- <append-runtime-event! [^js self session-id payload]
+  (p/let [current-session (<get-session self)]
+    (when (= session-id (:id current-session))
+      (let [event-type (or (:type payload) "agent.runtime")]
+        (<append-event! self {:type event-type
+                              :data payload
+                              :ts (common/now-ms)})))))
+
+(defn- <consume-message-stream! [^js self session-id runtime message]
+  (p/let [resp (sandbox/<open-message-stream (:base runtime)
+                                             (sandbox-token (.-env self))
+                                             (:session-id runtime)
+                                             message)
+          reader (.getReader (.-body resp))]
+    (let [decoder (js/TextDecoder.)
+          buffer (atom "")]
+      (letfn [(emit-frame! [frame]
+                (when-let [payload (parse-sse-data frame)]
+                  (<append-runtime-event! self session-id payload)))
+              (drain-buffer! []
+                (loop []
+                  (let [idx (.indexOf ^string @buffer "\n\n")]
+                    (when (>= idx 0)
+                      (let [frame (subs @buffer 0 idx)]
+                        (reset! buffer (subs @buffer (+ idx 2)))
+                        (emit-frame! frame)
+                        (recur))))))
+              (step! []
+                (p/let [chunk (.read reader)]
+                  (if (.-done chunk)
+                    nil
+                    (do
+                      (swap! buffer str (string/replace (.decode decoder (.-value chunk) #js {:stream true})
+                                                        #"\r\n" "\n"))
+                      (drain-buffer!)
+                      (step!)))))]
+        (step!)))))
+
 (defn- <transition! [^js self to-status event-type data]
   (p/let [session (<get-session self)]
     (cond
@@ -83,20 +141,19 @@
           (http/not-found)
           (http/json-response :sessions/pause {:ok true}))))))
 
-(defn- sandbox-base [^js env]
-  (aget env "SANDBOX_AGENT_URL"))
-
-(defn- sandbox-token [^js env]
-  (aget env "SANDBOX_AGENT_TOKEN"))
-
 (defn- <provision-sandbox! [^js self task session-id]
   (let [base (sandbox-base (.-env self))]
     (if-not (string? base)
       (p/resolved nil)
       (let [sandbox-base (sandbox/normalize-base-url base)]
-        (p/let [payload {:agent (:agent task)
-                         :model (get-in task [:agent :model])
-                         :permission-mode (get-in task [:agent :permission-mode])}
+        (p/let [payload {:agent (or (get-in task [:agent :provider])
+                                    (get-in task [:agent :id])
+                                    (:agent task))
+                         :agent-mode (or (get-in task [:agent :mode])
+                                         (get-in task [:agent :agent-mode])
+                                         (get-in task [:agent :model]))
+                         :permission-mode (or (get-in task [:agent :permission-mode])
+                                              (get-in task [:agent :permissionMode]))}
                 response (sandbox/<create-session sandbox-base (sandbox-token (.-env self)) session-id payload)
                 sandbox-session-id (:session-id response)
                 runtime {:sandbox {:base sandbox-base
@@ -116,11 +173,15 @@
 (defn- handle-init [^js self request]
   (p/let [existing (<get-session self)]
     (if existing
-      (let [session-id (:id existing)]
-        (http/json-response :sessions/create
-                            {:session-id session-id
-                             :status (:status existing)
-                             :stream-url (stream-url request session-id)}))
+      (let [session-id (:id existing)
+            runtime-id (get-in existing [:runtime :sandbox :session-id])]
+        (p/let [_ (when-not (string? runtime-id)
+                    (<provision-sandbox! self (:task existing) session-id))
+                session (<get-session self)]
+          (http/json-response :sessions/create
+                              {:session-id session-id
+                               :status (:status session)
+                               :stream-url (stream-url request session-id)})))
       (.then (common/read-json request)
              (fn [result]
                (if (nil? result)
@@ -204,11 +265,20 @@
                      :else
                      (let [runtime (get-in current-session [:runtime :sandbox])]
                        (p/let [_ (when (and runtime (string? (:session-id runtime)))
-                                   (sandbox/<send-message (:base runtime)
-                                                          (sandbox-token (.-env self))
-                                                          (:session-id runtime)
-                                                          {:message message
-                                                           :kind (:kind body)}))]
+                                   (-> (<consume-message-stream! self
+                                                                 (:id current-session)
+                                                                 runtime
+                                                                 {:message message
+                                                                  :kind (:kind body)})
+                                       (.catch (fn [error]
+                                                 (log/error :agent/runtime-stream-error
+                                                            {:session-id (:id current-session)
+                                                             :runtime-session-id (:session-id runtime)
+                                                             :error error})
+                                                 (<append-event! self {:type "agent.runtime.error"
+                                                                       :data {:session-id (:id current-session)
+                                                                              :message (str error)}
+                                                                       :ts (common/now-ms)})))))]
                          (http/json-response :sessions/message {:ok true})))))))))))
 
 (defn- handle-cancel [^js self request]
@@ -231,11 +301,11 @@
                 _ (when (and runtime (string? (:session-id runtime)))
                     (p/all
                      (map (fn [order]
-                            (sandbox/<send-message (:base runtime)
-                                                   (sandbox-token (.-env self))
-                                                   (:session-id runtime)
-                                                   {:message (:message order)
-                                                    :kind (:kind order)}))
+                            (<consume-message-stream! self
+                                                      (:id current-session)
+                                                      runtime
+                                                      {:message (:message order)
+                                                       :kind (:kind order)}))
                           orders)))]
           (count orders))))))
 
