@@ -45,6 +45,10 @@ Supported keys include:
 
 CLI flags take precedence over environment variables, which take precedence over the config file.
 
+Verbose logging:
+- `--verbose` enables structured debug logs to stderr for CLI option parsing and db-worker-node API calls.
+- stdout remains reserved for command output; large payloads are truncated in debug previews.
+
 ## Commands
 
 Graph commands:
