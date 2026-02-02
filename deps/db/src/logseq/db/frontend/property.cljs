@@ -73,76 +73,76 @@
                :public? false
                :hide? true}}
 
-     :block/alias          {:title "Alias"
-                            :attribute :block/alias
-                            :schema {:type :page
-                                     :cardinality :many
-                                     :view-context :page
-                                     :public? true}
-                            :queryable? true}
-     :block/tags           {:title "Tags"
-                            :attribute :block/tags
-                            :schema {:type :class
-                                     :cardinality :many
-                                     :public? true}
-                            :queryable? true}
-     :block/parent         {:title "Node parent"
-                            :attribute :block/parent
-                            :schema {:type :entity
-                                     :public? false
-                                     :hide? true}}
-     :block/order          {:title "Node order"
-                            :attribute :block/order
-                            :schema {:type :string
-                                     :public? false
-                                     :hide? true}}
-     :block/collapsed?     {:title "Node collapsed?"
-                            :attribute :block/collapsed?
-                            :schema {:type :checkbox
-                                     :public? false
-                                     :hide? true}}
-     :block/page           {:title "Node page"
-                            :attribute :block/page
-                            :schema {:type :entity
-                                     :public? false
-                                     :hide? true}}
-     :block/refs           {:title "Node references"
-                            :attribute :block/refs
-                            :schema {:type :entity
-                                     :cardinality :many
-                                     :public? false
-                                     :hide? true}}
-     :block/link           {:title "Node links to"
-                            :attribute :block/link
-                            :schema {:type :entity
-                                     :public? false
-                                     :hide? true}}
-     :block/title          {:title "Node title"
-                            :attribute :block/title
-                            :schema {:type :string
-                                     :public? false
-                                     :hide? true}}
-     :block/closed-value-property  {:title "Closed value property"
-                                    :attribute :block/closed-value-property
-                                    :schema {:type :entity
-                                             :public? false
-                                             :hide? true}}
-     :block/journal-day    {:title "Journal date"
-                            :attribute :block/journal-day
-                            :schema {:type :raw-number
-                                     :public? false
-                                     :hide? true}
-                            :queryable? true}
-     :block/created-at     {:title "Node created at"
-                            :attribute :block/created-at
-                            :schema {:type :datetime
-                                     :public? false
-                                     :hide? true}}
-     :block/updated-at     {:title "Node updated at"
-                            :attribute :block/updated-at
-                            :schema {:type :datetime
-                                     :public? false
-                                     :hide? true}}
+     :block/alias {:title "Alias"
+                   :attribute :block/alias
+                   :schema {:type :page
+                            :cardinality :many
+                            :view-context :page
+                            :public? true}
+                   :queryable? true}
+     :block/tags {:title "Tags"
+                  :attribute :block/tags
+                  :schema {:type :class
+                           :cardinality :many
+                           :public? true}
+                  :queryable? true}
+     :block/parent {:title "Node parent"
+                    :attribute :block/parent
+                    :schema {:type :entity
+                             :public? false
+                             :hide? true}}
+     :block/order {:title "Node order"
+                   :attribute :block/order
+                   :schema {:type :string
+                            :public? false
+                            :hide? true}}
+     :block/collapsed? {:title "Node collapsed?"
+                        :attribute :block/collapsed?
+                        :schema {:type :checkbox
+                                 :public? false
+                                 :hide? true}}
+     :block/page {:title "Node page"
+                  :attribute :block/page
+                  :schema {:type :entity
+                           :public? false
+                           :hide? true}}
+     :block/refs {:title "Node references"
+                  :attribute :block/refs
+                  :schema {:type :entity
+                           :cardinality :many
+                           :public? false
+                           :hide? true}}
+     :block/link {:title "Node links to"
+                  :attribute :block/link
+                  :schema {:type :entity
+                           :public? false
+                           :hide? true}}
+     :block/title {:title "Node title"
+                   :attribute :block/title
+                   :schema {:type :string
+                            :public? false
+                            :hide? true}}
+     :block/closed-value-property {:title "Closed value property"
+                                   :attribute :block/closed-value-property
+                                   :schema {:type :entity
+                                            :public? false
+                                            :hide? true}}
+     :block/journal-day {:title "Journal date"
+                         :attribute :block/journal-day
+                         :schema {:type :raw-number
+                                  :public? false
+                                  :hide? true}
+                         :queryable? true}
+     :block/created-at {:title "Node created at"
+                        :attribute :block/created-at
+                        :schema {:type :datetime
+                                 :public? false
+                                 :hide? true}}
+     :block/updated-at {:title "Node updated at"
+                        :attribute :block/updated-at
+                        :schema {:type :datetime
+                                 :public? false
+                                 :hide? true}}
      :logseq.property.node/display-type {:title "Node Display Type"
                                          :schema {:type :keyword
                                                   :public? false
@@ -213,11 +213,11 @@
                                             :schema {:type :checkbox
                                                      :public? true
                                                      :view-context :class}}
-     :logseq.property/query       {:title "Query"
-                                   :schema {:type :default
-                                            :public? true
-                                            :hide? true
-                                            :view-context :block}}
+     :logseq.property/query {:title "Query"
+                             :schema {:type :default
+                                      :public? true
+                                      :hide? true
+                                      :view-context :block}}
      :logseq.property/page-tags {:title "Page Tags"
                                  :schema {:type :page
                                           :public? true
@@ -234,12 +234,12 @@
      :logseq.property/created-from-property {:title "Created from property"
                                              :schema {:type :entity
                                                       :hide? true}}
-     :logseq.property/built-in?             {:title "Built in?"
-                                             :schema {:type :checkbox
-                                                      :hide? true}}
-     :logseq.property/asset   {:title "Asset"
-                               :schema {:type :entity
-                                        :hide? true}}
+     :logseq.property/built-in? {:title "Built in?"
+                                 :schema {:type :checkbox
+                                          :hide? true}}
+     :logseq.property/asset {:title "Asset"
+                             :schema {:type :entity
+                                      :hide? true}}
      ;; used by pdf
      ;; TODO: remove ls-type
      :logseq.property/ls-type {:schema {:type :keyword

@@ -17,6 +17,7 @@
             [frontend.fs :as fs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.property :as property-handler]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.storage :as storage]
@@ -36,7 +37,13 @@
 
 (defonce emojis (vals (bean/->clj (gobj/get emoji-data "emojis"))))
 
-(declare normalize-icon derive-initials derive-avatar-initials)
+;; Tracks page IDs for which we've attempted auto-fetch of Wikipedia avatars.
+;; Using a local atom instead of a DB property to avoid migration issues.
+;; This resets on app restart, allowing retry for previously failed fetches.
+(defonce *avatar-fetch-attempted (atom #{}))
+
+(declare normalize-icon derive-initials derive-avatar-initials
+         <search-wikipedia-image <save-url-asset!)
 
 (defn- convert-bg-color-to-rgba
   "Convert background color to rgba format with opacity ~0.314.
@@ -348,6 +355,70 @@
           :else
           "point-filled")))))
 
+;; ============================================================================
+;; Auto-Fetch Wikipedia Avatar
+;; ============================================================================
+
+(defn- should-auto-fetch-avatar?
+  "Check if we should auto-fetch a Wikipedia image for this page's avatar.
+   Returns true if:
+   - Auto-fetch is enabled in config
+   - The page has a title
+   - The page hasn't been attempted before (tracked in local atom)
+   - The page doesn't already have a custom icon with an image"
+  [page-entity]
+  (let [page-id (:db/id page-entity)
+        feature-enabled? (:feature/auto-fetch-avatar-images? (state/get-config))
+        has-title? (some? (:block/title page-entity))
+        not-attempted? (not (contains? @*avatar-fetch-attempted page-id))
+        no-existing-asset? (not (get-in (:logseq.property/icon page-entity) [:data :asset-uuid]))
+        result (and feature-enabled? has-title? not-attempted? no-existing-asset?)]
+    (js/console.log "[auto-fetch-avatar] Checking conditions:"
+                    "\n  feature-enabled?" feature-enabled?
+                    "\n  has-title?" has-title? "(" (:block/title page-entity) ")"
+                    "\n  not-attempted?" not-attempted?
+                    "\n  no-existing-asset?" no-existing-asset?
+                    "\n  RESULT:" result)
+    result))
+
+(defn- <auto-fetch-avatar-image!
+  "Fetch Wikipedia image for a page and set it as the avatar icon.
+   Marks the page as attempted in local atom regardless of success/failure."
+  [page-entity]
+  (let [repo (state/get-current-repo)
+        page-id (:db/id page-entity)
+        title (:block/title page-entity)]
+    ;; Mark as attempted first (prevents re-fetch on re-render)
+    (swap! *avatar-fetch-attempted conj page-id)
+    ;; Try to fetch the image
+    (p/let [image-data (<search-wikipedia-image title)]
+      (when (and image-data (:url image-data))
+        (p/let [asset (<save-url-asset! repo (:url image-data)
+                                        (str "avatar-" (subs title 0 (min 30 (count title)))))]
+          (when asset
+            (property-handler/set-block-property!
+             page-id
+             :logseq.property/icon
+             {:type :avatar
+              :data {:value (derive-avatar-initials title)
+                     :asset-uuid (str (:block/uuid asset))
+                     :asset-type (:logseq.property.asset/type asset)}})))))))
+
+(rum/defc auto-fetch-avatar-effect < rum/static
+  "Effect component that triggers auto-fetch for avatar images.
+   Renders nothing, just runs the side effect on mount."
+  [page-entity]
+  (js/console.log "[auto-fetch-avatar] Effect component mounted for:" (:block/title page-entity))
+  (hooks/use-effect!
+   (fn []
+     (js/console.log "[auto-fetch-avatar] Effect running for:" (:block/title page-entity))
+     (when (should-auto-fetch-avatar? page-entity)
+       (js/console.log "[auto-fetch-avatar] Starting fetch for:" (:block/title page-entity))
+       (<auto-fetch-avatar-image! page-entity))
+     js/undefined)
+   [(:db/id page-entity)])
+  nil)
+
 (rum/defc get-node-icon-cp < rum/reactive db-mixins/query
   [node-entity opts]
   (let [;; Get fresh entity using db/sub-block to make it reactive to property changes
@@ -362,12 +433,24 @@
                     (:link? opts)
                     "arrow-narrow-right"
                     :else
-                    (get-node-icon entity))]
+                    (get-node-icon entity))
+        ;; Check if this is an avatar that might need auto-fetch:
+        ;; - It's an avatar type
+        ;; - It doesn't have an asset-uuid (text-only avatar)
+        ;; - The entity is a page (not a block)
+        is-auto-fetchable-avatar? (and (= :avatar (:type node-icon))
+                                       (not (get-in node-icon [:data :asset-uuid]))
+                                       (ldb/page? entity))]
     (when-not (or (string/blank? node-icon) (and (contains? #{"letter-n" "file"} node-icon) (:not-text-or-page? opts)))
-      [:div.icon-cp-container.flex.items-center.justify-center
-       (merge {:style {:color (or (:color node-icon) "inherit")}}
-              (select-keys opts [:class]))
-       (icon node-icon opts')])))
+      [:<>
+       ;; Auto-fetch effect for avatars without images
+       (when is-auto-fetchable-avatar?
+         (auto-fetch-avatar-effect entity))
+       ;; Icon rendering
+       [:div.icon-cp-container.flex.items-center.justify-center
+        (merge {:style {:color (or (:color node-icon) "inherit")}}
+               (select-keys opts [:class]))
+        (icon node-icon opts')]])))
 
 (defn- emoji-char?
   "Check if a string is a single emoji character by checking against known emojis"

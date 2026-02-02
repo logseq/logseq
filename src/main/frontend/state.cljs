@@ -64,59 +64,59 @@
 ;; Stores main application state
 (defonce ^:large-vars/data-var state
   (let [document-mode? (or (storage/get :document/mode?) false)
-        current-graph  (let [url-graph (:graph (util/parse-params))
-                             graph (or url-graph (storage/get :git/current-repo))]
-                         (when graph (ipc/ipc "setCurrentGraph" graph))
-                         graph)]
+        current-graph (let [url-graph (:graph (util/parse-params))
+                            graph (or url-graph (storage/get :git/current-repo))]
+                        (when graph (ipc/ipc "setCurrentGraph" graph))
+                        graph)]
     (atom
-     {:client-id                             (str (random-uuid))
-      :route-match                           nil
-      :today                                 nil
-      :system/events                         (async/chan 1000)
-      :reactive/custom-queries               (async/chan 1000)
-      :notification/show?                    false
-      :notification/content                  nil
-      :instrument/disabled?                  (storage/get "instrument-disabled")
+     {:client-id (str (random-uuid))
+      :route-match nil
+      :today nil
+      :system/events (async/chan 1000)
+      :reactive/custom-queries (async/chan 1000)
+      :notification/show? false
+      :notification/content nil
+      :instrument/disabled? (storage/get "instrument-disabled")
       ;; TODO: how to detect the network reliably?
       ;; NOTE: prefer to use flows/network-online-event-flow
-      :network/online?         true
-      :me                      nil
-      :git/current-repo        current-graph
-      :db/restoring?           nil
+      :network/online? true
+      :me nil
+      :git/current-repo current-graph
+      :db/restoring? nil
 
-      :search/q                              ""
-      :search/mode                           nil ; nil -> global mode, :graph -> add graph filter, etc.
-      :search/args                           nil
-      :search/result                         nil
-      :search/graph-filters                  []
-      :search/engines                        {}
+      :search/q ""
+      :search/mode nil ; nil -> global mode, :graph -> add graph filter, etc.
+      :search/args nil
+      :search/result nil
+      :search/graph-filters []
+      :search/engines {}
 
       ;; modals
-      :modal/dropdowns                       {}
-      :modal/id                              nil
+      :modal/dropdowns {}
+      :modal/id nil
 
       ;; ui
-      :ui/viewport                           {}
-      :ui/show-property-dialog?              (atom false)
+      :ui/viewport {}
+      :ui/show-property-dialog? (atom false)
 
       ;; left sidebar
-      :ui/navigation-item-collapsed?         {}
-      :ui/recent-pages                       (or (storage/get :ui/recent-pages) {})
+      :ui/navigation-item-collapsed? {}
+      :ui/recent-pages (or (storage/get :ui/recent-pages) {})
 
       ;; right sidebar
-      :ui/handbooks-open?                    false
-      :ui/help-open?                         false
-      :ui/fullscreen?                        false
-      :ui/settings-open?                     false
-      :ui/sidebar-open?                      false
-      :ui/sidebar-width                      "40%"
-      :ui/left-sidebar-open?                 (boolean (storage/get :ls-left-sidebar-open?))
-      :ui/theme                              (or (storage/get :ui/theme) "light")
-      :ui/system-theme?                      ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
-      :ui/custom-theme                       (or (storage/get :ui/custom-theme) {:light {:mode "light"} :dark {:mode "dark"}})
-      :ui/wide-mode?                         (storage/get :ui/wide-mode)
-      :ui/radix-color                        (storage/get :ui/radix-color)
-      :ui/editor-font                        (storage/get :ui/editor-font)
+      :ui/handbooks-open? false
+      :ui/help-open? false
+      :ui/fullscreen? false
+      :ui/settings-open? false
+      :ui/sidebar-open? false
+      :ui/sidebar-width "40%"
+      :ui/left-sidebar-open? (boolean (storage/get :ls-left-sidebar-open?))
+      :ui/theme (or (storage/get :ui/theme) "light")
+      :ui/system-theme? ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
+      :ui/custom-theme (or (storage/get :ui/custom-theme) {:light {:mode "light"} :dark {:mode "dark"}})
+      :ui/wide-mode? (storage/get :ui/wide-mode)
+      :ui/radix-color (storage/get :ui/radix-color)
+      :ui/editor-font (storage/get :ui/editor-font)
 
       ;; ui/collapsed-blocks is to separate the collapse/expand state from db for:
       ;; 1. right sidebar
@@ -124,201 +124,201 @@
       ;; 3. queries
       ;; 4. references
       ;; graph => {container-id {:block-id bool}}
-      :ui/collapsed-blocks                   {}
-      :ui/sidebar-collapsed-blocks           {}
-      :ui/root-component                     nil
-      :ui/file-component                     nil
-      :ui/developer-mode?                    (or (= (storage/get "developer-mode") "true")
-                                                 false)
+      :ui/collapsed-blocks {}
+      :ui/sidebar-collapsed-blocks {}
+      :ui/root-component nil
+      :ui/file-component nil
+      :ui/developer-mode? (or (= (storage/get "developer-mode") "true")
+                              false)
       ;; remember scroll positions of visited paths
-      :ui/paths-scroll-positions             (atom {})
-      :ui/main-container-scroll-top          (atom nil)
-      :ui/shortcut-tooltip?                  (if (false? (storage/get :ui/shortcut-tooltip?))
-                                               false
-                                               true)
-      :ui/scrolling?                         (atom false)
-      :ui/show-empty-and-hidden-properties?  (atom {:mode :global
-                                                    :show? false})
-      :document/mode?                        document-mode?
+      :ui/paths-scroll-positions (atom {})
+      :ui/main-container-scroll-top (atom nil)
+      :ui/shortcut-tooltip? (if (false? (storage/get :ui/shortcut-tooltip?))
+                              false
+                              true)
+      :ui/scrolling? (atom false)
+      :ui/show-empty-and-hidden-properties? (atom {:mode :global
+                                                   :show? false})
+      :document/mode? document-mode?
 
-      :config                                {}
-      :block/component-editing-mode?         false
-      :editor/op                             (atom nil)
-      :editor/start-pos                      (atom nil)
-      :editor/async-unsaved-chars            (atom nil)
-      :editor/hidden-editors                 #{} ;; page names
+      :config {}
+      :block/component-editing-mode? false
+      :editor/op (atom nil)
+      :editor/start-pos (atom nil)
+      :editor/async-unsaved-chars (atom nil)
+      :editor/hidden-editors #{} ;; page names
 
-      :editor/action                         (atom nil)
-      :editor/action-data                    nil
+      :editor/action (atom nil)
+      :editor/action-data nil
       ;; With label or other data
-      :editor/last-saved-cursor              (atom {})
-      :editor/editing?                       (atom nil)
-      :editor/in-composition?                false
-      :editor/content                        (atom {})
-      :editor/block                          (atom nil)
-      :editor/set-timestamp-block            (atom nil) ;; click rendered block timestamp-cp to set timestamp
-      :editor/last-input-time                (atom {})
-      :editor/document-mode?                 document-mode?
-      :editor/args                           (atom nil)
-      :editor/on-paste?                      (atom false)
-      :editor/last-key-code                  (atom nil)
-      :ui/global-last-key-code               (atom nil)
-      :editor/block-op-type                  nil ;; :cut, :copy
-      :editor/block-refs                     (atom #{})
+      :editor/last-saved-cursor (atom {})
+      :editor/editing? (atom nil)
+      :editor/in-composition? false
+      :editor/content (atom {})
+      :editor/block (atom nil)
+      :editor/set-timestamp-block (atom nil) ;; click rendered block timestamp-cp to set timestamp
+      :editor/last-input-time (atom {})
+      :editor/document-mode? document-mode?
+      :editor/args (atom nil)
+      :editor/on-paste? (atom false)
+      :editor/last-key-code (atom nil)
+      :ui/global-last-key-code (atom nil)
+      :editor/block-op-type nil ;; :cut, :copy
+      :editor/block-refs (atom #{})
 
       ;; Stores deleted refed blocks, indexed by repo
-      :editor/last-replace-ref-content-tx    nil
+      :editor/last-replace-ref-content-tx nil
 
-      :editor/code-block-context             nil
-      :editor/latest-shortcut                (atom nil)
+      :editor/code-block-context nil
+      :editor/latest-shortcut (atom nil)
 
-      :history/paused?                       (atom false)
-      :editor/cursor-range                   (atom nil)
-      :editor/container-id                   (atom nil)
-      :editor/next-edit-block                (atom nil)
-      :editor/raw-mode-block                 (atom nil)
-      :editor/virtualized-scroll-fn          nil
-      :editor/edit-block-fn                  (atom nil)
+      :history/paused? (atom false)
+      :editor/cursor-range (atom nil)
+      :editor/container-id (atom nil)
+      :editor/next-edit-block (atom nil)
+      :editor/raw-mode-block (atom nil)
+      :editor/virtualized-scroll-fn nil
+      :editor/edit-block-fn (atom nil)
 
       ;; Warning: blocks order is determined when setting this attribute
-      :selection/blocks                      (atom [])
-      :selection/start-block                 (atom nil)
+      :selection/blocks (atom [])
+      :selection/start-block (atom nil)
       ;; nil, :up or :down
       ;; used to determine selection direction when two or more blocks are selected
-      :selection/direction                   (atom nil)
-      :selection/selected-all?               (atom false)
-      :custom-context-menu/show?             false
-      :custom-context-menu/links             nil
-      :custom-context-menu/position          nil
+      :selection/direction (atom nil)
+      :selection/selected-all? (atom false)
+      :custom-context-menu/show? false
+      :custom-context-menu/links nil
+      :custom-context-menu/position nil
 
       ;; pages or blocks in the right sidebar
       ;; It is a list of `[repo db-id block-type block-data]` 4-tuple
-      :sidebar/blocks                        '()
+      :sidebar/blocks '()
 
-      :preferred-language                    (storage/get :preferred-language)
+      :preferred-language (storage/get :preferred-language)
 
       ;; electron
-      :electron/auto-updater-downloaded      false
-      :electron/updater-pending?             false
-      :electron/updater                      {}
-      :electron/user-cfgs                    nil
-      :electron/server                       nil
-      :electron/window-maximized?            false
-      :electron/window-fullscreen?           false
+      :electron/auto-updater-downloaded false
+      :electron/updater-pending? false
+      :electron/updater {}
+      :electron/user-cfgs nil
+      :electron/server nil
+      :electron/window-maximized? false
+      :electron/window-fullscreen? false
 
       ;; assets
-      :assets/alias-enabled?                 (or (storage/get :assets/alias-enabled?) false)
-      :assets/alias-dirs                     (or (storage/get :assets/alias-dirs) [])
-      :assets/asset-file-write-finish        (atom {})
+      :assets/alias-enabled? (or (storage/get :assets/alias-enabled?) false)
+      :assets/alias-dirs (or (storage/get :assets/alias-dirs) [])
+      :assets/asset-file-write-finish (atom {})
 
       ;; mobile
-      :mobile/container-urls                 nil
-      :mobile/show-action-bar?               false
+      :mobile/container-urls nil
+      :mobile/show-action-bar? false
 
       ;; plugin
-      :plugin/enabled                        (and util/plugin-platform?
+      :plugin/enabled (and util/plugin-platform?
                                                   ;; true false :theme-only
-                                                  ((fnil identity true) (storage/get ::storage-spec/lsp-core-enabled)))
-      :plugin/preferences                    nil
-      :plugin/indicator-text                 nil
-      :plugin/installed-plugins              {}
-      :plugin/installed-themes               []
-      :plugin/installed-slash-commands       {}
-      :plugin/installed-ui-items             {}
-      :plugin/installed-resources            {}
-      :plugin/installed-hooks                {}
-      :plugin/installed-services             {}
-      :plugin/simple-commands                {}
-      :plugin/selected-theme                 nil
-      :plugin/selected-unpacked-pkg          nil
-      :plugin/marketplace-pkgs               nil
-      :plugin/marketplace-stats              nil
-      :plugin/installing                     nil
-      :plugin/active-readme                  nil
-      :plugin/updates-auto-checking?         false
-      :plugin/updates-pending                {}
-      :plugin/updates-coming                 {}
-      :plugin/updates-downloading?           false
-      :plugin/updates-unchecked              #{}
-      :plugin/navs-settings?                 true
-      :plugin/focused-settings               nil ;; plugin id
+                           ((fnil identity true) (storage/get ::storage-spec/lsp-core-enabled)))
+      :plugin/preferences nil
+      :plugin/indicator-text nil
+      :plugin/installed-plugins {}
+      :plugin/installed-themes []
+      :plugin/installed-slash-commands {}
+      :plugin/installed-ui-items {}
+      :plugin/installed-resources {}
+      :plugin/installed-hooks {}
+      :plugin/installed-services {}
+      :plugin/simple-commands {}
+      :plugin/selected-theme nil
+      :plugin/selected-unpacked-pkg nil
+      :plugin/marketplace-pkgs nil
+      :plugin/marketplace-stats nil
+      :plugin/installing nil
+      :plugin/active-readme nil
+      :plugin/updates-auto-checking? false
+      :plugin/updates-pending {}
+      :plugin/updates-coming {}
+      :plugin/updates-downloading? false
+      :plugin/updates-unchecked #{}
+      :plugin/navs-settings? true
+      :plugin/focused-settings nil ;; plugin id
 
       ;; pdf
-      :pdf/system-win?                       false
-      :pdf/current                           nil
-      :pdf/ref-highlight                     nil
-      :pdf/block-highlight-colored?          (or (storage/get "ls-pdf-hl-block-is-colored") true)
-      :pdf/auto-open-ctx-menu?               (not= false (storage/get "ls-pdf-auto-open-ctx-menu"))
+      :pdf/system-win? false
+      :pdf/current nil
+      :pdf/ref-highlight nil
+      :pdf/block-highlight-colored? (or (storage/get "ls-pdf-hl-block-is-colored") true)
+      :pdf/auto-open-ctx-menu? (not= false (storage/get "ls-pdf-auto-open-ctx-menu"))
 
       ;; all notification contents as k-v pairs
-      :notification/contents                 {}
+      :notification/contents {}
 
-      :copy/export-block-text-indent-style   (or (storage/get :copy/export-block-text-indent-style)
-                                                 "dashes")
+      :copy/export-block-text-indent-style (or (storage/get :copy/export-block-text-indent-style)
+                                               "dashes")
       :copy/export-block-text-remove-options (or (storage/get :copy/export-block-text-remove-options)
                                                  #{})
-      :copy/export-block-text-other-options  (or (storage/get :copy/export-block-text-other-options)
-                                                 {})
-      :date-picker/date                      nil
+      :copy/export-block-text-other-options (or (storage/get :copy/export-block-text-other-options)
+                                                {})
+      :date-picker/date nil
 
-      :youtube/players                       {}
+      :youtube/players {}
 
       ;; command palette
-      :command-palette/commands              (atom [])
+      :command-palette/commands (atom [])
 
-      :view/components                       {}
-      :view/selected-blocks                  nil
+      :view/components {}
+      :view/selected-blocks nil
 
-      :srs/mode?                             false
+      :srs/mode? false
 
-      :srs/cards-due-count                   nil
+      :srs/cards-due-count nil
 
-      :reactive/query-dbs                    {}
+      :reactive/query-dbs {}
 
       ;; login, userinfo, token, ...
-      :auth/refresh-token                    (some-> (storage/get "refresh-token") str)
-      :auth/access-token                     nil
-      :auth/id-token                         nil
+      :auth/refresh-token (some-> (storage/get "refresh-token") str)
+      :auth/access-token nil
+      :auth/id-token nil
 
       ;; graph-uuid -> ...
-      :rtc/state                             (atom {})
-      :rtc/loading-graphs?                   nil
+      :rtc/state (atom {})
+      :rtc/loading-graphs? nil
       ;; only latest rtc-log stored here, when a log stream is needed,
       ;; use missionary to create a rtc-log-flow, use (missionary.core/watch <atom>)
-      :rtc/log                               (atom nil)
-      :rtc/uploading?                        false
-      :rtc/downloading-graph-uuid            nil
-      :rtc/graphs                            []
-      :rtc/online-info                       (atom {})
-      :rtc/asset-upload-download-progress    (atom {})
-      :rtc/users-info                        (atom {})
+      :rtc/log (atom nil)
+      :rtc/uploading? false
+      :rtc/downloading-graph-uuid nil
+      :rtc/graphs []
+      :rtc/online-info (atom {})
+      :rtc/asset-upload-download-progress (atom {})
+      :rtc/users-info (atom {})
 
-      :user/info                             {:UserGroups (storage/get :user-groups)}
-      :encryption/graph-parsing?             false
+      :user/info {:UserGroups (storage/get :user-groups)}
+      :encryption/graph-parsing? false
 
-      :ui/loading?                           {}
-      :ui/container-id                       (atom 0)
-      :ui/cached-key->container-id           (atom {})
-      :feature/enable-sync?                  (storage/get :logseq-sync-enabled)
+      :ui/loading? {}
+      :ui/container-id (atom 0)
+      :ui/cached-key->container-id (atom {})
+      :feature/enable-sync? (storage/get :logseq-sync-enabled)
 
-      :ui/find-in-page                       nil
-      :graph/importing                       nil
-      :graph/importing-state                 {}
-      :graph/loading?                        nil
-      :handbook/route-chan                   (async/chan (async/sliding-buffer 1))
+      :ui/find-in-page nil
+      :graph/importing nil
+      :graph/importing-state {}
+      :graph/loading? nil
+      :handbook/route-chan (async/chan (async/sliding-buffer 1))
 
-      :system/info                           {}
+      :system/info {}
       ;; Whether block is selected
-      :ui/select-query-cache                 (atom {})
-      :ui/toggle-highlight-recent-blocks?    (atom false)
-      :ui/highlight-recent-days              (atom (or (storage/get :ui/highlight-recent-days)
-                                                       3))
-      :favorites/updated?                    (atom 0)
-      :db/async-queries                      (atom {})
-      :db/latest-transacted-entity-uuids     (atom {})
+      :ui/select-query-cache (atom {})
+      :ui/toggle-highlight-recent-blocks? (atom false)
+      :ui/highlight-recent-days (atom (or (storage/get :ui/highlight-recent-days)
+                                          3))
+      :favorites/updated? (atom 0)
+      :db/async-queries (atom {})
+      :db/latest-transacted-entity-uuids (atom {})
 
-      :vector-search/state                   (atom {})
-      :vector-search/load-model-progress     (atom nil)})))
+      :vector-search/state (atom {})
+      :vector-search/load-model-progress (atom nil)})))
 
 ;; User configuration getters under :config (and sometimes :me)
 ;; ========================================
@@ -363,7 +363,8 @@
              :inputs [:today :7d-after]
              :group-by-page? false
              :collapsed? true}]}
-          :ui/hide-empty-properties? false}))
+          :ui/hide-empty-properties? false
+          :feature/auto-fetch-avatar-images? true}))
 
 ;; State that most user config is dependent on
 (declare get-current-repo sub set-state!)
@@ -524,10 +525,10 @@ should be done through this fn in order to get global config and config defaults
   "Creates a rum cursor, https://github.com/tonsky/rum#cursors, for use in rum components.
 Similar to re-frame subscriptions"
   [ks & {:keys [path-in-sub-atom]}]
-  (let [ks-coll?               (coll? ks)
-        get-fn                 (if ks-coll? get-in get)
-        s                      (get-fn @state ks)
-        s-atom?                (util/atom? s)
+  (let [ks-coll? (coll? ks)
+        get-fn (if ks-coll? get-in get)
+        s (get-fn @state ks)
+        s-atom? (util/atom? s)
         path-coll?-in-sub-atom (coll? path-in-sub-atom)]
     (cond
       (and s-atom? path-in-sub-atom path-coll?-in-sub-atom)
@@ -536,9 +537,9 @@ Similar to re-frame subscriptions"
       (and s-atom? path-in-sub-atom)
       (util/react (rum/cursor s path-in-sub-atom))
 
-      s-atom?  (util/react s)
+      s-atom? (util/react s)
       ks-coll? (util/react (rum/cursor-in state ks))
-      :else    (util/react (rum/cursor state ks)))))
+      :else (util/react (rum/cursor state ks)))))
 
 (defn set-editing-block-id!
   [container-block]
@@ -679,10 +680,10 @@ Similar to re-frame subscriptions"
 (defn set-state!
   [path value & {:keys [path-in-sub-atom]}]
   (vswap! *profile-state update path inc)
-  (let [path-coll?             (coll? path)
-        get-fn                 (if path-coll? get-in get)
-        s                      (get-fn @state path)
-        s-atom?                (util/atom? s)
+  (let [path-coll? (coll? path)
+        get-fn (if path-coll? get-in get)
+        s (get-fn @state path)
+        s-atom? (util/atom? s)
         path-coll?-in-sub-atom (coll? path-in-sub-atom)]
     (cond
       (and s-atom? path-in-sub-atom path-coll?-in-sub-atom)
@@ -711,10 +712,10 @@ Similar to re-frame subscriptions"
 (defn update-state!
   [path f & {:keys [path-in-sub-atom]}]
   (vswap! *profile-state update path inc)
-  (let [path-coll?             (coll? path)
-        get-fn                 (if path-coll? get-in get)
-        s                      (get-fn @state path)
-        s-atom?                (util/atom? s)
+  (let [path-coll? (coll? path)
+        get-fn (if path-coll? get-in get)
+        s (get-fn @state path)
+        s-atom? (util/atom? s)
         path-coll?-in-sub-atom (coll? path-in-sub-atom)]
     (cond
       (and s-atom? path-in-sub-atom path-coll?-in-sub-atom)
@@ -723,9 +724,9 @@ Similar to re-frame subscriptions"
       (and s-atom? path-in-sub-atom)
       (swap! s update path-in-sub-atom f)
 
-      s-atom?    (swap! s f)
+      s-atom? (swap! s f)
       path-coll? (swap! state update-in path f)
-      :else      (swap! state update path f)))
+      :else (swap! state update path f)))
   nil)
 
 ;; State getters and setters
@@ -1507,8 +1508,8 @@ Similar to re-frame subscriptions"
   (when-let [pid (keyword pid)]
     (when-let [installed (get (:plugin/installed-services @state) pid)]
       (let [remove-all? (or (true? type-or-all) (nil? type-or-all))
-            remains     (if remove-all? nil (filterv #(not= type-or-all (:type %)) installed))
-            removed     (if remove-all? installed (filterv #(= type-or-all (:type %)) installed))]
+            remains (if remove-all? nil (filterv #(not= type-or-all (:type %)) installed))
+            removed (if remove-all? installed (filterv #(= type-or-all (:type %)) installed))]
         (set-state! [:plugin/installed-services pid] remains)
 
         ;; search engines state for results
@@ -1874,10 +1875,10 @@ Similar to re-frame subscriptions"
 (defn reset-all-updates-state
   []
   (swap! state assoc
-         :plugin/updates-auto-checking?         false
-         :plugin/updates-pending                {}
-         :plugin/updates-coming                 {}
-         :plugin/updates-downloading?           false))
+         :plugin/updates-auto-checking? false
+         :plugin/updates-pending {}
+         :plugin/updates-coming {}
+         :plugin/updates-downloading? false))
 
 (defn sub-right-sidebar-blocks
   []
@@ -1941,8 +1942,8 @@ Similar to re-frame subscriptions"
 
 (defn http-proxy-enabled-or-val? []
   (when-let [{:keys [type protocol host port] :as agent-opts} (sub [:electron/user-cfgs :settings/agent])]
-    (when (and  (not (contains? #{"system"} type))
-                (every? not-empty (vals agent-opts)))
+    (when (and (not (contains? #{"system"} type))
+               (every? not-empty (vals agent-opts)))
       (str protocol "://" host ":" port))))
 
 (defn get-current-pdf
