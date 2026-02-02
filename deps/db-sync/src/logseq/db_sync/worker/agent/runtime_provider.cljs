@@ -1,114 +1,28 @@
 (ns logseq.db-sync.worker.agent.runtime-provider
   (:require [clojure.string :as string]
-            [logseq.db-sync.platform.core :as platform]
-            [logseq.db-sync.worker.agent.sandbox :as sandbox]
             [promesa.core :as p]))
 
-(defprotocol RuntimeProvider
-  (<provision-runtime! [this session-id task])
-  (<open-message-stream! [this runtime message])
-  (<terminate-runtime! [this runtime]))
+;; -----------------------
+;; helpers
+;; -----------------------
 
-(defn- env-str [^js env key]
-  (let [value (aget env key)]
-    (when (string? value)
-      (let [value (string/trim value)]
-        (when-not (string/blank? value)
-          value)))))
+(defn- env-str [^js env k]
+  (let [v (aget env k)]
+    (when (string? v)
+      (let [t (string/trim v)]
+        (when-not (string/blank? t) t)))))
 
-(defn fill-template [template sandbox-id]
-  (string/replace (or template "") "{sandbox_id}" sandbox-id))
+(defn- parse-int [v default]
+  (let [n (some-> v js/parseInt)]
+    (if (and (number? n) (not (js/isNaN n))) n default)))
 
-(defn- normalize-provider-kind [kind]
-  (let [kind (some-> kind str string/lower-case string/trim)]
-    (case kind
-      "sprites" "sprites"
-      "local-dev" "local-dev"
-      "cloudflare" "cloudflare"
-      (or kind "sprites"))))
+(defn- parse-json-safe [s]
+  (try
+    (js->clj (js/JSON.parse s) :keywordize-keys true)
+    (catch :default _ {})))
 
-(defn provider-kind [^js env]
-  (normalize-provider-kind (env-str env "AGENT_RUNTIME_PROVIDER")))
-
-(defn runtime-provider-kind [^js env runtime]
-  (normalize-provider-kind
-   (or (:provider runtime)
-       (provider-kind env))))
-
-(defn- parse-int [value default]
-  (if-let [n (some-> value js/parseInt)]
-    (if (js/isNaN n) default n)
-    default))
-
-(defn- token-header! [^js headers token]
-  (when (string? token)
-    (.set headers "authorization" (str "Bearer " token))))
-
-(defn- session-payload [task]
-  {:agent (or (get-in task [:agent :provider])
-              (get-in task [:agent :id])
-              (:agent task))
-   :agent-mode (or (get-in task [:agent :mode])
-                   (get-in task [:agent :agent-mode])
-                   (get-in task [:agent :model]))
-   :permission-mode (or (get-in task [:agent :permission-mode])
-                        (get-in task [:agent :permissionMode]))})
-
-(defrecord LocalDevProvider [env]
-  RuntimeProvider
-  (<provision-runtime! [_ session-id task]
-    (let [base (env-str env "SANDBOX_AGENT_URL")
-          token (env-str env "SANDBOX_AGENT_TOKEN")]
-      (if-not (string? base)
-        (p/resolved nil)
-        (let [endpoint (sandbox/normalize-base-url base)
-              payload (session-payload task)]
-          (p/let [response (sandbox/<create-session endpoint token session-id payload)]
-            {:provider "local-dev"
-             :agent-endpoint endpoint
-             :session-id (:session-id response)})))))
-
-  (<open-message-stream! [_ runtime message]
-    (sandbox/<open-message-stream (:agent-endpoint runtime)
-                                  (or (:agent-token runtime)
-                                      (env-str env "SANDBOX_AGENT_TOKEN"))
-                                  (:session-id runtime)
-                                  message))
-
-  (<terminate-runtime! [_ _runtime]
-    (p/resolved nil)))
-
-(defonce ^:private sprites-sdk* (atom nil))
-
-(defn- <sprites-sdk []
-  (if-let [sdk @sprites-sdk*]
-    (p/resolved sdk)
-    (-> (js/import "@fly/sprites")
-        (.then (fn [module]
-                 (reset! sprites-sdk* module)
-                 module)))))
-
-(defn- sprites-token [^js env]
-  (or (env-str env "SPRITE_TOKEN")
-      (env-str env "SPRITES_TOKEN")))
-
-(defn- sprites-client-options [^js env]
-  (clj->js
-   (cond-> {}
-     (env-str env "SPRITES_API_URL")
-     (assoc :baseURL (env-str env "SPRITES_API_URL"))
-     (env-str env "SPRITES_TIMEOUT_MS")
-     (assoc :timeout (parse-int (env-str env "SPRITES_TIMEOUT_MS") 30000)))))
-
-(defn- <sprites-client [^js env]
-  (let [token (sprites-token env)]
-    (when-not (string? token)
-      (throw (ex-info "missing SPRITE_TOKEN" {})))
-    (p/let [^js sdk (<sprites-sdk)
-            SpritesClient (.-SpritesClient sdk)]
-      (when-not (fn? SpritesClient)
-        (throw (ex-info "sprites sdk is unavailable" {})))
-      (new SpritesClient token (sprites-client-options env)))))
+(defn- strip-trailing-slash [s]
+  (string/replace (or s "") #"/+$" ""))
 
 (defn- sanitize-name [name]
   (let [name (or name "task")
@@ -126,23 +40,34 @@
   (let [prefix (or (env-str env "SPRITES_NAME_PREFIX") "logseq-task-")]
     (sanitize-name (str prefix session-id))))
 
-(defn- sprites-config [^js env]
-  (let [ram-mb (parse-int (env-str env "SPRITES_RAM_MB") 0)
-        cpus (parse-int (env-str env "SPRITES_CPUS") 0)
-        storage-gb (parse-int (env-str env "SPRITES_STORAGE_GB") 0)]
-    (cond-> {}
-      (pos? ram-mb) (assoc :ramMB ram-mb)
-      (pos? cpus) (assoc :cpus cpus)
-      (string? (env-str env "SPRITES_REGION")) (assoc :region (env-str env "SPRITES_REGION"))
-      (pos? storage-gb) (assoc :storageGB storage-gb))))
+(defn- sprites-token [^js env]
+  (or (env-str env "SPRITE_TOKEN")
+      (env-str env "SPRITES_TOKEN")))
+
+(defn- sprites-base-url [^js env]
+  (or (env-str env "SPRITES_API_URL")
+      "https://api.sprites.dev"))
+
+(defn- sprites-http-url [base path]
+  (str (strip-trailing-slash base) path))
+
+(defn- build-query [pairs]
+  (->> pairs
+       (map (fn [[k v]]
+              (str (js/encodeURIComponent (name k))
+                   "="
+                   (js/encodeURIComponent (str v)))))
+       (string/join "&")))
+
+(defn- token-header! [^js headers token]
+  (when (string? token)
+    (.set headers "Authorization" (str "Bearer " token))))
 
 (defn- escape-shell-single [value]
   (string/replace (or value "") "'" "'\"'\"'"))
 
-(defn- sprite-url [port path]
-  (str "http://127.0.0.1:" port path))
-
 (defn- curl-auth-arg [token]
+  ;; token may be nil in --no-token mode
   (if (string? token)
     (str "-H 'authorization: Bearer " (escape-shell-single token) "'")
     ""))
@@ -152,232 +77,256 @@
     (str "--data '" (escape-shell-single (js/JSON.stringify (clj->js body))) "'")
     ""))
 
-(defn- parse-json-safe [s]
-  (try
-    (js->clj (js/JSON.parse s) :keywordize-keys true)
-    (catch :default _
-      {})))
+(defn- sprite-local-url [port path]
+  (str "http://127.0.0.1:" port path))
 
-(defn- <sprite-exec-file [^js sprite command args]
-  (p/let [result (.execFile sprite command (clj->js args))]
-    (js->clj result :keywordize-keys true)))
+(defn- ->promise
+  [v]
+  (js/Promise.resolve v))
 
-(defn- <sprite-health! [sprite port token retries interval-ms]
+(defn- fetch-json!
+  [method url {:keys [token json-body]}]
+  (let [^js h (js/Headers.)]
+    (.set h "Accept" "application/json")
+    (when token (token-header! h token))
+    (when json-body (.set h "Content-Type" "application/json"))
+    (p/let [resp (js/fetch url
+                           (clj->js (cond-> {:method method :headers h}
+                                      json-body (assoc :body (js/JSON.stringify (clj->js json-body))))))
+            status (.-status resp)
+            text (->promise (.text resp))
+            data (parse-json-safe text)]
+      (if (<= 200 status 299)
+        data
+        (throw (ex-info "sprites http error" {:status status :url url :body data}))))))
+
+;; -----------------------
+;; Sprites REST
+;; -----------------------
+
+(defn- sprites-create-or-get! [^js env name]
+  (let [base (sprites-base-url env)
+        token (sprites-token env)]
+    (when-not (string? token)
+      (throw (ex-info "missing SPRITE_TOKEN/SPRITES_TOKEN (Sprites API token)" {})))
+    (p/catch
+     (fetch-json! "POST" (sprites-http-url base "/v1/sprites")
+                  {:token token :json-body {:name name}})
+     (fn [_]
+       (fetch-json! "GET" (sprites-http-url base (str "/v1/sprites/" name))
+                    {:token token})))))
+
+(defn- sprites-delete! [^js env name]
+  (let [base (sprites-base-url env)
+        token (sprites-token env)]
+    (p/catch
+     (fetch-json! "DELETE" (sprites-http-url base (str "/v1/sprites/" name))
+                  {:token token})
+     (fn [_] nil))))
+
+(defn- sprites-exec-post!
+  [^js env sprite-name cmd-vec]
+  (let [base (sprites-base-url env)
+        token (sprites-token env)
+        q (build-query (map (fn [c] [:cmd c]) cmd-vec))
+        url (sprites-http-url base (str "/v1/sprites/" sprite-name "/exec?" q))]
+    (fetch-json! "POST" url {:token token})))
+
+;; -----------------------
+;; Worker WS upgrade to Sprites exec
+;; IMPORTANT: use https URL + Upgrade headers (not wss://)
+;; -----------------------
+
+(defn- sprites-exec-upgrade-url [^js env sprite-name cmd-vec]
+  (let [base (sprites-base-url env)
+        q (build-query (map (fn [c] [:cmd c]) cmd-vec))]
+    (sprites-http-url base (str "/v1/sprites/" sprite-name "/exec?" q))))
+
+(defn- ws-upgrade! [^js env upgrade-url]
+  (let [token (sprites-token env)]
+    (when-not (string? token)
+      (throw (ex-info "missing SPRITE_TOKEN/SPRITES_TOKEN (Sprites API token)" {})))
+    (let [^js headers (js/Headers.)]
+      (token-header! headers token)
+      (.set headers "Upgrade" "websocket")
+      (.set headers "Connection" "Upgrade")
+      (p/let [^js resp (js/fetch upgrade-url #js {:method "GET" :headers headers})
+              status (.-status resp)]
+        (when-not (= 101 status)
+          (p/let [body (->promise (.text resp))]
+            (throw (ex-info "sprites ws upgrade failed"
+                            {:status status :url upgrade-url :body body}))))
+        (let [ws (.-webSocket resp)]
+          (.accept ws)
+          (set! (.-binaryType ws) "arraybuffer")
+          ws)))))
+
+;; -----------------------
+;; REALTIME: Sprites WS stdout/stderr -> TransformStream -> SSE Response
+;; -----------------------
+
+(defn- sprites-ws->sse-response!
+  "Runs cmd inside sprite and streams stdout/stderr bytes to the HTTP client as SSE.
+   Uses TransformStream (reliable in Workers) instead of manual ReadableStream controllers."
+  [^js env sprite-name cmd-vec]
+  (p/let [ws (ws-upgrade! env (sprites-exec-upgrade-url env sprite-name cmd-vec))]
+    (let [ts (js/TransformStream.)
+          writer (.getWriter (.-writable ts))]
+
+      (set! (.-onmessage ws)
+            (fn [evt]
+              (let [data (.-data evt)]
+                (cond
+                  ;; ignore JSON control messages
+                  (string? data) nil
+
+                  (instance? js/ArrayBuffer data)
+                  (let [u8 (js/Uint8Array. data)
+                        n (.-length u8)]
+                    (when (> n 0)
+                      (let [sid (.at u8 0)
+                            payload (.subarray u8 1)]
+                        (cond
+                          ;; stdout/stderr
+                          (or (= sid 1) (= sid 2))
+                          ;; write ONLY bytes
+                          (.write writer payload)
+
+                          ;; exit
+                          (= sid 3)
+                          (do
+                            (try (.close writer) (catch :default _ nil))
+                            (try (.close ws 1000) (catch :default _ nil)))
+
+                          :else nil))))
+
+                  :else
+                  (do
+                    (try (.abort writer (js/Error. "unexpected ws frame type")) (catch :default _ nil))
+                    (try (.close ws 1011 "bad frame") (catch :default _ nil)))))))
+
+      (set! (.-onerror ws)
+            (fn [e]
+              (try (.abort writer e) (catch :default _ nil))))
+
+      (set! (.-onclose ws)
+            (fn [_]
+              (try (.close writer) (catch :default _ nil))))
+
+      (js/Response.
+       (.-readable ts)
+       #js {:status 200
+            :headers #js {"content-type" "text/event-stream"
+                          "cache-control" "no-cache"
+                          "connection" "keep-alive"}}))))
+
+;; -----------------------
+;; sandbox-agent bootstrap + health + create-session
+;; -----------------------
+
+(defn- <sprite-bootstrap! [^js env sprite-name port]
+  (let [bootstrap (or (env-str env "SPRITES_BOOTSTRAP_COMMAND")
+                      (str "command -v sandbox-agent >/dev/null 2>&1 || "
+                           "(curl -fsSL https://releases.rivet.dev/sandbox-agent/latest/install.sh | sh); "
+                           "nohup sandbox-agent server --no-token --host 0.0.0.0 --port " port
+                           " >/tmp/sandbox-agent.log 2>&1 &"))]
+    (sprites-exec-post! env sprite-name ["bash" "-lc" bootstrap])))
+
+(defn- <sprite-health! [^js env sprite-name port agent-token retries interval-ms]
   (if (<= retries 0)
     (throw (ex-info "sandbox-agent health check timed out in sprite"
-                    {:port port}))
+                    {:sprite sprite-name :port port}))
     (let [script (str "curl -fsS "
-                      (curl-auth-arg token)
+                      (curl-auth-arg agent-token)
                       " "
-                      (sprite-url port "/v1/health")
+                      (sprite-local-url port "/v1/health")
                       " >/dev/null")]
-      (-> (<sprite-exec-file sprite "bash" ["-lc" script])
-          (.then (fn [_] true))
-          (.catch (fn [_]
-                    (p/let [_ (p/delay interval-ms)]
-                      (<sprite-health! sprite port token (dec retries) interval-ms))))))))
+      (-> (sprites-exec-post! env sprite-name ["bash" "-lc" script])
+          (p/then (fn [_] true))
+          (p/catch (fn [_]
+                     (p/let [_ (p/delay interval-ms)]
+                       (<sprite-health! env sprite-name port agent-token (dec retries) interval-ms))))))))
 
-(defn- <sprite-create-session! [sprite port token session-id payload]
+(defn- session-payload [task]
+  {:agent (or (get-in task [:agent :provider])
+              (get-in task [:agent :id])
+              (:agent task))
+   :agent-mode (or (get-in task [:agent :mode])
+                   (get-in task [:agent :agent-mode])
+                   (get-in task [:agent :model]))
+   :permission-mode (or (get-in task [:agent :permission-mode])
+                        (get-in task [:agent :permissionMode]))})
+
+(defn- <sprite-create-session! [^js env sprite-name port agent-token session-id payload]
   (let [script (str "curl -fsS -X POST -H 'content-type: application/json' "
-                    (curl-auth-arg token)
+                    (curl-auth-arg agent-token)
                     " "
                     (curl-json-arg payload)
                     " "
-                    (sprite-url port (str "/v1/sessions/" session-id)))]
-    (p/let [result (<sprite-exec-file sprite "bash" ["-lc" script])]
-      (assoc (parse-json-safe (or (:stdout result) "{}"))
-             :session-id session-id))))
+                    (sprite-local-url port (str "/v1/sessions/" session-id)))]
+    (p/let [result (sprites-exec-post! env sprite-name ["bash" "-lc" script])
+            stdout (or (:stdout result) "")
+            parsed (parse-json-safe stdout)]
+      (assoc parsed :session-id session-id))))
 
-(defn- async-iterable->readable-stream [iterable cancel-fn]
-  (let [iter-fn (when iterable (aget iterable js/Symbol.asyncIterator))
-        iterator (when (fn? iter-fn)
-                   (.call iter-fn iterable))
-        encoder (js/TextEncoder.)]
-    (when-not iterator
-      (throw (ex-info "missing async iterator for sprite stream" {})))
-    (js/ReadableStream.
-     #js {:pull (fn [controller]
-                  (-> (.next iterator)
-                      (.then (fn [step]
-                               (if (.-done step)
-                                 (.close controller)
-                                 (let [chunk (.-value step)
-                                       bytes (cond
-                                               (instance? js/Uint8Array chunk) chunk
-                                               (string? chunk) (.encode encoder chunk)
-                                               :else (.encode encoder (str chunk)))]
-                                   (.enqueue controller bytes)))))
-                      (.catch (fn [error]
-                                (.error controller error)))))
-          :cancel (fn [_reason]
-                    (when (fn? cancel-fn)
-                      (cancel-fn)))})))
+;; ============================================================
+;; RuntimeProvider + SpritesProvider
+;; ============================================================
+
+(defprotocol RuntimeProvider
+  (<provision-runtime! [this session-id task])
+  (<open-message-stream! [this runtime message])
+  (<terminate-runtime! [this runtime]))
 
 (defrecord SpritesProvider [env]
   RuntimeProvider
+
   (<provision-runtime! [_ session-id task]
     (let [name (sprite-name env session-id)
           port (parse-int (env-str env "SPRITES_SANDBOX_AGENT_PORT") 2468)
-          token (or (env-str env "SANDBOX_AGENT_TOKEN")
-                    (sprites-token env))
+          agent-token (env-str env "SANDBOX_AGENT_TOKEN") ;; may be nil if --no-token
           health-retries (parse-int (env-str env "SPRITES_HEALTH_RETRIES") 120)
-          health-interval-ms (parse-int (env-str env "SPRITES_HEALTH_INTERVAL_MS") 500)
-          bootstrap (or (env-str env "SPRITES_BOOTSTRAP_COMMAND")
-                        "command -v sandbox-agent >/dev/null 2>&1 || (curl -fsSL https://releases.rivet.dev/sandbox-agent/latest/install.sh | sh); nohup sandbox-agent server --no-token --host 127.0.0.1 --port 2468 >/tmp/sandbox-agent.log 2>&1 &")]
-      (p/let [^js client (<sprites-client env)
-              ^js sprite (-> (.createSprite client name (clj->js (sprites-config env)))
-                             (.catch (fn [_]
-                                       (.getSprite client name))))
-              _ (<sprite-exec-file sprite "bash" ["-lc" bootstrap])
-              _ (<sprite-health! sprite port token health-retries health-interval-ms)
+          health-interval-ms (parse-int (env-str env "SPRITES_HEALTH_INTERVAL_MS") 500)]
+      (p/let [_ (sprites-create-or-get! env name)
+              _ (<sprite-bootstrap! env name port)
+              _ (<sprite-health! env name port agent-token health-retries health-interval-ms)
               payload (session-payload task)
-              response (<sprite-create-session! sprite port token session-id payload)]
+              response (<sprite-create-session! env name port agent-token session-id payload)]
         {:provider "sprites"
          :sprite-name name
          :sandbox-port port
+         :agent-token agent-token
          :session-id (:session-id response)})))
 
+  ;; REALTIME streaming endpoint:
+  ;; We stream stdout bytes of `curl -N ... text/event-stream` run inside sprite.
   (<open-message-stream! [_ runtime message]
     (let [name (:sprite-name runtime)
           port (or (:sandbox-port runtime)
                    (parse-int (env-str env "SPRITES_SANDBOX_AGENT_PORT") 2468))
-          token (or (env-str env "SANDBOX_AGENT_TOKEN")
-                    (sprites-token env))]
+          agent-token (or (:agent-token runtime)
+                          (env-str env "SANDBOX_AGENT_TOKEN"))]
       (when-not (string? name)
         (throw (ex-info "missing sprite-name on runtime" {:runtime runtime})))
-      (p/let [^js client (<sprites-client env)
-              ^js sprite (.sprite client name)
-              script (str "curl -sS -N -X POST -H 'accept: text/event-stream' -H 'content-type: application/json' "
-                          (curl-auth-arg token)
-                          " "
-                          (curl-json-arg {:message (:message message)})
-                          " "
-                          (sprite-url port (str "/v1/sessions/" (:session-id runtime) "/messages/stream")))
-              ^js cmd (.spawn sprite "bash" #js ["-lc" script])
-              stream (async-iterable->readable-stream (.-stdout cmd) #(.kill cmd))]
-        (js/Response. stream
-                      #js {:status 200
-                           :headers #js {"content-type" "text/event-stream"}}))))
+
+      (let [script (str "curl -sS -N -X POST "
+                        "-H 'accept: text/event-stream' "
+                        "-H 'content-type: application/json' "
+                        (curl-auth-arg agent-token)
+                        " "
+                        (curl-json-arg {:message (:message message)})
+                        " "
+                        (sprite-local-url port (str "/v1/sessions/" (:session-id runtime) "/messages/stream")))]
+        (sprites-ws->sse-response! env name ["bash" "-lc" script]))))
 
   (<terminate-runtime! [_ runtime]
     (if-not (string? (:sprite-name runtime))
       (p/resolved nil)
-      (p/let [^js client (<sprites-client env)]
-        (-> (.deleteSprite client (:sprite-name runtime))
-            (.catch (fn [_] nil)))))))
+      (sprites-delete! env (:sprite-name runtime)))))
 
-(defn- bootstrap-command [^js env]
-  (or (env-str env "CLOUDFLARE_SANDBOX_BOOTSTRAP_COMMAND")
-      "curl -fsSL https://releases.rivet.dev/sandbox-agent/latest/install.sh | sh && sandbox-agent server --no-token --host 0.0.0.0 --port 2468"))
-
-(defn- <wait-health! [endpoint token retries interval-ms]
-  (if (<= retries 0)
-    (throw (ex-info "sandbox-agent health check timed out"
-                    {:endpoint endpoint}))
-    (let [headers (js/Headers.)
-          _ (token-header! headers token)
-          req (platform/request (str endpoint "/v1/health")
-                                #js {:method "GET" :headers headers})]
-      (p/let [resp (js/fetch req)
-              status (.-status resp)]
-        (if (<= 200 status 299)
-          true
-          (p/let [_ (p/delay interval-ms)]
-            (<wait-health! endpoint token (dec retries) interval-ms)))))))
-
-(defn- sandbox-binding [^js env]
-  (aget env "Sandbox"))
-
-(defonce ^:private sandbox-sdk* (atom nil))
-
-(defn- <sandbox-sdk []
-  (if-let [sdk @sandbox-sdk*]
-    (p/resolved sdk)
-    (-> (js/import "@cloudflare/sandbox")
-        (.then (fn [module]
-                 (reset! sandbox-sdk* module)
-                 module)))))
-
-(defn- sandbox-options [^js env]
-  (let [sleep-after (or (env-str env "CLOUDFLARE_SANDBOX_SLEEP_AFTER")
-                        "10m")
-        memory (some-> (env-str env "CLOUDFLARE_SANDBOX_MEMORY_MB")
-                       (parse-int 0))
-        opts #js {:sleepAfter sleep-after}]
-    (when (pos? memory)
-      (aset opts "memory" memory))
-    opts))
-
-(defn- <get-cf-sandbox [^js env sandbox-id]
-  (let [binding (sandbox-binding env)]
-    (when-not binding
-      (throw (ex-info "missing Sandbox binding in worker env" {})))
-    (p/let [^js sdk (<sandbox-sdk)
-            get-sandbox (.-getSandbox sdk)]
-      (when-not (fn? get-sandbox)
-        (throw (ex-info "cloudflare sandbox sdk is unavailable" {})))
-      (get-sandbox binding sandbox-id (sandbox-options env)))))
-
-(defn- cf-sandbox-id [session-id]
-  (str "agent-" session-id))
-
-(defrecord CloudflareSandboxProvider [env]
-  RuntimeProvider
-  (<provision-runtime! [_ session-id task]
-    (let [sandbox-id (cf-sandbox-id session-id)
-          sandbox-port (parse-int (env-str env "CLOUDFLARE_SANDBOX_AGENT_PORT") 2468)
-          hostname (env-str env "CLOUDFLARE_SANDBOX_HOSTNAME")
-          token (env-str env "SANDBOX_AGENT_TOKEN")
-          health-retries (parse-int (env-str env "CLOUDFLARE_SANDBOX_HEALTH_RETRIES") 120)
-          health-interval-ms (parse-int (env-str env "CLOUDFLARE_SANDBOX_HEALTH_INTERVAL_MS") 500)]
-      (when-not (string? hostname)
-        (throw (ex-info "missing CLOUDFLARE_SANDBOX_HOSTNAME" {})))
-      (p/let [^js sandbox (<get-cf-sandbox env sandbox-id)
-              ^js process (.startProcess sandbox (bootstrap-command env) #js {:autoCleanup true})
-              _ (.waitForPort process sandbox-port #js {:mode "http"
-                                                        :path "/v1/health"
-                                                        :status 200})
-              endpoint-resp (.exposePort sandbox sandbox-port
-                                         (clj->js
-                                          (cond-> {:hostname hostname}
-                                            (env-str env "CLOUDFLARE_SANDBOX_PORT_TOKEN")
-                                            (assoc :token (env-str env "CLOUDFLARE_SANDBOX_PORT_TOKEN")))))
-              endpoint (some-> (aget endpoint-resp "url")
-                               sandbox/normalize-base-url)
-              _ (when-not (string? endpoint)
-                  (throw (ex-info "cloudflare sandbox exposePort returned no url"
-                                  {:sandbox-id sandbox-id
-                                   :port sandbox-port})))
-              _ (<wait-health! endpoint token health-retries health-interval-ms)
-              payload (session-payload task)
-              response (sandbox/<create-session endpoint token session-id payload)]
-        {:provider "cloudflare"
-         :sandbox-id sandbox-id
-         :sandbox-port sandbox-port
-         :agent-endpoint endpoint
-         :agent-token token
-         :session-id (:session-id response)})))
-
-  (<open-message-stream! [_ runtime message]
-    (sandbox/<open-message-stream (:agent-endpoint runtime)
-                                  (or (:agent-token runtime)
-                                      (env-str env "SANDBOX_AGENT_TOKEN"))
-                                  (:session-id runtime)
-                                  message))
-
-  (<terminate-runtime! [_ runtime]
-    (if-not (string? (:sandbox-id runtime))
-      (p/resolved nil)
-      (p/let [^js sandbox (<get-cf-sandbox env (:sandbox-id runtime))]
-        (-> (.destroy sandbox)
-            (.catch (fn [_] nil)))))))
-
-(defn create-provider [^js env kind]
-  (case kind
-    "sprites" (->SpritesProvider env)
-    "cloudflare" (->CloudflareSandboxProvider env)
-    (->LocalDevProvider env)))
+(defn create-provider [^js env _kind]
+  (->SpritesProvider env))
 
 (defn resolve-provider
-  [^js env runtime]
-  (create-provider env (runtime-provider-kind env runtime)))
+  [^js env _runtime]
+  (create-provider env "sprites"))

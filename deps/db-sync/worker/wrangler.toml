@@ -1,6 +1,6 @@
 name = "logseq-sync"
 main = "dist/worker/main.js"
-compatibility_date = "2025-05-05"
+compatibility_date = "2025-12-10"
 compatibility_flags = [ "nodejs_compat" ]
 
 [[containers]]

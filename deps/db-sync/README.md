@@ -140,14 +140,6 @@ For `cloudflare`, bind and export `Sandbox` in the Worker and configure the cont
 | SPRITES_SANDBOX_AGENT_PORT | sandbox-agent port inside sprite (default `2468`) |
 | SPRITES_HEALTH_RETRIES | Sprite health check retry count |
 | SPRITES_HEALTH_INTERVAL_MS | Sprite health check retry interval (ms) |
-| CLOUDFLARE_SANDBOX_BOOTSTRAP_COMMAND | Bootstrap command to install/start `sandbox-agent` inside sandbox |
-| CLOUDFLARE_SANDBOX_AGENT_PORT | sandbox-agent listen/expose port (default `2468`) |
-| CLOUDFLARE_SANDBOX_HOSTNAME | Public hostname used by `sandbox.exposePort` |
-| CLOUDFLARE_SANDBOX_PORT_TOKEN | Optional token required by exposed preview URLs |
-| CLOUDFLARE_SANDBOX_MEMORY_MB | Optional sandbox memory override |
-| CLOUDFLARE_SANDBOX_SLEEP_AFTER | Sandbox sleep timeout (default `10m`) |
-| CLOUDFLARE_SANDBOX_HEALTH_RETRIES | Health check retry count for `/v1/health` |
-| CLOUDFLARE_SANDBOX_HEALTH_INTERVAL_MS | Health check retry interval (ms) |
 
 ## Notes
 - Protocol definitions live in `docs/agent-guide/db-sync/protocol.md`.

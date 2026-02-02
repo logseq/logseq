@@ -154,7 +154,7 @@
         (nil? runtime)
         (throw (ex-info "runtime provisioning returned nil"
                         {:session-id session-id
-                         :provider (runtime-provider/runtime-provider-kind (.-env self) nil)}))
+                         :provider "sprites"}))
 
         (nil? session)
         nil
@@ -337,19 +337,37 @@
       (http/unauthorized)
       (<transition! self "paused" "session.paused" {:by user-id :reason "interrupt"}))))
 
+(defn- ->promise
+  [v]
+  (js/Promise.resolve v))
+
 (defn- handle-stream [^js self request]
   (let [streams (.-streams self)
         stream (js/TransformStream.)
         writer (.getWriter (.-writable stream))
+        encoder (js/TextEncoder.)
         stream-id (str (random-uuid))
+        closed? (volatile! false)
         cleanup (fn []
-                  (.delete streams stream-id)
-                  (.close writer))]
+                  (when-not @closed?
+                    (vreset! closed? true)
+                    (.delete streams stream-id)
+                    (try (.close writer) (catch :default _ nil))))]
     (.set streams stream-id writer)
     (.addEventListener (.-signal request) "abort" cleanup)
-    (p/let [events (<get-events self)]
-      (doseq [event events]
-        (.write writer (sse-encode event))))
+
+    ;; IMPORTANT: don't block returning the Response; write the initial backlog async
+    (js/queueMicrotask
+     (fn []
+       (p/let [events (<get-events self)]
+         (doseq [event events]
+           ;; sse-encode likely returns STRING -> must encode to Uint8Array
+           (let [txt (sse-encode event)
+                 payload (.encode encoder txt)]
+             ;; writer.write returns a promise; wait so order is preserved
+             (p/let [_ (->promise (.write writer payload))]
+               nil))))))
+
     (js/Response.
      (.-readable stream)
      #js {:status 200

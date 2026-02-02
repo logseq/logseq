@@ -8,5 +8,4 @@ Milestones are tracked as separate files in this folder:
 - `02-m2-control-plane-prototype.md`
 - `03-m3-sandbox-agent-integration.md`
 - `04-m4-operational-readiness.md`
-- `05-m5-cloudflare-sandbox-runtime.md`
 - `06-m6-sprites-default-runtime.md`

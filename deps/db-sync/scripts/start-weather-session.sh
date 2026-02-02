@@ -2,8 +2,8 @@
 set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:8787}"
-TOKEN="${TOKEN:-}"
-SESSION_ID="${SESSION_ID:-task-weather-hangzhou-$(date +%s)}"
+TOKEN="${TOKEN:-dev-token}"
+SESSION_ID="${SESSION_ID:-weather}"
 
 create_payload() {
   cat <<JSON

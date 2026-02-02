@@ -8,9 +8,9 @@
             [logseq.db-sync.worker.dispatch :as dispatch]
             [logseq.db-sync.worker.handler.sync :as sync-handler]
             [logseq.db-sync.worker.handler.ws :as ws-handler]
+            [logseq.db-sync.worker.http :as http]
             [logseq.db-sync.worker.presence :as presence]
             [logseq.db-sync.worker.ws :as ws]
-            [promesa.core :as p]
             [shadow.cljs.modern :refer (defclass)]))
 
 (logging/install!)
@@ -19,13 +19,10 @@
 
 (def worker
   #js {:fetch (fn [request env _ctx]
-                (p/let [proxy-fn (.-proxyToSandbox cf-sandbox)
-                        proxy-resp (if (fn? proxy-fn)
-                                     (proxy-fn request env)
-                                     nil)]
-                  (if proxy-resp
-                    proxy-resp
-                    (dispatch/handle-worker-fetch request env))))})
+                (-> (dispatch/handle-worker-fetch request env)
+                    (.catch (fn [error]
+                              (log/error :db-sync/worker-fetch-error {:error error})
+                              (http/error-response (str error) 500)))))})
 
 (defclass SyncDO
   (extends DurableObject)

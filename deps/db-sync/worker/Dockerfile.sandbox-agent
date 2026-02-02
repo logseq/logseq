@@ -1,11 +1,10 @@
-FROM node:20-bookworm-slim
-
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-      bash \
-      ca-certificates \
-      curl \
-      git \
-    && rm -rf /var/lib/apt/lists/*
+FROM docker.io/cloudflare/sandbox:0.3.3
 
 WORKDIR /workspace
+RUN curl -fsSL https://releases.rivet.dev/sandbox-agent/latest/install.sh | sh
+RUN sandbox-agent install-agent codex
+
+EXPOSE 2468
+EXPOSE 8000
+
+CMD ["sandbox-agent", "server", "--no-token", "--host", "0.0.0.0", "--port", "2468"]
