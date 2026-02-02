@@ -16,7 +16,9 @@
    :data-dir {:desc "Path to db-worker data dir (default ~/logseq/cli-graphs)"}
    :timeout-ms {:desc "Request timeout in ms (default 10000)"
                 :coerce :long}
-   :output {:desc "Output format (human, json, edn). Default: human"}})
+   :output {:desc "Output format (human, json, edn). Default: human"}
+   :verbose {:desc "Enable verbose debug logging to stderr"
+             :coerce :boolean}})
 
 (defn global-spec
   []
