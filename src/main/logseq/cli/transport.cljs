@@ -3,6 +3,8 @@
   (:require [cljs.reader :as reader]
             [clojure.string :as string]
             [logseq.db :as ldb]
+            [logseq.cli.log :as cli-log]
+            [lambdaisland.glogi :as log]
             [promesa.core :as p]
             ["fs" :as fs]
             ["http" :as http]
@@ -79,6 +81,8 @@
                   (string? method) method
                   (nil? method) nil
                   :else (str method))
+        start-ms (js/Date.now)
+        args-preview (cli-log/truncate-preview args)
         payload (if direct-pass?
                   {:method method*
                    :directPass true
@@ -87,6 +91,11 @@
                    :directPass false
                    :argsTransit (ldb/write-transit-str args)})
         body (js/JSON.stringify (clj->js payload))]
+    (log/debug :event :cli.transport/invoke
+               :method method*
+               :direct-pass? direct-pass?
+               :args args-preview
+               :url url)
     (p/let [{:keys [body]} (request {:method "POST"
                                     :url url
                                     :headers (base-headers)
@@ -94,8 +103,21 @@
                                     :timeout-ms timeout-ms})
             {:keys [result resultTransit]} (js->clj (js/JSON.parse body) :keywordize-keys true)]
       (if direct-pass?
-        result
-        (ldb/read-transit-str resultTransit)))))
+        (let [response-preview (cli-log/truncate-preview result)]
+          (log/debug :event :cli.transport/response
+                     :method method*
+                     :direct-pass? direct-pass?
+                     :elapsed-ms (- (js/Date.now) start-ms)
+                     :response response-preview)
+          result)
+        (let [decoded (ldb/read-transit-str resultTransit)
+              response-preview (cli-log/truncate-preview decoded)]
+          (log/debug :event :cli.transport/response
+                     :method method*
+                     :direct-pass? direct-pass?
+                     :elapsed-ms (- (js/Date.now) start-ms)
+                     :response response-preview)
+          decoded)))))
 
 (defn write-output
   [{:keys [format path data]}]

@@ -7,6 +7,7 @@
             ["path" :as node-path]
             [clojure.string :as string]
             [logseq.cli.command.core :as command-core]
+            [logseq.cli.log :as cli-log]
             [frontend.worker-common.util :as worker-util]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]))
@@ -83,6 +84,7 @@
   (p/create
    (fn [resolve reject]
      (let [timeout-ms (or timeout-ms 5000)
+           start-ms (js/Date.now)
            req (.request
                 http
                 #js {:method method
@@ -94,15 +96,28 @@
                   (let [chunks (array)]
                     (.on res "data" (fn [chunk] (.push chunks chunk)))
                     (.on res "end" (fn []
-                                     (let [buf (js/Buffer.concat chunks)]
-                                       (resolve {:status (.-statusCode res)
-                                                 :body (.toString buf "utf8")}))))
+                                     (let [buf (js/Buffer.concat chunks)
+                                           response {:status (.-statusCode res)
+                                                     :body (.toString buf "utf8")}]
+                                       (log/debug :event :cli.server/http-response
+                                                  :method method
+                                                  :path path
+                                                  :status (:status response)
+                                                  :elapsed-ms (- (js/Date.now) start-ms)
+                                                  :body (cli-log/truncate-preview (:body response)))
+                                       (resolve response))))
                     (.on res "error" reject))))
            timeout-id (js/setTimeout
                        (fn []
                          (.destroy req)
                          (reject (ex-info "request timeout" {:code :timeout})))
                        timeout-ms)]
+       (log/debug :event :cli.server/http-request
+                  :method method
+                  :host host
+                  :port port
+                  :path path
+                  :body (cli-log/truncate-preview body))
        (.on req "error" (fn [err]
                           (js/clearTimeout timeout-id)
                           (reject err)))
