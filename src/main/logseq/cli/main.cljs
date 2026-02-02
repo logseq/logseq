@@ -6,7 +6,9 @@
             [logseq.cli.config :as config]
             [logseq.cli.data-dir :as data-dir]
             [logseq.cli.format :as format]
+            [logseq.cli.log :as cli-log]
             [logseq.cli.version :as version]
+            [lambdaisland.glogi :as log]
             [promesa.core :as p]))
 
 (defn- usage
@@ -39,6 +41,18 @@
 
        :else
        (let [cfg (config/resolve-config (:options parsed))]
+         (cli-log/set-verbose! (:verbose cfg))
+         (log/debug :event :cli/parsed-options
+                    :command (:command parsed)
+                    :args (cli-log/truncate-preview (:args parsed))
+                    :options (into {}
+                                   (map (fn [[k v]]
+                                          [k (cli-log/truncate-preview v)])
+                                        (:options parsed)))
+                    :config (into {}
+                                  (map (fn [[k v]]
+                                         [k (cli-log/truncate-preview v)])
+                                       (dissoc cfg :auth-token))))
          (try
            (let [cfg (assoc cfg :data-dir (data-dir/ensure-data-dir! (:data-dir cfg)))
                  action-result (commands/build-action parsed cfg)]
