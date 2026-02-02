@@ -81,6 +81,18 @@
                          :stderr stderr}
                         e))))))
 
+(defn- capture-stderr!
+  []
+  (let [stderr (.-stderr js/process)
+        original-write (.-write stderr)
+        buffer (atom "")]
+    (set! (.-write stderr)
+          (fn [chunk]
+            (swap! buffer str chunk)
+            true))
+    {:buffer buffer
+     :restore! (fn [] (set! (.-write stderr) original-write))}))
+
 (defn- node-title
   [node]
   (or (:block/title node) (:block/content node) (:title node) (:content node)))
@@ -530,6 +542,27 @@
               (p/catch (fn [e]
                          (is false (str "unexpected error: " e))
                          (done)))))))
+
+(deftest test-cli-verbose-logs-to-stderr
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-verbose")
+               repo "verbose-graph"]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       _ (run-cli ["graph" "create" "--repo" repo] data-dir cfg-path)
+                       {:keys [buffer restore!]} (capture-stderr!)
+                       result (-> (run-cli ["--verbose" "--repo" repo "graph" "info"] data-dir cfg-path)
+                                  (p/finally (fn [] (restore!))))
+                       payload (parse-json-output-safe result "verbose graph info")
+                       stderr-text @buffer
+                       _ (run-cli ["server" "stop" "--repo" repo] data-dir cfg-path)]
+                 (is (= 0 (:exit-code result)))
+                 (is (= "ok" (:status payload)))
+                 (is (string/includes? stderr-text ":cli.transport/invoke"))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
 
 (deftest test-cli-update-tags-and-properties
   (async done
