@@ -145,6 +145,7 @@
   [{:value :tabler-icon :label "Icon"}
    {:value :emoji :label "Emoji"}
    {:value :avatar :label "Avatar"}
+   {:value :image :label "Image"}
    {:value :text :label "Text"}])
 
 (rum/defc default-icon-row < rum/reactive
@@ -165,9 +166,9 @@
                              icon-data))
         on-type-change (fn [new-type]
                          ;; When changing type, preserve icon data if switching between icon/emoji
-                         ;; For avatar/text, just store the type marker
+                         ;; For avatar/text/image, just store the type marker
                          (cond
-                           (contains? #{:avatar :text} new-type)
+                           (contains? #{:avatar :text :image} new-type)
                            (set-default-icon! {:type new-type})
 
                            ;; Switching to icon/emoji - keep existing icon if compatible
@@ -175,7 +176,7 @@
                                 (contains? #{:tabler-icon :emoji} current-type))
                            (set-default-icon! (assoc current-value :type new-type))
 
-                           ;; Switching to icon/emoji from avatar/text - clear and let user pick
+                           ;; Switching to icon/emoji from avatar/text/image - clear and let user pick
                            :else
                            (set-default-icon! {:type new-type})))
         on-icon-chosen (fn [_e icon]
@@ -227,12 +228,13 @@
                                     :on-chosen on-icon-chosen
                                     :icon-props {:size 18}})
 
-       ;; Avatar/text type - show preview indicator
+       ;; Avatar/text/image type - show preview indicator
        :else
        [:span.text-muted-foreground.text-xs.italic
         (case current-type
           :avatar "(auto from title)"
           :text "(auto from title)"
+          :image "(auto from Wikipedia)"
           "")])]))
 
 (defn select-type?
@@ -507,14 +509,14 @@
 (defn- human-date-label [utc-ms]
   ;; utc-ms is stored deadline/scheduled time
   (let [given-date (start-of-local-day (js/Date. utc-ms))
-        today      (start-of-local-day (js/Date.))
-        ms-in-day  (* 24 60 60 1000)
-        tomorrow   (js/Date. (+ (.getTime today) ms-in-day))
-        yesterday  (js/Date. (- (.getTime today) ms-in-day))]
+        today (start-of-local-day (js/Date.))
+        ms-in-day (* 24 60 60 1000)
+        tomorrow (js/Date. (+ (.getTime today) ms-in-day))
+        yesterday (js/Date. (- (.getTime today) ms-in-day))]
     (cond
       (= (.getTime given-date) (.getTime yesterday)) "Yesterday"
-      (= (.getTime given-date) (.getTime today))     "Today"
-      (= (.getTime given-date) (.getTime tomorrow))  "Tomorrow"
+      (= (.getTime given-date) (.getTime today)) "Today"
+      (= (.getTime given-date) (.getTime tomorrow)) "Tomorrow"
       :else nil)))
 
 (rum/defc datetime-value
@@ -583,7 +585,7 @@
          :div.flex.flex-1.flex-row.gap-1.items-center.flex-wrap
          {:ref *el
           :tabIndex 0
-          :class "jtrigger min-h-[24px]"                     ; FIXME: min-h-6 not works
+          :class "jtrigger min-h-[24px]" ; FIXME: min-h-6 not works
           :on-click open-popup!
           :on-key-down (fn [e]
                          (case (util/ekey e)
@@ -702,7 +704,7 @@
 (defn- sort-select-items
   [property selected-choices items]
   (if (:property/closed-values property)
-    items                   ; sorted by order
+    items ; sorted by order
     (sort-by
      (juxt (fn [item] (not (selected-choices (:db/id item))))
            db-property/property-value-content)

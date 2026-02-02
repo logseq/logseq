@@ -42,8 +42,42 @@
 ;; This resets on app restart, allowing retry for previously failed fetches.
 (defonce *avatar-fetch-attempted (atom #{}))
 
+;; Tracks page IDs for which we've attempted auto-fetch of Wikipedia images (for :image type).
+(defonce *image-fetch-attempted (atom #{}))
+
+;; Rate-limiting queue for Wikipedia API fetches
+;; Prevents hammering the API when many pages need fetching
+(defonce *wikipedia-fetch-queue (atom #queue []))
+(defonce *wikipedia-fetch-processing? (atom false))
+
+(def wikipedia-fetch-delay-ms
+  "Delay between Wikipedia API requests to avoid rate limiting"
+  200)
+
+(defn- process-wikipedia-fetch-queue!
+  "Process queued Wikipedia fetches with delays between each request.
+   Runs asynchronously, processing one item at a time."
+  []
+  (when-not @*wikipedia-fetch-processing?
+    (reset! *wikipedia-fetch-processing? true)
+    (letfn [(process-next []
+              (if-let [fetch-fn (peek @*wikipedia-fetch-queue)]
+                (do
+                  (swap! *wikipedia-fetch-queue pop)
+                  (p/let [_ (fetch-fn)]
+                    (js/setTimeout process-next wikipedia-fetch-delay-ms)))
+                (reset! *wikipedia-fetch-processing? false)))]
+      (process-next))))
+
+(defn enqueue-wikipedia-fetch!
+  "Add a fetch operation to the rate-limited queue.
+   The fetch-fn should be a zero-arg function that returns a promise."
+  [fetch-fn]
+  (swap! *wikipedia-fetch-queue conj fetch-fn)
+  (process-wikipedia-fetch-queue!))
+
 (declare normalize-icon derive-initials derive-avatar-initials
-         <search-wikipedia-image <save-url-asset!)
+         <search-wikipedia-image <save-url-asset! open-image-asset-picker!)
 
 (defn- convert-bg-color-to-rgba
   "Convert background color to rgba format with opacity ~0.314.
@@ -160,15 +194,19 @@
                        (load-image-url! asset-uuid asset-type *url *error (atom nil)))))
                  state)}
   "Renders an image icon by loading the asset URL asynchronously.
-   Tries common extensions if asset-type is unknown."
+   Tries common extensions if asset-type is unknown.
+   Accepts optional :on-click-error callback in opts for error state clicks."
   [state asset-uuid _asset-type-arg opts]
   (let [url @(::url state)
         error? @(::error state)
-        size (or (:size opts) 20)]
+        size (or (:size opts) 20)
+        on-click-error (:on-click-error opts)]
     (cond
       error?
-      [:span.ui__icon.image-icon.bg-gray-04.flex.items-center.justify-center
-       {:style {:width size :height size}}
+      [:span.ui__icon.image-icon.image-error.bg-gray-04.flex.items-center.justify-center.cursor-pointer
+       (cond-> {:style {:width size :height size}
+                :title "Image not found - click to replace"}
+         on-click-error (assoc :on-click on-click-error))
        (shui/tabler-icon "photo-off" {:size (* size 0.6)})]
 
       url
@@ -287,10 +325,23 @@
                                 :color color}}
                        display-text)))))
 
+               ;; Image with asset - use image icon component
                (and (map? normalized) (= :image (:type normalized)) (get-in normalized [:data :asset-uuid]))
                (let [asset-uuid (get-in normalized [:data :asset-uuid])
                      asset-type (get-in normalized [:data :asset-type])]
                  (image-icon-cp asset-uuid asset-type opts))
+
+               ;; Image without asset (empty state) - show subtle placeholder
+               ;; This is shown when inherited from default-icon before auto-fetch completes
+               (and (map? normalized) (= :image (:type normalized)) (get-in normalized [:data :empty?]))
+               (let [size (or (:size opts) 20)]
+                 [:span.ui__icon.image-icon.empty-image-placeholder.cursor-pointer
+                  {:style {:width size
+                           :height size
+                           :border "1px dashed var(--lx-gray-06)"
+                           :border-radius "2px"
+                           :background "var(--lx-gray-02)"}
+                   :title "Click to set image"}])
 
                ;; Legacy format support (fallback if normalization failed)
                (and (map? icon') (= :emoji (:type icon')) (:id icon'))
@@ -337,6 +388,10 @@
         :text (when (:block/title node-entity)
                 {:type :text
                  :data {:value (derive-initials (:block/title node-entity))}})
+        ;; Image type: return marker indicating inherited image without asset yet
+        ;; This triggers the empty placeholder and auto-fetch behavior
+        :image {:type :image
+                :data {:empty? true}}
         ;; For tabler-icon and emoji, use the stored icon value directly
         default-icon)
 
@@ -368,7 +423,10 @@
    - The page doesn't already have a custom icon with an image"
   [page-entity]
   (let [page-id (:db/id page-entity)
-        feature-enabled? (:feature/auto-fetch-avatar-images? (state/get-config))
+        config (state/get-config)
+        ;; Check new unified flag first, fall back to old flag for migration
+        feature-enabled? (or (:feature/auto-fetch-wikipedia-images? config)
+                             (:feature/auto-fetch-avatar-images? config))
         has-title? (some? (:block/title page-entity))
         not-attempted? (not (contains? @*avatar-fetch-attempted page-id))
         no-existing-asset? (not (get-in (:logseq.property/icon page-entity) [:data :asset-uuid]))
@@ -419,6 +477,93 @@
    [(:db/id page-entity)])
   nil)
 
+;; ============================================================================
+;; Auto-Fetch Wikipedia Image (for :image type default icon)
+;; ============================================================================
+
+(defn- should-auto-fetch-image?
+  "Check if we should auto-fetch a Wikipedia image for this page's icon.
+   Returns true if:
+   - Auto-fetch is enabled in config
+   - The page has a title
+   - The page hasn't been attempted before (tracked in local atom)
+   - The page doesn't already have a custom icon with an image"
+  [page-entity]
+  (let [page-id (:db/id page-entity)
+        config (state/get-config)
+        ;; Check unified flag (same as avatar)
+        feature-enabled? (or (:feature/auto-fetch-wikipedia-images? config)
+                             (:feature/auto-fetch-avatar-images? config))
+        has-title? (some? (:block/title page-entity))
+        not-attempted? (not (contains? @*image-fetch-attempted page-id))
+        no-existing-asset? (not (get-in (:logseq.property/icon page-entity) [:data :asset-uuid]))
+        result (and feature-enabled? has-title? not-attempted? no-existing-asset?)]
+    (js/console.log "[auto-fetch-image] Checking conditions:"
+                    "\n  feature-enabled?" feature-enabled?
+                    "\n  has-title?" has-title? "(" (:block/title page-entity) ")"
+                    "\n  not-attempted?" not-attempted?
+                    "\n  no-existing-asset?" no-existing-asset?
+                    "\n  RESULT:" result)
+    result))
+
+(defn- <auto-fetch-image!
+  "Fetch Wikipedia image for a page and set it as the icon.
+   Marks the page as attempted in local atom regardless of success/failure.
+   Uses rate-limited queue to prevent API overload."
+  [page-entity]
+  (let [repo (state/get-current-repo)
+        page-id (:db/id page-entity)
+        title (:block/title page-entity)]
+    ;; Mark as attempted first (prevents re-fetch on re-render)
+    (swap! *image-fetch-attempted conj page-id)
+    ;; Enqueue the fetch operation (rate-limited)
+    (enqueue-wikipedia-fetch!
+     (fn []
+       (p/let [image-data (<search-wikipedia-image title)]
+         (when (and image-data (:url image-data))
+           (p/let [asset (<save-url-asset! repo (:url image-data)
+                                           (str "image-" (subs title 0 (min 30 (count title)))))]
+             (when asset
+               (property-handler/set-block-property!
+                page-id
+                :logseq.property/icon
+                {:type :image
+                 :data {:asset-uuid (str (:block/uuid asset))
+                        :asset-type (:logseq.property.asset/type asset)}})))))))))
+
+(rum/defc auto-fetch-image-effect < rum/static
+  "Effect component that triggers auto-fetch for image icons.
+   Renders nothing, just runs the side effect on mount.
+   Uses rate-limited queue to prevent API overload."
+  [page-entity]
+  (js/console.log "[auto-fetch-image] Effect component mounted for:" (:block/title page-entity))
+  (hooks/use-effect!
+   (fn []
+     (js/console.log "[auto-fetch-image] Effect running for:" (:block/title page-entity))
+     (when (should-auto-fetch-image? page-entity)
+       (js/console.log "[auto-fetch-image] Enqueuing fetch for:" (:block/title page-entity))
+       (<auto-fetch-image! page-entity))
+     js/undefined)
+   [(:db/id page-entity)])
+  nil)
+
+(rum/defc empty-image-icon-cp
+  "Renders a clickable empty image placeholder that opens the asset picker.
+   Used for pages with inherited :image default-icon that haven't fetched/set an image yet."
+  [page-entity opts]
+  (let [size (or (:size opts) 20)
+        page-title (:block/title page-entity)
+        page-id (:db/id page-entity)]
+    [:span.ui__icon.image-icon.empty-image-placeholder.cursor-pointer
+     {:style {:width size
+              :height size
+              :border "1px dashed var(--lx-gray-06)"
+              :border-radius "2px"
+              :background "var(--lx-gray-02)"}
+      :title "Click to set image"
+      :on-click (fn [^js e]
+                  (open-image-asset-picker! e page-id page-title nil))}]))
+
 (rum/defc get-node-icon-cp < rum/reactive db-mixins/query
   [node-entity opts]
   (let [;; Get fresh entity using db/sub-block to make it reactive to property changes
@@ -440,17 +585,42 @@
         ;; - The entity is a page (not a block)
         is-auto-fetchable-avatar? (and (= :avatar (:type node-icon))
                                        (not (get-in node-icon [:data :asset-uuid]))
-                                       (ldb/page? entity))]
+                                       (ldb/page? entity))
+        ;; Check if this is an image that might need auto-fetch:
+        ;; - It's an image type with empty? marker (inherited from default-icon)
+        ;; - The entity is a page (not a block)
+        is-auto-fetchable-image? (and (= :image (:type node-icon))
+                                      (get-in node-icon [:data :empty?])
+                                      (ldb/page? entity))
+        ;; Check if this is an image icon with an asset (for error click handling)
+        is-image-with-asset? (and (= :image (:type node-icon))
+                                  (get-in node-icon [:data :asset-uuid])
+                                  (ldb/page? entity))
+        ;; Click handler for image error state - opens asset picker
+        open-asset-picker-for-error
+        (when is-image-with-asset?
+          (fn [^js e]
+            (open-image-asset-picker! e (:db/id entity) (:block/title entity) node-icon)))
+        ;; Add error click handler to opts for image icons
+        opts' (if open-asset-picker-for-error
+                (assoc opts' :on-click-error open-asset-picker-for-error)
+                opts')]
     (when-not (or (string/blank? node-icon) (and (contains? #{"letter-n" "file"} node-icon) (:not-text-or-page? opts)))
       [:<>
        ;; Auto-fetch effect for avatars without images
        (when is-auto-fetchable-avatar?
          (auto-fetch-avatar-effect entity))
+       ;; Auto-fetch effect for images (inherited from default-icon)
+       (when is-auto-fetchable-image?
+         (auto-fetch-image-effect entity))
        ;; Icon rendering
        [:div.icon-cp-container.flex.items-center.justify-center
         (merge {:style {:color (or (:color node-icon) "inherit")}}
                (select-keys opts [:class]))
-        (icon node-icon opts')]])))
+        ;; For empty images, use the clickable placeholder component
+        (if is-auto-fetchable-image?
+          (empty-image-icon-cp entity opts')
+          (icon node-icon opts'))]])))
 
 (defn- emoji-char?
   "Check if a string is a single emoji character by checking against known emojis"
@@ -2068,6 +2238,28 @@
                          (handle-upload files)))}]
         (shui/tabler-icon "square-plus" {:size 16})
         [:span "Upload asset"]])]]))
+
+(defn open-image-asset-picker!
+  "Opens the asset picker popup for selecting an image icon.
+   Used by empty-image-icon-cp and get-node-icon-cp for clickable placeholders/error states."
+  [^js e page-id page-title current-icon]
+  (shui/popup-show!
+   (.-target e)
+   (fn [{:keys [id]}]
+     (asset-picker
+      {:on-chosen (fn [_e icon-data]
+                    (when icon-data
+                      (property-handler/set-block-property!
+                       page-id :logseq.property/icon icon-data))
+                    (shui/popup-hide! id))
+       :on-back #(shui/popup-hide! id)
+       :on-delete nil
+       :del-btn? false
+       :current-icon current-icon
+       :page-title page-title}))
+   {:align :start
+    :content-props {:class "ls-icon-picker"
+                    :onEscapeKeyDown #(.preventDefault %)}}))
 
 (rum/defc all-cp < rum/reactive
   [opts]
