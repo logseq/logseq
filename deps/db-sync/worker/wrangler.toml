@@ -3,6 +3,14 @@ main = "dist/worker/main.js"
 compatibility_date = "2025-05-05"
 compatibility_flags = [ "nodejs_compat" ]
 
+[[containers]]
+class_name = "Sandbox"
+image = "./Dockerfile.sandbox-agent"
+max_instances = 10
+
+[containers.settings]
+idle_timeout = "10m"
+
 [observability]
 enabled = true
 
@@ -13,6 +21,10 @@ class_name = "SyncDO"
 [[durable_objects.bindings]]
 name = "LOGSEQ_AGENT_SESSION_DO"
 class_name = "AgentSessionDO"
+
+[[durable_objects.bindings]]
+name = "Sandbox"
+class_name = "Sandbox"
 
 [[r2_buckets]]
 binding = "LOGSEQ_SYNC_ASSETS"
@@ -30,6 +42,10 @@ new_sqlite_classes = [ "SyncDO" ]
 [[migrations]]
 tag = "v2"
 new_sqlite_classes = [ "AgentSessionDO" ]
+
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = [ "Sandbox" ]
 
 [vars]
 COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
@@ -52,6 +68,10 @@ class_name = "SyncDO"
 name = "LOGSEQ_AGENT_SESSION_DO"
 class_name = "AgentSessionDO"
 
+[[env.staging.durable_objects.bindings]]
+name = "Sandbox"
+class_name = "Sandbox"
+
 [[env.staging.migrations]]
 tag = "v1"
 new_sqlite_classes = [ "SyncDO" ]
@@ -63,6 +83,10 @@ deleted_classes = [ "SyncIndexDO" ]
 [[env.staging.migrations]]
 tag = "v3"
 new_sqlite_classes = [ "AgentSessionDO" ]
+
+[[env.staging.migrations]]
+tag = "v4"
+new_sqlite_classes = [ "Sandbox" ]
 
 [[env.staging.r2_buckets]]
 binding = "LOGSEQ_SYNC_ASSETS"
@@ -89,6 +113,10 @@ class_name = "SyncDO"
 name = "LOGSEQ_AGENT_SESSION_DO"
 class_name = "AgentSessionDO"
 
+[[env.prod.durable_objects.bindings]]
+name = "Sandbox"
+class_name = "Sandbox"
+
 [[env.prod.migrations]]
 tag = "v1"
 new_sqlite_classes = [ "SyncDO" ]
@@ -96,6 +124,10 @@ new_sqlite_classes = [ "SyncDO" ]
 [[env.prod.migrations]]
 tag = "v2"
 new_sqlite_classes = [ "AgentSessionDO" ]
+
+[[env.prod.migrations]]
+tag = "v3"
+new_sqlite_classes = [ "Sandbox" ]
 
 [[env.prod.r2_buckets]]
 binding = "LOGSEQ_SYNC_ASSETS"

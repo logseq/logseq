@@ -97,6 +97,15 @@ The control plane forwards each task message through sandbox-agent
 `/v1/sessions/{id}/messages/stream` and relays runtime events to
 `/sessions/{id}/stream`.
 
+### Runtime Provider
+
+Agent runtime is selected by `AGENT_RUNTIME_PROVIDER`:
+- `local-dev` (default): uses `SANDBOX_AGENT_URL` directly.
+- `cloudflare-sandbox`: provisions a sandbox first, then connects to the sandbox-hosted `sandbox-agent`.
+
+For `cloudflare-sandbox`, bind and export `Sandbox` in the Worker and configure the container image in
+`worker/wrangler.toml` (`[[containers]] class_name = "Sandbox"`).
+
 ## Environment Variables
 
 | Variable | Purpose |
@@ -111,11 +120,20 @@ The control plane forwards each task message through sandbox-agent
 | DB_SYNC_STATIC_USER_ID | Static user id for local dev |
 | DB_SYNC_STATIC_EMAIL | Static user email for local dev |
 | DB_SYNC_STATIC_USERNAME | Static username for local dev |
+| AGENT_RUNTIME_PROVIDER | Runtime backend (`local-dev`, `cloudflare-sandbox`, future providers e.g. `fly-io`) |
 | COGNITO_ISSUER | Cognito issuer URL |
 | COGNITO_CLIENT_ID | Cognito client id |
 | COGNITO_JWKS_URL | Cognito JWKS URL |
 | SANDBOX_AGENT_URL | sandbox-agent base URL for agent sessions |
 | SANDBOX_AGENT_TOKEN | Optional bearer token for sandbox-agent |
+| CLOUDFLARE_SANDBOX_BOOTSTRAP_COMMAND | Bootstrap command to install/start `sandbox-agent` inside sandbox |
+| CLOUDFLARE_SANDBOX_AGENT_PORT | sandbox-agent listen/expose port (default `2468`) |
+| CLOUDFLARE_SANDBOX_HOSTNAME | Public hostname used by `sandbox.exposePort` |
+| CLOUDFLARE_SANDBOX_PORT_TOKEN | Optional token required by exposed preview URLs |
+| CLOUDFLARE_SANDBOX_MEMORY_MB | Optional sandbox memory override |
+| CLOUDFLARE_SANDBOX_SLEEP_AFTER | Sandbox sleep timeout (default `10m`) |
+| CLOUDFLARE_SANDBOX_HEALTH_RETRIES | Health check retry count for `/v1/health` |
+| CLOUDFLARE_SANDBOX_HEALTH_INTERVAL_MS | Health check retry interval (ms) |
 
 ## Notes
 - Protocol definitions live in `docs/agent-guide/db-sync/protocol.md`.

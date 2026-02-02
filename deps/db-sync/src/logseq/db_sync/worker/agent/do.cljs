@@ -3,7 +3,7 @@
             [lambdaisland.glogi :as log]
             [logseq.db-sync.common :as common]
             [logseq.db-sync.platform.core :as platform]
-            [logseq.db-sync.worker.agent.sandbox :as sandbox]
+            [logseq.db-sync.worker.agent.runtime-provider :as runtime-provider]
             [logseq.db-sync.worker.agent.session :as session]
             [logseq.db-sync.worker.http :as http]
             [promesa.core :as p]))
@@ -69,11 +69,14 @@
 (defn- session-conflict [message]
   (http/error-response message 409))
 
-(defn- sandbox-base [^js env]
-  (aget env "SANDBOX_AGENT_URL"))
+(defn- terminal-status? [status]
+  (contains? #{"completed" "failed" "canceled"} status))
 
-(defn- sandbox-token [^js env]
-  (aget env "SANDBOX_AGENT_TOKEN"))
+(defn- <terminate-runtime! [^js self runtime]
+  (if-not (map? runtime)
+    (p/resolved nil)
+    (let [provider (runtime-provider/resolve-provider (.-env self) runtime)]
+      (runtime-provider/<terminate-runtime! provider runtime))))
 
 (defn- parse-sse-data [frame]
   (let [lines (string/split frame #"\n")
@@ -92,39 +95,40 @@
   (p/let [current-session (<get-session self)]
     (when (= session-id (:id current-session))
       (let [event-type (or (:type payload) "agent.runtime")]
-        (<append-event! self {:type event-type
-                              :data payload
-                              :ts (common/now-ms)})))))
+        (p/let [_ (<append-event! self {:type event-type
+                                        :data payload
+                                        :ts (common/now-ms)})
+                current-session (<get-session self)]
+          (when (terminal-status? (:status current-session))
+            (<terminate-runtime! self (:runtime current-session))))))))
 
 (defn- <consume-message-stream! [^js self session-id runtime message]
-  (p/let [resp (sandbox/<open-message-stream (:base runtime)
-                                             (sandbox-token (.-env self))
-                                             (:session-id runtime)
-                                             message)
-          reader (.getReader (.-body resp))]
-    (let [decoder (js/TextDecoder.)
-          buffer (atom "")]
-      (letfn [(emit-frame! [frame]
-                (when-let [payload (parse-sse-data frame)]
-                  (<append-runtime-event! self session-id payload)))
-              (drain-buffer! []
-                (loop []
-                  (let [idx (.indexOf ^string @buffer "\n\n")]
-                    (when (>= idx 0)
-                      (let [frame (subs @buffer 0 idx)]
-                        (reset! buffer (subs @buffer (+ idx 2)))
-                        (emit-frame! frame)
-                        (recur))))))
-              (step! []
-                (p/let [chunk (.read reader)]
-                  (if (.-done chunk)
-                    nil
-                    (do
-                      (swap! buffer str (string/replace (.decode decoder (.-value chunk) #js {:stream true})
-                                                        #"\r\n" "\n"))
-                      (drain-buffer!)
-                      (step!)))))]
-        (step!)))))
+  (let [provider (runtime-provider/resolve-provider (.-env self) runtime)]
+    (p/let [resp (runtime-provider/<open-message-stream! provider runtime message)
+            reader (.getReader (.-body resp))]
+      (let [decoder (js/TextDecoder.)
+            buffer (atom "")]
+        (letfn [(emit-frame! [frame]
+                  (when-let [payload (parse-sse-data frame)]
+                    (<append-runtime-event! self session-id payload)))
+                (drain-buffer! []
+                  (loop []
+                    (let [idx (.indexOf ^string @buffer "\n\n")]
+                      (when (>= idx 0)
+                        (let [frame (subs @buffer 0 idx)]
+                          (reset! buffer (subs @buffer (+ idx 2)))
+                          (emit-frame! frame)
+                          (recur))))))
+                (step! []
+                  (p/let [chunk (.read reader)]
+                    (if (.-done chunk)
+                      nil
+                      (do
+                        (swap! buffer str (string/replace (.decode decoder (.-value chunk) #js {:stream true})
+                                                          #"\r\n" "\n"))
+                        (drain-buffer!)
+                        (step!)))))]
+          (step!))))))
 
 (defn- <transition! [^js self to-status event-type data]
   (p/let [session (<get-session self)]
@@ -141,42 +145,38 @@
           (http/not-found)
           (http/json-response :sessions/pause {:ok true}))))))
 
-(defn- <provision-sandbox! [^js self task session-id]
-  (let [base (sandbox-base (.-env self))]
-    (if-not (string? base)
-      (p/resolved nil)
-      (let [sandbox-base (sandbox/normalize-base-url base)]
-        (p/let [payload {:agent (or (get-in task [:agent :provider])
-                                    (get-in task [:agent :id])
-                                    (:agent task))
-                         :agent-mode (or (get-in task [:agent :mode])
-                                         (get-in task [:agent :agent-mode])
-                                         (get-in task [:agent :model]))
-                         :permission-mode (or (get-in task [:agent :permission-mode])
-                                              (get-in task [:agent :permissionMode]))}
-                response (sandbox/<create-session sandbox-base (sandbox-token (.-env self)) session-id payload)
-                sandbox-session-id (:session-id response)
-                runtime {:sandbox {:base sandbox-base
-                                   :session-id sandbox-session-id}}]
-          (p/let [session (<get-session self)
-                  events (<get-events self)]
-            (if (nil? session)
-              nil
-              (let [session (assoc session :runtime runtime)
-                    [session events _event] (session/append-event session events {:type "session.provisioned"
-                                                                                  :data {:sandbox-session-id sandbox-session-id}
-                                                                                  :ts (common/now-ms)})]
-                (p/let [_ (<put-session! self session)
-                        _ (<put-events! self events)]
-                  runtime)))))))))
+(defn- <provision-runtime! [^js self task session-id]
+  (let [provider (runtime-provider/resolve-provider (.-env self) nil)]
+    (p/let [runtime (runtime-provider/<provision-runtime! provider session-id task)
+            session (<get-session self)
+            events (<get-events self)]
+      (cond
+        (nil? runtime)
+        (throw (ex-info "runtime provisioning returned nil"
+                        {:session-id session-id
+                         :provider (runtime-provider/runtime-provider-kind (.-env self) nil)}))
+
+        (nil? session)
+        nil
+
+        :else
+        (let [session (assoc session :runtime runtime)
+              [session events _event] (session/append-event session events {:type "session.provisioned"
+                                                                            :data {:provider (:provider runtime)
+                                                                                   :runtime-session-id (:session-id runtime)
+                                                                                   :sandbox-id (:sandbox-id runtime)}
+                                                                            :ts (common/now-ms)})]
+          (p/let [_ (<put-session! self session)
+                  _ (<put-events! self events)]
+            runtime))))))
 
 (defn- handle-init [^js self request]
   (p/let [existing (<get-session self)]
     (if existing
       (let [session-id (:id existing)
-            runtime-id (get-in existing [:runtime :sandbox :session-id])]
+            runtime-id (get-in existing [:runtime :session-id])]
         (p/let [_ (when-not (string? runtime-id)
-                    (<provision-sandbox! self (:task existing) session-id))
+                    (<provision-runtime! self (:task existing) session-id))
                 session (<get-session self)]
           (http/json-response :sessions/create
                               {:session-id session-id
@@ -209,7 +209,7 @@
                            [session events _event] (session/append-event session [] {:type "session.created" :data {:requested-by user-id} :ts now})]
                        (p/let [_ (<put-session! self session)
                                _ (<put-events! self events)
-                               _ (<provision-sandbox! self task task-id)]
+                               _ (<provision-runtime! self task task-id)]
                          (http/json-response :sessions/create
                                              {:session-id task-id
                                               :status (:status session)
@@ -252,7 +252,7 @@
                      (= (:error res) :missing-session)
                      (http/not-found)
 
-                     (contains? #{"completed" "failed" "canceled"} (:status current-session))
+                     (terminal-status? (:status current-session))
                      (session-conflict "session is not writable")
 
                      (= "paused" (:status current-session))
@@ -263,7 +263,7 @@
                          (http/json-response :sessions/message {:ok true})))
 
                      :else
-                     (let [runtime (get-in current-session [:runtime :sandbox])]
+                     (let [runtime (:runtime current-session)]
                        (p/let [_ (when (and runtime (string? (:session-id runtime)))
                                    (-> (<consume-message-stream! self
                                                                  (:id current-session)
@@ -286,7 +286,11 @@
     (if-not (string? user-id)
       (http/unauthorized)
       (p/let [res (<append-event! self {:type "session.canceled"
-                                        :data {:by user-id}})]
+                                        :data {:by user-id}})
+              current-session (<get-session self)
+              _ (<terminate-runtime! self (:runtime current-session))
+              current-session (when current-session (assoc current-session :runtime nil))
+              _ (when current-session (<save-session! self current-session))]
         (if (= (:error res) :missing-session)
           (http/not-found)
           (http/json-response :sessions/cancel {:ok true}))))))
@@ -296,7 +300,7 @@
     (if (nil? current-session)
       nil
       (let [[orders next-session] (session/drain-orders current-session)
-            runtime (get-in current-session [:runtime :sandbox])]
+            runtime (:runtime current-session)]
         (p/let [_ (<save-session! self next-session)
                 _ (when (and runtime (string? (:session-id runtime)))
                     (p/all

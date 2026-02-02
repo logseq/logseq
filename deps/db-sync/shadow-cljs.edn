@@ -7,7 +7,8 @@
             :output-dir "worker/dist/worker"
             :modules {:main {:exports {default logseq.db-sync.worker/worker
                                        SyncDO logseq.db-sync.worker/SyncDO
-                                       AgentSessionDO logseq.db-sync.worker/AgentSessionDO}}}
+                                       AgentSessionDO logseq.db-sync.worker/AgentSessionDO
+                                       Sandbox logseq.db-sync.worker/Sandbox}}}
             :js-options {:js-provider :import}
             :closure-defines {shadow.cljs.devtools.client.env/enabled false}
             :devtools {:enabled false}}

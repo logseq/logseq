@@ -2,6 +2,18 @@
 # yarn lockfile v1
 
 
+"@cloudflare/containers@^0.0.30":
+  version "0.0.30"
+  resolved "https://registry.yarnpkg.com/@cloudflare/containers/-/containers-0.0.30.tgz#c825edd70712cfee6c578f2280e19991cbcfca94"
+  integrity sha512-i148xBgmyn/pje82ZIyuTr/Ae0BT/YWwa1/GTJcw6DxEjUHAzZLaBCiX446U9OeuJ2rBh/L/9FIzxX5iYNt1AQ==
+
+"@cloudflare/sandbox@0.7.0":
+  version "0.7.0"
+  resolved "https://registry.yarnpkg.com/@cloudflare/sandbox/-/sandbox-0.7.0.tgz#6182e04487880cb603b4adfced93131f29adcdac"
+  integrity sha512-U9e/fqc2R/epygMRoRFZxjM6z8ZSyJqQSFFykWTLWl2j+c9+kK9reBjp1G/RcvTAGtv8pH3Dac21jmvh4ZbGXg==
+  dependencies:
+    "@cloudflare/containers" "^0.0.30"
+
 base64-js@^1.3.1:
   version "1.5.1"
   resolved "https://registry.yarnpkg.com/base64-js/-/base64-js-1.5.1.tgz#1b1b440160a5bf7ad40b650f095963481903930a"

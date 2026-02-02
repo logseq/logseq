@@ -16,8 +16,9 @@
     "deploy-staging": "yarn clean && yarn release && cd ./worker && wrangler deploy --env staging"
   },
   "dependencies": {
+    "@cloudflare/sandbox": "0.7.0",
     "better-sqlite3": "^11.10.0",
-    "ws": "^8.18.3",
-    "shadow-cljs": "^3.3.4"
+    "shadow-cljs": "^3.3.4",
+    "ws": "^8.18.3"
   }
 }

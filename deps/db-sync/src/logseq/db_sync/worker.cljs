@@ -1,5 +1,6 @@
 (ns logseq.db-sync.worker
-  (:require ["cloudflare:workers" :refer [DurableObject]]
+  (:require ["@cloudflare/sandbox" :as cf-sandbox]
+            ["cloudflare:workers" :refer [DurableObject]]
             [lambdaisland.glogi :as log]
             [logseq.db-sync.common :as common]
             [logseq.db-sync.logging :as logging]
@@ -9,13 +10,22 @@
             [logseq.db-sync.worker.handler.ws :as ws-handler]
             [logseq.db-sync.worker.presence :as presence]
             [logseq.db-sync.worker.ws :as ws]
+            [promesa.core :as p]
             [shadow.cljs.modern :refer (defclass)]))
 
 (logging/install!)
 
+(def Sandbox (.-Sandbox cf-sandbox))
+
 (def worker
   #js {:fetch (fn [request env _ctx]
-                (dispatch/handle-worker-fetch request env))})
+                (p/let [proxy-fn (.-proxyToSandbox cf-sandbox)
+                        proxy-resp (if (fn? proxy-fn)
+                                     (proxy-fn request env)
+                                     nil)]
+                  (if proxy-resp
+                    proxy-resp
+                    (dispatch/handle-worker-fetch request env))))})
 
 (defclass SyncDO
   (extends DurableObject)
