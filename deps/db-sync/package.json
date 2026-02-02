@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@cloudflare/sandbox": "0.7.0",
+    "@fly/sprites": "^0.0.1",
     "better-sqlite3": "^11.10.0",
     "shadow-cljs": "^3.3.4",
     "ws": "^8.18.3"

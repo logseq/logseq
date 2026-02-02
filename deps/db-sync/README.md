@@ -100,10 +100,11 @@ The control plane forwards each task message through sandbox-agent
 ### Runtime Provider
 
 Agent runtime is selected by `AGENT_RUNTIME_PROVIDER`:
-- `local-dev` (default): uses `SANDBOX_AGENT_URL` directly.
-- `cloudflare-sandbox`: provisions a sandbox first, then connects to the sandbox-hosted `sandbox-agent`.
+- `sprites` (default): provisions a Sprite and runs `sandbox-agent` inside it.
+- `local-dev`: uses `SANDBOX_AGENT_URL` directly.
+- `cloudflare`: provisions a sandbox first, then connects to the sandbox-hosted `sandbox-agent`.
 
-For `cloudflare-sandbox`, bind and export `Sandbox` in the Worker and configure the container image in
+For `cloudflare`, bind and export `Sandbox` in the Worker and configure the container image in
 `worker/wrangler.toml` (`[[containers]] class_name = "Sandbox"`).
 
 ## Environment Variables
@@ -120,12 +121,25 @@ For `cloudflare-sandbox`, bind and export `Sandbox` in the Worker and configure 
 | DB_SYNC_STATIC_USER_ID | Static user id for local dev |
 | DB_SYNC_STATIC_EMAIL | Static user email for local dev |
 | DB_SYNC_STATIC_USERNAME | Static username for local dev |
-| AGENT_RUNTIME_PROVIDER | Runtime backend (`local-dev`, `cloudflare-sandbox`, future providers e.g. `fly-io`) |
+| AGENT_RUNTIME_PROVIDER | Runtime backend (`sprites`, `local-dev`, `cloudflare`) |
 | COGNITO_ISSUER | Cognito issuer URL |
 | COGNITO_CLIENT_ID | Cognito client id |
 | COGNITO_JWKS_URL | Cognito JWKS URL |
 | SANDBOX_AGENT_URL | sandbox-agent base URL for agent sessions |
 | SANDBOX_AGENT_TOKEN | Optional bearer token for sandbox-agent |
+| SPRITE_TOKEN | Sprites API token (default runtime auth) |
+| SPRITES_TOKEN | Alias for `SPRITE_TOKEN` |
+| SPRITES_API_URL | Sprites API base URL override |
+| SPRITES_TIMEOUT_MS | Sprites API request timeout |
+| SPRITES_NAME_PREFIX | Prefix used when creating sprite names |
+| SPRITES_RAM_MB | Optional sprite RAM override |
+| SPRITES_CPUS | Optional sprite CPU override |
+| SPRITES_REGION | Optional sprite region |
+| SPRITES_STORAGE_GB | Optional sprite storage override |
+| SPRITES_BOOTSTRAP_COMMAND | Command to start `sandbox-agent` inside sprite |
+| SPRITES_SANDBOX_AGENT_PORT | sandbox-agent port inside sprite (default `2468`) |
+| SPRITES_HEALTH_RETRIES | Sprite health check retry count |
+| SPRITES_HEALTH_INTERVAL_MS | Sprite health check retry interval (ms) |
 | CLOUDFLARE_SANDBOX_BOOTSTRAP_COMMAND | Bootstrap command to install/start `sandbox-agent` inside sandbox |
 | CLOUDFLARE_SANDBOX_AGENT_PORT | sandbox-agent listen/expose port (default `2468`) |
 | CLOUDFLARE_SANDBOX_HOSTNAME | Public hostname used by `sandbox.exposePort` |

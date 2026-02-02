@@ -4,12 +4,9 @@
 
 (deftest provider-kind-test
   (testing "normalizes configured runtime provider"
-    (is (= "local-dev" (runtime-provider/provider-kind #js {})))
-    (is (= "local-dev" (runtime-provider/provider-kind #js {"AGENT_RUNTIME_PROVIDER" "LOCAL"})))
-    (is (= "cloudflare-sandbox"
-           (runtime-provider/provider-kind #js {"AGENT_RUNTIME_PROVIDER" "cloudflare-sandbox"})))
-    (is (= "fly-io"
-           (runtime-provider/provider-kind #js {"AGENT_RUNTIME_PROVIDER" "fly-io"})))))
+    (is (= "sprites" (runtime-provider/provider-kind #js {})))
+    (is (= "sprites" (runtime-provider/provider-kind #js {"AGENT_RUNTIME_PROVIDER" "SPRITES"})))
+    (is (= "local-dev" (runtime-provider/provider-kind #js {"AGENT_RUNTIME_PROVIDER" "LOCAL-DEV"})))))
 
 (deftest fill-template-test
   (testing "fills sandbox id placeholders"
@@ -20,10 +17,10 @@
 
 (deftest runtime-provider-resolution-test
   (testing "prefers runtime provider, falls back to env provider"
-    (let [env #js {"AGENT_RUNTIME_PROVIDER" "cloudflare-sandbox"}]
-      (is (= "cloudflare-sandbox"
-             (runtime-provider/runtime-provider-kind env nil)))
+    (let [env #js {"AGENT_RUNTIME_PROVIDER" "cloudflare"}]
       (is (= "local-dev"
              (runtime-provider/runtime-provider-kind env {:provider "local-dev"})))
-      (is (= "cloudflare-sandbox"
+      (is (= "sprites"
+             (runtime-provider/runtime-provider-kind env {:provider "sprites"})))
+      (is (= "cloudflare"
              (runtime-provider/runtime-provider-kind env {:provider "cloudflare"}))))))

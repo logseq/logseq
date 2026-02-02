@@ -60,7 +60,7 @@ Use these as implementation templates:
   - `<terminate-runtime!`
 - Added provider routing:
   - `local-dev` provider (direct sandbox-agent URL)
-  - `cloudflare-sandbox` provider (Cloudflare Sandbox SDK + `Sandbox` binding + health/bootstrap flow)
+  - `cloudflare` provider (Cloudflare Sandbox SDK + `Sandbox` binding + health/bootstrap flow)
 - Switched session DO logic to provider abstraction in
   `src/logseq/db_sync/worker/agent/do.cljs`.
 - Persisted runtime metadata in session state:
@@ -83,7 +83,7 @@ Use these as implementation templates:
   - `terminate(runtime)`
   - `health(runtime)`
 - Keep existing local mode as fallback (`local-dev` provider).
-- Add `cloudflare-sandbox` provider as default in staging/prod.
+- Add `cloudflare` provider as default in staging/prod.
 
 ### WS2: Cloudflare Sandbox Provisioning
 - Implement Cloudflare Sandbox SDK flow:
@@ -113,7 +113,7 @@ Use these as implementation templates:
   - create task -> run -> receive assistant deltas -> complete -> sandbox cleanup.
 - Rollout:
   1. local-dev provider default (current)
-  2. staging: cloudflare-sandbox default
+  2. staging: cloudflare default
   3. production canary -> full rollout
 
 ## Exit Criteria
@@ -124,7 +124,7 @@ Use these as implementation templates:
 5) Failure/retry telemetry available for provisioning and teardown.
 
 ## Required Configuration (initial)
-- `AGENT_RUNTIME_PROVIDER=cloudflare-sandbox|local-dev`
+- `AGENT_RUNTIME_PROVIDER=cloudflare|local-dev`
 - `Sandbox` container binding in `worker/wrangler.toml`
 - `CLOUDFLARE_SANDBOX_HOSTNAME`
 - `CLOUDFLARE_SANDBOX_BOOTSTRAP_COMMAND` (optional)

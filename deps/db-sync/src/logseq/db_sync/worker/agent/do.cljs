@@ -164,7 +164,8 @@
               [session events _event] (session/append-event session events {:type "session.provisioned"
                                                                             :data {:provider (:provider runtime)
                                                                                    :runtime-session-id (:session-id runtime)
-                                                                                   :sandbox-id (:sandbox-id runtime)}
+                                                                                   :sandbox-id (:sandbox-id runtime)
+                                                                                   :sprite-name (:sprite-name runtime)}
                                                                             :ts (common/now-ms)})]
           (p/let [_ (<put-session! self session)
                   _ (<put-events! self events)]
