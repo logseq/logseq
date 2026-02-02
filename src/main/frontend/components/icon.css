@@ -586,13 +586,48 @@
   }
 }
 
-/* Web image tooltip - borderless design for seamless arrow integration */
-.web-image-tooltip-content {
-  @apply border-0;
+/* Bordered tooltip arrow - CSS-positioned (Base UI technique) */
+/* Arrow is a regular child element, positioned via CSS - NOT Radix's TooltipPrimitive.Arrow */
+/* This gives us full control and prevents Radix's position recalculations that cause shift */
+/* Arrow SVG points UP by default (tip near top, base at bottom) */
+
+.ui__tooltip-arrow {
+  position: absolute;
+  display: flex;
+  pointer-events: none;
 }
 
-.web-image-tooltip-arrow {
-  fill: var(--popover);
+/* Tooltip ABOVE trigger - arrow at bottom pointing DOWN */
+.ui__tooltip-content[data-side="top"] .ui__tooltip-arrow {
+  bottom: -9px;
+  left: 50%;
+  transform: translateX(-50%) rotate(180deg);
+}
+
+/* Tooltip BELOW trigger - arrow at top pointing UP */
+.ui__tooltip-content[data-side="bottom"] .ui__tooltip-arrow {
+  top: -9px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Tooltip LEFT of trigger - arrow at right pointing RIGHT */
+.ui__tooltip-content[data-side="left"] .ui__tooltip-arrow {
+  right: -14px;
+  top: 50%;
+  transform: translateY(-50%) rotate(90deg);
+}
+
+/* Tooltip RIGHT of trigger - arrow at left pointing LEFT */
+.ui__tooltip-content[data-side="right"] .ui__tooltip-arrow {
+  left: -14px;
+  top: 50%;
+  transform: translateY(-50%) rotate(-90deg);
+}
+
+/* Web image tooltip with bordered arrow */
+.web-image-tooltip-content {
+  /* Border connects to arrow via BorderedArrowSvg stroke */
 }
 
 .web-image-tooltip {

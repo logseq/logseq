@@ -1388,8 +1388,8 @@
         [:div.external-badge
          (shui/tabler-icon "world" {:size 10})]])
       (shui/tooltip-content
-       {:side "top" :align "center" :class "web-image-tooltip-content"}
-       (shui/tooltip-arrow {:class "web-image-tooltip-arrow"})
+       {:side "top" :align "center" :class "web-image-tooltip-content"
+        :show-arrow true :arrow-class-name "web-image-tooltip-arrow"}
        [:div.web-image-tooltip {:style {:text-align "center"}}
         [:div.font-medium (or title "Web image")]
         ;; Show license description only (more glanceable than code)
@@ -1524,7 +1524,7 @@
            [:button.info-icon
             (shui/tabler-icon "info-circle" {:size 14})])
           (shui/tooltip-content
-           {:side "top"}
+           {:side "top" :show-arrow true}
            [:span "Images from Wikipedia Commons. Check licensing before commercial use."])))]
 
        ;; Image grid
