@@ -266,7 +266,7 @@
                            (ui-handler/re-render-root!)
                            (plugin-handler/hook-plugin-app :today-journal-created {:title today-page})
                            result))]
-          (when-not (db/get-page today-page)
+          (when-not (db-async/<get-block repo today-page)
             (create-f)))))))
 
 (defn open-today-in-sidebar
