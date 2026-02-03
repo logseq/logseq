@@ -217,22 +217,14 @@
    :any
    http-error-response-schema])
 
-(def agent-task-source-schema
+(def sessions-create-request-schema
   [:map
+   [:session-id :string]
    [:node-id :string]
    [:node-title :string]
-   [:node-revision :any]
-   [:snapshot {:optional true} :any]])
-
-(def agent-task-schema
-  [:map
-   [:id :string]
-   [:source agent-task-source-schema]
-   [:intent {:optional true} :map]
-   [:agent {:optional true} [:or :string :map]]
-   [:audit {:optional true} :map]])
-
-(def sessions-create-request-schema agent-task-schema)
+   [:content :string]
+   [:attachments [:sequential :string]]
+   [:agent [:or :string :map]]])
 
 (def sessions-message-request-schema
   [:map

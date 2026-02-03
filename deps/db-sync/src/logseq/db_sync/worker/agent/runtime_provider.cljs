@@ -24,6 +24,22 @@
 (defn- strip-trailing-slash [s]
   (string/replace (or s "") #"/+$" ""))
 
+(defn- normalize-provider [value]
+  (when (string? value)
+    (let [normalized (-> value string/trim string/lower-case)]
+      (when-not (string/blank? normalized) normalized))))
+
+(defn provider-kind [^js env]
+  (or (normalize-provider (env-str env "AGENT_RUNTIME_PROVIDER"))
+      "sprites"))
+
+(defn runtime-provider-kind [^js env runtime]
+  (or (normalize-provider (:provider runtime))
+      (provider-kind env)))
+
+(defn fill-template [template sandbox-id]
+  (string/replace (or template "") "{sandbox_id}" (or sandbox-id "")))
+
 (defn- sanitize-name [name]
   (let [name (or name "task")
         sanitized (-> name

@@ -2,6 +2,7 @@
   (:require [lambdaisland.glogi :as log]
             [logseq.db-sync.common :as common]
             [logseq.db-sync.platform.core :as platform]
+            [logseq.db-sync.worker.agent.request :as agent-request]
             [logseq.db-sync.worker.auth :as auth]
             [logseq.db-sync.worker.http :as http]
             [logseq.db-sync.worker.routes.index :as routes]
@@ -48,8 +49,7 @@
              (http/bad-request "missing body")
              (let [body (js->clj result :keywordize-keys true)
                    body (http/coerce-http-request :sessions/create body)
-                   idempotency-key (.get (.-headers request) "idempotency-key")
-                   session-id (or (:id body) idempotency-key)]
+                   session-id (:session-id body)]
                (cond
                  (nil? body)
                  (http/bad-request "invalid body")
@@ -61,7 +61,7 @@
                  (if-let [^js stub (session-stub env session-id)]
                    (let [headers (base-headers request claims)
                          _ (.set headers "x-stream-base" (.-origin url))
-                         task (assoc body :id session-id)
+                         task (agent-request/normalize-session-create body)
                          body-json (js/JSON.stringify (clj->js task))
                          do-url (str (.-origin url) "/__session__/init")]
                      (forward-request stub do-url "POST" headers body-json))

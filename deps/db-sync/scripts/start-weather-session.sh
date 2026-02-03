@@ -3,34 +3,20 @@ set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:8787}"
 TOKEN="${TOKEN:-dev-token}"
-SESSION_ID="${SESSION_ID:-weather}"
+SESSION_ID="${SESSION_ID:-p2}"
 
 create_payload() {
   cat <<JSON
 {
-  "id": "${SESSION_ID}",
-  "source": {
-    "node-id": "task-node-1",
-    "node-title": "Check weather in Hangzhou",
-    "node-revision": "2026-02-02T00:00:00Z",
-    "snapshot": {
-      "content": "#Task tell me the weather today in Hangzhou",
-      "references": [],
-      "attachments": []
-    }
-  },
-  "intent": {
-    "title": "Weather query",
-    "summary": "Ask codex for weather in Hangzhou today"
-  },
+  "session-id": "${SESSION_ID}",
+  "node-id": "task-node-1",
+  "node-title": "Check weather in Hangzhou",
+  "content": "Tell me the weather today in Hangzhou.",
+  "attachments": [],
   "agent": {
     "provider": "codex",
     "mode": "build",
     "permission-mode": "default"
-  },
-  "audit": {
-    "requested-at": 1769980800000,
-    "priority": "normal"
   }
 }
 JSON
