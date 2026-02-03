@@ -1,7 +1,9 @@
 (ns logseq.db-sync.worker-test
-  (:require [cljs.test :refer [deftest is]]
+  (:require [cljs.test :refer [async deftest is]]
             [datascript.core :as d]
             [logseq.db-sync.order :as sync-order]
+            [logseq.db-sync.platform.core :as platform]
+            [logseq.db-sync.worker.dispatch :as dispatch]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.schema :as db-schema]))
 
@@ -28,3 +30,16 @@
           order-b' (:block/order (d/entity @conn [:block/uuid block-b]))]
       (is (= order-a order-a'))
       (is (not= order-a' order-b')))))
+
+(deftest dispatch-worker-fetch-returns-promise-test
+  (async done
+         (let [request (platform/request "http://example.com/health" #js {:method "GET"})
+               resp (dispatch/handle-worker-fetch request #js {})]
+           (is (fn? (.-then resp)))
+           (is (fn? (.-catch resp)))
+           (-> (.then resp (fn [resolved]
+                             (is (= 200 (.-status resolved)))
+                             (done)))
+               (.catch (fn [error]
+                         (is false (str "unexpected error: " error))
+                         (done)))))))

@@ -9,9 +9,9 @@
             [promesa.core :as p]))
 
 (defn handle-worker-fetch [request ^js env]
-  (let [url (platform/request-url request)
-        path (.-pathname url)
-        method (.-method request)]
+  (p/let [url (platform/request-url request)
+          path (.-pathname url)
+          method (.-method request)]
     (cond
       (= path "/health")
       (http/json-response :worker/health {:ok true})

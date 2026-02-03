@@ -1,5 +1,6 @@
 (ns logseq.db-sync.worker.agent.runtime-provider
   (:require [clojure.string :as string]
+            [logseq.db-sync.worker.agent.sandbox :as sandbox]
             [promesa.core :as p]))
 
 ;; -----------------------
@@ -82,24 +83,12 @@
 (defn- escape-shell-single [value]
   (string/replace (or value "") "'" "'\"'\"'"))
 
-(defn- export-env [k v]
-  (if (string? v)
-    (str "export " k "='" (escape-shell-single v) "'; ")
-    ""))
-
-(defn- codex-env-vars [^js env]
-  (let [codex-auth (env-str env "CODEX_AUTH_TOKEN")
-        codex-auth-json (env-str env "SPRITES_CODEX_AUTH_JSON")
-        openai (or (env-str env "OPENAI_API_KEY")
-                   (env-str env "CODEX_API_KEY")
-                   codex-auth)
-        codex (or (env-str env "CODEX_API_KEY")
-                  (env-str env "OPENAI_API_KEY")
-                  codex-auth)]
-    {:openai openai
-     :codex codex
-     :codex-auth codex-auth
-     :codex-auth-json codex-auth-json}))
+(defn- ->base64
+  [value]
+  (when (string? value)
+    (let [bytes (.encode (js/TextEncoder.) value)
+          binary (apply str (map char bytes))]
+      (js/btoa binary))))
 
 (defn- curl-auth-arg [token]
   ;; token may be nil in --no-token mode
@@ -114,6 +103,8 @@
 
 (defn- sprite-local-url [port path]
   (str "http://127.0.0.1:" port path))
+
+(def ^:private default-repo-base-dir "/workspace")
 
 (defn- ->promise
   [v]
@@ -165,6 +156,7 @@
         token (sprites-token env)
         q (build-query (map (fn [c] [:cmd c]) cmd-vec))
         url (sprites-http-url base (str "/v1/sprites/" sprite-name "/exec?" q))]
+    (prn :debug :post url)
     (fetch-json! "POST" url {:token token})))
 
 ;; -----------------------
@@ -259,23 +251,22 @@
 ;; sandbox-agent bootstrap + health + create-session
 ;; -----------------------
 
-(defn- <sprite-bootstrap! [^js env sprite-name port]
-  (let [{:keys [openai codex codex-auth codex-auth-json]} (codex-env-vars env)
-        exports (str (export-env "CODEX_AUTH_TOKEN" codex-auth)
-                     (export-env "OPENAI_API_KEY" openai)
-                     (export-env "CODEX_API_KEY" codex)
-                     (export-env "SPRITES_CODEX_AUTH_JSON" codex-auth-json))
-        write-auth (str "if [ -n \"$SPRITES_CODEX_AUTH_JSON\" ]; then "
-                        "mkdir -p ~/.codex; "
-                        "printf \"%s\" \"$SPRITES_CODEX_AUTH_JSON\" | base64 -d > ~/.codex/auth.json; "
-                        "fi; ")
+(defn auth-json-write-command
+  [auth-json]
+  (when-let [encoded (->base64 auth-json)]
+    (str "mkdir -p ~/.codex; "
+         "printf \"%s\" \"" encoded "\" | base64 -d > ~/.codex/auth.json; ")))
+
+(defn- <sprite-bootstrap! [^js env sprite-name port task]
+  (let [auth-json (get-in task [:agent :auth-json])
+        write-auth (or (auth-json-write-command auth-json) "")
         bootstrap (or (env-str env "SPRITES_BOOTSTRAP_COMMAND")
                       (str "command -v sandbox-agent >/dev/null 2>&1 || "
                            "(curl -fsSL https://releases.rivet.dev/sandbox-agent/latest/install.sh | sh); "
                            write-auth
                            "nohup sandbox-agent server --no-token --host 0.0.0.0 --port " port
                            " >/tmp/sandbox-agent.log 2>&1 &"))]
-    (sprites-exec-post! env sprite-name ["bash" "-lc" (str exports bootstrap)])))
+    (sprites-exec-post! env sprite-name ["bash" "-lc" bootstrap])))
 
 (defn- <sprite-health! [^js env sprite-name port agent-token retries interval-ms]
   (if (<= retries 0)
@@ -292,15 +283,50 @@
                      (p/let [_ (p/delay interval-ms)]
                        (<sprite-health! env sprite-name port agent-token (dec retries) interval-ms))))))))
 
-(defn- session-payload [task]
-  {:agent (or (get-in task [:agent :provider])
-              (get-in task [:agent :id])
-              (:agent task))
-   :agent-mode (or (get-in task [:agent :mode])
-                   (get-in task [:agent :agent-mode])
-                   (get-in task [:agent :model]))
-   :permission-mode (or (get-in task [:agent :permission-mode])
-                        (get-in task [:agent :permissionMode]))})
+(defn- task-repo-url [task]
+  (some-> (get-in task [:project :repo-url]) str string/trim not-empty))
+
+(defn- repo-dir [session-id]
+  (let [session-id (some-> session-id str)]
+    (when (string? session-id)
+      (str default-repo-base-dir "/" (sanitize-name session-id)))))
+
+(defn- fill-repo-template
+  [template {:keys [repo-url session-id repo-dir]}]
+  (-> (or template "")
+      (string/replace "{repo_url}" (or repo-url ""))
+      (string/replace "{session_id}" (or session-id ""))
+      (string/replace "{repo_dir}" (or repo-dir ""))))
+
+(defn repo-clone-command
+  [^js env session-id task]
+  (let [repo-url (task-repo-url task)
+        session-id (some-> session-id str)
+        repo-dir (repo-dir session-id)
+        override (env-str env "SPRITES_REPO_CLONE_COMMAND")]
+    (when (and (string? repo-url) (string? session-id) (string? repo-dir))
+      (if (string? override)
+        (fill-repo-template override {:repo-url repo-url
+                                      :session-id session-id
+                                      :repo-dir repo-dir})
+        (str "mkdir -p " default-repo-base-dir
+             " && cd " default-repo-base-dir
+             " && git clone '" (escape-shell-single repo-url) "' '" (escape-shell-single repo-dir) "'"
+             " && chmod -R u+rw '" (escape-shell-single repo-dir) "'")))))
+
+(defn session-payload [task]
+  (let [agent (or (get-in task [:agent :provider])
+                  (get-in task [:agent :id])
+                  (:agent task))
+        agent (or (sandbox/normalize-agent-id agent) agent)]
+    {:agent agent
+     :agentMode (or (get-in task [:agent :mode])
+                    (get-in task [:agent :agent-mode])
+                    (get-in task [:agent :model])
+                    "build")
+     :permissionMode (or (get-in task [:agent :permission-mode])
+                         (get-in task [:agent :permissionMode])
+                         "read-write")}))
 
 (defn- <sprite-create-session! [^js env sprite-name port agent-token session-id payload]
   (let [script (str "curl -fsS -X POST -H 'content-type: application/json' "
@@ -314,6 +340,11 @@
             stdout (or (:stdout result) "")
             parsed (parse-json-safe stdout)]
       (assoc parsed :session-id session-id))))
+
+(defn- <sprite-clone-repo! [^js env sprite-name session-id task]
+  (prn :debug :cmd (repo-clone-command env session-id task))
+  (when-let [cmd (repo-clone-command env session-id task)]
+    (sprites-exec-post! env sprite-name ["bash" "-lc" cmd])))
 
 ;; ============================================================
 ;; RuntimeProvider + SpritesProvider
@@ -334,8 +365,9 @@
           health-retries (parse-int (env-str env "SPRITES_HEALTH_RETRIES") 120)
           health-interval-ms (parse-int (env-str env "SPRITES_HEALTH_INTERVAL_MS") 500)]
       (p/let [_ (sprites-create-or-get! env name)
-              _ (<sprite-bootstrap! env name port)
+              _ (<sprite-bootstrap! env name port task)
               _ (<sprite-health! env name port agent-token health-retries health-interval-ms)
+              _ (<sprite-clone-repo! env name session-id task)
               payload (session-payload task)
               response (<sprite-create-session! env name port agent-token session-id payload)]
         {:provider "sprites"
@@ -363,6 +395,7 @@
                         (curl-json-arg {:message (:message message)})
                         " "
                         (sprite-local-url port (str "/v1/sessions/" (:session-id runtime) "/messages/stream")))]
+        (prn :debug :message message)
         (sprites-ws->sse-response! env name ["bash" "-lc" script]))))
 
   (<terminate-runtime! [_ runtime]

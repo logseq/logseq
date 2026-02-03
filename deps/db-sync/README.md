@@ -127,10 +127,6 @@ For `cloudflare`, bind and export `Sandbox` in the Worker and configure the cont
 | COGNITO_JWKS_URL | Cognito JWKS URL |
 | SANDBOX_AGENT_URL | sandbox-agent base URL for agent sessions |
 | SANDBOX_AGENT_TOKEN | Optional bearer token for sandbox-agent |
-| OPENAI_API_KEY | OpenAI API key for Codex inside sandbox-agent |
-| CODEX_API_KEY | Codex/OpenAI API key alias for sandbox-agent |
-| CODEX_AUTH_TOKEN | Codex OAuth access token (mapped to OpenAI/Codex envs in Sprites) |
-| SPRITES_CODEX_AUTH_JSON | Base64-encoded `~/.codex/auth.json` written inside Sprites before starting sandbox-agent |
 | SPRITE_TOKEN | Sprites API token (default runtime auth) |
 | SPRITES_TOKEN | Alias for `SPRITE_TOKEN` |
 | SPRITES_API_URL | Sprites API base URL override |
