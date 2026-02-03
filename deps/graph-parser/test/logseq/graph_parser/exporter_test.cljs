@@ -257,7 +257,7 @@
               set))))
 
     (testing "user properties"
-      (is (= 20
+      (is (= 21
              (->> @conn
                   (d/q '[:find [(pull ?b [:db/ident]) ...]
                          :where [?b :block/tags :logseq.class/Property]])
