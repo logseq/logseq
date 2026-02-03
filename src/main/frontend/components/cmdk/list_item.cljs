@@ -10,6 +10,43 @@
    [logseq.shui.ui :as shui]
    [rum.core :as rum]))
 
+;; =============================================================================
+;; Wikidata Preview Icon Component
+;; =============================================================================
+
+(rum/defc wikidata-preview-icon
+  "Renders a preview image for Wikidata search results.
+   - :avatar → circular with initials fallback, image overlay when loaded
+   - :image → square with dashed border placeholder, image when loaded
+   - nil/other → nothing rendered (use regular icon only)"
+  [{:keys [icon-type image-url initials]}]
+  (case icon-type
+    :avatar
+    [:div.relative.w-5.h-5.flex-shrink-0
+     ;; Avatar circle with initials
+     [:div.absolute.inset-0.rounded-full.bg-gray-06.flex.items-center.justify-center
+      {:class "text-[8px] font-medium text-gray-11"}
+      initials]
+     ;; Image overlay (when loaded)
+     (when image-url
+       [:img.absolute.inset-0.w-5.h-5.rounded-full.object-cover
+        {:src image-url
+         :loading "lazy"
+         :on-error (fn [e] (set! (.-style (.-target e)) "display:none"))}])]
+
+    :image
+    [:div.relative.w-5.h-5.flex-shrink-0
+     ;; Square placeholder with dashed border
+     (if image-url
+       [:img.w-5.h-5.rounded.object-contain
+        {:src image-url
+         :loading "lazy"
+         :on-error (fn [e] (set! (.-style (.-target e)) "display:none"))}]
+       [:div.w-5.h-5.rounded.border.border-dashed.border-gray-07])]
+
+    ;; For :tabler-icon or nil, don't render anything extra
+    nil))
+
 (defn- to-string [input]
   (cond
     (string? input) input
@@ -53,7 +90,9 @@
 
 (rum/defc root [{:keys [group icon icon-theme query text info shortcut value-label value
                         title highlighted on-highlight on-highlight-dep header on-click hls-page?
-                        hoverable compact rounded on-mouse-enter component-opts source-page source-create source-block] :as _props
+                        hoverable compact rounded on-mouse-enter component-opts source-page source-create source-block
+                        ;; Wikidata preview props
+                        source-wikidata preview-image-url preview-icon-type preview-initials] :as _props
                  :or {hoverable true rounded true}}
                 {:keys [app-config]}]
   (let [ref (hooks/create-ref)
@@ -104,6 +143,11 @@
         ;; Use new list-item-icon component for all other cases
         (list-item-icon/root {:variant icon-variant
                               :icon icon}))
+      ;; Wikidata preview image (shows next to icon for :avatar/:image types)
+      (when (and source-wikidata preview-icon-type)
+        (wikidata-preview-icon {:icon-type preview-icon-type
+                                :image-url preview-image-url
+                                :initials preview-initials}))
       [:div.flex.flex-1.flex-col
        (when title
          [:div.text-sm.pb-2.font-bold.text-gray-11 (highlight-query title)])

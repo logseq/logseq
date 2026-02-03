@@ -9,6 +9,7 @@
             [frontend.components.plugins :as plugin]
             [frontend.components.property.dialog :as property-dialog]
             [frontend.components.quick-add :as quick-add]
+            [frontend.components.wikidata-import :as wikidata-import]
             [frontend.components.repo :as repo]
             [frontend.components.select :as select]
             [frontend.components.selection :as selection]
@@ -321,3 +322,6 @@
     :align :top
     :content-props {:class "ls-dialog-quick-add"}
     :onEscapeKeyDown (fn [e] (.preventDefault e))}))
+
+(defmethod events/handle :wikidata/show-import-panel [[_ opts]]
+  (wikidata-import/show-import-panel! opts))

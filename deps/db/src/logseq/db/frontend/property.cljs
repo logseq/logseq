@@ -240,6 +240,11 @@
      :logseq.property/asset {:title "Asset"
                              :schema {:type :entity
                                       :hide? true}}
+     ;; Wikidata entity ID for pages created from Wikidata
+     :logseq.property/wikidata-id {:title "Wikidata ID"
+                                   :schema {:type :default
+                                            :public? false
+                                            :hide? true}}
      ;; used by pdf
      ;; TODO: remove ls-type
      :logseq.property/ls-type {:schema {:type :keyword

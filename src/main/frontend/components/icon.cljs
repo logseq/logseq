@@ -486,8 +486,11 @@
    Returns true if:
    - Auto-fetch is enabled in config
    - The page has a title
-   - The page hasn't been attempted before (tracked in local atom)
-   - The page doesn't already have a custom icon with an image"
+   - The page hasn't been attempted before (tracked in *image-fetch-attempted atom)
+   - The page doesn't already have a custom icon with an image
+
+   Note: Wikidata pages are prevented from auto-fetch by adding their page ID to
+   *image-fetch-attempted BEFORE redirect in cmdk/core.cljs :create-from-wikidata"
   [page-entity]
   (let [page-id (:db/id page-entity)
         config (state/get-config)
@@ -916,7 +919,7 @@
                       :edit-block? false})]
         (db/entity [:block/uuid (:block/uuid block)])))))
 
-(defn- <save-url-asset!
+(defn <save-url-asset!
   "Download image from URL and save as asset. Returns promise with asset entity."
   [repo url asset-name]
   (p/let [{:keys [data content-type size]} (<download-url-asset url)]

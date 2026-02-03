@@ -3,6 +3,8 @@
             [clojure.string :as string]
             [frontend.components.block :as block]
             [frontend.components.cmdk.list-item :as list-item]
+            [frontend.components.icon :as icon]
+            [frontend.components.wikidata :as wikidata]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -12,6 +14,7 @@
             [frontend.handler.block :as block-handler]
             [frontend.handler.command-palette :as cp-handler]
             [frontend.handler.db-based.page :as db-page-handler]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
@@ -71,9 +74,16 @@
    :favorites      {:status :success :show :less :items nil}
    :current-page   {:status :success :show :less :items nil}
    :nodes          {:status :success :show :less :items nil}
+   :wikidata-entities {:status :success :show :less :items nil}
    :files          {:status :success :show :less :items nil}
    :themes         {:status :success :show :less :items nil}
    :filters        {:status :success :show :less :items nil}})
+
+;; Wikidata search state - used for cancellation and debouncing
+(defonce ^:private *wikidata-cancel-token (atom nil))
+(defonce ^:private *wikidata-last-query (atom nil))
+
+(def ^:private wikidata-search-debounce-ms 400)
 
 (defn get-class-from-input
   [input]
@@ -164,6 +174,11 @@
                  (->>
                   [(when-not node-exists?
                      ["Create"         :create       (create-items input)])
+                   ;; "From Web" section - Wikidata entity search results
+                   (let [wikidata-items (visible-items :wikidata-entities)
+                         wikidata-status (get-in results [:wikidata-entities :status])]
+                     (when (or (seq wikidata-items) (= :loading wikidata-status))
+                       ["From Web"       :wikidata-entities wikidata-items]))
                    ["Current page"     :current-page   (visible-items :current-page)]
                    ["Nodes"            :nodes         (visible-items :nodes)]
                    ["Recently updated" :recently-updated-pages (visible-items :recently-updated-pages)]
@@ -195,6 +210,7 @@
           (:source-search highlighted-item) :search
           (:source-command highlighted-item) :trigger
           (:source-create highlighted-item) :create
+          (:source-wikidata highlighted-item) :create-from-wikidata
           (:filter highlighted-item) :filter
           (:source-theme highlighted-item) :theme
           :else nil)))
@@ -413,13 +429,97 @@
         (swap! !results update :current-page merge {:status :success :items items})))
     (reset! (::filter state) nil)))
 
+;; Wikidata entity search - searches Wikidata for matching entities
+(defmethod load-results :wikidata-entities [group state]
+  (let [!input (::input state)
+        !results (::results state)
+        input @!input]
+    (js/console.log "[wikidata-debug] load-results called, input:" input "last-query:" @*wikidata-last-query)
+    ;; Only search if input is non-empty and at least 2 characters
+    (if (and (not (string/blank? input)) (>= (count input) 2))
+      (do
+        ;; Cancel any previous in-flight request
+        (when-let [cancel-fn @*wikidata-cancel-token]
+          (js/console.log "[wikidata-debug] Cancelling previous search")
+          (cancel-fn))
+        ;; Also cancel any pending image fetches
+        (wikidata/cancel-image-fetches!)
+
+        ;; Only search if query changed (debounced by caller)
+        (when (not= input @*wikidata-last-query)
+          (reset! *wikidata-last-query input)
+
+          ;; Set loading state
+          (swap! !results assoc-in [group :status] :loading)
+
+          ;; Create new cancel token
+          (let [cancelled? (atom false)]
+            (reset! *wikidata-cancel-token #(reset! cancelled? true))
+
+            ;; Search Wikidata
+            (-> (wikidata/<search-and-enrich input)
+                (p/then (fn [results]
+                          (when-not @cancelled?
+                            (let [items (->> results
+                                             (take 5)
+                                             (mapv (fn [{:keys [qid label description]}]
+                                                     {:icon "globe"
+                                                      :icon-theme :gray
+                                                      :text label
+                                                      :info description
+                                                      ;; Preview icon info (will be enriched with image URL later)
+                                                      :preview-initials (wikidata/derive-avatar-initials label)
+                                                      :source-wikidata {:qid qid
+                                                                        :label label
+                                                                        :description description}})))]
+                              (js/console.log "[wikidata-debug] Search success, setting" (count items) "items")
+                              (swap! !results update group merge
+                                     {:status :success :items items})
+                              ;; Start fetching images in background
+                              (wikidata/<enrich-search-results-with-images
+                               (mapv (fn [{:keys [qid]}] {:id qid}) results)
+                               ;; Callback: update item with image info when it arrives
+                               (fn [qid {:keys [image-url class-title icon-type]}]
+                                 (when-not @cancelled?
+                                   (swap! !results update-in [group :items]
+                                          (fn [items]
+                                            (mapv (fn [item]
+                                                    (if (= qid (get-in item [:source-wikidata :qid]))
+                                                      (assoc item
+                                                             :preview-image-url image-url
+                                                             :preview-icon-type icon-type
+                                                             :preview-class-title class-title)
+                                                      item))
+                                                  items))))))))))
+                (p/catch (fn [err]
+                           (js/console.error "[wikidata-debug] Search error:" err)
+                           (when-not @cancelled?
+                             (js/console.log "[wikidata-debug] Setting error state, clearing items")
+                             (swap! !results update group merge
+                                    {:status :error :items []}))))))))
+      ;; Clear results if input is empty or too short
+      (do
+        (js/console.log "[wikidata-debug] Input too short, clearing results")
+        (wikidata/cancel-image-fetches!)
+        (swap! !results update group merge {:status :success :items []})))))
+
+;; Debounced version of Wikidata search
+(def ^:private load-wikidata-results-debounced
+  (gfun/debounce
+   (fn [state]
+     (load-results :wikidata-entities state))
+   wikidata-search-debounce-ms))
+
 ;; The default load-results function triggers all the other load-results function
 (defmethod load-results :default [_ state]
   (let [filter-group (:group @(::filter state))]
     (if (and (not (some-> state ::input deref seq))
              (not filter-group))
       (do (load-results :initial state)
-          (load-results :filters state))
+          (load-results :filters state)
+          ;; Clear wikidata results when input is empty
+          (js/console.log "[wikidata-debug] Input empty, clearing wikidata from :default")
+          (swap! (::results state) update :wikidata-entities merge {:status :success :items []}))
       (if filter-group
         (load-results filter-group state)
         (do
@@ -428,8 +528,8 @@
           (load-results :filters state)
           (load-results :files state)
           (load-results :recently-updated-pages state)
-          ;; (load-results :recents state)
-          )))))
+          ;; Wikidata search (debounced separately for better UX)
+          (load-wikidata-results-debounced state))))))
 
 (defn- copy-block-ref [state]
   (when-let [block-uuid (some-> state state->highlighted-item :source-block :block/uuid)]
@@ -559,6 +659,102 @@
         (shui/dialog-close! :ls-dialog-cmdk)
         (when (and create-class? result)
           (state/pub-event! [:dialog/show-block result {:tag-dialog? true}]))))))
+
+(defn- <ensure-class-exists!
+  "Ensure a class with the given title exists. Creates it if not found.
+   If creating a new class, sets the default-icon from wikidata/class->default-icon.
+   Returns the class entity."
+  [class-title]
+  (let [existing-class (db/get-case-page class-title)]
+    (if (and existing-class (ldb/class? existing-class))
+      ;; Class already exists
+      (p/resolved existing-class)
+      ;; Create new class with default icon
+      (p/let [new-class (db-page-handler/<create-class! class-title {:redirect? false})]
+        ;; Set default-icon if one is defined for this class
+        (when-let [default-icon (get wikidata/class->default-icon class-title)]
+          (db-property-handler/set-block-property!
+           (:block/uuid new-class)
+           :logseq.property.class/default-icon
+           default-icon))
+        (js/console.log "[wikidata] Created new class:" class-title "with default-icon:" (get wikidata/class->default-icon class-title))
+        new-class))))
+
+(defn- <set-wikidata-icon!
+  "Download Wikidata image and set as page icon.
+   Uses the class's default icon type (:avatar for Person, :image for Company, etc.)"
+  [page-id image-info label class-title]
+  (when-let [image-url (:url image-info)]
+    (p/let [repo (state/get-current-repo)
+            asset-name (str "wikidata-" (subs label 0 (min 30 (count label))))
+            asset (icon/<save-url-asset! repo image-url asset-name)]
+      (when asset
+        ;; Determine icon type from class's default-icon (Person→avatar, Company→image)
+        (let [icon-spec (wikidata/get-preview-icon-type class-title)
+              icon-type (or (:type icon-spec) :image)
+              base-data {:asset-uuid (str (:block/uuid asset))
+                         :asset-type (:logseq.property.asset/type asset)}
+              ;; For avatars, include :value (initials) as fallback text
+              ;; The avatar renderer expects :value, not :initials
+              icon-data (if (= icon-type :avatar)
+                          (assoc base-data :value (wikidata/derive-avatar-initials label))
+                          base-data)]
+          (db-property-handler/set-block-property!
+           page-id
+           :logseq.property/icon
+           {:type icon-type
+            :data icon-data})
+          (js/console.log "[wikidata] Set icon for page:" label
+                          "type:" icon-type
+                          "from" (:property image-info)))))))
+
+(defmethod handle-action :create-from-wikidata [_ state _event]
+  (when-let [item (state->highlighted-item state)]
+    (let [wikidata-info (:source-wikidata item)
+          {:keys [qid label]} wikidata-info]
+      (when (and qid label)
+        ;; Close the dialog immediately for better UX
+        (shui/dialog-close! :ls-dialog-cmdk)
+        ;; Fetch full entity details and create page
+        (p/let [entity-data (wikidata/<fetch-full-entity qid)]
+          (when entity-data
+            (let [{:keys [class image properties]} entity-data
+                  class-title (:title class)]
+              ;; Step 1: Ensure class exists (create if needed)
+              (p/let [class-entity (when class-title
+                                     (<ensure-class-exists! class-title))
+                      ;; Step 2: Create the page WITHOUT redirect
+                      ;; We redirect after setting properties to avoid race conditions
+                      ;; with auto-fetch-image (which checks for wikidata-id)
+                      page (page-handler/<create! label {:redirect? false})]
+                (when page
+                  ;; Step 3: Add class tag to page
+                  (when class-entity
+                    (db-property-handler/set-block-property!
+                     (:block/uuid page)
+                     :block/tags
+                     (:db/id class-entity)))
+                  ;; Step 4: Prevent Wikipedia auto-fetch from overwriting Wikidata icon
+                  ;; Mark page as "already attempted" so auto-fetch skips it
+                  (swap! icon/*image-fetch-attempted conj (:db/id page))
+                  (swap! icon/*avatar-fetch-attempted conj (:db/id page))
+                  ;; Step 5: Now redirect (auto-fetch will skip due to step 4)
+                  (route-handler/redirect-to-page! (:block/uuid page))
+                  ;; Step 6: Set icon from Wikidata image (async, after redirect)
+                  ;; Pass class-title to determine icon type (avatar for Person, image for Company)
+                  (when image
+                    (<set-wikidata-icon! (:db/id page) image label class-title))
+                  ;; Step 7: Show property import panel if properties available
+                  (when (seq properties)
+                    (state/pub-event! [:wikidata/show-import-panel
+                                       {:page page
+                                        :properties properties
+                                        :entity-data entity-data}]))
+                  ;; Log success
+                  (js/console.log "[wikidata] Created page from Wikidata:" label
+                                  "\n  Class:" class-title
+                                  "\n  Has image:" (boolean image)
+                                  "\n  Properties available:" (count properties)))))))))))
 
 (defn- get-filter-user-input
   [input]
