@@ -66,6 +66,25 @@
 (defn- escape-shell-single [value]
   (string/replace (or value "") "'" "'\"'\"'"))
 
+(defn- export-env [k v]
+  (if (string? v)
+    (str "export " k "='" (escape-shell-single v) "'; ")
+    ""))
+
+(defn- codex-env-vars [^js env]
+  (let [codex-auth (env-str env "CODEX_AUTH_TOKEN")
+        codex-auth-json (env-str env "SPRITES_CODEX_AUTH_JSON")
+        openai (or (env-str env "OPENAI_API_KEY")
+                   (env-str env "CODEX_API_KEY")
+                   codex-auth)
+        codex (or (env-str env "CODEX_API_KEY")
+                  (env-str env "OPENAI_API_KEY")
+                  codex-auth)]
+    {:openai openai
+     :codex codex
+     :codex-auth codex-auth
+     :codex-auth-json codex-auth-json}))
+
 (defn- curl-auth-arg [token]
   ;; token may be nil in --no-token mode
   (if (string? token)
@@ -225,12 +244,22 @@
 ;; -----------------------
 
 (defn- <sprite-bootstrap! [^js env sprite-name port]
-  (let [bootstrap (or (env-str env "SPRITES_BOOTSTRAP_COMMAND")
+  (let [{:keys [openai codex codex-auth codex-auth-json]} (codex-env-vars env)
+        exports (str (export-env "CODEX_AUTH_TOKEN" codex-auth)
+                     (export-env "OPENAI_API_KEY" openai)
+                     (export-env "CODEX_API_KEY" codex)
+                     (export-env "SPRITES_CODEX_AUTH_JSON" codex-auth-json))
+        write-auth (str "if [ -n \"$SPRITES_CODEX_AUTH_JSON\" ]; then "
+                        "mkdir -p ~/.codex; "
+                        "printf \"%s\" \"$SPRITES_CODEX_AUTH_JSON\" | base64 -d > ~/.codex/auth.json; "
+                        "fi; ")
+        bootstrap (or (env-str env "SPRITES_BOOTSTRAP_COMMAND")
                       (str "command -v sandbox-agent >/dev/null 2>&1 || "
                            "(curl -fsSL https://releases.rivet.dev/sandbox-agent/latest/install.sh | sh); "
+                           write-auth
                            "nohup sandbox-agent server --no-token --host 0.0.0.0 --port " port
                            " >/tmp/sandbox-agent.log 2>&1 &"))]
-    (sprites-exec-post! env sprite-name ["bash" "-lc" bootstrap])))
+    (sprites-exec-post! env sprite-name ["bash" "-lc" (str exports bootstrap)])))
 
 (defn- <sprite-health! [^js env sprite-name port agent-token retries interval-ms]
   (if (<= retries 0)
@@ -264,6 +293,7 @@
                     (curl-json-arg payload)
                     " "
                     (sprite-local-url port (str "/v1/sessions/" session-id)))]
+    (prn :debug :script script)
     (p/let [result (sprites-exec-post! env sprite-name ["bash" "-lc" script])
             stdout (or (:stdout result) "")
             parsed (parse-json-safe stdout)]
