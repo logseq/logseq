@@ -45,8 +45,8 @@
     (is (nil? (runtime-provider/repo-clone-command #js {} "sess-1" {})))))
 
 (deftest session-payload-test
-  (testing "defaults permission mode to read-write"
-    (is (= "read-write"
+  (testing "defaults permission mode to default"
+    (is (= "default"
            (:permissionMode (runtime-provider/session-payload {:agent "codex"})))))
 
   (testing "keeps explicit permission mode"

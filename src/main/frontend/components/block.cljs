@@ -10,6 +10,7 @@
             [datascript.impl.entity :as e]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
+            [frontend.components.agent-chat :as agent-chat]
             [frontend.components.block.macros :as block-macros]
             [frontend.components.icon :as icon-component]
             [frontend.components.lazy-editor :as lazy-editor]
@@ -2539,7 +2540,7 @@
           status-label (agent-status-label status)
           status-class (agent-status-class status)
           running? (contains? #{"running" "paused"} status)
-          btn-title (if ready? "Start agent session" "Set Project + Agent + Git Repo")]
+          btn-title (if ready? "Check agent session" "Set Project + Agent + Git Repo")]
       [:div.flex.flex-row.items-center.gap-1
        (when status-label
          [:span.text-xs.font-medium {:class status-class} status-label])
@@ -2548,13 +2549,11 @@
          :size :sm
          :class "text-xs h-6 !px-2"
          :title btn-title
-         :disabled (or (not ready?) running?)
+         :disabled (not ready?)
          :on-click (fn [e]
                      (util/stop e)
-                     (-> (agent-handler/<start-session! block)
-                         (p/catch (fn [error]
-                                    (log/error :agent/start-session-failed error)))))}
-        (if running? "Running" "Run agent"))])))
+                     (agent-chat/open-agent-chat-dialog! block))}
+        (if running? "Running" "Check"))])))
 
 (rum/defc ^:large-vars/cleanup-todo block-content < rum/reactive
   [config {:block/keys [uuid] :as block} edit-input-id block-id *show-query?]

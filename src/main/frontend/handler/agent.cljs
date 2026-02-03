@@ -2,6 +2,7 @@
   "Agent sessions for tasks."
   (:require [clojure.string :as string]
             [frontend.db :as db]
+            [frontend.handler.agent-ui :as agent-ui]
             [frontend.handler.db-based.sync :as db-sync]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
@@ -99,6 +100,18 @@
        :project project
        :agent agent})))
 
+(def ^:private stream-reconnect-delay-ms 1500)
+
+(defn- session-key [block-uuid]
+  (some-> block-uuid str))
+
+(defn- auth-headers []
+  (when-let [token (state/get-auth-id-token)]
+    {"authorization" (str "Bearer " token)}))
+
+(defn- session-stream-url [base session-id]
+  (str base "/sessions/" session-id "/stream"))
+
 (def ^:private session-status->task-status
   {"created" :logseq.property/status.todo
    "running" :logseq.property/status.doing
@@ -122,17 +135,198 @@
         (when (and desired (not= current desired))
           (property-handler/set-block-property! block-uuid :logseq.property/status status-ident))))))
 
-(defn- update-session-state!
-  [block-uuid data]
+(defn- update-session!
+  [block-uuid f]
   (state/update-state! :agent/sessions
                        (fn [sessions]
-                         (update sessions (str block-uuid) merge data))))
+                         (let [key (session-key block-uuid)
+                               session (get sessions key {})]
+                           (assoc sessions key (f session))))))
+
+(defn- update-session-state!
+  [block-uuid data]
+  (update-session! block-uuid #(merge % data)))
+
+(defn- event->status [event]
+  (case (:type event)
+    "session.created" "created"
+    "session.running" "running"
+    "session.paused" "paused"
+    "session.completed" "completed"
+    "session.failed" "failed"
+    "session.canceled" "canceled"
+    nil))
+
+(defn- merge-events [session events]
+  (let [existing-ids (or (:event-ids session) #{})
+        [new-events new-ids] (reduce (fn [[acc ids] event]
+                                       (let [event-id (:event-id event)]
+                                         (if (and (string? event-id) (contains? ids event-id))
+                                           [acc ids]
+                                           [(conj acc event) (if (string? event-id) (conj ids event-id) ids)])))
+                                     [[] existing-ids]
+                                     events)
+        last-ts (reduce (fn [acc event]
+                          (max acc (or (:ts event) 0)))
+                        (or (:last-event-ts session) 0)
+                        new-events)]
+    (cond-> session
+      (seq new-events)
+      (-> (update :events (fnil into []) new-events)
+          (assoc :event-ids new-ids
+                 :last-event-ts last-ts)))))
+
+(defn- append-events!
+  [block-uuid events]
+  (update-session! block-uuid #(merge-events % events)))
+
+(defn- parse-sse-frame [frame]
+  (let [lines (string/split frame #"\n")
+        data-lines (keep (fn [line]
+                           (when (string/starts-with? line "data:")
+                             (string/trim (subs line 5))))
+                         lines)
+        payload (string/join "\n" data-lines)]
+    (when (seq payload)
+      (try
+        (js->clj (js/JSON.parse payload) :keywordize-keys true)
+        (catch :default _
+          {:raw payload})))))
+
+(defn- split-sse-frames [buffer]
+  (loop [remaining buffer
+         frames []]
+    (let [idx (.indexOf ^string remaining "\n\n")]
+      (if (neg? idx)
+        [frames remaining]
+        (let [frame (subs remaining 0 idx)
+              rest (subs remaining (+ idx 2))]
+          (recur rest (conj frames frame)))))))
 
 (defn- message-body
   [content]
   (when-let [message (blank->nil content)]
     {:message message
      :kind "user"}))
+
+(defn- session-state [block-uuid]
+  (get (state/sub :agent/sessions) (session-key block-uuid)))
+
+(defn- session-terminal? [block-uuid]
+  (terminal-status? (:status (session-state block-uuid))))
+
+(defn- stream-controller [block-uuid]
+  (get-in (session-state block-uuid) [:stream-controller]))
+
+(defn- stop-session-stream! [block-uuid]
+  (when-let [controller (stream-controller block-uuid)]
+    (.abort controller)))
+
+(defn- handle-stream-event!
+  [block-uuid event]
+  (append-events! block-uuid [event])
+  (agent-ui/handle-ui-event! block-uuid event)
+  (when-let [status (event->status event)]
+    (update-session-state! block-uuid {:status status})
+    (maybe-update-task-status! block-uuid status)
+    (when (terminal-status? status)
+      (stop-session-stream! block-uuid))))
+
+(defn- <consume-sse-stream!
+  [block-uuid resp]
+  (let [reader (.getReader (.-body resp))
+        decoder (js/TextDecoder.)
+        buffer (atom "")]
+    (letfn [(step []
+              (p/let [result (.read reader)]
+                (if (.-done result)
+                  nil
+                  (let [chunk (.decode decoder (.-value result) #js {:stream true})
+                        chunk (string/replace chunk #"\r\n" "\n")
+                        merged (str @buffer chunk)
+                        [frames remainder] (split-sse-frames merged)]
+                    (reset! buffer remainder)
+                    (doseq [frame frames]
+                      (when-let [event (parse-sse-frame frame)]
+                        (handle-stream-event! block-uuid event)))
+                    (step)))))]
+      (step))))
+
+(declare schedule-reconnect!)
+(defn- <connect-session-stream!
+  [block-uuid stream-url]
+  (when (string? stream-url)
+    (let [controller (js/AbortController.)
+          headers (auth-headers)
+          opts (cond-> {:method "GET"
+                        :signal (.-signal controller)}
+                 headers (assoc :headers headers))]
+      (update-session-state! block-uuid {:streaming? true
+                                         :stream-error nil
+                                         :stream-controller controller})
+      (-> (p/let [resp (js/fetch stream-url (clj->js opts))]
+            (if-not (.-ok resp)
+              (throw (ex-info "agent session stream failed"
+                              {:status (.-status resp)
+                               :stream-url stream-url}))
+              (<consume-sse-stream! block-uuid resp)))
+          (p/then (fn [_]
+                    (update-session-state! block-uuid {:streaming? false})))
+          (p/catch (fn [error]
+                     (if (.-aborted (.-signal controller))
+                       (update-session-state! block-uuid {:streaming? false})
+                       (do
+                         (update-session-state! block-uuid {:streaming? false
+                                                            :stream-error (str error)})
+                         (schedule-reconnect! block-uuid stream-url)))))))))
+
+(defn- schedule-reconnect!
+  [block-uuid stream-url]
+  (js/setTimeout
+   (fn []
+     (when-not (session-terminal? block-uuid)
+       (when-not (:streaming? (session-state block-uuid))
+         (<connect-session-stream! block-uuid stream-url))))
+   stream-reconnect-delay-ms))
+
+(defn <ensure-session!
+  [block]
+  (let [block-uuid (:block/uuid block)
+        base (db-sync/http-base)
+        session-id (some-> block-uuid str)
+        session (session-state block-uuid)]
+    (when (and base session-id (task-ready? block))
+      (cond
+        (:loading? session)
+        (p/resolved nil)
+
+        (:session-id session)
+        (do
+          (when-not (:streaming? session)
+            (<connect-session-stream! block-uuid (or (:stream-url session)
+                                                     (session-stream-url base session-id))))
+          (p/resolved session))
+
+        :else
+        (do
+          (update-session-state! block-uuid {:loading? true})
+          (-> (p/let [resp (db-sync/fetch-json (str base "/sessions/" session-id)
+                                               {:method "GET"}
+                                               {:response-schema :sessions/get})
+                      stream-url (session-stream-url base session-id)]
+                (update-session-state! block-uuid {:session-id session-id
+                                                   :status (:status resp)
+                                                   :stream-url stream-url
+                                                   :loading? false})
+                (maybe-update-task-status! block-uuid (:status resp))
+                (<connect-session-stream! block-uuid stream-url)
+                resp)
+              (p/catch (fn [error]
+                         (update-session-state! block-uuid {:loading? false})
+                         (let [status (:status (ex-data error))]
+                           (when-not (= status 404)
+                             (log/error :agent/ensure-session-failed error)))
+                         nil))))))))
 
 (defn <start-session!
   [block]
@@ -177,4 +371,5 @@
                                                :status status
                                                :stream-url stream-url
                                                :started-at (util/time-ms)})
+            (<connect-session-stream! block-uuid stream-url)
             resp))))))

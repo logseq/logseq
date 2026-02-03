@@ -53,7 +53,7 @@
       "task"
       (subs sanitized 0 (min 63 (count sanitized))))))
 
-(defn- sprite-name [^js env session-id]
+(defn- get-sprite-name [^js env session-id]
   (let [prefix (or (env-str env "SPRITES_NAME_PREFIX") "logseq-task-")]
     (sanitize-name (str prefix session-id))))
 
@@ -156,7 +156,6 @@
         token (sprites-token env)
         q (build-query (map (fn [c] [:cmd c]) cmd-vec))
         url (sprites-http-url base (str "/v1/sprites/" sprite-name "/exec?" q))]
-    (prn :debug :post url)
     (fetch-json! "POST" url {:token token})))
 
 ;; -----------------------
@@ -257,15 +256,27 @@
     (str "mkdir -p ~/.codex; "
          "printf \"%s\" \"" encoded "\" | base64 -d > ~/.codex/auth.json; ")))
 
-(defn- <sprite-bootstrap! [^js env sprite-name port task]
+(defn- get-repo-dir [session-id]
+  (let [session-id (some-> session-id str)]
+    (when (string? session-id)
+      (str default-repo-base-dir "/" (sanitize-name session-id)))))
+
+(defn- repo-cd-command
+  [session-id]
+  (when-let [dir (get-repo-dir session-id)]
+    (str "cd '" (escape-shell-single dir) "'")))
+
+(defn- <sprite-bootstrap! [^js env sprite-name port task session-id]
   (let [auth-json (get-in task [:agent :auth-json])
         write-auth (or (auth-json-write-command auth-json) "")
+        repo-cd (or (repo-cd-command session-id) "")
         bootstrap (or (env-str env "SPRITES_BOOTSTRAP_COMMAND")
                       (str "command -v sandbox-agent >/dev/null 2>&1 || "
                            "(curl -fsSL https://releases.rivet.dev/sandbox-agent/latest/install.sh | sh); "
                            write-auth
+                           (when (string? repo-cd) (str repo-cd "; "))
                            "nohup sandbox-agent server --no-token --host 0.0.0.0 --port " port
-                           " >/tmp/sandbox-agent.log 2>&1 &"))]
+                           " --no-telemetry >/tmp/sandbox-agent.log 2>&1 &"))]
     (sprites-exec-post! env sprite-name ["bash" "-lc" bootstrap])))
 
 (defn- <sprite-health! [^js env sprite-name port agent-token retries interval-ms]
@@ -286,11 +297,6 @@
 (defn- task-repo-url [task]
   (some-> (get-in task [:project :repo-url]) str string/trim not-empty))
 
-(defn- repo-dir [session-id]
-  (let [session-id (some-> session-id str)]
-    (when (string? session-id)
-      (str default-repo-base-dir "/" (sanitize-name session-id)))))
-
 (defn- fill-repo-template
   [template {:keys [repo-url session-id repo-dir]}]
   (-> (or template "")
@@ -302,7 +308,7 @@
   [^js env session-id task]
   (let [repo-url (task-repo-url task)
         session-id (some-> session-id str)
-        repo-dir (repo-dir session-id)
+        repo-dir (get-repo-dir session-id)
         override (env-str env "SPRITES_REPO_CLONE_COMMAND")]
     (when (and (string? repo-url) (string? session-id) (string? repo-dir))
       (if (string? override)
@@ -326,23 +332,37 @@
                     "build")
      :permissionMode (or (get-in task [:agent :permission-mode])
                          (get-in task [:agent :permissionMode])
-                         "read-write")}))
+                         "default")}))
 
 (defn- <sprite-create-session! [^js env sprite-name port agent-token session-id payload]
-  (let [script (str "curl -fsS -X POST -H 'content-type: application/json' "
-                    (curl-auth-arg agent-token)
-                    " "
+  (let [script (str "resp=$(curl -sS -w '\\n%{http_code}' -X POST -H 'content-type: application/json' "
+                    (if agent-token
+                      (str (curl-auth-arg agent-token) " ")
+                      "")
                     (curl-json-arg payload)
                     " "
-                    (sprite-local-url port (str "/v1/sessions/" session-id)))]
-    (prn :debug :script script)
+                    (sprite-local-url port (str "/v1/sessions/" session-id)) "); "
+                    "status=$(echo \"$resp\" | tail -n1); "
+                    "body=$(echo \"$resp\" | sed '$d'); "
+                    "printf \"%s\" \"$body\"; "
+                    "printf \"STATUS:%s\" \"$status\" 1>&2")]
+    (println :debug :script script)
     (p/let [result (sprites-exec-post! env sprite-name ["bash" "-lc" script])
             stdout (or (:stdout result) "")
+            stderr (or (:stderr result) "")
+            status (some-> (re-find #"STATUS:(\\d+)" stderr)
+                           second
+                           (parse-int 400))
             parsed (parse-json-safe stdout)]
+      (when (and (number? status) (not (<= 200 status 299)))
+        (throw (ex-info "sandbox-agent create-session failed"
+                        {:status status
+                         :body parsed
+                         :raw-body stdout
+                         :stderr stderr})))
       (assoc parsed :session-id session-id))))
 
 (defn- <sprite-clone-repo! [^js env sprite-name session-id task]
-  (prn :debug :cmd (repo-clone-command env session-id task))
   (when-let [cmd (repo-clone-command env session-id task)]
     (sprites-exec-post! env sprite-name ["bash" "-lc" cmd])))
 
@@ -359,15 +379,15 @@
   RuntimeProvider
 
   (<provision-runtime! [_ session-id task]
-    (let [name (sprite-name env session-id)
+    (let [name (get-sprite-name env session-id)
           port (parse-int (env-str env "SPRITES_SANDBOX_AGENT_PORT") 2468)
           agent-token (env-str env "SANDBOX_AGENT_TOKEN") ;; may be nil if --no-token
           health-retries (parse-int (env-str env "SPRITES_HEALTH_RETRIES") 120)
           health-interval-ms (parse-int (env-str env "SPRITES_HEALTH_INTERVAL_MS") 500)]
       (p/let [_ (sprites-create-or-get! env name)
-              _ (<sprite-bootstrap! env name port task)
-              _ (<sprite-health! env name port agent-token health-retries health-interval-ms)
               _ (<sprite-clone-repo! env name session-id task)
+              _ (<sprite-bootstrap! env name port task session-id)
+              _ (<sprite-health! env name port agent-token health-retries health-interval-ms)
               payload (session-payload task)
               response (<sprite-create-session! env name port agent-token session-id payload)]
         {:provider "sprites"
@@ -395,7 +415,6 @@
                         (curl-json-arg {:message (:message message)})
                         " "
                         (sprite-local-url port (str "/v1/sessions/" (:session-id runtime) "/messages/stream")))]
-        (prn :debug :message message)
         (sprites-ws->sse-response! env name ["bash" "-lc" script]))))
 
   (<terminate-runtime! [_ runtime]

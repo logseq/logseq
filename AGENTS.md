@@ -38,3 +38,4 @@
 - New properties should be added to `logseq.db.frontend.property/built-in-properties`.
 - Avoid creating new class or property unless you have to.
 - Create db migration when adding new properties/classes.
+- Cljs doesn't support "text-[10px]" directly, you need add it to `:class`.
