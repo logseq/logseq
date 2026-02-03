@@ -20,6 +20,6 @@
                   :compression compression}]
     (p/let [zip-blob (.generateAsync zip opts
                                      (when progress-fn
-                                       (fn [metadata]
+                                       (fn [^js metadata]
                                          (progress-fn (.-percent metadata)))))]
       (make-file zip-blob (str zip-filename ".zip") {:type "application/zip"}))))

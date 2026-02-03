@@ -39,7 +39,17 @@
 
      :logseq.class/Task
      {:title "Task"
-      :schema {:properties [:logseq.property/status :logseq.property/priority :logseq.property/deadline :logseq.property/scheduled]}}
+      :schema {:properties [:logseq.property/status :logseq.property/priority :logseq.property/deadline
+                            :logseq.property/scheduled :logseq.property/project :logseq.property/agent]}}
+
+     :logseq.class/Project
+     {:title "Project"
+      :schema {:properties [:logseq.property/git-repo]
+               :required-properties [:logseq.property/git-repo]}}
+
+     :logseq.class/Agent
+     {:title "Agent"
+      :schema {:properties [:logseq.property/agent-api-token :logseq.property/agent-auth-json]}}
 
      :logseq.class/Query
      {:title "Query"

@@ -9,5 +9,6 @@
                :source {:node-id (:node-id body)
                         :node-title (:node-title body)}
                :intent {:content (:content body)}
+               :project (:project body)
                :agent (:agent body)}
         (some? attachments) (assoc-in [:intent :attachments] attachments)))))

@@ -37,3 +37,4 @@
 - DB-sync protocol reference: `docs/agent-guide/db-sync/protocol.md`.
 - New properties should be added to `logseq.db.frontend.property/built-in-properties`.
 - Avoid creating new class or property unless you have to.
+- Create db migration when adding new properties/classes.

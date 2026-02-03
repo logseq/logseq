@@ -207,7 +207,11 @@
 
                      :else
                      (let [session (session/initial-session task audit now)
-                           [session events _event] (session/append-event session [] {:type "session.created" :data {:requested-by user-id} :ts now})]
+                           [session events _event] (session/append-event session [] {:type "session.created"
+                                                                                     :data {:requested-by user-id
+                                                                                            :project (:project task)
+                                                                                            :agent (:agent task)}
+                                                                                     :ts now})]
                        (p/let [_ (<put-session! self session)
                                _ (<put-events! self events)
                                _ (<provision-runtime! self task task-id)]

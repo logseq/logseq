@@ -10,6 +10,9 @@
                 :node-title "Title"
                 :content "Hello"
                 :attachments ["https://example.com/a.png"]
+                :project {:id "project-1"
+                          :title "Demo Project"
+                          :repo-url "https://github.com/example/repo"}
                 :agent "codex"}
           coerced (http/coerce-http-request :sessions/create body)]
       (is (= body coerced))))
@@ -23,7 +26,12 @@
                 :node-title "Title"
                 :content "Hello"
                 :attachments ["https://example.com/a.png" "https://example.com/b.png"]
-                :agent {:provider "codex"}}
+                :project {:id "project-1"
+                          :title "Demo Project"
+                          :repo-url "https://github.com/example/repo"}
+                :agent {:provider "codex"
+                        :api-token "token-123"
+                        :auth-json "{\"tokens\":{\"access_token\":\"abc\"}}"}}
           normalized (request/normalize-session-create body)]
       (is (= {:id "sess-1"
               :source {:node-id "node-1"
@@ -31,5 +39,10 @@
               :intent {:content "Hello"
                        :attachments ["https://example.com/a.png"
                                      "https://example.com/b.png"]}
-              :agent {:provider "codex"}}
+              :project {:id "project-1"
+                        :title "Demo Project"
+                        :repo-url "https://github.com/example/repo"}
+              :agent {:provider "codex"
+                      :api-token "token-123"
+                      :auth-json "{\"tokens\":{\"access_token\":\"abc\"}}"}}
              normalized)))))

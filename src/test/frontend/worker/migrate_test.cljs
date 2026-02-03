@@ -3,7 +3,8 @@
             [cljs.test :refer [deftest is]]
             [datascript.core :as d]
             [frontend.worker.db.migrate :as db-migrate]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.db.test.helper :as db-test]))
 
 (deftest ensure-built-in-data-exists!
   (let [db-transit (str (fs-node/readFileSync "src/test/migration/64.8.transit"))
@@ -20,3 +21,23 @@
     (is (= graph-created-at
            (:kv/value (d/entity @conn :logseq.kv/graph-created-at)))
         "Graph created at not changed by fn")))
+
+(deftest migrate-adds-project-agent-builtins
+  (let [conn (db-test/create-conn)
+        _ (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                              :kv/value {:major 65 :minor 22}}])
+        remove-idents [:logseq.class/Project
+                       :logseq.class/Agent
+                       :logseq.property/project
+                       :logseq.property/git-repo
+                       :logseq.property/agent-api-token
+                       :logseq.property/agent-auth-json]
+        _ (doseq [ident remove-idents
+                  :let [eid (d/entid @conn ident)]
+                  :when eid]
+            (d/transact! conn [[:db/retractEntity eid]]))
+        _ (db-migrate/migrate conn :target-version "65.23")]
+    (is (= {:major 65 :minor 23}
+           (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+    (doseq [ident remove-idents]
+      (is (some? (d/entity @conn ident))))))

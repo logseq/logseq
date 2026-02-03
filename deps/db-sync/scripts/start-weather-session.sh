@@ -13,6 +13,11 @@ create_payload() {
   "node-title": "Check weather in Hangzhou",
   "content": "Tell me the weather today in Hangzhou.",
   "attachments": [],
+  "project": {
+    "id": "project-weather",
+    "title": "Weather Demo",
+    "repo-url": "https://github.com/logseq/logseq"
+  },
   "agent": {
     "provider": "codex",
     "mode": "build",

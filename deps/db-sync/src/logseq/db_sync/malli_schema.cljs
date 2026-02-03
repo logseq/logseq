@@ -224,7 +224,17 @@
    [:node-title :string]
    [:content :string]
    [:attachments [:sequential :string]]
-   [:agent [:or :string :map]]])
+   [:project [:map
+              [:id :string]
+              [:title :string]
+              [:repo-url :string]]]
+   [:agent [:or :string
+            [:map
+             [:provider {:optional true} :string]
+             [:mode {:optional true} :string]
+             [:permission-mode {:optional true} :string]
+             [:api-token {:optional true} :string]
+             [:auth-json {:optional true} :string]]]]])
 
 (def sessions-message-request-schema
   [:map

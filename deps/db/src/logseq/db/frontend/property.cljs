@@ -406,7 +406,37 @@
       :schema {:type :property
                :hide? true}}
 
-     ;; TODO: Add more props :Assignee, :Estimate, :Cycle, :Project
+     ;; TODO: Add more props :Assignee, :Estimate, :Cycle
+
+     :logseq.property/project
+     {:title "Project"
+      :schema {:type :page
+               :public? true
+               :classes #{:logseq.class/Project}}
+      :queryable? true}
+     :logseq.property/agent
+     {:title "Agent"
+      :schema {:type :page
+               :public? true
+               :classes #{:logseq.class/Agent}}
+      :queryable? true}
+     :logseq.property/git-repo
+     {:title "Git Repo"
+      :schema {:type :url
+               :public? true
+               :view-context :page}
+      :queryable? true}
+     :logseq.property/agent-api-token
+     {:title "API Token"
+      :schema {:type :string
+               :public? true
+               :view-context :page}}
+     :logseq.property/agent-auth-json
+     {:title "auth.json"
+      :schema {:type :string
+               :public? true
+               :view-context :page}
+      :properties {:logseq.property/description "Store a text block with the auth.json content."}}
 
      :logseq.property/icon {:title "Icon"
                             :schema {:type :map}}
