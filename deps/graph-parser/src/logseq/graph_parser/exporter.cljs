@@ -1205,8 +1205,7 @@
           :logseq.property.asset/size (:size asset-data)}
          (when-let [external-url (:external-url asset-data)]
            {:logseq.property.asset/external-url external-url
-            :logseq.property.asset/external-file-name (:external-file-name asset-data)
-            :logseq.property.asset/external-props (:external-props asset-data)})))
+            :logseq.property.asset/external-file-name (:external-file-name asset-data)})))
 
 (defn- get-asset-block-id
   [assets path]
