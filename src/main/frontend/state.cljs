@@ -292,6 +292,7 @@
       :rtc/online-info                       (atom {})
       :rtc/asset-upload-download-progress    (atom {})
       :rtc/users-info                        (atom {})
+      :agent/sessions                        (atom {})
 
       :user/info                             {:UserGroups (storage/get :user-groups)}
       :encryption/graph-parsing?             false

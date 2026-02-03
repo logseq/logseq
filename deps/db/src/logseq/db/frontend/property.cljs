@@ -419,6 +419,13 @@
       :schema {:type :page
                :public? true
                :classes #{:logseq.class/Agent}}
+      :closed-values
+      (mapv (fn [[db-ident value]]
+              {:db-ident db-ident
+               :value value
+               :uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)})
+            [[:logseq.property/agent.codex "Codex"]
+             [:logseq.property/agent.claude-code "Claude Code"]])
       :queryable? true}
      :logseq.property/git-repo
      {:title "Git Repo"

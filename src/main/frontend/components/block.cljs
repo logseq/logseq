@@ -39,6 +39,7 @@
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
             [frontend.fs :as fs]
+            [frontend.handler.agent :as agent-handler]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.block :as block-handler]
             [frontend.handler.db-based.property :as db-property-handler]
@@ -71,6 +72,7 @@
             [goog.dom :as gdom]
             [goog.functions :refer [debounce]]
             [goog.object :as gobj]
+            [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
@@ -2509,6 +2511,51 @@
                                          {:align :end}))}
           (clock/seconds->days:hours:minutes:seconds time-spent))]))))
 
+(defn- agent-status-class
+  [status]
+  (case status
+    "running" "text-emerald-600"
+    "paused" "text-amber-600"
+    "failed" "text-red-600"
+    "canceled" "text-red-600"
+    "completed" "text-emerald-700"
+    "created" "text-muted-foreground"
+    "text-muted-foreground"))
+
+(defn- agent-status-label
+  [status]
+  (when (string? status)
+    (-> status
+        (string/replace "-" " ")
+        (string/capitalize))))
+
+(rum/defc task-agent-session-cp < rum/reactive
+  [block]
+  (when (ldb/class-instance? (db/entity :logseq.class/Task) block)
+    (let [sessions (state/sub :agent/sessions)
+          session (get sessions (str (:block/uuid block)))
+          status (:status session)
+          ready? (agent-handler/task-ready? block)
+          status-label (agent-status-label status)
+          status-class (agent-status-class status)
+          running? (contains? #{"running" "paused"} status)
+          btn-title (if ready? "Start agent session" "Set Project + Agent + Git Repo")]
+      [:div.flex.flex-row.items-center.gap-1
+       (when status-label
+         [:span.text-xs.font-medium {:class status-class} status-label])
+       (shui/button
+        {:variant :ghost
+         :size :sm
+         :class "text-xs h-6 !px-2"
+         :title btn-title
+         :disabled (or (not ready?) running?)
+         :on-click (fn [e]
+                     (util/stop e)
+                     (-> (agent-handler/<start-session! block)
+                         (p/catch (fn [error]
+                                    (log/error :agent/start-session-failed error)))))}
+        (if running? "Running" "Run agent"))])))
+
 (rum/defc ^:large-vars/cleanup-todo block-content < rum/reactive
   [config {:block/keys [uuid] :as block} edit-input-id block-id *show-query?]
   (let [repo (state/get-current-repo)
@@ -2585,8 +2632,9 @@
        (when-not plugin-slotted?
          [:div.block-head-wrap
           (block-title config block {:*show-query? *show-query?})])
-
-       (task-spent-time-cp block)]
+       [:div.flex.flex-row.items-center.gap-1
+        (task-agent-session-cp block)
+        (task-spent-time-cp block)]]
 
       (block-content-inner config block ast-body plugin-slotted? collapsed? block-ref-with-title?)
 
