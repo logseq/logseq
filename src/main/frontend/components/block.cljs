@@ -3079,7 +3079,14 @@
                                                                           :logseq.property.class/default-icon)))))
                                                       :del-btn? (boolean icon')
                                                       :page-title (:block/title block)
-                                                      :icon-props {:style {:width "1lh"
+                                                      :button-opts (when (:page-title? config)
+                                                                     {:size nil  ;; Override :sm size
+                                                                      :class "!p-0.5 !h-auto !w-auto"})
+                                                      :icon-props {:size (cond
+                                                                           (and (util/mobile?) (:page-title? config)) 28
+                                                                           (:page-title? config) 38
+                                                                           :else 20)
+                                                                   :style {:width "1lh"
                                                                            :height "1lh"
                                                                            :font-size (cond
                                                                                         (and (util/mobile?) (:page-title? config)) 24

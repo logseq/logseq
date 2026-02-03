@@ -217,7 +217,8 @@
          :loading "lazy"
          :style {:width "100%"
                  :height "100%"
-                 :object-fit "contain"}}]]
+                 :object-fit "contain"
+                 :display "block"}}]]
 
       :else
       [:span.ui__icon.image-icon.bg-gray-04.animate-pulse
@@ -246,6 +247,8 @@
    Uses shui/avatar for circular display with object-fit: cover."
   [state _asset-uuid _asset-type avatar-data opts]
   (let [url @(::url state)
+        ;; Size from opts, default to 20px
+        size (or (:size opts) 20)
         ;; Fallback data from avatar
         avatar-value (get avatar-data :value "")
         backgroundColor (or (get avatar-data :backgroundColor)
@@ -254,9 +257,14 @@
                   (colors/variable :gray :09))
         display-text (subs avatar-value 0 (min 3 (count avatar-value)))
         bg-color-rgba (convert-bg-color-to-rgba backgroundColor)
-        font-size (if (<= (:size opts 20) 16) "8px" "14px")]
+        ;; Scale font-size with avatar size
+        font-size (cond
+                    (<= size 16) "8px"
+                    (<= size 24) "10px"
+                    (<= size 32) "12px"
+                    :else "14px")]
     (shui/avatar
-     {:class "w-5 h-5"}
+     {:style {:width size :height size}}
      ;; Image (shows when loaded, circular with cover fit)
      (when url
        (shui/avatar-image {:src url
@@ -291,9 +299,13 @@
                      display-text (if (> (count text-value) 8)
                                     (subs text-value 0 8)
                                     text-value)
-                     ;; Sidebar (:size 16) uses 10px font, page title uses 14px font
-                     sidebar? (= (:size opts) 16)
-                     font-size (if sidebar? "10px" "14px")]
+                     size (or (:size opts) 20)
+                     ;; Scale font-size with icon size
+                     font-size (cond
+                                 (<= size 16) "10px"
+                                 (<= size 24) "12px"
+                                 (<= size 32) "14px"
+                                 :else "16px")]
                  [:span.inline-flex.items-center.justify-center.flex-shrink-0
                   [:span.font-medium.text-center.whitespace-nowrap
                    {:style (cond-> {:font-size font-size}
@@ -308,16 +320,22 @@
                    ;; Avatar with image - use async loading component
                    (avatar-image-cp asset-uuid asset-type avatar-data opts)
                    ;; Text-only avatar
-                   (let [avatar-value (get avatar-data :value)
+                   (let [size (or (:size opts) 20)
+                         avatar-value (get avatar-data :value)
                          backgroundColor (or (get avatar-data :backgroundColor)
                                              (colors/variable :gray :09))
                          color (or (get avatar-data :color)
                                    (colors/variable :gray :09))
                          display-text (subs avatar-value 0 (min 3 (count avatar-value)))
                          bg-color-rgba (convert-bg-color-to-rgba backgroundColor)
-                         font-size (if (<= (:size opts 20) 16) "8px" "14px")]
+                         ;; Scale font-size with avatar size
+                         font-size (cond
+                                     (<= size 16) "8px"
+                                     (<= size 24) "10px"
+                                     (<= size 32) "12px"
+                                     :else "14px")]
                      (shui/avatar
-                      {:class "w-5 h-5"}
+                      {:style {:width size :height size}}
                       (shui/avatar-fallback
                        {:style {:background-color bg-color-rgba
                                 :font-size font-size

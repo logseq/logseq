@@ -1101,35 +1101,8 @@ html.is-mac {
   color: var(--rx-gray-09);
 }
 
-.ls-page-title .ls-page-icon svg, .ls-page-title .ls-page-icon button {
-  width: 38px;
-  height: 38px;
-}
-
-/* Image icons in page title - fill the button like avatars do */
-.ls-page-title .ls-page-icon .image-icon {
-  width: 2rem !important; /* 32px, matching avatar size */
-  height: 2rem !important;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.ls-page-title .ls-page-icon .image-icon img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-/* Scale up avatars in page title context */
-.ls-page-title .ls-page-icon .ui__avatar {
-  width: 2rem; /* 32px */
-  height: 2rem;
-}
-
-.ls-page-title .ls-page-icon .ui__avatar span {
-  font-size: 14px; /* Slightly larger font for larger avatar */
-}
+/* Page title icon sizing is controlled via inline styles in block.cljs icon-props */
+/* This ensures consistent sizing across avatar, image, emoji, and tabler icons */
 
 .ls-page-title .positioned-properties.block-left svg,
 .ls-page-title .positioned-properties.block-right svg {
