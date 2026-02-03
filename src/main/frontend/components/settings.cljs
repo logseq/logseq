@@ -910,6 +910,7 @@
 (rum/defc settings-rtc-members
   []
   (let [[invite-email set-invite-email!] (hooks/use-state "")
+        [loading? set-loading!] (hooks/use-state true)
         current-repo (state/get-current-repo)
         [users-info] (hooks/use-atom (:rtc/users-info @state/state))
         users (get users-info current-repo)
@@ -919,7 +920,10 @@
                            (when graph-uuid
                              (rtc-handler/<rtc-invite-email graph-uuid invite-email)))))]
     (hooks/use-effect!
-     #(c.m/run-task* (m/sp (c.m/<? (rtc-handler/<rtc-get-users-info))))
+     #(c.m/run-task*
+       (m/sp
+        (c.m/<? (rtc-handler/<rtc-get-users-info))
+        (set-loading! false)))
      [])
     [:div.flex.flex-col.gap-2.mt-4
      {:on-key-press (fn [e]
@@ -927,13 +931,18 @@
                         (invite-user!)))}
      [:h2.opacity-50.font-medium "Members:"]
      [:div.users.flex.flex-col.gap-1
-      (for [{user-name :user/name
-             user-email :user/email
-             graph<->user-user-type :graph<->user/user-type} users]
-        [:div.flex.flex-row.items-center.gap-2 {:key (str "user-" user-name)}
-         [:div user-name]
-         (when user-email [:div.opacity-50.text-sm user-email])
-         (when graph<->user-user-type [:div.opacity-50.text-sm (name graph<->user-user-type)])])]
+      (if loading?
+        (for [i (range 2)]
+          [:div.flex.flex-row.items-center.gap-2.pr-4 {:key (str "skeleton-" i)}
+           (shui/skeleton {:class "h-4 w-32"})
+           (shui/skeleton {:class "h-4 w-full"})])
+        (for [{user-name :user/name
+               user-email :user/email
+               graph<->user-user-type :graph<->user/user-type} users]
+          [:div.flex.flex-row.items-center.gap-2 {:key (str "user-" user-name)}
+           [:div user-name]
+           (when user-email [:div.opacity-50.text-sm user-email])
+           (when graph<->user-user-type [:div.opacity-50.text-sm (name graph<->user-user-type)])]))]
      [:div.flex.flex-col.gap-4.mt-4
       (shui/input
        {:placeholder   "Email address"
