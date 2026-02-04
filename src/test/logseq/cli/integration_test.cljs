@@ -562,7 +562,8 @@
                                                                  :block/title "Acceptance Criteria"}}
                                     :pages-and-blocks [{:page {:block/title "PropsPage"}
                                                         :blocks [{:block/title "Property block"
-                                                                  :build/properties {property-ident "First requirement"}}]}]}
+                                                                  :build/properties {property-ident "First requirement"}}
+                                                                 {:block/title "Sibling block"}]}]}
                        wait-for-property (fn wait-for-property [attempt]
                                            (p/let [value (transport/invoke server :thread-api/q false
                                                                            [repo ['[:find ?v .
@@ -593,7 +594,7 @@
                        output (get-in show-result [:data :message])
                        stop-payload (stop-repo! data-dir cfg-path repo)]
                  (is (= :ok (:status show-result)))
-                 (is (string/includes? output "Acceptance Criteria: First requirement"))
+                 (is (string/includes? output "│   Acceptance Criteria: First requirement"))
                  (is (= "ok" (:status stop-payload)))
                  (done))
                (p/catch (fn [e]
