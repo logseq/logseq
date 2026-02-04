@@ -364,6 +364,85 @@
                   "175 └── cccc")
              (strip-ansi output))))))
 
+(deftest test-tree->text-renders-properties-single-value
+  (testing "show tree text renders user properties below block labels"
+    (let [tree->text #'show-command/tree->text
+          tree-data {:root {:db/id 1
+                            :block/title "Root"
+                            :user.property/background "Because"}
+                     :property-titles {:user.property/background "Background"}}
+          output (binding [style/*color-enabled?* true]
+                   (tree->text tree-data))]
+      (is (= (str "1 Root\n"
+                  "  Background: Because")
+             (strip-ansi output)))
+      (is (not (string/includes? output "└── Background"))))))
+
+(deftest test-tree->text-renders-properties-multi-value
+  (testing "show tree text renders multi-value properties as a list"
+    (let [tree->text #'show-command/tree->text
+          tree-data {:root {:db/id 1
+                            :block/title "Root"
+                            :user.property/criteria ["One" "Two"]}
+                     :property-titles {:user.property/criteria "Criteria"}}
+          output (binding [style/*color-enabled?* true]
+                   (tree->text tree-data))]
+      (is (= (str "1 Root\n"
+                  "  Criteria:\n"
+                  "    - One\n"
+                  "    - Two")
+             (strip-ansi output))))))
+
+(deftest test-tree->text-properties-order
+  (testing "show tree text renders user properties in stable key order"
+    (let [tree->text #'show-command/tree->text
+          tree-data {:root {:db/id 1
+                            :block/title "Root"
+                            :user.property/zeta "Last"
+                            :user.property/alpha "First"}
+                     :property-titles {:user.property/zeta "Zeta"
+                                       :user.property/alpha "Alpha"}}
+          output (strip-ansi (tree->text tree-data))
+          alpha-idx (.indexOf output "Alpha:")
+          zeta-idx (.indexOf output "Zeta:")]
+      (is (<= 0 alpha-idx))
+      (is (<= 0 zeta-idx))
+      (is (< alpha-idx zeta-idx)))))
+
+(deftest test-tree->text-properties-multiline-alignment
+  (testing "show tree text keeps multiline alignment with properties"
+    (let [tree->text #'show-command/tree->text
+          tree-data {:root {:db/id 1
+                            :block/title "Root line1\nRoot line2"
+                            :user.property/background "Root prop"
+                            :block/children [{:db/id 22
+                                              :block/title "Child line1\nChild line2"
+                                              :user.property/notes "Child prop"}]}
+                     :property-titles {:user.property/background "Background"
+                                       :user.property/notes "Notes"}}
+          output (binding [style/*color-enabled?* true]
+                   (tree->text tree-data))]
+      (is (= (str "1  Root line1\n"
+                  "   Root line2\n"
+                  "   Background: Root prop\n"
+                  "22 └── Child line1\n"
+                  "       Child line2\n"
+                  "       Notes: Child prop")
+             (strip-ansi output))))))
+
+(deftest test-tree->text-properties-dont-render-as-children
+  (testing "show tree text does not render property values as children"
+    (let [tree->text #'show-command/tree->text
+          tree-data {:root {:db/id 1
+                            :block/title "Root"
+                            :user.property/background "Child"}
+                     :property-titles {:user.property/background "Background"}}
+          output (binding [style/*color-enabled?* true]
+                   (tree->text tree-data))]
+      (is (string/includes? output "Background: Child"))
+      (is (not (string/includes? output "└── Child")))
+      (is (not (string/includes? output "├── Child"))))))
+
 (deftest test-tree->text-prefixes-status
   (testing "show tree text prefixes status before block titles"
     (let [tree->text #'show-command/tree->text
@@ -527,8 +606,11 @@
                                                                       :block/page {:db/id 2}}))
                                       :thread-api/q (let [[_ [query _]] args
                                                           pull-form (second query)
-                                                          selector (nth pull-form 2)]
-                                                      (swap! selectors conj selector)
+                                                          selector (when (and (seq? pull-form)
+                                                                              (= 'pull (first pull-form)))
+                                                                     (nth pull-form 2))]
+                                                      (when selector
+                                                        (swap! selectors conj selector))
                                                       (p/resolved []))
                                       :thread-api/get-block-refs (p/resolved [{:db/id 10}])
                                       (p/resolved nil))))
@@ -1211,6 +1293,11 @@
   (async done
          (let [ops* (atom nil)
                calls* (atom [])
+               orig-ensure-server! cli-server/ensure-server!
+               orig-resolve-tags add-command/resolve-tags
+               orig-resolve-properties add-command/resolve-properties
+               orig-resolve-property-identifiers add-command/resolve-property-identifiers
+               orig-invoke transport/invoke
                action {:type :update-block
                        :repo "demo"
                        :id 1
@@ -1220,44 +1307,49 @@
                        :remove-tags [:tag/old]
                        :update-properties {:logseq.property/deadline "2026-01-25T12:00:00Z"}
                        :remove-properties [:logseq.property/publishing-public?]}]
-           (with-redefs [cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                         add-command/resolve-tags (fn [_ _ tags]
-                                                    (p/resolved (cond
-                                                                  (= tags [:tag/new]) [{:db/id 101}]
-                                                                  (= tags [:tag/old]) [{:db/id 202}]
-                                                                  :else nil)))
-                         add-command/resolve-properties (fn [_ _ properties] (p/resolved properties))
-                         add-command/resolve-property-identifiers (fn [_ _ properties] (p/resolved properties))
-                         transport/invoke (fn [_ method _ args]
-                                            (swap! calls* conj {:method method :args args})
-                                            (case method
-                                              :thread-api/pull (let [[_ _ lookup] args]
-                                                                 (cond
-                                                                   (= lookup 1)
-                                                                   {:db/id 1
-                                                                    :block/name nil
-                                                                    :block/uuid (uuid "00000000-0000-0000-0000-000000000001")}
-                                                                   (= lookup 2)
-                                                                   {:db/id 2
-                                                                    :block/name nil
-                                                                    :block/uuid (uuid "00000000-0000-0000-0000-000000000002")}
-                                                                   :else {}))
-                                              :thread-api/apply-outliner-ops (let [[_ ops _] args]
-                                                                               (reset! ops* ops)
-                                                                               {:result :ok})
-                                              (throw (ex-info "unexpected invoke" {:method method :calls @calls*}))))]
-             (-> (p/let [result (commands/execute action {})]
-                   (is (= :ok (:status result)))
-                   (is (= [[:move-blocks [[1] 2 {:sibling? false :bottom? true}]]
-                           [:batch-delete-property-value [[1] :block/tags 202]]
-                           [:batch-remove-property [[1] :logseq.property/publishing-public?]]
-                           [:batch-set-property [[1] :block/tags 101 {}]]
-                           [:batch-set-property [[1] :logseq.property/deadline "2026-01-25T12:00:00Z" {}]]]
-                          @ops*))
-                   (done))
-                 (p/catch (fn [e]
-                            (is false (str "unexpected error: " e " calls: " @calls*))
-                            (done))))))))
+           (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
+           (set! add-command/resolve-tags (fn [_ _ tags]
+                                            (p/resolved (cond
+                                                          (= tags [:tag/new]) [{:db/id 101}]
+                                                          (= tags [:tag/old]) [{:db/id 202}]
+                                                          :else nil))))
+           (set! add-command/resolve-properties (fn [_ _ properties] (p/resolved properties)))
+           (set! add-command/resolve-property-identifiers (fn [_ _ properties] (p/resolved properties)))
+           (set! transport/invoke (fn [_ method _ args]
+                                    (swap! calls* conj {:method method :args args})
+                                    (case method
+                                      :thread-api/pull (let [[_ _ lookup] args]
+                                                         (cond
+                                                           (= lookup 1)
+                                                           {:db/id 1
+                                                            :block/name nil
+                                                            :block/uuid (uuid "00000000-0000-0000-0000-000000000001")}
+                                                           (= lookup 2)
+                                                           {:db/id 2
+                                                            :block/name nil
+                                                            :block/uuid (uuid "00000000-0000-0000-0000-000000000002")}
+                                                           :else {}))
+                                      :thread-api/apply-outliner-ops (let [[_ ops _] args]
+                                                                       (reset! ops* ops)
+                                                                       {:result :ok})
+                                      (throw (ex-info "unexpected invoke" {:method method :calls @calls*})))))
+           (-> (p/let [result (commands/execute action {})]
+                 (is (= :ok (:status result)))
+                 (is (= [[:move-blocks [[1] 2 {:sibling? false :bottom? true}]]
+                         [:batch-delete-property-value [[1] :block/tags 202]]
+                         [:batch-remove-property [[1] :logseq.property/publishing-public?]]
+                         [:batch-set-property [[1] :block/tags 101 {}]]
+                         [:batch-set-property [[1] :logseq.property/deadline "2026-01-25T12:00:00Z" {}]]]
+                        @ops*)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e " calls: " @calls*))))
+               (p/finally (fn []
+                            (set! cli-server/ensure-server! orig-ensure-server!)
+                            (set! add-command/resolve-tags orig-resolve-tags)
+                            (set! add-command/resolve-properties orig-resolve-properties)
+                            (set! add-command/resolve-property-identifiers orig-resolve-property-identifiers)
+                            (set! transport/invoke orig-invoke)
+                            (done)))))))
 
 (deftest test-execute-requires-existing-graph
   (async done
