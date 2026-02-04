@@ -369,12 +369,18 @@
     (let [tree->text #'show-command/tree->text
           tree-data {:root {:db/id 1
                             :block/title "Root"
-                            :user.property/background "Because"}
+                            :block/children [{:db/id 2
+                                              :block/title "Child A"
+                                              :user.property/background "Because"}
+                                             {:db/id 3
+                                              :block/title "Child B"}]}
                      :property-titles {:user.property/background "Background"}}
           output (binding [style/*color-enabled?* true]
                    (tree->text tree-data))]
       (is (= (str "1 Root\n"
-                  "  Background: Because")
+                  "2 ├── Child A\n"
+                  "  │   Background: Because\n"
+                  "3 └── Child B")
              (strip-ansi output)))
       (is (not (string/includes? output "└── Background"))))))
 
@@ -383,14 +389,20 @@
     (let [tree->text #'show-command/tree->text
           tree-data {:root {:db/id 1
                             :block/title "Root"
-                            :user.property/criteria ["One" "Two"]}
+                            :block/children [{:db/id 2
+                                              :block/title "Child A"
+                                              :user.property/criteria ["One" "Two"]}
+                                             {:db/id 3
+                                              :block/title "Child B"}]}
                      :property-titles {:user.property/criteria "Criteria"}}
           output (binding [style/*color-enabled?* true]
                    (tree->text tree-data))]
       (is (= (str "1 Root\n"
-                  "  Criteria:\n"
-                  "    - One\n"
-                  "    - Two")
+                  "2 ├── Child A\n"
+                  "  │   Criteria:\n"
+                  "  │     - One\n"
+                  "  │     - Two\n"
+                  "3 └── Child B")
              (strip-ansi output))))))
 
 (deftest test-tree->text-properties-order

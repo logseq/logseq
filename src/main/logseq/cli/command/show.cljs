@@ -770,8 +770,7 @@
                       (style/dim value))
         lines (atom [])
         property-indent (fn [prefix]
-                          (let [prefix* (string/replace prefix "│" " ")]
-                            (str id-padding (style-glyph prefix*))))
+                          (str id-padding (style-glyph prefix)))
         append-property-lines (fn [node prefix]
                                 (let [indent (property-indent prefix)
                                       prop-lines (node-property-lines node property-titles property-value-labels indent)]
