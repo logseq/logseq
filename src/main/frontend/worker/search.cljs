@@ -138,6 +138,9 @@ DROP TRIGGER IF EXISTS blocks_au;
 
 (defonce max-snippet-length 250)
 
+(def ^:private snippet-highlight-start "$pfts_2lqh>$")
+(def ^:private snippet-highlight-end "$<pfts_2lqh$")
+
 (defn- snippet-by
   [content length]
   (str (subs content 0 length) (when (> (count content) max-snippet-length) "...")))
@@ -145,11 +148,54 @@ DROP TRIGGER IF EXISTS blocks_au;
 (defn- get-snippet-result
   [snippet]
   (let [;; Cut snippet to limited size chars for non-matched results
-        flag-highlight "$pfts_2lqh>$ "
+        flag-highlight (str snippet-highlight-start " ")
         snippet (if (string/includes? snippet flag-highlight)
                   snippet
                   (snippet-by snippet max-snippet-length))]
     snippet))
+
+(defn- query->terms
+  [q]
+  (->> (string/split (string/trim q) #"\s+")
+       (remove string/blank?)
+       (remove #(contains? #{"and" "or" "not"} (string/lower-case %)))))
+
+(defn- find-best-match
+  [text terms]
+  (let [text-lc (string/lower-case text)]
+    (reduce
+     (fn [best term]
+       (let [term-lc (string/lower-case term)
+             idx (string/index-of text-lc term-lc)]
+         (cond
+           (nil? idx) best
+           (nil? best) {:term term :idx idx}
+           (< idx (:idx best)) {:term term :idx idx}
+           (and (= idx (:idx best))
+                (> (count term) (count (:term best))))
+           {:term term :idx idx}
+           :else best)))
+     nil
+     terms)))
+
+(defn ensure-highlighted-snippet
+  "Ensure snippet includes SQLite-style highlight markers. Uses `title` as a fallback
+  when snippet is missing or unhighlighted."
+  [snippet title q]
+  (let [base (or snippet title)]
+    (cond
+      (string/blank? base) base
+      (string/blank? q) base
+      (string/includes? base snippet-highlight-start) base
+      :else
+      (if-let [{:keys [term idx]} (find-best-match base (query->terms q))]
+        (let [end-idx (+ idx (count term))]
+          (str (subs base 0 idx)
+               snippet-highlight-start
+               (subs base idx end-idx)
+               snippet-highlight-end
+               (subs base end-idx)))
+        base))))
 
 (defn- get-match-input
   [q]
@@ -421,7 +467,7 @@ DROP TRIGGER IF EXISTS blocks_au;
                                                     (ldb/class? block))))
                                         {:db/id (:db/id block)
                                          :block/uuid (:block/uuid block)
-                                         :block/title (or snippet title)
+                                         :block/title (ensure-highlighted-snippet snippet title q)
                                          :block.temp/original-title (:block/title block)
                                          :block/page (or
                                                       (:block/uuid (:block/page block))
