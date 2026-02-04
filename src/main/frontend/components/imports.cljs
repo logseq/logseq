@@ -68,6 +68,7 @@
 (defn- finished-cb
   [& {:keys [reload?]
       :or {reload? true}}]
+  (state/pub-event! [:graph/sync-context])
   (notification/show! "Import finished!" :success)
   (shui/dialog-close! :import-indicator)
   (route-handler/redirect-to-home!)
