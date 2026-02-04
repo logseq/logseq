@@ -136,10 +136,11 @@ DROP TRIGGER IF EXISTS blocks_au;
   (let [sql (str "DELETE from blocks WHERE id IN " (clj-list->sql ids))]
     (.exec db sql)))
 
-(defonce max-snippet-length 250)
-
+(def ^:private max-snippet-length 250)
 (def ^:private snippet-highlight-start "$pfts_2lqh>$")
 (def ^:private snippet-highlight-end "$<pfts_2lqh$")
+(def ^:private snippet-prefix-length 50)
+(def ^:private snippet-ellipsis "\u00A0\u00A0\u00A0...\u00A0\u00A0\u00A0")
 
 (defn- snippet-by
   [content length]
@@ -159,6 +160,39 @@ DROP TRIGGER IF EXISTS blocks_au;
   (->> (string/split (string/trim q) #"\s+")
        (remove string/blank?)
        (remove #(contains? #{"and" "or" "not"} (string/lower-case %)))))
+
+(defn- break-char?
+  [ch]
+  (or (boolean (re-find #"\s" (str ch)))
+      (contains? #{\, \. \! \? \， \。 \！ \？ \、} ch)))
+
+(defn- find-break-before
+  [s start end]
+  (loop [i (dec end)]
+    (if (< i start)
+      nil
+      (if (break-char? (.charAt s i))
+        i
+        (recur (dec i))))))
+
+(defn- snippet-window-around
+  [text idx match-len]
+  (let [text-len (count text)
+        prefix-len (min snippet-prefix-length text-len)
+        window-len (max 0 (- max-snippet-length prefix-len (count snippet-ellipsis)))
+        window-start (max 0 (- idx (quot window-len 2)))
+        min-end (min text-len (+ idx match-len))
+        window-end (min text-len (max min-end (+ window-start window-len)))
+        break-idx (find-break-before text window-start idx)
+        snippet-start (min window-end (max window-start (if break-idx (inc break-idx) window-start)))
+        snippet-end (min text-len (+ snippet-start window-len))
+        prefix (subs text 0 prefix-len)
+        snippet (subs text snippet-start snippet-end)]
+    {:prefix prefix
+     :snippet snippet
+     :snippet-start snippet-start
+     :snippet-end snippet-end
+     :prefix-len prefix-len}))
 
 (defn- find-best-match
   [text terms]
@@ -182,19 +216,31 @@ DROP TRIGGER IF EXISTS blocks_au;
   "Ensure snippet includes SQLite-style highlight markers. Uses `title` as a fallback
   when snippet is missing or unhighlighted."
   [snippet title q]
-  (let [base (or snippet title)]
+  (let [base (or snippet title)
+        full-text (or title snippet)]
     (cond
       (string/blank? base) base
       (string/blank? q) base
       (string/includes? base snippet-highlight-start) base
       :else
-      (if-let [{:keys [term idx]} (find-best-match base (query->terms q))]
-        (let [end-idx (+ idx (count term))]
-          (str (subs base 0 idx)
-               snippet-highlight-start
-               (subs base idx end-idx)
-               snippet-highlight-end
-               (subs base end-idx)))
+      (if-let [{:keys [term idx]} (and full-text (find-best-match full-text (query->terms q)))]
+        (let [use-window? (and (> (count full-text) max-snippet-length)
+                               (>= idx max-snippet-length))
+              {:keys [prefix snippet snippet-start]} (when use-window?
+                                                       (snippet-window-around full-text idx (count term)))
+              [target-text offset]
+              (if use-window?
+                [(str prefix snippet-ellipsis snippet)
+                 (+ (count prefix) (count snippet-ellipsis) (- idx snippet-start))]
+                [base idx])
+              target-end (+ offset (count term))]
+          (if (and offset (<= 0 offset) (<= target-end (count target-text)))
+            (str (subs target-text 0 offset)
+                 snippet-highlight-start
+                 (subs target-text offset target-end)
+                 snippet-highlight-end
+                 (subs target-text target-end))
+            target-text))
         base))))
 
 (defn- get-match-input
