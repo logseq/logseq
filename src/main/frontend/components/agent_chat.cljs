@@ -38,10 +38,12 @@
 (defn- payload-text
   [payload]
   (cond
+    (string? payload) payload
     (string? (:text payload)) (:text payload)
     (string? (:message payload)) (:message payload)
     (string? (:content payload)) (:content payload)
     (string? (:output_text payload)) (:output_text payload)
+    (string? (:raw payload)) (:raw payload)
     (seq (:content payload))
     (->> (:content payload)
          (keep (fn [part]
@@ -93,7 +95,8 @@
                                (or (:delta payload)
                                    (:text payload)
                                    (:message payload)
-                                   (:output_text payload)))
+                                   (:output_text payload)
+                                   (:raw payload)))
                        role (normalize-role (or (:role item)
                                                 (:role payload)
                                                 (when (= "audit.log" event-type)
@@ -212,6 +215,7 @@
                                                           (clj->js {:message trimmed-draft
                                                                     :kind "user"}))}
                                                   {:response-schema :sessions/message})
+                              (p/then (fn [_] (agent-handler/<fetch-events! block)))
                               (p/catch (fn [_] nil)))))]
     (hooks/use-effect!
      (fn []
@@ -219,6 +223,23 @@
          (agent-handler/<ensure-session! block))
        nil)
      [block-uuid (:logseq.property/project block) (:logseq.property/agent block)])
+    (hooks/use-effect!
+     (fn []
+       (when (and base session-id session-started?)
+         (agent-handler/<fetch-events! block))
+       nil)
+     [session-id session-started?])
+    (hooks/use-effect!
+     (fn []
+       (when (and base session-id session-started?
+                  (or (not (:streaming? session))
+                      (string? (:stream-error session))))
+         (let [interval-id (js/setInterval
+                            (fn []
+                              (agent-handler/<fetch-events! block))
+                            2000)]
+           #(js/clearInterval interval-id))))
+     [session-id session-started? (:streaming? session) (:stream-error session)])
     (hooks/use-effect!
      (fn []
        (js/setTimeout scroll-to-bottom! 0)

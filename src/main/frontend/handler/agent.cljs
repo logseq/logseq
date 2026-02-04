@@ -210,6 +210,23 @@
 (defn- session-state [block-uuid]
   (get (state/sub :agent/sessions) (session-key block-uuid)))
 
+(defn <fetch-events!
+  [block]
+  (let [base (db-sync/http-base)
+        block-uuid (:block/uuid block)
+        session-id (some-> block-uuid str)
+        session (session-state block-uuid)
+        since (when (number? (:last-event-ts session)) (:last-event-ts session))
+        query (when since (str "?since=" since))]
+    (when (and base session-id (task-ready? block))
+      (-> (db-sync/fetch-json (str base "/sessions/" session-id "/events" (or query ""))
+                              {:method "GET"}
+                              {:response-schema :sessions/events})
+          (p/then (fn [resp]
+                    (when (seq (:events resp))
+                      (append-events! block-uuid (:events resp)))))
+          (p/catch (fn [_] nil))))))
+
 (defn- session-terminal? [block-uuid]
   (terminal-status? (:status (session-state block-uuid))))
 

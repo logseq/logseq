@@ -332,7 +332,9 @@
                     "build")
      :permissionMode (or (get-in task [:agent :permission-mode])
                          (get-in task [:agent :permissionMode])
-                         "default")}))
+                         (if (= agent "codex")
+                           "bypass"
+                           "default"))}))
 
 (defn- <sprite-create-session! [^js env sprite-name port agent-token session-id payload]
   (let [script (str "resp=$(curl -sS -w '\\n%{http_code}' -X POST -H 'content-type: application/json' "
