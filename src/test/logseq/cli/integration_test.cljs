@@ -5,11 +5,14 @@
             [cljs.reader :as reader]
             [cljs.test :refer [deftest is async]]
             [clojure.string :as string]
-            [frontend.worker-common.util :as worker-util]
             [frontend.test.node-helper :as node-helper]
-            [logseq.cli.command.show :as show-command]
+            [frontend.worker-common.util :as worker-util]
             [logseq.cli.command.core :as command-core]
+            [logseq.cli.command.show :as show-command]
+            [logseq.cli.config :as cli-config]
             [logseq.cli.main :as cli-main]
+            [logseq.cli.server :as cli-server]
+            [logseq.cli.transport :as transport]
             [logseq.common.util :as common-util]
             [logseq.db.frontend.property :as db-property]
             [promesa.core :as p]))
@@ -272,7 +275,7 @@
                        add-block-result (run-cli ["--repo" "content-graph" "add" "block" "--target-page-name" "TestPage" "--content" "Test block"] data-dir cfg-path)
                        add-block-payload (parse-json-output add-block-result)
                        _ (p/delay 100)
-                       show-result (run-cli ["--repo" "content-graph" "show" "--page" "TestPage" ] data-dir cfg-path)
+                       show-result (run-cli ["--repo" "content-graph" "show" "--page" "TestPage"] data-dir cfg-path)
                        show-payload (parse-json-output show-result)
                        remove-page-result (run-cli ["--repo" "content-graph" "remove" "--page" "TestPage"] data-dir cfg-path)
                        remove-page-payload (parse-json-output remove-page-result)
@@ -293,8 +296,8 @@
                  (is (not (contains? (get-in show-payload [:data :root]) :block/uuid)))
                  (is (= "ok" (:status remove-page-payload)))
                  (is (= "ok" (:status stop-payload)))
-                (done))
-              (p/catch (fn [e]
+                 (done))
+               (p/catch (fn [e]
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
@@ -324,7 +327,7 @@
                        ref-title (some #(when (and (string? %)
                                                    (string/includes? % "See [[")
                                                    (string/includes? % "]]"))
-                                         %)
+                                          %)
                                        titles)
                        ref-value (when ref-title
                                    (second (first (re-seq #"\[\[(.*?)\]\]" ref-title))))
@@ -378,7 +381,7 @@
                        titles (map first (get-in ref-query-payload [:data :result]))
                        ref-title (some #(when (and (string? %)
                                                    (string/includes? % (str "[[" target-uuid "]]")))
-                                         %)
+                                          %)
                                        titles)
                        stop-result (run-cli ["server" "stop" "--repo" "uuid-ref-graph"] data-dir cfg-path)
                        stop-payload (parse-json-output stop-result)]
@@ -442,7 +445,7 @@
                                                         "add" "block"
                                                         "--target-page-name" "Home"
                                                         "--content" "Tagged block ident"
-                                                 "--tags" "[:logseq.class/Quote-block]"]
+                                                        "--tags" "[:logseq.class/Quote-block]"]
                                                        data-dir cfg-path)
                        add-block-ident-payload (parse-json-output add-block-ident-result)
                        deadline-prop-title (get-in db-property/built-in-properties [:logseq.property/deadline :title])
@@ -469,27 +472,27 @@
                        block-deadline (query-property data-dir cfg-path repo "Tagged block" ":logseq.property/deadline")
                        block-deadline-title (query-property data-dir cfg-path repo "Tagged block title" ":logseq.property/deadline")
                        stop-payload (stop-repo! data-dir cfg-path repo)]
-                (is (= 0 (:exit-code add-page-result)))
-                (is (= "ok" (:status add-page-payload)))
-                (is (= 0 (:exit-code add-block-result)))
-                (is (= "ok" (:status add-block-payload)))
-                (is (= 0 (:exit-code add-block-ident-result)))
-                (is (= "ok" (:status add-block-ident-payload)))
-                (is (string? deadline-prop-title))
-                (is (string? publishing-prop-title))
-                (is (= 0 (:exit-code add-page-title-result)))
-                (is (= "ok" (:status add-page-title-payload)))
-                (is (= 0 (:exit-code add-block-title-result)))
-                (is (= "ok" (:status add-block-title-payload)))
-                (is (contains? block-tag-names "Quote"))
-                (is (contains? block-ident-tag-names "Quote"))
-                (is (contains? page-tag-names "Quote"))
-                (is (true? page-value))
-                (is (true? page-title-value))
-                (is (number? block-deadline))
-                (is (number? block-deadline-title))
-                (is (= "ok" (:status stop-payload)))
-                (done))
+                 (is (= 0 (:exit-code add-page-result)))
+                 (is (= "ok" (:status add-page-payload)))
+                 (is (= 0 (:exit-code add-block-result)))
+                 (is (= "ok" (:status add-block-payload)))
+                 (is (= 0 (:exit-code add-block-ident-result)))
+                 (is (= "ok" (:status add-block-ident-payload)))
+                 (is (string? deadline-prop-title))
+                 (is (string? publishing-prop-title))
+                 (is (= 0 (:exit-code add-page-title-result)))
+                 (is (= "ok" (:status add-page-title-payload)))
+                 (is (= 0 (:exit-code add-block-title-result)))
+                 (is (= "ok" (:status add-block-title-payload)))
+                 (is (contains? block-tag-names "Quote"))
+                 (is (contains? block-ident-tag-names "Quote"))
+                 (is (contains? page-tag-names "Quote"))
+                 (is (true? page-value))
+                 (is (true? page-title-value))
+                 (is (number? block-deadline))
+                 (is (number? block-deadline-title))
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))
                           (done)))))))
@@ -536,12 +539,66 @@
                      (pr-str (:error add-block-id-payload)))
                  (is (= "ok" (:status add-block-id-payload)))
                  (is (true? page-id-value))
-                (is (number? block-deadline-id))
-                (is (= "ok" (:status stop-payload)))
-                (done))
-              (p/catch (fn [e]
-                         (is false (str "unexpected error: " e))
-                         (done)))))))
+                 (is (number? block-deadline-id))
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
+(deftest test-cli-show-properties-human-output
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-show-properties")
+               repo "show-properties-graph"]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       _ (run-cli ["graph" "create" "--repo" repo] data-dir cfg-path)
+                       cfg (cli-config/resolve-config {:data-dir data-dir
+                                                       :config-path cfg-path
+                                                       :output-format :json})
+                       server (cli-server/ensure-server! cfg repo)
+                       property-ident :user.property/acceptance-criteria
+                       import-data {:properties {property-ident {:logseq.property/type :default
+                                                                 :block/title "Acceptance Criteria"}}
+                                    :pages-and-blocks [{:page {:block/title "PropsPage"}
+                                                        :blocks [{:block/title "Property block"
+                                                                  :build/properties {property-ident "First requirement"}}]}]}
+                       wait-for-property (fn wait-for-property [attempt]
+                                           (p/let [value (transport/invoke server :thread-api/q false
+                                                                           [repo ['[:find ?v .
+                                                                                   :in $ ?title ?prop
+                                                                                   :where
+                                                                                   [?b :block/title ?title]
+                                                                                   [?b ?prop ?v]]
+                                                                                  "Property block"
+                                                                                  property-ident]])]
+                                             (if (or value (>= attempt 20))
+                                               value
+                                               (p/let [_ (p/delay 100)]
+                                                 (wait-for-property (inc attempt))))))
+                       _ (transport/invoke server :thread-api/apply-outliner-ops false
+                                           [repo [[:batch-import-edn [import-data {}]]] {}])
+                       _ (p/delay 100)
+                       _ (wait-for-property 0)
+                       page-name (common-util/page-name-sanity-lc "PropsPage")
+                       page-entity (transport/invoke server :thread-api/pull false
+                                                     [repo [:db/id :block/name :block/title] [:block/name page-name]])
+                       _ (when-not (:db/id page-entity)
+                           (throw (ex-info "page not found in server" {:page page-name})))
+                       show-config (assoc cfg :output-format :human)
+                       show-result (show-command/execute-show {:type :show
+                                                               :repo repo
+                                                               :page page-name}
+                                                              show-config)
+                       output (get-in show-result [:data :message])
+                       stop-payload (stop-repo! data-dir cfg-path repo)]
+                 (is (= :ok (:status show-result)))
+                 (is (string/includes? output "Acceptance Criteria: First requirement"))
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
 
 (deftest test-cli-verbose-logs-to-stderr
   (async done
@@ -641,11 +698,17 @@
                query-text "[:find ?e :in $ ?title :where [?e :block/title ?title]]"]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
-                  create-result (run-cli ["graph" "create" "--repo" "query-graph"] data-dir cfg-path)
-                  create-payload (parse-json-output create-result)
-                  _ (run-cli ["--repo" "query-graph" "add" "page" "--page" "QueryPage"] data-dir cfg-path)
-                       _ (run-cli ["--repo" "query-graph" "add" "block" "--target-page-name" "QueryPage" "--content" "Query block"] data-dir cfg-path)
-                       _ (run-cli ["--repo" "query-graph" "add" "block" "--target-page-name" "QueryPage" "--content" "Query block"] data-dir cfg-path)
+                       create-result (run-cli ["graph" "create" "--repo" "query-graph"] data-dir cfg-path)
+                       create-payload (parse-json-output create-result)
+                       _ (run-cli ["--repo" "query-graph" "add" "page" "--page" "QueryPage"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "query-graph" "add" "block"
+                                   "--target-page-name" "QueryPage"
+                                   "--content" "Query block"]
+                                  data-dir cfg-path)
+                       _ (run-cli ["--repo" "query-graph" "add" "block"
+                                   "--target-page-name" "QueryPage"
+                                   "--content" "Query block"]
+                                  data-dir cfg-path)
                        _ (p/delay 100)
                        query-result (run-cli ["--repo" "query-graph"
                                               "query"
@@ -809,8 +872,7 @@
                        page-id (or (:db/id page-item) (:id page-item))
                        show-result (run-cli ["--repo" "recent-updated-graph"
                                              "show"
-                                             "--page" "RecentPage"
-                                             ]
+                                             "--page" "RecentPage"]
                                             data-dir cfg-path)
                        show-payload (parse-json-output show-result)
                        show-root (get-in show-payload [:data :root])
@@ -907,7 +969,7 @@
                        middle-uuid (query-block-uuid-by-title data-dir cfg-path "nested-refs" middle-content)
                        _ (run-cli ["--repo" "nested-refs" "add" "block" "--target-page-name" "NestedPage"
                                    "--content" (str "Outer [[" middle-uuid "]]")] data-dir cfg-path)
-                       show-outer (run-cli ["--repo" "nested-refs" "show" "--page" "NestedPage" ] data-dir cfg-path)
+                       show-outer (run-cli ["--repo" "nested-refs" "show" "--page" "NestedPage"] data-dir cfg-path)
                        show-outer-payload (parse-json-output show-outer)
                        outer-node (find-block-by-title (get-in show-outer-payload [:data :root]) "Outer [[See [[Inner]]]]")
                        stop-result (run-cli ["server" "stop" "--repo" "nested-refs"] data-dir cfg-path)
@@ -938,11 +1000,11 @@
                        ref-title (str "See [[" target-title "]]")
                        _ (run-cli ["--repo" "linked-refs-graph" "add" "block" "--target-page-name" "SourcePage" "--content" ref-content] data-dir cfg-path)
                        _ (p/delay 100)
-                       source-show (run-cli ["--repo" "linked-refs-graph" "show" "--page" "SourcePage" ] data-dir cfg-path)
+                       source-show (run-cli ["--repo" "linked-refs-graph" "show" "--page" "SourcePage"] data-dir cfg-path)
                        source-payload (parse-json-output source-show)
                        ref-node (find-block-by-title (get-in source-payload [:data :root]) ref-title)
                        ref-id (or (:db/id ref-node) (:id ref-node))
-                       target-show (run-cli ["--repo" "linked-refs-graph" "show" "--page" "TargetPage" ] data-dir cfg-path)
+                       target-show (run-cli ["--repo" "linked-refs-graph" "show" "--page" "TargetPage"] data-dir cfg-path)
                        target-payload (parse-json-output target-show)
                        linked-refs (get-in target-payload [:data :linked-references])
                        linked-blocks (:blocks linked-refs)
@@ -983,7 +1045,7 @@
                        _ (run-cli ["--repo" "move-graph" "add" "block" "--target-id" (str parent-id) "--content" "Child Block"] data-dir cfg-path)
                        update-result (run-cli ["--repo" "move-graph" "update" "--id" (str parent-id) "--target-page" "TargetPage"] data-dir cfg-path)
                        update-payload (parse-json-output update-result)
-                       target-show (run-cli ["--repo" "move-graph" "show" "--page" "TargetPage" ] data-dir cfg-path)
+                       target-show (run-cli ["--repo" "move-graph" "show" "--page" "TargetPage"] data-dir cfg-path)
                        target-payload (parse-json-output target-show)
                        moved-node (find-block-by-title (get-in target-payload [:data :root]) "Parent Block")
                        child-node (find-block-by-title moved-node "Child Block")
@@ -1014,7 +1076,7 @@
                        parent-id (node-id parent-node)
                        _ (run-cli ["--repo" "add-pos-graph" "add" "block" "--target-id" (str parent-id) "--pos" "first-child" "--content" "First"] data-dir cfg-path)
                        _ (run-cli ["--repo" "add-pos-graph" "add" "block" "--target-id" (str parent-id) "--pos" "last-child" "--content" "Last"] data-dir cfg-path)
-                       final-show (run-cli ["--repo" "add-pos-graph" "show" "--page" "PosPage" ] data-dir cfg-path)
+                       final-show (run-cli ["--repo" "add-pos-graph" "show" "--page" "PosPage"] data-dir cfg-path)
                        final-payload (parse-json-output final-show)
                        final-parent (find-block-by-title (get-in final-payload [:data :root]) "Parent")
                        child-titles (map node-title (node-children final-parent))
@@ -1107,9 +1169,9 @@
                                        (get-in list-page-payload [:data :items]))
                        page-id (or (:db/id page-item) (:id page-item))
                        page-uuid (or (:block/uuid page-item) (:uuid page-item))
-                       show-by-id-result (run-cli ["show" "--id" (str page-id) ] data-dir cfg-path)
+                       show-by-id-result (run-cli ["show" "--id" (str page-id)] data-dir cfg-path)
                        show-by-id-payload (parse-json-output show-by-id-result)
-                       show-by-uuid-result (run-cli ["show" "--uuid" (str page-uuid) ] data-dir cfg-path)
+                       show-by-uuid-result (run-cli ["show" "--uuid" (str page-uuid)] data-dir cfg-path)
                        show-by-uuid-payload (parse-json-output show-by-uuid-result)
                        stop-result (run-cli ["server" "stop" "--repo" "show-page-block-graph"] data-dir cfg-path)
                        stop-payload (parse-json-output stop-result)]
@@ -1172,8 +1234,7 @@
                        idx-two (string/index-of output "Multi show two")
                        idx-delim (string/index-of output "================================================================")
                        show-json-result (run-cli ["--repo" "show-multi-id-graph" "show"
-                                                  "--id" ids-edn
-                                                  ]
+                                                  "--id" ids-edn]
                                                  data-dir cfg-path)
                        show-json-payload (parse-json-output show-json-result)
                        show-data (:data show-json-payload)
@@ -1198,9 +1259,9 @@
                  (is (= 2 (count show-data)))
                  (is (contains? root-titles "Multi show one"))
                  (is (contains? root-titles "Multi show two"))
-                  (is (= "ok" (:status stop-payload)))
-                  (done))
-                (p/catch (fn [e]
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
+               (p/catch (fn [e]
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
@@ -1229,16 +1290,14 @@
                        _ (p/delay 100)
                        show-children (run-cli ["--repo" "show-multi-id-contained-graph"
                                                "show"
-                                               "--page" "ParentPage"
-                                               ]
+                                               "--page" "ParentPage"]
                                               data-dir cfg-path)
                        show-children-payload (parse-json-output show-children)
                        child-node (find-block-by-title (get-in show-children-payload [:data :root]) "Child Block")
                        child-id (or (:db/id child-node) (:id child-node))
                        ids-edn (str "[" parent-id " " child-id "]")
                        show-json-result (run-cli ["--repo" "show-multi-id-contained-graph" "show"
-                                                  "--id" ids-edn
-                                                  ]
+                                                  "--id" ids-edn]
                                                  data-dir cfg-path)
                        show-json-payload (parse-json-output show-json-result)
                        show-data (:data show-json-payload)
@@ -1415,7 +1474,7 @@
                        blocks-edn (str "[{:block/title \"Ref to TargetPage\" :block/refs [{:db/id " page-id "}]}]")
                        _ (run-cli ["--repo" "linked-refs-graph" "add" "block" "--target-page-name" "SourcePage"
                                    "--blocks" blocks-edn] data-dir cfg-path)
-                       show-result (run-cli ["--repo" "linked-refs-graph" "show" "--page" "TargetPage" ]
+                       show-result (run-cli ["--repo" "linked-refs-graph" "show" "--page" "TargetPage"]
                                             data-dir cfg-path)
                        show-payload (parse-json-output show-result)
                        linked (get-in show-payload [:data :linked-references])
