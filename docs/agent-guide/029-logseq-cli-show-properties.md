@@ -13,7 +13,7 @@ Related: Builds on 028-logseq-cli-verbose-debug.md.
 
 The logseq-cli show command currently renders block trees without any property visibility.
 Users need to see each block's properties directly under the block content in the human output so that show reflects the same metadata they rely on in the UI.
-Property lines belong to the same block tree element, so they must not render with tree glyphs.
+Property lines belong to the same block tree element, so they must render with the same tree glyphs and indentation rules used for multiline block content (no blank space-only prefix).
 The display must show "<property-name>: <property-value>" and must handle single-value properties as a single line and multi-value properties as an indented list as shown in the example.
 
 ## Testing Plan
@@ -87,7 +87,7 @@ User properties with values that are entities or maps should render as :block/ti
 User properties must be detected only via the :user.property/* namespace and no other property sources should be displayed.
 Blocks without properties should render exactly as they do today.
 Linked references output should include properties for each block without breaking the existing tree formatting.
-Property lines should not include tree glyphs or branch markers.
+Property lines should include the same tree glyphs/branch markers used for multiline block content so they align with block text.
 
 ## Implementation details for formatting
 
@@ -95,7 +95,7 @@ Use a stable sort order for :user.property/* keys, such as ascending by keyword 
 Do not use :block/properties-text-values for db-graph output.
 Format user property values from :user.property/* attributes and coerce values into strings using :block/title, :block/name, or :logseq.property/value.
 Render single values as "Property: value" and multi values as "Property: - v1" with subsequent lines aligned under the dash list.
-Align property lines with the block content column and preserve tree glyph indentation, but do not render additional tree glyphs for properties.
+Align property lines with the block content column and reuse the same tree glyph indentation rules used for multiline block content.
 
 ## Questions
 
@@ -137,10 +137,10 @@ Current:
 Target:
 ```
 5137 Done Add git sha when graph is created for improved debugging #Issue
-     Background: Motivated by wanting to ensure missing addresses bug isn't happening in new graphs - https://logseq.slack.com/archives/C04ENNDPDFB/p1748290483138269
-     Acceptance Criteria:
-       - When a DB graph is created in app, store git SHA used to create it in entity :logseq.kv/graph-git-sha
-       - When a DB graph is created with a script, store git SHA used to create it in entity :logseq.kv/graph-git-sha
+     │   Background: Motivated by wanting to ensure missing addresses bug isn't happening in new graphs - https://logseq.slack.com/archives/C04ENNDPDFB/p1748290483138269
+     │   Acceptance Criteria:
+     │     - When a DB graph is created in app, store git SHA used to create it in entity :logseq.kv/graph-git-sha
+     │     - When a DB graph is created with a script, store git SHA used to create it in entity :logseq.kv/graph-git-sha
 ```
 
 ## Question
