@@ -1,12 +1,14 @@
 (ns frontend.rum
   "Utility fns for rum"
-  (:require [cljs-bean.core :as bean]
-            [clojure.set :as set]
-            [clojure.string :as string]
-            [clojure.walk :as w]
-            [daiquiri.interpreter :as interpreter]
-            [logseq.shui.hooks :as hooks]
-            [rum.core :as rum]))
+  (:require
+   ["react" :as react]
+   [cljs-bean.core :as bean]
+   [clojure.set :as set]
+   [clojure.string :as string]
+   [clojure.walk :as w]
+   [daiquiri.interpreter :as interpreter]
+   [logseq.shui.hooks :as hooks]
+   [rum.core :as rum]))
 
 ;; copy from https://github.com/priornix/antizer/blob/35ba264cf48b84e6597743e28b3570d8aa473e74/src/antizer/core.cljs
 
@@ -61,7 +63,7 @@
                              (if skip-opts-transform?
                                opts
                                (map vector->react-elems opts)))]
-       (apply js/React.createElement react-class
+       (apply (.-createElement react) react-class
         ;; sablono html-to-dom-attrs does not work for nested hashmaps
               (bean/->js (map-keys->camel-case new-options :html-props true))
               new-children)))))

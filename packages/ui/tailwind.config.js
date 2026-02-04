@@ -28,7 +28,7 @@ module.exports = {
     './@/components/**/*.{ts,tsx}',
     './src/**/*.{ts,tsx}',
     './examples/**/*.{ts,tsx}',
-    '../../deps/shui/src/**/*.cljs'
+    '../../deps/shui/src/**/*.cljs',
   ],
   safelist: [
     { pattern: /primary-(gray|red|yellow|green|blue|orange|indigo|rose|purple|pink)/ }

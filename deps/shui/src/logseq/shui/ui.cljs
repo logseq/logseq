@@ -121,6 +121,8 @@
 (def tabs-trigger (util/lsui-wrap "TabsTrigger"))
 (def tabs-content (util/lsui-wrap "TabsContent"))
 
+(def chat (util/lsui-wrap "Chat"))
+
 (def dialog dialog-core/dialog)
 (def dialog-portal dialog-core/dialog-portal)
 (def dialog-overlay dialog-core/dialog-overlay)

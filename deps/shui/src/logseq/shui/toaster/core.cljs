@@ -1,18 +1,20 @@
 (ns logseq.shui.toaster.core
-  (:require [cljs-bean.core :as bean]
-            [daiquiri.interpreter :refer [interpret]]
-            [logseq.shui.hooks :as hooks]
-            [logseq.shui.util :as util]
-            [rum.core :as rum]))
+  (:require
+   ["ui" :as ui]
+   [cljs-bean.core :as bean]
+   [daiquiri.interpreter :refer [interpret]]
+   [logseq.shui.hooks :as hooks]
+   [logseq.shui.util :as util]
+   [rum.core :as rum]))
 
 (defonce ^:private Toaster (util/lsui-wrap "Toaster"))
 (defonce ^:private *toast (atom nil))
 
 (defn gen-id []
-  (js/window.LSUI.genToastId))
+  (.-genToastId (.-LSUI ui)))
 
 (defn use-toast []
-  (when-let [^js js-toast (js/window.LSUI.useToast)]
+  (when-let [^js js-toast (.-useToast (.-LSUI ui))]
     (let [toast-fn! (.-toast js-toast)
           dismiss! (.-dismiss js-toast)]
       [(fn [s]
@@ -23,7 +25,7 @@
 (rum/defc install-toaster
   < rum/static
   []
-  (let [^js js-toast (js/window.LSUI.useToast)]
+  (let [^js js-toast (.-useToast (.-LSUI ui))]
     (hooks/use-effect!
      (fn []
        (reset! *toast {:toast   (.-toast js-toast)

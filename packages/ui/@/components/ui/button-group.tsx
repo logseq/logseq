@@ -1,4 +1,4 @@
-import { Children, ReactElement, cloneElement } from 'react';
+import { Children, type HTMLAttributes, ReactElement, cloneElement } from 'react';
 
 import { ButtonProps } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -8,6 +8,8 @@ interface ButtonGroupProps {
   orientation?: 'horizontal' | 'vertical';
   children: ReactElement<ButtonProps>[];
 }
+
+interface ButtonGroupTextProps extends HTMLAttributes<HTMLSpanElement> {}
 
 export const ButtonGroup = ({
   className,
@@ -51,3 +53,13 @@ export const ButtonGroup = ({
     </div>
   );
 };
+
+export const ButtonGroupText = ({ className, ...props }: ButtonGroupTextProps) => (
+  <span
+    className={cn(
+      'inline-flex h-8 items-center rounded-md border border-input bg-background px-2 text-xs font-medium',
+      className
+    )}
+    {...props}
+  />
+);

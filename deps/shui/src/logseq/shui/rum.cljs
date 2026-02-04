@@ -1,15 +1,16 @@
 (ns logseq.shui.rum
-  (:require [clojure.string :as str]
-            [daiquiri.normalize :as normalize]
-            [daiquiri.util :as util]
-            [cljsjs.react]
-            [goog.object :as gobj]))
+  (:require
+   ["react" :as react]
+   [clojure.string :as str]
+   [daiquiri.normalize :as normalize]
+   [daiquiri.util :as util]
+   [goog.object :as gobj]))
 
-(defn ^js/React.Element create-element
+(defn create-element
   "Create a React element. Returns a JavaScript object when running
   under ClojureScript, and a om.dom.Element record in Clojure."
   [type attrs children]
-  (.apply (.-createElement js/React) nil (.concat #js [type attrs] children)))
+  (.apply (.-createElement react) nil (.concat #js [type attrs] children)))
 
 (defn component-attributes [attrs]
   (let [x (util/camel-case-keys* attrs)]
@@ -37,23 +38,23 @@
   "Eagerly interpret the seq `x` as HTML elements."
   [x]
   (reduce
-    (fn [ret x]
-      (conj ret (interpret x)))
-    [] x))
+   (fn [ret x]
+     (conj ret (interpret x)))
+   [] x))
 
 (defn element
   "Render an element vector as a HTML element."
   [element]
   (let [[type attrs content] (normalize/element element)]
     (create-element type
-      (element-attributes attrs)
-      (interpret-seq content))))
+                    (element-attributes attrs)
+                    (interpret-seq content))))
 
 (defn fragment [[_ attrs & children]]
   (let [[attrs children] (if (map? attrs)
                            [(component-attributes attrs) (interpret-seq children)]
                            [nil (interpret-seq (into [attrs] children))])]
-    (create-element js/React.Fragment attrs children)))
+    (create-element (.-Fragment react) attrs children)))
 
 (defn interop [[_ component attrs & children]]
   (let [[attrs children] (if (map? attrs)
@@ -76,4 +77,3 @@
     (vector? v) (interpret-vec v)
     (seq? v) (interpret-seq v)
     :else v))
-

@@ -2,6 +2,9 @@
     "name": "logseq",
     "version": "0.0.1",
     "private": true,
+    "workspaces": [
+        "packages/*"
+    ],
     "main": "static/electron.js",
     "engines": {
         "node": ">=22.20.0"
@@ -107,7 +110,7 @@
         "ios:dev": "cross-env PLATFORM=ios gulp cap",
         "android:dev": "cross-env PLATFORM=android gulp cap",
         "amplify:build": "yarn --cwd packages/amplify install",
-        "ui:build": "yarn --cwd packages/ui install",
+        "ui:build": "yarn --cwd packages/ui build:ui",
         "postinstall": "yarn ui:build"
     },
     "dependencies": {
@@ -151,7 +154,7 @@
         "@tabler/icons-react": "^2.47.0",
         "@tabler/icons-webfont": "^2.47.0",
         "@tippyjs/react": "4.2.5",
-        "ai": "^6.0.68",
+        "aws-amplify": "^6.15.6",
         "bignumber.js": "^9.0.2",
         "chokidar": "3.5.1",
         "chrono-node": "2.2.4",
@@ -198,7 +201,8 @@
         "url": "^0.11.0",
         "util": "^0.12.5",
         "yargs-parser": "20.2.4",
-        "zod": "^4.3.6"
+        "zod": "^4.3.6",
+        "ui": "0.0.1"
     },
     "resolutions": {
         "pixi-graph-fork/@pixi/app": "6.2.0",

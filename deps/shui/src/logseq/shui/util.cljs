@@ -1,5 +1,7 @@
 (ns logseq.shui.util
   (:require
+   ["react" :as react]
+   ["ui" :as ui]
    [cljs-bean.core :as bean]
    [clojure.set :refer [rename-keys]]
    [clojure.string :as s]
@@ -39,7 +41,7 @@
                     x))
                 data)))
 
-(defn $LSUtils [] (aget js/window "LSUtils"))
+(defn $LSUtils [] (.-LSUtils ui))
 (def dev? (some-> ($LSUtils) (aget "isDev")))
 
 (defn uuid-color
@@ -81,7 +83,7 @@
                                 [key val]))
         new-options (into {} (map vector->react-elems opts))
         react-class (if dev? (react-class) react-class)]
-    (apply js/React.createElement react-class
+    (apply (.-createElement react) react-class
       ;; sablono html-to-dom-attrs does not work for nested hash-maps
            (bean/->js (map-keys->camel-case new-options :html-props true))
            new-children)))
@@ -132,10 +134,10 @@
     (react->rum (if dev? cp (cp)) static?)))
 
 (def lsui-wrap
-  (partial component-wrap js/window.LSUI))
+  (partial component-wrap (.-LSUI ui)))
 
 (defn lsui-get
   [name]
   (if NODETEST
     #js {}
-    (some-> js/window.LSUI (aget name))))
+    (some-> (.-LSUI ui) (aget name))))

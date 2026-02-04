@@ -80,3 +80,4 @@ clj-e2e/e2e-dump
 .dir-locals.el
 .projectile
 deps/db-sync/data
+/packages/ui/@/lib/streamdown-bundle.js

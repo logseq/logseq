@@ -2,7 +2,6 @@
   "Agent sessions for tasks."
   (:require [clojure.string :as string]
             [frontend.db :as db]
-            [frontend.handler.agent-ui :as agent-ui]
             [frontend.handler.db-based.sync :as db-sync]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
@@ -225,7 +224,6 @@
 (defn- handle-stream-event!
   [block-uuid event]
   (append-events! block-uuid [event])
-  (agent-ui/handle-ui-event! block-uuid event)
   (when-let [status (event->status event)]
     (update-session-state! block-uuid {:status status})
     (maybe-update-task-status! block-uuid status)

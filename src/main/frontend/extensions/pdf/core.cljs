@@ -1,33 +1,35 @@
 (ns frontend.extensions.pdf.core
-  (:require [cljs-bean.core :as bean]
-            [clojure.string :as string]
-            [datascript.impl.entity :as de]
-            [frontend.commands :as commands]
-            [frontend.components.block :as block]
-            [frontend.components.svg :as svg]
-            [frontend.config :as config]
-            [frontend.context.i18n :refer [t]]
-            [frontend.extensions.pdf.assets :as pdf-assets]
-            [frontend.extensions.pdf.toolbar :refer [*area-dashed? *area-mode?
-                                                     *highlight-mode?
-                                                     *highlights-ctx*
-                                                     pdf-toolbar]]
-            [frontend.extensions.pdf.utils :as pdf-utils]
-            [frontend.extensions.pdf.windows :as pdf-windows]
-            [frontend.handler.notification :as notification]
-            [frontend.handler.property :as property-handler]
-            [frontend.modules.shortcut.core :as shortcut]
-            [frontend.rum :refer [use-atom]]
-            [frontend.state :as state]
-            [frontend.storage :as storage]
-            [frontend.ui :as ui]
-            [frontend.util :as util]
-            [goog.functions :refer [debounce]]
-            [logseq.shui.hooks :as hooks]
-            [logseq.shui.ui :as shui]
-            [medley.core :as medley]
-            [promesa.core :as p]
-            [rum.core :as rum]))
+  (:require
+   ["react-dom" :as react-dom]
+   [cljs-bean.core :as bean]
+   [clojure.string :as string]
+   [datascript.impl.entity :as de]
+   [frontend.commands :as commands]
+   [frontend.components.block :as block]
+   [frontend.components.svg :as svg]
+   [frontend.config :as config]
+   [frontend.context.i18n :refer [t]]
+   [frontend.extensions.pdf.assets :as pdf-assets]
+   [frontend.extensions.pdf.toolbar :refer [*area-dashed? *area-mode?
+                                            *highlight-mode?
+                                            *highlights-ctx*
+                                            pdf-toolbar]]
+   [frontend.extensions.pdf.utils :as pdf-utils]
+   [frontend.extensions.pdf.windows :as pdf-windows]
+   [frontend.handler.notification :as notification]
+   [frontend.handler.property :as property-handler]
+   [frontend.modules.shortcut.core :as shortcut]
+   [frontend.rum :refer [use-atom]]
+   [frontend.state :as state]
+   [frontend.storage :as storage]
+   [frontend.ui :as ui]
+   [frontend.util :as util]
+   [goog.functions :refer [debounce]]
+   [logseq.shui.hooks :as hooks]
+   [logseq.shui.ui :as shui]
+   [medley.core :as medley]
+   [promesa.core :as p]
+   [rum.core :as rum]))
 
 (declare pdf-container system-embed-playground)
 
@@ -738,7 +740,7 @@
 
      ;; hl context tip menu
      (when-let [_hl (:highlight ctx-menu-state)]
-       (js/ReactDOM.createPortal
+       ((.-createPortal react-dom)
         (pdf-highlights-ctx-menu viewer ctx-menu-state
                                  {:clear-ctx-menu! clear-ctx-menu!
                                   :add-hl! add-hl!
@@ -1090,7 +1092,7 @@
                               (not (nil? pdf-current))))
 
      (when (and (not system-win?) pdf-current)
-       (js/ReactDOM.createPortal
+       ((.-createPortal react-dom)
         (pdf-container-outer
          (pdf-container pdf-current))
         (js/document.querySelector "#app-single-container")))]))

@@ -1,11 +1,7 @@
 (ns frontend.components.agent-chat
-  (:require ["@ai-sdk/react" :refer [useChat Chat]]
-            [cljs-bean.core :as bean]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [frontend.handler.agent :as agent-handler]
-            [frontend.handler.agent-chat-transport :as chat-transport]
             [frontend.handler.db-based.sync :as db-sync]
-            [frontend.handler.property :as property-handler]
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.shui.hooks :as hooks]
@@ -31,10 +27,6 @@
     (keyword? role) (name role)
     (string? role) role
     :else "assistant"))
-
-(def ^:private model-options
-  [{:id "Codex" :label "Codex"}
-   {:id "Claude Code" :label "Claude Code"}])
 
 (defn- agent-title
   [agent-value]
@@ -122,36 +114,14 @@
       (and user-message (not has-task?)) (into [user-message] base)
       :else base)))
 
-(defn- message-bubble
+(defn- message->chat-message
   [message]
   (let [role (normalize-role (:role message))
-        mine? (= "user" role)
-        role-label (if mine? "You" "Assistant")
-        bubble-classes (if mine?
-                         "bg-primary text-primary-foreground rounded-br-sm"
-                         "bg-muted/70 text-foreground rounded-bl-sm")
-        row-classes (if mine? "justify-end" "justify-start")
         text (ui-message-text message)]
     (when (seq text)
-      [:div.flex.flex-row.items-end.gap-2 {:class row-classes}
-       [:div.flex.flex-col.gap-1 {:class (str (if mine? "items-end" "items-start")
-                                              " max-w-[85%]")}
-        [:div {:class "text-[11px] uppercase tracking-wider opacity-60"} role-label]
-        [:div.rounded-2xl.px-4.py-2.shadow-sm {:class bubble-classes}
-         [:div.whitespace-pre-wrap.leading-relaxed.text-sm text]]]])))
-
-(defn- model-pill
-  [{:keys [id label]} selected on-click]
-  (let [active? (= id selected)]
-    [:button
-     {:key id
-      :class (str "h-8 rounded-full border px-3 text-xs font-medium transition "
-                  (if active?
-                    "border-primary bg-primary text-primary-foreground shadow-sm"
-                    "border-muted bg-background text-muted-foreground hover:border-foreground/30 hover:text-foreground"))
-      :type "button"
-      :on-click #(on-click id)}
-     label]))
+      {:id (:id message)
+       :role role
+       :text text})))
 
 (rum/defc agent-chat-dialog
   [block]
@@ -162,103 +132,74 @@
         base (db-sync/http-base)
         agent-value (:logseq.property/agent block)
         agent-label (agent-title agent-value)
-        initial-messages (session->messages session block)
-        known-ids (mapv :id initial-messages)
-        [transport] (rum/use-state
-                     (fn []
-                       (chat-transport/make-transport {:base base
-                                                       :session-id session-id
-                                                       :known-ids known-ids})))
-        [chat-instance] (rum/use-state
-                         (fn []
-                           (new Chat (bean/->js {:id session-id
-                                                 :messages initial-messages
-                                                 :transport transport}))))
-        chat (useChat (bean/->js {:chat chat-instance
-                                  :resume true}))
-        messages (js->clj (.-messages chat) :keywordize-keys true)
-        status (.-status chat)
-        error (.-error chat)
-        set-messages (.-setMessages chat)
-        stop-chat (.-stop chat)
-        [input set-input!] (rum/use-state "")]
+        messages (session->messages session block)
+        status (:status session)
+        error (:stream-error session)
+        session-started? (boolean (:session-id session))
+        chat-messages (->> messages
+                           (map message->chat-message)
+                           (remove nil?))
+        [draft set-draft!] (rum/use-state "")
+        trimmed-draft (string/trim (or draft ""))
+        send-message! (fn []
+                        (when (and base session-id (not (string/blank? trimmed-draft)))
+                          (set-draft! "")
+                          (-> (db-sync/fetch-json (str base "/sessions/" session-id "/messages")
+                                                  {:method "POST"
+                                                   :headers {"content-type" "application/json"}
+                                                   :body (js/JSON.stringify
+                                                          (clj->js {:message trimmed-draft
+                                                                    :kind "user"}))}
+                                                  {:response-schema :sessions/message})
+                              (p/catch (fn [_] nil)))))]
     (hooks/use-effect!
      (fn []
        (when (agent-handler/task-ready? block)
          (agent-handler/<ensure-session! block))
        nil)
      [block-uuid (:logseq.property/project block) (:logseq.property/agent block)])
-    (hooks/use-effect!
-     (fn []
-       (when (and (fn? set-messages) (seq initial-messages))
-         (set-messages (bean/->js initial-messages)))
-       nil)
-     [session-id (count initial-messages)])
     [:div.max-w-full
-     {:class "w-[min(860px,92vw)]"}
-     [:div {:class "flex h-[72vh] flex-col overflow-hidden rounded-3xl border border-muted/60 bg-background shadow-xl"}
-      [:div {:class "flex items-center justify-between border-b border-muted/60 px-5 py-3"}
-       [:div {:class "flex items-center gap-3"}
-        [:div {:class "flex flex-col"}
-         [:div {:class "text-base font-medium opacity-70"} agent-label]]]
-       [:div {:class "flex items-center gap-2"}
-        (when (string? status)
-          [:div {:class "rounded-full border border-muted/60 px-2 py-1 text-[11px] uppercase tracking-wider text-muted-foreground"}
-           (string/capitalize status)])
-        (when (and (agent-handler/task-ready? block)
-                   (not (:session-id session)))
-          (shui/button
-           {:variant :default
-            :size :sm
-            :on-click (fn [e]
-                        (util/stop e)
-                        (-> (agent-handler/<start-session! block)
-                            (p/catch (fn [_] nil))))}
-           "Start session"))]]
-
-      [:div {:class "flex-1 overflow-auto space-y-4 px-5 py-4"}
-       (if (seq messages)
-         (for [message messages]
-           (message-bubble message))
-         [:div {:class "flex h-full flex-col items-center justify-center text-center text-sm text-muted-foreground"}
-          [:div {:class "mb-2 text-base font-medium text-foreground"} "No messages yet"]
-          [:div "Ask the agent to start exploring this project."]])]
-
-      (when error
-        [:div {:class "px-5 pb-2 text-xs text-red-600"} (str "Error: " error)])
-
-      [:div
-       {:class "border-t border-muted/60 bg-background px-5 py-3"}
-       [:form
-        {:class "flex items-end gap-2"
-         :on-submit (fn [e]
-                      (util/stop e)
-                      (when (seq (string/trim input))
-                        (-> (.sendMessage chat #js {:text input})
-                            (p/catch (fn [_] nil)))
-                        (set-input! "")))}
-        [:div {:class "flex-1"}
-         [:textarea
-          {:class "form-input block w-full resize-none text-sm leading-relaxed"
-           :placeholder "Send a message..."
-           :rows 1
-           :value input
-           :on-change #(set-input! (.. % -target -value))}]]
-        (when (and (= "streaming" status) (fn? stop-chat))
-          (shui/button
-           {:variant :outline
-            :size :sm
-            :type "button"
-            :on-click (fn [e]
-                        (util/stop e)
-                        (stop-chat))}
-           "Stop"))
-        (shui/button
-         {:variant :default
-          :size :sm
-          :disabled (or (string/blank? (string/trim input))
-                        (= "streaming" status))}
-         "Send")]]]]))
+     [:div.flex.items-start.justify-between.gap-3
+      [:div.flex.flex-col.gap-1
+       [:div.text-lg.font-medium (or agent-label "Agent")]
+       (when (string? status)
+         [:div.text-xs.opacity-60 (string/capitalize status)])
+       (when (string? error)
+         [:div.text-xs.text-red-500 error])]]
+     [:div.mt-4.flex.flex-col.gap-3.overflow-auto.pr-1
+      {:style {:maxHeight "60vh"}}
+      (if (seq chat-messages)
+        (for [{:keys [id role text]} chat-messages
+              :let [from-user? (= "user" (normalize-role role))
+                    bubble-class (if from-user?
+                                   "bg-accent text-accent-foreground"
+                                   "bg-secondary text-secondary-foreground")]]
+          [:div.flex {:key id :class (if from-user? "justify-end" "justify-start")}
+           [:div.rounded-lg.px-3.py-2.text-sm
+            {:class bubble-class
+             :style {:maxWidth "85%"}}
+            [:div.text-xs.opacity-60.mb-1 (if from-user? "You" (or agent-label "Assistant"))]
+            [:div.whitespace-pre-wrap text]]])
+        [:div.text-sm.opacity-60 "No messages yet."])]
+     [:div.mt-4.flex.gap-2.items-end
+      [:textarea.flex-1.rounded-md.border.border-input.bg-transparent.px-3.py-2.text-sm
+       {:placeholder "Send a message..."
+        :style {:minHeight "88px"}
+        :value draft
+        :disabled (or (not session-started?) (not (agent-handler/task-ready? block)))
+        :on-change (fn [e] (set-draft! (util/evalue e)))
+        :on-key-down (fn [e]
+                       (when (and (= "Enter" (.-key e))
+                                  (or (.-metaKey e) (.-ctrlKey e)))
+                         (.preventDefault e)
+                         (send-message!)))}]
+      (shui/button
+       {:size :sm
+        :disabled (or (not session-started?)
+                      (string/blank? trimmed-draft)
+                      (not (agent-handler/task-ready? block)))
+        :on-click (fn [] (send-message!))}
+       "Send")]]))
 
 (defn open-agent-chat-dialog!
   [block]
