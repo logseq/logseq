@@ -93,12 +93,17 @@
               :assets-bucket assets-bucket}
         server (.createServer http
                               (fn [req res]
-                                (p/let [request (platform-node/request-from-node req {:scheme "http"})
-                                        response (dispatch/handle-node-fetch {:request request
-                                                                              :env env
-                                                                              :registry registry
-                                                                              :deps deps})]
-                                  (platform-node/send-response! res response))))
+                                (-> (p/let [request (platform-node/request-from-node req {:scheme "http"})
+                                            response (dispatch/handle-node-fetch {:request request
+                                                                                  :env env
+                                                                                  :registry registry
+                                                                                  :deps deps})]
+                                      (platform-node/send-response! res response))
+                                    (p/catch
+                                     (fn [e]
+                                       (log/error :db-sync/node-request-failed {:error e})
+                                       ;; Throw until there's a more desirable behavior like 500
+                                       (throw e))))))
         WSS (or (.-WebSocketServer ws) (.-Server ws))
         ^js wss (new WSS #js {:noServer true})]
     (.on server "error" (fn [error] (log/error :db-sync/node-server-error {:error error})))
