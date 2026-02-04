@@ -81,10 +81,9 @@
   [block]
   (let [{:keys [project agent node-id]} (task-context block)]
     (and (string? node-id)
-         (map? project)
-         (seq project)
-         (map? agent)
-         (seq agent))))
+         project
+         agent
+         (> (count (:block/title block)) 4))))
 
 (defn build-session-body
   [block]
@@ -112,7 +111,7 @@
   (str base "/sessions/" session-id "/stream"))
 
 (def ^:private session-status->task-status
-  {"created" :logseq.property/status.todo
+  {"created" :logseq.property/status.doing
    "running" :logseq.property/status.doing
    "paused" :logseq.property/status.todo
    "completed" :logseq.property/status.done
@@ -217,9 +216,14 @@
 (defn- stream-controller [block-uuid]
   (get-in (session-state block-uuid) [:stream-controller]))
 
+(defn- stream-controller-active? [controller]
+  (and controller (not (.-aborted (.-signal controller)))))
+
 (defn- stop-session-stream! [block-uuid]
   (when-let [controller (stream-controller block-uuid)]
-    (.abort controller)))
+    (.abort controller)
+    (update-session-state! block-uuid {:streaming? false
+                                       :stream-controller nil})))
 
 (defn- handle-stream-event!
   [block-uuid event]
@@ -253,30 +257,37 @@
 (declare schedule-reconnect!)
 (defn- <connect-session-stream!
   [block-uuid stream-url]
-  (when (string? stream-url)
-    (let [controller (js/AbortController.)
-          headers (auth-headers)
-          opts (cond-> {:method "GET"
-                        :signal (.-signal controller)}
-                 headers (assoc :headers headers))]
-      (update-session-state! block-uuid {:streaming? true
-                                         :stream-error nil
-                                         :stream-controller controller})
-      (-> (p/let [resp (js/fetch stream-url (clj->js opts))]
-            (if-not (.-ok resp)
-              (throw (ex-info "agent session stream failed"
-                              {:status (.-status resp)
-                               :stream-url stream-url}))
-              (<consume-sse-stream! block-uuid resp)))
-          (p/then (fn [_]
-                    (update-session-state! block-uuid {:streaming? false})))
-          (p/catch (fn [error]
-                     (if (.-aborted (.-signal controller))
-                       (update-session-state! block-uuid {:streaming? false})
-                       (do
-                         (update-session-state! block-uuid {:streaming? false
-                                                            :stream-error (str error)})
-                         (schedule-reconnect! block-uuid stream-url)))))))))
+  (let [session (session-state block-uuid)]
+    (if (or (:streaming? session)
+            (stream-controller-active? (:stream-controller session)))
+      (p/resolved nil)
+      (when (string? stream-url)
+        (let [controller (js/AbortController.)
+              headers (auth-headers)
+              opts (cond-> {:method "GET"
+                            :signal (.-signal controller)}
+                     headers (assoc :headers headers))]
+          (update-session-state! block-uuid {:streaming? true
+                                             :stream-error nil
+                                             :stream-controller controller})
+          (-> (p/let [resp (js/fetch stream-url (clj->js opts))]
+                (if-not (.-ok resp)
+                  (throw (ex-info "agent session stream failed"
+                                  {:status (.-status resp)
+                                   :stream-url stream-url}))
+                  (<consume-sse-stream! block-uuid resp)))
+              (p/then (fn [_]
+                        (update-session-state! block-uuid {:streaming? false
+                                                           :stream-controller nil})))
+              (p/catch (fn [error]
+                         (if (.-aborted (.-signal controller))
+                           (update-session-state! block-uuid {:streaming? false
+                                                              :stream-controller nil})
+                           (do
+                             (update-session-state! block-uuid {:streaming? false
+                                                                :stream-error (str error)
+                                                                :stream-controller nil})
+                             (schedule-reconnect! block-uuid stream-url)))))))))))
 
 (defn- schedule-reconnect!
   [block-uuid stream-url]

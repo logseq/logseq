@@ -2537,13 +2537,12 @@
           session (get sessions (str (:block/uuid block)))
           status (:status session)
           ready? (agent-handler/task-ready? block)
-          status-label (agent-status-label status)
-          status-class (agent-status-class status)
           running? (contains? #{"running" "paused"} status)
-          btn-title (if ready? "Check agent session" "Set Project + Agent + Git Repo")]
+          session-started? (boolean (:session-id session))
+          btn-title (if ready?
+                      (if session-started? "Open chat" "Run agent")
+                      "Set Project + Agent + Git Repo")]
       [:div.flex.flex-row.items-center.gap-1
-       (when status-label
-         [:span.text-xs.font-medium {:class status-class} status-label])
        (shui/button
         {:variant :ghost
          :size :sm
@@ -2552,8 +2551,15 @@
          :disabled (not ready?)
          :on-click (fn [e]
                      (util/stop e)
-                     (agent-chat/open-agent-chat-dialog! block))}
-        (if running? "Running" "Check"))])))
+                     (if session-started?
+                       (agent-chat/open-agent-chat-dialog! block)
+                       (-> (agent-handler/<start-session! block)
+                           (p/then (fn [_] (agent-chat/open-agent-chat-dialog! block)))
+                           (p/catch (fn [_] (agent-chat/open-agent-chat-dialog! block))))))}
+        (cond
+          running? "Running"
+          session-started? "Thread"
+          :else "Run"))])))
 
 (rum/defc ^:large-vars/cleanup-todo block-content < rum/reactive
   [config {:block/keys [uuid] :as block} edit-input-id block-id *show-query?]
