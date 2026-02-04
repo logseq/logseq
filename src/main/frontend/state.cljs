@@ -1115,11 +1115,6 @@ Similar to re-frame subscriptions"
   (when (empty? (:sidebar/blocks @state))
     (sidebar-add-block! (get-current-repo) "contents" :contents)))
 
-(defn toggle-sidebar-open?!
-  []
-  (when-not (:ui/sidebar-open? @state)
-    (sidebar-add-content-when-open!))
-  (swap! state update :ui/sidebar-open? not))
 
 (defn open-right-sidebar!
   []
@@ -1129,6 +1124,12 @@ Similar to re-frame subscriptions"
 (defn hide-right-sidebar!
   []
   (swap! state assoc :ui/sidebar-open? false))
+
+(defn toggle-sidebar-open?!
+  []
+  (if (:ui/sidebar-open? @state)
+    (hide-right-sidebar!)
+    (open-right-sidebar!)))
 
 (defn sidebar-move-block!
   [from to]

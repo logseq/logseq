@@ -2169,6 +2169,7 @@
                    (-> (select-keys options [:notify-user :default-config :<save-config-file])
                        (set/rename-keys {:<save-config-file :<save-file})))]
      (let [files (common-config/remove-hidden-files *files config rpath-key)
+           ;; Path normalization is needed just for windows
            normalized-rpath (fn [f]
                               (some-> (get f rpath-key) path/path-normalize))
            logseq-file? #(string/starts-with? (normalized-rpath %) "logseq/")
