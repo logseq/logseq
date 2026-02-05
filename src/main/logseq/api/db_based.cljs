@@ -292,17 +292,21 @@
   (resolve-eid this prop-uuid-or-ident-or-title
                api-block/resolve-property-prefix-for-db))
 
+(defn- get-tags [name]
+  (some->> (entity-util/get-pages-by-name (db-conn/get-db) name)
+           (map #(some-> % (first) (db/entity)))
+           (filter ldb/class?)))
+
 (defn get-tag [class-uuid-or-ident-or-title]
   (this-as this
            (let [eid (resolve-tag-eid this class-uuid-or-ident-or-title)
-                 tag (db/entity eid)]
+                 tag (db/entity eid)
+                 tag (or tag (some-> (get-tags class-uuid-or-ident-or-title) first))]
              (when (ldb/class? tag)
                (sdk-utils/result->js tag)))))
 
 (defn get-tags-by-name [name]
-  (when-let [tags (some->> (entity-util/get-pages-by-name (db-conn/get-db) name)
-                           (map #(some-> % (first) (db/entity)))
-                           (filter ldb/class?))]
+  (when-let [tags (get-tags name)]
     (sdk-utils/result->js tags)))
 
 (defn tag-add-property [tag-id property-id-or-name]
