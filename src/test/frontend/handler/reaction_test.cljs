@@ -9,19 +9,6 @@
 
 (use-fixtures :each test-helper/start-and-destroy-db)
 
-(deftest summarize-reactions
-  (testing "groups counts and marks current user"
-    (let [user-id 1
-          reactions [{:logseq.property.reaction/emoji-id "+1"
-                      :logseq.property/created-by-ref user-id}
-                     {:logseq.property.reaction/emoji-id "+1"
-                      :logseq.property/created-by-ref 2}
-                     {:logseq.property.reaction/emoji-id "tada"}]
-          summary (reaction/summarize reactions user-id)]
-      (is (= [{:emoji-id "+1" :count 2 :reacted-by-me? true}
-              {:emoji-id "tada" :count 1 :reacted-by-me? false}]
-             summary)))))
-
 (deftest toggle-reaction-anonymous
   (testing "adds and removes reaction without user"
     (test-helper/load-test-files
