@@ -640,9 +640,14 @@
   @apply overflow-visible;
 }
 
+/* Remove default dropdown padding to allow full-width preview image */
+.ui__dropdown-menu-content.web-image-confirm-popup {
+  @apply p-0;
+}
+
 .web-image-confirm-pane {
-  @apply flex flex-col gap-3;
-  width: 280px;
+  @apply flex flex-col;
+  width: 290px;
   background-color: var(--lx-gray-02);
 
   .preview-image {
@@ -672,8 +677,13 @@
     }
   }
 
+  /* Content wrapper - reintroduce padding for non-preview content */
+  .content-wrapper {
+    @apply flex flex-col gap-3 p-3;
+  }
+
   .image-info {
-    @apply flex flex-col gap-1 px-3;
+    @apply flex flex-col gap-1;
 
     .image-title {
       @apply font-medium text-sm;
@@ -692,7 +702,7 @@
   }
 
   .skip-confirm-checkbox {
-    @apply flex items-center gap-2 cursor-pointer px-3;
+    @apply flex items-center gap-2 cursor-pointer;
     @apply text-xs py-1;
     color: var(--rx-gray-11);
 
@@ -702,7 +712,7 @@
   }
 
   .pane-footer {
-    @apply flex justify-end gap-2 pt-1 px-3 pb-3;
+    @apply flex justify-end gap-2 pt-1;
   }
 }
 

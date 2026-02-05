@@ -1183,12 +1183,12 @@
        :on-click (fn [e]
                    (on-chosen e {:type :emoji
                                  :id emoji-id
-                                 :name emoji-name}))}
+                                 :name emoji-name}))
        (not (nil? hover))
        (assoc :on-mouse-over #(reset! hover {:type :emoji
                                              :id emoji-id
                                              :name emoji-name})
-              :on-mouse-out #()))
+              :on-mouse-out #())})
      [:em-emoji {:id emoji-id
                  :style {:line-height 1}}]]))
 
@@ -1206,12 +1206,12 @@
        :on-click (fn [e]
                    (on-chosen e {:type :text
                                  :data (cond-> {:value text-value}
-                                         text-color (assoc :color text-color))}))}
+                                         text-color (assoc :color text-color))}))
        (not (nil? hover))
        (assoc :on-mouse-over #(reset! hover {:type :text
                                              :data (cond-> {:value text-value}
                                                      text-color (assoc :color text-color))})
-              :on-mouse-out #()))
+              :on-mouse-out #())})
      display-text]))
 
 (rum/defc avatar-cp < rum/static
@@ -1232,13 +1232,13 @@
                    (on-chosen e {:type :avatar
                                  :data {:value avatar-value
                                         :backgroundColor backgroundColor
-                                        :color color}}))}
+                                        :color color}}))
        (not (nil? hover))
        (assoc :on-mouse-over #(reset! hover {:type :avatar
                                              :data {:value avatar-value
                                                     :backgroundColor backgroundColor
                                                     :color color}})
-              :on-mouse-out #()))
+              :on-mouse-out #())})
      (shui/avatar
       {:class "w-7 h-7"}
       (shui/avatar-fallback
@@ -1716,44 +1716,46 @@
                                       :sideOffset 8}}))}
        (shui/tabler-icon "arrows-maximize" {:size 16})]]
 
-     ;; Image info
-     [:div.image-info
-      [:div.image-title (or title "Web image")]
-      [:div.image-source {:style {:color "var(--lx-gray-11)"}} source-text]
-      ;; License description badge
-      (when license-desc
-        [:div.license-badge license-desc])]
+     ;; Content wrapper - adds padding back for non-preview content
+     [:div.content-wrapper
+      ;; Image info
+      [:div.image-info
+       [:div.image-title (or title "Web image")]
+       [:div.image-source {:style {:color "var(--lx-gray-11)"}} source-text]
+       ;; License description badge
+       (when license-desc
+         [:div.license-badge license-desc])]
 
-     ;; Skip confirmation checkbox
-     [:label.skip-confirm-checkbox
-      (shui/checkbox
-       {:checked skip-confirm?
-        :on-checked-change #(reset! *skip-confirm %)})
-      [:span "Always add without asking"]]
+      ;; Skip confirmation checkbox
+      [:label.skip-confirm-checkbox
+       (shui/checkbox
+        {:checked skip-confirm?
+         :on-checked-change #(reset! *skip-confirm %)})
+       [:span "Always add without asking"]]
 
-     ;; Action buttons
-     [:div.pane-footer
-      (shui/button
-       {:variant :outline
-        :size :sm
-        :on-click on-close}
-       "Cancel")
-      (shui/button
-       {:variant :default
-        :size :sm
-        :disabled saving?
-        :on-click (fn []
-                    (reset! *saving? true)
-                    ;; Save preference if checkbox was checked
-                    (when skip-confirm?
-                      (set-web-image-skip-confirm! true))
-                    ;; Delegate saving to parent
-                    (on-save web-image))}
-       (if saving?
-         [:span.flex.items-center.gap-1
-          [:span.animate-spin (shui/tabler-icon "loader-2" {:size 14})]
-          "Adding..."]
-         "Add to assets"))]]))
+      ;; Action buttons
+      [:div.pane-footer
+       (shui/button
+        {:variant :outline
+         :size :sm
+         :on-click on-close}
+        "Cancel")
+       (shui/button
+        {:variant :default
+         :size :sm
+         :disabled saving?
+         :on-click (fn []
+                     (reset! *saving? true)
+                     ;; Save preference if checkbox was checked
+                     (when skip-confirm?
+                       (set-web-image-skip-confirm! true))
+                     ;; Delegate saving to parent
+                     (on-save web-image))}
+        (if saving?
+          [:span.flex.items-center.gap-1
+           [:span.animate-spin (shui/tabler-icon "loader-2" {:size 14})]
+           "Adding..."]
+          "Add to assets"))]]]))
 
 (rum/defcs web-images-section < rum/reactive
   (rum/local nil ::images)
@@ -2075,13 +2077,25 @@
            (debounce
             (fn [q] (reset! *web-query-debounced q))
             500)))
+        ;; SVG detection helper - checks if URL is an SVG file
+        svg-url?
+        (fn [url]
+          (and (string? url)
+               (string/ends-with? (string/lower-case url) ".svg")))
+
         ;; Handle web image selection (download and save)
+        ;; For SVGs, prefer PNG thumbnail to avoid binary corruption issues
         handle-web-image-select
         (fn [_e web-image skip-confirm?]
           (let [repo (state/get-current-repo)
-                {:keys [url title]} web-image
+                {:keys [url thumb-url title]} web-image
+                ;; Use PNG thumbnail for SVGs (avoids blob rendering issues)
+                ;; Fall back to original URL for non-SVGs or if no thumbnail
+                download-url (if (and (svg-url? url) thumb-url)
+                               thumb-url  ; PNG thumbnail for SVG
+                               url)       ; Original for other formats
                 asset-name (or title "web-image")]
-            (-> (<save-url-asset! repo url asset-name)
+            (-> (<save-url-asset! repo download-url asset-name)
                 (p/then (fn [asset-entity]
                           (when asset-entity
                             ;; Track as recently used
@@ -2725,4 +2739,3 @@
            icon-value
            (icon icon-value (merge {:color? true} icon-props)))
          (or empty-label "Empty"))))))
-
