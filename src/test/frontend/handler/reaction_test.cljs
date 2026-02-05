@@ -3,7 +3,6 @@
             [frontend.db :as db]
             [frontend.handler.reaction :as reaction-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.reaction :as reaction]
             [frontend.test.helper :as test-helper]
             [logseq.common.util :as common-util]))
 
