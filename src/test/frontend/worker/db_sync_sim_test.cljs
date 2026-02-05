@@ -82,7 +82,7 @@
     {:repro repro
      :restore (fn [] (reset! ldb/*transact-invalid-callback prev))}))
 
-(deftest rng-uuid-deterministic-test
+(deftest ^:long rng-uuid-deterministic-test
   (testing "rng-uuid produces stable sequences for the same seed"
     (let [rng-a (make-rng 42)
           rng-b (make-rng 42)
@@ -93,7 +93,7 @@
       (is (= seq-a seq-b))
       (is (not= seq-a seq-c)))))
 
-(deftest invalid-tx-repro-callback-test
+(deftest ^:long invalid-tx-repro-callback-test
   (testing "invalid tx callback captures sim repro payload"
     (let [seed 7
           history (atom [{:type :op :op :create-page}])
@@ -275,7 +275,7 @@
                                                :datoms-count (count (d/datoms (deref (:conn c)) :avet :block/uuid))}))
                                           clients)})))))))
 
-(deftest sync-loop-all-offline-no-error-test
+(deftest ^:long sync-loop-all-offline-no-error-test
   (testing "sync-loop tolerates all clients offline"
     (let [server (make-server)
           conn (db-test/create-conn)
@@ -453,7 +453,7 @@
                               repo (assoc :repo repo)
                               context (assoc :context context)))))))
 
-(deftest two-clients-online-offline-sim-test
+(deftest ^:long two-clients-online-offline-sim-test
   (testing "db-sync convergence with online/offline client and random ops"
     (prn :debug "run two-clients-online-offline-sim-test")
     (let [seed (or (env-seed) default-seed)
@@ -514,7 +514,7 @@
               (finally
                 (restore)))))))))
 
-(deftest two-clients-rebase-keeps-local-title-after-reverse-tx-test
+(deftest ^:long two-clients-rebase-keeps-local-title-after-reverse-tx-test
   (testing "two clients keep local title after reverse tx with newer tx id"
     (let [base-uuid (uuid "11111111-1111-1111-1111-111111111111")
           block-uuid (uuid "22222222-2222-2222-2222-222222222222")
@@ -580,7 +580,7 @@
            " c=" (count attrs-c)
            " history=" (count @history))))
 
-(deftest two-clients-online-sim-test
+(deftest ^:long two-clients-online-sim-test
   (testing "db-sync convergence with two online clients"
     (let [seed (or (env-seed) default-seed)
           rng (make-rng seed)
@@ -631,7 +631,7 @@
               (finally
                 (restore)))))))))
 
-(deftest ^:large-vars/cleanup-todo three-clients-single-repo-sim-test
+(deftest ^:long ^:large-vars/cleanup-todo three-clients-single-repo-sim-test
   (prn :debug "run three-clients-single-repo-sim-test")
   (testing "db-sync convergence with three clients sharing one repo"
     (let [seed (or (env-seed) default-seed)
