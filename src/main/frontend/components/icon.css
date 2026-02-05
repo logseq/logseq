@@ -641,27 +641,39 @@
 }
 
 .web-image-confirm-pane {
-  @apply flex flex-col gap-3 p-3;
+  @apply flex flex-col gap-3;
   width: 280px;
   background-color: var(--lx-gray-02);
 
   .preview-image {
-    @apply flex justify-center;
+    width: 100%;
+    height: 180px;
+    position: relative;
 
     img {
-      width: 80px;
-      height: 80px;
+      width: 100%;
+      height: 100%;
       object-fit: cover;
-      border-radius: 8px;
+      object-position: center;
+      border-radius: 6px 6px 0 0;
     }
 
-    &.avatar-mode img {
-      border-radius: 50%;
+    /* Maximize button - floating top-right */
+    .maximize-btn {
+      @apply absolute top-2 right-2;
+      @apply flex items-center justify-center;
+      @apply w-7 h-7 rounded;
+      @apply transition-opacity duration-150;
+      @apply opacity-70 hover:opacity-100;
+      @apply border-none cursor-pointer;
+      background-color: color-mix(in srgb, var(--lx-gray-02) 80%, transparent);
+      backdrop-filter: blur(4px);
+      color: var(--rx-gray-12);
     }
   }
 
   .image-info {
-    @apply flex flex-col gap-1 text-center;
+    @apply flex flex-col gap-1 px-3;
 
     .image-title {
       @apply font-medium text-sm;
@@ -673,14 +685,14 @@
     }
 
     .license-badge {
-      @apply text-xs px-2 py-1 rounded mt-1 text-center;
+      @apply text-xs px-2 py-1 rounded mt-1 self-start;
       background-color: var(--lx-gray-04);
       color: var(--lx-gray-11);
     }
   }
 
   .skip-confirm-checkbox {
-    @apply flex items-center gap-2 cursor-pointer;
+    @apply flex items-center gap-2 cursor-pointer px-3;
     @apply text-xs py-1;
     color: var(--rx-gray-11);
 
@@ -690,6 +702,40 @@
   }
 
   .pane-footer {
-    @apply flex justify-end gap-2 pt-1;
+    @apply flex justify-end gap-2 pt-1 px-3 pb-3;
+  }
+}
+
+/* Full image view popover (opened from maximize button) */
+.full-image-view-popup {
+  @apply overflow-visible p-0;
+}
+
+.full-image-view-pane {
+  @apply relative;
+  background-color: var(--lx-gray-02);
+  border-radius: 8px;
+
+  .image-container {
+    @apply flex items-center justify-center;
+
+    img {
+      max-width: min(800px, 90vw);
+      max-height: 70vh;
+      object-fit: contain;
+      border-radius: 6px;
+    }
+  }
+
+  .close-btn {
+    @apply absolute top-2 right-2;
+    @apply flex items-center justify-center;
+    @apply w-7 h-7 rounded;
+    @apply border-none cursor-pointer;
+    @apply transition-opacity duration-150;
+    @apply opacity-70 hover:opacity-100;
+    background-color: color-mix(in srgb, var(--lx-gray-02) 80%, transparent);
+    backdrop-filter: blur(4px);
+    color: var(--rx-gray-12);
   }
 }

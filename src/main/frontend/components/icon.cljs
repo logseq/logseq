@@ -1670,6 +1670,16 @@
         (when license-desc
           [:div.text-xs {:style {:color "var(--lx-gray-11)"}} license-desc])])))))
 
+(rum/defc full-image-view
+  "Full image view popover - shows uncropped image with object-fit: contain"
+  [{:keys [url on-close]}]
+  [:div.full-image-view-pane
+   [:div.image-container
+    [:img {:src url}]]
+   [:button.close-btn
+    {:on-click on-close}
+    (shui/tabler-icon "x" {:size 16})]])
+
 (rum/defcs web-image-confirm-pane < rum/reactive
   (rum/local false ::skip-confirm)
   (rum/local false ::saving?)
@@ -1687,10 +1697,24 @@
                            "From: Web")
                          (when license (str " · " license)))]
     [:div.web-image-confirm-pane
-     ;; Preview image
+     ;; Preview image with maximize button
      [:div.preview-image
-      {:class (when avatar-mode? "avatar-mode")}
-      [:img {:src (or thumb-url url)}]]
+      [:img {:src (or thumb-url url)}]
+      ;; Maximize button - opens full image view
+      [:button.maximize-btn
+       {:on-click (fn [e]
+                    (.stopPropagation e)
+                    (shui/popup-show!
+                     (.-target e)
+                     (fn [{:keys [id]}]
+                       (full-image-view
+                        {:url (or thumb-url url)
+                         :on-close #(shui/popup-hide! id)}))
+                     {:align :center
+                      :side "top"
+                      :content-props {:class "full-image-view-popup"
+                                      :sideOffset 8}}))}
+       (shui/tabler-icon "arrows-maximize" {:size 16})]]
 
      ;; Image info
      [:div.image-info
