@@ -2,6 +2,8 @@
   (:require [cljs.test :refer [deftest is testing async]]
             [datascript.core :as d]
             [frontend.common.crypt :as crypt]
+            [frontend.worker-common.util :as worker-util]
+            [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync :as db-sync]
             [frontend.worker.sync.client-op :as client-op]
@@ -52,6 +54,76 @@
      :child1 child1
      :child2 child2
      :child3 child3}))
+
+(deftest update-online-users-dedupes-identical-messages-test
+  (let [client {:repo test-repo
+                :online-users (atom [])
+                :ws-state (atom :open)}
+        broadcasts (atom [])]
+    (with-redefs [shared-service/broadcast-to-clients! (fn [topic payload]
+                                                         (swap! broadcasts conj {:topic topic :payload payload}))]
+      (#'db-sync/update-online-users! client [{:user-id "u1" :username "Alice"}])
+      (#'db-sync/update-online-users! client [{:user-id "u1" :username "Alice"}])
+      (is (= 1 (count @broadcasts)))
+      (is (= [{:user/uuid "u1" :user/name "Alice"}]
+             (get-in (first @broadcasts) [:payload :online-users]))))))
+
+(deftest update-online-users-broadcasts-when-user-list-changes-test
+  (let [client {:repo test-repo
+                :online-users (atom [])
+                :ws-state (atom :open)}
+        broadcasts (atom [])]
+    (with-redefs [shared-service/broadcast-to-clients! (fn [topic payload]
+                                                         (swap! broadcasts conj {:topic topic :payload payload}))]
+      (#'db-sync/update-online-users! client [{:user-id "u1" :username "Alice"}])
+      (#'db-sync/update-online-users! client [{:user-id "u1" :username "Alice"}
+                                              {:user-id "u2" :username "Bob"}])
+      (is (= 2 (count @broadcasts)))
+      (is (= [{:user/uuid "u1" :user/name "Alice"}
+              {:user/uuid "u2" :user/name "Bob"}]
+             (get-in (last @broadcasts) [:payload :online-users]))))))
+
+(deftest presence-message-ignores-source-client-test
+  (let [client {:repo test-repo
+                :online-users (atom [{:user/uuid "u1" :user/name "Alice"}
+                                     {:user/uuid "u2" :user/name "Bob"}])
+                :ws-state (atom :open)}
+        broadcasts (atom [])
+        raw-message (js/JSON.stringify
+                     (clj->js {:type "presence"
+                               :user-id "u1"
+                               :editing-block-uuid "block-self"}))]
+    (with-redefs [worker-state/get-id-token (fn [] "token")
+                  worker-util/parse-jwt (fn [_] {:sub "u1"})
+                  client-op/get-local-tx (fn [_repo] 0)
+                  shared-service/broadcast-to-clients! (fn [topic payload]
+                                                         (swap! broadcasts conj {:topic topic :payload payload}))]
+      (#'db-sync/handle-message! test-repo client raw-message)
+      (is (= [{:user/uuid "u1" :user/name "Alice"}
+              {:user/uuid "u2" :user/name "Bob"}]
+             @(:online-users client)))
+      (is (empty? @broadcasts)))))
+
+(deftest presence-message-updates-other-user-test
+  (let [client {:repo test-repo
+                :online-users (atom [{:user/uuid "u1" :user/name "Alice"}
+                                     {:user/uuid "u2" :user/name "Bob"}])
+                :ws-state (atom :open)}
+        broadcasts (atom [])
+        raw-message (js/JSON.stringify
+                     (clj->js {:type "presence"
+                               :user-id "u2"
+                               :editing-block-uuid "block-2"}))]
+    (with-redefs [worker-state/get-id-token (fn [] "token")
+                  worker-util/parse-jwt (fn [_] {:sub "u1"})
+                  client-op/get-local-tx (fn [_repo] 0)
+                  shared-service/broadcast-to-clients! (fn [topic payload]
+                                                         (swap! broadcasts conj {:topic topic :payload payload}))]
+      (#'db-sync/handle-message! test-repo client raw-message)
+      (is (= [{:user/uuid "u1" :user/name "Alice"}
+              {:user/uuid "u2" :user/name "Bob" :user/editing-block-uuid "block-2"}]
+             @(:online-users client)))
+      (is (= 1 (count @broadcasts))))))
 
 (deftest ^:long reparent-block-when-cycle-detected-test
   (testing "cycle from remote sync reparent block to page root"

@@ -94,8 +94,10 @@
 (defn- update-online-users!
   [client users]
   (when-let [*online-users (:online-users client)]
-    (reset! *online-users (normalize-online-users users))
-    (broadcast-rtc-state! client)))
+    (let [users' (normalize-online-users users)]
+      (when (not= users' @*online-users)
+        (reset! *online-users users')
+        (broadcast-rtc-state! client)))))
 
 (defn- update-user-presence!
   [client user-id* editing-block-uuid]
@@ -129,6 +131,11 @@
 
 (defn- auth-token []
   (worker-state/get-id-token))
+
+(defn- get-user-uuid []
+  (some-> (worker-state/get-id-token)
+          worker-util/parse-jwt
+          :sub))
 
 (defn- auth-headers []
   (when-let [token (auth-token)]
@@ -1066,8 +1073,10 @@
                            (fail-fast :db-sync/invalid-field
                                       {:repo repo :type "online-users" :field :online-users}))
                          (update-online-users! client (or users [])))
-        "presence" (let [{:keys [user-id editing-block-uuid]} message]
-                     (update-user-presence! client user-id editing-block-uuid))
+        "presence" (let [{:keys [user-id editing-block-uuid]} message
+                         current-user-id (get-user-uuid)]
+                     (when-not (= current-user-id user-id)
+                       (update-user-presence! client user-id editing-block-uuid)))
         ;; Upload response
         "tx/batch/ok" (do
                         (require-non-negative remote-tx {:repo repo :type "tx/batch/ok"})
