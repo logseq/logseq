@@ -67,6 +67,8 @@
                                (callback (bean/->js
                                           {:cancel         false
                                            :requestHeaders headers})))))
+     ;; Show window as soon as it's ready
+     (.once win "ready-to-show" #(.show win))
      (.loadURL win url)
      ;;(when dev? (.. win -webContents (openDevTools)))
      win)))
