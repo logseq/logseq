@@ -428,8 +428,7 @@
   (.close win))
 
 (defmethod handle :theme-loaded [^js win]
-  (.manage (windowStateKeeper) win)
-  (.show win))
+  (.manage (windowStateKeeper) win))
 
 (defmethod handle :keychain/save-e2ee-password [_window [_ key encrypted-text]]
   (keychain/<set-password! key encrypted-text))
