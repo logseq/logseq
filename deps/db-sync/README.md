@@ -43,16 +43,10 @@ npm run build:node-adapter
 Run the adapter with Cognito auth:
 
 ```bash
-./start.sh
-```
-
-Run the adapter with a static token (local dev):
-
-```bash
-export DB_SYNC_AUTH_DRIVER=static
-export DB_SYNC_AUTH_TOKEN=dev-token
-export DB_SYNC_STATIC_USER_ID=user-1
-export DB_SYNC_PORT=8787
+DB_SYNC_PORT=8787 \
+COGNITO_ISSUER=https://cognito-idp.us-east-2.amazonaws.com/us-east-2_kAqZcxIeM \
+COGNITO_CLIENT_ID=1qi1uijg8b6ra70nejvbptis0q \
+COGNITO_JWKS_URL=https://cognito-idp.us-east-2.amazonaws.com/us-east-2_kAqZcxIeM/.well-known/jwks.json \
 node worker/dist/node-adapter.js
 ```
 
@@ -74,11 +68,6 @@ npm run test:node-adapter
 | DB_SYNC_DATA_DIR | Data directory for sqlite + assets |
 | DB_SYNC_STORAGE_DRIVER | Storage backend selection (sqlite) |
 | DB_SYNC_ASSETS_DRIVER | Assets backend selection (filesystem) |
-| DB_SYNC_AUTH_DRIVER | Auth driver (cognito, static, none) |
-| DB_SYNC_AUTH_TOKEN | Static token for local dev |
-| DB_SYNC_STATIC_USER_ID | Static user id for local dev |
-| DB_SYNC_STATIC_EMAIL | Static user email for local dev |
-| DB_SYNC_STATIC_USERNAME | Static username for local dev |
 | SENTRY_DSN | Sentry DSN |
 | SENTRY_RELEASE | Release identifier for Sentry events and sourcemaps |
 | SENTRY_ENVIRONMENT | Sentry environment name (prod, staging, etc.) |
