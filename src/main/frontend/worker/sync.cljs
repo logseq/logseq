@@ -297,9 +297,7 @@
 (def rtc-ignored-attrs
   (set/union
    #{:logseq.property.embedding/hnsw-label-updated-at
-     :block/tx-id
-     ;; FIXME: created-by-ref maybe not exist yet on server or client
-     :logseq.property/created-by-ref}
+     :block/tx-id}
    rtc-const/ignore-attrs-when-syncing
    rtc-const/ignore-entities-when-init-upload))
 
