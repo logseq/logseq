@@ -532,6 +532,7 @@
                                                    :hide? false
                                                    :public? true}
                                           :queryable? true}
+     ;; need to rename for better alignment with practical purposes
      :logseq.property.asset/external-file-name {:title "External file name"
                                                 :schema {:type :string
                                                          :hide? true
