@@ -87,23 +87,23 @@
         (throw (ex-info "incomplete framed buffer" {:buffer buffer :rows rows}))))))
 
 (defn- gzip-bytes?
-  [^js bytes]
-  (and (some? bytes)
-       (>= (.-byteLength bytes) 2)
-       (= 31 (aget bytes 0))
-       (= 139 (aget bytes 1))))
+  [^js payload]
+  (and (some? payload)
+       (>= (.-byteLength payload) 2)
+       (= 31 (aget payload 0))
+       (= 139 (aget payload 1))))
 
 (defn- bytes->stream
-  [^js bytes]
+  [^js payload]
   (js/ReadableStream.
    #js {:start (fn [controller]
-                 (.enqueue controller bytes)
+                 (.enqueue controller payload)
                  (.close controller))}))
 
 (defn- <decompress-gzip-bytes
-  [^js bytes]
+  [^js payload]
   (if (exists? js/DecompressionStream)
-    (p/let [stream (bytes->stream bytes)
+    (p/let [stream (bytes->stream payload)
             decompressed (.pipeThrough stream (js/DecompressionStream. "gzip"))
             resp (js/Response. decompressed)
             buf (.arrayBuffer resp)]
@@ -114,10 +114,10 @@
 (defn- <snapshot-response-bytes
   [^js resp]
   (p/let [buf (.arrayBuffer resp)
-          bytes (->uint8 buf)]
-    (if (gzip-bytes? bytes)
-      (<decompress-gzip-bytes bytes)
-      bytes)))
+          payload (->uint8 buf)]
+    (if (gzip-bytes? payload)
+      (<decompress-gzip-bytes payload)
+      payload)))
 
 (defn- auth-headers []
   (when-let [token (state/get-auth-id-token)]

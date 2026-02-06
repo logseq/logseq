@@ -37,3 +37,4 @@
 - DB-sync protocol reference: `docs/agent-guide/db-sync/protocol.md`.
 - New properties should be added to `logseq.db.frontend.property/built-in-properties`.
 - Avoid creating new class or property unless you have to.
+- Avoid shadow var, e.g. `bytes` should be named as `payload`.
