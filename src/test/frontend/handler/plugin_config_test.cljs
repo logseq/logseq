@@ -41,13 +41,13 @@
     (fs-node/writeFileSync (plugin-config-handler/plugin-config-path) body)
 
     (p/with-redefs [fs/write-file! fsp/writeFile]
-     (->
-      (p/do!
-       (plugin-config-handler/add-or-update-plugin plugin-to-add)
-       (is (= (dissoc plugin-to-add :id)
-              (:foo (edn/read-string (str (fs-node/readFileSync (plugin-config-handler/plugin-config-path))))))))
+      (->
+       (p/do!
+        (plugin-config-handler/add-or-update-plugin plugin-to-add)
+        (is (= (dissoc plugin-to-add :id)
+               (:foo (edn/read-string (str (fs-node/readFileSync (plugin-config-handler/plugin-config-path))))))))
 
-      (p/finally #(delete-global-config-dir dir))))))
+       (p/finally #(delete-global-config-dir dir))))))
 
 (deftest-async remove-plugin
   (let [dir (create-global-config-dir)
@@ -58,14 +58,14 @@
     (fs-node/writeFileSync (plugin-config-handler/plugin-config-path) (pr-str plugins))
 
     (p/with-redefs [fs/write-file! fsp/writeFile]
-     (->
-      (p/do!
-       (plugin-config-handler/remove-plugin some-plugin-id)
-       (is (= nil
-              (get (edn/read-string (str (fs-node/readFileSync (plugin-config-handler/plugin-config-path))))
-                   some-plugin-id))))
+      (->
+       (p/do!
+        (plugin-config-handler/remove-plugin some-plugin-id)
+        (is (= nil
+               (get (edn/read-string (str (fs-node/readFileSync (plugin-config-handler/plugin-config-path))))
+                    some-plugin-id))))
 
-      (p/finally #(delete-global-config-dir dir))))))
+       (p/finally #(delete-global-config-dir dir))))))
 
 (deftest-async open-replace-plugins-modal-malformed-edn
   (let [dir (create-global-config-dir)
@@ -73,7 +73,7 @@
     (fs-node/writeFileSync (plugin-config-handler/plugin-config-path) "{:id {}")
 
     (p/with-redefs
-      [notification/show! (fn [msg _] (reset! error-message msg))]
+     [notification/show! (fn [msg _] (reset! error-message msg))]
       (->
        (p/do!
         (plugin-config-handler/open-replace-plugins-modal)
@@ -89,7 +89,7 @@
                            (pr-str {:id {:theme true :repo "user/repo"}}))
 
     (p/with-redefs
-      [notification/show! (fn [msg _] (reset! error-message msg))]
+     [notification/show! (fn [msg _] (reset! error-message msg))]
       (->
        (p/do!
         (plugin-config-handler/open-replace-plugins-modal)
@@ -109,16 +109,16 @@
     (let [plugins {:foo {:id :foo :repo "some-user/foo" :version "v0.9.0"}
                    :bar {:id :bar :repo "some-user/bar" :version "v0.1.0"}}]
       (is (= {} (#'plugin-config-handler/determine-plugins-to-change
-                  plugins
-                  (installed-plugins->edn-plugins plugins))))))
+                 plugins
+                 (installed-plugins->edn-plugins plugins))))))
 
   (testing "differing versions are uninstalled and installed"
     (let [plugins {:bar {:id :bar :repo "some-user/bar" :version "v0.1.0"}}]
       (is (= {:uninstall [(:bar plugins)]
               :install [(assoc (:bar plugins) :version "v1.0.0" :plugin-action "install")]}
              (#'plugin-config-handler/determine-plugins-to-change
-               plugins
-               (installed-plugins->edn-plugins (assoc-in plugins [:bar :version] "v1.0.0")))))))
+              plugins
+              (installed-plugins->edn-plugins (assoc-in plugins [:bar :version] "v1.0.0")))))))
 
   (testing "replaced plugins are uninstalled and new plugins are installed"
     (let [plugins {:foo {:id :foo :repo "some-user/foo" :version "v0.9.0"}
@@ -127,5 +127,5 @@
       (is (= {:uninstall [(:foo plugins)]
               :install [(assoc new-plugin :plugin-action "install")]}
              (#'plugin-config-handler/determine-plugins-to-change
-               plugins
-               (-> plugins (dissoc :foo) (assoc :baz new-plugin) installed-plugins->edn-plugins)))))))
+              plugins
+              (-> plugins (dissoc :foo) (assoc :baz new-plugin) installed-plugins->edn-plugins)))))))

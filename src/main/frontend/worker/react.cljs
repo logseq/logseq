@@ -17,6 +17,8 @@
 (s/def ::refs (s/tuple #(= ::refs %) int?))
 ;; get class's objects
 (s/def ::objects (s/tuple #(= ::objects %) int?))
+;; get block reactions
+(s/def ::block-reactions (s/tuple #(= ::block-reactions %) int?))
 ;; custom react-query
 (s/def ::custom any?)
 
@@ -24,6 +26,7 @@
                                 :journals ::journals
                                 :refs ::refs
                                 :objects ::objects
+                                :block-reactions ::block-reactions
                                 :custom ::custom))
 
 (s/def ::affected-keys (s/coll-of ::react-query-keys))
@@ -50,6 +53,10 @@
                            (= (:db/id (d/entity db-after :logseq.class/Journal))
                               (:v datom))))
                         tx-data)
+        reaction-targets (->> (filter (fn [datom]
+                                        (= :logseq.property.reaction/target (:a datom))) tx-data)
+                              (map :v)
+                              (distinct))
         other-blocks (->> (filter (fn [datom] (= "block" (namespace (:a datom)))) tx-data)
                           (map :e))
         blocks (-> (concat blocks other-blocks) distinct)
@@ -81,6 +88,12 @@
                           [[::refs ref]
                            [::block ref]])
                         refs)
+
+                       (mapcat
+                        (fn [target-id]
+                          [[::block-reactions target-id]
+                           [::block target-id]])
+                        reaction-targets)
 
                        (keep
                         (fn [tag]

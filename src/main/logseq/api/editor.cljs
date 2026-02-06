@@ -137,8 +137,8 @@
                            :journal? journal
                            :class? class
                            :format format}
-                          (string? customUUID)
-                          (assoc :uuid (uuid customUUID)))))
+                           (string? customUUID)
+                           (assoc :uuid (uuid customUUID)))))
              page' (or page new-page)
              _ (when (seq properties)
                  (api-block/db-based-save-block-properties! new-page properties {:plugin this
@@ -427,8 +427,8 @@
                    block (<get-block id {:children? false})
                    value (bean/->clj value)
                    opts (cond-> opts
-                                (boolean? (:reset opts))
-                                (assoc :reset-property-values (:reset opts)))]
+                          (boolean? (:reset opts))
+                          (assoc :reset-property-values (:reset opts)))]
              (when block
                (db-based-api/upsert-block-property this block key' value opts)))))
 

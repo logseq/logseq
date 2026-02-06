@@ -284,55 +284,56 @@
                             block-el (.closest target ".bullet-container[blockid]")
                             block-id (some-> block-el (.getAttribute "blockid"))
                             {:keys [block block-ref]} (state/sub :block-ref/context)
-                            {:keys [page page-entity]} (state/sub :page-title/context)]
+                            {:keys [page page-entity]} (state/sub :page-title/context)
+                            show!
+                            (fn [content & {:as option}]
+                              (shui/popup-show! e
+                                                (fn [{:keys [id]}]
+                                                  [:div {:on-click (fn [e]
+                                                                     (when-not (util/input? (.-target e))
+                                                                       (shui/popup-hide! id)))
+                                                         :data-keep-selection true}
+                                                   content])
+                                                (merge
+                                                 {:on-before-hide state/dom-clear-selection!
+                                                  :on-after-hide state/state-clear-selection!
+                                                  :content-props {:class "w-[280px] ls-context-menu-content"}
+                                                  :as-dropdown? true}
+                                                 option)))
 
-                        (let [show!
-                              (fn [content & {:as option}]
-                                (shui/popup-show! e
-                                                  (fn [{:keys [id]}]
-                                                    [:div {:on-click #(shui/popup-hide! id)
-                                                           :data-keep-selection true}
-                                                     content])
-                                                  (merge
-                                                   {:on-before-hide state/dom-clear-selection!
-                                                    :on-after-hide state/state-clear-selection!
-                                                    :content-props {:class "w-[280px] ls-context-menu-content"}
-                                                    :as-dropdown? true}
-                                                   option)))
+                            handled
+                            (cond
+                              (and page (not block-id))
+                              (do
+                                (show! (cp-content/page-title-custom-context-menu-content page-entity))
+                                (state/set-state! :page-title/context nil))
 
-                              handled
-                              (cond
-                                (and page (not block-id))
-                                (do
-                                  (show! (cp-content/page-title-custom-context-menu-content page-entity))
-                                  (state/set-state! :page-title/context nil))
-
-                                block-ref
-                                (do
-                                  (show! (cp-content/block-ref-custom-context-menu-content block block-ref))
-                                  (state/set-state! :block-ref/context nil))
+                              block-ref
+                              (do
+                                (show! (cp-content/block-ref-custom-context-menu-content block block-ref))
+                                (state/set-state! :block-ref/context nil))
 
                                 ;; block selection
-                                (and (state/selection?) (not (d/has-class? target "bullet")))
-                                (show! (cp-content/custom-context-menu-content)
-                                       {:id :blocks-selection-context-menu})
+                              (and (state/selection?) (not (d/has-class? target "bullet")))
+                              (show! (cp-content/custom-context-menu-content)
+                                     {:id :blocks-selection-context-menu})
 
                                 ;; block bullet
-                                (and block-id (parse-uuid block-id))
-                                (let [block (.closest target ".ls-block")
-                                      property-default-value? (when block
-                                                                (= "true" (d/attr block "data-is-property-default-value")))]
-                                  (when block
-                                    (state/clear-selection!)
-                                    (state/conj-selection-block! block :down))
-                                  (p/do!
-                                   (db-async/<get-block (state/get-current-repo) (uuid block-id) {:children? false})
-                                   (show! (cp-content/block-context-menu-content target (uuid block-id) property-default-value?))))
+                              (and block-id (parse-uuid block-id))
+                              (let [block (.closest target ".ls-block")
+                                    property-default-value? (when block
+                                                              (= "true" (d/attr block "data-is-property-default-value")))]
+                                (when block
+                                  (state/clear-selection!)
+                                  (state/conj-selection-block! block :down))
+                                (p/do!
+                                 (db-async/<get-block (state/get-current-repo) (uuid block-id) {:children? false})
+                                 (show! (cp-content/block-context-menu-content target (uuid block-id) property-default-value?))))
 
-                                :else
-                                false)]
-                          (when (not (false? handled))
-                            (util/stop e))))))))
+                              :else
+                              false)]
+                        (when (not (false? handled))
+                          (util/stop e)))))))
   []
   nil)
 

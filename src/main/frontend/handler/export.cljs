@@ -7,7 +7,6 @@
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.export.common :as export-common-handler]
             [frontend.handler.notification :as notification]
-            [frontend.handler.user :as user-handler]
             [frontend.idb :as idb]
             [frontend.persist-db :as persist-db]
             [frontend.state :as state]
@@ -45,16 +44,42 @@
 
 (defn db-based-export-repo-as-zip!
   [repo]
-  (p/let [db-data (persist-db/<export-db repo {:return-data? true})
-          filename "db.sqlite"
-          repo-name (common-sqlite/sanitize-db-name repo)
-          assets (assets-handler/<get-all-assets)
-          files (cons [filename db-data] assets)
-          zipfile (zip/make-zip repo-name files repo)]
-    (when-let [anchor (gdom/getElement "download-as-zip")]
-      (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
-      (.setAttribute anchor "download" (.-name zipfile))
-      (.click anchor))))
+  (state/pub-event! [:dialog/export-zip "Preparing zip"])
+  (-> (p/let [db-data (persist-db/<export-db repo {:return-data? true})
+              filename "db.sqlite"
+              repo-name (common-sqlite/sanitize-db-name repo)
+              _ (state/set-state! :graph/exporting-state {:total 100
+                                                          :current-idx 20
+                                                          :current-page "Collecting assets"
+                                                          :label "Exporting"})
+              assets (assets-handler/<get-all-assets)
+              files (cons [filename db-data] assets)
+              _ (state/set-state! :graph/exporting-state {:total 100
+                                                          :current-idx 40
+                                                          :current-page "Creating zip"
+                                                          :label "Exporting"})
+              zipfile (zip/make-zip repo-name files repo
+                                    {:compression "STORE"
+                                     :progress-fn (fn [percent]
+                                                    (let [scaled (+ 40 (* 0.6 percent))]
+                                                      (state/set-state! :graph/exporting-state
+                                                                        {:total 100
+                                                                         :current-idx (js/Math.round scaled)
+                                                                         :current-page "Creating zip"
+                                                                         :label "Exporting"})))})]
+        (state/set-state! :graph/exporting-state {:total 100
+                                                  :current-idx 100
+                                                  :current-page "Finalizing"
+                                                  :label "Exporting"})
+        (when-let [anchor (gdom/getElement "download-as-zip")]
+          (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
+          (.setAttribute anchor "download" (.-name zipfile))
+          (.click anchor)))
+      (p/catch (fn [error]
+                 (js/console.error error)
+                 (notification/show! "Export zip failed." :error)))
+      (p/finally (fn []
+                   (state/pub-event! [:dialog/close-export-zip])))))
 
 (defn export-repo-as-zip!
   [repo]
@@ -89,24 +114,6 @@
        (.click anchor)))
    (p/catch (fn [error]
               (js/console.error error)))))
-
-(defn export-repo-as-debug-log-sqlite!
-  [repo]
-  (if-not (and (state/get-auth-id-token) (user-handler/rtc-group?))
-    (notification/show! "Debug log export is limited to team members." :warning)
-    (->
-     (p/let [data (state/<invoke-db-worker-direct-pass :thread-api/export-debug-log-db repo)]
-       (if-not data
-         (notification/show! "Debug log db is not available for this graph." :warning)
-         (let [filename (file-name (str repo "_debug-log") "sqlite")
-               url (js/URL.createObjectURL (js/Blob. #js [data]))
-               anchor (.createElement js/document "a")]
-           (set! (.-href anchor) url)
-           (set! (.-download anchor) filename)
-           (.click anchor)
-           (js/URL.revokeObjectURL url))))
-     (p/catch (fn [error]
-                (js/console.error error))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Export to roam json ;;

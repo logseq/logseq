@@ -4,8 +4,8 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
+            [frontend.handler.db-based.sync :as rtc-handler]
             [frontend.handler.graph :as graph]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
@@ -122,8 +122,7 @@
                                  token (state/get-auth-id-token)
                                  remote-graph-name (config/db-graph-name (state/get-current-repo))]
                              (when (and token remote-graph-name)
-                               (state/<invoke-db-worker :thread-api/rtc-async-upload-graph
-                                                        repo token remote-graph-name)
+                               (rtc-handler/<rtc-upload-graph! repo token remote-graph-name)
                                (when (util/mobile?)
                                  (shui/popup-show! nil
                                                    (fn []
@@ -138,7 +137,8 @@
                                    (rtc-handler/<get-remote-graphs)))))))}
               "Use Logseq sync (Beta testing)"))
 
-           (when (and remote? manager?)
+           (when (and remote?
+                      manager?)
              (shui/dropdown-menu-item
               {:key "delete-remotely"
                :class "delete-remote-graph-menu-item"
@@ -150,13 +150,12 @@
                                     [:small "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."]]])
                                  (p/then
                                   (fn []
-                                    (let [<delete-graph rtc-handler/<rtc-delete-graph!]
-                                      (state/set-state! :rtc/loading-graphs? true)
-                                      (when (= (state/get-current-repo) repo)
-                                        (state/<invoke-db-worker :thread-api/rtc-stop))
-                                      (p/do! (<delete-graph GraphUUID GraphSchemaVersion)
-                                             (state/set-state! :rtc/loading-graphs? false)
-                                             (rtc-handler/<get-remote-graphs))))))))}
+                                    (state/set-state! :rtc/loading-graphs? true)
+                                    (when (= (state/get-current-repo) repo)
+                                      (state/<invoke-db-worker :thread-api/rtc-stop))
+                                    (p/do! (rtc-handler/<rtc-delete-graph! GraphUUID GraphSchemaVersion)
+                                           (state/set-state! :rtc/loading-graphs? false)
+                                           (rtc-handler/<get-remote-graphs)))))))}
               "Delete from server"))
 
            (when (and remote? (not manager?))
@@ -164,17 +163,25 @@
               {:key "leave-shared-graph"
                :class "leave-shared-graph-menu-item"
                :on-click (fn []
-                           (notification/show!
-                            "Please ask this graph's manager to rovoke your access."
-                            :info
-                            false)
-                           ;; (let [prompt-str "Are you sure you want to leave this graph?"]
-                           ;;   (-> (shui/dialog-confirm!
-                           ;;        [:p.font-medium.-my-4 prompt-str])
-                           ;;       (p/then
-                           ;;        (fn []
-                           ;;          ))))
-                           )}
+                           (let [prompt-str "Are you sure you want to leave this graph?"]
+                             (-> (shui/dialog-confirm!
+                                  [:p.font-medium.-my-4 prompt-str])
+                                 (p/then
+                                  (fn []
+                                    (state/set-state! :rtc/loading-graphs? true)
+                                    (when (= (state/get-current-repo) repo)
+                                      (state/<invoke-db-worker :thread-api/rtc-stop))
+                                    (-> (rtc-handler/<rtc-leave-graph! GraphUUID)
+                                        (p/then (fn []
+                                                  (notification/show! "Left graph." :success)
+                                                  (rtc-handler/<get-remote-graphs)))
+                                        (p/catch (fn [e]
+                                                   (notification/show! "Failed to leave graph." :error)
+                                                   (log/error :db-sync/leave-graph-failed
+                                                              {:error e
+                                                               :graph-uuid GraphUUID})))
+                                        (p/finally (fn []
+                                                     (state/set-state! :rtc/loading-graphs? false)))))))))}
               "Leave this graph")))))]]]))
 
 (rum/defc repos-cp < rum/reactive
@@ -446,14 +453,15 @@
                        (invalid-graph-name-warning)
                        (do
                          (set-creating-db? true)
-                         (p/let [repo (repo-handler/new-db! graph-name)]
+                         (p/let [repo (repo-handler/new-db! graph-name
+                                                            {:remote-graph? cloud?})]
                            (when cloud?
                              (->
                               (p/do
                                 (state/set-state! :rtc/uploading? true)
                                 (rtc-handler/<rtc-create-graph! repo)
-                                (rtc-flows/trigger-rtc-start repo)
-                                (rtc-handler/<get-remote-graphs))
+                                (rtc-handler/<get-remote-graphs)
+                                (rtc-flows/trigger-rtc-start repo))
                               (p/catch (fn [error]
                                          (log/error :create-db-failed error)))
                               (p/finally (fn []
@@ -479,17 +487,12 @@
              db-name (util/trim-safe (.-value (rum/deref input-ref)))]
          (when (and cloud? refresh-token token user-uuid
                     (not e2ee-rsa-key-ensured?))
-           (p/do!
-            (state/<invoke-db-worker :thread-api/init-user-rsa-key-pair
-                                     token
-                                     refresh-token
-                                     user-uuid))
-           (-> (p/let [rsa-key-pair (state/<invoke-db-worker :thread-api/get-user-rsa-key-pair token user-uuid)]
+           (-> (p/let [rsa-key-pair (state/<invoke-db-worker :thread-api/db-sync-ensure-user-rsa-keys)]
                  (set-e2ee-rsa-key-ensured? (some? rsa-key-pair))
                  (when rsa-key-pair
                    (when db-name (new-db-f db-name))))
                (p/catch (fn [e]
-                          (log/error :get-user-rsa-key-pair e)
+                          (log/error :db-sync/ensure-user-rsa-keys-failed e)
                           e))))))
      [cloud?])
 

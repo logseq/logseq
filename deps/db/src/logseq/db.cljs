@@ -13,6 +13,7 @@
             [logseq.db.common.delete-blocks :as delete-blocks] ;; Load entity extensions
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.initial-data :as common-initial-data]
+            [logseq.db.common.normalize :as db-normalize]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.db :as db-db]
             [logseq.db.frontend.entity-util :as entity-util]
@@ -140,6 +141,7 @@
         (d/transact! conn tx-data tx-meta)))
     (catch :default e
       (prn :debug :transact-failed :tx-meta tx-meta :tx-data tx-data)
+      (js/console.error e)
       (throw e))))
 
 (defn transact!
@@ -165,7 +167,7 @@
                                        (integer? m)
                                        (empty? m)))))
          delete-blocks-tx (when-not (string? repo-or-conn)
-                            (delete-blocks/update-refs-history-and-macros @repo-or-conn tx-data tx-meta))
+                            (delete-blocks/update-refs-history @repo-or-conn tx-data tx-meta))
          tx-data (concat tx-data delete-blocks-tx)]
 
      ;; Ensure worker can handle the request sequentially (one by one)
@@ -179,11 +181,12 @@
        (if-let [transact-fn @*transact-fn]
          (transact-fn repo-or-conn tx-data tx-meta)
          (transact-sync repo-or-conn tx-data tx-meta))))))
+(def remove-conflict-datoms db-normalize/remove-conflict-datoms)
 
 (defn transact-with-temp-conn!
   "Validate db and store once for a batch transaction, the `temp` conn can still load data from disk,
   however it can't write to the disk."
-  [conn tx-meta batch-tx-fn]
+  [conn tx-meta batch-tx-fn & {:keys [listen-db]}]
   (let [temp-conn (d/conn-from-db @conn)
         *batch-tx-data (volatile! [])]
     ;; can read from disk, write is disallowed
@@ -191,16 +194,23 @@
            :skip-store? true
            :batch-temp-conn? true)
     (d/listen! temp-conn ::temp-conn-batch-tx
-               (fn [{:keys [tx-data]}]
-                 (vswap! *batch-tx-data into tx-data)))
-    (batch-tx-fn temp-conn)
-    (let [tx-data @*batch-tx-data]
+               (fn [{:keys [tx-data] :as tx-report}]
+                 (vswap! *batch-tx-data into tx-data)
+                 (when (fn? listen-db)
+                   (listen-db tx-report))))
+    (batch-tx-fn temp-conn *batch-tx-data)
+    (let [tx-data @*batch-tx-data
+          temp-after-db @temp-conn]
       (d/unlisten! temp-conn ::temp-conn-batch-tx)
       (reset! temp-conn nil)
       (vreset! *batch-tx-data nil)
       (when (seq tx-data)
         ;; transact tx-data to `conn` and validate db
-        (transact! conn tx-data tx-meta)))))
+        (let [tx-data' (->>
+                        tx-data
+                        remove-conflict-datoms
+                        (db-normalize/replace-attr-retract-with-retract-entity temp-after-db))]
+          (transact! conn tx-data' tx-meta))))))
 
 (def page? entity-util/page?)
 (def internal-page? entity-util/internal-page?)

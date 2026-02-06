@@ -3,8 +3,8 @@
   (:require [clojure.string :as string]
             [cognitect.transit :as transit]
             [datascript.transit :as dt]
-            [logseq.db :as ldb])
-  (:require-macros [logseq.publish.async :refer [js-await]]))
+            [logseq.db :as ldb]
+            [promesa.core :as p]))
 
 (def text-decoder (js/TextDecoder.))
 (def text-encoder (js/TextEncoder.))
@@ -117,9 +117,9 @@
        (apply str)))
 
 (defn sha256-hex [message]
-  (js-await [data (.encode text-encoder message)
-             digest (.digest js/crypto.subtle "SHA-256" data)]
-            (to-hex digest)))
+  (p/let [data (.encode text-encoder message)
+          digest (.digest js/crypto.subtle "SHA-256" data)]
+    (to-hex digest)))
 
 (def password-kdf-max-iterations 90000)
 (def password-kdf-iterations 90000)
@@ -133,31 +133,31 @@
         (string/replace #"=+$" ""))))
 
 (defn hash-password [password]
-  (js-await [salt (doto (js/Uint8Array. 16)
-                    (js/crypto.getRandomValues))
-             crypto-key (.importKey js/crypto.subtle
-                                    "raw"
-                                    (.encode text-encoder password)
-                                    #js {:name "PBKDF2"}
-                                    false
-                                    #js ["deriveBits"])
-             iterations (min password-kdf-iterations password-kdf-max-iterations)
-             derived (.deriveBits js/crypto.subtle
-                                  #js {:name "PBKDF2"
-                                       :hash "SHA-256"
-                                       :salt salt
-                                       :iterations iterations}
-                                  crypto-key
-                                  256)
-             derived-bytes (js/Uint8Array. derived)
-             salt-encoded (bytes->base64url salt)
-             hash-encoded (bytes->base64url derived-bytes)]
-            (str "pbkdf2$sha256$"
-                 iterations
-                 "$"
-                 salt-encoded
-                 "$"
-                 hash-encoded)))
+  (p/let [salt (doto (js/Uint8Array. 16)
+                 (js/crypto.getRandomValues))
+          crypto-key (.importKey js/crypto.subtle
+                                 "raw"
+                                 (.encode text-encoder password)
+                                 #js {:name "PBKDF2"}
+                                 false
+                                 #js ["deriveBits"])
+          iterations (min password-kdf-iterations password-kdf-max-iterations)
+          derived (.deriveBits js/crypto.subtle
+                               #js {:name "PBKDF2"
+                                    :hash "SHA-256"
+                                    :salt salt
+                                    :iterations iterations}
+                               crypto-key
+                               256)
+          derived-bytes (js/Uint8Array. derived)
+          salt-encoded (bytes->base64url salt)
+          hash-encoded (bytes->base64url derived-bytes)]
+    (str "pbkdf2$sha256$"
+         iterations
+         "$"
+         salt-encoded
+         "$"
+         hash-encoded)))
 
 (defn base64url->uint8array [input]
   (let [pad (if (pos? (mod (count input) 4))
@@ -179,43 +179,43 @@
                  (= "pbkdf2" (nth parts 0))
                  (= "sha256" (nth parts 1)))
       false
-      (js-await [iterations (js/parseInt (nth parts 2))]
-                (if (> iterations password-kdf-max-iterations)
-                  false
-                  (js-await [salt (base64url->uint8array (nth parts 3))
-                             expected (base64url->uint8array (nth parts 4))
-                             crypto-key (.importKey js/crypto.subtle
-                                                    "raw"
-                                                    (.encode text-encoder password)
-                                                    #js {:name "PBKDF2"}
-                                                    false
-                                                    #js ["deriveBits"])
-                             derived (.deriveBits js/crypto.subtle
-                                                  #js {:name "PBKDF2"
-                                                       :hash "SHA-256"
-                                                       :salt salt
-                                                       :iterations iterations}
-                                                  crypto-key
-                                                  (* 8 (.-length expected)))
-                             derived-bytes (js/Uint8Array. derived)]
-                            (if (not= (.-length derived-bytes) (.-length expected))
-                              false
-                              (let [mismatch (reduce (fn [acc idx]
-                                                       (bit-or acc
-                                                               (bit-xor (aget derived-bytes idx)
-                                                                        (aget expected idx))))
-                                                     0
-                                                     (range (.-length expected)))]
-                                (zero? mismatch)))))))))
+      (p/let [iterations (js/parseInt (nth parts 2))]
+        (if (> iterations password-kdf-max-iterations)
+          false
+          (p/let [salt (base64url->uint8array (nth parts 3))
+                  expected (base64url->uint8array (nth parts 4))
+                  crypto-key (.importKey js/crypto.subtle
+                                         "raw"
+                                         (.encode text-encoder password)
+                                         #js {:name "PBKDF2"}
+                                         false
+                                         #js ["deriveBits"])
+                  derived (.deriveBits js/crypto.subtle
+                                       #js {:name "PBKDF2"
+                                            :hash "SHA-256"
+                                            :salt salt
+                                            :iterations iterations}
+                                       crypto-key
+                                       (* 8 (.-length expected)))
+                  derived-bytes (js/Uint8Array. derived)]
+            (if (not= (.-length derived-bytes) (.-length expected))
+              false
+              (let [mismatch (reduce (fn [acc idx]
+                                       (bit-or acc
+                                               (bit-xor (aget derived-bytes idx)
+                                                        (aget expected idx))))
+                                     0
+                                     (range (.-length expected)))]
+                (zero? mismatch)))))))))
 
 (defn hmac-sha256 [key message]
-  (js-await [crypto-key (.importKey js/crypto.subtle
-                                    "raw"
-                                    key
-                                    #js {:name "HMAC" :hash "SHA-256"}
-                                    false
-                                    #js ["sign"])]
-            (.sign js/crypto.subtle "HMAC" crypto-key message)))
+  (p/let [crypto-key (.importKey js/crypto.subtle
+                                 "raw"
+                                 key
+                                 #js {:name "HMAC" :hash "SHA-256"}
+                                 false
+                                 #js ["sign"])]
+    (.sign js/crypto.subtle "HMAC" crypto-key message)))
 
 (defn encode-rfc3986 [value]
   (-> (js/encodeURIComponent value)
@@ -229,109 +229,66 @@
        (string/join "/")))
 
 (defn get-signature-key [secret date-stamp region service]
-  (js-await [k-date (hmac-sha256
-                     (.encode text-encoder (str "AWS4" secret))
-                     (.encode text-encoder date-stamp))
-             k-region (hmac-sha256 k-date (.encode text-encoder region))
-             k-service (hmac-sha256 k-region (.encode text-encoder service))]
-            (hmac-sha256 k-service (.encode text-encoder "aws4_request"))))
+  (p/let [k-date (hmac-sha256
+                  (.encode text-encoder (str "AWS4" secret))
+                  (.encode text-encoder date-stamp))
+          k-region (hmac-sha256 k-date (.encode text-encoder region))
+          k-service (hmac-sha256 k-region (.encode text-encoder service))]
+    (hmac-sha256 k-service (.encode text-encoder "aws4_request"))))
 
 (defn presign-r2-url [r2-key env]
-  (js-await [region "auto"
-             service "s3"
-             host (str (aget env "R2_ACCOUNT_ID") ".r2.cloudflarestorage.com")
-             bucket (aget env "R2_BUCKET")
-             method "GET"
-             now (js/Date.)
-             amz-date (.replace (.toISOString now) #"[ :-]|\.\d{3}" "")
-             date-stamp (.slice amz-date 0 8)
-             credential-scope (str date-stamp "/" region "/" service "/aws4_request")
-             params (->> [["X-Amz-Algorithm" "AWS4-HMAC-SHA256"]
-                          ["X-Amz-Credential" (str (aget env "R2_ACCESS_KEY_ID") "/" credential-scope)]
-                          ["X-Amz-Date" amz-date]
-                          ["X-Amz-Expires" "300"]
-                          ["X-Amz-SignedHeaders" "host"]]
-                         (sort-by first))
-             canonical-query (->> params
-                                  (map (fn [[k v]]
-                                         (str (encode-rfc3986 k) "=" (encode-rfc3986 v))))
-                                  (string/join "&"))
-             canonical-uri (str "/" bucket "/" (encode-path r2-key))
-             canonical-headers (str "host:" host "\n")
-             signed-headers "host"
-             payload-hash "UNSIGNED-PAYLOAD"
-             canonical-request (string/join "\n"
-                                            [method
-                                             canonical-uri
-                                             canonical-query
-                                             canonical-headers
-                                             signed-headers
-                                             payload-hash])
-             canonical-hash (sha256-hex canonical-request)
-             string-to-sign (string/join "\n"
-                                         ["AWS4-HMAC-SHA256"
-                                          amz-date
-                                          credential-scope
-                                          canonical-hash])
-             signing-key (get-signature-key (aget env "R2_SECRET_ACCESS_KEY")
-                                            date-stamp
-                                            region
-                                            service)
-             raw-signature (hmac-sha256 signing-key (.encode text-encoder string-to-sign))
-             signature (to-hex raw-signature)
-             signed-query (str canonical-query "&X-Amz-Signature=" signature)]
-            (str "https://" host canonical-uri "?" signed-query)))
-
-(defn decode-jwt-part [part]
-  (let [data (base64url->uint8array part)]
-    (js/JSON.parse (.decode text-decoder data))))
-
-(defn import-rsa-key [jwk]
-  (.importKey js/crypto.subtle
-              "jwk"
-              jwk
-              #js {:name "RSASSA-PKCS1-v1_5" :hash "SHA-256"}
-              false
-              #js ["verify"]))
-
-(defn verify-jwt [token env]
-  (js-await [parts (string/split token #"\.")
-             _ (when (not= 3 (count parts)) (throw (ex-info "invalid" {})))
-             header-part (nth parts 0)
-             payload-part (nth parts 1)
-             signature-part (nth parts 2)
-             header (decode-jwt-part header-part)
-             payload (decode-jwt-part payload-part)
-             issuer (aget env "COGNITO_ISSUER")
-             client-id (aget env "COGNITO_CLIENT_ID")
-             _ (when (not= (aget payload "iss") issuer) (throw (ex-info "iss not found" {})))
-             _ (when (not= (aget payload "aud") client-id) (throw (ex-info "aud not found" {})))
-             now (js/Math.floor (/ (.now js/Date) 1000))
-             _ (when (and (aget payload "exp") (< (aget payload "exp") now))
-                 (throw (ex-info "exp" {})))
-             jwks-resp (js/fetch (aget env "COGNITO_JWKS_URL"))
-             _ (when-not (.-ok jwks-resp) (throw (ex-info "jwks" {})))
-             jwks (.json jwks-resp)
-             keys (or (aget jwks "keys") #js [])
-             key (.find keys (fn [k] (= (aget k "kid") (aget header "kid"))))
-             _ (when-not key (throw (ex-info "kid" {})))
-             crypto-key (import-rsa-key key)
-             data (.encode text-encoder (str header-part "." payload-part))
-             signature (base64url->uint8array signature-part)
-             ok (.verify js/crypto.subtle
-                         "RSASSA-PKCS1-v1_5"
-                         crypto-key
-                         signature
-                         data)]
-            (when ok payload)))
+  (p/let [region "auto"
+          service "s3"
+          host (str (aget env "R2_ACCOUNT_ID") ".r2.cloudflarestorage.com")
+          bucket (aget env "R2_BUCKET")
+          method "GET"
+          now (js/Date.)
+          amz-date (.replace (.toISOString now) #"[ :-]|\.\d{3}" "")
+          date-stamp (.slice amz-date 0 8)
+          credential-scope (str date-stamp "/" region "/" service "/aws4_request")
+          params (->> [["X-Amz-Algorithm" "AWS4-HMAC-SHA256"]
+                       ["X-Amz-Credential" (str (aget env "R2_ACCESS_KEY_ID") "/" credential-scope)]
+                       ["X-Amz-Date" amz-date]
+                       ["X-Amz-Expires" "300"]
+                       ["X-Amz-SignedHeaders" "host"]]
+                      (sort-by first))
+          canonical-query (->> params
+                               (map (fn [[k v]]
+                                      (str (encode-rfc3986 k) "=" (encode-rfc3986 v))))
+                               (string/join "&"))
+          canonical-uri (str "/" bucket "/" (encode-path r2-key))
+          canonical-headers (str "host:" host "\n")
+          signed-headers "host"
+          payload-hash "UNSIGNED-PAYLOAD"
+          canonical-request (string/join "\n"
+                                         [method
+                                          canonical-uri
+                                          canonical-query
+                                          canonical-headers
+                                          signed-headers
+                                          payload-hash])
+          canonical-hash (sha256-hex canonical-request)
+          string-to-sign (string/join "\n"
+                                      ["AWS4-HMAC-SHA256"
+                                       amz-date
+                                       credential-scope
+                                       canonical-hash])
+          signing-key (get-signature-key (aget env "R2_SECRET_ACCESS_KEY")
+                                         date-stamp
+                                         region
+                                         service)
+          raw-signature (hmac-sha256 signing-key (.encode text-encoder string-to-sign))
+          signature (to-hex raw-signature)
+          signed-query (str canonical-query "&X-Amz-Signature=" signature)]
+    (str "https://" host canonical-uri "?" signed-query)))
 
 (defn normalize-etag [etag]
   (when etag
     (string/replace etag #"\"" "")))
 
 (defn short-id-for-page [graph-uuid page-uuid]
-  (js-await [payload (.encode text-encoder (str graph-uuid ":" page-uuid))
-             digest (.digest js/crypto.subtle "SHA-256" payload)]
-            (let [data (js/Uint8Array. digest)
-                  encoded (bytes->base64url data)]
-              (subs encoded 0 10))))
+  (p/let [payload (.encode text-encoder (str graph-uuid ":" page-uuid))
+          digest (.digest js/crypto.subtle "SHA-256" payload)]
+    (let [data (js/Uint8Array. digest)
+          encoded (bytes->base64url data)]
+      (subs encoded 0 10))))

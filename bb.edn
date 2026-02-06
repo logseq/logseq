@@ -159,6 +159,9 @@
   dev:test
   logseq.tasks.dev/test
 
+  dev:test-no-worker
+  logseq.tasks.dev/test-no-worker
+
   dev:lint-and-test
   logseq.tasks.dev/lint-and-test
 
@@ -172,6 +175,15 @@
   dev:e2e-rtc-extra-part2-test
   {:doc "Run e2e rtc extra part2 tests. HTTP server should be available at localhost:3001"
    :task (clojure {:dir "clj-e2e"} "-X:dev-run-rtc-extra-part2-test")}
+
+  dev:db-sync-test
+  {:doc "Run db-sync server unit tests"
+   :task (do (shell {:dir "deps/db-sync"} "clojure -M:cljs compile db-sync-test")
+             (shell {:dir "deps/db-sync"} "node worker/dist/worker-test.js"))}
+
+  dev:db-sync-start
+  {:doc "Start db-sync local server + client watch processes in foreground"
+   :task logseq.tasks.dev.db-sync/start}
 
   dev:gen-malli-kondo-config
   logseq.tasks.dev/gen-malli-kondo-config

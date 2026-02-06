@@ -16,10 +16,6 @@
    :rtc/ignore-attr-when-init-download true
    :rtc/ignore-attr-when-syncing true})
 
-(def ^:private property-ignore-rtc-upload-sync
-  {:rtc/ignore-attr-when-init-upload true
-   :rtc/ignore-attr-when-syncing true})
-
 ;; Main property vars
 ;; ==================
 
@@ -567,8 +563,7 @@
                                               :hide? true
                                               :public? false}
                                              :properties
-                                             {:logseq.property/description "Metadata of asset in remote storage"}
-                                             :rtc property-ignore-rtc-upload-sync}
+                                             {:logseq.property/description "Metadata of asset in remote storage"}}
      :logseq.property.asset/resize-metadata {:title "Asset resize metadata"
                                              :schema {:type :map
                                                       :hide? true
@@ -620,6 +615,14 @@
                                       :schema {:type :entity
                                                :hide? true}
                                       :queryable? true}
+     :logseq.property.reaction/emoji-id {:title "Reaction emoji"
+                                         :schema {:type :string
+                                                  :public? false
+                                                  :hide? true}}
+     :logseq.property.reaction/target {:title "Reaction target"
+                                       :schema {:type :node
+                                                :public? false
+                                                :hide? true}}
      :logseq.property/used-template {:title "Used template"
                                      :schema {:type :node
                                               :public? false
@@ -630,6 +633,10 @@
                                                     :cardinality :many
                                                     :public? true}
                                            :queryable? true}
+     :logseq.property.sync/large-title-object {:title "Reference to large block title stored in remote object storage"
+                                               :schema {:type :map
+                                                        :public? false
+                                                        :hide? true}}
      :logseq.property.embedding/hnsw-label-updated-at {:title "HNSW label updated-at"
                                                        :schema {:type :datetime
                                                                 :public? false
@@ -688,7 +695,7 @@
     "logseq.property.code" "logseq.property.repeat"
     "logseq.property.journal" "logseq.property.class" "logseq.property.view"
     "logseq.property.user" "logseq.property.history" "logseq.property.embedding"
-    "logseq.property.publish"})
+    "logseq.property.reaction" "logseq.property.sync" "logseq.property.publish"})
 
 (defn logseq-property?
   "Determines if keyword is a logseq property"

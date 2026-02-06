@@ -18,7 +18,8 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.extensions.fsrs :as fsrs]
-            [frontend.handler.db-based.rtc :as rtc-handler]
+            [frontend.handler.db-based.rtc-flows :as rtc-flows]
+            [frontend.handler.db-based.sync :as rtc-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.events :as events]
             [frontend.handler.notification :as notification]
@@ -32,6 +33,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.dom :as gdom]
+            [lambdaisland.glogi :as log]
             [logseq.common.util :as common-util]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]))
@@ -298,11 +300,21 @@
         (do
           (state/set-user-info! result)
           (when-let [uid (user-handler/user-uuid)]
-            (sentry-event/set-user! uid))
-          (let [status (if (user-handler/alpha-or-beta-user?) :welcome :unavailable)]
-            (when (and (= status :welcome) (user-handler/logged-in?))
+            (sentry-event/set-user! uid)
+            (-> (state/<invoke-db-worker :thread-api/db-sync-ensure-user-rsa-keys)
+                (p/catch (fn [error]
+                           (log/error :db-sync/ensure-user-rsa-keys-failed error)
+                           nil))))
+          (let [status (if (user-handler/alpha-or-beta-user?) :welcome :unavailable)
+                fetch-graphs? (and (user-handler/logged-in?)
+                                   (or (= status :welcome)
+                                       (user-handler/rtc-group?)))]
+            (when fetch-graphs?
               (async/<! (p->c (rtc-handler/<get-remote-graphs)))
-              (repo-handler/refresh-repos!))))))))
+              (repo-handler/refresh-repos!)
+              (when-let [current-repo (state/get-current-repo)]
+                (when (some #(= current-repo (:url %)) (state/get-rtc-graphs))
+                  (rtc-flows/trigger-rtc-start current-repo))))))))))
 
 (defmethod events/handle :dialog/show-block [[_ block option]]
   (shui/dialog-open!

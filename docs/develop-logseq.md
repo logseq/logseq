@@ -122,3 +122,30 @@ yarn release-electron
 ```
 
 The final released binaries or installers will be at `static/out/`.
+
+## DB sync Node adapter (self-hosted)
+
+Build and run the Node.js adapter for self-hosted DB sync.
+
+```bash
+cd deps/db-sync
+yarn install
+DB_SYNC_PORT=8787 \
+COGNITO_ISSUER=https://cognito-idp.us-east-2.amazonaws.com/us-east-2_kAqZcxIeM \
+COGNITO_CLIENT_ID=1qi1uijg8b6ra70nejvbptis0q \
+COGNITO_JWKS_URL=https://cognito-idp.us-east-2.amazonaws.com/us-east-2_kAqZcxIeM/.well-known/jwks.json \
+yarn build:node-adapter
+
+DB_SYNC_PORT=8787 \
+COGNITO_ISSUER=https://cognito-idp.us-east-2.amazonaws.com/us-east-2_kAqZcxIeM \
+COGNITO_CLIENT_ID=1qi1uijg8b6ra70nejvbptis0q \
+COGNITO_JWKS_URL=https://cognito-idp.us-east-2.amazonaws.com/us-east-2_kAqZcxIeM/.well-known/jwks.json \
+yarn start:node-adapter
+```
+
+Optional environment variables:
+- DB_SYNC_DATA_DIR (defaults to data/db-sync)
+
+Notes:
+- The Cognito values above match `ENABLE_DB_SYNC_LOCAL=true yarn watch` default auth config.
+- For production builds, use the production Cognito pool values from `src/main/frontend/config.cljs`.
