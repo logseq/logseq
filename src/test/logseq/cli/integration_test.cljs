@@ -12,6 +12,7 @@
             [logseq.cli.config :as cli-config]
             [logseq.cli.main :as cli-main]
             [logseq.cli.server :as cli-server]
+            [logseq.cli.style :as style]
             [logseq.cli.transport :as transport]
             [logseq.common.util :as common-util]
             [logseq.db.frontend.property :as db-property]
@@ -592,9 +593,10 @@
                                                                :page page-name}
                                                               show-config)
                        output (get-in show-result [:data :message])
+                       output* (style/strip-ansi output)
                        stop-payload (stop-repo! data-dir cfg-path repo)]
                  (is (= :ok (:status show-result)))
-                 (is (string/includes? output "│   Acceptance Criteria: First requirement"))
+                 (is (string/includes? output* "│   Acceptance Criteria: First requirement"))
                  (is (= "ok" (:status stop-payload)))
                  (done))
                (p/catch (fn [e]
