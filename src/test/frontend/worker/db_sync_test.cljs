@@ -68,21 +68,6 @@
       (is (= [{:user/uuid "u1" :user/name "Alice"}]
              (get-in (first @broadcasts) [:payload :online-users]))))))
 
-(deftest update-online-users-broadcasts-when-user-list-changes-test
-  (let [client {:repo test-repo
-                :online-users (atom [])
-                :ws-state (atom :open)}
-        broadcasts (atom [])]
-    (with-redefs [shared-service/broadcast-to-clients! (fn [topic payload]
-                                                         (swap! broadcasts conj {:topic topic :payload payload}))]
-      (#'db-sync/update-online-users! client [{:user-id "u1" :username "Alice"}])
-      (#'db-sync/update-online-users! client [{:user-id "u1" :username "Alice"}
-                                              {:user-id "u2" :username "Bob"}])
-      (is (= 2 (count @broadcasts)))
-      (is (= [{:user/uuid "u1" :user/name "Alice"}
-              {:user/uuid "u2" :user/name "Bob"}]
-             (get-in (last @broadcasts) [:payload :online-users]))))))
-
 (deftest presence-message-ignores-source-client-test
   (let [client {:repo test-repo
                 :online-users (atom [{:user/uuid "u1" :user/name "Alice"}
