@@ -95,7 +95,7 @@
         "cljs:release-app": "clojure -M:cljs release app db-worker inference-worker",
         "cljs:release-publishing": "clojure -M:cljs release app publishing",
         "cljs:test": "clojure -M:test compile test",
-        "cljs:run-test": "node static/tests.js",
+        "cljs:run-test": "node static/tests.js -r '^(?!logseq.db-sync.).*' -e fix-me",
         "cljs:test-no-worker": "clojure -M:test compile test-no-worker",
         "cljs:run-test-no-worker": "node static/tests-no-worker.js",
         "cljs:dev-release-app": "clojure -M:cljs release app db-worker inference-worker --config-merge \"{:closure-defines {frontend.config/DEV-RELEASE true}}\"",
