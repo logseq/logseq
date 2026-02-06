@@ -494,6 +494,7 @@
   :editor/add-property-status     "Add task status to selected block"
   :editor/add-property-priority   "Add task priority to selected block"
   :editor/add-property-icon       "Add icon"
+  :editor.asset/upload            "Upload asset from file system"
   :editor/jump                    "Jump to a property key or value"
   :ui/toggle-brackets             "Toggle whether to display brackets"
   :go/electron-find-in-page       "Find text in page"

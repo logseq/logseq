@@ -1,3 +1,16 @@
+/* Screen reader only - for accessibility */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
 .cp__emoji-icon-picker {
   --ls-color-icon-preset: "inherit";
 
@@ -271,6 +284,7 @@
   min-height: 320px;
   max-height: 440px;
   background-color: var(--lx-gray-02);
+  transition: background-color 200ms;
 
   /* Body content - scrollable area */
   > .bd {
@@ -281,6 +295,60 @@
   /* Sections - 8px padding on both sides (symmetric) */
   .pane-section {
     @apply px-2;
+  }
+
+  /* Drag-active state - visual feedback when dragging files */
+  &.drag-active {
+    background-color: rgba(var(--lx-color-primary-rgb), 0.05);
+  }
+
+  /* Semi-transparent blue-tinted backdrop and outline when dragging */
+  &.drag-active::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    right: 2px;
+    bottom: 2px;
+    background: linear-gradient(
+      135deg,
+      rgba(37, 99, 235, 0.25) 0%,
+      rgba(0, 0, 0, 0.75) 100%
+    );
+    border: 3px dashed var(--rx-blue-09);
+    border-radius: 4px;
+    z-index: 100;
+    pointer-events: none;
+    transition: opacity 200ms;
+  }
+
+  /* Drag overlay hint with icon and text */
+  .drag-overlay-hint {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 101;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+
+    .tabler-icon {
+      color: #ffffff;
+      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+    }
+
+    span {
+      font-size: 18px;
+      color: #ffffff;
+      font-weight: 500;
+      text-align: center;
+      letter-spacing: 0.5px;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+      white-space: nowrap;
+    }
   }
 }
 
@@ -531,7 +599,7 @@
     inset: 0;
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain;
     border-radius: 4px;
   }
 
@@ -654,11 +722,36 @@
     width: 100%;
     height: 180px;
     position: relative;
+    /* Create stacking context for z-index layering */
+    isolation: isolate;
+    overflow: hidden;
+    background-color: var(--lx-gray-02);
 
-    img {
+    /* Blurred background image layer - positioned behind main image */
+    img.blur-bg {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
       width: 100%;
       height: 100%;
       object-fit: cover;
+      object-position: center;
+      /* Apply blur effect */
+      filter: blur(12px);
+      /* Reduce opacity for subtle, non-distracting effect */
+      opacity: 0.6;
+      /* Prevent interaction with blur layer */
+      pointer-events: none;
+      border-radius: 6px 6px 0 0;
+    }
+
+    /* Main preview image - on top with object-fit: contain */
+    img.preview-img {
+      position: relative;
+      z-index: 2;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
       object-position: center;
       border-radius: 6px 6px 0 0;
     }
@@ -671,9 +764,21 @@
       @apply transition-opacity duration-150;
       @apply opacity-70 hover:opacity-100;
       @apply border-none cursor-pointer;
+      z-index: 3;
       background-color: color-mix(in srgb, var(--lx-gray-02) 80%, transparent);
       backdrop-filter: blur(4px);
       color: var(--rx-gray-12);
+
+      /* Keyboard focus indicator */
+      &:focus-visible {
+        outline: 2px solid var(--rx-accent-09);
+        outline-offset: 1px;
+      }
+
+      /* Active state feedback */
+      &:active {
+        @apply opacity-100;
+      }
     }
   }
 
@@ -713,6 +818,48 @@
 
   .pane-footer {
     @apply flex justify-end gap-2 pt-1;
+  }
+}
+
+/* High contrast mode - enhance blur for better visibility */
+@media (prefers-contrast: more) {
+  .web-image-confirm-pane .preview-image img.blur-bg {
+    filter: blur(20px);
+    opacity: 0.8;
+  }
+
+  .web-image-confirm-pane .preview-image .maximize-btn {
+    background-color: color-mix(in srgb, var(--lx-gray-02) 95%, transparent);
+    box-shadow: 0 0 0 1px var(--rx-gray-08);
+  }
+}
+
+/* Reduced motion - disable blur for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .web-image-confirm-pane .preview-image img.blur-bg {
+    filter: blur(0px);
+    opacity: 0;
+    transition: none;
+  }
+
+  .web-image-confirm-pane .preview-image .maximize-btn {
+    @apply transition-none;
+  }
+}
+
+/* Dark mode - enhance blur for visual consistency */
+@media (prefers-color-scheme: dark) {
+  .web-image-confirm-pane .preview-image img.blur-bg {
+    filter: blur(14px);
+    opacity: 0.7;
+  }
+}
+
+/* Light mode - lighter blur for readability */
+@media (prefers-color-scheme: light) {
+  .web-image-confirm-pane .preview-image img.blur-bg {
+    filter: blur(10px);
+    opacity: 0.5;
   }
 }
 

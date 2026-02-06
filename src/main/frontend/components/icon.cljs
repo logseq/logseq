@@ -50,6 +50,13 @@
 (defonce *wikipedia-fetch-queue (atom #queue []))
 (defonce *wikipedia-fetch-processing? (atom false))
 
+;; Asset picker drag & drop state
+(defonce *drag-active? (atom false))
+(defonce *drag-depth (atom 0))  ;; Track drag enter/leave depth to prevent flicker
+(defonce *asset-picker-open? (atom false))
+(defonce *upload-status (atom ""))
+(defonce *uploading-files (atom {}))
+
 (def wikipedia-fetch-delay-ms
   "Delay between Wikipedia API requests to avoid rate limiting"
   200)
@@ -1183,12 +1190,12 @@
        :on-click (fn [e]
                    (on-chosen e {:type :emoji
                                  :id emoji-id
-                                 :name emoji-name}))
+                                 :name emoji-name}))}
        (not (nil? hover))
        (assoc :on-mouse-over #(reset! hover {:type :emoji
                                              :id emoji-id
                                              :name emoji-name})
-              :on-mouse-out #())})
+              :on-mouse-out #()))
      [:em-emoji {:id emoji-id
                  :style {:line-height 1}}]]))
 
@@ -1206,12 +1213,12 @@
        :on-click (fn [e]
                    (on-chosen e {:type :text
                                  :data (cond-> {:value text-value}
-                                         text-color (assoc :color text-color))}))
+                                         text-color (assoc :color text-color))}))}
        (not (nil? hover))
        (assoc :on-mouse-over #(reset! hover {:type :text
                                              :data (cond-> {:value text-value}
                                                      text-color (assoc :color text-color))})
-              :on-mouse-out #())})
+              :on-mouse-out #()))
      display-text]))
 
 (rum/defc avatar-cp < rum/static
@@ -1232,13 +1239,13 @@
                    (on-chosen e {:type :avatar
                                  :data {:value avatar-value
                                         :backgroundColor backgroundColor
-                                        :color color}}))
+                                        :color color}}))}
        (not (nil? hover))
        (assoc :on-mouse-over #(reset! hover {:type :avatar
                                              :data {:value avatar-value
                                                     :backgroundColor backgroundColor
                                                     :color color}})
-              :on-mouse-out #())})
+              :on-mouse-out #()))
      (shui/avatar
       {:class "w-7 h-7"}
       (shui/avatar-fallback
@@ -1670,6 +1677,21 @@
         (when license-desc
           [:div.text-xs {:style {:color "var(--lx-gray-11)"}} license-desc])])))))
 
+(defn- should-use-blur-bg?
+  "Determine if blurred background should be used based on image format.
+   SVGs and potentially transparent formats should not use blur."
+  [url]
+  (let [url-lower (when url (string/lower-case url))
+        ;; SVG detection
+        is-svg? (and url-lower (string/ends-with? url-lower ".svg"))
+        ;; Formats that commonly have transparency (conservative approach)
+        likely-transparent? (or (and url-lower (string/ends-with? url-lower ".png"))
+                                (and url-lower (string/ends-with? url-lower ".gif"))
+                                (and url-lower (string/ends-with? url-lower ".webp")))]
+    ;; Use blur only for opaque formats (JPEG, BMP)
+    ;; Skip for SVG (uses PNG thumbnail anyway) and potentially transparent formats
+    (not (or is-svg? likely-transparent?))))
+
 (rum/defc full-image-view
   "Full image view popover - shows uncropped image with object-fit: contain"
   [{:keys [url on-close]}]
@@ -1695,11 +1717,22 @@
                            :wikipedia "From: Wikipedia"
                            :wikipedia-commons "From: Wikipedia Commons"
                            "From: Web")
-                         (when license (str " · " license)))]
+                         (when license (str " · " license)))
+        ;; Determine if we should use blur based on format
+        display-url (or thumb-url url)
+        use-blur? (should-use-blur-bg? display-url)]
     [:div.web-image-confirm-pane
-     ;; Preview image with maximize button
+     ;; Preview image with blur background layer
      [:div.preview-image
-      [:img {:src (or thumb-url url)}]
+      ;; Blurred background image (only for opaque formats)
+      (when use-blur?
+        [:img.blur-bg {:src display-url}])
+      ;; Main image with object-fit: contain
+      [:img.preview-img {:src display-url
+                         :alt (str title " from " (case source
+                                                    :wikipedia "Wikipedia"
+                                                    :wikipedia-commons "Wikipedia Commons"
+                                                    "Web"))}]
       ;; Maximize button - opens full image view
       [:button.maximize-btn
        {:on-click (fn [e]
@@ -2008,6 +2041,40 @@
          "Save"))]]))
 
 ;; ============================================================================
+;; Multi-File Upload Preview
+;; ============================================================================
+
+(rum/defc multi-file-preview
+  [files on-confirm on-cancel]
+  (let [image-files (filter #(contains? config/image-formats
+                                        (keyword (second (string/split (.-type %) "/"))))
+                            files)
+        other-files (remove #(contains? config/image-formats
+                                        (keyword (second (string/split (.-type %) "/"))))
+                            files)]
+    [:div.multi-file-preview.p-4.space-y-4
+     [:h3.text-base.font-semibold
+      (str "Upload " (count image-files) " image" (when (not= 1 (count image-files)) "s") "?")]
+
+     ;; File list
+     [:div.space-y-1.max-h-64.overflow-y-auto
+      (for [file image-files]
+        [:div.text-sm.py-1
+         {:key (.-name file)}
+         [:span.truncate (.-name file)]])]
+
+     ;; Warning for skipped files
+     (when (seq other-files)
+       [:div.text-sm.text-yellow-09.bg-yellow-02.rounded.px-3.py-2
+        (str "Will skip " (count other-files) " non-image file"
+             (when (not= 1 (count other-files)) "s"))])
+
+     ;; Action buttons
+     [:div.flex.gap-2.justify-end
+      (shui/button {:variant :outline :on-click on-cancel} "Cancel")
+      (shui/button {:on-click on-confirm} "Upload")]]))
+
+;; ============================================================================
 ;; Asset Picker
 ;; ============================================================================
 
@@ -2018,6 +2085,9 @@
   (rum/local nil ::web-query-debounced) ;; Debounced web search query
   (rum/local false ::popover-open?) ;; Track if any popover is open
   {:did-mount (fn [state]
+                ;; Track picker open state
+                (reset! *asset-picker-open? true)
+
                 ;; Fetch assets - prefer sync query, fall back to async for cold start
                 (let [*loaded-assets (::loaded-assets state)
                       *loading? (::loading? state)
@@ -2034,7 +2104,13 @@
                                   (reset! *loading? false)))
                         (p/catch (fn [_err]
                                    (reset! *loading? false))))))
-                state)}
+
+                state)
+   :will-unmount (fn [state]
+                   ;; Track picker closed state
+                   (reset! *asset-picker-open? false)
+
+                   state)}
   [state {:keys [on-chosen on-back on-delete del-btn? current-icon avatar-context page-title]}]
   (let [*search-q (::search-q state)
         *loading? (::loading? state)
@@ -2118,36 +2194,136 @@
                                             :data image-data}))))))
                 (p/catch (fn [err]
                            (shui/toast! (str "Failed to save image: " (ex-message err)) :error))))))
-        ;; Handle file upload
+        ;; Process upload (actual upload logic extracted for reuse)
+        process-upload (fn [files]
+                         (let [repo (state/get-current-repo)
+                               image-files (filter (fn [file]
+                                                     (let [file-type (.-type file)
+                                                           ext (some-> file-type
+                                                                       (string/split "/")
+                                                                       second
+                                                                       keyword)]
+                                                       (contains? config/image-formats ext)))
+                                                   files)
+                               rejected-files (remove (fn [file]
+                                                        (let [file-type (.-type file)
+                                                              ext (some-> file-type
+                                                                          (string/split "/")
+                                                                          second
+                                                                          keyword)]
+                                                          (contains? config/image-formats ext)))
+                                                      files)]
+                           (when (seq image-files)
+                             ;; Update ARIA status
+                             (reset! *upload-status
+                                     (str "Uploading " (count image-files) " image"
+                                          (when (not= 1 (count image-files)) "s")))
+
+                             (p/let [entities (p/all (map #(save-image-asset! repo %) image-files))]
+                               (p/let [updated-assets (<get-image-assets)]
+                                 (reset! *loaded-assets (or (seq updated-assets) [])))
+
+                               ;; Show feedback notification
+                               (let [uploaded-count (count (remove nil? entities))]
+                                 (cond
+                                   (and (pos? uploaded-count) (empty? rejected-files))
+                                   (shui/toast! (str "Uploaded " uploaded-count " image"
+                                                     (when (not= 1 uploaded-count) "s"))
+                                                :success)
+
+                                   (and (pos? uploaded-count) (seq rejected-files))
+                                   (shui/toast! (str "Uploaded " uploaded-count " image"
+                                                     (when (not= 1 uploaded-count) "s")
+                                                     ". Skipped " (count rejected-files)
+                                                     " file" (when (not= 1 (count rejected-files)) "s")
+                                                     " (not images)")
+                                                :warning)
+
+                                   :else
+                                   (shui/toast! (str "No valid images to upload. Skipped "
+                                                     (count rejected-files) " file"
+                                                     (when (not= 1 (count rejected-files)) "s"))
+                                                :error)))
+
+                               ;; Update completion status
+                               (reset! *upload-status
+                                       (str "Upload complete. " (count (remove nil? entities)) " images added"))
+
+                               ;; Clear status after 3 seconds
+                               (js/setTimeout #(reset! *upload-status "") 3000)
+
+                               (when-let [first-asset (first (remove nil? entities))]
+                                 (let [image-data {:asset-uuid (str (:block/uuid first-asset))
+                                                   :asset-type (:logseq.property.asset/type first-asset)}]
+                                   (on-chosen nil
+                                              (if avatar-context
+                                                {:type :avatar
+                                                 :id (:id avatar-context)
+                                                 :label (:label avatar-context)
+                                                 :data (merge (:data avatar-context) image-data)}
+                                                {:type :image
+                                                 :id (str "image-" (:block/uuid first-asset))
+                                                 :label (or (:block/title first-asset) "")
+                                                 :data image-data}))))))))
+
+        ;; Handle file upload with smart multi-file preview
         handle-upload (fn [files]
-                        (let [repo (state/get-current-repo)
-                              image-files (filter (fn [file]
-                                                    (let [file-type (.-type file)
-                                                          ext (some-> file-type
-                                                                      (string/split "/")
-                                                                      second
-                                                                      keyword)]
-                                                      (contains? config/image-formats ext)))
-                                                  files)]
-                          (when (seq image-files)
-                            (p/let [entities (p/all (map #(save-image-asset! repo %) image-files))]
-                              (p/let [updated-assets (<get-image-assets)]
-                                (reset! *loaded-assets (or (seq updated-assets) [])))
-                              (when-let [first-asset (first (remove nil? entities))]
-                                (let [image-data {:asset-uuid (str (:block/uuid first-asset))
-                                                  :asset-type (:logseq.property.asset/type first-asset)}]
-                                  (on-chosen nil
-                                             (if avatar-context
-                                               {:type :avatar
-                                                :id (:id avatar-context)
-                                                :label (:label avatar-context)
-                                                :data (merge (:data avatar-context) image-data)}
-                                               {:type :image
-                                                :id (str "image-" (:block/uuid first-asset))
-                                                :label (or (:block/title first-asset) "")
-                                                :data image-data}))))))))]
+                        (let [file-count (count files)]
+                          (if (> file-count 3)
+                            ;; Show preview confirmation for >3 files
+                            (shui/popup-show!
+                             (multi-file-preview
+                              files
+                              #(do (shui/popup-hide!) (process-upload files))
+                              #(shui/popup-hide!))
+                             {:align :center
+                              :content-props {:class "w-96"}})
+                            ;; Auto-upload for 1-3 files
+                            (process-upload files))))]
     [:div.asset-picker
-     {:class (when avatar-mode? "avatar-mode")}
+     {:id "asset-picker-modal"
+      :class [(when avatar-mode? "avatar-mode")
+              (when (rum/react *drag-active?) "drag-active")]
+      :on-drag-enter (fn [e]
+                       (.preventDefault e)
+                       (.stopPropagation e)
+                       ;; Increment depth counter - activate on first enter
+                       (swap! *drag-depth inc)
+                       (when (= @*drag-depth 1)
+                         (reset! *drag-active? true)))
+      :on-drag-over (fn [e]
+                      ;; CRITICAL: Must preventDefault to allow drop
+                      (.preventDefault e)
+                      (.stopPropagation e))
+      :on-drag-leave (fn [e]
+                       (.preventDefault e)
+                       (.stopPropagation e)
+                       ;; Decrement depth counter - deactivate when leaving completely
+                       (swap! *drag-depth dec)
+                       (when (<= @*drag-depth 0)
+                         (reset! *drag-depth 0)
+                         (reset! *drag-active? false)))
+      :on-drop (fn [e]
+                 (.preventDefault e)
+                 (.stopPropagation e)
+                 ;; Reset state immediately
+                 (reset! *drag-depth 0)
+                 (reset! *drag-active? false)
+                 (let [files (array-seq (.. e -dataTransfer -files))]
+                   (handle-upload files)))}
+
+     ;; ARIA live region for status announcements
+     [:div.sr-only
+      {:role "status"
+       :aria-live "polite"
+       :aria-atomic "true"}
+      (rum/react *upload-status)]
+
+     ;; Drag overlay hint - shown when dragging files
+     (when @*drag-active?
+       [:div.drag-overlay-hint
+        (shui/tabler-icon "photo-up" {:size 40})
+        [:span "Drop images to upload"]])
 
      ;; Topbar: back button + search
      [:div.asset-picker-topbar
@@ -2282,21 +2458,38 @@
                                       :sideOffset 8}
                       :on-after-hide (fn [] (reset! *popover-open? false))}))}
        (shui/tabler-icon "link" {:size 16})
-       [:span "Add asset via URL"])
+       [:span "Add image via URL"])
       (shui/button
        {:variant (if popover-open? :secondary :default)
         :size :sm
         :as-child true}
        [:label
-        [:input.hidden
+        [:input#asset-upload-input.hidden
          {:type "file"
           :accept "image/*"
           :multiple true
           :on-change (fn [e]
                        (let [files (array-seq (.-files (.-target e)))]
                          (handle-upload files)))}]
-        (shui/tabler-icon "square-plus" {:size 16})
-        [:span "Upload asset"]])]]))
+        [:span "Upload image"]])
+
+      ;; Mobile camera button
+      (when (util/mobile?)
+        (shui/button
+         {:variant :secondary
+          :size :sm
+          :as-child true}
+         [:label
+          [:input.hidden
+           {:type "file"
+            :accept "image/*"
+            :capture "environment"
+            :on-change (fn [e]
+                         (let [files (array-seq (.-files (.-target e)))]
+                           (handle-upload files)))}]
+          [:div.flex.items-center.gap-2
+           (shui/tabler-icon "camera" {:size 16})
+           [:span "Take photo"]]]))]]))
 
 (defn open-image-asset-picker!
   "Opens the asset picker popup for selecting an image icon.

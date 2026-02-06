@@ -1431,6 +1431,34 @@
   (let [repo (state/get-current-repo)]
     (db-upload-assets! repo id ^js files format uploading? drop-or-paste?)))
 
+(defn upload-global-asset!
+  "Opens file picker and uploads selected files to #Asset page.
+   Does NOT insert into current block - just saves to Asset class.
+   Accepts all file types. Called from CMD K or mod+u shortcut."
+  []
+  (let [input (js/document.createElement "input")]
+    (set! (.-type input) "file")
+    (set! (.-multiple input) true)
+    (set! (.-accept input) "*/*")
+    (.addEventListener input "change"
+                       (fn [e]
+                         (let [files (array-seq (.-files (.-target e)))]
+                           (when (seq files)
+                             (let [repo (state/get-current-repo)
+                                   asset-class (db/entity :logseq.class/Asset)]
+                               (-> (db-based-save-assets! repo (js->clj files) {:save-to-page asset-class})
+                                   (p/then (fn [results]
+                                             (let [success-count (count (filter some? results))]
+                                               (when (pos? success-count)
+                                                 (notification/show!
+                                                  (str "Uploaded " success-count " asset"
+                                                       (when (> success-count 1) "s") " to #Asset")
+                                                  :success)))))
+                                   (p/catch (fn [e]
+                                              (js/console.error e)
+                                              (notification/show! "Failed to upload asset" :error)))))))))
+    (.click input)))
+
 ;; Editor should track some useful information, like editor modes.
 ;; For example:
 ;; 1. Which file format is it, markdown or org mode?

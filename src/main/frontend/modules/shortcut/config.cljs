@@ -24,6 +24,7 @@
             [frontend.modules.shortcut.before :as m]
             [frontend.state :as state]
             [frontend.util :refer [mac?] :as util]
+            [goog.dom :as gdom]
             [medley.core :as medley]))
 
 (defn- search
@@ -58,6 +59,10 @@
 
    :pdf/find                                {:binding "alt+f"
                                              :fn      pdf-utils/open-finder}
+
+   :editor.asset/upload                     {:binding "mod+u"
+                                             :fn      (fn [_ _]
+                                                        (editor-handler/upload-global-asset!))}
 
    :auto-complete/complete                  {:binding "enter"
                                              :fn      ui-handler/auto-complete-complete}
@@ -657,6 +662,7 @@
           :publish/open-dialog
           :command-palette/toggle
           :editor/add-property
+          :editor.asset/upload
           :window/close])
         (with-meta {:before m/prevent-default-behavior}))
 
