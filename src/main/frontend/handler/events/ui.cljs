@@ -33,6 +33,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.dom :as gdom]
+            [lambdaisland.glogi :as log]
             [logseq.common.util :as common-util]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]))
@@ -299,7 +300,11 @@
         (do
           (state/set-user-info! result)
           (when-let [uid (user-handler/user-uuid)]
-            (sentry-event/set-user! uid))
+            (sentry-event/set-user! uid)
+            (-> (state/<invoke-db-worker :thread-api/db-sync-ensure-user-rsa-keys)
+                (p/catch (fn [error]
+                           (log/error :db-sync/ensure-user-rsa-keys-failed error)
+                           nil))))
           (let [status (if (user-handler/alpha-or-beta-user?) :welcome :unavailable)
                 fetch-graphs? (and (user-handler/logged-in?)
                                    (or (= status :welcome)
