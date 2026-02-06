@@ -246,6 +246,11 @@
 (defn <rtc-download-graph!
   [graph-name graph-uuid]
   (state/set-state! :rtc/downloading-graph-uuid graph-uuid)
+  (state/pub-event!
+   [:rtc/log {:type :rtc.log/download
+              :sub-type :download-progress
+              :graph-uuid graph-uuid
+              :message "Preparing graph snapshot download"}])
   (let [base (http-base)]
     (-> (if (and graph-uuid base)
           (let [download-url* (atom nil)]
