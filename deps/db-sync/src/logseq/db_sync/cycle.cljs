@@ -245,19 +245,6 @@
                               (ancestor? db victim safe))
                        (safe-target-for-block-parent db victim attr bad-v)
                        safe)]
-            (prn :debug
-                 :victim victim
-                 :page-id (:db/id (:block/page (d/entity db victim)))
-                 :attr attr
-                 :safe safe
-                 :bad-v bad-v
-                 :fix-tx (cond
-                           (and safe (not= safe bad-v))
-                           [[:db/retract victim attr bad-v]
-                            [:db/add     victim attr safe]]
-
-                           :else
-                           [[:db/retract victim attr bad-v]]))
             (cond
               (and safe (not= safe bad-v))
               [[:db/retract victim attr bad-v]
@@ -308,17 +295,15 @@
                    (reduce
                     (fn [{:keys [tx seen] :as acc2} e]
                       (if-let [cycle (reachable-cycle db e attr opts)]
-                        (do
-                          (prn :debug :cycle-detected cycle)
-                          (if-let [t (break-cycle-edge! db cycle attr opts touched)]
-                            (let [[_op e2 a2 v2] (first t)
-                                  edge [e2 a2 v2]]
+                        (if-let [t (break-cycle-edge! db cycle attr opts touched)]
+                          (let [[_op e2 a2 v2] (first t)
+                                edge [e2 a2 v2]]
                               ;; Skip if we've already retracted this exact edge.
-                              (if (contains? seen edge)
-                                acc2
-                                {:tx (into tx t)
-                                 :seen (conj seen edge)}))
-                            acc2))
+                            (if (contains? seen edge)
+                              acc2
+                              {:tx (into tx t)
+                               :seen (conj seen edge)}))
+                          acc2)
                         acc2))
                     acc
                     es)))
