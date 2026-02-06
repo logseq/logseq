@@ -5,7 +5,6 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [frontend.worker-common.util :as worker-util]
-            [frontend.worker.db.rename-db-ident :as rename-db-ident]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
@@ -17,116 +16,6 @@
 
 ;; Frontend migrations
 ;; ===================
-
-(defn- rename-properties-fix
-  [db props-to-rename]
-  (let [;; update property title/name
-        ;; don't update :db/ident since it's addressed by `:rename-db-idents`
-        property-tx (map
-                     (fn [[old new]]
-                       (merge {:db/id (:db/id (d/entity db old))}
-                              (when-let [new-title (get-in db-property/built-in-properties [new :title])]
-                                {:block/title new-title
-                                 :block/name (common-util/page-name-sanity-lc new-title)})))
-                     props-to-rename)
-        titles-tx (->> (d/datoms db :avet :block/title)
-                       (keep (fn [d]
-                               (let [title (:v d)]
-                                 (if (string? title)
-                                   (when-let [props (seq (filter (fn [[old _new]] (string/includes? (:v d) (str old))) props-to-rename))]
-                                     (let [title' (reduce (fn [title [old new]]
-                                                            (string/replace title (str old) (str new))) title props)]
-                                       [:db/add (:e d) :block/title title']))
-                                   [:db/retract (:e d) :block/title])))))
-        sorting-tx (->> (d/datoms db :avet :logseq.property.table/sorting)
-                        (keep (fn [d]
-                                (when (coll? (:v d))
-                                  (when-let [props (seq (filter (fn [[old _new]]
-                                                                  (some (fn [item] (= old (:id item))) (:v d))) props-to-rename))]
-                                    (let [value (reduce
-                                                 (fn [sorting [old new]]
-                                                   (mapv
-                                                    (fn [item]
-                                                      (if (= old (:id item))
-                                                        (assoc item :id new)
-                                                        item))
-                                                    sorting))
-                                                 (:v d)
-                                                 props)]
-                                      [:db/add (:e d) :logseq.property.table/sorting value]))))))
-        sized-columns-tx (->> (d/datoms db :avet :logseq.property.table/sized-columns)
-                              (keep (fn [d]
-                                      (when (map? (:v d))
-                                        (when-let [props (seq (filter (fn [[old _new]] (get (:v d) old)) props-to-rename))]
-                                          (let [value (reduce
-                                                       (fn [sizes [old new]]
-                                                         (if-let [size (get sizes old)]
-                                                           (-> sizes
-                                                               (dissoc old)
-                                                               (assoc new size))
-                                                           sizes))
-                                                       (:v d)
-                                                       props)]
-                                            [:db/add (:e d) :logseq.property.table/sized-columns value]))))))
-        hidden-columns-tx (mapcat
-                           (fn [[old new]]
-                             (->> (d/datoms db :avet :logseq.property.table/hidden-columns old)
-                                  (mapcat (fn [d]
-                                            [[:db/retract (:e d) :logseq.property.table/hidden-columns old]
-                                             [:db/add (:e d) :logseq.property.table/hidden-columns new]]))))
-                           props-to-rename)
-        ordered-columns-tx (->> (d/datoms db :avet :logseq.property.table/ordered-columns)
-                                (keep (fn [d]
-                                        (when (coll? (:v d))
-                                          (when-let [props (seq (filter (fn [[old _new]] ((set (:v d)) old)) props-to-rename))]
-                                            (let [value (reduce
-                                                         (fn [col [old new]]
-                                                           (mapv (fn [v] (if (= old v) new v)) col))
-                                                         (:v d)
-                                                         props)]
-                                              [:db/add (:e d) :logseq.property.table/ordered-columns value]))))))
-        filters-tx (->> (d/datoms db :avet :logseq.property.table/filters)
-                        (keep (fn [d]
-                                (let [filters (:filters (:v d))]
-                                  (when (coll? filters)
-                                    (when-let [props (seq (filter (fn [[old _new]]
-                                                                    (some (fn [item] (and (vector? item)
-                                                                                          (= old (first item)))) filters)) props-to-rename))]
-                                      (let [value (update (:v d) :filters
-                                                          (fn [col]
-                                                            (reduce
-                                                             (fn [col [old new]]
-                                                               (mapv (fn [item]
-                                                                       (if (and (vector? item) (= old (first item)))
-                                                                         (vec (cons new (rest item)))
-                                                                         item))
-                                                                     col))
-                                                             col
-                                                             props)))]
-                                        [:db/add (:e d) :logseq.property.table/filters value])))))))]
-    (concat property-tx
-            titles-tx
-            sorting-tx
-            sized-columns-tx
-            hidden-columns-tx
-            ordered-columns-tx
-            filters-tx)))
-
-(defn- rename-properties
-  [props-to-rename {:keys [fix]}]
-  {:rename-db-idents (fn [_db]
-                       (mapv
-                        (fn [[old-ident new-ident]]
-                          {:db-ident-or-block-uuid old-ident
-                           :new-db-ident new-ident})
-                        props-to-rename))
-   :fix (fn [db]
-          (let [common-fix (rename-properties-fix db
-                                                  {:logseq.property.asset/external-src
-                                                   :logseq.property.asset/external-url})
-                additional-fix (when (fn? fix)
-                                 (fix db))]
-            (concat common-fix additional-fix)))})
 
 (defn- add-quick-add-page
   [_db]
@@ -169,7 +58,7 @@
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
-   :rename-db-idents and :fix."
+   and :fix."
   [["65.7" {:fix add-quick-add-page}]
    ["65.8" {:fix add-missing-page-name}]
    ["65.9" {:properties [:logseq.property.embedding/hnsw-label-updated-at]}]
@@ -179,9 +68,6 @@
    ["65.13" {:properties [:logseq.property.asset/width
                           :logseq.property.asset/height]}]
    ["65.14" {:properties [:logseq.property.asset/external-src]}]
-   ["65.15" (rename-properties {:logseq.property.asset/external-src
-                                :logseq.property.asset/external-url}
-                               {})]
    ["65.16" {:properties [:logseq.property.asset/external-file-name]}]
    ["65.17" {:properties [:logseq.property.publish/published-url]}]
    ["65.18" {:fix deprecated-ensure-graph-uuid}]
@@ -281,7 +167,7 @@
 
 (defn- upgrade-version!
   "Return tx-data"
-  [conn version {:keys [properties classes rename-db-idents fix] :as migrate-updates}]
+  [conn version {:keys [properties classes fix] :as migrate-updates}]
   (let [version (db-schema/parse-schema-version version)
         db @conn
         new-properties (->> (select-keys db-property/built-in-properties properties)
@@ -303,19 +189,14 @@
         new-class-idents (keep (fn [class]
                                  (when-let [db-ident (:db/ident class)]
                                    {:db/ident db-ident})) new-classes)
-        [rename-db-idents-tx-data rename-db-idents-coll]
-        (when rename-db-idents
-          (rename-db-ident/rename-db-idents-migration-tx-data db rename-db-idents))
         fixes (when (fn? fix)
                 (fix db))
-        tx-data (concat new-class-idents new-properties new-classes rename-db-idents-tx-data fixes)
+        tx-data (concat new-class-idents new-properties new-classes fixes)
         tx-data' (concat
                   [(sqlite-util/kv :logseq.kv/schema-version version)]
                   tx-data)
         r (ldb/transact! conn tx-data' {:db-migrate? true
-                                        :skip-validate-db? true})
-        migrate-updates (cond-> migrate-updates
-                          rename-db-idents (assoc :rename-db-idents rename-db-idents-coll))]
+                                        :skip-validate-db? true})]
     (println "DB schema migrated to" version)
     (assoc r :migrate-updates migrate-updates)))
 
