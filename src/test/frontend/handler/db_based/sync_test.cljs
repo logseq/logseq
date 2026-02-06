@@ -1,5 +1,6 @@
 (ns frontend.handler.db-based.sync-test
   (:require [cljs.test :refer [deftest is async]]
+            [clojure.string :as string]
             [frontend.handler.db-based.sync :as db-sync]
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
@@ -82,3 +83,30 @@
                (p/catch (fn [e]
                           (is false (str e))
                           (done)))))))
+
+(deftest rtc-download-graph-emits-feedback-before-snapshot-fetch-test
+  (let [trace (atom [])
+        log-events (atom [])]
+    (with-redefs [db-sync/http-base (fn [] "http://base")
+                  state/set-state! (fn [k v]
+                                     (swap! trace conj [:set k v]))
+                  state/pub-event! (fn [[event payload :as e]]
+                                     (when (and (= :rtc/log event)
+                                                (= "graph-1" (:graph-uuid payload)))
+                                       (swap! trace conj :log)
+                                       (swap! log-events conj e)))
+                  ;; Keep auth pending so we only validate immediate click-time feedback.
+                  user-handler/task--ensure-id&access-token (fn [_resolve _reject] nil)
+                  db-sync/fetch-json (fn [url _opts _schema]
+                                       (swap! trace conj [:fetch url])
+                                       (p/resolved {:t 1}))]
+      (db-sync/<rtc-download-graph! "demo-graph" "graph-1")
+      (is (= [[:set :rtc/downloading-graph-uuid "graph-1"] :log]
+             (take 2 @trace)))
+      (let [[event {:keys [type sub-type graph-uuid message]}] (first @log-events)]
+        (is (= :rtc/log event))
+        (is (= :rtc.log/download type))
+        (is (= :download-progress sub-type))
+        (is (= "graph-1" graph-uuid))
+        (is (and (string? message)
+                 (string/includes? message "Preparing")))))))
