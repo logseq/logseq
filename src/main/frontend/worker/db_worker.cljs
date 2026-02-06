@@ -241,7 +241,8 @@
         (sqlite-gc/gc-kvs-table! db {:full-gc? full-gc?})
         (.exec db "VACUUM"))
       (ldb/transact! datascript-conn [{:db/ident :logseq.kv/graph-last-gc-at
-                                       :kv/value (common-util/time-ms)}]))))
+                                       :kv/value (common-util/time-ms)}]
+                     {:skip-validate-db? true}))))
 
 (defn- <create-or-open-db!
   [repo {:keys [config datoms] :as opts}]
