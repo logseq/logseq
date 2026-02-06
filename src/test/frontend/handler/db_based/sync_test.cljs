@@ -21,17 +21,17 @@
   (let [payload (.encode test-text-encoder (sqlite-util/write-transit-str rows))]
     (frame-bytes payload)))
 
-(defn- <gzip-bytes [^js bytes]
+(defn- <gzip-bytes [^js payload]
   (if (exists? js/CompressionStream)
     (p/let [stream (js/ReadableStream.
                     #js {:start (fn [controller]
-                                  (.enqueue controller bytes)
+                                  (.enqueue controller payload)
                                   (.close controller))})
             compressed (.pipeThrough stream (js/CompressionStream. "gzip"))
             resp (js/Response. compressed)
             buf (.arrayBuffer resp)]
       (js/Uint8Array. buf))
-    (p/resolved bytes)))
+    (p/resolved payload)))
 
 (deftest remove-member-request-test
   (async done
