@@ -377,11 +377,14 @@
                                             repo graph-uuid email))]
          (notification/show! "Invitation sent!" :success))
        (p/catch (fn [e]
-                  (notification/show! "Something wrong, please try again." :error)
-                  (log/error :db-sync/invite-email-failed
-                             {:error e
-                              :graph-uuid graph-uuid
-                              :email email}))))
+                  (if (= "user not found" (get-in (ex-data e) [:body :error]))
+                    (notification/show! "User doesn't exist yet." :warning)
+                    (do
+                      (notification/show! "Something wrong, please try again." :error)
+                      (log/error :db-sync/invite-email-failed
+                                 {:error e
+                                  :graph-uuid graph-uuid
+                                  :email email}))))))
       (p/rejected (ex-info "db-sync missing invite info"
                            {:type :db-sync/invalid-invite
                             :graph-uuid graph-uuid
