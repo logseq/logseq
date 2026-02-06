@@ -20,9 +20,9 @@
         (let [editing-block-uuid (:editing-block-uuid message)
               user (presence/get-user self ws)]
           (presence/update-presence! self ws {:editing-block-uuid editing-block-uuid})
-          (ws/broadcast! self nil {:type "presence"
-                                   :editing-block-uuid editing-block-uuid
-                                   :user-id (:user-id user)}))
+          (ws/broadcast! self ws {:type "presence"
+                                  :editing-block-uuid editing-block-uuid
+                                  :user-id (:user-id user)}))
 
         "pull"
         (let [raw-since (:since message)
