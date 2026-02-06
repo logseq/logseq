@@ -65,9 +65,11 @@ Use the following environment variables for the Node adapter configuration.
 | DB_SYNC_PORT | HTTP server port | 8080 |
 | DB_SYNC_BASE_URL | External base URL for asset links | https://sync.example.com |
 | DB_SYNC_STORAGE_DRIVER | Storage backend selection | sqlite | 
-| DB_SYNC_AUTH_DRIVER | Auth backend selection | bearer | 
 | DB_SYNC_ASSETS_DRIVER | Asset storage backend selection | filesystem |
 | DB_SYNC_LOG_LEVEL | Log verbosity | info |
+| COGNITO_ISSUER | Cognito issuer URL | https://cognito-idp.us-east-2.amazonaws.com/us-east-2_kAqZcxIeM |
+| COGNITO_CLIENT_ID | Cognito app client id | 1qi1uijg8b6ra70nejvbptis0q |
+| COGNITO_JWKS_URL | Cognito JWKS URL | https://cognito-idp.us-east-2.amazonaws.com/us-east-2_kAqZcxIeM/.well-known/jwks.json |
 
 ## Verification
 Run the server-side test suite.

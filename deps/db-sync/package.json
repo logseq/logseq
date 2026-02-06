@@ -19,9 +19,9 @@
   "dependencies": {
     "@sentry/cloudflare": "^10.38.0",
     "@sentry/node": "^10.38.0",
-    "better-sqlite3": "^11.10.0",
-    "ws": "^8.18.3",
-    "shadow-cljs": "^3.3.4"
+    "better-sqlite3": "^12.6.2",
+    "shadow-cljs": "^3.3.4",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "@sentry/cli": "^3.1.0"
