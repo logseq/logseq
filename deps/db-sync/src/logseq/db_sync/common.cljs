@@ -66,15 +66,20 @@
                      stmt)]
     (.run stmt)))
 
+(defn- with-session-db [^js db session-mode]
+  (let [with-session (.-withSession db)]
+    (if (fn? with-session)
+      (if (some? session-mode)
+        (.withSession db session-mode)
+        (.withSession db))
+      db)))
+
 (defn <d1-all
   [^js db sql-or-opts & more]
   (let [[opts sql-str args] (if (map? sql-or-opts)
                               [sql-or-opts (first more) (rest more)]
                               [nil sql-or-opts more])
-        session-mode (:session opts)
-        session (if (some? session-mode)
-                  (.withSession db session-mode)
-                  (.withSession db))]
+        session (with-session-db db (:session opts))]
     (p/let [^js stmt (.prepare session sql-str)
             ^js stmt (if (seq args)
                        (.apply (.-bind stmt) stmt (to-array args))
