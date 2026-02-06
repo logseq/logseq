@@ -82,7 +82,6 @@
       :network/online?         true
       :me                      nil
       :git/current-repo        current-graph
-      :draw?                   false
       :db/restoring?           nil
 
       :search/q                              ""
@@ -124,7 +123,7 @@
       ;; 2. zoom-in view
       ;; 3. queries
       ;; 4. references
-      ;; graph => {:block-id bool}
+      ;; graph => {container-id {:block-id bool}}
       :ui/collapsed-blocks                   {}
       :ui/sidebar-collapsed-blocks           {}
       :ui/root-component                     nil
@@ -148,7 +147,6 @@
       :editor/start-pos                      (atom nil)
       :editor/async-unsaved-chars            (atom nil)
       :editor/hidden-editors                 #{} ;; page names
-      :editor/draw-mode?                     false
 
       :editor/action                         (atom nil)
       :editor/action-data                    nil
@@ -333,13 +331,7 @@
 (def common-default-config
   "Common default config for a user's repo config"
   {:feature/enable-search-remove-accents? true
-   :ui/auto-expand-block-refs? true
-
-   ;; For flushing the settings of old versions. Don't bump this value.
-   ;; There are only two kinds of graph, one is not upgraded (:legacy) and one is upgraded (:triple-lowbar)
-   ;; For not upgraded graphs, the config will have no key `:file/name-format`
-   ;; Then the default value is applied
-   :file/name-format :legacy})
+   :ui/auto-expand-block-refs? true})
 
 (def db-default-config
   "Default repo config for DB graphs"
@@ -461,42 +453,15 @@ should be done through this fn in order to get global config and config defaults
   []
   (some? (:page (get-default-home))))
 
+;; TODO: Move or remove as this is no longer stateful
 (defn get-preferred-format
-  ([]
-   (get-preferred-format (get-current-repo)))
-  ([repo-url]
-   (keyword
-    (or
-     (common-config/get-preferred-format (get-config repo-url))
-     (get-in @state [:me :preferred_format] "markdown")))))
+  [& _args]
+  :markdown)
 
 (defn markdown?
   []
   (= (keyword (get-preferred-format))
      :markdown))
-
-(defn get-pages-directory
-  []
-  (or
-   (when-let [repo (get-current-repo)]
-     (:pages-directory (get-config repo)))
-   "pages"))
-
-(defn get-journals-directory
-  []
-  (or
-   (when-let [repo (get-current-repo)]
-     (:journals-directory (get-config repo)))
-   "journals"))
-
-(defn org-mode-file-link?
-  [repo]
-  (:org-mode/insert-file-link? (get-config repo)))
-
-(defn get-journal-file-name-format
-  []
-  (when-let [repo (get-current-repo)]
-    (:journal/file-name-format (get-config repo))))
 
 (defn get-date-formatter
   []
@@ -618,10 +583,6 @@ Similar to re-frame subscriptions"
 (defn scheduled-deadlines-disabled?
   []
   (true? (:feature/disable-scheduled-and-deadline-query? (sub-config))))
-
-(defn enable-timetracking?
-  []
-  (not (false? (:feature/enable-timetracking? (sub-config)))))
 
 (defn enable-fold-button-right?
   []
@@ -1154,11 +1115,6 @@ Similar to re-frame subscriptions"
   (when (empty? (:sidebar/blocks @state))
     (sidebar-add-block! (get-current-repo) "contents" :contents)))
 
-(defn toggle-sidebar-open?!
-  []
-  (when-not (:ui/sidebar-open? @state)
-    (sidebar-add-content-when-open!))
-  (swap! state update :ui/sidebar-open? not))
 
 (defn open-right-sidebar!
   []
@@ -1168,6 +1124,12 @@ Similar to re-frame subscriptions"
 (defn hide-right-sidebar!
   []
   (swap! state assoc :ui/sidebar-open? false))
+
+(defn toggle-sidebar-open?!
+  []
+  (if (:ui/sidebar-open? @state)
+    (hide-right-sidebar!)
+    (open-right-sidebar!)))
 
 (defn sidebar-move-block!
   [from to]
@@ -1924,23 +1886,37 @@ Similar to re-frame subscriptions"
     (->> (sub :sidebar/blocks)
          (filter #(= (first %) current-repo)))))
 
+(defn get-current-editor-container-id
+  []
+  @(:editor/container-id @state))
+
+(defn- resolve-container-id
+  [container-id]
+  (or container-id (get-current-editor-container-id) :unknown-container))
+
 (defn toggle-collapsed-block!
-  [block-id]
-  (let [current-repo (get-current-repo)]
-    (update-state! [:ui/collapsed-blocks current-repo block-id] not)))
+  ([block-id] (toggle-collapsed-block! block-id nil))
+  ([block-id container-id]
+   (let [current-repo (get-current-repo)
+         container-id (resolve-container-id container-id)]
+     (update-state! [:ui/collapsed-blocks current-repo container-id block-id] not))))
 
 (defn set-collapsed-block!
-  [block-id value]
-  (let [current-repo (get-current-repo)]
-    (set-state! [:ui/collapsed-blocks current-repo block-id] value)))
+  ([block-id value] (set-collapsed-block! block-id value nil))
+  ([block-id value container-id]
+   (let [current-repo (get-current-repo)
+         container-id (resolve-container-id container-id)]
+     (set-state! [:ui/collapsed-blocks current-repo container-id block-id] value))))
 
 (defn sub-block-collapsed
-  [block-id]
-  (sub [:ui/collapsed-blocks (get-current-repo) block-id]))
+  ([block-id] (sub-block-collapsed block-id nil))
+  ([block-id container-id]
+   (sub [:ui/collapsed-blocks (get-current-repo) (resolve-container-id container-id) block-id])))
 
 (defn get-block-collapsed
-  [block-id]
-  (get-in @state [:ui/collapsed-blocks (get-current-repo) block-id]))
+  ([block-id] (get-block-collapsed block-id nil))
+  ([block-id container-id]
+   (get-in @state [:ui/collapsed-blocks (get-current-repo) (resolve-container-id container-id) block-id])))
 
 (defn get-modal-id
   []
@@ -1963,13 +1939,6 @@ Similar to re-frame subscriptions"
 
 (defn get-auth-refresh-token []
   (:auth/refresh-token @state))
-
-(defn set-parsing-state!
-  "Leave for tests"
-  [m]
-  (update-state! [:graph/parsing-state (get-current-repo)]
-                 (if (fn? m) m
-                     (fn [old-value] (merge old-value m)))))
 
 (defn http-proxy-enabled-or-val? []
   (when-let [{:keys [type protocol host port] :as agent-opts} (sub [:electron/user-cfgs :settings/agent])]
@@ -2047,10 +2016,6 @@ Similar to re-frame subscriptions"
           (swap! (:ui/cached-key->container-id @state) assoc key id)
           id))
     (get-next-container-id)))
-
-(defn get-current-editor-container-id
-  []
-  @(:editor/container-id @state))
 
 (comment
   (defn remove-container-key!

@@ -18,7 +18,6 @@ can be passed:
   can be icon, name, alias, title, description and url
 * :repo - Name of repo
 * :repo-config - A graph's configuration
-* :db-graph? - Boolean which indicates if graph is db based
 * :default-notification-fn - Configure how errors are reported when creating the export.
   Default is to throw an exception when it occurs."
   [db static-dir graph-dir output-dir {:keys [notification-fn dev?]

@@ -21,7 +21,6 @@
             [goog.object :as gobj]
             [logseq.api.block :as api-block]
             [logseq.db :as ldb]
-            [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.graph-parser.text :as text]
             [logseq.outliner.core :as outliner-core]
@@ -56,7 +55,7 @@
         {:keys [sibling before schema]} opts
         block (if before
                 (db/pull (:db/id (ldb/get-left-sibling (db/entity (:db/id target))))) target)
-        sibling? (if (common-entity-util/page? block) false sibling)
+        sibling? (if (entity-util/page? block) false sibling)
         uuid->properties (let [blocks (outliner-core/tree-vec-flatten blocks' :children)]
                            (when (some (fn [b] (seq (:properties b))) blocks)
                              (zipmap (map :uuid blocks)
@@ -200,7 +199,7 @@
               (let [k (keyword (api-block/sanitize-user-property-name class-uuid-or-ident-or-title))]
                 (if (qualified-keyword? k)
                   k
-                  (ldb/get-case-page (db/get-db) class-uuid-or-ident-or-title))))
+                  (some-> (ldb/get-case-page (db/get-db) class-uuid-or-ident-or-title) :db/id))))
         class (db/entity eid)]
     (when-not (ldb/class? class)
       (throw (ex-info "Not a tag" {:input class-uuid-or-ident-or-title})))
@@ -386,3 +385,17 @@
   (when-let [values (and property-id (bean/->clj choices))]
     (db-property-handler/add-existing-values-to-closed-values!
      property-id values)))
+
+(defn set-property-node-tags [property-id ^js tag-ids]
+  (let [tag-ids (and property-id (seq (bean/->clj tag-ids)))]
+    (p/let [repo (state/get-current-repo)
+            property (db-async/<get-block repo property-id)]
+      (when-not (ldb/property? property)
+        (throw (ex-info "Not a valid property" {:property property-id})))
+
+      (doseq [tag-id tag-ids]
+        (when-not (number? tag-id)
+          (throw (ex-info "Tag id should be a number" {:tag-id tag-id}))))
+
+      (db-property-handler/set-block-property!
+       (:db/id property) :logseq.property/classes tag-ids))))

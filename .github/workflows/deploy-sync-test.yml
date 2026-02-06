@@ -1,0 +1,78 @@
+name: Deploy new sync test
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Git branch to build & deploy"
+        required: true
+        default: "feat/worker-sync"
+
+env:
+  CLOJURE_VERSION: "1.11.1.1413"
+  NODE_VERSION: "22"
+  JAVA_VERSION: "11"
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout selected branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+          fetch-depth: 0
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: "zulu"
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Clojure
+        uses: DeLaGuardo/setup-clojure@11.0
+        with:
+          cli: ${{ env.CLOJURE_VERSION }}
+
+      - name: Install Yarn deps
+        run: yarn install --frozen-lockfile
+
+      - name: Set build environment flags
+        run: |
+          echo "ENABLE_FILE_SYNC_PRODUCTION=true" >> $GITHUB_ENV
+          echo "ENABLE_RTC_SYNC_PRODUCTION=true" >> $GITHUB_ENV
+
+      - name: Build web + workers
+        run: |
+          yarn gulp:build
+          clojure -M:cljs release app db-worker inference-worker \
+            --config-merge '{:compiler-options {:source-map true :source-map-include-sources-content true :source-map-detail-level :symbols}}'
+          yarn webpack-app-build
+
+          rsync -avz \
+            --exclude node_modules \
+            --exclude android \
+            --exclude ios \
+            --exclude mobile \
+            ./static/ ./public/
+
+          rm ./public/js/*.map
+
+        env:
+          LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
+
+      - name: Publish to Cloudflare Pages
+        uses: cloudflare/pages-action@1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: 2553ea8236c11ea0f88de28fce1cbfee
+          projectName: "test-sync"
+          directory: "public"
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ inputs.branch }}

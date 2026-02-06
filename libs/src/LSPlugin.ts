@@ -639,6 +639,7 @@ export interface IEditorProxy extends Record<string, any> {
   getEditingBlockContent: () => Promise<string>
 
   getCurrentPage: () => Promise<PageEntity | BlockEntity | null>
+  getTodayPage: () => Promise<PageEntity | null>
 
   getCurrentBlock: () => Promise<BlockEntity | null>
 
@@ -794,6 +795,7 @@ export interface IEditorProxy extends Record<string, any> {
   setBlockIcon: (blockId: BlockIdentity, iconType: 'tabler-icon' | 'emoji', iconName: string) => Promise<void>
   removeBlockIcon: (blockId: BlockIdentity) => Promise<void>
   addPropertyValueChoices: (propertyId: BlockIdentity, choices: Array<BlockIdentity>) => Promise<void>
+  setPropertyNodeTags: (propertyId: BlockIdentity, tagIds: Array<EntityID>) => Promise<void>
 
   prependBlockInPage: (
     page: PageIdentity,

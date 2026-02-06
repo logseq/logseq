@@ -264,6 +264,7 @@
     > .r {
       flex: 1;
       position: relative;
+      min-width: 0; /* prevent flex item overflow */
 
       p {
         @apply py-1 m-0;

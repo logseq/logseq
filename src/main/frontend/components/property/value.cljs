@@ -42,7 +42,6 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
-;; TODO: support :string editing
 (defonce string-value-on-click
   {:logseq.property.asset/external-url
    (fn [block property]
@@ -770,7 +769,7 @@
                                 :label label
                                 :value id
                                 :disabled? (and tags? (contains?
-                                                       (set/union #{:logseq.class/Journal :logseq.class/Whiteboard}
+                                                       (set/union #{:logseq.class/Journal}
                                                                   (set/difference ldb/internal-tags #{:logseq.class/Page}))
                                                        (:db/ident node)))))) nodes)
         classes' (remove (fn [class] (= :logseq.class/Root (:db/ident class))) classes)
@@ -1074,6 +1073,69 @@
       :else
       (property-normal-block-value block property v-block opts))))
 
+(rum/defc single-string-input
+  [block property value table-view?]
+  (let [[editing? set-editing!] (hooks/use-state false)
+        *ref (hooks/use-ref nil)
+        string-value (cond
+                       (string? value) value
+                       (some? value) (str (db-property/property-value-content value))
+                       :else "")
+        [value set-value!] (hooks/use-state string-value)
+        set-property-value! (fn [value & {:keys [exit-editing?]
+                                          :or {exit-editing? true}}]
+                              (let [next-value (or value "")
+                                    blank? (string/blank? next-value)]
+                                (p/do!
+                                 (if blank?
+                                   (when (get block (:db/ident property))
+                                     (db-property-handler/remove-block-property! (:db/id block) (:db/ident property)))
+                                   (when (not= string-value next-value)
+                                     (db-property-handler/set-block-property! (:db/id block)
+                                                                              (:db/ident property)
+                                                                              next-value)))
+                                 (set-value! (or (get (db/entity (:db/id block)) (:db/ident property)) ""))
+                                 (when exit-editing?
+                                   (set-editing! false)))))]
+    (hooks/use-effect!
+     (fn []
+       (set-value! string-value)
+       #())
+     [string-value])
+
+    [:div.ls-string.flex.flex-1.jtrigger
+     {:ref *ref
+      :on-click #(do
+                   (state/clear-selection!)
+                   (set-editing! true))}
+     (if editing?
+       (shui/input
+        {:auto-focus true
+         :class (str "ls-string-input h-6 px-0 py-0 border-none bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-base"
+                     (when table-view? " text-sm"))
+         :value value
+         :on-change (fn [e]
+                      (set-value! (util/evalue e)))
+         :on-blur (fn [_e]
+                    (p/do!
+                     (set-property-value! value)))
+         :on-key-down (fn [e]
+                        (case (util/ekey e)
+                          "Enter"
+                          (do
+                            (util/stop e)
+                            (set-property-value! value))
+                          "Escape"
+                          (do
+                            (util/stop e)
+                            (set-value! string-value)
+                            (set-editing! false)
+                            (some-> (rum/deref *ref) (.focus)))
+                          nil))})
+       (if (string/blank? string-value)
+         (property-empty-text-value property {:table-view? table-view?})
+         string-value))]))
+
 (rum/defc closed-value-item < rum/reactive db-mixins/query
   [value {:keys [inline-text icon?]}]
   (when value
@@ -1371,6 +1433,9 @@
 
       (and (= type :number) (not editing?) (not closed-values?))
       (single-number-input block property value (:table-view? opts))
+
+      (= type :string)
+      (single-string-input block property value (:table-view? opts))
 
       :else
       (if (and select-type?'

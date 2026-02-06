@@ -48,10 +48,6 @@
       :close-btn? false
       :onEscapeKeyDown (fn [e] (.preventDefault e))})))
 
-(defmethod events/handle :command/run [_]
-  (when (util/electron?)
-    (shui/dialog-open! shell/shell)))
-
 (defmethod events/handle :notification/show [[_ {:keys [content status clear?]}]]
   (notification/show! content status clear?))
 

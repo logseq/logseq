@@ -25,8 +25,6 @@
 ;; when it launches (when pro plan launches) it should be removed
 (def ENABLE-SETTINGS-ACCOUNT-TAB false)
 
-;; (def PUBLISH-API-BASE "http://localhost:8787")
-
 (if ENABLE-FILE-SYNC-PRODUCTION
   (do (def LOGIN-URL
         "https://logseq-prod.auth.us-east-1.amazoncognito.com/login?client_id=3c7np6bjtb4r1k1bi9i049ops5&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
@@ -49,6 +47,9 @@
       (def IDENTITY-POOL-ID "us-east-2:cc7d2ad3-84d0-4faf-98fe-628f6b52c0a5")
       (def OAUTH-DOMAIN "logseq-test2.auth.us-east-2.amazoncognito.com")
       (def PUBLISH-API-BASE "https://logseq-publish-staging.logseq.workers.dev")))
+
+;; Enable for local development
+;; (def PUBLISH-API-BASE "http://localhost:8787")
 
 (goog-define ENABLE-RTC-SYNC-PRODUCTION false)
 (if ENABLE-RTC-SYNC-PRODUCTION
@@ -104,47 +105,6 @@
 
 (def media-formats (set/union (common-config/img-formats) audio-formats video-formats))
 
-(defn extname-of-supported?
-  ([input] (extname-of-supported?
-            input
-            [image-formats doc-formats audio-formats
-             video-formats markup-formats
-             (common-config/text-formats)]))
-  ([input formats]
-   (when-let [input (some->
-                     (cond-> input
-                       (and (string? input)
-                            (not (string/blank? input)))
-                       (string/replace-first "." ""))
-                     (util/safe-lower-case)
-                     (keyword))]
-     (boolean
-      (some
-       (fn [s]
-         (contains? s input))
-       formats)))))
-
-(defn ext-of-video?
-  ([s] (ext-of-video? s true))
-  ([s html5?]
-   (when-let [s (and (string? s) (util/get-file-ext s))]
-     (let [video-formats' (cond-> video-formats
-                            html5? (disj :mkv))]
-       (extname-of-supported? s [video-formats'])))))
-
-(defn ext-of-audio?
-  ([s] (ext-of-audio? s true))
-  ([s html5?]
-   (when-let [s (and (string? s) (util/get-file-ext s))]
-     (let [audio-formats' (cond-> audio-formats
-                            html5? (disj :wma :ogg))]
-       (extname-of-supported? s [audio-formats'])))))
-
-(defn ext-of-image?
-  [s]
-  (when-let [s (and (string? s) (util/get-file-ext s))]
-    (extname-of-supported? s [image-formats])))
-
 (def mobile?
   "Triggering condition: Mobile phones
    *** Warning!!! ***
@@ -155,18 +115,10 @@
   (when-not util/node-test?
     (util/safe-re-find #"Mobi" js/navigator.userAgent)))
 
-;; TODO: protocol design for future formats support
-
-(defn get-block-pattern
-  [format]
-  (common-config/get-block-pattern (or format (state/get-preferred-format))))
-
 (defn get-hr
   [format]
   (let [format (or format (keyword (state/get-preferred-format)))]
     (case format
-      :org
-      "-----"
       :markdown
       "---"
       "")))
@@ -175,8 +127,6 @@
   [format]
   (let [format (or format (keyword (state/get-preferred-format)))]
     (case format
-      :org
-      "*"
       :markdown
       "**"
       "")))
@@ -185,8 +135,6 @@
   [format]
   (let [format (or format (keyword (state/get-preferred-format)))]
     (case format
-      :org
-      "/"
       :markdown
       "*"
       "")))
@@ -194,8 +142,6 @@
   [format]
   (let [format (or format (keyword (state/get-preferred-format)))]
     (case format
-      :org
-      "_"
       :markdown ;; no underline for markdown
       ""
       "")))
@@ -203,8 +149,6 @@
   [format]
   (let [format (or format (keyword (state/get-preferred-format)))]
     (case format
-      :org
-      "+"
       :markdown
       "~~"
       "")))
@@ -212,8 +156,6 @@
 (defn get-highlight
   [format]
   (case format
-    :org
-    "^^"
     :markdown
     "=="
     ""))
@@ -222,8 +164,6 @@
   [format]
   (let [format (or format (keyword (state/get-preferred-format)))]
     (case format
-      :org
-      "~"
       :markdown
       "`"
       "")))
@@ -231,28 +171,19 @@
 (defn get-empty-link-and-forward-pos
   [format]
   (case format
-    :org
-    ["[[][]]" 2]
     :markdown
     ["[]()" 1]
     ["" 0]))
 
 (defn link-format
-  [format label link]
+  [label link]
   (if (not-empty label)
-    (case format
-      :org
-      (util/format "[[%s][%s]]" link label)
-      :markdown
-      (util/format "[%s](%s)" label link))
+    (util/format "[%s](%s)" label link)
     link))
 
 (defn with-default-link
   [format link]
   (case format
-    :org
-    [(util/format "[[%s][]]" link)
-     (+ 4 (count link))]
     :markdown
     [(util/format "[](%s)" link)
      1]
@@ -261,9 +192,6 @@
 (defn with-label-link
   [format label link]
   (case format
-    :org
-    [(util/format "[[%s][%s]]" link label)
-     (+ 4 (count link) (count label))]
     :markdown
     [(util/format "[%s](%s)" label link)
      (+ 4 (count link) (count label))]
@@ -272,24 +200,10 @@
 (defn with-default-label
   [format label]
   (case format
-    :org
-    [(util/format "[[][%s]]" label)
-     2]
     :markdown
     [(util/format "[%s]()" label)
      (+ 3 (count label))]
     ["" 0]))
-
-(defonce default-journals-directory "journals")
-(defonce default-pages-directory "pages")
-
-(defn get-pages-directory
-  []
-  (or (state/get-pages-directory) default-pages-directory))
-
-(defn get-journals-directory
-  []
-  (or (state/get-journals-directory) default-journals-directory))
 
 (defonce demo-repo "Demo")
 
@@ -347,10 +261,6 @@
       (get-local-dir repo-url)
       (str "memory:///"
            (string/replace-first repo-url db-version-prefix "")))))
-
-(defn get-repo-fpath
-  [repo-url path]
-  (path/path-join (get-repo-dir repo-url) path))
 
 (defn get-repo-config-path
   []
