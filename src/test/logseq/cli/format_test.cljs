@@ -231,9 +231,13 @@
           result (format/format-result {:status :ok
                                         :command :show
                                         :data {:message styled}}
-                                       {:output-format nil})]
-      (is (string/includes? result (style/bold "TODO")))
-      (is (string/includes? result (style/bold "#TagA")))
+                                       {:output-format nil})
+          styled-todo (binding [style/*color-enabled?* true]
+                        (style/bold (style/yellow "TODO")))
+          styled-tag (binding [style/*color-enabled?* true]
+                       (style/bold "#TagA"))]
+      (is (string/includes? result styled-todo))
+      (is (string/includes? result styled-tag))
       (is (= (str "1 Root\n"
                   "2 └── TODO Child #TagA")
              (style/strip-ansi result))))))
