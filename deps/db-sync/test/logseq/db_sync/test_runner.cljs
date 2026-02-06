@@ -3,6 +3,8 @@
             [logseq.db-sync.node-adapter-test]
             [logseq.db-sync.node-config-test]
             [logseq.db-sync.platform-test]
+            [logseq.db-sync.worker-handler-assets-test]
+            [logseq.db-sync.worker-handler-sync-test]
             [logseq.db-sync.worker-handler-ws-test]
             [shadow.test :as st]
             [shadow.test.env :as env]))
