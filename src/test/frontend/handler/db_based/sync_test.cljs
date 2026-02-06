@@ -4,7 +4,34 @@
             [frontend.handler.db-based.sync :as db-sync]
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
+            [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
+
+(def ^:private test-text-encoder (js/TextEncoder.))
+
+(defn- frame-bytes [^js data]
+  (let [len (.-byteLength data)
+        out (js/Uint8Array. (+ 4 len))
+        view (js/DataView. (.-buffer out))]
+    (.setUint32 view 0 len false)
+    (.set out data 4)
+    out))
+
+(defn- encode-framed-rows [rows]
+  (let [payload (.encode test-text-encoder (sqlite-util/write-transit-str rows))]
+    (frame-bytes payload)))
+
+(defn- <gzip-bytes [^js bytes]
+  (if (exists? js/CompressionStream)
+    (p/let [stream (js/ReadableStream.
+                    #js {:start (fn [controller]
+                                  (.enqueue controller bytes)
+                                  (.close controller))})
+            compressed (.pipeThrough stream (js/CompressionStream. "gzip"))
+            resp (js/Response. compressed)
+            buf (.arrayBuffer resp)]
+      (js/Uint8Array. buf))
+    (p/resolved bytes)))
 
 (deftest remove-member-request-test
   (async done
@@ -110,3 +137,69 @@
         (is (= "graph-1" graph-uuid))
         (is (and (string? message)
                  (string/includes? message "Preparing")))))))
+
+(deftest rtc-download-graph-imports-snapshot-once-test
+  (async done
+         (let [import-calls (atom [])
+               fetch-calls (atom [])
+               rows [[1 "content-1" "addresses-1"]
+                     [2 "content-2" "addresses-2"]]
+               framed-bytes (encode-framed-rows rows)
+               original-fetch js/fetch]
+           (-> (p/let [gzip-bytes (<gzip-bytes framed-bytes)]
+                 (set! js/fetch
+                       (fn [url opts]
+                         (let [method (or (aget opts "method") "GET")]
+                           (swap! fetch-calls conj [url method])
+                           (cond
+                             (and (= url "http://snapshot") (= method "GET"))
+                             (js/Promise.resolve
+                              #js {:ok true
+                                   :status 200
+                                   :headers #js {:get (fn [header]
+                                                        (when (= header "content-length")
+                                                          (str (.-byteLength gzip-bytes))))}
+                                   :arrayBuffer (fn [] (js/Promise.resolve (.-buffer gzip-bytes)))})
+
+                             :else
+                             (js/Promise.resolve
+                              #js {:ok true
+                                   :status 200})))))
+                 (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
+                                     db-sync/fetch-json (fn [url _opts _schema]
+                                                          (cond
+                                                            (string/ends-with? url "/pull")
+                                                            (p/resolved {:t 42})
+
+                                                            (string/ends-with? url "/snapshot/download")
+                                                            (p/resolved {:url "http://snapshot"})
+
+                                                            :else
+                                                            (p/rejected (ex-info "unexpected fetch-json URL"
+                                                                                 {:url url}))))
+                                     user-handler/task--ensure-id&access-token (fn [resolve _reject]
+                                                                                 (resolve true))
+                                     state/<invoke-db-worker (fn [& args]
+                                                               (swap! import-calls conj args)
+                                                               (p/resolved :ok))
+                                     state/set-state! (fn [& _] nil)
+                                     state/pub-event! (fn [& _] nil)]
+                       (db-sync/<rtc-download-graph! "demo-graph" "graph-1"))
+                     (p/finally (fn [] (set! js/fetch original-fetch)))))
+               (p/then (fn [_]
+                         (is (= 1 (count @import-calls)))
+                         (let [[op graph imported-rows reset? graph-uuid remote-tx] (first @import-calls)]
+                           (is (= :thread-api/db-sync-import-kvs-rows op))
+                           (is (string/ends-with? graph "demo-graph"))
+                           (is (= rows imported-rows))
+                           (is (= true reset?))
+                           (is (= "graph-1" graph-uuid))
+                           (is (= 42 remote-tx)))
+                         (is (= [["http://snapshot" "GET"]
+                                 ["http://snapshot" "DELETE"]]
+                                @fetch-calls))
+                         (done)))
+               (p/catch (fn [error]
+                          (set! js/fetch original-fetch)
+                          (is false (str error))
+                          (done)))))))

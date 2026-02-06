@@ -86,6 +86,17 @@
     (.pipeThrough stream (js/DecompressionStream. "gzip"))
     stream))
 
+(defn- maybe-compress-stream [stream]
+  (if (exists? js/CompressionStream)
+    (.pipeThrough stream (js/CompressionStream. snapshot-content-encoding))
+    stream))
+
+(defn- <buffer-stream
+  [stream]
+  (p/let [resp (js/Response. stream)
+          buf (.arrayBuffer resp)]
+    buf))
+
 (defn- ->uint8 [data]
   (cond
     (instance? js/Uint8Array data) data
@@ -303,23 +314,31 @@
         :else
         (p/let [snapshot-id (str (random-uuid))
                 key (snapshot-key graph-id snapshot-id)
+                use-compression? (exists? js/CompressionStream)
+                content-encoding (when use-compression? snapshot-content-encoding)
                 stream (snapshot-export-stream self)
+                stream (if use-compression?
+                         (maybe-compress-stream stream)
+                         stream)
                 multipart? (and (some? (.-createMultipartUpload bucket))
                                 (fn? (.-createMultipartUpload bucket)))
                 opts #js {:httpMetadata #js {:contentType snapshot-content-type
-                                             :contentEncoding nil
+                                             :contentEncoding content-encoding
                                              :cacheControl snapshot-cache-control}
                           :customMetadata #js {:purpose "snapshot"
                                                :created-at (str (common/now-ms))}}
                 _ (if multipart?
                     (upload-multipart! bucket key stream opts)
-                    (p/let [body (snapshot-export-fixed-length self)]
-                      (.put bucket key body opts)))
+                    (if use-compression?
+                      (p/let [body (<buffer-stream stream)]
+                        (.put bucket key body opts))
+                      (p/let [body (snapshot-export-fixed-length self)]
+                        (.put bucket key body opts))))
                 url (snapshot-url request graph-id snapshot-id)]
           (http/json-response :sync/snapshot-download {:ok true
                                                        :key key
                                                        :url url
-                                                       :content-encoding nil}))))
+                                                       :content-encoding content-encoding}))))
 
     :sync/admin-reset
     (do

@@ -6,6 +6,26 @@
 
 (def ^:private max-asset-size (* 100 1024 1024))
 
+(defn- parse-size
+  [size]
+  (cond
+    (number? size) size
+    (string? size) (let [n (js/parseInt size 10)]
+                     (when-not (js/isNaN n)
+                       n))
+    :else nil))
+
+(defn- maybe-fixed-length-body
+  [body size]
+  (if (and (number? size)
+           (exists? js/FixedLengthStream)
+           (some? body)
+           (fn? (.-pipeTo body)))
+    (let [^js fixed (js/FixedLengthStream. size)]
+      (.catch (.pipeTo body (.-writable fixed)) (fn [_] nil))
+      (.-readable fixed))
+    body))
+
 (defn parse-asset-path [path]
   (let [prefix "/assets/"]
     (when (string/starts-with? path prefix)
@@ -46,8 +66,18 @@
                                                 "application/octet-stream")
                                content-encoding (.-contentEncoding metadata)
                                cache-control (.-cacheControl metadata)
+                               size (parse-size (or (.-size obj)
+                                                    (some-> (.-body obj) .-byteLength)))
+                               content-length (cond
+                                                (number? size) (str size)
+                                                (string? size) size
+                                                :else nil)
+                               body (maybe-fixed-length-body (.-body obj) size)
                                headers (cond-> {"content-type" content-type
                                                 "x-asset-type" asset-type}
+                                         (and (string? content-length)
+                                              (pos? (.-length content-length)))
+                                         (assoc "content-length" content-length)
                                          (and (string? content-encoding)
                                               (not= content-encoding "null")
                                               (pos? (.-length content-encoding)))
@@ -57,7 +87,7 @@
                                          (assoc "cache-control" cache-control)
                                          true
                                          (bean/->js))]
-                           (js/Response. (.-body obj)
+                           (js/Response. body
                                          #js {:status 200
                                               :headers (js/Object.assign
                                                         headers
