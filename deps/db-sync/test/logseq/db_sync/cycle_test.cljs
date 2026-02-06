@@ -179,7 +179,6 @@
                                               :logseq.property.class/extends :user.class/A}])
             tx-metas (fix-cycle! conn remote-report nil)]
         (let [b (d/entity @conn :user.class/B)
-              _ (prn :debug :extends (:logseq.property.class/extends b))
               extends (set (map :db/ident (:logseq.property.class/extends b)))]
           (is (not (contains? extends :user.class/A)))
           (is (contains? extends :logseq.class/Root)))
