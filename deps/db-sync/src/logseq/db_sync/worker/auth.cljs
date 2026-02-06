@@ -2,37 +2,6 @@
   (:require [clojure.string :as string]
             [logseq.common.authorization :as authorization]))
 
-(defonce ^:private auth-cache (js/Map.))
-(defonce ^:private auth-cache-max-entries 512)
-(def ^:private auth-exp-skew-seconds 5)
-
-(defn- now-seconds []
-  (js/Math.floor (/ (.now js/Date) 1000)))
-
-(defn- evict-auth-cache! []
-  (when (> (.-size auth-cache) auth-cache-max-entries)
-    (let [keys-iter (.keys auth-cache)
-          first-key (.next keys-iter)]
-      (when-not (.-done first-key)
-        (.delete auth-cache (.-value first-key))))))
-
-(defn- cached-claims [token]
-  (let [entry (.get auth-cache token)]
-    (when entry
-      (let [exp (aget entry "exp")
-            now (now-seconds)]
-        (if (and (number? exp) (<= exp (+ now auth-exp-skew-seconds)))
-          (do
-            (.delete auth-cache token)
-            nil)
-          (aget entry "claims"))))))
-
-(defn- cache-claims! [token claims]
-  (let [exp (aget claims "exp")]
-    (when (and (string? token) (number? exp))
-      (.set auth-cache token #js {"claims" claims "exp" exp})
-      (evict-auth-cache!))))
-
 (defn- bearer-token [auth-header]
   (when (and (string? auth-header) (string/starts-with? auth-header "Bearer "))
     (subs auth-header 7)))
@@ -64,12 +33,5 @@
 (defn auth-claims [request env]
   (let [token (token-from-request request)]
     (if (string? token)
-      (if-let [claims (cached-claims token)]
-        (js/Promise.resolve claims)
-        (-> (authorization/verify-jwt token env)
-            (.then (fn [claims]
-                     (when claims
-                       (cache-claims! token claims))
-                     claims))
-            (.catch (fn [_] nil))))
+      (authorization/verify-jwt token env)
       (js/Promise.resolve nil))))
