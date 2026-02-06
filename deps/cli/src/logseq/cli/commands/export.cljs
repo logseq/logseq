@@ -35,19 +35,26 @@
   "Modified version of export.common/<get-file-contents which doesn't have to deal with worker threads"
   [db content-config suffix]
   (let [page->content (common-file/get-all-page->content db content-config)]
-    (map (fn [[page-title content]]
-           {:path (str page-title "." suffix)
-            :content content
-            :title page-title
-            :format :markdown})
+    (map (fn [[page-title content-or-map]]
+           (if (map? content-or-map)
+             (merge {:path (str page-title "." suffix)
+                     :title page-title
+                     :format :markdown}
+                    content-or-map)
+             {:path (str page-title "." suffix)
+              :content content-or-map
+              :title page-title
+              :format :markdown}))
          page->content)))
 
 (defn- export-files-as-markdown
   "Modified version of handler.export.text/export-files-as-markdown for the CLI"
   [files options]
   (mapv
-   (fn [{:keys [path title content]}]
-     [(or path title) (cli-export-text/export-helper content :markdown options)])
+   (fn [{:keys [path title content frontmatter tag-header]}]
+     (let [exported (cli-export-text/export-helper content :markdown options)
+           output (str (or frontmatter "") (or tag-header "") exported)]
+       [(or path title) output]))
    files))
 
 (defn- export-repo-as-markdown!

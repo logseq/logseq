@@ -14,6 +14,12 @@
             [logseq.outliner.property :as outliner-property]
             [promesa.core :as p]))
 
+(defn- unpack-page-content
+  "Handles both legacy [title content-string] and new [title {:content ...}] format
+   from get-all-page->content. Returns [title content-string]."
+  [[title content-or-map]]
+  [title (if (map? content-or-map) (:content content-or-map) content-or-map)])
+
 (def test-files
   (let [uuid-1 #uuid "61506710-484c-46d5-9983-3d1651ec02c8"
         uuid-2 #uuid "61506711-5638-4899-ad78-187bdc2eaffc"
@@ -183,11 +189,17 @@
         ;; Stage 1: same as what the DB worker does
         page->content (common-file/get-all-page->content db {:obsidian-mode? true})
         ;; Convert to the file format that export-file-as-markdown expects
-        files (mapv (fn [[page-title content]]
-                      {:path (str page-title ".md")
-                       :title page-title
-                       :content content
-                       :format :markdown})
+        files (mapv (fn [entry]
+                      (let [[page-title content-or-map] entry]
+                        (if (map? content-or-map)
+                          (merge {:path (str page-title ".md")
+                                  :title page-title
+                                  :format :markdown}
+                                 content-or-map)
+                          {:path (str page-title ".md")
+                           :title page-title
+                           :content content-or-map
+                           :format :markdown})))
                     page->content)
         ;; Stage 2: same as what export-repo-as-markdown! does
         result (@#'export-text/export-files-as-markdown
@@ -305,11 +317,17 @@
                         :obsidian-mode? true}
         ;; Stage 1: same as what the DB worker does
         files (->> (common-file/get-all-page->content db content-config)
-                   (map (fn [[page-title content]]
-                          {:path (str page-title ".md")
-                           :content content
-                           :title page-title
-                           :format :markdown}))
+                   (map (fn [entry]
+                          (let [[page-title content-or-map] entry]
+                            (if (map? content-or-map)
+                              (merge {:path (str page-title ".md")
+                                      :title page-title
+                                      :format :markdown}
+                                     content-or-map)
+                              {:path (str page-title ".md")
+                               :content content-or-map
+                               :title page-title
+                               :format :markdown}))))
                    vec)
         ;; Stage 2: same as what export-file-as-markdown does (mldoc re-parse)
         exported-files (binding [cli-export-common/*current-db* db
@@ -342,11 +360,17 @@
         real-db (conn/get-db repo)
         ;; Stage 1 (worker-equivalent): generate page content with obsidian mode on.
         files (->> (common-file/get-all-page->content real-db {:obsidian-mode? true})
-                   (map (fn [[page-title content]]
-                          {:path (str page-title ".md")
-                           :title page-title
-                           :content content
-                           :format :markdown}))
+                   (map (fn [entry]
+                          (let [[page-title content-or-map] entry]
+                            (if (map? content-or-map)
+                              (merge {:path (str page-title ".md")
+                                      :title page-title
+                                      :format :markdown}
+                                     content-or-map)
+                              {:path (str page-title ".md")
+                               :title page-title
+                               :content content-or-map
+                               :format :markdown}))))
                    (filter #(= "page3.md" (:path %)))
                    vec)
         schema (d/schema (conn/get-db (state/get-current-repo)))
@@ -442,7 +466,9 @@
   (let [db (conn/get-db (state/get-current-repo))
         block-uuid "61506712-3007-407e-b6d3-d008a8dfa88b"
         page->content (common-file/get-all-page->content db {:obsidian-mode? true})
-        page3-raw (some (fn [[title content]] (when (= title "page3") content))
+        page3-raw (some (fn [entry]
+                          (let [[title content] (unpack-page-content entry)]
+                            (when (= title "page3") content)))
                         page->content)]
     (is (some? page3-raw) "page3 must exist in Stage 1 output")
     ;; The block lives on page1, so cross-page refs must say page1
@@ -457,7 +483,8 @@
   (let [db (conn/get-db (state/get-current-repo))
         page->content (common-file/get-all-page->content db {:obsidian-mode? true})
         uuid-re #"(?:\[\[|\(\()([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})(?:\]\]|\)\))"]
-    (doseq [[page-title content] page->content]
+    (doseq [entry page->content
+            :let [[page-title content] (unpack-page-content entry)]]
       (let [remaining (re-seq uuid-re content)]
         (is (empty? remaining)
             (str "Stage 1 output for \"" page-title "\" still has bare UUID refs: "
@@ -529,11 +556,17 @@
                                (d/entity db)
                                :block/title)
         files (->> (common-file/get-all-page->content db {:obsidian-mode? true})
-                   (mapv (fn [[page-title content]]
-                           {:path (str page-title ".md")
-                            :title page-title
-                            :content content
-                            :format :markdown})))
+                   (mapv (fn [entry]
+                           (let [[page-title content-or-map] entry]
+                             (if (map? content-or-map)
+                               (merge {:path (str page-title ".md")
+                                       :title page-title
+                                       :format :markdown}
+                                      content-or-map)
+                               {:path (str page-title ".md")
+                                :title page-title
+                                :content content-or-map
+                                :format :markdown})))))
         result (@#'export-text/export-files-as-markdown files {:other-options {:obsidian-mode? true}})
         paths (set (map first result))]
     (is (contains? paths "Notes/page1.md"))
@@ -546,6 +579,16 @@
                 paths))
     (is (= "Attachments/file.png"
            (@#'export-text/attachment-output-path "assets/file.png")))))
+
+(deftest obsidian-export-directory-layout-journal-fallback-by-date-title
+  (let [page-output-path @#'export-text/page-output-path]
+    (with-redefs [ldb/get-page (fn [_ _] nil)]
+      (is (= "Daily/2014-06-27.md"
+             (page-output-path {} "2014-06-27" nil)))
+      (is (= "Daily/2014-06-27.md"
+             (page-output-path {} nil "2014-06-27.md")))
+      (is (= "Notes/not-a-journal.md"
+             (page-output-path {} "not-a-journal" nil))))))
 
 (deftest-async obsidian-asset-uuid-ref-conversion
   (p/do!
@@ -563,11 +606,17 @@
   (p/do!
    (let [db (conn/get-db (state/get-current-repo))
          files (->> (common-file/get-all-page->content db {:obsidian-mode? true})
-                    (map (fn [[page-title content]]
-                           {:path (str page-title ".md")
-                            :title page-title
-                            :content content
-                            :format :markdown}))
+                    (map (fn [entry]
+                           (let [[page-title content-or-map] entry]
+                             (if (map? content-or-map)
+                               (merge {:path (str page-title ".md")
+                                       :title page-title
+                                       :format :markdown}
+                                      content-or-map)
+                               {:path (str page-title ".md")
+                                :title page-title
+                                :content content-or-map
+                                :format :markdown}))))
                     (filter #(= "page3.md" (:path %)))
                     vec)
          result (@#'export-text/export-files-as-markdown files {:other-options {:obsidian-mode? true}})
@@ -588,6 +637,23 @@
      (is (not (string/includes? content "end-date-YOC048on")))
      (is (false? (@#'export-text/exportable-page-property? :logseq.property.class/extends))))))
 
+(deftest page-frontmatter-literal-keys-fallback-when-property-entity-missing
+  (let [fake-db {:db :fake}
+        fake-page {:db/id 1 :block/title "fake"}
+        frontmatter (with-redefs [ldb/get-page (fn [_ _] fake-page)
+                                  db-property/properties (fn [_] {:user.property/stage-r5NYQY4D "R2"})
+                                  outliner-property/get-block-classes-properties (fn [_ _] {:classes-properties []})
+                                  d/entity (fn [_ _] nil)]
+                      (@#'export-text/build-page-frontmatter fake-db "fake"))]
+    (is (string/includes? frontmatter "stage: R2"))
+    (is (not (string/includes? frontmatter "stage-r5NYQY4D")))))
+
+(deftest stage1-property-key-fallback-strips-random-suffix
+  (let [property-key->markdown @#'common-file/property-key->markdown]
+    (with-redefs [d/entity (fn [_ _] nil)]
+      (is (= "stage" (property-key->markdown {} :user.property/stage-r5NYQY4D)))
+      (is (= "end-date" (property-key->markdown {} :user.property/end-date-YOC048on))))))
+
 (deftest page-frontmatter-includes-class-derived-default-property
   (let [fake-db {:db :fake}
         fake-page {:db/id 1 :block/title "fake"}
@@ -604,3 +670,24 @@
                                   d/entity (fn [_ lookup] (get entity-map lookup))]
                       (@#'export-text/build-page-frontmatter fake-db "fake"))]
     (is (string/includes? frontmatter "Inherited: from-tag"))))
+
+(deftest stage1-frontmatter-generation
+  ;; Verify that Stage 1 (get-all-page->content) produces frontmatter and tag-header
+  ;; in the new map format when obsidian-mode? is true.
+  (let [db (conn/get-db (state/get-current-repo))
+        page->content (common-file/get-all-page->content db {:obsidian-mode? true})
+        page1-entry (some (fn [[title m]] (when (= title "page1") m))
+                          page->content)]
+    ;; Stage 1 output must be a map in obsidian mode
+    (is (map? page1-entry) "Stage 1 obsidian output must be a map")
+    (is (string? (:content page1-entry)) "Map must contain :content string")
+    ;; Frontmatter should be pre-computed
+    (is (some? (:frontmatter page1-entry)) "page1 should have pre-computed frontmatter")
+    (is (string/starts-with? (:frontmatter page1-entry) "---\n")
+        "Frontmatter must start with YAML delimiter")
+    (is (string/includes? (:frontmatter page1-entry) "url: https://www.example.com")
+        "Frontmatter must include page properties")
+    ;; Tag header should be pre-computed
+    (is (some? (:tag-header page1-entry)) "page1 should have pre-computed tag-header")
+    (is (string/includes? (:tag-header page1-entry) "#ExportTag")
+        "Tag header must include page tags")))

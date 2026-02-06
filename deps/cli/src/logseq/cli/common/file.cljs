@@ -130,12 +130,21 @@
 
 (defn- property-key->markdown
   [db k]
-  (if-not (keyword? k)
-    (str k)
-    (if-let [prop-ent (d/entity db [:db/ident k])]
-      (or (when (string? (:block/title prop-ent)) (:block/title prop-ent))
-          (name k))
-      (name k))))
+  (let [strip-random-suffix
+        (fn [kw]
+          (let [n (name kw)
+                ns (namespace kw)]
+            (if (and (string? ns)
+                     (re-find #"^(user\.property|plugin\.property)(\.|$)" ns)
+                     (re-find #"-[A-Za-z][A-Za-z0-9_-]{7}$" n))
+              (string/replace n #"-[A-Za-z][A-Za-z0-9_-]{7}$" "")
+              n)))]
+    (if-not (keyword? k)
+      (str k)
+      (if-let [prop-ent (d/entity db [:db/ident k])]
+        (or (when (string? (:block/title prop-ent)) (:block/title prop-ent))
+            (strip-random-suffix k))
+        (strip-random-suffix k)))))
 
 (defn- property-value->markdown
   [db v]
@@ -181,6 +190,203 @@
     (string? v) (replace-uuid-refs-with-obsidian-refs db v)
     :else (str v)))
 
+;; ---------------------------------------------------------------------------
+;; Obsidian frontmatter & tag-header (Stage 1)
+;; ---------------------------------------------------------------------------
+
+(defn- empty-placeholder-property-value?
+  [db v]
+  (or (= :logseq.property/empty-placeholder v)
+      (and (integer? v) (pos? v)
+           (= :logseq.property/empty-placeholder (:db/ident (d/entity db v))))
+      (and (de/entity? v)
+           (= :logseq.property/empty-placeholder (:db/ident v)))
+      (and (map? v)
+           (= :logseq.property/empty-placeholder (:db/ident v)))))
+
+(defn- normalize-frontmatter-value
+  [db v]
+  (cond
+    (nil? v) nil
+    (set? v) (let [v' (->> v
+                           (remove #(empty-placeholder-property-value? db %))
+                           vec)]
+               (when (seq v') v'))
+    (sequential? v) (let [v' (->> v
+                                  (remove #(empty-placeholder-property-value? db %))
+                                  vec)]
+                      (when (seq v') v'))
+    (empty-placeholder-property-value? db v) nil
+    :else v))
+
+(defn- exportable-page-property?
+  [k]
+  (and (keyword? k)
+       (not (contains? db-property/public-db-attribute-properties k))
+       (not (contains? #{:logseq.property/created-from-property
+                         :logseq.property/created-by-ref
+                         :logseq.property.class/extends
+                         :logseq.property/built-in?
+                         :logseq.property/hide?
+                         :logseq.property/publishing-public?
+                         :logseq.property.publish/published-url}
+                       k))
+       (let [n (namespace k)]
+         (not (contains? #{"logseq.property.asset"
+                           "logseq.property.embedding"
+                           "logseq.property.history"
+                           "logseq.property.table"
+                           "logseq.property.view"}
+                         n)))))
+
+(defn- collect-page-properties
+  "Collect page properties including class-derived defaults.
+   Inlines the class-property resolution (replaces outliner-property dependency)."
+  [db page]
+  (let [own-properties (db-property/properties page)
+        ;; Inline class-property resolution using db layer only
+        classes (->> (:block/tags page)
+                     (sort-by :block/name))
+        class-parents (db-db/get-classes-parents classes)
+        all-classes (->> (concat classes class-parents)
+                         (filter (fn [cls]
+                                   (seq (:logseq.property.class/properties cls)))))
+        class-property-idents (->> (mapcat (fn [cls]
+                                             (:logseq.property.class/properties cls))
+                                           all-classes)
+                                   (map :db/ident)
+                                   distinct)
+        class-derived-properties
+        (->> class-property-idents
+             (keep (fn [ident]
+                     (let [property (d/entity db ident)
+                           explicit? (contains? own-properties ident)
+                           value (if explicit?
+                                   (get own-properties ident)
+                                   (or (:logseq.property/scalar-default-value property)
+                                       (:logseq.property/default-value property)))
+                           value' (normalize-frontmatter-value db value)]
+                       (when (some? value')
+                         [ident value']))))
+             (into {}))
+        own-properties'
+        (->> own-properties
+             (keep (fn [[k v]]
+                     (let [v' (normalize-frontmatter-value db v)]
+                       (when (some? v')
+                         [k v']))))
+             (into {}))]
+    ;; explicit properties should override class-derived defaults
+    (merge class-derived-properties own-properties')))
+
+(defn- yaml-key
+  [k]
+  (let [s (str k)]
+    (if (re-matches #"^[A-Za-z0-9_-]+$" s)
+      s
+      (str "\"" (string/replace s "\"" "\\\"") "\""))))
+
+(defn- obsidian-frontmatter-value
+  "Like property-value->markdown but tuned for YAML frontmatter.
+   Key difference: extracts :logseq.property/value from entity refs,
+   which fixes values stored as entity refs (e.g. URLs, enum choices)."
+  [db v]
+  (cond
+    (de/entity? v)
+    (cond
+      ;; Extract scalar property value from property-created entities.
+      (contains? v :logseq.property/value)
+      (obsidian-frontmatter-value db (:logseq.property/value v))
+
+      ;; Keep absolute URLs as plain scalar strings in frontmatter.
+      (and (string? (:block/title v))
+           (re-matches #"(?i)^[a-z][a-z0-9+.-]*://.+" (:block/title v)))
+      (:block/title v)
+
+      ;; Page refs as wikilinks
+      (and (string? (:block/title v)) (ldb/page? v))
+      (str "[[" (:block/title v) "]]")
+
+      ;; Non-page entity with title
+      (string? (:block/title v))
+      (:block/title v)
+
+      ;; Ident keyword
+      (:db/ident v)
+      (property-key->markdown db (:db/ident v))
+
+      ;; UUID fallback
+      (:block/uuid v)
+      (str "[[" (:block/uuid v) "]]")
+
+      :else (str v))
+
+    (set? v)
+    (->> v
+         (map #(obsidian-frontmatter-value db %))
+         (remove string/blank?)
+         sort
+         (string/join ", "))
+
+    (sequential? v)
+    (->> v
+         (map #(obsidian-frontmatter-value db %))
+         (remove string/blank?)
+         (string/join ", "))
+
+    (keyword? v) (name v)
+    (nil? v) ""
+    :else (str v)))
+
+(defn- yaml-value
+  [db v]
+  (cond
+    (number? v) (str v)
+    (boolean? v) (str v)
+    (nil? v) "null"
+    :else
+    (let [s (obsidian-frontmatter-value db v)]
+      (cond
+        ;; Keep absolute URLs unquoted
+        (re-matches #"(?i)^[a-z][a-z0-9+.-]*://.+" s)
+        s
+
+        (or (string/blank? s)
+            (string/includes? s "[[")
+            (string/includes? s ":")
+            (string/includes? s "\"")
+            (string/includes? s "\n")
+            (string/starts-with? s "[")
+            (string/starts-with? s "{")
+            (string/includes? s ","))
+        (str "\"" (string/replace s "\"" "\\\"") "\"")
+
+        :else
+        s))))
+
+(defn- build-page-frontmatter
+  [db page-title]
+  (when-let [page (ldb/get-page db page-title)]
+    (let [lines (->> (collect-page-properties db page)
+                     (filter (fn [[k _]] (exportable-page-property? k)))
+                     (sort-by (fn [[k _]] (str k)))
+                     (map (fn [[k v]]
+                            (str (yaml-key (property-key->markdown db k))
+                                 ": " (yaml-value db v))))
+                     (remove #(string/ends-with? % ": \"\"")))]
+      (when (seq lines)
+        (str "---\n" (string/join "\n" lines) "\n---\n\n")))))
+
+(defn- build-page-tag-header
+  [db page-title]
+  (when-let [page (ldb/get-page db page-title)]
+    (let [hashtags (->> (:block/tags page)
+                        (remove #(db-class/disallowed-inline-tags (:db/ident %)))
+                        (keep tag->obsidian-hashtag)
+                        distinct)]
+      (when (seq hashtags)
+        (str (string/join " " hashtags) "\n\n")))))
+
 (defn- task-block?
   [db block-ent]
   (when-let [task-class (d/entity db :logseq.class/Task)]
@@ -201,7 +407,7 @@
         (= status-title "done"))))
 
 (defn- exportable-block-property?
-  [k {:keys [task-block?]}]
+  [k {:keys [task-instance?]}]
   (and (keyword? k)
        (not (contains? db-property/public-db-attribute-properties k))
        (not (contains?
@@ -217,15 +423,15 @@
                :logseq.property.asset/resize-metadata
                :logseq.property.embedding/hnsw-label-updated-at}
              k))
-       (not (and task-block? (= k :logseq.property/status)))
+       (not (and task-instance? (= k :logseq.property/status)))
        (let [n (namespace k)]
          (not (contains? #{"logseq.property.history" "logseq.property.table"} n)))))
 
 (defn- block-properties->lines
   [db block-ent]
-  (let [task-block? (task-block? db block-ent)]
+  (let [task-instance? (task-block? db block-ent)]
     (->> (db-property/properties block-ent)
-         (filter (fn [[k _]] (exportable-block-property? k {:task-block? task-block?})))
+         (filter (fn [[k _]] (exportable-block-property? k {:task-instance? task-instance?})))
          (sort-by (fn [[k _]] (str k)))
          (map (fn [[k v]]
                 (let [k* (property-key->markdown db k)
@@ -253,7 +459,11 @@
         block-ent (d/entity db (:db/id b))
         obsidian-mode? (true? (:obsidian-mode? context))
         referenced-block-uuids (:obsidian-referenced-block-uuids context)
-        raw-title (or (when (string? (:block/raw-title block-ent)) (:block/raw-title block-ent))
+        ;; When the block itself is an asset, render as embed markdown.
+        asset-embed (when (and obsidian-mode? (ldb/asset? block-ent))
+                      (asset->embed-markdown block-ent))
+        raw-title (or asset-embed
+                      (when (string? (:block/raw-title block-ent)) (:block/raw-title block-ent))
                       (when (string? (:block/title block-ent)) (:block/title block-ent))
                       "")
         title* (if obsidian-mode?
@@ -288,28 +498,25 @@
                      (str block-id-suffix))
         property-lines (when obsidian-mode?
                          (block-properties->lines db block-ent))
-        task-block? (and obsidian-mode? (task-block? db block-ent))
-        task-checked? (and task-block? (task-done? db block-ent))
+        task-instance? (and obsidian-mode? (task-block? db block-ent))
+        task-checked? (and task-instance? (task-done? db block-ent))
         content (if (seq property-lines)
                   (str title-line "\n"
                        (string/join "\n" (map #(str "  " %) property-lines)))
                   title-line)
-        content (let [[prefix spaces-tabs]
-                      (let [level (if (and heading-to-list? heading)
-                                    (if (> heading 1)
-                                      (dec heading)
-                                      heading)
-                                    level)
-                            spaces-tabs (->>
-                                         (repeat (dec level) (:export-bullet-indentation context))
-                                         (apply str))]
-                        [(str spaces-tabs "-") (str spaces-tabs "  ")])
-                      [prefix spaces-tabs] (if task-block?
-                                             [(str spaces-tabs (if task-checked?
-                                                                 "- [x]"
-                                                                 "- [ ]"))
-                                              (str spaces-tabs "  ")]
-                                             [prefix spaces-tabs])
+        content (let [level' (if (and heading-to-list? heading)
+                                (if (> heading 1)
+                                  (dec heading)
+                                  heading)
+                                level)
+                      base-indent (->>
+                                   (repeat (dec level') (:export-bullet-indentation context))
+                                   (apply str))
+                      [prefix spaces-tabs]
+                      (if task-instance?
+                        [(str base-indent (if task-checked? "- [x]" "- [ ]"))
+                         (str base-indent "  ")]
+                        [(str base-indent "-") (str base-indent "  ")])
                       content* (->string-content content)
                       content* (if heading-to-list?
                                  (-> (string/replace content* #"^\s?#+\s+" "")
@@ -387,5 +594,10 @@
     (->> pages
          (filter filter-fn)
          (mapv (fn [e]
-                 [(page-title e)
-                  (block->content db (:block/uuid e) {} options)])))))
+                 (let [title (page-title e)
+                       content (block->content db (:block/uuid e) {} options)]
+                   (if (:obsidian-mode? options)
+                     [title {:content content
+                             :frontmatter (build-page-frontmatter db title)
+                             :tag-header (build-page-tag-header db title)}]
+                     [title content])))))))

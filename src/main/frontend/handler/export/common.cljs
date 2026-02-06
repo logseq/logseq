@@ -50,11 +50,16 @@
   ([repo suffix options]
    (p/let [page->content (<get-all-page->content repo
                                                  (get-content-config options))]
-    (clojure.core/map (fn [[page-title content]]
-                        {:path (str page-title "." suffix)
-                         :content content
-                         :title page-title
-                         :format :markdown})
+    (clojure.core/map (fn [[page-title content-or-map]]
+                        (if (map? content-or-map)
+                          (merge {:path (str page-title "." suffix)
+                                  :title page-title
+                                  :format :markdown}
+                                 content-or-map)
+                          {:path (str page-title "." suffix)
+                           :content content-or-map
+                           :title page-title
+                           :format :markdown}))
                       page->content))))
 
 ;; Aliased fns requiring cli-export-common dynamic bindings e.g. cli-export-common/*current-db*

@@ -4,6 +4,7 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [frontend.config :as config]
+            [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
             [frontend.extensions.zip :as zip]
@@ -324,7 +325,7 @@
 (defn- empty-placeholder-property-value?
   [db v]
   (or (= :logseq.property/empty-placeholder v)
-      (and (integer? v)
+      (and (integer? v) (pos? v)
            (= :logseq.property/empty-placeholder (:db/ident (d/entity db v))))
       (and (de/entity? v)
            (= :logseq.property/empty-placeholder (:db/ident v)))
@@ -348,13 +349,22 @@
 
 (defn- property-key->literal
   [db k]
-  (if-not (keyword? k)
-    (str k)
-    (if-let [prop-ent (d/entity db [:db/ident k])]
-      (or (when (string? (:block/title prop-ent))
-            (:block/title prop-ent))
-          (name k))
-      (name k))))
+  (let [strip-random-suffix
+        (fn [kw]
+          (let [n (name kw)
+                ns (namespace kw)]
+            (if (and (string? ns)
+                     (re-find #"^(user\.property|plugin\.property)(\.|$)" ns)
+                     (re-find #"-[A-Za-z][A-Za-z0-9_-]{7}$" n))
+              (string/replace n #"-[A-Za-z][A-Za-z0-9_-]{7}$" "")
+              n)))]
+    (if-not (keyword? k)
+      (str k)
+      (if-let [prop-ent (d/entity db [:db/ident k])]
+        (or (when (string? (:block/title prop-ent))
+              (:block/title prop-ent))
+            (strip-random-suffix k))
+        (strip-random-suffix k)))))
 
 (defn- yaml-key
   [k]
@@ -433,15 +443,22 @@
 
 (defn- page-output-path
   [db page-title fallback-path]
-  (let [base-name (or page-title
-                      (when (string? fallback-path)
+  (let [fallback-name (when (string? fallback-path)
                         (some-> fallback-path
+                                (string/split #"/")
+                                last
                                 (string/replace #"\.[^.]+$" "")))
-                      "Untitled")
+        base-name (or page-title fallback-name "Untitled")
         page (when page-title (ldb/get-page db page-title))
-        dir (if (and page (ldb/journal? page))
-              "Daily"
-              "Notes")]
+        date-title? (fn [s]
+                      (and (string? s)
+                           (or (re-matches #"^\d{4}-\d{2}-\d{2}$" s)
+                               (some? (date/journal-title->int s)))))
+        journal-like? (or (and page (or (ldb/journal? page)
+                                        (some? (:block/journal-day page))))
+                          (date-title? page-title)
+                          (date-title? fallback-name))
+        dir (if journal-like? "Daily" "Notes")]
     (str dir "/" base-name ".md")))
 
 (defn- attachment-output-path
@@ -457,7 +474,7 @@
     path))
 
 (defn- export-file-as-markdown
-  [db content-config obsidian-mode? {:keys [path title content]} options]
+  [db content-config obsidian-mode? {:keys [path title content frontmatter tag-header]} options]
   (let [content-normalized (cond-> (normalize-markdown-content content)
                                 ;; Alias forms like [alias](((uuid))) must be converted before
                                 ;; mldoc parsing since mldoc can't handle them.
@@ -467,12 +484,17 @@
                                          cli-export-common/*content-config* content-config]
                                  (cli-export-text/export-helper content-normalized :markdown options))
           exported-content (normalize-markdown-content raw-exported-content)
-          frontmatter (when obsidian-mode?
-                        (build-page-frontmatter db title))
-          page-tags-header (when obsidian-mode?
-                             (build-page-tag-header db title))
-          page-header (str (or frontmatter "")
-                           (or page-tags-header ""))
+          ;; Use pre-computed Stage 1 values when available, fall back to Stage 2
+          frontmatter' (if (some? frontmatter)
+                         frontmatter
+                         (when obsidian-mode?
+                           (build-page-frontmatter db title)))
+          tag-header' (if (some? tag-header)
+                        tag-header
+                        (when obsidian-mode?
+                          (build-page-tag-header db title)))
+          page-header (str (or frontmatter' "")
+                           (or tag-header' ""))
           output-content (cond-> exported-content
                            obsidian-mode?
                            fix-asset-paths
