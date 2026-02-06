@@ -86,6 +86,39 @@
         rows
         (throw (ex-info "incomplete framed buffer" {:buffer buffer :rows rows}))))))
 
+(defn- gzip-bytes?
+  [^js bytes]
+  (and (some? bytes)
+       (>= (.-byteLength bytes) 2)
+       (= 31 (aget bytes 0))
+       (= 139 (aget bytes 1))))
+
+(defn- bytes->stream
+  [^js bytes]
+  (js/ReadableStream.
+   #js {:start (fn [controller]
+                 (.enqueue controller bytes)
+                 (.close controller))}))
+
+(defn- <decompress-gzip-bytes
+  [^js bytes]
+  (if (exists? js/DecompressionStream)
+    (p/let [stream (bytes->stream bytes)
+            decompressed (.pipeThrough stream (js/DecompressionStream. "gzip"))
+            resp (js/Response. decompressed)
+            buf (.arrayBuffer resp)]
+      (->uint8 buf))
+    (p/rejected (ex-info "gzip decompression not supported"
+                         {:type :db-sync/decompression-not-supported}))))
+
+(defn- <snapshot-response-bytes
+  [^js resp]
+  (p/let [buf (.arrayBuffer resp)
+          bytes (->uint8 buf)]
+    (if (gzip-bytes? bytes)
+      (<decompress-gzip-bytes bytes)
+      bytes)))
+
 (defn- auth-headers []
   (when-let [token (state/get-auth-id-token)]
     {"authorization" (str "Bearer " token)}))
@@ -286,33 +319,17 @@
                     (throw (ex-info "snapshot download failed"
                                     {:graph graph-name
                                      :status (.-status resp)})))
-                  (when-not (.-body resp)
-                    (throw (ex-info "snapshot download missing body"
-                                    {:graph graph-name})))
-                  (p/let [reader (.getReader (.-body resp))]
-                    (p/loop [buffer nil
-                             total 0
-                             total-rows []
-                             loaded 0]
-                      (p/let [chunk (.read reader)]
-                        (if (.-done chunk)
-                          (let [rows (finalize-framed-buffer buffer)
-                                total' (+ total (count rows))
-                                total-rows' (into total-rows rows)]
-                            (state/pub-event!
-                             [:rtc/log {:type :rtc.log/download
-                                        :sub-type :download-completed
-                                        :graph-uuid graph-uuid
-                                        :message "Graph snapshot downloaded"}])
-                            (when (seq total-rows')
-                              (state/<invoke-db-worker :thread-api/db-sync-import-kvs-rows
-                                                       graph total-rows' true graph-uuid remote-tx))
-                            total')
-                          (let [value (.-value chunk)
-                                loaded' (+ loaded (.-byteLength value))
-                                {:keys [rows buffer]} (parse-framed-chunk buffer value)
-                                total' (+ total (count rows))]
-                            (p/recur buffer total' (into total-rows rows) loaded')))))))
+                  (p/let [snapshot-bytes (<snapshot-response-bytes resp)
+                          rows (finalize-framed-buffer snapshot-bytes)]
+                    (state/pub-event!
+                     [:rtc/log {:type :rtc.log/download
+                                :sub-type :download-completed
+                                :graph-uuid graph-uuid
+                                :message "Graph snapshot downloaded"}])
+                    (when (seq rows)
+                      (state/<invoke-db-worker :thread-api/db-sync-import-kvs-rows
+                                               graph rows true graph-uuid remote-tx))
+                    (count rows)))
                 (p/finally
                   (fn []
                     (when-let [download-url @download-url*]
