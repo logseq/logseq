@@ -133,8 +133,13 @@
                                                             :else
                                                             (ldb/write-transit-str args)))]
                               (if direct-pass?
-                                result
-                                (ldb/read-transit-str result))))
+                               result
+                                (if (string? result)
+                                  (ldb/read-transit-str result)
+                                  (throw (ex-info "db-worker returned non-transit result"
+                                                  {:qkw qkw
+                                                   :result-type (type result)
+                                                   :result result}))))))
            t1 (util/time-ms)]
        (Comlink/expose #js{"remoteInvoke" thread-api/remote-function} worker)
        (worker-handler/handle-message! worker wrapped-worker)

@@ -743,23 +743,34 @@
   ([options on-change]
    (select options on-change {}))
   ([options on-change select-options]
-   [:select.pl-6.block.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5
-    (merge
-     {:class     "form-select"
-      :on-change (fn [e]
-                   (let [value (util/evalue e)]
-                     (on-change e value)))}
-     select-options)
-    (for [{:keys [label value selected disabled]
-           :or {selected false disabled false}} options]
-      [:option (cond->
-                {:key   label
-                 :value (or value label)} ;; NOTE: value might be an empty string, `or` is safe here
-                 disabled
-                 (assoc :disabled disabled)
-                 selected
-                 (assoc :selected selected))
-       label])]))
+   (let [selected-value (->> options
+                             (filter :selected)
+                             first
+                             ((fn [option]
+                                (when option
+                                  (or (:value option) (:label option))))))
+         select-options (cond-> select-options
+                          ;; Keep the component uncontrolled by default while
+                          ;; avoiding deprecated `selected` on individual options.
+                          (and (nil? (:value select-options))
+                               (nil? (:default-value select-options))
+                               (some? selected-value))
+                          (assoc :default-value selected-value))]
+     [:select.pl-6.block.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5
+      (merge
+       {:class     "form-select"
+        :on-change (fn [e]
+                     (let [value (util/evalue e)]
+                       (on-change e value)))}
+       select-options)
+      (for [{:keys [label value disabled]
+             :or {disabled false}} options]
+        [:option (cond->
+                  {:key   label
+                   :value (or value label)} ;; NOTE: value might be an empty string, `or` is safe here
+                   disabled
+                   (assoc :disabled disabled))
+         label])])))
 
 (rum/defc radio-list
   [options on-change class]

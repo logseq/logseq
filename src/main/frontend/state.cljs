@@ -711,8 +711,8 @@ Similar to re-frame subscriptions"
 (defn update-state!
   [path f & {:keys [path-in-sub-atom]}]
   (vswap! *profile-state update path inc)
-  (let [path-coll?             (coll? path)
-        get-fn                 (if path-coll? get-in get)
+  (let [path-coll-p            (coll? path)
+        get-fn                 (if path-coll-p get-in get)
         s                      (get-fn @state path)
         s-atom?                (util/atom? s)
         path-coll?-in-sub-atom (coll? path-in-sub-atom)]
@@ -724,7 +724,7 @@ Similar to re-frame subscriptions"
       (swap! s update path-in-sub-atom f)
 
       s-atom?    (swap! s f)
-      path-coll? (swap! state update-in path f)
+      path-coll-p (swap! state update-in path f)
       :else      (swap! state update path f)))
   nil)
 

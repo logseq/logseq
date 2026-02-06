@@ -165,13 +165,16 @@
 
 (defn <get-all-assets
   []
-  (when-let [path (config/get-current-repo-assets-root)]
-    (p/let [result (p/catch (fs/readdir path {:path-only? true})
+  (when-let [assets-root (config/get-current-repo-assets-root)]
+    (p/let [result (p/catch (fs/readdir assets-root {:path-only? true})
                             (constantly nil))]
-      (p/all (map (fn [path]
-                    (p/let [data (fs/read-file-raw path "" {})]
-                      (let [path' (util/node-path.join "assets" (util/node-path.basename path))]
-                        [path' data]))) result)))))
+      (p/all (map (fn [asset-path]
+                    (p/let [data (fs/read-file-raw asset-path "" {})]
+                      (let [relative-path (util/node-path.relative assets-root asset-path)
+                            path' (-> (util/node-path.join "assets" relative-path)
+                                      (string/replace #"\\" "/"))]
+                        [path' data])))
+                  result)))))
 
 (defn ensure-assets-dir!
   [repo]

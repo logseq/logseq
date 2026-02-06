@@ -186,34 +186,43 @@
 ;;; utils (ends)
 
 ;;; replace block-ref, block-embed, page-embed
+(defn- obsidian-export?
+  []
+  (true? (:obsidian-mode? *content-config*)))
 
 (defn- replace-block-reference-in-heading
   [{:keys [title] :as ast-content}]
-  (let [inline-coll  title
-        inline-coll*
-        (mapcatv
-         #(match [%]
-            [["Link" {:url ["Block_ref" block-uuid]}]]
-            (let [[[_ {title-inline-coll :title}]]
-                  (block-uuid->ast (uuid block-uuid))]
-              (set! *state* (assoc-in *state* [:replace-ref-embed :block-ref-replaced?] true))
-              title-inline-coll)
+  (if (obsidian-export?)
+    ;; Keep Link AST in Obsidian mode and render it in export.text/inline-link.
+    ast-content
+    (let [inline-coll  title
+          inline-coll*
+          (mapcatv
+           #(match [%]
+              [["Link" {:url ["Block_ref" block-uuid]}]]
+              (let [[[_ {title-inline-coll :title}]]
+                    (block-uuid->ast (uuid block-uuid))]
+                (set! *state* (assoc-in *state* [:replace-ref-embed :block-ref-replaced?] true))
+                title-inline-coll)
 
-            :else [%])
-         inline-coll)]
-    (assoc ast-content :title inline-coll*)))
+              :else [%])
+           inline-coll)]
+      (assoc ast-content :title inline-coll*))))
 
 (defn- replace-block-reference-in-paragraph
   [inline-coll]
-  (mapcatv
-   #(match [%]
-      [["Link" {:url ["Block_ref" block-uuid]}]]
-      (let [[[_ {title-inline-coll :title}]]
-            (block-uuid->ast (uuid block-uuid))]
-        (set! *state* (assoc-in *state* [:replace-ref-embed :block-ref-replaced?] true))
-        title-inline-coll)
-      :else [%])
-   inline-coll))
+  (if (obsidian-export?)
+    ;; Keep Link AST in Obsidian mode and render it in export.text/inline-link.
+    inline-coll
+    (mapcatv
+     #(match [%]
+        [["Link" {:url ["Block_ref" block-uuid]}]]
+        (let [[[_ {title-inline-coll :title}]]
+              (block-uuid->ast (uuid block-uuid))]
+          (set! *state* (assoc-in *state* [:replace-ref-embed :block-ref-replaced?] true))
+          title-inline-coll)
+        :else [%])
+     inline-coll)))
 
 (declare replace-block-references)
 
@@ -232,39 +241,42 @@
 
 (defn- replace-block-reference-in-table
   [{:keys [header groups] :as table}]
-  (let [header*
-        (mapv
-         (fn [col]
-           (mapcatv
-            #(match [%]
-               [["Link" {:url ["Block_ref" block-uuid]}]]
-               (let [[[_ {title-inline-coll :title}]]
-                     (block-uuid->ast (uuid block-uuid))]
-                 (set! *state* (assoc-in *state* [:replace-ref-embed :block-ref-replaced?] true))
-                 title-inline-coll)
-               :else [%])
-            col))
-         header)
-        groups*
-        (mapv
-         (fn [group]
-           (mapv
-            (fn [row]
-              (mapv
-               (fn [col]
-                 (mapcatv
-                  #(match [%]
-                     [["Link" {:url ["Block_ref" block-uuid]}]]
-                     (let [[[_ {title-inline-coll :title}]]
-                           (block-uuid->ast (uuid block-uuid))]
-                       (set! *state* (assoc-in *state* [:replace-ref-embed :block-ref-replaced?] true))
-                       title-inline-coll)
-                     :else [%])
-                  col))
-               row))
-            group))
-         groups)]
-    (assoc table :header header* :groups groups*)))
+  (if (obsidian-export?)
+    ;; Keep Link AST in Obsidian mode and render it in export.text/inline-link.
+    table
+    (let [header*
+          (mapv
+           (fn [col]
+             (mapcatv
+              #(match [%]
+                 [["Link" {:url ["Block_ref" block-uuid]}]]
+                 (let [[[_ {title-inline-coll :title}]]
+                       (block-uuid->ast (uuid block-uuid))]
+                   (set! *state* (assoc-in *state* [:replace-ref-embed :block-ref-replaced?] true))
+                   title-inline-coll)
+                 :else [%])
+              col))
+           header)
+          groups*
+          (mapv
+           (fn [group]
+             (mapv
+              (fn [row]
+                (mapv
+                 (fn [col]
+                   (mapcatv
+                    #(match [%]
+                       [["Link" {:url ["Block_ref" block-uuid]}]]
+                       (let [[[_ {title-inline-coll :title}]]
+                             (block-uuid->ast (uuid block-uuid))]
+                         (set! *state* (assoc-in *state* [:replace-ref-embed :block-ref-replaced?] true))
+                         title-inline-coll)
+                       :else [%])
+                    col))
+                 row))
+              group))
+           groups)]
+      (assoc table :header header* :groups groups*))))
 
 (defn- replace-block-references
   [block-ast]

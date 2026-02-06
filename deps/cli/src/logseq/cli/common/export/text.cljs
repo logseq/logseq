@@ -1,9 +1,12 @@
 (ns logseq.cli.common.export.text
   "Common fns between frontend and CLI for exporting as markdown"
   (:require [clojure.string :as string]
+            [datascript.core :as d]
             [logseq.cli.common.export.common :as cli-export-common :refer
              [*state* newline* indent raw-text space simple-asts->string]]
             [logseq.cli.common.util :refer-macros [removev concatv mapcatv]]
+            [logseq.common.util :as common-util]
+            [logseq.db :as ldb]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.schema.mldoc :as mldoc-schema]))
 
@@ -22,7 +25,7 @@
          block-ast->simple-ast)
 
 (defn- block-heading
-  [{:keys [title _tags marker level _numbering priority _anchor _meta _unordered size]}]
+  [{:keys [title marker level _numbering priority _anchor _unordered size]}]
   (let [indent-style (get-in *state* [:export-options :indent-style])
         priority* (and priority (raw-text (cli-export-common/priority->string priority)))
         heading* (if (= indent-style "dashes")
@@ -222,8 +225,58 @@
     [(indent-with-2-spaces level) (raw-text s) space]))
 
 (defn- inline-link
-  [{full-text :full_text}]
-  [(raw-text full-text)])
+  [{:keys [url label full_text] :as _link-data}]
+  (if-not (:obsidian-mode? cli-export-common/*content-config*)
+    [(raw-text full_text)]
+    (let [[url-type url-value] url
+          block-ref-ent
+          (when (and cli-export-common/*current-db*
+                     (string? url-value)
+                     (common-util/uuid-string? url-value))
+            (when-let [ent (d/entity cli-export-common/*current-db* [:block/uuid (uuid url-value)])]
+              (when-not (ldb/page? ent)
+                ent)))]
+      (cond
+        ;; Block reference → [[Page#^id]]
+        (= url-type "Block_ref")
+        (if-let [block (and cli-export-common/*current-db*
+                            (d/entity cli-export-common/*current-db*
+                                      [:block/uuid (uuid url-value)]))]
+          (let [page-name (or (get-in block [:block/page :block/title]) "Unknown")]
+            [(raw-text "[[" page-name "#^" url-value "]]")])
+          ;; Fallback if block not found
+          [(raw-text full_text)])
+
+        ;; UUID page-ref that points to a block → [[Page#^uuid]]
+        block-ref-ent
+        (let [page-name (or (get-in block-ref-ent [:block/page :block/title]) "Unknown")]
+          [(raw-text "[[" page-name "#^" url-value "]]")])
+
+        ;; UUID page-ref that points to a page → [[Page]]
+        (and (= url-type "Page_ref")
+             cli-export-common/*current-db*
+             (string? url-value)
+             (common-util/uuid-string? url-value))
+        (if-let [ent (d/entity cli-export-common/*current-db* [:block/uuid (uuid url-value)])]
+          (if (ldb/page? ent)
+            [(raw-text "[[" (or (:block/title ent) url-value) "]]")]
+            [(raw-text full_text)])
+          [(raw-text full_text)])
+
+        ;; Page ref with alias → [[page|alias]] (Obsidian format)
+        (and (= url-type "Page_ref")
+             (seq label)
+             (not= label [["Plain" ""]]))
+        (let [alias-text (if (and (= (count label) 1)
+                                  (= "Plain" (ffirst label)))
+                           (second (first label))
+                           ;; For complex labels, extract text
+                           (cli-export-common/hashtag-value->string label))]
+          [(raw-text "[[" url-value "|" alias-text "]]")])
+
+        ;; Default: use original full_text
+        :else
+        [(raw-text full_text)]))))
 
 (defn- inline-nested-link
   [{content :content}]

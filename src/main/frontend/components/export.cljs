@@ -107,7 +107,8 @@
       (when-not (mobile-util/native-platform?)
         [:div
          [:a.font-medium {:on-click #(export-text/export-repo-as-markdown! current-repo)}
-          (t :export-markdown)]])
+          (t :export-markdown)]
+         [:p.text-sm.opacity-70.mb-0 (t :export-markdown-desc)]])
 
       (when (util/electron?)
         [:div
@@ -135,12 +136,9 @@
 
 (def *export-block-type (atom :text))
 
-(def text-indent-style-options [{:label "dashes"
-                                 :selected false}
-                                {:label "spaces"
-                                 :selected false}
-                                {:label "no-indent"
-                                 :selected false}])
+(def text-indent-style-options [{:label "dashes"}
+                                {:label "spaces"}
+                                {:label "no-indent"}])
 
 (defn- export-helper
   [top-level-ids]
@@ -291,28 +289,22 @@
                        :on-change (fn [e]
                                     (reset! *content nil)
                                     (get-image-blob top-level-uuids (merge options {:transparent-bg? e.currentTarget.checked}) (fn [blob] (reset! *content blob))))})]
-        (let [options (->> text-indent-style-options
-                           (mapv (fn [opt]
-                                   (if (= @*text-indent-style (:label opt))
-                                     (assoc opt :selected true)
-                                     opt))))]
+        (let [options text-indent-style-options]
           [:div [:div.flex.items-center
                  [:label.mr-4
                   {:style {:visibility (if (= :text tp) "visible" "hidden")}}
                   "Indentation style:"]
                  [:select.block.my-2.text-lg.rounded.border.py-0.px-1
                   {:style {:visibility (if (= :text tp) "visible" "hidden")}
+                   :value @*text-indent-style
                    :on-change (fn [e]
                                 (let [value (util/evalue e)]
                                   (state/set-export-block-text-indent-style! value)
                                   (reset! *text-indent-style value)
                                   (reset! *content (export-helper top-level-uuids))))}
-                  (for [{:keys [label value selected]} options]
-                    [:option (cond->
-                              {:key label
-                               :value (or value label)}
-                               selected
-                               (assoc :selected selected))
+                  (for [{:keys [label value]} options]
+                    [:option {:key label
+                              :value (or value label)}
                      label])]]
            [:div.flex.items-center
             (ui/checkbox {:class "mr-2"

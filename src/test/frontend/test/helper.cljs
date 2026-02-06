@@ -101,7 +101,8 @@
       {:block/uuid page-uuid
        :block/name "test"
        :block/title "Test"
-       ;; :block/tags #{:logseq.class/Page}
+       ;; Required so schema/entity-util consistently treats this as a page.
+       :block/tags #{:logseq.class/Page}
        }
       ;; first block
       {:block/uuid first-block-uuid
@@ -142,8 +143,11 @@
   [repo block-uuid content {:keys [tags]}]
   (editor-handler/save-block! repo block-uuid content)
   (doseq [tag tags]
-    (db-property-handler/set-block-property! block-uuid :block/tags
-                                             (db/get-page tag))))
+    (let [tag-ent (if (string? tag) (db/get-page tag) tag)
+          tag-value (or (:db/ident tag-ent)
+                        (:db/id tag-ent)
+                        tag)]
+      (db-property-handler/set-block-property! block-uuid :block/tags tag-value))))
 
 (defn create-page!
   [title & {:as opts}]

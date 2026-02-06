@@ -9,24 +9,32 @@
             [logseq.cli.common.export.common :as cli-export-common]
             [promesa.core :as p]))
 
-(defn get-content-config []
-  {:export-bullet-indentation (state/get-export-bullet-indentation)})
+(defn get-content-config
+  ([] (get-content-config nil))
+  ([options]
+   (merge
+    {:export-bullet-indentation (state/get-export-bullet-indentation)}
+    options)))
 
 (defn root-block-uuids->content
   "Converts given block uuids to content for given repo"
-  [repo root-block-uuids]
-  (binding [cli-export-common/*current-db* (conn/get-db repo)
-            cli-export-common/*content-config* (get-content-config)]
-    (let [contents (mapv (fn [id]
-                           (cli-export-common/get-blocks-contents id)) root-block-uuids)]
-      (string/join "\n" (mapv string/trim-newline contents)))))
+  ([repo root-block-uuids]
+   (root-block-uuids->content repo root-block-uuids nil))
+  ([repo root-block-uuids options]
+   (binding [cli-export-common/*current-db* (conn/get-db repo)
+             cli-export-common/*content-config* (get-content-config options)]
+     (let [contents (mapv (fn [id]
+                            (cli-export-common/get-blocks-contents id)) root-block-uuids)]
+       (string/join "\n" (mapv string/trim-newline contents))))))
 
 (defn get-page-content
   "Gets page content for current repo, db and state"
-  [page-uuid]
-  (binding [cli-export-common/*current-db* (conn/get-db (state/get-current-repo))
-            cli-export-common/*content-config* (get-content-config)]
-    (cli-export-common/get-page-content page-uuid)))
+  ([page-uuid]
+   (get-page-content page-uuid nil))
+  ([page-uuid options]
+   (binding [cli-export-common/*current-db* (conn/get-db (state/get-current-repo))
+             cli-export-common/*content-config* (get-content-config options)]
+     (cli-export-common/get-page-content page-uuid))))
 
 (defn <get-debug-datoms
   [repo]
@@ -37,15 +45,17 @@
   (state/<invoke-db-worker :thread-api/export-get-all-page->content repo options))
 
 (defn <get-file-contents
-  [repo suffix]
-  (p/let [page->content (<get-all-page->content repo
-                                                {:export-bullet-indentation (state/get-export-bullet-indentation)})]
+  ([repo suffix]
+   (<get-file-contents repo suffix nil))
+  ([repo suffix options]
+   (p/let [page->content (<get-all-page->content repo
+                                                 (get-content-config options))]
     (clojure.core/map (fn [[page-title content]]
                         {:path (str page-title "." suffix)
                          :content content
                          :title page-title
                          :format :markdown})
-                      page->content)))
+                      page->content))))
 
 ;; Aliased fns requiring cli-export-common dynamic bindings e.g. cli-export-common/*current-db*
 (def replace-block&page-reference&embed cli-export-common/replace-block&page-reference&embed)

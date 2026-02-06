@@ -1,0 +1,6 @@
+:run-background-task :logseq.db.common.entity-plus/reset-immutable-entities-cache!
+:run-background-task :frontend.background-tasks/sync-to-worker-network-online-status
+:run-background-task :frontend.worker.embedding/subscribe-state
+
+Ran 0 tests containing 0 assertions.
+0 failures, 0 errors.
