@@ -15,7 +15,7 @@
                  value))
 
 (defn- ->json
-  [{:keys [status data error]}]
+  [{:keys [status data error command]}]
   (let [obj (js-obj)]
     (set! (.-status obj) (name status))
     (cond
@@ -23,7 +23,10 @@
       (set! (.-data obj) (clj->js (normalize-json data)))
 
       (= status :error)
-      (set! (.-error obj) (clj->js (normalize-json (update error :code name)))))
+      (do
+        (set! (.-error obj) (clj->js (normalize-json (update error :code name))))
+        (when (and (= :doctor command) (some? data))
+          (set! (.-data obj) (clj->js (normalize-json data))))))
     (js/JSON.stringify obj)))
 
 (defn- pad-right
@@ -277,6 +280,18 @@
                "updated")]
     (str "Graph " verb ": " graph)))
 
+(defn- format-doctor
+  [status checks]
+  (let [header (str "Doctor: " (name (or status :unknown)))
+        check-lines (mapv (fn [{:keys [id status message]}]
+                            (str "[" (name (or status :unknown))
+                                 "] "
+                                 (name (or id :unknown))
+                                 (when (seq message)
+                                   (str " - " message))))
+                          (or checks []))]
+    (string/join "\n" (into [header] check-lines))))
+
 (defn- ->human
   [{:keys [status data error command context]} {:keys [now-ms]}]
   (let [now-ms (or now-ms (js/Date.now))]
@@ -302,20 +317,27 @@
         :query (format-query-results (:result data))
         :query-list (format-query-list (:queries data))
         :show (or (:message data) (pr-str data))
+        :doctor (format-doctor (:status data) (:checks data))
         (if (and (map? data) (contains? data :message))
           (:message data)
           (pr-str data)))
 
       :error
-      (format-error error)
+      (if (= :doctor command)
+        (format-doctor (or (get-in data [:status]) :error)
+                       (or (get-in data [:checks])
+                           (get-in error [:checks])))
+        (format-error error))
 
       (pr-str {:status status :data data :error error}))))
 
 (defn- ->edn
-  [{:keys [status data error]}]
+  [{:keys [status data error command]}]
   (pr-str (cond-> {:status status}
             (= status :ok) (assoc :data data)
-            (= status :error) (assoc :error error))))
+            (= status :error) (assoc :error error)
+            (and (= status :error) (= :doctor command) (some? data))
+            (assoc :data data))))
 
 (defn- normalize-graph-result
   [result]

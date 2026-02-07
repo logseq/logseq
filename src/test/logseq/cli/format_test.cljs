@@ -1,5 +1,6 @@
 (ns logseq.cli.format-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require [cljs.reader :as reader]
+            [cljs.test :refer [deftest is testing]]
             [clojure.string :as string]
             [logseq.cli.command.show :as show-command]
             [logseq.cli.format :as format]
@@ -307,3 +308,56 @@
       (is (= (str "Error (missing-graph): graph name is required\n"
                   "Hint: Use --repo <name>")
              result)))))
+
+(deftest test-human-output-doctor
+  (testing "doctor renders concise check summary"
+    (let [result (format/format-result {:status :ok
+                                        :command :doctor
+                                        :data {:status :warning
+                                               :checks [{:id :db-worker-script
+                                                         :status :ok
+                                                         :message "Found readable file: /tmp/db-worker-node.js"}
+                                                        {:id :data-dir
+                                                         :status :ok
+                                                         :message "Read/write access confirmed: /tmp/logseq/graphs"}
+                                                        {:id :running-servers
+                                                         :status :warning
+                                                         :message "1 server is still starting"}]}}
+                                       {:output-format nil})]
+      (is (= (str "Doctor: warning\n"
+                  "[ok] db-worker-script - Found readable file: /tmp/db-worker-node.js\n"
+                  "[ok] data-dir - Read/write access confirmed: /tmp/logseq/graphs\n"
+                  "[warning] running-servers - 1 server is still starting")
+             result)))))
+
+(deftest test-doctor-json-edn-output
+  (testing "doctor json and edn keep structured checks for failed runs"
+    (let [payload {:checks [{:id :db-worker-script
+                             :status :ok
+                             :message "Found readable file: /tmp/db-worker-node.js"}
+                            {:id :data-dir
+                             :status :error
+                             :code :data-dir-permission
+                             :message "data-dir is not readable/writable: /tmp/logseq"}]}
+          json-result (format/format-result {:status :error
+                                             :command :doctor
+                                             :error {:code :data-dir-permission
+                                                     :message "data-dir check failed"}
+                                             :data payload}
+                                            {:output-format :json})
+          edn-result (format/format-result {:status :error
+                                            :command :doctor
+                                            :error {:code :data-dir-permission
+                                                    :message "data-dir check failed"}
+                                            :data payload}
+                                           {:output-format :edn})
+          parsed-json (js->clj (js/JSON.parse json-result) :keywordize-keys true)
+          parsed-edn (reader/read-string edn-result)]
+      (is (= "error" (:status parsed-json)))
+      (is (= "data-dir-permission" (get-in parsed-json [:error :code])))
+      (is (= "data-dir" (get-in parsed-json [:data :checks 1 :id])))
+      (is (= "error" (get-in parsed-json [:data :checks 1 :status])))
+      (is (= :error (:status parsed-edn)))
+      (is (= :data-dir-permission (get-in parsed-edn [:error :code])))
+      (is (= :data-dir (get-in parsed-edn [:data :checks 1 :id])))
+      (is (= :error (get-in parsed-edn [:data :checks 1 :status]))))))
