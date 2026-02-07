@@ -107,6 +107,13 @@ Agent runtime is selected by `AGENT_RUNTIME_PROVIDER`:
 For `cloudflare`, bind and export `Sandbox` in the Worker and configure the container image in
 `worker/wrangler.toml` (`[[containers]] class_name = "Sandbox"`).
 
+Cloudflare runtime flow:
+- resolve sandbox by deterministic name (session id + prefix)
+- health probe `sandbox-agent` inside container
+- set runtime env vars and start `sandbox-agent` when needed
+- proxy create/message stream via `containerFetch`
+- terminate session and cleanup sandbox on terminal states
+
 ## Environment Variables
 
 | Variable | Purpose |
@@ -140,6 +147,16 @@ For `cloudflare`, bind and export `Sandbox` in the Worker and configure the cont
 | SPRITES_SANDBOX_AGENT_PORT | sandbox-agent port inside sprite (default `2468`) |
 | SPRITES_HEALTH_RETRIES | Sprite health check retry count |
 | SPRITES_HEALTH_INTERVAL_MS | Sprite health check retry interval (ms) |
+| CLOUDFLARE_SANDBOX_NAME_PREFIX | Prefix used when creating Cloudflare sandbox names |
+| CLOUDFLARE_SANDBOX_AGENT_PORT | sandbox-agent port inside Cloudflare sandbox (default `2468`) |
+| CLOUDFLARE_BOOTSTRAP_COMMAND | Optional command override to start sandbox-agent in Cloudflare sandbox |
+| CLOUDFLARE_REPO_CLONE_COMMAND | Optional repo clone command template for Cloudflare sandbox |
+| CLOUDFLARE_HEALTH_RETRIES | Cloudflare sandbox health check retry count |
+| CLOUDFLARE_HEALTH_INTERVAL_MS | Cloudflare sandbox health check retry interval (ms) |
+| OPENAI_API_KEY | Passed into Cloudflare sandbox runtime env (if set) |
+| ANTHROPIC_API_KEY | Passed into Cloudflare sandbox runtime env (if set) |
+| OPENAI_BASE_URL | Passed into Cloudflare sandbox runtime env (if set) |
+| ANTHROPIC_BASE_URL | Passed into Cloudflare sandbox runtime env (if set) |
 
 ## Notes
 - Protocol definitions live in `docs/agent-guide/db-sync/protocol.md`.

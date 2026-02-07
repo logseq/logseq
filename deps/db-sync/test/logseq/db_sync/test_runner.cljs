@@ -1,5 +1,6 @@
 (ns logseq.db-sync.test-runner
   (:require [cljs.test :as ct]
+            [logseq.db-sync.agent-do-test]
             [logseq.db-sync.agent-request-test]
             [logseq.db-sync.agent-runtime-provider-test]
             [logseq.db-sync.node-config-test]

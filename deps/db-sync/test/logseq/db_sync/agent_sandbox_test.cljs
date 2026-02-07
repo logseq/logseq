@@ -18,6 +18,8 @@
              (sandbox/session-url base session-id)))
       (is (= "https://sandbox.example/v1/sessions/sess-1/messages"
              (sandbox/messages-url base session-id)))
+      (is (= "https://sandbox.example/v1/sessions/sess-1/events/sse"
+             (sandbox/events-sse-url base session-id)))
       (is (= "https://sandbox.example/v1/sessions/sess-1/messages/stream"
              (sandbox/messages-stream-url base session-id))))))
 

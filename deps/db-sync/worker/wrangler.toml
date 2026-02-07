@@ -6,7 +6,8 @@ compatibility_flags = [ "nodejs_compat" ]
 [[containers]]
 class_name = "Sandbox"
 image = "./Dockerfile.sandbox-agent"
-max_instances = 10
+instance_type = "lite"
+max_instances = 1
 
 [containers.settings]
 idle_timeout = "10m"

@@ -1,5 +1,6 @@
 (ns logseq.db-sync.worker.agent.runtime-provider
   (:require [clojure.string :as string]
+            [lambdaisland.glogi :as log]
             [logseq.db-sync.worker.agent.sandbox :as sandbox]
             [promesa.core :as p]))
 
@@ -30,12 +31,20 @@
     (let [normalized (-> value string/trim string/lower-case)]
       (when-not (string/blank? normalized) normalized))))
 
+(def ^:private supported-provider-kinds
+  #{"sprites" "local-dev" "cloudflare"})
+
+(defn- known-provider-kind [value]
+  (let [provider (normalize-provider value)]
+    (when (contains? supported-provider-kinds provider)
+      provider)))
+
 (defn provider-kind [^js env]
-  (or (normalize-provider (env-str env "AGENT_RUNTIME_PROVIDER"))
+  (or (known-provider-kind (env-str env "AGENT_RUNTIME_PROVIDER"))
       "sprites"))
 
 (defn runtime-provider-kind [^js env runtime]
-  (or (normalize-provider (:provider runtime))
+  (or (known-provider-kind (:provider runtime))
       (provider-kind env)))
 
 (defn fill-template [template sandbox-id]
@@ -55,6 +64,10 @@
 
 (defn- get-sprite-name [^js env session-id]
   (let [prefix (or (env-str env "SPRITES_NAME_PREFIX") "logseq-task-")]
+    (sanitize-name (str prefix session-id))))
+
+(defn cloudflare-sandbox-name [^js env session-id]
+  (let [prefix (or (env-str env "CLOUDFLARE_SANDBOX_NAME_PREFIX") "logseq-task-")]
     (sanitize-name (str prefix session-id))))
 
 (defn- sprites-token [^js env]
@@ -105,6 +118,21 @@
   (str "http://127.0.0.1:" port path))
 
 (def ^:private default-repo-base-dir "/workspace")
+(def ^:private cloudflare-local-host "http://localhost")
+
+(defn- cloudflare-agent-port [^js env]
+  (parse-int (env-str env "CLOUDFLARE_SANDBOX_AGENT_PORT") 2468))
+
+(defn- cloudflare-health-retries [^js env]
+  (parse-int (env-str env "CLOUDFLARE_HEALTH_RETRIES") 30))
+
+(defn- cloudflare-health-interval-ms [^js env]
+  (parse-int (env-str env "CLOUDFLARE_HEALTH_INTERVAL_MS") 200))
+
+(defn- js-method
+  [obj method]
+  (let [f (when obj (aget obj method))]
+    (when (fn? f) f)))
 
 (defn- ->promise
   [v]
@@ -305,20 +333,26 @@
       (string/replace "{repo_dir}" (or repo-dir ""))))
 
 (defn repo-clone-command
-  [^js env session-id task]
-  (let [repo-url (task-repo-url task)
-        session-id (some-> session-id str)
-        repo-dir (get-repo-dir session-id)
-        override (env-str env "SPRITES_REPO_CLONE_COMMAND")]
-    (when (and (string? repo-url) (string? session-id) (string? repo-dir))
-      (if (string? override)
-        (fill-repo-template override {:repo-url repo-url
-                                      :session-id session-id
-                                      :repo-dir repo-dir})
-        (str "mkdir -p " default-repo-base-dir
-             " && cd " default-repo-base-dir
-             " && git clone '" (escape-shell-single repo-url) "' '" (escape-shell-single repo-dir) "'"
-             " && chmod -R u+rw '" (escape-shell-single repo-dir) "'")))))
+  ([^js env session-id task]
+   (repo-clone-command env session-id task "sprites"))
+  ([^js env session-id task provider]
+   (let [repo-url (task-repo-url task)
+         session-id (some-> session-id str)
+         repo-dir (get-repo-dir session-id)
+         override-key (if (= "cloudflare" provider)
+                        "CLOUDFLARE_REPO_CLONE_COMMAND"
+                        "SPRITES_REPO_CLONE_COMMAND")
+         override (env-str env override-key)]
+     (when (and (string? repo-url) (string? session-id) (string? repo-dir))
+       (if (string? override)
+         (fill-repo-template override {:repo-url repo-url
+                                       :session-id session-id
+                                       :repo-dir repo-dir})
+         (str "mkdir -p " default-repo-base-dir
+              " && cd " default-repo-base-dir
+              " && git clone --depth 1 --single-branch --no-tags '"
+              (escape-shell-single repo-url) "' '" (escape-shell-single repo-dir) "'"
+              " && chmod -R u+rw '" (escape-shell-single repo-dir) "'"))))))
 
 (defn session-payload [task]
   (let [agent (or (get-in task [:agent :provider])
@@ -336,6 +370,10 @@
                            "bypass"
                            "default"))}))
 
+(defn- message-payload [message]
+  (cond-> {:message (:message message)}
+    (string? (:kind message)) (assoc :kind (:kind message))))
+
 (defn- <sprite-create-session! [^js env sprite-name port agent-token session-id payload]
   (let [script (str "resp=$(curl -sS -w '\\n%{http_code}' -X POST -H 'content-type: application/json' "
                     (if agent-token
@@ -348,7 +386,6 @@
                     "body=$(echo \"$resp\" | sed '$d'); "
                     "printf \"%s\" \"$body\"; "
                     "printf \"STATUS:%s\" \"$status\" 1>&2")]
-    (println :debug :script script)
     (p/let [result (sprites-exec-post! env sprite-name ["bash" "-lc" script])
             stdout (or (:stdout result) "")
             stderr (or (:stderr result) "")
@@ -369,12 +406,274 @@
     (sprites-exec-post! env sprite-name ["bash" "-lc" cmd])))
 
 ;; ============================================================
-;; RuntimeProvider + SpritesProvider
+;; RuntimeProvider + Providers
 ;; ============================================================
+
+(defn- local-dev-base-url [^js env runtime]
+  (or (:base-url runtime)
+      (env-str env "SANDBOX_AGENT_URL")
+      "http://127.0.0.1:2468"))
+
+(defn- local-dev-token [^js env runtime]
+  (or (:agent-token runtime)
+      (env-str env "SANDBOX_AGENT_TOKEN")))
+
+(defn- cloudflare-sandbox-namespace [^js env]
+  (let [sandbox-ns (aget env "Sandbox")]
+    (when-not sandbox-ns
+      (throw (ex-info "missing Sandbox binding for cloudflare runtime provider" {})))
+    sandbox-ns))
+
+(defn- cloudflare-sandbox [^js env sandbox-id]
+  (let [^js sandbox-ns (cloudflare-sandbox-namespace env)
+        id-from-name (js-method sandbox-ns "idFromName")
+        get-sandbox (js-method sandbox-ns "get")]
+    (when-not (and id-from-name get-sandbox)
+      (throw (ex-info "invalid Sandbox binding: missing idFromName/get" {})))
+    (let [do-id (.idFromName sandbox-ns sandbox-id)
+          sandbox (.get sandbox-ns do-id)]
+      (when-not sandbox
+        (throw (ex-info "failed to get cloudflare sandbox stub"
+                        {:sandbox-id sandbox-id})))
+      sandbox)))
+
+(defn- cloudflare-health-command [port agent-token]
+  (str "curl -fsS "
+       (curl-auth-arg agent-token)
+       " "
+       cloudflare-local-host
+       ":"
+       port
+       "/v1/health >/dev/null"))
+
+(defn- <cloudflare-exec! [sandbox cmd]
+  (if (js-method sandbox "exec")
+    (->promise (.exec sandbox cmd))
+    (throw (ex-info "cloudflare sandbox missing exec method" {}))))
+
+(defn- <cloudflare-health-once! [sandbox port agent-token]
+  (-> (js/Promise.resolve (<cloudflare-exec! sandbox (cloudflare-health-command port agent-token)))
+      (.then (fn [result]
+               (let [success (when result (aget result "success"))]
+                 (if (boolean? success)
+                   success
+                   true))))
+      (.catch (fn [_] false))))
+
+(defn- <cloudflare-health! [sandbox port agent-token retries interval-ms]
+  (log/debug :agent/cloudflare-health-check
+             {:port port
+              :retries retries
+              :interval-ms interval-ms
+              :token? (boolean (string? agent-token))})
+  (if (<= retries 0)
+    (throw (ex-info "sandbox-agent health check timed out in cloudflare sandbox"
+                    {:port port}))
+    (p/let [healthy? (<cloudflare-health-once! sandbox port agent-token)]
+      (if healthy?
+        true
+        (p/let [_ (p/delay interval-ms)]
+          (<cloudflare-health! sandbox port agent-token (dec retries) interval-ms))))))
+
+(defn- normalize-agent-env-map [env-map]
+  (if-not (map? env-map)
+    {}
+    (reduce-kv (fn [acc k v]
+                 (if (and (some? k) (string? v))
+                   (assoc acc (name k) v)
+                   acc))
+               {}
+               env-map)))
+
+(def ^:private cloudflare-env-pass-through
+  ["OPENAI_API_KEY"
+   "ANTHROPIC_API_KEY"
+   "OPENAI_BASE_URL"
+   "ANTHROPIC_BASE_URL"])
+
+(defn- cloudflare-agent-env-vars [^js env task]
+  (let [base (reduce (fn [acc k]
+                       (if-let [v (env-str env k)]
+                         (assoc acc k v)
+                         acc))
+                     {}
+                     cloudflare-env-pass-through)
+        task-env (normalize-agent-env-map (get-in task [:agent :env]))
+        agent-id (:agent (session-payload task))
+        api-token (some-> (get-in task [:agent :api-token]) str string/trim not-empty)]
+    (cond-> (merge base task-env)
+      (and (string? api-token) (= "codex" agent-id)) (assoc "OPENAI_API_KEY" api-token)
+      (and (string? api-token) (= "claude" agent-id)) (assoc "ANTHROPIC_API_KEY" api-token))))
+
+(defn- cloudflare-server-command [^js env task port agent-token]
+  (let [auth-json (get-in task [:agent :auth-json])
+        write-auth (or (auth-json-write-command auth-json) "")
+        override (env-str env "CLOUDFLARE_BOOTSTRAP_COMMAND")]
+    (or override
+        (str write-auth
+             "sandbox-agent server "
+             (if (string? agent-token)
+               (str "--token '" (escape-shell-single agent-token) "'")
+               "--no-token")
+             " --host 0.0.0.0 --port " port
+             " --no-telemetry"))))
+
+(defn- <cloudflare-set-env-vars! [^js sandbox env-vars]
+  (cond
+    (empty? env-vars)
+    (p/resolved nil)
+
+    (js-method sandbox "setEnvVars")
+    (->promise (.setEnvVars sandbox (clj->js env-vars)))
+
+    :else
+    (p/resolved nil)))
+
+(defn- <cloudflare-start-server! [^js env ^js sandbox task port agent-token]
+  (let [command (cloudflare-server-command env task port agent-token)]
+    (if (js-method sandbox "startProcess")
+      (->promise (.startProcess sandbox command))
+      (->promise (<cloudflare-exec! sandbox (str "nohup " command " >/tmp/sandbox-agent.log 2>&1 &"))))))
+
+(defn- cloudflare-fetch-port-candidates [port]
+  (->> [port 2468 8000]
+       (filter number?)
+       (distinct)
+       (vec)))
+
+(defn- error-message [error]
+  (let [msg (when error (aget error "message"))]
+    (if (string? msg) msg (str error))))
+
+(defn- cloudflare-port-error?
+  [error]
+  (let [m (-> (error-message error) string/lower-case)]
+    (or (string/includes? m "container port not found")
+        (string/includes? m "connection refused")
+        (string/includes? m "error proxying request to container"))))
+
+(defn- <cloudflare-container-fetch! [^js sandbox request port]
+  (if-not (js-method sandbox "containerFetch")
+    (throw (ex-info "cloudflare sandbox missing containerFetch method" {}))
+    (let [ports (cloudflare-fetch-port-candidates port)]
+      (letfn [(step [idx last-error]
+                (if (>= idx (count ports))
+                  (if last-error
+                    (throw last-error)
+                    (throw (ex-info "cloudflare containerFetch failed: no candidate ports"
+                                    {:requested-port port})))
+                  (let [candidate (nth ports idx)]
+                    (p/catch
+                     (->promise (.containerFetch sandbox request candidate))
+                     (fn [error]
+                       (if (and (cloudflare-port-error? error)
+                                (< (inc idx) (count ports)))
+                         (step (inc idx) error)
+                         (throw error)))))))]
+        (step 0 nil)))))
+
+(defn- <cloudflare-json-request!
+  [sandbox port method path {:keys [token json-body]}]
+  (let [^js headers (js/Headers.)
+        _ (.set headers "accept" "application/json")
+        _ (when json-body (.set headers "content-type" "application/json"))
+        _ (when token (.set headers "authorization" (str "Bearer " token)))
+        request (js/Request. (str cloudflare-local-host path)
+                             (clj->js (cond-> {:method method :headers headers}
+                                        json-body
+                                        (assoc :body (js/JSON.stringify (clj->js json-body))))))]
+    (p/let [resp (<cloudflare-container-fetch! sandbox request port)
+            status (.-status resp)
+            raw (->promise (.text resp))
+            parsed (parse-json-safe raw)]
+      (if (<= 200 status 299)
+        parsed
+        (throw (ex-info "cloudflare sandbox request failed"
+                        {:status status
+                         :path path
+                         :body parsed
+                         :raw-body raw}))))))
+
+(defn- <cloudflare-events-stream-request!
+  [sandbox port token session-id]
+  (let [^js headers (js/Headers.)
+        _ (.set headers "accept" "text/event-stream")
+        _ (when token (.set headers "authorization" (str "Bearer " token)))
+        request (js/Request. (str cloudflare-local-host
+                                  "/v1/sessions/"
+                                  session-id
+                                  "/events/sse")
+                             #js {:method "GET"
+                                  :headers headers})]
+    (p/let [resp (<cloudflare-container-fetch! sandbox request port)
+            status (.-status resp)]
+      (if (<= 200 status 299)
+        resp
+        (throw (ex-info "cloudflare sandbox open-events-stream failed"
+                        {:status status
+                         :session-id session-id}))))))
+
+(defn- <cloudflare-send-message! [sandbox port token session-id message]
+  (<cloudflare-json-request! sandbox
+                             port
+                             "POST"
+                             (str "/v1/sessions/" session-id "/messages")
+                             {:token token
+                              :json-body (message-payload message)}))
+
+(defn- <cloudflare-clone-repo! [^js env sandbox session-id task]
+  (when-let [cmd (repo-clone-command env session-id task "cloudflare")]
+    (<cloudflare-exec! sandbox cmd)))
+
+(defn- <cloudflare-ensure-running! [^js env sandbox task port agent-token]
+  (p/let [healthy? (->promise (<cloudflare-health-once! sandbox port agent-token))]
+    (if healthy?
+      true
+      (p/let [env-vars (cloudflare-agent-env-vars env task)
+              _ (<cloudflare-set-env-vars! sandbox env-vars)
+              _ (<cloudflare-start-server! env sandbox task port agent-token)
+              _ (<cloudflare-health! sandbox
+                                     port
+                                     agent-token
+                                     (cloudflare-health-retries env)
+                                     (cloudflare-health-interval-ms env))]
+        (log/debug :agent/cloudflare-ready {:port port})
+        true))))
+
+(defn- <cloudflare-create-session! [sandbox port agent-token session-id payload]
+  (p/let [response (<cloudflare-json-request! sandbox
+                                              port
+                                              "POST"
+                                              (str "/v1/sessions/" session-id)
+                                              {:token agent-token
+                                               :json-body payload})]
+    (assoc response :session-id session-id)))
+
+(defn- <cloudflare-terminate-session! [sandbox port agent-token session-id]
+  (<cloudflare-json-request! sandbox
+                             port
+                             "POST"
+                             (str "/v1/sessions/" session-id "/terminate")
+                             {:token agent-token}))
+
+(defn- <cloudflare-delete-sandbox! [^js sandbox]
+  (cond
+    (js-method sandbox "delete")
+    (->promise (.delete sandbox))
+
+    (js-method sandbox "remove")
+    (->promise (.remove sandbox))
+
+    (js-method sandbox "destroy")
+    (->promise (.destroy sandbox))
+
+    :else
+    (p/resolved nil)))
 
 (defprotocol RuntimeProvider
   (<provision-runtime! [this session-id task])
-  (<open-message-stream! [this runtime message])
+  (<open-events-stream! [this runtime])
+  (<send-message! [this runtime message])
   (<terminate-runtime! [this runtime]))
 
 (defrecord SpritesProvider [env]
@@ -398,9 +697,9 @@
          :agent-token agent-token
          :session-id (:session-id response)})))
 
-  ;; REALTIME streaming endpoint:
+  ;; REALTIME events endpoint:
   ;; We stream stdout bytes of `curl -N ... text/event-stream` run inside sprite.
-  (<open-message-stream! [_ runtime message]
+  (<open-events-stream! [_ runtime]
     (let [name (:sprite-name runtime)
           port (or (:sandbox-port runtime)
                    (parse-int (env-str env "SPRITES_SANDBOX_AGENT_PORT") 2468))
@@ -409,24 +708,173 @@
       (when-not (string? name)
         (throw (ex-info "missing sprite-name on runtime" {:runtime runtime})))
 
-      (let [script (str "curl -sS -N -X POST "
+      (let [script (str "curl -sS -N -X GET "
                         "-H 'accept: text/event-stream' "
+                        (curl-auth-arg agent-token)
+                        " "
+                        (sprite-local-url port (str "/v1/sessions/" (:session-id runtime) "/events/sse")))]
+        (sprites-ws->sse-response! env name ["bash" "-lc" script]))))
+
+  (<send-message! [_ runtime message]
+    (let [name (:sprite-name runtime)
+          port (or (:sandbox-port runtime)
+                   (parse-int (env-str env "SPRITES_SANDBOX_AGENT_PORT") 2468))
+          agent-token (or (:agent-token runtime)
+                          (env-str env "SANDBOX_AGENT_TOKEN"))]
+      (when-not (string? name)
+        (throw (ex-info "missing sprite-name on runtime" {:runtime runtime})))
+      (let [script (str "curl -fsS -X POST "
                         "-H 'content-type: application/json' "
                         (curl-auth-arg agent-token)
                         " "
-                        (curl-json-arg {:message (:message message)})
+                        (curl-json-arg (message-payload message))
                         " "
-                        (sprite-local-url port (str "/v1/sessions/" (:session-id runtime) "/messages/stream")))]
-        (sprites-ws->sse-response! env name ["bash" "-lc" script]))))
+                        (sprite-local-url port (str "/v1/sessions/" (:session-id runtime) "/messages"))
+                        " >/dev/null")]
+        (p/let [_ (sprites-exec-post! env name ["bash" "-lc" script])]
+          true))))
 
   (<terminate-runtime! [_ runtime]
     (if-not (string? (:sprite-name runtime))
       (p/resolved nil)
       (sprites-delete! env (:sprite-name runtime)))))
 
-(defn create-provider [^js env _kind]
-  (->SpritesProvider env))
+(defrecord LocalDevProvider [env]
+  RuntimeProvider
+
+  (<provision-runtime! [_ session-id task]
+    (let [base-url (local-dev-base-url env nil)
+          agent-token (env-str env "SANDBOX_AGENT_TOKEN")
+          payload (session-payload task)]
+      (p/let [response (sandbox/<create-session base-url agent-token session-id payload)]
+        {:provider "local-dev"
+         :base-url base-url
+         :agent-token agent-token
+         :session-id (:session-id response)})))
+
+  (<open-events-stream! [_ runtime]
+    (let [base-url (local-dev-base-url env runtime)
+          agent-token (local-dev-token env runtime)]
+      (sandbox/<open-events-stream base-url agent-token (:session-id runtime))))
+
+  (<send-message! [_ runtime message]
+    (let [base-url (local-dev-base-url env runtime)
+          agent-token (local-dev-token env runtime)]
+      (sandbox/<send-message base-url agent-token (:session-id runtime) message)))
+
+  (<terminate-runtime! [_ runtime]
+    (let [base-url (local-dev-base-url env runtime)
+          agent-token (local-dev-token env runtime)
+          session-id (:session-id runtime)]
+      (if-not (string? session-id)
+        (p/resolved nil)
+        (p/catch
+         (sandbox/<terminate-session base-url agent-token session-id)
+         (fn [_] nil))))))
+
+(defrecord CloudflareProvider [env]
+  RuntimeProvider
+
+  (<provision-runtime! [_ session-id task]
+    (let [sandbox-id (cloudflare-sandbox-name env session-id)
+          sandbox (cloudflare-sandbox env sandbox-id)
+          port (cloudflare-agent-port env)
+          agent-token (env-str env "SANDBOX_AGENT_TOKEN")
+          payload (session-payload task)]
+      (log/debug :agent/cloudflare-provision-start
+                 {:session-id session-id
+                  :sandbox-id sandbox-id
+                  :port port
+                  :token? (boolean (string? agent-token))})
+      (p/let [_ (<cloudflare-ensure-running! env sandbox task port agent-token)
+              _ (<cloudflare-clone-repo! env sandbox session-id task)
+              response (<cloudflare-create-session! sandbox port agent-token session-id payload)]
+        (log/debug :agent/cloudflare-provisioned
+                   {:session-id session-id
+                    :sandbox-id sandbox-id
+                    :runtime-session-id (:session-id response)})
+        {:provider "cloudflare"
+         :sandbox-id sandbox-id
+         :sandbox-name sandbox-id
+         :sandbox-port port
+         :agent-token agent-token
+         :session-id (:session-id response)})))
+
+  (<open-events-stream! [_ runtime]
+    (let [sandbox-id (:sandbox-id runtime)
+          session-id (:session-id runtime)
+          port (or (:sandbox-port runtime) (cloudflare-agent-port env))
+          agent-token (or (:agent-token runtime)
+                          (env-str env "SANDBOX_AGENT_TOKEN"))]
+      (log/debug :agent/cloudflare-open-events-stream
+                 {:session-id session-id
+                  :sandbox-id sandbox-id
+                  :port port
+                  :token? (boolean (string? agent-token))})
+      (when-not (string? sandbox-id)
+        (throw (ex-info "missing sandbox-id on runtime" {:runtime runtime})))
+      (when-not (string? session-id)
+        (throw (ex-info "missing runtime session-id on runtime" {:runtime runtime})))
+      (let [sandbox (cloudflare-sandbox env sandbox-id)]
+        (<cloudflare-events-stream-request! sandbox port agent-token session-id))))
+
+  (<send-message! [_ runtime message]
+    (let [sandbox-id (:sandbox-id runtime)
+          session-id (:session-id runtime)
+          port (or (:sandbox-port runtime) (cloudflare-agent-port env))
+          agent-token (or (:agent-token runtime)
+                          (env-str env "SANDBOX_AGENT_TOKEN"))]
+      (log/debug :agent/cloudflare-send-message-request
+                 {:session-id session-id
+                  :sandbox-id sandbox-id
+                  :port port
+                  :token? (boolean (string? agent-token))
+                  :message-len (count (or (:message message) ""))})
+      (when-not (string? sandbox-id)
+        (throw (ex-info "missing sandbox-id on runtime" {:runtime runtime})))
+      (when-not (string? session-id)
+        (throw (ex-info "missing runtime session-id on runtime" {:runtime runtime})))
+      (let [sandbox (cloudflare-sandbox env sandbox-id)]
+        (<cloudflare-send-message! sandbox port agent-token session-id message))))
+
+  (<terminate-runtime! [_ runtime]
+    (let [sandbox-id (:sandbox-id runtime)
+          session-id (:session-id runtime)]
+      (log/debug :agent/cloudflare-terminate
+                 {:session-id session-id
+                  :sandbox-id sandbox-id})
+      (if-not (string? sandbox-id)
+        (p/resolved nil)
+        (let [sandbox (cloudflare-sandbox env sandbox-id)
+              port (or (:sandbox-port runtime) (cloudflare-agent-port env))
+              agent-token (or (:agent-token runtime)
+                              (env-str env "SANDBOX_AGENT_TOKEN"))]
+          (p/catch
+           (p/let [_ (when (string? session-id)
+                       (p/catch
+                        (<cloudflare-terminate-session! sandbox port agent-token session-id)
+                        (fn [_] nil)))
+                   _ (p/catch (<cloudflare-delete-sandbox! sandbox)
+                              (fn [_] nil))]
+             nil)
+           (fn [_] nil)))))))
+
+(defn provider-id [provider]
+  (cond
+    (instance? SpritesProvider provider) "sprites"
+    (instance? LocalDevProvider provider) "local-dev"
+    (instance? CloudflareProvider provider) "cloudflare"
+    :else nil))
+
+(defn create-provider [^js env kind]
+  (log/debug :agent/runtime-provider-selected
+             {:requested kind
+              :resolved (known-provider-kind kind)})
+  (case (known-provider-kind kind)
+    "local-dev" (->LocalDevProvider env)
+    "cloudflare" (->CloudflareProvider env)
+    (->SpritesProvider env)))
 
 (defn resolve-provider
-  [^js env _runtime]
-  (create-provider env "sprites"))
+  [^js env runtime]
+  (create-provider env (runtime-provider-kind env runtime)))

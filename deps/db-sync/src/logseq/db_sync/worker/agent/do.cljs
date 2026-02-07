@@ -73,6 +73,7 @@
   (contains? #{"completed" "failed" "canceled"} status))
 
 (defn- <terminate-runtime! [^js self runtime]
+  (set! (.-runtime-events-stream self) nil)
   (if-not (map? runtime)
     (p/resolved nil)
     (let [provider (runtime-provider/resolve-provider (.-env self) runtime)]
@@ -102,9 +103,9 @@
           (when (terminal-status? (:status current-session))
             (<terminate-runtime! self (:runtime current-session))))))))
 
-(defn- <consume-message-stream! [^js self session-id runtime message]
+(defn- <consume-events-stream! [^js self session-id runtime]
   (let [provider (runtime-provider/resolve-provider (.-env self) runtime)]
-    (p/let [resp (runtime-provider/<open-message-stream! provider runtime message)
+    (p/let [resp (runtime-provider/<open-events-stream! provider runtime)
             reader (.getReader (.-body resp))]
       (let [decoder (js/TextDecoder.)
             buffer (atom "")]
@@ -130,6 +131,25 @@
                         (step!)))))]
           (step!))))))
 
+(defn- start-runtime-events-stream! [^js self session-id runtime]
+  (when (and (map? runtime)
+             (string? (:session-id runtime))
+             (nil? (.-runtime-events-stream self)))
+    (let [stream-task (-> (<consume-events-stream! self session-id runtime)
+                          (.catch (fn [error]
+                                    (log/error :agent/runtime-events-stream-error
+                                               {:session-id session-id
+                                                :runtime-session-id (:session-id runtime)
+                                                :error error})
+                                    (<append-event! self {:type "agent.runtime.error"
+                                                          :data {:session-id session-id
+                                                                 :message (str error)}
+                                                          :ts (common/now-ms)}))))]
+      (set! (.-runtime-events-stream self)
+            (.finally stream-task
+                      (fn []
+                        (set! (.-runtime-events-stream self) nil)))))))
+
 (defn- <transition! [^js self to-status event-type data]
   (p/let [session (<get-session self)]
     (cond
@@ -146,7 +166,8 @@
           (http/json-response :sessions/pause {:ok true}))))))
 
 (defn- <provision-runtime! [^js self task session-id]
-  (let [provider (runtime-provider/resolve-provider (.-env self) nil)]
+  (let [provider (runtime-provider/resolve-provider (.-env self) nil)
+        provider-kind (runtime-provider/provider-id provider)]
     (p/let [runtime (runtime-provider/<provision-runtime! provider session-id task)
             session (<get-session self)
             events (<get-events self)]
@@ -154,7 +175,7 @@
         (nil? runtime)
         (throw (ex-info "runtime provisioning returned nil"
                         {:session-id session-id
-                         :provider "sprites"}))
+                         :provider provider-kind}))
 
         (nil? session)
         nil
@@ -165,10 +186,13 @@
                                                                             :data {:provider (:provider runtime)
                                                                                    :runtime-session-id (:session-id runtime)
                                                                                    :sandbox-id (:sandbox-id runtime)
+                                                                                   :sandbox-name (:sandbox-name runtime)
                                                                                    :sprite-name (:sprite-name runtime)}
                                                                             :ts (common/now-ms)})]
           (p/let [_ (<put-session! self session)
-                  _ (<put-events! self events)]
+                  _ (<put-events! self events)
+                  _ (when-not (terminal-status? (:status session))
+                      (start-runtime-events-stream! self (:id session) runtime))]
             runtime))))))
 
 (defn- handle-init [^js self request]
@@ -179,6 +203,9 @@
         (p/let [_ (when-not (string? runtime-id)
                     (<provision-runtime! self (:task existing) session-id))
                 session (<get-session self)]
+          (when (and (map? (:runtime session))
+                     (not (terminal-status? (:status session))))
+            (start-runtime-events-stream! self session-id (:runtime session)))
           (http/json-response :sessions/create
                               {:session-id session-id
                                :status (:status session)
@@ -249,7 +276,7 @@
 
                  :else
                  (p/let [res (<append-event! self {:type "audit.log"
-                                                   :data {:message message
+                                                   :data {:event "user-message"
                                                           :kind (:kind body)
                                                           :by user-id}})
                          current-session (<get-session self)]
@@ -268,22 +295,27 @@
                          (http/json-response :sessions/message {:ok true})))
 
                      :else
-                     (let [runtime (:runtime current-session)]
-                       (p/let [_ (when (and runtime (string? (:session-id runtime)))
-                                   (-> (<consume-message-stream! self
-                                                                 (:id current-session)
-                                                                 runtime
-                                                                 {:message message
-                                                                  :kind (:kind body)})
-                                       (.catch (fn [error]
-                                                 (log/error :agent/runtime-stream-error
-                                                            {:session-id (:id current-session)
-                                                             :runtime-session-id (:session-id runtime)
-                                                             :error error})
-                                                 (<append-event! self {:type "agent.runtime.error"
-                                                                       :data {:session-id (:id current-session)
-                                                                              :message (str error)}
-                                                                       :ts (common/now-ms)})))))]
+                     (let [runtime (:runtime current-session)
+                           provider (when runtime
+                                      (runtime-provider/resolve-provider (.-env self) runtime))]
+                       (p/let [_ (when (and runtime
+                                            provider
+                                            (string? (:session-id runtime)))
+                                   (do
+                                     (start-runtime-events-stream! self (:id current-session) runtime)
+                                     (-> (runtime-provider/<send-message! provider
+                                                                          runtime
+                                                                          {:message message
+                                                                           :kind (:kind body)})
+                                         (.catch (fn [error]
+                                                   (log/error :agent/runtime-message-error
+                                                              {:session-id (:id current-session)
+                                                               :runtime-session-id (:session-id runtime)
+                                                               :error error})
+                                                   (<append-event! self {:type "agent.runtime.error"
+                                                                         :data {:session-id (:id current-session)
+                                                                                :message (str error)}
+                                                                         :ts (common/now-ms)}))))))]
                          (http/json-response :sessions/message {:ok true})))))))))))
 
 (defn- handle-cancel [^js self request]
@@ -305,16 +337,23 @@
     (if (nil? current-session)
       nil
       (let [[orders next-session] (session/drain-orders current-session)
-            runtime (:runtime current-session)]
+            runtime (:runtime current-session)
+            provider (when runtime
+                       (runtime-provider/resolve-provider (.-env self) runtime))]
         (p/let [_ (<save-session! self next-session)
-                _ (when (and runtime (string? (:session-id runtime)))
+                _ (when (and runtime
+                             provider
+                             (string? (:session-id runtime)))
+                    (start-runtime-events-stream! self (:id current-session) runtime))
+                _ (when (and runtime
+                             provider
+                             (string? (:session-id runtime)))
                     (p/all
                      (map (fn [order]
-                            (<consume-message-stream! self
-                                                      (:id current-session)
-                                                      runtime
-                                                      {:message (:message order)
-                                                       :kind (:kind order)}))
+                            (runtime-provider/<send-message! provider
+                                                             runtime
+                                                             {:message (:message order)
+                                                              :kind (:kind order)}))
                           orders)))]
           (count orders))))))
 

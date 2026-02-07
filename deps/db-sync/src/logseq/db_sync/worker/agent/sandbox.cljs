@@ -18,6 +18,12 @@
 (defn messages-stream-url [base session-id]
   (str (session-url base session-id) "/messages/stream"))
 
+(defn events-sse-url [base session-id]
+  (str (session-url base session-id) "/events/sse"))
+
+(defn terminate-url [base session-id]
+  (str (session-url base session-id) "/terminate"))
+
 (def ^:private agent-aliases
   {"claude-code" "claude"
    "claude_code" "claude"
@@ -75,3 +81,47 @@
         (throw (ex-info "sandbox open-message-stream failed"
                         {:status status
                          :session-id session-id}))))))
+
+(defn <open-events-stream
+  [base token session-id]
+  (let [headers (js/Headers.)
+        _ (.set headers "accept" "text/event-stream")
+        _ (when (string? token) (.set headers "authorization" (str "Bearer " token)))
+        req (json-request (events-sse-url base session-id) "GET" headers nil)]
+    (p/let [resp (js/fetch req)
+            status (.-status resp)]
+      (if (<= 200 status 299)
+        resp
+        (throw (ex-info "sandbox open-events-stream failed"
+                        {:status status
+                         :session-id session-id}))))))
+
+(defn <send-message
+  [base token session-id message]
+  (let [headers (js/Headers.)
+        _ (.set headers "content-type" "application/json")
+        _ (when (string? token) (.set headers "authorization" (str "Bearer " token)))
+        body (cond-> {:message (:message message)}
+               (string? (:kind message)) (assoc :kind (:kind message)))
+        req (json-request (messages-url base session-id) "POST" headers body)]
+    (p/let [resp (js/fetch req)
+            status (.-status resp)]
+      (if (<= 200 status 299)
+        true
+        (throw (ex-info "sandbox send-message failed"
+                        {:status status
+                         :session-id session-id}))))))
+
+(defn <terminate-session
+  [base token session-id]
+  (let [headers (js/Headers.)
+        _ (.set headers "content-type" "application/json")
+        _ (when (string? token) (.set headers "authorization" (str "Bearer " token)))
+        req (json-request (terminate-url base session-id) "POST" headers nil)]
+    (p/let [resp (js/fetch req)
+            status (.-status resp)]
+      (when-not (<= 200 status 299)
+        (throw (ex-info "sandbox terminate-session failed"
+                        {:status status
+                         :session-id session-id})))
+      true)))
