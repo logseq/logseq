@@ -110,6 +110,8 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import * as uniqolor from 'uniqolor'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { AgentChatBox } from '@/components/ai-elements/agent-chat-box'
+import { AgentChatPromptInput } from '@/components/ai-elements/agent-chat-prompt-input'
 import { setLocale, setTranslate } from './i18n'
 import * as amplifyAuth from './amplify'
 
@@ -239,6 +241,8 @@ export const LSUI = {
   TabsContent,
   TabsList,
   TabsTrigger,
+  AgentChatBox,
+  AgentChatPromptInput,
 }
 
 export const LSUtils = {
@@ -379,4 +383,6 @@ export {
   TabsContent,
   TabsList,
   TabsTrigger,
+  AgentChatBox,
+  AgentChatPromptInput,
 }

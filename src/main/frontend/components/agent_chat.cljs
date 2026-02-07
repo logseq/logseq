@@ -1,25 +1,54 @@
 (ns frontend.components.agent-chat
-  (:require [clojure.string :as string]
+  (:require ["@ai-sdk/react" :refer [useChat]]
+            [cljs-bean.core :as bean]
+            [clojure.string :as string]
             [frontend.handler.agent :as agent-handler]
+            [frontend.handler.agent-chat-transport :as chat-transport]
             [frontend.handler.db-based.sync :as db-sync]
             [frontend.state :as state]
-            [frontend.util :as util]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [rum.core :as rum]))
 
+(defn- normalized-text
+  [value]
+  (when (string? value)
+    (let [value (string/trim value)]
+      (when-not (string/blank? value)
+        value))))
+
+(defn- text-from-content-parts
+  [parts]
+  (when (seq parts)
+    (some->> parts
+             (keep (fn [part]
+                     (when (= "text" (:type part))
+                       (or (:text part) (:content part)))))
+             (apply str)
+             normalized-text)))
+
+(defn- normalize-message-part
+  [part]
+  (when (map? part)
+    (if (= "text" (:type part))
+      (when-let [text (normalized-text (or (:text part) (:content part)))]
+        {:type "text"
+         :text text})
+      part)))
+
 (defn- ui-message-text
   [message]
-  (let [parts (:parts message)]
-    (when (seq parts)
-      (let [text (->> parts
-                      (keep (fn [part]
-                              (when (= "text" (:type part))
-                                (:text part))))
-                      (apply str)
-                      (string/trim))]
-        (when-not (string/blank? text)
-          text)))))
+  (or (text-from-content-parts (:parts message))
+      (let [content (:content message)]
+        (cond
+          (string? content)
+          (normalized-text content)
+
+          (seq content)
+          (text-from-content-parts content)
+
+          :else nil))
+      (normalized-text (:text message))))
 
 (defn- normalize-role [role]
   (cond
@@ -169,11 +198,16 @@
 (defn- message->chat-message
   [message]
   (let [role (normalize-role (:role message))
-        text (ui-message-text message)]
-    (when (seq text)
-      {:id (:id message)
+        parts (vec (keep normalize-message-part (:parts message)))
+        fallback-text (ui-message-text message)
+        resolved-parts (cond
+                         (seq parts) parts
+                         (string? fallback-text) [{:type "text" :text fallback-text}]
+                         :else [])]
+    (when (seq resolved-parts)
+      {:id (or (:id message) (str "message-" (random-uuid)))
        :role role
-       :text text})))
+       :parts resolved-parts})))
 
 (rum/defc agent-chat-dialog
   [block]
@@ -184,36 +218,38 @@
         base (db-sync/http-base)
         agent-value (:logseq.property/agent block)
         agent-label (agent-title agent-value)
-        messages (session->messages session block)
-        status (:status session)
-        error (:stream-error session)
+        session-messages (session->messages session block)
+        [transport] (rum/use-state
+                     (fn []
+                       (chat-transport/make-transport {:base base
+                                                       :session-id session-id})))
+        chat (useChat #js {:id session-id
+                           :transport transport
+                           :messages (clj->js session-messages)})
+        set-messages! (.-setMessages chat)
+        ui-messages (js->clj (.-messages chat) :keywordize-keys true)
+        chat-status (some-> (.-status chat) str)
+        chat-error (let [e (.-error chat)]
+                     (when e
+                       (or (.-message e)
+                           (str e))))
+        status (or chat-status (:status session))
+        error (or chat-error (:stream-error session))
         session-started? (boolean (:session-id session))
-        chat-messages (->> messages
+        chat-messages (->> ui-messages
                            (map message->chat-message)
                            (remove nil?))
-        *list-ref (rum/use-ref nil)
-        [at-bottom? set-at-bottom!] (rum/use-state true)
         [draft set-draft!] (rum/use-state "")
         trimmed-draft (string/trim (or draft ""))
-        scroll-to-bottom! (fn []
-                            (when-let [el (rum/deref *list-ref)]
-                              (set! (.-scrollTop el) (.-scrollHeight el))))
-        handle-scroll! (fn []
-                         (when-let [el (rum/deref *list-ref)]
-                           (let [distance (- (.-scrollHeight el)
-                                             (.-scrollTop el)
-                                             (.-clientHeight el))]
-                             (set-at-bottom! (<= distance 24)))))
+        busy? (contains? #{"submitted" "streaming"} chat-status)
+        input-disabled? (or (not session-started?) (not (agent-handler/task-ready? block)))
+        can-send? (and (not input-disabled?)
+                       (not (string/blank? trimmed-draft))
+                       (not busy?))
         send-message! (fn []
-                        (when (and base session-id (not (string/blank? trimmed-draft)))
+                        (when (and can-send? base session-id)
                           (set-draft! "")
-                          (-> (db-sync/fetch-json (str base "/sessions/" session-id "/messages")
-                                                  {:method "POST"
-                                                   :headers {"content-type" "application/json"}
-                                                   :body (js/JSON.stringify
-                                                          (clj->js {:message trimmed-draft
-                                                                    :kind "user"}))}
-                                                  {:response-schema :sessions/message})
+                          (-> (.sendMessage chat #js {:text trimmed-draft})
                               (.catch (fn [_] nil)))))]
     (hooks/use-effect!
      (fn []
@@ -223,72 +259,50 @@
      [block-uuid (:logseq.property/project block) (:logseq.property/agent block)])
     (hooks/use-effect!
      (fn []
+       (when (and (fn? set-messages!)
+                  (seq session-messages)
+                  (> (count session-messages) (count ui-messages)))
+         (set-messages! (clj->js session-messages)))
+       nil)
+     [session-id (count session-messages)])
+    (hooks/use-effect!
+     (fn []
        (when (and base session-id session-started?)
          (agent-handler/<fetch-events! block))
        nil)
      [session-id session-started?])
-    (hooks/use-effect!
-     (fn []
-       (js/setTimeout scroll-to-bottom! 0)
-       nil)
-     [(count chat-messages)])
     [:div.max-w-full.flex.flex-col
      {:style {:height "70vh" :overflow "hidden"}}
      [:div.flex.items-start.justify-between.gap-3
       [:div.flex.flex-col.gap-1
        [:div.text-lg.font-medium (or agent-label "Agent")]
-       (when (string? status)
-         [:div.text-xs.opacity-60 (string/capitalize status)])
+       [:div.flex.items-center.gap-2.text-xs.opacity-75
+        (when (string? status)
+          [:div.rounded-md.bg-muted.px-2.py-0.5.font-medium
+           (string/capitalize status)])
+        (when busy?
+          [:div.inline-flex.items-center.gap-1
+           [:span.inline-block.h-1.5.w-1.5.animate-pulse.rounded-full.bg-emerald-500]
+           "Streaming"])]
        (when (string? error)
          [:div.text-xs.text-red-500 error])]]
-     [:div.mt-4.flex-1.relative.flex.flex-col
+     [:div.mt-4.relative.flex.flex-1.flex-col.overflow-hidden.rounded-xl.border.border-border.bg-gradient-to-b.from-background.to-muted
       {:style {:minHeight 0}}
-      [:div.flex.flex-col.gap-3.overflow-auto.pr-1
-       {:ref *list-ref
-        :on-scroll handle-scroll!
-        :style {:minHeight 0 :flex 1}}
-       (if (seq chat-messages)
-         (for [{:keys [id role text]} chat-messages
-               :let [from-user? (= "user" (normalize-role role))
-                     bubble-class (if from-user?
-                                    "bg-accent text-accent-foreground"
-                                    "bg-secondary text-secondary-foreground")]]
-           [:div.flex {:key id :class (if from-user? "justify-end" "justify-start")}
-            [:div.rounded-lg.px-3.py-2.text-sm
-             {:class bubble-class
-              :style {:maxWidth "85%"}}
-             [:div.text-xs.opacity-60.mb-1 (if from-user? "You" (or agent-label "Assistant"))]
-             [:div.whitespace-pre-wrap text]]])
-         [:div.text-sm.opacity-60 "No messages yet."])]
-      (when (not at-bottom?)
-        [:div.absolute.bottom-3.right-3
-         (shui/button
-          {:size :xs
-           :variant :secondary
-           :title "Scroll to bottom"
-           :on-click (fn []
-                       (scroll-to-bottom!)
-                       (set-at-bottom! true))}
-          "↓")])]
-     [:div.mt-4.flex.gap-2.items-end
-      [:textarea.flex-1.rounded-md.border.border-input.bg-transparent.px-3.py-2.text-sm
-       {:placeholder "Send a message..."
-        :style {:minHeight "88px"}
-        :value draft
-        :disabled (or (not session-started?) (not (agent-handler/task-ready? block)))
-        :on-change (fn [e] (set-draft! (util/evalue e)))
-        :on-key-down (fn [e]
-                       (when (and (= "Enter" (.-key e))
-                                  (or (.-metaKey e) (.-ctrlKey e)))
-                         (.preventDefault e)
-                         (send-message!)))}]
-      (shui/button
-       {:size :sm
-        :disabled (or (not session-started?)
-                      (string/blank? trimmed-draft)
-                      (not (agent-handler/task-ready? block)))
-        :on-click (fn [] (send-message!))}
-       "Send")]]))
+      (shui/agent-chat-box
+       {:messages (bean/->js chat-messages)
+        :agent-label agent-label
+        :class "h-full"
+        :content-class-name "gap-3 px-2 py-2 sm:px-3"})]
+     (shui/agent-chat-prompt-input
+      {:value draft
+       :on-value-change set-draft!
+       :on-send send-message!
+       :disabled input-disabled?
+       :busy busy?
+       :placeholder (if input-disabled?
+                      "Start the session to chat..."
+                      "Message the agent...")
+       :hint "Enter to send, Shift+Enter for newline"})]))
 
 (defn open-agent-chat-dialog!
   [block]
