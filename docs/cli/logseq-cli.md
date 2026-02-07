@@ -33,7 +33,9 @@ logseq graph list
 
 Optional configuration file: `~/logseq/cli.edn`
 
-Default data dir: `~/logseq/cli-graphs`.
+Default data dir: `~/logseq/graphs`.
+
+Graph directories on disk are stored as user-facing graph names (for example, `demo/`), not `logseq_db_` prefixed repo identifiers.
 
 Migration note: If you previously used `~/.logseq/cli-graphs` or `~/.logseq/cli.edn`, pass `--data-dir` or `--config` to continue using those locations.
 

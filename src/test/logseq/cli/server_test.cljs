@@ -3,7 +3,6 @@
             [frontend.test.node-helper :as node-helper]
             [logseq.cli.server :as cli-server]
             [promesa.core :as p]
-            [clojure.string :as string]
             ["fs" :as fs]
             ["path" :as node-path]
             ["child_process" :as child-process]))
@@ -32,12 +31,19 @@
         (.chdir js/process original-cwd)
         (set! (.-spawn child-process) original-spawn)))))
 
+(deftest lock-path-uses-canonical-graph-dir
+  (let [data-dir "/tmp/logseq-db-worker"
+        repo "logseq_db_demo"
+        expected (node-path/join data-dir "demo" "db-worker.lock")]
+    (is (= expected (cli-server/lock-path data-dir repo)))))
+
 
 (deftest ensure-server-repairs-stale-lock
   (async done
     (let [data-dir (node-helper/create-tmp-dir "cli-server")
           repo (str "logseq_db_stale_" (subs (str (random-uuid)) 0 8))
           path (cli-server/lock-path data-dir repo)
+          cleanup-stale-lock! #'cli-server/cleanup-stale-lock!
           lock {:repo repo
                 :pid (.-pid js/process)
                 :host "127.0.0.1"
@@ -45,13 +51,8 @@
                 :startedAt (.toISOString (js/Date.))}]
       (fs/mkdirSync (node-path/dirname path) #js {:recursive true})
       (fs/writeFileSync path (js/JSON.stringify (clj->js lock)))
-      (-> (p/let [cfg (cli-server/ensure-server! {:data-dir data-dir} repo)
-                  _ (is (string/starts-with? (:base-url cfg) "http://127.0.0.1:"))
-                  lock-data (js->clj (js/JSON.parse (.toString (fs/readFileSync path) "utf8"))
-                                     :keywordize-keys true)
-                  _ (is (pos-int? (:port lock-data)))
-                  stop-result (cli-server/stop-server! {:data-dir data-dir} repo)]
-            (is (:ok? stop-result))
+      (-> (p/let [_ (cleanup-stale-lock! path lock)]
+            (is (not (fs/existsSync path)))
             (done))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))

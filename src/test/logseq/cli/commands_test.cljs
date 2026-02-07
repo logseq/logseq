@@ -66,6 +66,7 @@
       (is (string/includes? plain-summary "show"))
       (is (string/includes? plain-summary "graph"))
       (is (string/includes? plain-summary "server"))
+      (is (string/includes? plain-summary "Path to db-worker data dir (default ~/logseq/graphs)"))
       (is (contains-bold? summary "list page"))
       (is (contains-bold? summary "list tag"))
       (is (contains-bold? summary "list property"))
@@ -1305,6 +1306,7 @@
   (async done
          (let [ops* (atom nil)
                calls* (atom [])
+               orig-list-graphs cli-server/list-graphs
                orig-ensure-server! cli-server/ensure-server!
                orig-resolve-tags add-command/resolve-tags
                orig-resolve-properties add-command/resolve-properties
@@ -1319,6 +1321,7 @@
                        :remove-tags [:tag/old]
                        :update-properties {:logseq.property/deadline "2026-01-25T12:00:00Z"}
                        :remove-properties [:logseq.property/publishing-public?]}]
+           (set! cli-server/list-graphs (fn [_] ["demo"]))
            (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
            (set! add-command/resolve-tags (fn [_ _ tags]
                                             (p/resolved (cond
@@ -1356,6 +1359,7 @@
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e " calls: " @calls*))))
                (p/finally (fn []
+                            (set! cli-server/list-graphs orig-list-graphs)
                             (set! cli-server/ensure-server! orig-ensure-server!)
                             (set! add-command/resolve-tags orig-resolve-tags)
                             (set! add-command/resolve-properties orig-resolve-properties)
