@@ -6,7 +6,7 @@
             [cljs.test :refer [deftest is async]]
             [clojure.string :as string]
             [frontend.test.node-helper :as node-helper]
-            [frontend.worker-common.util :as worker-util]
+            [frontend.worker.db-worker-node-lock :as db-lock]
             [logseq.cli.command.core :as command-core]
             [logseq.cli.command.show :as show-command]
             [logseq.cli.config :as cli-config]
@@ -220,7 +220,7 @@
          (let [data-dir (node-helper/create-tmp-dir "db-worker-graph-readonly")
                repo "readonly-graph"
                repo-id (command-core/resolve-repo repo)
-               repo-dir (node-path/join data-dir (worker-util/encode-graph-dir-name repo-id))]
+               repo-dir (db-lock/repo-dir data-dir repo-id)]
            (fs/mkdirSync repo-dir #js {:recursive true})
            (fs/chmodSync repo-dir 365)
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
@@ -550,7 +550,8 @@
 (deftest test-cli-show-properties-human-output
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-show-properties")
-               repo "show-properties-graph"]
+               repo "show-properties-graph"
+               repo-id (command-core/resolve-repo repo)]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
                        _ (run-cli ["graph" "create" "--repo" repo] data-dir cfg-path)
@@ -567,29 +568,30 @@
                                                                  {:block/title "Sibling block"}]}]}
                        wait-for-property (fn wait-for-property [attempt]
                                            (p/let [value (transport/invoke server :thread-api/q false
-                                                                           [repo ['[:find ?v .
-                                                                                   :in $ ?title ?prop
-                                                                                   :where
-                                                                                   [?b :block/title ?title]
-                                                                                   [?b ?prop ?v]]
-                                                                                  "Property block"
-                                                                                  property-ident]])]
+                                                                           [repo-id
+                                                                            ['[:find ?v .
+                                                                               :in $ ?title ?prop
+                                                                               :where
+                                                                               [?b :block/title ?title]
+                                                                               [?b ?prop ?v]]
+                                                                             "Property block"
+                                                                             property-ident]])]
                                              (if (or value (>= attempt 20))
                                                value
                                                (p/let [_ (p/delay 100)]
                                                  (wait-for-property (inc attempt))))))
                        _ (transport/invoke server :thread-api/apply-outliner-ops false
-                                           [repo [[:batch-import-edn [import-data {}]]] {}])
+                                           [repo-id [[:batch-import-edn [import-data {}]]] {}])
                        _ (p/delay 100)
                        _ (wait-for-property 0)
                        page-name (common-util/page-name-sanity-lc "PropsPage")
                        page-entity (transport/invoke server :thread-api/pull false
-                                                     [repo [:db/id :block/name :block/title] [:block/name page-name]])
+                                                     [repo-id [:db/id :block/name :block/title] [:block/name page-name]])
                        _ (when-not (:db/id page-entity)
                            (throw (ex-info "page not found in server" {:page page-name})))
                        show-config (assoc cfg :output-format :human)
                        show-result (show-command/execute-show {:type :show
-                                                               :repo repo
+                                                               :repo repo-id
                                                                :page page-name}
                                                               show-config)
                        output (get-in show-result [:data :message])

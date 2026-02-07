@@ -6,7 +6,7 @@
             ["path" :as node-path]
             ["ws" :as ws]
             [clojure.string :as string]
-            [frontend.worker-common.util :as worker-util]
+            [frontend.worker.db-worker-node-lock :as db-lock]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]))
@@ -29,8 +29,8 @@
   (string/replace-first path #"^/" ""))
 
 (defn- repo-dir
-  [data-dir pool-name]
-  (node-path/join data-dir pool-name))
+  [data-dir repo]
+  (db-lock/repo-dir data-dir repo))
 
 (defn- pool-path
   [^js pool path]
@@ -57,7 +57,7 @@
             db-dirs (->> entries
                          (filter dir?))
             graph-names (map (fn [dirent]
-                               (worker-util/decode-graph-dir-name (.-name dirent)))
+                               (db-lock/decode-canonical-graph-dir-key (.-name dirent)))
                              db-dirs)]
       (->> graph-names
            (filter some?)
@@ -65,8 +65,7 @@
 
 (defn- db-exists?
   [data-dir graph]
-  (p/let [pool-name (worker-util/encode-graph-dir-name graph)
-          db-path (node-path/join (repo-dir data-dir pool-name) "db.sqlite")]
+  (p/let [db-path (node-path/join (repo-dir data-dir graph) "db.sqlite")]
     (-> (fs/stat db-path)
         (p/then (fn [_] true))
         (p/catch (fn [_] false)))))
@@ -136,26 +135,32 @@
   (fs/readFile (pool-path pool path)))
 
 (defn- import-db
-  [pool path data]
+  [write-guard-fn pool path data]
   (let [full-path (pool-path pool path)
         dir (node-path/dirname full-path)]
-    (p/let [_ (ensure-dir! dir)]
+    (p/let [_ (when write-guard-fn
+                (write-guard-fn))
+            _ (ensure-dir! dir)]
       (fs/writeFile full-path (->buffer data)))))
 
 (defn- remove-vfs!
-  [^js pool]
+  [write-guard-fn ^js pool]
   (when pool
-    (fs/rm (.-repoDir pool) #js {:recursive true :force true})))
+    (p/let [_ (when write-guard-fn
+                (write-guard-fn))]
+      (fs/rm (.-repoDir pool) #js {:recursive true :force true}))))
 
 (defn- read-text!
   [data-dir path]
   (fs/readFile (path-under-data-dir data-dir path) "utf8"))
 
 (defn- write-text!
-  [data-dir path text]
+  [write-guard-fn data-dir path text]
   (let [full-path (path-under-data-dir data-dir path)
         dir (node-path/dirname full-path)]
-    (p/let [_ (ensure-dir! dir)]
+    (p/let [_ (when write-guard-fn
+                (write-guard-fn))
+            _ (ensure-dir! dir)]
       (fs/writeFile full-path text "utf8"))))
 
 (defn- websocket-connect
@@ -187,8 +192,8 @@
                (fs/writeFile kv-path payload "utf8")))}))
 
 (defn node-platform
-  [{:keys [data-dir event-fn]}]
-  (let [data-dir (expand-home (or data-dir "~/logseq/cli-graphs"))
+  [{:keys [data-dir event-fn write-guard-fn]}]
+  (let [data-dir (expand-home (or data-dir "~/logseq/graphs"))
         kv (kv-store data-dir)]
     (p/do!
      (ensure-dir! data-dir)
@@ -203,10 +208,10 @@
                 :resolve-db-path (fn [_repo pool path]
                                    (pool-path pool path))
                 :export-file export-file
-                :import-db import-db
-                :remove-vfs! remove-vfs!
+                :import-db (fn [pool path data] (import-db write-guard-fn pool path data))
+                :remove-vfs! (fn [pool] (remove-vfs! write-guard-fn pool))
                 :read-text! (fn [path] (read-text! data-dir path))
-                :write-text! (fn [path text] (write-text! data-dir path text))}
+                :write-text! (fn [path text] (write-text! write-guard-fn data-dir path text))}
       :kv {:get (:get kv)
            :set! (:set! kv)}
       :broadcast {:post-message! (fn [type payload]

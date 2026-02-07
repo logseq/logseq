@@ -15,6 +15,7 @@
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.db-metadata :as worker-db-metadata]
+            [frontend.worker.db-worker-node-lock :as db-lock]
             [frontend.worker.db.fix :as db-fix]
             [frontend.worker.db.migrate :as db-migrate]
             [frontend.worker.db.validate :as worker-db-validate]
@@ -72,7 +73,7 @@
 (defn- storage-pool-name
   [graph]
   (if (node-runtime?)
-    (worker-util/encode-graph-dir-name graph)
+    (db-lock/repo->graph-dir-key graph)
     (worker-util/get-pool-name graph)))
 
 (defn- get-storage-pool
@@ -350,9 +351,9 @@
   (p/let [storage (platform/storage (platform/current))
           graph-names ((:list-graphs storage))]
     (p/all (map (fn [graph-name]
-                  (p/let [repo (str sqlite-util/db-version-prefix graph-name)
-                          metadata (worker-db-metadata/<get repo)]
-                    {:name graph-name
+                (p/let [repo (str sqlite-util/db-version-prefix graph-name)
+                        metadata (worker-db-metadata/<get repo)]
+                    {:name repo
                      :metadata (edn/read-string metadata)}))
                 graph-names))))
 

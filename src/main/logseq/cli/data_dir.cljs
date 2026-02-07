@@ -5,7 +5,7 @@
             ["path" :as node-path]
             [clojure.string :as string]))
 
-(def ^:private default-data-dir "~/logseq/cli-graphs")
+(def ^:private default-data-dir "~/logseq/graphs")
 
 (defn- expand-home
   [path]

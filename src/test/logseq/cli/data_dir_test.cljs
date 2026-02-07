@@ -42,7 +42,7 @@
             (is (= (node-path/resolve target) (:path data)))))))))
 
 (deftest normalize-data-dir-default
-  (testing "defaults to ~/logseq/cli-graphs"
-    (let [expected (node-path/resolve (node-path/join (.homedir os) "logseq" "cli-graphs"))
+  (testing "defaults to ~/logseq/graphs"
+    (let [expected (node-path/resolve (node-path/join (.homedir os) "logseq" "graphs"))
           resolved (data-dir/normalize-data-dir nil)]
       (is (= expected resolved)))))
