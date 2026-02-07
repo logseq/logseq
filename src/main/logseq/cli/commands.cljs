@@ -4,6 +4,7 @@
             [clojure.string :as string]
             [logseq.cli.command.add :as add-command]
             [logseq.cli.command.core :as command-core]
+            [logseq.cli.command.doctor :as doctor-command]
             [logseq.cli.command.graph :as graph-command]
             [logseq.cli.command.list :as list-command]
             [logseq.cli.command.query :as query-command]
@@ -101,7 +102,8 @@
                remove-command/entries
                update-command/entries
                query-command/entries
-               show-command/entries)))
+               show-command/entries
+               doctor-command/entries)))
 
 ;; Global option parsing lives in logseq.cli.command.core.
 
@@ -375,6 +377,9 @@
         :show
         (show-command/build-action options repo)
 
+        :doctor
+        (doctor-command/build-action)
+
         {:ok? false
          :error {:code :unknown-command
                  :message (str "unknown command: " command)}}))))
@@ -410,6 +415,7 @@
                          :query (query-command/execute-query action config)
                          :query-list (query-command/execute-query-list action config)
                          :show (show-command/execute-show action config)
+                         :doctor (doctor-command/execute-doctor action config)
                          :server-list (server-command/execute-list action config)
                          :server-status (server-command/execute-status action config)
                          :server-start (server-command/execute-start action config)
