@@ -11,11 +11,11 @@
             [frontend.common.graph-view :as graph-view]
             [frontend.common.missionary :as c.m]
             [frontend.common.thread-api :as thread-api :refer [def-thread-api]]
+            [frontend.worker.graph-dir :as graph-dir]
             [frontend.worker.platform :as platform]
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.db-metadata :as worker-db-metadata]
-            [frontend.worker.db-worker-node-lock :as db-lock]
             [frontend.worker.db.fix :as db-fix]
             [frontend.worker.db.migrate :as db-migrate]
             [frontend.worker.db.validate :as worker-db-validate]
@@ -73,7 +73,7 @@
 (defn- storage-pool-name
   [graph]
   (if (node-runtime?)
-    (db-lock/repo->graph-dir-key graph)
+    (graph-dir/repo->graph-dir-key graph)
     (worker-util/get-pool-name graph)))
 
 (defn- get-storage-pool
