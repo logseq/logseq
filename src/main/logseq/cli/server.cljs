@@ -51,6 +51,14 @@
   [data-dir repo]
   (node-path/join (repo-dir data-dir repo) "db-worker.lock"))
 
+(defn db-worker-script-path
+  []
+  (node-path/join js/__dirname "../dist/db-worker-node.js"))
+
+(defn db-worker-runtime-script-path
+  []
+  (node-path/join js/__dirname "../static/db-worker-node.js"))
+
 (defn- pid-status
   [pid]
   (when (number? pid)
@@ -205,7 +213,7 @@
 
 (defn- spawn-server!
   [{:keys [repo data-dir]}]
-  (let [script (node-path/join js/__dirname "../dist/db-worker-node.js")
+  (let [script (db-worker-script-path)
         args #js ["--repo" repo "--data-dir" data-dir]
         child (.spawn child-process script args #js {:detached true
                                                      :stdio "ignore"})]
