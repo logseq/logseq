@@ -70,10 +70,17 @@
 
 (defn event-item-id
   [event payload item]
+  (when-not (or (:item_id item)
+                (:item_id payload)
+                (:event-id event))
+    (throw (ex-info
+            "wrong event without id"
+            {:event event
+             :payload payload
+             :item item})))
   (or (:item_id item)
       (:item_id payload)
-      (:event-id event)
-      (str "event-" (random-uuid))))
+      (:event-id event)))
 
 (defn event-item-kind
   [payload item]

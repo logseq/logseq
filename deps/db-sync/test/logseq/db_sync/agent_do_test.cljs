@@ -438,16 +438,16 @@
                            (done))))))))
 
 (deftest messages-persists-when-existing-events-near-storage-limit-test
-  (testing "message append should succeed and keep persisted events under size limits"
+  (testing "message append should retain existing events even with low configured max bytes"
     (async done
            (let [payload (apply str (repeat 1500 "x"))
-                 initial-events (clj->js [{:event-id "e1"
-                                           :session-id "sess-cap"
-                                           :type "agent.runtime"
-                                           :ts 1
-                                           :data {:payload payload}}])
-                 cap (+ (json-size initial-events) 16)
-                 {:keys [self data]} (make-limited-self #js {"AGENT_SESSION_EVENTS_MAX_BYTES" (str cap)} cap)
+                 initial-event {:event-id "e1"
+                                :session-id "sess-cap"
+                                :type "agent.runtime"
+                                :ts 1
+                                :data {:payload payload}}
+                 initial-events (clj->js [initial-event])
+                 {:keys [self data]} (make-limited-self #js {"AGENT_SESSION_EVENTS_MAX_BYTES" "256"} 500000)
                  headers {"content-type" "application/json"
                           "x-user-id" "user-1"}]
              (-> (.put (.-storage self)
@@ -470,21 +470,20 @@
                           (is (= 200 (.-status resp)))
                           (let [stored-events (.get data "events")
                                 events (js->clj stored-events :keywordize-keys true)]
-                            (is (<= (json-size stored-events) cap))
+                            (is (= (:event-id initial-event)
+                                   (:event-id (first events))))
                             (is (= "audit.log" (:type (last events)))))
                           (done)))
                  (.catch (fn [error]
                            (is false (str "unexpected error: " error))
                            (done))))))))
 
-(deftest append-event-truncates-oversized-event-data-test
-  (testing "single oversized event payload should be persisted in bounded form"
+(deftest append-event-persists-oversized-event-data-test
+  (testing "single oversized event payload should be persisted fully without truncation"
     (async done
-           (let [cap 1800
-                 huge-payload (apply str (repeat 5000 "y"))
-                 {:keys [self data]} (make-limited-self #js {"AGENT_SESSION_EVENTS_MAX_BYTES" (str cap)
-                                                             "AGENT_SESSION_EVENT_DATA_MAX_BYTES" "512"
-                                                             "AGENT_SESSION_EVENT_PREVIEW_MAX_CHARS" "120"} cap)]
+           (let [huge-payload (apply str (repeat 5000 "y"))
+                 {:keys [self data]} (make-limited-self #js {"AGENT_SESSION_EVENT_DATA_MAX_BYTES" "512"
+                                                             "AGENT_SESSION_EVENT_PREVIEW_MAX_CHARS" "120"} 500000)]
              (-> (.put (.-storage self)
                        "session"
                        (clj->js {:id "sess-huge"
@@ -506,8 +505,8 @@
                                 events (js->clj stored-events :keywordize-keys true)
                                 first-event (first events)]
                             (is (= "agent.runtime" (:type first-event)))
-                            (is (<= (json-size stored-events) cap))
-                            (is (contains? (:data first-event) :truncated)))
+                            (is (= huge-payload (get-in first-event [:data :output])))
+                            (is (not (contains? (:data first-event) :truncated))))
                           (done)))
                  (.catch (fn [error]
                            (is false (str "unexpected error: " error))
