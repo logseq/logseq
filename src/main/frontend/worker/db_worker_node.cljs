@@ -127,6 +127,16 @@
     :thread-api/get-version
     :thread-api/set-infer-worker-proxy})
 
+(def ^:private write-methods
+  #{:thread-api/transact
+    :thread-api/import-db
+    :thread-api/import-db-base64
+    :thread-api/import-edn
+    :thread-api/unsafe-unlink-db
+    :thread-api/search-upsert-blocks
+    :thread-api/search-delete-blocks
+    :thread-api/search-truncate-tables})
+
 (defn- repo-arg
   [args]
   (cond
@@ -198,17 +208,26 @@
                                                args'))]
                  (if-let [{:keys [status error]} (repo-error method-kw args-for-validation bound-repo)]
                    (send-json! res status {:ok false :error error})
-                   (p/let [result (<invoke! proxy method-str method-kw direct-pass? args')]
+                   (p/let [_ (when (contains? write-methods method-kw)
+                               (let [{:keys [path lock]} @*lock-info]
+                                 (db-lock/assert-lock-owner! path lock)))
+                           result (<invoke! proxy method-str method-kw direct-pass? args')]
                      (send-json! res 200 (if direct-pass?
                                            {:ok true :result result}
                                            {:ok true :resultTransit result})))))
                (p/catch (fn [e]
-                          (log/error :db-worker-node-http-invoke-failed e)
-                          (send-json! res 500 {:ok false
-                                               :error (if (instance? js/Error e)
-                                                        {:message (.-message e)
-                                                         :stack (.-stack e)}
-                                                        e)}))))
+                          (let [data (ex-data e)]
+                            (if (= :repo-locked (:code data))
+                              (send-json! res 409 {:ok false
+                                                   :error {:code :repo-locked
+                                                           :message (or (.-message e) "graph is locked")}})
+                              (do
+                                (log/error :db-worker-node-http-invoke-failed e)
+                                (send-json! res 500 {:ok false
+                                                     :error (if (instance? js/Error e)
+                                                              {:message (.-message e)
+                                                               :stack (.-stack e)}
+                                                              e)})))))))
            (send-text! res 405 "method-not-allowed"))
 
          (= url "/v1/shutdown")
@@ -227,7 +246,7 @@
 (defn- show-help!
   []
   (println (str (style/bold "db-worker-node") " " (style/bold "options") ":"))
-  (println (str "  " (style/bold "--data-dir") " <path>    (default ~/logseq/cli-graphs)"))
+  (println (str "  " (style/bold "--data-dir") " <path>    (default ~/logseq/graphs)"))
   (println (str "  " (style/bold "--repo") " <name>        (required)"))
   (println (str "  " (style/bold "--rtc-ws-url") " <url>   (optional)"))
   (println (str "  " (style/bold "--log-level") " <level>  (default info)"))
@@ -308,9 +327,14 @@
                                  :repo repo
                                  :log-level (keyword (or log-level "info"))})
           (reset! *ready? false)
+          (reset! *lock-info nil)
           (set-main-thread-stub!)
-          (-> (p/let [platform (platform-node/node-platform {:data-dir data-dir
-                                                             :event-fn handle-event!})
+          (-> (p/let [write-guard-fn (fn []
+                                       (let [{:keys [path lock]} @*lock-info]
+                                         (db-lock/assert-lock-owner! path lock)))
+                      platform (platform-node/node-platform {:data-dir data-dir
+                                                             :event-fn handle-event!
+                                                             :write-guard-fn write-guard-fn})
                       proxy (db-core/init-core! platform)
                       _ (<init-worker! proxy (or rtc-ws-url ""))
                       {:keys [path lock]} (db-lock/ensure-lock! {:data-dir data-dir
@@ -348,8 +372,9 @@
                                                  (.close server (fn [] (resolve true))))))]
                                   (reset! *ready? true)
                                   (reset! stop!* stop!)
-                                  (p/let [lock' (assoc (:lock @*lock-info) :port actual-port)
-                                          _ (db-lock/update-lock! (:path @*lock-info) lock')]
+                                  (p/let [lock-with-port (assoc (:lock @*lock-info) :port actual-port)
+                                          updated-lock (db-lock/update-lock! (:path @*lock-info) lock-with-port)
+                                          _ (swap! *lock-info assoc :lock updated-lock)]
                                     (resolve {:host host
                                               :port actual-port
                                               :server server

@@ -75,7 +75,7 @@
   [opts]
   (let [defaults {:timeout-ms 10000
                   :output-format nil
-                  :data-dir "~/logseq/cli-graphs"
+                  :data-dir "~/logseq/graphs"
                   :config-path (default-config-path)}
         env (env-config)
         config-path (or (:config-path opts)
