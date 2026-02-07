@@ -6,6 +6,7 @@
             [clojure.string :as string]
             [frontend.worker-common.util :as worker-util]
             [lambdaisland.glogi :as log]
+            [logseq.common.config :as common-config]
             [promesa.core :as p]))
 
 (defn- expand-home
@@ -16,11 +17,29 @@
 
 (defn resolve-data-dir
   [data-dir]
-  (expand-home (or data-dir "~/logseq/cli-graphs")))
+  (expand-home (or data-dir "~/logseq/graphs")))
+
+(defn repo->graph-dir-key
+  [repo]
+  (when (seq repo)
+    (if (string/starts-with? repo common-config/db-version-prefix)
+      (subs repo (count common-config/db-version-prefix))
+      repo)))
+
+(defn canonical-graph-dir-key?
+  [graph-dir-key]
+  (and (seq graph-dir-key)
+       (not (string/starts-with? graph-dir-key common-config/db-version-prefix))))
+
+(defn decode-canonical-graph-dir-key
+  [encoded-graph-dir-key]
+  (let [decoded (worker-util/decode-graph-dir-name encoded-graph-dir-key)]
+    (when (canonical-graph-dir-key? decoded)
+      decoded)))
 
 (defn repo-dir
   [data-dir repo]
-  (node-path/join data-dir (worker-util/encode-graph-dir-name repo)))
+  (node-path/join data-dir (worker-util/encode-graph-dir-name (repo->graph-dir-key repo))))
 
 (defn lock-path
   [data-dir repo]
@@ -65,6 +84,7 @@
          (let [fd (fs/openSync path "wx")
                lock {:repo repo
                      :pid (.-pid js/process)
+                     :lock-id (str (random-uuid))
                      :host host
                      :port port
                      :startedAt (.toISOString (js/Date.))}]
@@ -82,11 +102,63 @@
   (p/create
    (fn [resolve reject]
      (try
-       (fs/writeFileSync path (js/JSON.stringify (clj->js lock)))
-       (resolve lock)
+       (let [existing (read-lock path)
+             lock' (if existing
+                     (-> lock
+                         (assoc :repo (:repo existing))
+                         (assoc :pid (:pid existing))
+                         (assoc :lock-id (or (:lock-id existing) (:lock-id lock)))
+                         (assoc :startedAt (:startedAt existing)))
+                     lock)]
+         (fs/writeFileSync path (js/JSON.stringify (clj->js lock')))
+         (resolve lock'))
        (catch :default e
          (log/error :db-worker-node-lock-update-failed e)
          (reject e))))))
+
+(defn assert-lock-owner!
+  [path {:keys [repo pid lock-id] :as owner-lock}]
+  (let [lock (read-lock path)]
+    (cond
+      (nil? owner-lock)
+      (throw (ex-info "lock owner missing"
+                      {:code :repo-locked
+                       :path path}))
+
+      (nil? lock)
+      (throw (ex-info "graph lock missing"
+                      {:code :repo-locked
+                       :path path}))
+
+      (not= :alive (pid-status (:pid lock)))
+      (throw (ex-info "graph lock is stale"
+                      {:code :repo-locked
+                       :path path
+                       :lock lock}))
+
+      (not= repo (:repo lock))
+      (throw (ex-info "graph lock repo mismatch"
+                      {:code :repo-locked
+                       :path path
+                       :lock lock
+                       :owner owner-lock}))
+
+      (not= pid (:pid lock))
+      (throw (ex-info "graph lock pid mismatch"
+                      {:code :repo-locked
+                       :path path
+                       :lock lock
+                       :owner owner-lock}))
+
+      (not= lock-id (:lock-id lock))
+      (throw (ex-info "graph lock-id mismatch"
+                      {:code :repo-locked
+                       :path path
+                       :lock lock
+                       :owner owner-lock}))
+
+      :else
+      lock)))
 
 (defn ensure-lock!
   [{:keys [data-dir repo host port]}]
