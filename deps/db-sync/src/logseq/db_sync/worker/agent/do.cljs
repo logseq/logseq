@@ -27,18 +27,63 @@
 (defn- <storage-put! [storage key value]
   (.put storage key (clj->js value)))
 
+(def ^:private events-meta-key "events.meta")
+
+(defn- events-item-key [idx]
+  (str "events." idx))
+
+(defn- valid-events-meta? [meta]
+  (and (map? meta)
+       (integer? (:count meta))
+       (<= 0 (:count meta))))
+
+(defn- <get-events-meta [^js self]
+  (p/let [meta (<storage-get (.-storage self) events-meta-key)]
+    (when (valid-events-meta? meta)
+      meta)))
+
+(defn- <put-events-meta! [^js self count]
+  (<storage-put! (.-storage self) events-meta-key {:count count}))
+
+(defn- <persist-events! [^js self events]
+  (let [events (vec events)
+        storage (.-storage self)]
+    (p/let [_ (p/all (map-indexed (fn [idx event]
+                                    (<storage-put! storage (events-item-key idx) event))
+                                  events))
+            _ (<put-events-meta! self (count events))]
+      nil)))
+
+(defn- <append-event-storage! [^js self event]
+  (p/let [meta (<get-events-meta self)
+          meta (or meta {:count 0})
+          idx (:count meta)
+          _ (<storage-put! (.-storage self) (events-item-key idx) event)
+          _ (<put-events-meta! self (inc idx))]
+    nil))
+
 (defn- <get-session [^js self]
   (<storage-get (.-storage self) "session"))
 
 (defn- <get-events [^js self]
-  (p/let [events (<storage-get (.-storage self) "events")]
-    (vec (or events []))))
+  (p/let [meta (<get-events-meta self)]
+    (if meta
+      (let [count (:count meta)]
+        (if (zero? count)
+          []
+          (p/let [events (p/all (map (fn [idx]
+                                       (<storage-get (.-storage self) (events-item-key idx)))
+                                     (range count)))]
+            (->> events
+                 (remove nil?)
+                 vec))))
+      [])))
 
 (defn- <put-session! [^js self session]
   (<storage-put! (.-storage self) "session" session))
 
 (defn- <put-events! [^js self events]
-  (<storage-put! (.-storage self) "events" (vec events)))
+  (<persist-events! self events))
 
 (defn- <save-session! [^js self session]
   (p/let [_ (<put-session! self session)]
@@ -60,13 +105,12 @@
                                 (.delete streams key)))))))))
 
 (defn- <append-event! [^js self event-opts]
-  (p/let [session (<get-session self)
-          events (<get-events self)]
+  (p/let [session (<get-session self)]
     (if (nil? session)
       {:error :missing-session}
-      (let [[session events event] (session/append-event session events event-opts)]
-        (p/let [_ (<put-session! self session)
-                _ (<put-events! self events)]
+      (let [[session _ event] (session/append-event session [] event-opts)]
+        (p/let [_ (<append-event-storage! self event)
+                _ (<put-session! self session)]
           (broadcast-event! self event)
           {:session session :event event})))))
 
@@ -202,8 +246,7 @@
   (let [provider (runtime-provider/resolve-provider (.-env self) nil)
         provider-kind (runtime-provider/provider-id provider)]
     (p/let [runtime (runtime-provider/<provision-runtime! provider session-id task)
-            session (<get-session self)
-            events (<get-events self)]
+            session (<get-session self)]
       (cond
         (nil? runtime)
         (throw (ex-info "runtime provisioning returned nil"
@@ -215,15 +258,15 @@
 
         :else
         (let [session (assoc session :runtime runtime)
-              [session events _event] (session/append-event session events {:type "session.provisioned"
-                                                                            :data {:provider (:provider runtime)
-                                                                                   :runtime-session-id (:session-id runtime)
-                                                                                   :sandbox-id (:sandbox-id runtime)
-                                                                                   :sandbox-name (:sandbox-name runtime)
-                                                                                   :sprite-name (:sprite-name runtime)}
-                                                                            :ts (common/now-ms)})]
-          (p/let [_ (<put-session! self session)
-                  _ (<put-events! self events)]
+              [session _ event] (session/append-event session [] {:type "session.provisioned"
+                                                                  :data {:provider (:provider runtime)
+                                                                         :runtime-session-id (:session-id runtime)
+                                                                         :sandbox-id (:sandbox-id runtime)
+                                                                         :sandbox-name (:sandbox-name runtime)
+                                                                         :sprite-name (:sprite-name runtime)}
+                                                                  :ts (common/now-ms)})]
+          (p/let [_ (<append-event-storage! self event)
+                  _ (<put-session! self session)]
             (when-not (terminal-status? (:status session))
               (start-runtime-events-stream-background! self (:id session) runtime))
             runtime))))))
