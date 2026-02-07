@@ -82,7 +82,7 @@
   (let [result (config/resolve-config {})
         expected-config-path (node-path/join (.homedir os) "logseq" "cli.edn")]
     (is (= expected-config-path (:config-path result)))
-    (is (= "~/logseq/cli-graphs" (:data-dir result)))))
+    (is (= "~/logseq/graphs" (:data-dir result)))))
 
 (deftest test-update-config
   (let [dir (node-helper/create-tmp-dir "cli")

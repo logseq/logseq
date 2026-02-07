@@ -5,7 +5,7 @@
             [cljs.test :refer [async deftest is]]
             [clojure.string :as string]
             [frontend.test.node-helper :as node-helper]
-            [frontend.worker-common.util :as worker-util]
+            [frontend.worker.db-worker-node-lock :as db-lock]
             [frontend.worker.db-worker-node :as db-worker-node]
             [goog.object :as gobj]
             [logseq.cli.style :as style]
@@ -86,8 +86,7 @@
 
 (defn- lock-path
   [data-dir repo]
-  (let [repo-dir (node-path/join data-dir (worker-util/encode-graph-dir-name repo))]
-    (node-path/join repo-dir "db-worker.lock")))
+  (db-lock/lock-path data-dir repo))
 
 (defn- pad2
   [value]
@@ -103,7 +102,7 @@
 
 (defn- log-path
   [data-dir repo]
-  (let [repo-dir (node-path/join data-dir (worker-util/encode-graph-dir-name repo))
+  (let [repo-dir (db-lock/repo-dir data-dir repo)
         date-str (yyyymmdd (js/Date.))]
     (node-path/join repo-dir (str "db-worker-node-" date-str ".log"))))
 
@@ -168,7 +167,7 @@
   (let [enforce-log-retention! #'db-worker-node/enforce-log-retention!
         data-dir (node-helper/create-tmp-dir "db-worker-log-retention")
         repo (str "logseq_db_log_retention_" (subs (str (random-uuid)) 0 8))
-        repo-dir (node-path/join data-dir (worker-util/encode-graph-dir-name repo))
+        repo-dir (db-lock/repo-dir data-dir repo)
         days ["20240101" "20240102" "20240103" "20240104" "20240105"
               "20240106" "20240107" "20240108" "20240109"]
         make-log (fn [day]
@@ -214,8 +213,10 @@
 (deftest db-worker-node-help-omits-auth-token
   (let [show-help! #'db-worker-node/show-help!
         output (binding [style/*color-enabled?* true]
-                 (with-out-str (show-help!)))]
+                 (with-out-str (show-help!)))
+        plain-output (style/strip-ansi output)]
     (is (not (string/includes? (style/strip-ansi output) "--auth-token")))
+    (is (string/includes? plain-output "(default ~/logseq/graphs)"))
     (is (re-find #"\u001b\[[0-9;]*moptions\u001b\[[0-9;]*m:" output))
     (is (contains-bold? output "db-worker-node"))
     (is (contains-bold? output "--data-dir"))
@@ -465,6 +466,90 @@
                                (is false "expected lock error")))
                      (p/catch (fn [e]
                                 (is (= :repo-locked (-> (ex-data e) :code)))))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!) (p/finally (fn [] (done))))
+                              (done))))))))
+
+(deftest db-worker-node-write-mutation-fails-for-non-owner-pid
+  (async done
+         (let [daemon (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-write-lease-pid")
+               repo (str "logseq_db_write_lease_pid_" (subs (str (random-uuid)) 0 8))
+               lock-file (lock-path data-dir repo)]
+           (-> (p/let [{:keys [host port stop!]}
+                       (db-worker-node/start-daemon! {:data-dir data-dir
+                                                      :repo repo})
+                       _ (reset! daemon {:stop! stop!})
+                       _ (invoke host port "thread-api/create-or-open-db" [repo {}])
+                       export-base64 (invoke host port "thread-api/export-db-base64" [repo])
+                       lock-contents (js->clj (js/JSON.parse (.toString (fs/readFileSync lock-file) "utf8"))
+                                              :keywordize-keys true)
+                       tampered-lock (assoc lock-contents
+                                            :pid (inc (:pid lock-contents))
+                                            :lock-id "non-owner-lock")
+                       _ (fs/writeFileSync lock-file (js/JSON.stringify (clj->js tampered-lock)))
+                       {:keys [status body]} (invoke-raw host port "thread-api/import-db-base64" [repo export-base64])
+                       parsed (js->clj (js/JSON.parse body) :keywordize-keys true)]
+                 (is (= 409 status))
+                 (is (= false (:ok parsed)))
+                 (is (= "repo-locked" (get-in parsed [:error :code]))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!) (p/finally (fn [] (done))))
+                              (done))))))))
+
+(deftest db-worker-node-write-mutation-succeeds-for-active-owner
+  (async done
+         (let [daemon (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-write-lease-owner")
+               repo (str "logseq_db_write_lease_owner_" (subs (str (random-uuid)) 0 8))
+               lock-file (lock-path data-dir repo)]
+           (-> (p/let [{:keys [host port stop!]}
+                       (db-worker-node/start-daemon! {:data-dir data-dir
+                                                      :repo repo})
+                       _ (reset! daemon {:stop! stop!})
+                       _ (invoke host port "thread-api/create-or-open-db" [repo {}])
+                       lock-contents (js/JSON.parse (.toString (fs/readFileSync lock-file) "utf8"))
+                       lock-id (gobj/get lock-contents "lock-id")
+                       _ (is (string? lock-id))
+                       export-base64 (invoke host port "thread-api/export-db-base64" [repo])
+                       {:keys [status body]} (invoke-raw host port "thread-api/import-db-base64" [repo export-base64])
+                       parsed (js->clj (js/JSON.parse body) :keywordize-keys true)]
+                 (is (= 200 status))
+                 (is (= true (:ok parsed))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!) (p/finally (fn [] (done))))
+                              (done))))))))
+
+(deftest db-worker-node-write-mutation-rejects-stale-lock-after-replacement
+  (async done
+         (let [daemon (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-write-lease-replaced")
+               repo (str "logseq_db_write_lease_replaced_" (subs (str (random-uuid)) 0 8))
+               lock-file (lock-path data-dir repo)]
+           (-> (p/let [{:keys [host port stop!]}
+                       (db-worker-node/start-daemon! {:data-dir data-dir
+                                                      :repo repo})
+                       _ (reset! daemon {:stop! stop!})
+                       _ (invoke host port "thread-api/create-or-open-db" [repo {}])
+                       export-base64 (invoke host port "thread-api/export-db-base64" [repo])
+                       lock-contents (js->clj (js/JSON.parse (.toString (fs/readFileSync lock-file) "utf8"))
+                                              :keywordize-keys true)
+                       replaced-lock (assoc lock-contents :lock-id "replaced-lock-id")
+                       _ (fs/writeFileSync lock-file (js/JSON.stringify (clj->js replaced-lock)))
+                       {:keys [status body]} (invoke-raw host port "thread-api/import-db-base64" [repo export-base64])
+                       parsed (js->clj (js/JSON.parse body) :keywordize-keys true)]
+                 (is (= 409 status))
+                 (is (= false (:ok parsed)))
+                 (is (= "repo-locked" (get-in parsed [:error :code]))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally (fn []
