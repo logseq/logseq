@@ -123,27 +123,18 @@
             [repo-dir asset-dir-rpath] (assets-handler/ensure-assets-dir! repo)
             file-rpath (str asset-dir-rpath "/" asset-uuid "." ext)
             ;; Write the file
-            buffer (.arrayBuffer blob)]
-    (if (util/electron?)
+            buffer (.arrayBuffer blob)
+            content (js/Uint8Array. buffer)]
+      ;; Use fs namespace for both Electron and web
       (p/do!
-       (js/window.apis.writeFile repo (path/path-join repo-dir file-rpath) buffer)
+       (fs/write-plain-text-file! repo repo-dir file-rpath content nil)
        (p/let [checksum (assets-handler/get-file-checksum blob)]
          (db-property-handler/set-block-properties!
           (:db/id asset-block)
           {:logseq.property.asset/checksum checksum
            :logseq.property.asset/resize-metadata nil}))
        (notification/show! (t :asset/image-saved) :success)
-       (when on-complete (on-complete)))
-      ;; Web version
-      (p/let [content (js/Uint8Array. buffer)]
-        (fs/write-plain-text-file! repo repo-dir file-rpath content nil)
-        (p/let [checksum (assets-handler/get-file-checksum blob)]
-          (db-property-handler/set-block-properties!
-           (:db/id asset-block)
-           {:logseq.property.asset/checksum checksum
-            :logseq.property.asset/resize-metadata nil}))
-        (notification/show! (t :asset/image-saved) :success)
-        (when on-complete (on-complete)))))))
+       (when on-complete (on-complete))))))
 
 ;; ============================================================================
 ;; Crop selection component
@@ -331,7 +322,7 @@
 
 (rum/defc editor-content
   "Image editor modal content with crop and rotation controls."
-  [asset-block {:keys [src]}]
+  [asset-block {:keys [src reload-asset!]}]
   (let [[rotation set-rotation!] (rum/use-state 0)
         [crop set-crop!] (rum/use-state nil)
         [crop-enabled? set-crop-enabled!] (rum/use-state false)
@@ -361,7 +352,7 @@
                      (-> (save-edited-image!
                           (state/get-current-repo) asset-block src rotation
                           (scale-crop-to-natural crop (:scale image-size))
-                          #(do (shui/dialog-close!) (state/pub-event! [:ui/re-render-root])))
+                          #(do (shui/dialog-close!) (some-> reload-asset! (apply []))))
                          (p/catch #(notification/show! (str "Error: " (.-message %)) :error))
                          (p/finally #(set-saving! false)))))
 
