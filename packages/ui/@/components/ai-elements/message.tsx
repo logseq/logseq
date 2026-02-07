@@ -1,7 +1,12 @@
 "use client";
 
 import type { UIMessage } from "ai";
-import type { ComponentProps, HTMLAttributes, ReactElement } from "react";
+import type {
+  ComponentProps,
+  HTMLAttributes,
+  ReactElement,
+  ReactNode,
+} from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +30,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { Streamdown } from "streamdown";
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"];
@@ -33,7 +39,7 @@ export type MessageProps = HTMLAttributes<HTMLDivElement> & {
 export const Message = ({ className, from, ...props }: MessageProps) => (
   <div
     className={cn(
-      "group flex w-full max-w-[95%] flex-col gap-2",
+      "group flex w-full max-w-4xl flex-col gap-2",
       from === "user" ? "is-user ml-auto justify-end" : "is-assistant",
       className
     )}
@@ -297,16 +303,60 @@ export const MessageBranchPage = ({
 
 export type MessageResponseProps = ComponentProps<"div">;
 
+function extractText(children: ReactNode): string | null {
+  if (children == null || typeof children === "boolean") {
+    return "";
+  }
+
+  if (
+    typeof children === "string" ||
+    typeof children === "number" ||
+    typeof children === "bigint"
+  ) {
+    return String(children);
+  }
+
+  if (Array.isArray(children)) {
+    let result = "";
+    for (const child of children) {
+      const part = extractText(child);
+      if (part === null) {
+        return null;
+      }
+      result += part;
+    }
+    return result;
+  }
+
+  return null;
+}
+
 export const MessageResponse = memo(
-  ({ className, ...props }: MessageResponseProps) => (
-    <div
-      className={cn(
-        "size-full whitespace-pre-wrap break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
-        className
-      )}
-      {...props}
-    />
-  ),
+  ({ className, children, ...props }: MessageResponseProps) => {
+    const text = extractText(children);
+
+    return (
+      <div
+        className={cn(
+          "size-full break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
+          className
+        )}
+        {...props}
+      >
+        {text !== null ? (
+          <Streamdown
+            className="space-y-3 whitespace-pre-wrap"
+            mode="streaming"
+            parseIncompleteMarkdown={true}
+          >
+            {text}
+          </Streamdown>
+        ) : (
+          children
+        )}
+      </div>
+    );
+  },
   (prevProps, nextProps) => prevProps.children === nextProps.children
 );
 
