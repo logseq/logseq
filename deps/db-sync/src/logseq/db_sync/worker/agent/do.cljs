@@ -27,6 +27,83 @@
 (defn- <storage-put! [storage key value]
   (.put storage key (clj->js value)))
 
+(def ^:private default-max-events-storage-bytes (* 768 1024))
+(def ^:private default-max-events-retained 2000)
+(def ^:private default-max-event-data-bytes (* 64 1024))
+(def ^:private default-max-event-preview-chars 4096)
+
+(defn- json-string [value]
+  (try
+    (js/JSON.stringify (clj->js value))
+    (catch :default _
+      nil)))
+
+(defn- json-size [value]
+  (some-> (json-string value) (.-length)))
+
+(defn- truncate-string
+  [s max-chars]
+  (if (> (count s) max-chars)
+    (str (subs s 0 max-chars)
+         "...[truncated "
+         (- (count s) max-chars)
+         " chars]")
+    s))
+
+(defn- parse-positive-int
+  [value]
+  (let [n (js/parseInt (str value) 10)]
+    (when (and (js/Number.isFinite n) (pos? n))
+      n)))
+
+(defn- storage-limits
+  [^js self]
+  (let [env (.-env self)]
+    {:max-events-storage-bytes (or (some-> (aget env "AGENT_SESSION_EVENTS_MAX_BYTES")
+                                           parse-positive-int)
+                                   default-max-events-storage-bytes)
+     :max-events-retained (or (some-> (aget env "AGENT_SESSION_EVENTS_MAX_RETAINED")
+                                      parse-positive-int)
+                              default-max-events-retained)
+     :max-event-data-bytes (or (some-> (aget env "AGENT_SESSION_EVENT_DATA_MAX_BYTES")
+                                       parse-positive-int)
+                               default-max-event-data-bytes)
+     :max-event-preview-chars (or (some-> (aget env "AGENT_SESSION_EVENT_PREVIEW_MAX_CHARS")
+                                          parse-positive-int)
+                                  default-max-event-preview-chars)}))
+
+(defn- compact-event-data
+  [data {:keys [max-event-data-bytes max-event-preview-chars]}]
+  (let [size (json-size data)]
+    (if (and (number? size) (> size max-event-data-bytes))
+      (let [raw (or (json-string data) (str data))]
+        {:truncated true
+         :reason "event data too large"
+         :size size
+         :preview (truncate-string raw max-event-preview-chars)})
+      data)))
+
+(defn- compact-event
+  [event limits]
+  (update event :data compact-event-data limits))
+
+(defn- events-for-storage
+  [events {:keys [max-events-storage-bytes max-events-retained] :as limits}]
+  (let [events (->> events
+                    (map #(compact-event % limits))
+                    (take-last max-events-retained)
+                    vec)]
+    (loop [idx (dec (count events))
+           acc '()
+           total-bytes 2] ; []
+      (if (neg? idx)
+        (vec acc)
+        (let [event (nth events idx)
+              event-size (or (json-size event) max-events-storage-bytes)]
+          (if (> (+ total-bytes event-size) max-events-storage-bytes)
+            (recur (dec idx) acc total-bytes)
+            (recur (dec idx) (conj acc event) (+ total-bytes event-size))))))))
+
 (defn- <get-session [^js self]
   (<storage-get (.-storage self) "session"))
 
@@ -38,7 +115,7 @@
   (<storage-put! (.-storage self) "session" session))
 
 (defn- <put-events! [^js self events]
-  (<storage-put! (.-storage self) "events" events))
+  (<storage-put! (.-storage self) "events" (events-for-storage events (storage-limits self))))
 
 (defn- <save-session! [^js self session]
   (p/let [_ (<put-session! self session)]
