@@ -14,6 +14,18 @@ import {
   MessageContent,
   MessageResponse,
 } from "@/components/ai-elements/message";
+import {
+  Reasoning,
+  ReasoningContent,
+  ReasoningTrigger,
+} from "@/components/ai-elements/reasoning";
+import {
+  Tool,
+  ToolContent,
+  ToolHeader,
+  ToolInput,
+  ToolOutput,
+} from "@/components/ai-elements/tool";
 import { cn } from "@/lib/utils";
 
 export interface AgentChatBoxProps {
@@ -23,18 +35,6 @@ export interface AgentChatBoxProps {
   contentClassName?: string;
   emptyTitle?: string;
   emptyDescription?: string;
-}
-
-function roleLabel(role: string, agentLabel?: string): string {
-  if (role === "user") {
-    return "You";
-  }
-
-  if (role === "assistant") {
-    return agentLabel ?? "Assistant";
-  }
-
-  return role;
 }
 
 function isDataPart(type?: string): boolean {
@@ -71,18 +71,15 @@ function renderPart(part: any, index: number): ReactNode {
     const isStreaming = part?.state === "streaming";
 
     return (
-      <details
-        className="rounded-md border border-border bg-muted/50 p-2"
+      <Reasoning
+        className="mb-0"
+        defaultOpen={isStreaming}
+        isStreaming={isStreaming}
         key={`reasoning-${index}`}
-        open={isStreaming}
       >
-        <summary className="cursor-pointer select-none text-xs font-medium uppercase tracking-wide opacity-75">
-          {isStreaming ? "Reasoning (streaming)" : "Reasoning"}
-        </summary>
-        <div className="mt-2">
-          <MessageResponse>{part.text ?? ""}</MessageResponse>
-        </div>
-      </details>
+        <ReasoningTrigger />
+        <ReasoningContent>{part.text ?? ""}</ReasoningContent>
+      </Reasoning>
     );
   }
 
@@ -154,7 +151,27 @@ function renderPart(part: any, index: number): ReactNode {
     );
   }
 
-  if (isToolPart(type) || isDataPart(type)) {
+  if (isToolPart(type)) {
+    const toolState = part?.state ?? "input-available";
+    const toolOpen = toolState !== "output-available";
+
+    return (
+      <Tool defaultOpen={toolOpen} key={`${type ?? "tool"}-${index}`}>
+        <ToolHeader
+          state={toolState}
+          title={part?.title}
+          toolName={part?.toolName}
+          type={type as any}
+        />
+        <ToolContent>
+          <ToolInput input={part?.input} />
+          <ToolOutput errorText={part?.errorText} output={part?.output} />
+        </ToolContent>
+      </Tool>
+    );
+  }
+
+  if (isDataPart(type)) {
     return (
       <pre
         className="max-h-56 overflow-auto rounded-md border border-border bg-muted/50 p-2 text-xs"
@@ -177,7 +194,6 @@ function renderPart(part: any, index: number): ReactNode {
 
 export const AgentChatBox = ({
   messages,
-  agentLabel,
   className,
   contentClassName,
   emptyTitle,
@@ -191,9 +207,6 @@ export const AgentChatBox = ({
         {chatMessages.length > 0 ? (
           chatMessages.map((message) => (
             <Message from={message.role} key={message.id}>
-              <div className="px-1 text-xs font-medium uppercase tracking-wide opacity-60">
-                {roleLabel(message.role, agentLabel)}
-              </div>
               <MessageContent>
                 {(message.parts ?? []).map((part, idx) => renderPart(part, idx))}
               </MessageContent>

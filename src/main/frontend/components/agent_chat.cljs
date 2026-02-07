@@ -5,6 +5,7 @@
             [frontend.handler.agent :as agent-handler]
             [frontend.handler.agent-chat-transport :as chat-transport]
             [frontend.handler.db-based.sync :as db-sync]
+            [frontend.modules.agent-chat.event :as chat-event]
             [frontend.state :as state]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
@@ -63,23 +64,20 @@
       role
       default-role)))
 
-(defn- payload-text
+(defn- chat-role
+  [role]
+  (let [role (normalize-role role)]
+    (if (contains? #{"user" "assistant" "system"} role)
+      role
+      "assistant")))
+
+(defn- payload-delta
   [payload]
-  (cond
-    (string? payload) payload
-    (string? (:text payload)) (:text payload)
-    (string? (:message payload)) (:message payload)
-    (string? (:content payload)) (:content payload)
-    (string? (:output_text payload)) (:output_text payload)
-    (string? (:raw payload)) (:raw payload)
-    (seq (:content payload))
-    (->> (:content payload)
-         (keep (fn [part]
-                 (when (= "text" (:type part))
-                   (:text part))))
-         (apply str)
-         string/trim)
-    :else nil))
+  (or (when (string? (:delta payload)) (:delta payload))
+      (when (string? (:text payload)) (:text payload))
+      (when (string? (:message payload)) (:message payload))
+      (when (string? (:output_text payload)) (:output_text payload))
+      (when (string? (:raw payload)) (:raw payload))))
 
 (defn- agent-title
   [agent-value]
@@ -93,94 +91,234 @@
   [session block]
   (let [events (:events session)
         base (let [acc (atom {:items {}
-                              :order []})]
-               (doseq [event events]
-                 (let [data (:data event)
-                       payload (or (:data data) data)
-                       item (:item payload)
-                       event-type (:type event)
-                       item-kind (:kind item)
-                       payload (if (map? payload) payload {})
-                       item-id (or (:item_id item)
-                                   (:item-id item)
-                                   (:itemId item)
-                                   (:item_id payload)
-                                   (:item-id payload)
-                                   (:itemId payload)
-                                   (:response_id payload)
-                                   (:response-id payload)
-                                   (:responseId payload)
-                                   (:message_id payload)
-                                   (:message-id payload)
-                                   (:messageId payload)
-                                   (:id payload)
-                                   (:event-id event)
-                                   (str "event-" (random-uuid)))
-                       delta? (and (string? event-type)
-                                   (or (= "item.delta" event-type)
-                                       (string/includes? event-type ".delta")))
-                       delta (when delta?
-                               (or (:delta payload)
-                                   (:text payload)
-                                   (:message payload)
-                                   (:output_text payload)
-                                   (:raw payload)))
-                       role (normalize-role (or (:role item)
-                                                (:role payload)
-                                                (when (= "audit.log" event-type)
-                                                  (role-from-kind (:kind payload) "user"))
-                                                (:kind payload)
-                                                "assistant"))
-                       text-from-item (when (and (= "message" item-kind)
-                                                 (seq (:content item)))
-                                        (->> (:content item)
-                                             (keep (fn [part]
-                                                     (when (= "text" (:type part))
-                                                       (:text part))))
-                                             (apply str)
-                                             string/trim))
-                       text-from-payload (payload-text payload)
-                       message-event? (or (= "message" item-kind)
-                                          (= "audit.log" event-type)
-                                          (and delta? (string? delta))
-                                          (string? text-from-item)
-                                          (string? text-from-payload))]
-                   (when (and (string? item-id) message-event?)
-                     (swap! acc update :items
-                            (fn [items]
-                              (let [entry (get items item-id {:id item-id
-                                                              :role role
-                                                              :text ""})]
-                                (assoc items item-id
-                                       (cond
-                                         (and delta? (string? delta))
-                                         (update entry :text str delta)
+                              :order []
+                              :item-kind-by-id {}
+                              :tool-call-id-by-item-id {}})]
+               (letfn [(known-item-kind [item-id]
+                         (get-in @acc [:item-kind-by-id item-id]))
+                       (remember-item-kind! [item-id item-kind]
+                         (when-let [item-kind (chat-event/normalize-kind item-kind)]
+                           (swap! acc assoc-in [:item-kind-by-id item-id] item-kind)))
+                       (known-tool-call-id [item-id]
+                         (get-in @acc [:tool-call-id-by-item-id item-id]))
+                       (remember-tool-call-id! [item-id call-id]
+                         (when-let [call-id (some-> call-id str normalized-text)]
+                           (swap! acc assoc-in [:tool-call-id-by-item-id item-id] call-id)))
+                       (ensure-item! [item-id role]
+                         (let [role (chat-role role)]
+                           (swap! acc
+                                  (fn [state]
+                                    (let [has-item? (contains? (:items state) item-id)
+                                          state (if has-item?
+                                                  state
+                                                  (-> state
+                                                      (assoc-in [:items item-id] {:id item-id
+                                                                                  :role role
+                                                                                  :parts []
+                                                                                  :part-index {}})
+                                                      (update :order (fn [order]
+                                                                       (if (some #{item-id} order)
+                                                                         order
+                                                                         (conj order item-id))))))]
+                                      (assoc-in state [:items item-id :role] role))))))
+                       (update-part! [item-id part-key default-part f]
+                         (let [part-key (vec part-key)]
+                           (swap! acc
+                                  (fn [state]
+                                    (let [entry (or (get-in state [:items item-id])
+                                                    {:id item-id
+                                                     :role "assistant"
+                                                     :parts []
+                                                     :part-index {}})
+                                          part-index (:part-index entry)
+                                          idx (or (get part-index part-key)
+                                                  (count (:parts entry)))
+                                          entry (if (contains? part-index part-key)
+                                                  entry
+                                                  (-> entry
+                                                      (update :parts conj default-part)
+                                                      (assoc-in [:part-index part-key] idx)))
+                                          entry (update-in entry [:parts idx] f)]
+                                      (assoc-in state [:items item-id] entry))))))
+                       (set-text-part! [item-id role text]
+                         (when-let [text (normalized-text text)]
+                           (ensure-item! item-id role)
+                           (update-part! item-id [:text]
+                                         {:type "text" :text text}
+                                         (fn [part]
+                                           (assoc part :type "text" :text text)))))
+                       (append-text-part! [item-id role delta]
+                         (when (string? delta)
+                           (ensure-item! item-id role)
+                           (update-part! item-id [:text]
+                                         {:type "text" :text ""}
+                                         (fn [part]
+                                           (assoc part :type "text"
+                                                  :text (str (or (:text part) "")
+                                                             delta))))))
+                       (set-reasoning-part! [item-id role text]
+                         (when-let [text (normalized-text text)]
+                           (ensure-item! item-id role)
+                           (update-part! item-id [:reasoning]
+                                         {:type "reasoning" :text text}
+                                         (fn [part]
+                                           (assoc part :type "reasoning"
+                                                  :text text)))))
+                       (append-reasoning-part! [item-id role delta]
+                         (when (string? delta)
+                           (ensure-item! item-id role)
+                           (update-part! item-id [:reasoning]
+                                         {:type "reasoning" :text ""}
+                                         (fn [part]
+                                           (assoc part :type "reasoning"
+                                                  :text (str (or (:text part) "")
+                                                             delta))))))
+                       (resolve-tool-call-id [item-id value]
+                         (or (some-> (chat-event/tool-call-id value) str normalized-text)
+                             (known-tool-call-id item-id)
+                             (some-> item-id str normalized-text)))
+                       (set-tool-input! [item-id role value]
+                         (when-let [call-id (resolve-tool-call-id item-id value)]
+                           (let [tool-name (or (chat-event/tool-name value) "tool")
+                                 input (or (chat-event/tool-input value) {})]
+                             (ensure-item! item-id role)
+                             (remember-tool-call-id! item-id call-id)
+                             (update-part! item-id [:tool-input call-id]
+                                           {:type "tool-input-available"
+                                            :toolCallId call-id
+                                            :toolName tool-name
+                                            :input input}
+                                           (fn [part]
+                                             (assoc part
+                                                    :type "tool-input-available"
+                                                    :toolCallId call-id
+                                                    :toolName tool-name
+                                                    :input input))))))
+                       (set-tool-output! [item-id role value]
+                         (when-let [call-id (resolve-tool-call-id item-id value)]
+                           (let [output (or (chat-event/tool-output value)
+                                            (chat-event/payload-text value))]
+                             (when (some? output)
+                               (ensure-item! item-id role)
+                               (remember-tool-call-id! item-id call-id)
+                               (update-part! item-id [:tool-output call-id]
+                                             {:type "tool-output-available"
+                                              :toolCallId call-id
+                                              :output output}
+                                             (fn [part]
+                                               (assoc part
+                                                      :type "tool-output-available"
+                                                      :toolCallId call-id
+                                                      :output output)))))))
+                       (append-tool-output-delta! [item-id role value delta]
+                         (when (and (string? delta)
+                                    (seq delta))
+                           (when-let [call-id (resolve-tool-call-id item-id value)]
+                             (ensure-item! item-id role)
+                             (remember-tool-call-id! item-id call-id)
+                             (update-part! item-id [:tool-output call-id]
+                                           {:type "tool-output-available"
+                                            :toolCallId call-id
+                                            :output ""}
+                                           (fn [part]
+                                             (assoc part
+                                                    :type "tool-output-available"
+                                                    :toolCallId call-id
+                                                    :output (str (if (string? (:output part))
+                                                                   (:output part)
+                                                                   "")
+                                                                 delta)))))))
+                       (process-content-part! [item-id role part]
+                         (let [part-kind (chat-event/content-part-kind part)]
+                           (cond
+                             (= "text" part-kind)
+                             (set-text-part! item-id role (chat-event/content-part-text part))
 
-                                         (and (= "item.started" event-type)
-                                              (string? role))
-                                         (assoc entry :role role)
+                             (= "reasoning" part-kind)
+                             (set-reasoning-part! item-id role (chat-event/content-part-text part))
 
-                                         (and (string? text-from-item)
-                                              (not (string/blank? text-from-item)))
-                                         (assoc entry :text text-from-item)
+                             (= "tool-call" part-kind)
+                             (set-tool-input! item-id role part)
 
-                                         (and (string? text-from-payload)
-                                              (not (string/blank? text-from-payload)))
-                                         (assoc entry :text text-from-payload)
+                             (= "tool-result" part-kind)
+                             (set-tool-output! item-id role part)
 
-                                         :else entry)))))
-                     (swap! acc update :order
-                            (fn [order]
-                              (if (some #{item-id} order) order (conj order item-id)))))))
-               (->> (:order @acc)
-                    (map (fn [item-id]
-                           (let [{:keys [role text]} (get-in @acc [:items item-id])]
-                             (when (and (string? text) (not (string/blank? text)))
-                               {:id item-id
-                                :role (normalize-role role)
-                                :parts [{:type "text" :text text}]}))))
-                    (remove nil?)
-                    vec))
+                             :else nil)))
+                       (process-event! [event]
+                         (let [event-type (:type event)
+                               payload (chat-event/unwrap-event-payload event)
+                               payload (if (map? payload) payload {})
+                               item (if (map? (:item payload)) (:item payload) {})
+                               item-id (chat-event/event-item-id event payload item)
+                               item-kind (or (chat-event/event-item-kind payload item)
+                                             (known-item-kind item-id))
+                               role (chat-role (or (:role item)
+                                                   (:role payload)
+                                                   (when (= "audit.log" event-type)
+                                                     (role-from-kind (:kind payload) "user"))
+                                                   (:kind payload)
+                                                   "assistant"))
+                               merged (merge payload item)
+                               delta (payload-delta payload)
+                               known-tool-call? (string? (known-tool-call-id item-id))
+                               tool-result-like? (or (= "tool-result" item-kind)
+                                                     known-tool-call?)]
+                           (when (string? item-id)
+                             (remember-item-kind! item-id item-kind)
+                             (case event-type
+                               "item.started"
+                               (when (= "tool-result" item-kind)
+                                 (set-tool-input! item-id role merged))
+
+                               ("item.completed" "response.completed")
+                               (if (seq (:content item))
+                                 (doseq [part (:content item)]
+                                   (process-content-part! item-id role part))
+                                 (cond
+                                   (= "reasoning" item-kind)
+                                   (set-reasoning-part! item-id role (or (chat-event/payload-text item)
+                                                                         (chat-event/payload-text payload)))
+
+                                   (= "tool-call" item-kind)
+                                   (set-tool-input! item-id role merged)
+
+                                   (= "tool-result" item-kind)
+                                   (set-tool-output! item-id role merged)
+
+                                   :else
+                                   (set-text-part! item-id role (or (chat-event/payload-text item)
+                                                                    (chat-event/payload-text payload)))))
+
+                               "audit.log"
+                               (set-text-part! item-id "user" (chat-event/payload-text payload))
+
+                               nil)
+
+                             (when (chat-event/delta-event? event-type)
+                               (cond
+                                 (= "reasoning" item-kind)
+                                 (append-reasoning-part! item-id role delta)
+
+                                 (= "tool-call" item-kind)
+                                 (set-tool-input! item-id role merged)
+
+                                 tool-result-like?
+                                 (append-tool-output-delta! item-id role merged delta)
+
+                                 :else
+                                 (append-text-part! item-id role delta))))))]
+                 (doseq [event events]
+                   (process-event! event))
+                 (->> (:order @acc)
+                      (keep (fn [item-id]
+                              (let [entry (get-in @acc [:items item-id])
+                                    parts (vec (keep normalize-message-part (:parts entry)))
+                                    role (chat-role (:role entry))]
+                                (when (seq parts)
+                                  {:id item-id
+                                   :role role
+                                   :parts parts}))))
+                      vec)))
         task-text (some-> (or (:block/raw-title block) (:block/title block))
                           string/trim)
         user-message (when-not (string/blank? task-text)
@@ -209,6 +347,25 @@
        :role role
        :parts resolved-parts})))
 
+(defn- message-size
+  [message]
+  (count (pr-str (select-keys message [:id :role :parts]))))
+
+(defn- session-messages-need-sync?
+  [session-messages ui-messages]
+  (let [ui-by-id (into {} (map (juxt :id identity) ui-messages))]
+    (boolean
+     (or (and (seq session-messages)
+              (empty? ui-messages))
+         (> (count session-messages) (count ui-messages))
+         (some (fn [session-message]
+                 (if-let [ui-message (get ui-by-id (:id session-message))]
+                   (and (not= session-message ui-message)
+                        (>= (message-size session-message)
+                            (message-size ui-message)))
+                   true))
+               session-messages)))))
+
 (rum/defc agent-chat-dialog
   [block]
   (let [block-uuid (:block/uuid block)
@@ -219,10 +376,11 @@
         agent-value (:logseq.property/agent block)
         agent-label (agent-title agent-value)
         session-messages (session->messages session block)
-        [transport] (rum/use-state
-                     (fn []
-                       (chat-transport/make-transport {:base base
-                                                       :session-id session-id})))
+        transport (hooks/use-memo
+                   #(chat-transport/make-transport {:base base
+                                                    :session-id session-id
+                                                    :open-stream? false})
+                   [base session-id])
         chat (useChat #js {:id session-id
                            :transport transport
                            :messages (clj->js session-messages)})
@@ -236,6 +394,9 @@
         status (or chat-status (:status session))
         error (or chat-error (:stream-error session))
         session-started? (boolean (:session-id session))
+        session-chat-messages (->> session-messages
+                                   (map message->chat-message)
+                                   (remove nil?))
         chat-messages (->> ui-messages
                            (map message->chat-message)
                            (remove nil?))
@@ -260,11 +421,10 @@
     (hooks/use-effect!
      (fn []
        (when (and (fn? set-messages!)
-                  (seq session-messages)
-                  (> (count session-messages) (count ui-messages)))
-         (set-messages! (clj->js session-messages)))
+                  (session-messages-need-sync? session-chat-messages chat-messages))
+         (set-messages! (clj->js session-chat-messages)))
        nil)
-     [session-id (count session-messages)])
+     [session-id (pr-str session-chat-messages) (pr-str chat-messages)])
     (hooks/use-effect!
      (fn []
        (when (and base session-id session-started?)
@@ -275,11 +435,8 @@
      {:style {:height "70vh" :overflow "hidden"}}
      [:div.flex.items-start.justify-between.gap-3
       [:div.flex.flex-col.gap-1
-       [:div.text-lg.font-medium (or agent-label "Agent")]
        [:div.flex.items-center.gap-2.text-xs.opacity-75
-        (when (string? status)
-          [:div.rounded-md.bg-muted.px-2.py-0.5.font-medium
-           (string/capitalize status)])
+        (or agent-label "Agent")
         (when busy?
           [:div.inline-flex.items-center.gap-1
            [:span.inline-block.h-1.5.w-1.5.animate-pulse.rounded-full.bg-emerald-500]
