@@ -64,6 +64,7 @@
       (is (string/includes? plain-summary "update"))
       (is (string/includes? plain-summary "query"))
       (is (string/includes? plain-summary "show"))
+      (is (string/includes? plain-summary "doctor"))
       (is (string/includes? plain-summary "graph"))
       (is (string/includes? plain-summary "server"))
       (is (string/includes? plain-summary "Path to db-worker data dir (default ~/logseq/graphs)"))
@@ -77,6 +78,7 @@
       (is (contains-bold? summary "query"))
       (is (contains-bold? summary "query list"))
       (is (contains-bold? summary "show"))
+      (is (contains-bold? summary "doctor"))
       (is (contains-bold? summary "graph list"))
       (is (contains-bold? summary "graph create"))
       (is (contains-bold? summary "server list"))
@@ -283,6 +285,12 @@
     (let [result (commands/parse-args ["--output" "json" "graph" "list"])]
       (is (true? (:ok? result)))
       (is (= "json" (get-in result [:options :output]))))))
+
+(deftest test-parse-args-doctor
+  (testing "doctor command parses"
+    (let [result (commands/parse-args ["doctor"])]
+      (is (true? (:ok? result)))
+      (is (= :doctor (:command result))))))
 
 (deftest test-tree->text-format
   (testing "show tree text uses db/id with tree glyphs"
@@ -1138,6 +1146,13 @@
           result (commands/build-action parsed {})]
       (is (true? (:ok? result)))
       (is (= :server-stop (get-in result [:action :type]))))))
+
+(deftest test-build-action-doctor
+  (testing "doctor builds action"
+    (let [parsed {:ok? true :command :doctor :options {}}
+          result (commands/build-action parsed {})]
+      (is (true? (:ok? result)))
+      (is (= :doctor (get-in result [:action :type]))))))
 
 (deftest test-build-action-inspect-edit
   (testing "list page requires repo"
