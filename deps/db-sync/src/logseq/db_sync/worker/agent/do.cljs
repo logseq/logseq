@@ -17,6 +17,9 @@
 (defn- sse-encode [event]
   (str "data: " (js/JSON.stringify (clj->js event)) "\n\n"))
 
+(defn- sse-bytes [event]
+  (.encode (js/TextEncoder.) (sse-encode event)))
+
 (defn- <storage-get [storage key]
   (p/let [value (.get storage key)]
     (when value (js->clj value :keywordize-keys true))))
@@ -47,11 +50,12 @@
     (str base "/sessions/" session-id "/stream")))
 
 (defn- broadcast-event! [^js self event]
-  (let [streams (.-streams self)]
+  (let [streams (.-streams self)
+        payload (sse-bytes event)]
     (when streams
       (.forEach streams
                 (fn [writer key]
-                  (-> (.write writer (sse-encode event))
+                  (-> (.write writer payload)
                       (.catch (fn [_]
                                 (.delete streams key)))))))))
 
@@ -155,6 +159,28 @@
   (when (and (map? runtime)
              (string? (:session-id runtime)))
     (start-runtime-events-stream! self session-id runtime)
+    nil))
+
+(defn- send-runtime-message-background!
+  [^js self current-session runtime provider message kind]
+  (when (and runtime
+             provider
+             (string? (:session-id runtime)))
+    (start-runtime-events-stream-background! self (:id current-session) runtime)
+    (-> (runtime-provider/<send-message! provider
+                                         runtime
+                                         {:message message
+                                          :kind kind})
+        (.catch (fn [error]
+                  (log/error :agent/runtime-message-error
+                             {:session-id (:id current-session)
+                              :runtime-session-id (:session-id runtime)
+                              :error error})
+                  (<append-event! self {:type "agent.runtime.error"
+                                        :data {:session-id (:id current-session)
+                                               :message (str error)}
+                                        :ts (common/now-ms)})))
+        (.catch (fn [_] nil)))
     nil))
 
 (defn- <transition! [^js self to-status event-type data]
@@ -305,24 +331,13 @@
                      (let [runtime (:runtime current-session)
                            provider (when runtime
                                       (runtime-provider/resolve-provider (.-env self) runtime))]
-                       (p/let [_ (when (and runtime
-                                            provider
-                                            (string? (:session-id runtime)))
-                                   (start-runtime-events-stream! self (:id current-session) runtime)
-                                   (-> (runtime-provider/<send-message! provider
-                                                                        runtime
-                                                                        {:message message
-                                                                         :kind (:kind body)})
-                                       (.catch (fn [error]
-                                                 (log/error :agent/runtime-message-error
-                                                            {:session-id (:id current-session)
-                                                             :runtime-session-id (:session-id runtime)
-                                                             :error error})
-                                                 (<append-event! self {:type "agent.runtime.error"
-                                                                       :data {:session-id (:id current-session)
-                                                                              :message (str error)}
-                                                                       :ts (common/now-ms)})))))]
-                         (http/json-response :sessions/message {:ok true})))))))))))
+                       (send-runtime-message-background! self
+                                                         current-session
+                                                         runtime
+                                                         provider
+                                                         message
+                                                         (:kind body))
+                       (http/json-response :sessions/message {:ok true}))))))))))
 
 (defn- handle-cancel [^js self request]
   (let [user-id (user-id-from-request request)]
@@ -394,7 +409,6 @@
   (let [streams (.-streams self)
         stream (js/TransformStream.)
         writer (.getWriter (.-writable stream))
-        encoder (js/TextEncoder.)
         stream-id (str (random-uuid))
         closed? (volatile! false)
         cleanup (fn []
@@ -410,12 +424,9 @@
      (fn []
        (p/let [events (<get-events self)]
          (doseq [event events]
-           ;; sse-encode likely returns STRING -> must encode to Uint8Array
-           (let [txt (sse-encode event)
-                 payload (.encode encoder txt)]
-             ;; writer.write returns a promise; wait so order is preserved
-             (p/let [_ (->promise (.write writer payload))]
-               nil))))))
+           ;; writer.write returns a promise; wait so order is preserved
+           (p/let [_ (->promise (.write writer (sse-bytes event)))]
+             nil)))))
 
     (js/Response.
      (.-readable stream)

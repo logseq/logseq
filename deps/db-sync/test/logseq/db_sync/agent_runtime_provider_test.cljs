@@ -245,13 +245,22 @@
                              cmds (vec (.getAll (.-searchParams parsed) "cmd"))
                              script (nth cmds 2 nil)
                              create-session? (and (string? script)
-                                                  (string/includes? script "/v1/sessions/sess-ok"))]
+                                                  (string/includes? script "/v1/sessions/sess-ok"))
+                             health? (and (string? script)
+                                          (string/includes? script "/v1/health"))]
                          (js/Promise.resolve
                           (js/Response.
                            (js/JSON.stringify
-                            (clj->js (if create-session?
+                            (clj->js (cond
+                                       create-session?
                                        {:result {:stdout "{\"ok\":true}\n__HTTP_STATUS__:200__HTTP_STATUS__:200"
                                                  :stderr ""}}
+
+                                       health?
+                                       {:result {:stdout "__HEALTH_OK__"
+                                                 :stderr ""}}
+
+                                       :else
                                        {:result {:stdout ""
                                                  :stderr ""}})))
                            #js {:status 200 :headers #js {"content-type" "application/json"}})))
