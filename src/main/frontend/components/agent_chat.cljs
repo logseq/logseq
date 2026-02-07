@@ -6,7 +6,6 @@
             [frontend.util :as util]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [promesa.core :as p]
             [rum.core :as rum]))
 
 (defn- ui-message-text
@@ -215,8 +214,7 @@
                                                           (clj->js {:message trimmed-draft
                                                                     :kind "user"}))}
                                                   {:response-schema :sessions/message})
-                              (p/then (fn [_] (agent-handler/<fetch-events! block)))
-                              (p/catch (fn [_] nil)))))]
+                              (.catch (fn [_] nil)))))]
     (hooks/use-effect!
      (fn []
        (when (agent-handler/task-ready? block)
@@ -229,17 +227,6 @@
          (agent-handler/<fetch-events! block))
        nil)
      [session-id session-started?])
-    (hooks/use-effect!
-     (fn []
-       (when (and base session-id session-started?
-                  (or (not (:streaming? session))
-                      (string? (:stream-error session))))
-         (let [interval-id (js/setInterval
-                            (fn []
-                              (agent-handler/<fetch-events! block))
-                            2000)]
-           #(js/clearInterval interval-id))))
-     [session-id session-started? (:streaming? session) (:stream-error session)])
     (hooks/use-effect!
      (fn []
        (js/setTimeout scroll-to-bottom! 0)
