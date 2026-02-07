@@ -3,6 +3,18 @@
             [clojure.string :as string]
             [logseq.db-sync.worker.agent.runtime-provider :as runtime-provider]))
 
+(defn- fetch-url [request]
+  (cond
+    (string? request) request
+    (instance? js/URL request) (.toString request)
+    (some? request) (.-url request)
+    :else ""))
+
+(defn- fetch-method [request init]
+  (or (when (some? init) (aget init "method"))
+      (when (and (some? request) (not (string? request))) (.-method request))
+      "GET"))
+
 (deftest provider-kind-test
   (testing "normalizes configured runtime provider"
     (is (= "sprites" (runtime-provider/provider-kind #js {})))
@@ -100,9 +112,9 @@
                task {:agent {:provider "codex"}}
                original-fetch js/fetch]
            (set! js/fetch
-                 (fn [request]
-                   (is (= "http://127.0.0.1:2468/v1/sessions/sess-1" (.-url request)))
-                   (is (= "POST" (.-method request)))
+                 (fn [request init]
+                   (is (= "http://127.0.0.1:2468/v1/sessions/sess-1" (fetch-url request)))
+                   (is (= "POST" (fetch-method request init)))
                    (js/Promise.resolve
                     (js/Response.
                      (js/JSON.stringify #js {:ok true})
@@ -128,9 +140,9 @@
                         :session-id "sess-2"}
                original-fetch js/fetch]
            (set! js/fetch
-                 (fn [request]
-                   (is (= "http://sandbox.local/v1/sessions/sess-2/events/sse" (.-url request)))
-                   (is (= "GET" (.-method request)))
+                 (fn [request init]
+                   (is (= "http://sandbox.local/v1/sessions/sess-2/events/sse" (fetch-url request)))
+                   (is (= "GET" (fetch-method request init)))
                    (js/Promise.resolve
                     (js/Response. "data: {\"type\":\"ok\"}\n\n"
                                   #js {:status 200
@@ -154,9 +166,9 @@
                         :session-id "sess-2"}
                original-fetch js/fetch]
            (set! js/fetch
-                 (fn [request]
-                   (is (= "http://sandbox.local/v1/sessions/sess-2/messages" (.-url request)))
-                   (is (= "POST" (.-method request)))
+                 (fn [request init]
+                   (is (= "http://sandbox.local/v1/sessions/sess-2/messages" (fetch-url request)))
+                   (is (= "POST" (fetch-method request init)))
                    (js/Promise.resolve
                     (js/Response.
                      (js/JSON.stringify #js {:ok true})
@@ -170,6 +182,237 @@
                (.catch (fn [error]
                          (set! js/fetch original-fetch)
                          (is false (str "unexpected error: " error))
+                         (done)))))))
+
+(deftest sprites-provider-send-message-test
+  (async done
+         (let [captured (atom nil)
+               env #js {"SPRITE_TOKEN" "sprite-token"}
+               provider (runtime-provider/create-provider env "sprites")
+               runtime {:provider "sprites"
+                        :sprite-name "sprite-1"
+                        :sandbox-port 2468
+                        :session-id "sess-4"}
+               original-fetch js/fetch]
+           (set! js/fetch
+                 (fn [request init]
+                   (let [url (fetch-url request)
+                         parsed (js/URL. url)
+                         cmds (vec (.getAll (.-searchParams parsed) "cmd"))]
+                     (reset! captured {:url url
+                                       :method (fetch-method request init)
+                                       :script (nth cmds 2 nil)})
+                     (js/Promise.resolve
+                      (js/Response.
+                       (js/JSON.stringify #js {:ok true})
+                       #js {:status 200 :headers #js {"content-type" "application/json"}})))))
+           (-> (runtime-provider/<send-message! provider runtime {:message "hello sprites"})
+               (.then (fn [ok?]
+                        (set! js/fetch original-fetch)
+                        (is (true? ok?))
+                        (is (= "POST" (:method @captured)))
+                        (is (string/includes? (:url @captured) "/v1/sprites/sprite-1/exec"))
+                        (is (string/includes? (:script @captured) "/v1/sessions/sess-4/messages"))
+                        (is (not (string/includes? (:script @captured) "/messages/stream")))
+                        (done)))
+               (.catch (fn [error]
+                         (set! js/fetch original-fetch)
+                         (is false (str "unexpected error: " error))
+                         (done)))))))
+
+(deftest sprites-provider-provision-parses-nested-exec-output-test
+  (async done
+         (let [env #js {"SPRITE_TOKEN" "sprite-token"}
+               provider (runtime-provider/create-provider env "sprites")
+               task {:agent {:provider "codex"}}
+               original-fetch js/fetch]
+           (set! js/fetch
+                 (fn [request init]
+                   (let [url (fetch-url request)
+                         method (fetch-method request init)]
+                     (cond
+                       (and (= "POST" method)
+                            (string/includes? url "/v1/sprites")
+                            (not (string/includes? url "/exec")))
+                       (js/Promise.resolve
+                        (js/Response.
+                         (js/JSON.stringify #js {:name "logseq-task-sess-ok"})
+                         #js {:status 200 :headers #js {"content-type" "application/json"}}))
+
+                       (and (= "POST" method)
+                            (string/includes? url "/v1/sprites/logseq-task-sess-ok/exec"))
+                       (let [parsed (js/URL. url)
+                             cmds (vec (.getAll (.-searchParams parsed) "cmd"))
+                             script (nth cmds 2 nil)
+                             create-session? (and (string? script)
+                                                  (string/includes? script "/v1/sessions/sess-ok"))]
+                         (js/Promise.resolve
+                          (js/Response.
+                           (js/JSON.stringify
+                            (clj->js (if create-session?
+                                       {:result {:stdout "{\"ok\":true}\n__HTTP_STATUS__:200__HTTP_STATUS__:200"
+                                                 :stderr ""}}
+                                       {:result {:stdout ""
+                                                 :stderr ""}})))
+                           #js {:status 200 :headers #js {"content-type" "application/json"}})))
+
+                       :else
+                       (js/Promise.resolve
+                        (js/Response.
+                         (js/JSON.stringify #js {:error "unexpected request"})
+                         #js {:status 500 :headers #js {"content-type" "application/json"}}))))))
+           (-> (runtime-provider/<provision-runtime! provider "sess-ok" task)
+               (.then (fn [runtime]
+                        (set! js/fetch original-fetch)
+                        (is (= "sess-ok" (:session-id runtime)))
+                        (is (= "sprites" (:provider runtime)))
+                        (done)))
+               (.catch (fn [error]
+                         (set! js/fetch original-fetch)
+                         (is false (str "unexpected error: " error))
+                         (done)))))))
+
+(deftest sprites-provider-provision-retries-create-session-on-transient-connection-error-test
+  (async done
+         (let [calls (atom {:create-session 0})
+               env #js {"SPRITE_TOKEN" "sprite-token"
+                        "SPRITES_HEALTH_RETRIES" "2"
+                        "SPRITES_HEALTH_INTERVAL_MS" "1"}
+               provider (runtime-provider/create-provider env "sprites")
+               task {:agent {:provider "codex"}}
+               original-fetch js/fetch]
+           (set! js/fetch
+                 (fn [request init]
+                   (let [url (fetch-url request)
+                         method (fetch-method request init)]
+                     (cond
+                       (and (= "POST" method)
+                            (string/includes? url "/v1/sprites")
+                            (not (string/includes? url "/exec")))
+                       (js/Promise.resolve
+                        (js/Response.
+                         (js/JSON.stringify #js {:name "logseq-task-sess-retry"})
+                         #js {:status 200 :headers #js {"content-type" "application/json"}}))
+
+                       (and (= "POST" method)
+                            (string/includes? url "/v1/sprites/logseq-task-sess-retry/exec"))
+                       (let [parsed (js/URL. url)
+                             cmds (vec (.getAll (.-searchParams parsed) "cmd"))
+                             script (nth cmds 2 nil)
+                             create-session? (and (string? script)
+                                                  (string/includes? script "/v1/sessions/sess-retry"))
+                             health? (and (string? script)
+                                          (string/includes? script "/v1/health"))]
+                         (cond
+                           create-session?
+                           (let [n (swap! calls update :create-session inc)]
+                             (js/Promise.resolve
+                              (js/Response.
+                               (js/JSON.stringify
+                                (clj->js (if (= 1 (:create-session n))
+                                           {:result {:stdout "curl: (7) Failed to connect to 127.0.0.1 port 2468\n__HTTP_STATUS__:000"
+                                                     :stderr ""}}
+                                           {:result {:stdout "{\"ok\":true}\n__HTTP_STATUS__:200"
+                                                     :stderr ""}})))
+                               #js {:status 200 :headers #js {"content-type" "application/json"}})))
+
+                           health?
+                           (js/Promise.resolve
+                            (js/Response.
+                             (js/JSON.stringify (clj->js {:result {:stdout "__HEALTH_OK__" :stderr ""}}))
+                             #js {:status 200 :headers #js {"content-type" "application/json"}}))
+
+                           :else
+                           (js/Promise.resolve
+                            (js/Response.
+                             (js/JSON.stringify (clj->js {:result {:stdout "" :stderr ""}}))
+                             #js {:status 200 :headers #js {"content-type" "application/json"}}))))
+
+                       :else
+                       (js/Promise.resolve
+                        (js/Response.
+                         (js/JSON.stringify #js {:error "unexpected request"})
+                         #js {:status 500 :headers #js {"content-type" "application/json"}}))))))
+           (-> (runtime-provider/<provision-runtime! provider "sess-retry" task)
+               (.then (fn [runtime]
+                        (set! js/fetch original-fetch)
+                        (is (= "sess-retry" (:session-id runtime)))
+                        (is (= "sprites" (:provider runtime)))
+                        (is (= 2 (:create-session @calls)))
+                        (done)))
+               (.catch (fn [error]
+                         (set! js/fetch original-fetch)
+                         (is false (str "unexpected error: " error))
+                         (done)))))))
+
+(deftest sprites-provider-provision-does-not-retry-create-session-on-http-400-test
+  (async done
+         (let [calls (atom {:create-session 0})
+               env #js {"SPRITE_TOKEN" "sprite-token"
+                        "SPRITES_HEALTH_RETRIES" "2"
+                        "SPRITES_HEALTH_INTERVAL_MS" "1"}
+               provider (runtime-provider/create-provider env "sprites")
+               task {:agent {:provider "codex"}}
+               original-fetch js/fetch]
+           (set! js/fetch
+                 (fn [request init]
+                   (let [url (fetch-url request)
+                         method (fetch-method request init)]
+                     (cond
+                       (and (= "POST" method)
+                            (string/includes? url "/v1/sprites")
+                            (not (string/includes? url "/exec")))
+                       (js/Promise.resolve
+                        (js/Response.
+                         (js/JSON.stringify #js {:name "logseq-task-sess-400"})
+                         #js {:status 200 :headers #js {"content-type" "application/json"}}))
+
+                       (and (= "POST" method)
+                            (string/includes? url "/v1/sprites/logseq-task-sess-400/exec"))
+                       (let [parsed (js/URL. url)
+                             cmds (vec (.getAll (.-searchParams parsed) "cmd"))
+                             script (nth cmds 2 nil)
+                             create-session? (and (string? script)
+                                                  (string/includes? script "/v1/sessions/sess-400"))
+                             health? (and (string? script)
+                                          (string/includes? script "/v1/health"))]
+                         (cond
+                           create-session?
+                           (do
+                             (swap! calls update :create-session inc)
+                             (js/Promise.resolve
+                              (js/Response.
+                               (js/JSON.stringify
+                                (clj->js {:result {:stdout "{\"error\":\"bad request\"}\n__HTTP_STATUS__:400"
+                                                   :stderr ""}}))
+                               #js {:status 200 :headers #js {"content-type" "application/json"}})))
+
+                           health?
+                           (js/Promise.resolve
+                            (js/Response.
+                             (js/JSON.stringify (clj->js {:result {:stdout "__HEALTH_OK__" :stderr ""}}))
+                             #js {:status 200 :headers #js {"content-type" "application/json"}}))
+
+                           :else
+                           (js/Promise.resolve
+                            (js/Response.
+                             (js/JSON.stringify (clj->js {:result {:stdout "" :stderr ""}}))
+                             #js {:status 200 :headers #js {"content-type" "application/json"}}))))
+
+                       :else
+                       (js/Promise.resolve
+                        (js/Response.
+                         (js/JSON.stringify #js {:error "unexpected request"})
+                         #js {:status 500 :headers #js {"content-type" "application/json"}}))))))
+           (-> (runtime-provider/<provision-runtime! provider "sess-400" task)
+               (.then (fn [_]
+                        (set! js/fetch original-fetch)
+                        (is false "expected provisioning to fail")
+                        (done)))
+               (.catch (fn [error]
+                         (set! js/fetch original-fetch)
+                         (is (= 1 (:create-session @calls)))
+                         (is (= 400 (:status (ex-data error))))
                          (done)))))))
 
 (deftest cloudflare-provider-provision-test

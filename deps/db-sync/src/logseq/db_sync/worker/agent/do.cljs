@@ -150,6 +150,13 @@
                       (fn []
                         (set! (.-runtime-events-stream self) nil)))))))
 
+(defn- start-runtime-events-stream-background! [^js self session-id runtime]
+  ;; Fire-and-forget start. Returning nil avoids p/let awaiting the stream task.
+  (when (and (map? runtime)
+             (string? (:session-id runtime)))
+    (start-runtime-events-stream! self session-id runtime)
+    nil))
+
 (defn- <transition! [^js self to-status event-type data]
   (p/let [session (<get-session self)]
     (cond
@@ -190,9 +197,9 @@
                                                                                    :sprite-name (:sprite-name runtime)}
                                                                             :ts (common/now-ms)})]
           (p/let [_ (<put-session! self session)
-                  _ (<put-events! self events)
-                  _ (when-not (terminal-status? (:status session))
-                      (start-runtime-events-stream! self (:id session) runtime))]
+                  _ (<put-events! self events)]
+            (when-not (terminal-status? (:status session))
+              (start-runtime-events-stream-background! self (:id session) runtime))
             runtime))))))
 
 (defn- handle-init [^js self request]
@@ -205,7 +212,7 @@
                 session (<get-session self)]
           (when (and (map? (:runtime session))
                      (not (terminal-status? (:status session))))
-            (start-runtime-events-stream! self session-id (:runtime session)))
+            (start-runtime-events-stream-background! self session-id (:runtime session)))
           (http/json-response :sessions/create
                               {:session-id session-id
                                :status (:status session)
@@ -301,21 +308,20 @@
                        (p/let [_ (when (and runtime
                                             provider
                                             (string? (:session-id runtime)))
-                                   (do
-                                     (start-runtime-events-stream! self (:id current-session) runtime)
-                                     (-> (runtime-provider/<send-message! provider
-                                                                          runtime
-                                                                          {:message message
-                                                                           :kind (:kind body)})
-                                         (.catch (fn [error]
-                                                   (log/error :agent/runtime-message-error
-                                                              {:session-id (:id current-session)
-                                                               :runtime-session-id (:session-id runtime)
-                                                               :error error})
-                                                   (<append-event! self {:type "agent.runtime.error"
-                                                                         :data {:session-id (:id current-session)
-                                                                                :message (str error)}
-                                                                         :ts (common/now-ms)}))))))]
+                                   (start-runtime-events-stream! self (:id current-session) runtime)
+                                   (-> (runtime-provider/<send-message! provider
+                                                                        runtime
+                                                                        {:message message
+                                                                         :kind (:kind body)})
+                                       (.catch (fn [error]
+                                                 (log/error :agent/runtime-message-error
+                                                            {:session-id (:id current-session)
+                                                             :runtime-session-id (:session-id runtime)
+                                                             :error error})
+                                                 (<append-event! self {:type "agent.runtime.error"
+                                                                       :data {:session-id (:id current-session)
+                                                                              :message (str error)}
+                                                                       :ts (common/now-ms)})))))]
                          (http/json-response :sessions/message {:ok true})))))))))))
 
 (defn- handle-cancel [^js self request]
@@ -344,7 +350,7 @@
                 _ (when (and runtime
                              provider
                              (string? (:session-id runtime)))
-                    (start-runtime-events-stream! self (:id current-session) runtime))
+                    (start-runtime-events-stream-background! self (:id current-session) runtime))
                 _ (when (and runtime
                              provider
                              (string? (:session-id runtime)))

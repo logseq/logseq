@@ -99,8 +99,8 @@
 (defn- ->base64
   [value]
   (when (string? value)
-    (let [bytes (.encode (js/TextEncoder.) value)
-          binary (apply str (map char bytes))]
+    (let [payload (.encode (js/TextEncoder.) value)
+          binary (apply str (map char payload))]
       (js/btoa binary))))
 
 (defn- curl-auth-arg [token]
@@ -183,8 +183,30 @@
   (let [base (sprites-base-url env)
         token (sprites-token env)
         q (build-query (map (fn [c] [:cmd c]) cmd-vec))
-        url (sprites-http-url base (str "/v1/sprites/" sprite-name "/exec?" q))]
-    (fetch-json! "POST" url {:token token})))
+        url (sprites-http-url base (str "/v1/sprites/" sprite-name "/exec?" q))
+        ^js headers (js/Headers.)]
+    (.set headers "Accept" "application/json")
+    (when token (token-header! headers token))
+    (p/let [resp (js/fetch url #js {:method "POST" :headers headers})
+            status (.-status resp)
+            text (->promise (.text resp))
+            parsed (parse-json-safe text)]
+      (when-not (<= 200 status 299)
+        (throw (ex-info "sprites exec failed"
+                        {:status status
+                         :url url
+                         :body parsed
+                         :raw-body text})))
+      (cond
+        (and (map? parsed) (seq parsed))
+        parsed
+
+        (string/blank? text)
+        {}
+
+        :else
+        {:stdout text
+         :stderr ""}))))
 
 ;; -----------------------
 ;; Worker WS upgrade to Sprites exec
@@ -307,17 +329,27 @@
                            " --no-telemetry >/tmp/sandbox-agent.log 2>&1 &"))]
     (sprites-exec-post! env sprite-name ["bash" "-lc" bootstrap])))
 
+(declare sprites-exec-output)
 (defn- <sprite-health! [^js env sprite-name port agent-token retries interval-ms]
   (if (<= retries 0)
     (throw (ex-info "sandbox-agent health check timed out in sprite"
                     {:sprite sprite-name :port port}))
-    (let [script (str "curl -fsS "
+    (let [script (str "if curl -fsS "
                       (curl-auth-arg agent-token)
                       " "
                       (sprite-local-url port "/v1/health")
-                      " >/dev/null")]
+                      " >/dev/null; then echo __HEALTH_OK__; else echo __HEALTH_FAIL__; fi")]
       (-> (sprites-exec-post! env sprite-name ["bash" "-lc" script])
-          (p/then (fn [_] true))
+          (p/then (fn [result]
+                    (let [{:keys [stdout stderr]} (sprites-exec-output result)
+                          output (str stdout "\n" stderr)]
+                      (when-not (string/includes? output "__HEALTH_OK__")
+                        (throw (ex-info "sprite health check failed"
+                                        {:sprite sprite-name
+                                         :port port
+                                         :stdout stdout
+                                         :stderr stderr})))
+                      true)))
           (p/catch (fn [_]
                      (p/let [_ (p/delay interval-ms)]
                        (<sprite-health! env sprite-name port agent-token (dec retries) interval-ms))))))))
@@ -371,8 +403,53 @@
                            "default"))}))
 
 (defn- message-payload [message]
-  (cond-> {:message (:message message)}
-    (string? (:kind message)) (assoc :kind (:kind message))))
+  {:message (:message message)})
+
+(def ^:private sprite-http-status-marker "__HTTP_STATUS__")
+
+(defn- parse-sprite-http-status [text]
+  (when (string? text)
+    (some-> (re-seq (re-pattern (str sprite-http-status-marker ":(\\d+)")) text)
+            last
+            second
+            (parse-int 400))))
+
+(defn- strip-sprite-http-status [text]
+  (if-not (string? text)
+    ""
+    (string/replace text
+                    (re-pattern (str "(?:\\n?" sprite-http-status-marker ":\\d+)+\\s*$"))
+                    "")))
+
+(defn- sprites-exec-output [result]
+  (let [stdout (or (:stdout result)
+                   (get-in result [:result :stdout])
+                   (get-in result [:data :stdout])
+                   (get-in result [:output :stdout]))
+        stderr (or (:stderr result)
+                   (get-in result [:result :stderr])
+                   (get-in result [:data :stderr])
+                   (get-in result [:output :stderr]))
+        exit-code (or (:exitCode result)
+                      (:exit-code result)
+                      (get-in result [:result :exitCode])
+                      (get-in result [:result :exit-code])
+                      (get-in result [:data :exitCode])
+                      (get-in result [:data :exit-code])
+                      (get-in result [:output :exitCode])
+                      (get-in result [:output :exit-code]))]
+    {:stdout (cond
+               (string? stdout) stdout
+               (some? stdout) (str stdout)
+               :else "")
+     :stderr (cond
+               (string? stderr) stderr
+               (some? stderr) (str stderr)
+               :else "")
+     :exit-code (cond
+                  (number? exit-code) exit-code
+                  (string? exit-code) (parse-int exit-code nil)
+                  :else nil)}))
 
 (defn- <sprite-create-session! [^js env sprite-name port agent-token session-id payload]
   (let [script (str "resp=$(curl -sS -w '\\n%{http_code}' -X POST -H 'content-type: application/json' "
@@ -382,24 +459,62 @@
                     (curl-json-arg payload)
                     " "
                     (sprite-local-url port (str "/v1/sessions/" session-id)) "); "
-                    "status=$(echo \"$resp\" | tail -n1); "
+                    "http_status=$(echo \"$resp\" | tail -n1); "
                     "body=$(echo \"$resp\" | sed '$d'); "
                     "printf \"%s\" \"$body\"; "
-                    "printf \"STATUS:%s\" \"$status\" 1>&2")]
+                    "printf \"\\n" sprite-http-status-marker ":%s\" \"$http_status\"; ")]
     (p/let [result (sprites-exec-post! env sprite-name ["bash" "-lc" script])
-            stdout (or (:stdout result) "")
-            stderr (or (:stderr result) "")
-            status (some-> (re-find #"STATUS:(\\d+)" stderr)
-                           second
-                           (parse-int 400))
-            parsed (parse-json-safe stdout)]
-      (when (and (number? status) (not (<= 200 status 299)))
+            {:keys [stdout stderr exit-code]} (sprites-exec-output result)
+            status (or (parse-sprite-http-status stderr)
+                       (parse-sprite-http-status stdout))
+            parsed (parse-json-safe (strip-sprite-http-status stdout))]
+      (when (or
+             (not (number? status))
+             (and (number? status) (not (<= 200 status 299))))
         (throw (ex-info "sandbox-agent create-session failed"
                         {:status status
                          :body parsed
                          :raw-body stdout
                          :stderr stderr})))
+      (println :debug :sprite-create-session :status status :exit-code exit-code)
       (assoc parsed :session-id session-id))))
+
+(defn- transient-create-session-error?
+  [error]
+  (let [{:keys [status raw-body stderr]} (ex-data error)
+        msg (ex-message error)
+        haystack (-> (str (or raw-body "") "\n" (or stderr "") "\n" (or msg ""))
+                     string/lower-case)]
+    (or (= status 0)
+        (string/includes? haystack "__http_status__:000")
+        (string/includes? haystack "failed to connect")
+        (string/includes? haystack "could not connect")
+        (string/includes? haystack "connection refused")
+        (string/includes? haystack "connect(): connection refused")
+        (string/includes? haystack "connection reset")
+        (string/includes? haystack "timed out"))))
+
+(defn- <sprite-create-session-with-retry!
+  [^js env sprite-name port agent-token session-id payload retries interval-ms]
+  (-> (<sprite-create-session! env sprite-name port agent-token session-id payload)
+      (p/catch (fn [error]
+                 (if (and (> retries 0) (transient-create-session-error? error))
+                   (do
+                     (println :debug :sprite-create-session-retry
+                              {:sprite sprite-name
+                               :session-id session-id
+                               :retries-left retries
+                               :error (ex-data error)})
+                     (p/let [_ (p/delay interval-ms)]
+                       (<sprite-create-session-with-retry! env
+                                                           sprite-name
+                                                           port
+                                                           agent-token
+                                                           session-id
+                                                           payload
+                                                           (dec retries)
+                                                           interval-ms)))
+                   (p/rejected error))))))
 
 (defn- <sprite-clone-repo! [^js env sprite-name session-id task]
   (when-let [cmd (repo-clone-command env session-id task)]
@@ -684,13 +799,22 @@
           port (parse-int (env-str env "SPRITES_SANDBOX_AGENT_PORT") 2468)
           agent-token (env-str env "SANDBOX_AGENT_TOKEN") ;; may be nil if --no-token
           health-retries (parse-int (env-str env "SPRITES_HEALTH_RETRIES") 120)
-          health-interval-ms (parse-int (env-str env "SPRITES_HEALTH_INTERVAL_MS") 500)]
+          health-interval-ms (parse-int (env-str env "SPRITES_HEALTH_INTERVAL_MS") 500)
+          create-session-retries (parse-int (env-str env "SPRITES_CREATE_SESSION_RETRIES") 20)
+          create-session-interval-ms (parse-int (env-str env "SPRITES_CREATE_SESSION_INTERVAL_MS") 250)]
       (p/let [_ (sprites-create-or-get! env name)
               _ (<sprite-clone-repo! env name session-id task)
               _ (<sprite-bootstrap! env name port task session-id)
               _ (<sprite-health! env name port agent-token health-retries health-interval-ms)
               payload (session-payload task)
-              response (<sprite-create-session! env name port agent-token session-id payload)]
+              response (<sprite-create-session-with-retry! env
+                                                           name
+                                                           port
+                                                           agent-token
+                                                           session-id
+                                                           payload
+                                                           create-session-retries
+                                                           create-session-interval-ms)]
         {:provider "sprites"
          :sprite-name name
          :sandbox-port port
@@ -723,14 +847,18 @@
                           (env-str env "SANDBOX_AGENT_TOKEN"))]
       (when-not (string? name)
         (throw (ex-info "missing sprite-name on runtime" {:runtime runtime})))
-      (let [script (str "curl -fsS -X POST "
+      (let [payload-arg (curl-json-arg (message-payload message))
+            auth-arg (curl-auth-arg agent-token)
+            messages-url (sprite-local-url port (str "/v1/sessions/" (:session-id runtime) "/messages"))
+            script (str "curl -fsS -X POST "
                         "-H 'content-type: application/json' "
-                        (curl-auth-arg agent-token)
+                        auth-arg
                         " "
-                        (curl-json-arg (message-payload message))
+                        payload-arg
                         " "
-                        (sprite-local-url port (str "/v1/sessions/" (:session-id runtime) "/messages"))
+                        messages-url
                         " >/dev/null")]
+        (js/console.log "[agent:sprites-send-message]" script)
         (p/let [_ (sprites-exec-post! env name ["bash" "-lc" script])]
           true))))
 

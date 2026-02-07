@@ -149,3 +149,136 @@
                          (set! js/fetch original-fetch)
                          (is false (str "unexpected error: " error))
                          (done))))))))
+
+(deftest init-does-not-wait-for-open-events-stream-test
+  (testing "session init returns immediately even when runtime events stream stays open"
+    (async done
+           (let [calls (atom {:create 0
+                              :events-sse 0})
+                 original-fetch js/fetch
+                 env #js {"AGENT_RUNTIME_PROVIDER" "local-dev"
+                          "SANDBOX_AGENT_URL" "http://sandbox.local"}
+                 self (make-self env)
+                 headers {"content-type" "application/json"
+                          "x-user-id" "user-1"}
+                 init-body {:id "sess-init-fast"
+                            :project {:id "project-1"}
+                            :agent "codex"}
+                 timeout-id (js/setTimeout (fn []
+                                             (set! js/fetch original-fetch)
+                                             (is false "init blocked waiting on events stream")
+                                             (done))
+                                           250)]
+             (set! js/fetch
+                   (fn [request]
+                     (let [url (.-url request)
+                           method (.-method request)]
+                       (cond
+                         (and (= "POST" method)
+                              (string/includes? url "/v1/sessions/sess-init-fast")
+                              (not (string/includes? url "/messages")))
+                         (do
+                           (swap! calls update :create inc)
+                           (js/Promise.resolve
+                            (js/Response.
+                             (js/JSON.stringify #js {:ok true})
+                             #js {:status 200
+                                  :headers #js {"content-type" "application/json"}})))
+
+                         (and (= "GET" method)
+                              (string/includes? url "/v1/sessions/sess-init-fast/events/sse"))
+                         (do
+                           (swap! calls update :events-sse inc)
+                           (let [stream (js/TransformStream.)]
+                             ;; Never close/read completion from this stream.
+                             (js/Promise.resolve
+                              (js/Response.
+                               (.-readable stream)
+                               #js {:status 200
+                                    :headers #js {"content-type" "text/event-stream"}}))))
+
+                         :else
+                         (js/Promise.resolve
+                          (js/Response.
+                           (js/JSON.stringify #js {:error "unhandled request"})
+                           #js {:status 500
+                                :headers #js {"content-type" "application/json"}}))))))
+
+             (-> (agent-do/handle-fetch self
+                                        (json-request "http://db-sync.local/__session__/init"
+                                                      "POST"
+                                                      init-body
+                                                      headers))
+                 (.then (fn [resp]
+                          (js/clearTimeout timeout-id)
+                          (set! js/fetch original-fetch)
+                          (is (= 200 (.-status resp)))
+                          (is (= 1 (:create @calls)))
+                          (is (= 1 (:events-sse @calls)))
+                          (done)))
+                 (.catch (fn [error]
+                           (js/clearTimeout timeout-id)
+                           (set! js/fetch original-fetch)
+                           (is false (str "unexpected error: " error))
+                           (done))))))))
+
+(deftest init-does-not-await-start-runtime-events-stream-return-test
+  (testing "session init should not await start-runtime-events-stream! promise"
+    (async done
+           (let [calls (atom {:create 0})
+                 original-fetch js/fetch
+                 env #js {"AGENT_RUNTIME_PROVIDER" "local-dev"
+                          "SANDBOX_AGENT_URL" "http://sandbox.local"}
+                 self (make-self env)
+                 headers {"content-type" "application/json"
+                          "x-user-id" "user-1"}
+                 init-body {:id "sess-init-no-await"
+                            :project {:id "project-1"}
+                            :agent "codex"}
+                 timeout-id (js/setTimeout (fn []
+                                             (set! js/fetch original-fetch)
+                                             (is false "init awaited start-runtime-events-stream! promise")
+                                             (done))
+                                           250)]
+             (set! js/fetch
+                   (fn [request]
+                     (let [url (.-url request)
+                           method (.-method request)]
+                       (cond
+                         (and (= "POST" method)
+                              (string/includes? url "/v1/sessions/sess-init-no-await")
+                              (not (string/includes? url "/messages")))
+                         (do
+                           (swap! calls update :create inc)
+                           (js/Promise.resolve
+                            (js/Response.
+                             (js/JSON.stringify #js {:ok true})
+                             #js {:status 200
+                                  :headers #js {"content-type" "application/json"}})))
+
+                         :else
+                         (js/Promise.resolve
+                          (js/Response.
+                           (js/JSON.stringify #js {:error "unhandled request"})
+                           #js {:status 500
+                                :headers #js {"content-type" "application/json"}}))))))
+
+             (with-redefs [agent-do/start-runtime-events-stream!
+                           (fn [& _]
+                             (js/Promise. (fn [_resolve _reject])))]
+               (-> (agent-do/handle-fetch self
+                                          (json-request "http://db-sync.local/__session__/init"
+                                                        "POST"
+                                                        init-body
+                                                        headers))
+                   (.then (fn [resp]
+                            (js/clearTimeout timeout-id)
+                            (set! js/fetch original-fetch)
+                            (is (= 200 (.-status resp)))
+                            (is (= 1 (:create @calls)))
+                            (done)))
+                   (.catch (fn [error]
+                             (js/clearTimeout timeout-id)
+                             (set! js/fetch original-fetch)
+                             (is false (str "unexpected error: " error))
+                             (done)))))))))
