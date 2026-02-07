@@ -41,7 +41,10 @@ export const AgentChatPromptInput = ({
   };
 
   return (
-    <PromptInput className={cn("mt-4", className)} onSubmit={handleSubmit}>
+    <PromptInput
+      className={cn("mt-4 [&_svg.lucide]:size-3", className)}
+      onSubmit={handleSubmit}
+    >
       <PromptInputTextarea
         disabled={disabled}
         onChange={(event) => {
@@ -62,4 +65,3 @@ export const AgentChatPromptInput = ({
     </PromptInput>
   );
 };
-

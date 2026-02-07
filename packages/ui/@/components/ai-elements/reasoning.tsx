@@ -149,11 +149,11 @@ export const ReasoningTrigger = ({
     >
       {children ?? (
         <>
-          <BrainIcon className="size-4" />
+          <BrainIcon className="size-3" />
           <span>{getThinkingMessage(isStreaming, duration)}</span>
           <ChevronDownIcon
             className={cn(
-              "ml-auto size-4 transition-transform",
+              "ml-auto size-3 transition-transform",
               isOpen ? "rotate-180" : "rotate-0"
             )}
           />
@@ -176,4 +176,3 @@ export const ReasoningContent = ({
     <MessageResponse>{children}</MessageResponse>
   </div>
 );
-

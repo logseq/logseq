@@ -91,11 +91,11 @@ export const ToolHeader = ({
       {...props}
     >
       <div className="flex items-center gap-2 text-sm">
-        <WrenchIcon className="size-4 text-muted-foreground" />
+        <WrenchIcon className="size-3 text-muted-foreground" />
         <span className="font-medium">{title ?? derivedName}</span>
         {getStatusBadge(state)}
       </div>
-      <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-open:rotate-180" />
+      <ChevronDownIcon className="size-3 text-muted-foreground transition-transform group-open:rotate-180" />
     </summary>
   );
 };
@@ -180,4 +180,3 @@ export const ToolOutput = ({
     </div>
   );
 };
-

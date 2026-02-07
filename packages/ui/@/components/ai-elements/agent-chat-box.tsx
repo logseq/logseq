@@ -202,7 +202,9 @@ export const AgentChatBox = ({
   const chatMessages = Array.isArray(messages) ? messages : [];
 
   return (
-    <Conversation className={cn("relative flex-1", className)}>
+    <Conversation
+      className={cn("relative flex-1 [&_svg.lucide]:size-3", className)}
+    >
       <ConversationContent className={cn("gap-4 p-3", contentClassName)}>
         {chatMessages.length > 0 ? (
           chatMessages.map((message) => (

@@ -252,7 +252,7 @@ export const MessageBranchPrevious = ({
       variant="ghost"
       {...props}
     >
-      <ChevronLeftIcon className="size-4" />
+      <ChevronLeftIcon className="size-3" />
     </Button>
   );
 };
@@ -275,7 +275,7 @@ export const MessageBranchNext = ({
       variant="ghost"
       {...props}
     >
-      <ChevronRightIcon className="size-4" />
+      <ChevronRightIcon className="size-3" />
     </Button>
   );
 };

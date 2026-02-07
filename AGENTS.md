@@ -39,3 +39,5 @@
 - Avoid creating new class or property unless you have to.
 - Create db migration when adding new properties/classes.
 - Cljs doesn't support "text-[10px]" directly, you need add it to `:class`.
+- Don't apply Test-Driven Development (TDD) skill for UI tweaks.
+- User can ask to disable Test-Driven Development and you must obey the order.

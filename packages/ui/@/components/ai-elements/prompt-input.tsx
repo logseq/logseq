@@ -119,7 +119,7 @@ export const PromptInputSubmit = ({
   children,
   ...props
 }: PromptInputSubmitProps) => (
-  <Button className={cn("h-8 w-8 rounded-full p-0", className)} size="icon-sm" type="submit" {...props}>
-    {children ?? <ArrowUpIcon className="size-4" />}
+  <Button className={cn("h-6 w-6 rounded-full p-0", className)} size="icon-sm" type="submit" {...props}>
+    {children ?? <ArrowUpIcon className="size-3" />}
   </Button>
 );
