@@ -4,6 +4,7 @@
             ["os" :as os]
             ["path" :as node-path]
             [clojure.string :as string]
+            [frontend.worker.graph-dir :as graph-dir]
             [frontend.worker-common.util :as worker-util]
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
@@ -21,10 +22,7 @@
 
 (defn repo->graph-dir-key
   [repo]
-  (when (seq repo)
-    (if (string/starts-with? repo common-config/db-version-prefix)
-      (subs repo (count common-config/db-version-prefix))
-      repo)))
+  (graph-dir/repo->graph-dir-key repo))
 
 (defn canonical-graph-dir-key?
   [graph-dir-key]
