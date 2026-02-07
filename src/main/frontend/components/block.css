@@ -1178,7 +1178,7 @@ html.is-mac {
   .handle-left, .handle-right {
     @apply absolute w-[6px] h-[15%] min-h-[30px] bg-black/30 hover:bg-black/70
     top-[50%] left-[5px] rounded-full cursor-col-resize select-none
-    translate-y-[-20%] opacity-0 border border-gray-200;
+    translate-y-[-20%] opacity-0 border border-gray-200 z-10;
   }
 
   .handle-right {
@@ -1190,6 +1190,7 @@ html.is-mac {
       @apply opacity-100;
     }
   }
+
 }
 
 .property-value .ls-resize-image {

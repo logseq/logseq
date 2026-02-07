@@ -41,6 +41,7 @@
  :help/block-reference "块引用"
  :help/open-link-in-sidebar "在侧边栏打开"
  :text/image "图片"
+ :text/video "视频"
  :asset/confirm-delete "确定要删除{1}吗？"
  :asset/physical-delete "同时删除本地文件（目前不可撤销）"
  :search-item/page "页面"
