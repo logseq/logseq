@@ -9,7 +9,6 @@
    [frontend.handler.notification :as notification]
    [frontend.state :as state]
    [frontend.util :as util]
-   [logseq.common.path :as path]
    [logseq.shui.hooks :as hooks]
    [logseq.shui.ui :as shui]
    [promesa.core :as p]
