@@ -2,17 +2,32 @@
   "Backend of DB based graph"
   (:require [frontend.db :as db]
             [frontend.persist-db.browser :as browser]
+            [frontend.persist-db.node :as node]
             [frontend.persist-db.protocol :as protocol]
+            [frontend.handler.worker :as worker-handler]
             [frontend.state :as state]
             [frontend.util :as util]
             [promesa.core :as p]))
 
 (defonce opfs-db (browser/->InBrowser))
+(defonce node-db (atom nil))
+
+(defn- node-runtime?
+  []
+  (and (exists? js/process)
+       (not (exists? js/window))))
 
 (defn- get-impl
   "Get the actual implementation of PersistentDB"
   []
-  opfs-db)
+  (if (node-runtime?)
+    (or @node-db
+        (let [client (node/start! (assoc (node/default-config)
+                                         :event-handler worker-handler/handle))]
+          (reset! node-db client)
+          (reset! state/*db-worker (:wrapped-worker client))
+          client))
+    opfs-db))
 
 (defn <list-db []
   (protocol/<list-db (get-impl)))

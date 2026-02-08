@@ -36,17 +36,18 @@
 (defn- insert!
   [^js db sql params]
   (try
-    (.exec db #js {:sql sql
-                   :bind (clj->js params)})
+    (when db
+      (.exec db #js {:sql sql
+                     :bind (clj->js params)}))
     (catch :default e
-      (log/error :rtc-debug-log-insert-failed e))))
+      (log/error :rtc-debug-log-insert-failed [e sql (clj->js params)]))))
 
 (defn log-tx!
   [repo tx-data tx-meta]
   (when repo
     (when-let [db (worker-state/get-sqlite-conn repo :debug-log)]
       (insert! db
-               "INSERT INTO tx_log (tx_data, tx_meta) VALUES (?1, ?2)"
+               "INSERT INTO tx_log (tx_data, tx_meta) VALUES (?, ?)"
                [(safe-str tx-data) (safe-str tx-meta)])
       (log/debug :log-tx tx-meta))))
 
@@ -57,5 +58,5 @@
    (when (and repo message)
      (when-let [db (worker-state/get-sqlite-conn repo :debug-log)]
        (insert! db
-                "INSERT INTO messages (direction, message) VALUES (?1, ?2)"
+                "INSERT INTO messages (direction, message) VALUES (?, ?)"
                 [(name direction) (str message)])))))

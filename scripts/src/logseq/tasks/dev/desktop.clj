@@ -7,15 +7,15 @@
 (defn watch
   "Watches environment to reload cljs, css and other assets"
   []
-  (shell "yarn electron-watch"))
+  (shell {:shutdown nil} "yarn electron-watch"))
 
 (defn open-dev-electron-app
   "Opens dev-electron-app when watch process has built main.js"
   []
   (let [start-time (java.time.Instant/now)]
     (dotimes [_n 1000]
-             (if (and (fs/exists? "static/js/main.js")
-                      (task-util/file-modified-later-than? "static/js/main.js" start-time))
-               (shell "yarn dev-electron-app")
-               (println "Waiting for app to build..."))
-             (Thread/sleep 1000))))
+        (if (and (fs/exists? "static/js/main.js")
+                 (task-util/file-modified-later-than? "static/js/main.js" start-time))
+          (shell {:shutdown nil} "yarn dev-electron-app")
+          (println "Waiting for app to build..."))
+        (Thread/sleep 1000))))
