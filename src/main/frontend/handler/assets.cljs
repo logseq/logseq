@@ -274,24 +274,25 @@
   [repo aes-key asset-block-uuid-str asset-type checksum put-url & {:keys [extra-headers]}]
   (assert (and asset-type checksum))
   (m/sp
-    (let [asset-file (loop [i 0]
-                       (try
-                         (c.m/<? (<read-asset repo asset-block-uuid-str asset-type))
-                         (catch :default e
-                           ;; Asset upload is triggered by DB change events. In practice
-                           ;; the asset file write can race with the upload task startup,
-                           ;; causing transient ENOENT. Retry briefly to make uploads
-                           ;; deterministic.
-                           (if (and (< i 20) (re-find #"ENOENT" (str e)))
-                             (do
-                               (c.m/<? (p/delay 200))
-                               (recur (inc i)))
-                             (do
-                               (log/info :read-asset e)
-                               (throw (ex-info "read-asset failed"
-                                               {:type :rtc.exception/read-asset-failed
-                                                :attempt i}
-                                               e)))))))
+    (letfn [(read-asset-with-retry [attempt]
+              (try
+                (c.m/<? (<read-asset repo asset-block-uuid-str asset-type))
+                (catch :default e
+                  ;; Asset upload is triggered by DB change events. In practice
+                  ;; the asset file write can race with the upload task startup,
+                  ;; causing transient ENOENT. Retry briefly to make uploads
+                  ;; deterministic.
+                  (if (and (< attempt 20) (re-find #"ENOENT" (str e)))
+                    (do
+                      (c.m/<? (p/delay 200))
+                      (read-asset-with-retry (inc attempt)))
+                    (do
+                      (log/info :read-asset e)
+                      (throw (ex-info "read-asset failed"
+                                      {:type :rtc.exception/read-asset-failed
+                                       :attempt attempt}
+                                      e)))))))]
+      (let [asset-file (read-asset-with-retry 0)
           asset-file* (if (not aes-key)
                         asset-file
                         (ldb/write-transit-str
@@ -311,10 +312,10 @@
                      (fn [m] (assoc-in m [repo asset-block-uuid-str] v))))
                   @*progress-flow)
         :succ (constantly nil))
-      (let [{:keys [status] :as r} (m/? http-task)]
-        (when-not (http/unexceptional-status? status)
-          (throw (ex-info "upload-asset failed"
-                          {:type :rtc.exception/upload-asset-failed :data (dissoc r :body)})))))))
+	      (let [{:keys [status] :as r} (m/? http-task)]
+	        (when-not (http/unexceptional-status? status)
+	          (throw (ex-info "upload-asset failed"
+	                          {:type :rtc.exception/upload-asset-failed :data (dissoc r :body)}))))))))
 
 (defn new-task--rtc-download-asset
   [repo aes-key asset-block-uuid-str asset-type get-url & {:keys [extra-headers]}]
