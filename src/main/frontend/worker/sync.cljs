@@ -1373,13 +1373,23 @@
                        loaded 0]
                 (let [rows (fetch-kvs-rows db last-addr upload-kvs-batch-size)]
                   (if (empty? rows)
-                    (do
-                      (client-op/remove-local-tx repo)
-                      (client-op/update-local-tx repo 0)
-                      (client-op/add-all-exists-asset-as-ops repo)
-                      (update-progress {:sub-type :upload-completed
-                                        :message "Graph upload finished!"})
-                      {:graph-id graph-id})
+	                    (do
+	                      (client-op/remove-local-tx repo)
+	                      (client-op/update-local-tx repo 0)
+	                      (client-op/add-all-exists-asset-as-ops repo)
+	                      ;; Snapshot upload alone is not enough, assets live in R2 and must be
+	                      ;; pushed explicitly. Without running the asset ops here, it is easy
+	                      ;; to end up with a remote graph that can be re-downloaded but has
+	                      ;; missing attachments.
+	                      (update-progress {:sub-type :upload-progress
+	                                        :message "Uploading assets"})
+	                      (p/let [client (or (current-client repo)
+	                                         {:repo repo
+	                                          :graph-id graph-id})]
+	                        (process-asset-ops! repo client))
+	                      (update-progress {:sub-type :upload-completed
+	                                        :message "Graph upload finished!"})
+	                      {:graph-id graph-id})
                     (let [max-addr (apply max (map first rows))
                           rows (normalize-snapshot-rows rows)
                           upload-url (str base "/sync/" graph-id "/snapshot/upload?reset=" (if first-batch? "true" "false"))]
