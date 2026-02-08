@@ -218,10 +218,8 @@
   (let [asset-uuid (:block/uuid asset-block)
         asset-type (:logseq.property.asset/type asset-block)
         external-url (:logseq.property.asset/external-url asset-block)
-        remote-metadata (:logseq.property.asset/remote-metadata asset-block)
         progress-entry (get progress (str asset-uuid))]
     (and (seq repo)
-         remote-metadata
          asset-uuid
          (seq asset-type)
          (string/blank? external-url)
@@ -276,10 +274,24 @@
   [repo aes-key asset-block-uuid-str asset-type checksum put-url & {:keys [extra-headers]}]
   (assert (and asset-type checksum))
   (m/sp
-    (let [asset-file (try (c.m/<? (<read-asset repo asset-block-uuid-str asset-type))
-                          (catch :default e
-                            (log/info :read-asset e)
-                            (throw (ex-info "read-asset failed" {:type :rtc.exception/read-asset-failed} e))))
+    (let [asset-file (loop [i 0]
+                       (try
+                         (c.m/<? (<read-asset repo asset-block-uuid-str asset-type))
+                         (catch :default e
+                           ;; Asset upload is triggered by DB change events. In practice
+                           ;; the asset file write can race with the upload task startup,
+                           ;; causing transient ENOENT. Retry briefly to make uploads
+                           ;; deterministic.
+                           (if (and (< i 20) (re-find #"ENOENT" (str e)))
+                             (do
+                               (c.m/<? (p/delay 200))
+                               (recur (inc i)))
+                             (do
+                               (log/info :read-asset e)
+                               (throw (ex-info "read-asset failed"
+                                               {:type :rtc.exception/read-asset-failed
+                                                :attempt i}
+                                               e)))))))
           asset-file* (if (not aes-key)
                         asset-file
                         (ldb/write-transit-str
