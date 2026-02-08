@@ -4,6 +4,8 @@
 
 (deftest match-route-sync-test
   (testing "sync routes"
+    (let [match (sync-routes/match-route "GET" "/")]
+      (is (= :sync/root (:handler match))))
     (let [match (sync-routes/match-route "GET" "/health")]
       (is (= :sync/health (:handler match))))
     (let [match (sync-routes/match-route "GET" "/pull")]

@@ -35,6 +35,15 @@
       (= method "OPTIONS")
       (common/options-response)
 
+      ;; Some clients (or log tooling) hit /sync?graph-id=... (without /sync/<graph-id>/...).
+      ;; Treat that as a malformed sync request and respond deterministically instead of
+      ;; falling through to a generic 404 (which shows up as "Unknown" in logs).
+      (and (= path "/sync") (not= method "OPTIONS"))
+      (http/bad-request "missing graph id")
+
+      (and (= path "/sync/") (not= method "OPTIONS"))
+      (http/bad-request "missing graph id")
+
       (string/starts-with? path "/sync/")
       (let [prefix (count "/sync/")
             rest-path (subs path prefix)

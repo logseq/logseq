@@ -294,6 +294,11 @@
     :sync/health
     (http/json-response :sync/health {:ok true})
 
+    ;; For compatibility with clients that hit `/sync/<graph-id>` without a tail.
+    ;; We treat it as a health check for this graph DO.
+    :sync/root
+    (http/json-response :sync/health {:ok true})
+
     :sync/pull
     (let [raw-since (.get (.-searchParams url) "since")
           since (if (some? raw-since) (parse-int raw-since) 0)]

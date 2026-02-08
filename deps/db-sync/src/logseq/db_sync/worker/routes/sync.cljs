@@ -2,7 +2,8 @@
   (:require [reitit.core :as r]))
 
 (def ^:private route-data
-  [["/health" {:methods {"GET" :sync/health}}]
+  [["/" {:methods {"GET" :sync/root}}]
+   ["/health" {:methods {"GET" :sync/health}}]
    ["/pull" {:methods {"GET" :sync/pull}}]
    ["/snapshot/download" {:methods {"GET" :sync/snapshot-download}}]
    ["/admin/reset" {:methods {"DELETE" :sync/admin-reset}}]
