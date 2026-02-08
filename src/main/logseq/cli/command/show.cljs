@@ -232,12 +232,13 @@
 
 (defn- format-property-lines
   [indent title values]
-  (when (seq values)
-    (if (= 1 (count values))
-      [(str indent title ": " (first values))]
-      (let [item-indent (str indent "  ")]
-        (into [(str indent title ":")]
-              (map #(str item-indent "- " %) values))))))
+  (let [title* (style/bold title)]
+    (when (seq values)
+      (if (= 1 (count values))
+        [(str indent title* ": " (first values))]
+        (let [item-indent (str indent "  ")]
+          (into [(str indent title* ":")]
+                (map #(str item-indent "- " %) values)))))))
 
 (defn- node-property-lines
   [node property-titles property-value-labels indent]
