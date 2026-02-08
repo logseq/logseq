@@ -352,7 +352,8 @@
                   :asset-id asset-id}))
         (fs/mkdir-if-not-exists assets-dir)
         (when-not pdf-annotation?
-          (fs/write-plain-text-file! repo assets-dir (str asset-id "." asset-type) bytes-array {:skip-transact? true}))))))
+          (fs/write-plain-text-file! repo assets-dir (str asset-id "." asset-type) bytes-array {:skip-transact? true
+                                                                                                :skip-compare? true}))))))
 
 (defn- import-file-graph
   [*files

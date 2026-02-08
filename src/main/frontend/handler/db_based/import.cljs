@@ -67,7 +67,8 @@
   (let [file-path (path/path-join assets-dir file-name)]
     (if (util/electron?)
       (fs/write-file! file-path data)
-      (fs/write-plain-text-file! repo assets-dir file-name data {:skip-transact? true}))))
+      (fs/write-plain-text-file! repo assets-dir file-name data {:skip-transact? true
+                                                                 :skip-compare? true}))))
 
 (defn- <copy-zip-assets!
   [repo entries {:keys [progress-fn total]}]
