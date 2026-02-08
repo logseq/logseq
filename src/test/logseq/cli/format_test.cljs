@@ -243,6 +243,34 @@
                   "2 └── TODO Child #TagA")
              (style/strip-ansi result))))))
 
+(deftest test-human-output-show-styled-property-keys
+  (testing "show preserves styled property keys in human output"
+    (let [tree->text #'show-command/tree->text
+          tree-data {:root {:db/id 1
+                            :block/title "Root"
+                            :block/children [{:db/id 2
+                                              :block/title "Child"
+                                              :user.property/acceptance-criteria ["One" "Two"]}
+                                             {:db/id 3
+                                              :block/title "Sibling"}]}
+                     :property-titles {:user.property/acceptance-criteria "Acceptance Criteria"}}
+          styled (binding [style/*color-enabled?* true]
+                   (tree->text tree-data))
+          result (format/format-result {:status :ok
+                                        :command :show
+                                        :data {:message styled}}
+                                       {:output-format nil})]
+      (is (re-find #"\u001b\[[0-9;]*mAcceptance Criteria\u001b\[[0-9;]*m" result))
+      (is (not (re-find #"\u001b\[[0-9;]*m- One\u001b\[[0-9;]*m" result)))
+      (is (not (re-find #"\u001b\[[0-9;]*m- Two\u001b\[[0-9;]*m" result)))
+      (is (= (str "1 Root\n"
+                  "2 ├── Child\n"
+                  "  │   Acceptance Criteria:\n"
+                  "  │     - One\n"
+                  "  │     - Two\n"
+                  "3 └── Sibling")
+             (style/strip-ansi result))))))
+
 (deftest test-human-output-show-preserves-styling
   (testing "show returns styled text without stripping ANSI"
     (let [tree->text #'show-command/tree->text
