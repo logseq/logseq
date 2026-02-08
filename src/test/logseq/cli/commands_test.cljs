@@ -386,6 +386,7 @@
                      :property-titles {:user.property/background "Background"}}
           output (binding [style/*color-enabled?* true]
                    (tree->text tree-data))]
+      (is (contains-bold? output "Background"))
       (is (= (str "1 Root\n"
                   "2 ├── Child A\n"
                   "  │   Background: Because\n"
@@ -406,6 +407,9 @@
                      :property-titles {:user.property/criteria "Criteria"}}
           output (binding [style/*color-enabled?* true]
                    (tree->text tree-data))]
+      (is (contains-bold? output "Criteria"))
+      (is (not (contains-bold? output "- One")))
+      (is (not (contains-bold? output "- Two")))
       (is (= (str "1 Root\n"
                   "2 ├── Child A\n"
                   "  │   Criteria:\n"
@@ -459,10 +463,11 @@
                             :user.property/background "Child"}
                      :property-titles {:user.property/background "Background"}}
           output (binding [style/*color-enabled?* true]
-                   (tree->text tree-data))]
-      (is (string/includes? output "Background: Child"))
-      (is (not (string/includes? output "└── Child")))
-      (is (not (string/includes? output "├── Child"))))))
+                   (tree->text tree-data))
+          output* (strip-ansi output)]
+      (is (string/includes? output* "Background: Child"))
+      (is (not (string/includes? output* "└── Child")))
+      (is (not (string/includes? output* "├── Child"))))))
 
 (deftest test-tree->text-prefixes-status
   (testing "show tree text prefixes status before block titles"
