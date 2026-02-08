@@ -404,10 +404,21 @@
                          (p/then load$)))))
                (js/console.error _e))))))))
 
+(defn- asset-title-or-fallback
+  [asset-block]
+  (let [title (:block/title asset-block)
+        title (some-> title util/trim-safe not-empty)
+        asset-uuid (some-> (:block/uuid asset-block) str)]
+    (or title asset-uuid "asset")))
+
 (rum/defcs asset-link < rum/reactive
   (rum/local nil ::src)
   [state config title href metadata full_text]
   (let [src (::src state)
+        asset-block (:asset-block config)
+        title (if asset-block
+                (asset-title-or-fallback asset-block)
+                title)
         ^js js-url (:link-js-url config)
         href (cond-> href
                (nil? js-url)
@@ -462,7 +473,7 @@
            title]
 
           util/web-platform?
-          (let [file-name (str (:block/title (:asset-block config)) "." (name ext))]
+          (let [file-name (str title "." (name ext))]
             [:a.asset-ref
              {:href @src
               :download file-name}
@@ -470,7 +481,7 @@
 
           (and (util/electron?) (:asset-block config))
           (let [asset-block (:asset-block config)
-                file-name (str (:block/title asset-block) "." (name ext))]
+                file-name (str title "." (name ext))]
             [:a.asset-ref
              {:on-click (fn [e]
                           (util/stop e)
@@ -995,7 +1006,7 @@
                   (asset-link (assoc config
                                      :asset-block block
                                      :image-placeholder img-placeholder)
-                              (:block/title block)
+                              (asset-title-or-fallback block)
                               (path/path-join (str "../" common-config/local-assets-dir) file)
                               img-metadata
                               nil)
@@ -1007,13 +1018,6 @@
            [:div.asset-transfer-placeholder (str label " asset...")])
        progress-view]
       content)))
-
-(defn- img-audio-video?
-  [block]
-  (let [asset-type (some-> (:logseq.property.asset/type block) keyword)]
-    (or (contains? (common-config/img-formats) asset-type)
-        (contains? config/audio-formats asset-type)
-        (contains? config/video-formats asset-type))))
 
 (declare block-positioned-properties)
 
@@ -1050,7 +1054,7 @@
                              (not contents-page?))]
           (when-not (and (:db/id block) (= (:db/id block) (:db/id (:block config))))
             (cond
-              (and asset? (img-audio-video? block))
+              asset?
               (asset-cp config block)
 
               (and (string? uuid-or-title) (string/ends-with? uuid-or-title ".excalidraw"))
@@ -2725,7 +2729,7 @@
                                      config))]
              show-editor? (and editor-box edit? (not type-block-editor?))]
          (cond
-           (and (ldb/asset? block) (img-audio-video? block))
+           (ldb/asset? block)
            [:div.flex.flex-col.asset-block-wrap.w-full
             (block-content-f {:custom-block-content
                               [:div.flex.flex-1
