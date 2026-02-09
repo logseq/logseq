@@ -123,7 +123,29 @@ yarn release-electron
 
 The final released binaries or installers will be at `static/out/`.
 
-## DB sync Node adapter (self-hosted)
+## DB sync
+
+DB sync can be run locally in one of two ways as described in the following
+sections. To use a local sync approach, the app must be built with
+`$ENABLE_DB_SYNC_LOCAL` e.g. `ENABLE_DB_SYNC_LOCAL=true yarn watch`. For more
+about db sync, see [its readme](/deps/db-sync/README.md).
+
+### DB sync Cloudflare Worker adapter
+
+Build and run a Cloudlare worker locally
+
+```bash
+cd deps/db-sync
+yarn install
+yarn release
+# This migration is a one time setup
+cd worker && wrangler d1 migrations apply DB --local && cd -
+yarn dev
+```
+
+When testing
+
+### DB sync Node adapter (self-hosted)
 
 Build and run the Node.js adapter for self-hosted DB sync.
 
