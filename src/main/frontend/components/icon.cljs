@@ -2535,7 +2535,7 @@
         opts (assoc opts :virtual-list? false)
         ;; Read section states reactively
         section-states (rum/react *section-states)]
-    [:div.all-pane.pb-10
+    [:div.all-pane.pb-2
      ;; Recently used - collapsible
      (when (seq used-items)
        (pane-section "Recently used" used-items
@@ -2774,13 +2774,45 @@
       [:div.cp__emoji-icon-picker
        {:data-keep-selection true}
 
-       ;; Topbar: search + separator + tabs
+       ;; Topbar: tabs + separator + search
        [:div.icon-picker-topbar
-        [:div.search-section
+        [:div.tabs-section
          (tab-observer @*tab {:q @*q :*result *result})
          (keyboard-shortcut-observer @*tab *input-focused?)
          (when @*select-mode?
            (select-observer *input-ref))
+         (let [tabs [[:all "All"] [:emoji "Emojis"] [:icon "Icons"] [:custom "Custom"]]]
+           (for [[id label] tabs
+                 :let [active? (= @*tab id)]]
+             [:button.tab-item
+              {:key (name id)
+               :data-text label
+               :data-active (when active? "true")
+               :on-mouse-down (fn [e]
+                                (util/stop e)
+                                (reset! *tab id))}
+              label]))
+         [:div.tab-actions
+          ;; color picker (always visible)
+          (color-picker *color (fn [c]
+                                 (cond
+                                   (or (= :icon (:type normalized-icon-value))
+                                       (= :text (:type normalized-icon-value)))
+                                   (on-chosen nil (assoc-in normalized-icon-value [:data :color] c) true)
+
+                                   (= :avatar (:type normalized-icon-value))
+                                   (on-chosen nil (-> normalized-icon-value
+                                                      (assoc-in [:data :color] c)
+                                                      (assoc-in [:data :backgroundColor] c)) true))))
+          ;; delete button
+          (when del-btn?
+            (shui/button {:variant :outline :size :sm :data-action "del"
+                          :on-click #(on-chosen nil)}
+                         (shui/tabler-icon "trash" {:size 17})))]]
+
+        (shui/separator {:class "my-0 icon-picker-separator"})
+
+        [:div.search-section
          [:div.search-input
           (shui/tabler-icon "search" {:size 16})
           [(shui/input
@@ -2813,39 +2845,7 @@
                                (reset! *result result))))
                          200)})]
           (when-not (string/blank? @*q)
-            [:a.x {:on-click reset-q!} (shui/tabler-icon "x" {:size 14})])]
-
-         ;; color picker (always visible)
-         (color-picker *color (fn [c]
-                                (cond
-                                  (or (= :icon (:type normalized-icon-value))
-                                      (= :text (:type normalized-icon-value)))
-                                  (on-chosen nil (assoc-in normalized-icon-value [:data :color] c) true)
-
-                                  (= :avatar (:type normalized-icon-value))
-                                  (on-chosen nil (-> normalized-icon-value
-                                                     (assoc-in [:data :color] c)
-                                                     (assoc-in [:data :backgroundColor] c)) true))))
-
-         ;; delete button
-         (when del-btn?
-           (shui/button {:variant :outline :size :sm :data-action "del"
-                         :on-click #(on-chosen nil)}
-                        (shui/tabler-icon "trash" {:size 17})))]
-
-        (shui/separator {:class "my-0 icon-picker-separator"})
-
-        [:div.tabs-section
-         (let [tabs [[:all "All"] [:emoji "Emojis"] [:icon "Icons"] [:custom "Custom"]]]
-           (for [[id label] tabs
-                 :let [active? (= @*tab id)]]
-             [:button.tab-item
-              {:key (name id)
-               :data-active (when active? "true")
-               :on-mouse-down (fn [e]
-                                (util/stop e)
-                                (reset! *tab id))}
-              label]))]]
+            [:a.x {:on-click reset-q!} (shui/tabler-icon "x" {:size 14})])]]]
 
        ;; Body
        [:div.bd.bd-scroll

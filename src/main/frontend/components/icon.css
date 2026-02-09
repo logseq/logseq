@@ -27,21 +27,21 @@
   }
 
   .search-section {
-    @apply flex items-center gap-2 py-1 pr-3;
+    @apply flex items-center py-1;
     @apply flex-shrink-0;
     background-color: var(--lx-gray-03);
+    border-bottom: 1px solid var(--rx-gray-06);
   }
 
   .tabs-section {
-    @apply flex gap-0 px-3 py-0;
+    @apply flex items-center gap-0 px-3 py-0;
     @apply flex-shrink-0 h-auto;
     background-color: var(--lx-gray-03) !important;
-    border-bottom: 1px solid var(--rx-gray-06);
-    padding: 0 !important;
+    padding: 0 12px 0 0 !important;
     border-radius: 0 !important;
 
     .tab-item {
-      @apply relative px-3 py-2.5 text-xs font-medium;
+      @apply relative px-3 py-2.5 text-sm font-medium;
       @apply opacity-60 hover:opacity-100;
       @apply transition-all duration-150;
       @apply rounded-none;
@@ -50,6 +50,16 @@
       border: none !important;
       height: auto !important;
       color: var(--rx-gray-11);
+
+      /* Reserve bold width to prevent layout shift on active */
+      &::before {
+        content: attr(data-text);
+        display: block;
+        font-weight: bold;
+        height: 0;
+        overflow: hidden;
+        visibility: hidden;
+      }
 
       /* Underline for active state */
       &[data-active="true"] {
@@ -68,6 +78,10 @@
       &:hover {
         background: transparent !important;
       }
+    }
+
+    .tab-actions {
+      @apply flex items-center gap-1 ml-auto;
     }
   }
 
@@ -167,7 +181,7 @@
 
   .ui__button {
     &[data-action=del] {
-      @apply !w-6 !h-6 overflow-hidden rounded-md ml-1 opacity-60
+      @apply !w-6 !h-6 overflow-hidden rounded-md opacity-60
       hover:text-red-rx-09 hover:opacity-90;
     }
   }
@@ -371,7 +385,7 @@
 
   .back-button {
     @apply flex items-center gap-0.5;
-    @apply text-sm cursor-pointer;
+    @apply text-sm font-medium cursor-pointer;
     @apply border-none bg-transparent p-0;
     @apply transition-colors duration-150;
     color: var(--rx-gray-10);
