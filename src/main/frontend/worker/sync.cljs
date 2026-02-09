@@ -733,6 +733,32 @@
                             :base base
                             :graph-id graph-id})))))
 
+(defn <download-remote-asset-if-missing!
+  "Downloads a remote asset if it is referenced by the local DB but the local
+  file doesn't exist yet.
+
+  Returns `true` when a download was performed, `false` when skipped.
+
+  This is intentionally usable even when the WS sync loop isn't running
+  (for example right after restoring a graph from a remote snapshot)."
+  [repo {:keys [graph-id asset-uuid asset-type]}]
+  (let [graph-id (or graph-id (get-graph-id repo))
+        asset-uuid (some-> asset-uuid str)
+        asset-type (some-> asset-type str)]
+    (if (and (seq graph-id) (seq asset-uuid) (seq asset-type))
+      (p/let [meta (worker-state/<invoke-main-thread
+                    :thread-api/get-asset-file-metadata
+                    repo asset-uuid asset-type)]
+        (if meta
+          false
+          (p/let [_ (download-remote-asset! repo graph-id asset-uuid asset-type)]
+            true)))
+      (p/rejected (ex-info "missing asset download info"
+                           {:repo repo
+                            :asset-uuid asset-uuid
+                            :asset-type asset-type
+                            :graph-id graph-id})))))
+
 (defn- process-asset-op!
   [repo graph-id asset-op]
   (let [asset-uuid (:block/uuid asset-op)
@@ -843,24 +869,28 @@
 
 (defn request-asset-download!
   [repo asset-uuid]
-  (when-let [client (current-client repo)]
-    (let [conn (worker-state/get-datascript-conn repo)
-          graph-id (:graph-id client)
-          ent (when conn (d/entity @conn [:block/uuid asset-uuid]))
-          asset-type (:logseq.property.asset/type ent)]
-      (-> (p/let [meta (when (seq asset-type)
-                         (worker-state/<invoke-main-thread
-                          :thread-api/get-asset-file-metadata
-                          repo (str asset-uuid) asset-type))]
-            (when (and (seq asset-type)
-                       (:logseq.property.asset/remote-metadata ent)
-                       (nil? meta))
-              (download-remote-asset! repo graph-id asset-uuid asset-type)))
-          (p/catch (fn [e]
-                     (log/error :db-sync/asset-download-failed
-                                {:repo repo
-                                 :asset-uuid asset-uuid
-                                 :error e})))))))
+  ;; Asset downloads are pure HTTP. They should work even when the WS sync loop
+  ;; hasn't been started yet (for example right after downloading a remote graph).
+  (let [conn (worker-state/get-datascript-conn repo)
+	        graph-id (or (some-> (current-client repo) :graph-id)
+	                     (get-graph-id repo))
+	        ent (when conn (d/entity @conn [:block/uuid asset-uuid]))
+	        asset-type (:logseq.property.asset/type ent)
+	        external-url (:logseq.property.asset/external-url ent)]
+	    (-> (p/let [meta (when (seq asset-type)
+	                       (worker-state/<invoke-main-thread
+	                        :thread-api/get-asset-file-metadata
+	                        repo (str asset-uuid) asset-type))]
+	          (when (and (seq asset-type)
+	                     (seq graph-id)
+	                     (nil? external-url)
+	                     (nil? meta))
+	            (download-remote-asset! repo graph-id asset-uuid asset-type)))
+	        (p/catch (fn [e]
+	                   (log/error :db-sync/asset-download-failed
+                              {:repo repo
+                               :asset-uuid asset-uuid
+                               :error e}))))))
 
 (defn- get-local-deleted-blocks
   [reversed-tx-report reversed-tx-data]
