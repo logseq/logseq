@@ -13,7 +13,7 @@
       (log/error :db-sync/index-db-missing {:binding "DB"}))
     db))
 
-(defn handle [{:keys [db ^js env request url claims route]}]
+(defn ^:large-vars/cleanup-todo handle [{:keys [db ^js env request url claims route]}]
   (let [path-params (:path-params route)
         graph-id (:graph-id path-params)
         member-id (:member-id path-params)

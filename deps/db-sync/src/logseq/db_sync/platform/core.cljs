@@ -9,5 +9,5 @@
   (js/Request. url init))
 
 (defn request-url
-  [request]
-  (js/URL. (.-url request)))
+  [request']
+  (js/URL. (.-url request')))
