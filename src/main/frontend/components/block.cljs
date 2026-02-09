@@ -225,7 +225,7 @@
           get-blockid #(some-> (rum/deref *el-ref) (.closest "[blockid]") (.getAttribute "blockid") (uuid))
           [reload-n set-reload-n!] (rum/use-state 0)
           reload-asset! #(if (util/electron?)
-                           (set-reload-n! (inc reload-n))
+                           (set-reload-n! inc)
                            (rebuild-asset-url!))]
       (hooks/use-effect!
        (fn []
