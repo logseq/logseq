@@ -31,6 +31,8 @@ wrangler d1 migrations apply logseq-sync-graph-meta-staging --env staging
 wrangler d1 migrations apply logseq-sync-graphs-prod --env prod
 ```
 
+For local development, run `wrangler d1 migrations apply DB --local`.
+
 ### Node.js Adapter (self-hosted)
 
 Build the adapter:
