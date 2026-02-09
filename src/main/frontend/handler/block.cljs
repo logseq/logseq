@@ -31,8 +31,8 @@
   (let [order-block-fn? (fn [block]
                           (let [type (pu/lookup block :logseq.property/order-list-type)]
                             (= type order-list-type)))
-        prev-block-fn   #(some-> (db/entity (:db/id %)) ldb/get-left-sibling)
-        prev-block      (prev-block-fn block)]
+        prev-block-fn #(some-> (db/entity (:db/id %)) ldb/get-left-sibling)
+        prev-block (prev-block-fn block)]
     (letfn [(order-sibling-list [b]
               (lazy-seq
                (when (order-block-fn? b)
@@ -41,8 +41,8 @@
               (lazy-seq
                (when (order-block-fn? b)
                  (cons b (order-parent-list (db-model/get-block-parent (:block/uuid b)))))))]
-      (let [idx           (if prev-block
-                            (count (order-sibling-list block)) 1)
+      (let [idx (if prev-block
+                  (count (order-sibling-list block)) 1)
             order-parents-count (dec (count (order-parent-list block)))
             delta (if (neg? order-parents-count) 0 (mod order-parents-count 3))]
         (cond
@@ -57,7 +57,7 @@
 (defn attach-order-list-state
   [config block]
   (let [type (pu/lookup block :logseq.property/order-list-type)
-        own-order-list-type  (some-> type str string/lower-case)
+        own-order-list-type (some-> type str string/lower-case)
         own-order-list-index (some->> own-order-list-type (get-idx-of-order-list-block block))]
     (assoc config :own-order-list-type own-order-list-type
            :own-order-list-index own-order-list-index
@@ -91,6 +91,26 @@
                            :container-id container-id :direction direction :event event :pos pos}))
     (mark-last-input-time! repo)))
 
+(defn visible-tags
+  "Returns visible (non-inline, non-private) tag entities for a block.
+   Returns nil for built-in blocks or class/tag pages.
+   Used to render tags separately from the page title."
+  [block]
+  (when-not (or (ldb/built-in? block) (ldb/class? block))
+    (let [block-e (cond
+                    (de/entity? block)
+                    block
+                    (uuid? (:block/uuid block))
+                    (db/entity [:block/uuid (:block/uuid block)])
+                    :else
+                    block)]
+      (seq
+       (->> (:block/tags block)
+            (map (fn [tag] (if (number? tag) (db/entity tag) tag)))
+            (remove (fn [t]
+                      (or (some-> (:block/raw-title block-e) (ldb/inline-tag? t))
+                          (ldb/private-tags (:db/ident t))))))))))
+
 (defn block-unique-title
   "Multiple pages/objects may have the same `:block/title`.
    Notice: this doesn't prevent for pages/objects that have the same tag or created by different clients."
@@ -98,22 +118,12 @@
             :or {with-tags? true}}]
   (if (ldb/built-in? block)
     (:block/title block)
-    (let [block-e (cond
-                    (de/entity? block)
-                    block
-                    (uuid? (:block/uuid block))
-                    (db/entity [:block/uuid (:block/uuid block)])
-                    :else
-                    block)
-          tags (remove (fn [t]
-                         (or (some-> (:block/raw-title block-e) (ldb/inline-tag? t))
-                             (ldb/private-tags (:db/ident t))))
-                       (map (fn [tag] (if (number? tag) (db/entity tag) tag)) (:block/tags block)))
+    (let [tags (when with-tags? (visible-tags block))
           title (cond
                   (ldb/class? block)
                   (ldb/get-class-title-with-extends block)
 
-                  (and with-tags? (seq tags))
+                  (seq tags)
                   (str (:block/title block)
                        " "
                        (string/join
@@ -133,8 +143,10 @@
   "Used for select item"
   [block title icon-cp]
   (if-let [icon (:logseq.property/icon block)]
-    [:div.flex.flex-row.items-center.gap-1
-     (icon-cp icon {:size 14})
+    [:div.flex.flex-row.items-baseline.gap-1
+     [:span.self-center.inline-flex.items-center.justify-center.flex-shrink-0
+      {:style {:width 14 :height 14}}
+      (icon-cp icon {:size 14})]
      title]
     (or title (:block/title block))))
 

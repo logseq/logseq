@@ -230,12 +230,15 @@
   (when-let [db (db/get-db)]
     (let [!results (::results state)
           recent-pages (map (fn [block]
-                              (let [text (block-handler/block-unique-title block)
+                              (let [tags (block-handler/visible-tags block)
+                                    text (block-handler/block-unique-title block {:with-tags? false})
                                     icon (get-page-icon block)]
-                                {:icon icon
-                                 :icon-theme :gray
-                                 :text text
-                                 :source-block block}))
+                                (cond-> {:icon icon
+                                         :icon-theme :gray
+                                         :text text
+                                         :source-block block}
+                                  (seq tags)
+                                  (assoc :text-tags (string/join ", " (keep (fn [t] (when-let [title (:block/title t)] (str "#" title))) tags))))))
                             (ldb/get-recent-updated-pages db))]
       (reset! !results (assoc-in default-results [:recently-updated-pages :items] recent-pages)))))
 
@@ -268,12 +271,15 @@
                            (search/fuzzy-search recent-pages @!input {:extract-fn :block/title}))]
       (->> search-results
            (map (fn [block]
-                  (let [text (block-handler/block-unique-title block)
+                  (let [tags (block-handler/visible-tags block)
+                        text (block-handler/block-unique-title block {:with-tags? false})
                         icon (get-page-icon block)]
-                    {:icon icon
-                     :icon-theme :gray
-                     :text text
-                     :source-block block})))
+                    (cond-> {:icon icon
+                             :icon-theme :gray
+                             :text text
+                             :source-block block}
+                      (seq tags)
+                      (assoc :text-tags (string/join ", " (keep (fn [t] (when-let [title (:block/title t)] (str "#" title))) tags)))))))
            (hash-map :status :success :items)
            (swap! !results update group merge)))))
 
@@ -303,20 +309,27 @@
         source-page (or (model/get-alias-source-page repo (:db/id entity))
                         (:alias page))
         icon (get-page-icon entity)
-        title (block-handler/block-unique-title entity
-                                                {:alias (:block/title source-page)})]
-    (hash-map :icon icon
-              :icon-theme :gray
-              :text (if (string/includes? title "$pfts_2lqh>$") ; sqlite matched
-                      [:span {"data-testid" title}
-                       (highlight-content-query title input)]
-                      title)
-              :header (when (:block/parent entity)
-                        (block/breadcrumb {:disable-preview? true
-                                           :search? true} repo (:block/uuid page)
-                                          {:disabled? true}))
-              :alias (:alias page)
-              :source-block (or source-page page))))
+        alias-title (:block/title source-page)
+        full-title (block-handler/block-unique-title entity {:alias alias-title})
+        fts? (string/includes? (or full-title "") "$pfts_2lqh>$")
+        tags (when-not fts? (block-handler/visible-tags entity))
+        base-title (if fts?
+                     full-title
+                     (block-handler/block-unique-title entity {:with-tags? false :alias alias-title}))]
+    (cond-> (hash-map :icon icon
+                      :icon-theme :gray
+                      :text (if fts?
+                              [:span {"data-testid" full-title}
+                               (highlight-content-query full-title input)]
+                              base-title)
+                      :header (when (:block/parent entity)
+                                (block/breadcrumb {:disable-preview? true
+                                                   :search? true} repo (:block/uuid page)
+                                                  {:disabled? true}))
+                      :alias (:alias page)
+                      :source-block (or source-page page))
+      (seq tags)
+      (assoc :text-tags (string/join ", " (keep (fn [t] (when-let [title (:block/title t)] (str "#" title))) tags))))))
 
 (defn block-item
   [repo block current-page input]

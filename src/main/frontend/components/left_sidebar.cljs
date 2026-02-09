@@ -98,9 +98,15 @@
                           :class (when untitled? "opacity-50")}
         (cond
           (not (db/page? page))
-          (block/inline-text :markdown (string/replace (apply str (take 64 (:block/title page))) "\n" " "))
-          untitled? (t :untitled)
-          :else (block-handler/block-unique-title page))]
+          [:span.title-text (block/inline-text :markdown (string/replace (apply str (take 64 (:block/title page))) "\n" " "))]
+          untitled? [:span.title-text (t :untitled)]
+          :else (let [tags (block-handler/visible-tags page)]
+                  (if (seq tags)
+                    [:<>
+                     [:span.title-text (block-handler/block-unique-title page {:with-tags? false})]
+                     [:span.page-tag-suffix
+                      (string/join ", " (keep (fn [t] (when-let [title (:block/title t)] (str "#" title))) tags))]]
+                    [:span.title-text (block-handler/block-unique-title page)])))]
 
      ;; dots trigger
        (shui/button

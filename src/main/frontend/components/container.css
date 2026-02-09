@@ -220,10 +220,25 @@
             @apply px-2 flex items-center justify-between relative h-[32px] w-full rounded-md;
 
             .page-title {
-              @apply whitespace-nowrap text-ellipsis flex-grow overflow-hidden pr-2;
+              @apply flex items-baseline flex-grow overflow-hidden pr-2;
+              gap: 0.25em;
 
-              * {
-                display: inline !important;
+              .title-text {
+                @apply whitespace-nowrap overflow-hidden;
+                text-overflow: ellipsis;
+                flex: 0 0 auto;
+                max-width: 100%;
+
+                * {
+                  display: inline !important;
+                }
+              }
+
+              .page-tag-suffix {
+                @apply whitespace-nowrap overflow-hidden;
+                text-overflow: ellipsis;
+                flex: 0 1 auto;
+                min-width: 0;
               }
             }
 
@@ -796,4 +811,10 @@ html[data-theme='dark'] {
 .blocks-selection-mode .block-body,
 .blocks-selection-mode .ls-properties-area {
   @apply select-none;
+}
+
+/* De-emphasized tag suffix in page titles (sidebar, CMD+K, autocomplete, property dropdowns) */
+.page-tag-suffix {
+  @apply opacity-50 font-normal;
+  font-size: 0.85em;
 }

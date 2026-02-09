@@ -854,20 +854,26 @@
                                               (when-let [title (if (seq (:logseq.property/classes property))
                                                                  (some-> (db-content/recur-replace-uuid-in-block-title node)
                                                                          (subs 0 256))
-                                                                 (block-handler/block-unique-title node))]
+                                                                 (block-handler/block-unique-title node {:with-tags? false}))]
                                                 (let [node (or (db/entity id) node)
                                                       header (when-not (db/page? node)
                                                                (when-let [breadcrumb (state/get-component :block/breadcrumb)]
                                                                  [:div.text-xs.opacity-70
                                                                   (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid node)
                                                                               {:disabled? true})]))
+                                                      tags (when-not (seq (:logseq.property/classes property))
+                                                             (block-handler/visible-tags node))
                                                       label [:div.flex.flex-row.items-center.gap-1
                                                              (when-not (or (:logseq.property/classes property)
                                                                            (contains? #{:class :property} property-type))
                                                                (icon-component/get-node-icon-cp node {:ignore-current-icon? true}))
                                                              [:div (if (contains? #{:class :property :page} property-type)
                                                                      title
-                                                                     (block-handler/block-title-with-icon node title icon-component/icon))]]]
+                                                                     (if (seq tags)
+                                                                       [:<> title
+                                                                        [:span.page-tag-suffix
+                                                                         (str " " (string/join ", " (keep (fn [t] (when-let [tl (:block/title t)] (str "#" tl))) tags)))]]
+                                                                       title))]]]
                                                   [header label]))
                                               [nil (:block/title node)])]
                          (assoc node

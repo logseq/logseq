@@ -88,7 +88,7 @@
                              segs))
           [:span normal-text])))))
 
-(rum/defc root [{:keys [group icon icon-theme query text info shortcut value-label value
+(rum/defc root [{:keys [group icon icon-theme query text text-tags info shortcut value-label value
                         title highlighted on-highlight on-highlight-dep header on-click hls-page?
                         hoverable compact rounded on-mouse-enter component-opts source-page source-create source-block
                         ;; Wikidata preview props
@@ -151,10 +151,12 @@
       [:div.flex.flex-1.flex-col
        (when title
          [:div.text-sm.pb-2.font-bold.text-gray-11 (highlight-query title)])
-       [:div {:class "text-sm font-medium text-gray-12"}
+       [:div {:class "text-sm font-medium text-gray-12 flex items-baseline"}
         (block-handler/block-title-with-icon source-block
                                              (highlight-query text)
                                              icon-component/icon)
+        (when text-tags
+          [:span.page-tag-suffix.ml-1 (highlight-query text-tags)])
         (when info
           [:span.text-xs.text-gray-11 " — " (highlight-query info)])]]
       (when (or value-label value)

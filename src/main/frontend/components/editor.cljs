@@ -80,13 +80,23 @@
              :else
              (icon-component/get-node-icon-cp block' {:ignore-current-icon? true}))])
 
-        (let [title (let [alias (get-in block' [:alias :block/title])]
-                      (block-handler/block-unique-title block' {:alias alias}))]
-          (if (or (string/starts-with? title (t :new-tag))
-                  (string/starts-with? title (t :new-page)))
-            title
+        (let [alias (get-in block' [:alias :block/title])
+              tags (block-handler/visible-tags block')
+              base-title (block-handler/block-unique-title block' {:with-tags? false :alias alias})
+              full-title (if (seq tags)
+                           (str base-title " " (string/join ", " (keep (fn [t] (when-let [title (:block/title t)] (str "#" title))) tags)))
+                           base-title)]
+          (if (or (string/starts-with? full-title (t :new-tag))
+                  (string/starts-with? full-title (t :new-page)))
+            full-title
             (block-handler/block-title-with-icon block'
-                                                 (search-handler/highlight-exact-query title q)
+                                                 (if (seq tags)
+                                                   [:<> (search-handler/highlight-exact-query base-title q)
+                                                    [:span.page-tag-suffix
+                                                     " " (search-handler/highlight-exact-query
+                                                          (string/join ", " (keep (fn [t] (when-let [title (:block/title t)] (str "#" title))) tags))
+                                                          q)]]
+                                                   (search-handler/highlight-exact-query base-title q))
                                                  icon-component/icon)))]])))
 
 (rum/defcs commands < rum/reactive
@@ -297,8 +307,15 @@
                                         block)
                                       block)
                              alias (get-in block' [:alias :block/title])
-                             title (block-handler/block-unique-title block' {:alias alias})]
-                         (search-handler/highlight-exact-query title q)))
+                             tags (block-handler/visible-tags block')
+                             base-title (block-handler/block-unique-title block' {:with-tags? false :alias alias})]
+                         (if (seq tags)
+                           [:<> (search-handler/highlight-exact-query base-title q)
+                            [:span.page-tag-suffix
+                             " " (search-handler/highlight-exact-query
+                                  (string/join ", " (keep (fn [t] (when-let [title (:block/title t)] (str "#" title))) tags))
+                                  q)]]
+                           (search-handler/highlight-exact-query base-title q))))
             :highlight-query? true
             :query-fn (fn [] q)
             :gap-size 2}
