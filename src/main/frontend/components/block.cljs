@@ -1773,8 +1773,8 @@
                       ;; Always show bullet (icon moved to inline before title)
                       [:span.bullet (cond->
                                      {:blockid (str uuid)}
-                                     selected?
-                                     (assoc :class "selected"))
+                                      selected?
+                                      (assoc :class "selected"))
                        (when order-list?
                          [:label (str order-list-idx ".")])]]]
              bullet' (cond
@@ -2621,7 +2621,7 @@
                                      config))]
              show-editor? (and editor-box edit? (not type-block-editor?))]
          (cond
-           (and (ldb/asset? block) (img-audio-video? block))
+           (and (not (:page-title? config)) (ldb/asset? block) (img-audio-video? block))
            [:div.flex.flex-col.asset-block-wrap.w-full
             (block-content-f {:custom-block-content
                               [:div.flex.flex-1
