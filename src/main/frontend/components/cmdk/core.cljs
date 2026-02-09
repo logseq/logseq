@@ -1,6 +1,7 @@
 (ns frontend.components.cmdk.core
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
+            [datascript.core :as d]
             [frontend.components.block :as block]
             [frontend.components.cmdk.list-item :as list-item]
             [frontend.components.icon :as icon]
@@ -141,6 +142,11 @@
                                  (and
                                   (:page? block)
                                   (= input (util/page-name-sanity-lc (:block.temp/original-title block))))) blocks-result)))
+        existing-page-names (let [blocks-result (keep :source-block (get-in results [:nodes :items]))]
+                              (->> blocks-result
+                                   (filter :page?)
+                                   (map #(util/page-name-sanity-lc (:block.temp/original-title %)))
+                                   set))
         include-slash? (or (string/includes? input "/")
                            (string/starts-with? input "/"))
         start-with-slash? (string/starts-with? input "/")
@@ -176,8 +182,17 @@
                   [(when-not node-exists?
                      ["Create" :create (create-items input)])
                    ;; "From Web" section - Wikidata entity search results
-                   (let [wikidata-items (visible-items :wikidata-entities)
-                         wikidata-status (get-in results [:wikidata-entities :status])]
+                   ;; Filter out results that match existing page names (D layer)
+                   (let [all-wikidata (get-in results [:wikidata-entities :items])
+                         wikidata-status (get-in results [:wikidata-entities :status])
+                         filtered (remove (fn [item]
+                                            (when-let [label (get-in item [:source-wikidata :label])]
+                                              (contains? existing-page-names
+                                                         (util/page-name-sanity-lc label))))
+                                          all-wikidata)
+                         wikidata-items (if (or sidebar? (= :more (get-in results [:wikidata-entities :show])))
+                                          filtered
+                                          (take (get-group-limit :wikidata-entities) filtered))]
                      (when (or (seq wikidata-items) (= :loading wikidata-status))
                        ["From Web" :wikidata-entities wikidata-items]))
                    ["Current page" :current-page (visible-items :current-page)]
@@ -692,6 +707,17 @@
         (js/console.log "[wikidata] Created new class:" class-title "with default-icon:" (get wikidata/class->default-icon class-title))
         new-class))))
 
+(defn- get-page-by-wikidata-id
+  "Find an existing page that was created from the given Wikidata entity."
+  [qid]
+  (when-let [db (db/get-db)]
+    (some->> (d/q '[:find [?p ...]
+                    :in $ ?qid
+                    :where [?p :logseq.property/wikidata-id ?qid]]
+                  db qid)
+             first
+             (db/entity))))
+
 (defn- <set-wikidata-icon!
   "Download Wikidata image and set as page icon.
    Uses the class's default icon type (:avatar for Person, :image for Company, etc.)"
@@ -727,46 +753,43 @@
       (when (and qid label)
         ;; Close the dialog immediately for better UX
         (shui/dialog-close! :ls-dialog-cmdk)
-        ;; Fetch full entity details and create page
-        (p/let [entity-data (wikidata/<fetch-full-entity qid)]
-          (when entity-data
-            (let [{:keys [class image properties]} entity-data
-                  class-title (:title class)]
-              ;; Step 1: Ensure class exists (create if needed)
-              (p/let [class-entity (when class-title
-                                     (<ensure-class-exists! class-title))
-                      ;; Step 2: Create the page WITHOUT redirect
-                      ;; We redirect after setting properties to avoid race conditions
-                      ;; with auto-fetch-image (which checks for wikidata-id)
-                      page (page-handler/<create! label {:redirect? false})]
-                (when page
-                  ;; Step 3: Add class tag to page
-                  (when class-entity
+        ;; Check: page already created from this Wikidata entity?
+        (if-let [existing-page (get-page-by-wikidata-id qid)]
+          (route-handler/redirect-to-page! (:block/uuid existing-page))
+          ;; No match — create new page
+          (p/let [entity-data (wikidata/<fetch-full-entity qid)]
+            (when entity-data
+              (let [{:keys [class image properties]} entity-data
+                    class-title (:title class)]
+                (p/let [class-entity (when class-title
+                                       (<ensure-class-exists! class-title))
+                        page (page-handler/<create! label {:redirect? false})]
+                  (when page
+                    ;; Store Wikidata Q-ID for future deduplication
                     (db-property-handler/set-block-property!
                      (:block/uuid page)
-                     :block/tags
-                     (:db/id class-entity)))
-                  ;; Step 4: Prevent Wikipedia auto-fetch from overwriting Wikidata icon
-                  ;; Mark page as "already attempted" so auto-fetch skips it
-                  (swap! icon/*image-fetch-attempted conj (:db/id page))
-                  (swap! icon/*avatar-fetch-attempted conj (:db/id page))
-                  ;; Step 5: Now redirect (auto-fetch will skip due to step 4)
-                  (route-handler/redirect-to-page! (:block/uuid page))
-                  ;; Step 6: Set icon from Wikidata image (async, after redirect)
-                  ;; Pass class-title to determine icon type (avatar for Person, image for Company)
-                  (when image
-                    (<set-wikidata-icon! (:db/id page) image label class-title))
-                  ;; Step 7: Show property import panel if properties available
-                  (when (seq properties)
-                    (state/pub-event! [:wikidata/show-import-panel
-                                       {:page page
-                                        :properties properties
-                                        :entity-data entity-data}]))
-                  ;; Log success
-                  (js/console.log "[wikidata] Created page from Wikidata:" label
-                                  "\n  Class:" class-title
-                                  "\n  Has image:" (boolean image)
-                                  "\n  Properties available:" (count properties)))))))))))
+                     :logseq.property/wikidata-id
+                     qid)
+                    (when class-entity
+                      (db-property-handler/set-block-property!
+                       (:block/uuid page)
+                       :block/tags
+                       (:db/id class-entity)))
+                    (swap! icon/*image-fetch-attempted conj (:db/id page))
+                    (swap! icon/*avatar-fetch-attempted conj (:db/id page))
+                    (route-handler/redirect-to-page! (:block/uuid page))
+                    (when image
+                      (<set-wikidata-icon! (:db/id page) image label class-title))
+                    (when (seq properties)
+                      (state/pub-event! [:wikidata/show-import-panel
+                                         {:page page
+                                          :properties properties
+                                          :entity-data entity-data}]))
+                    (js/console.log "[wikidata] Created page from Wikidata:" label
+                                    "\n  Q-ID:" qid
+                                    "\n  Class:" class-title
+                                    "\n  Has image:" (boolean image)
+                                    "\n  Properties available:" (count properties))))))))))))
 
 (defn- get-filter-user-input
   [input]
