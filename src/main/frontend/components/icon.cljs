@@ -2088,21 +2088,22 @@
                 ;; Track picker open state
                 (reset! *asset-picker-open? true)
 
-                ;; Fetch assets - prefer sync query, fall back to async for cold start
+                ;; Fetch assets - use sync as placeholder, always fire async for completeness
                 (let [*loaded-assets (::loaded-assets state)
                       *loading? (::loading? state)
                       sync-assets (get-image-assets)]
-                  (if (seq sync-assets)
-                    ;; Sync has data - use it immediately
-                    (do
-                      (reset! *loaded-assets sync-assets)
-                      (reset! *loading? false))
-                    ;; No sync data - fetch from DB worker (cold start case)
-                    (-> (<get-image-assets)
-                        (p/then (fn [async-assets]
+                  ;; Use sync data as immediate placeholder (avoids spinner if we have partial data)
+                  (when (seq sync-assets)
+                    (reset! *loaded-assets sync-assets)
+                    (reset! *loading? false))
+                  ;; Always fire async query to ensure complete asset list
+                  (-> (<get-image-assets)
+                      (p/then (fn [async-assets]
+                                (when @*asset-picker-open?
                                   (reset! *loaded-assets (vec async-assets))
-                                  (reset! *loading? false)))
-                        (p/catch (fn [_err]
+                                  (reset! *loading? false))))
+                      (p/catch (fn [_err]
+                                 (when @*asset-picker-open?
                                    (reset! *loading? false))))))
 
                 state)
