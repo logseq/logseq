@@ -4,8 +4,6 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
 
-(def text-decoder (js/TextDecoder.))
-
 (defn cors-headers []
   #js {"Access-Control-Allow-Origin" "*"
        "Access-Control-Allow-Headers" "content-type,content-encoding,authorization,x-amz-meta-checksum,x-amz-meta-type"
@@ -24,18 +22,6 @@
 
 (defn options-response []
   (platform/response nil #js {:status 204 :headers (cors-headers)}))
-
-(defn bad-request [message]
-  (json-response {:error message} 400))
-
-(defn unauthorized []
-  (json-response {:error "unauthorized"} 401))
-
-(defn forbidden []
-  (json-response {:error "forbidden"} 403))
-
-(defn not-found []
-  (json-response {:error "not found"} 404))
 
 (defn get-sql-rows [^js result]
   (let [iter-fn (when result (aget result js/Symbol.iterator))]
