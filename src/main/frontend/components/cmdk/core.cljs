@@ -51,8 +51,9 @@
 
 (defn- get-group-limit
   [group]
-  (if (= group :nodes)
-    10
+  (case group
+    :nodes 10
+    :wikidata-entities 1
     5))
 
 (defn filters
@@ -70,14 +71,14 @@
 ;; The results are separated into groups, and loaded/fetched/queried separately
 (def default-results
   {:recently-updated-pages {:status :success :show :less :items nil}
-   :commands       {:status :success :show :less :items nil}
-   :favorites      {:status :success :show :less :items nil}
-   :current-page   {:status :success :show :less :items nil}
-   :nodes          {:status :success :show :less :items nil}
+   :commands {:status :success :show :less :items nil}
+   :favorites {:status :success :show :less :items nil}
+   :current-page {:status :success :show :less :items nil}
+   :nodes {:status :success :show :less :items nil}
    :wikidata-entities {:status :success :show :less :items nil}
-   :files          {:status :success :show :less :items nil}
-   :themes         {:status :success :show :less :items nil}
-   :filters        {:status :success :show :less :items nil}})
+   :files {:status :success :show :less :items nil}
+   :themes {:status :success :show :less :items nil}
+   :filters {:status :success :show :less :items nil}})
 
 ;; Wikidata search state - used for cancellation and debouncing
 (defonce ^:private *wikidata-cancel-token (atom nil))
@@ -149,42 +150,42 @@
 
                  start-with-slash?
                  [["Filters" :filters (visible-items :filters)]
-                  ["Current page"   :current-page   (visible-items :current-page)]
-                  ["Nodes"          :nodes         (visible-items :nodes)]]
+                  ["Current page" :current-page (visible-items :current-page)]
+                  ["Nodes" :nodes (visible-items :nodes)]]
 
                  include-slash?
                  [(when-not node-exists?
-                    ["Create"         :create         (create-items input)])
+                    ["Create" :create (create-items input)])
 
-                  ["Current page"   :current-page   (visible-items :current-page)]
-                  ["Nodes"         :nodes         (visible-items :nodes)]
-                  ["Files"          :files          (visible-items :files)]
+                  ["Current page" :current-page (visible-items :current-page)]
+                  ["Nodes" :nodes (visible-items :nodes)]
+                  ["Files" :files (visible-items :files)]
                   ["Filters" :filters (visible-items :filters)]]
 
                  filter-group
                  [(when (= filter-group :nodes)
-                    ["Current page"   :current-page   (visible-items :current-page)])
+                    ["Current page" :current-page (visible-items :current-page)])
                   [(if (= filter-group :current-page) "Current page" (name filter-group))
                    filter-group
                    (visible-items filter-group)]
                   (when-not node-exists?
-                    ["Create"         :create         (create-items input)])]
+                    ["Create" :create (create-items input)])]
 
                  :else
                  (->>
                   [(when-not node-exists?
-                     ["Create"         :create       (create-items input)])
+                     ["Create" :create (create-items input)])
                    ;; "From Web" section - Wikidata entity search results
                    (let [wikidata-items (visible-items :wikidata-entities)
                          wikidata-status (get-in results [:wikidata-entities :status])]
                      (when (or (seq wikidata-items) (= :loading wikidata-status))
-                       ["From Web"       :wikidata-entities wikidata-items]))
-                   ["Current page"     :current-page   (visible-items :current-page)]
-                   ["Nodes"            :nodes         (visible-items :nodes)]
+                       ["From Web" :wikidata-entities wikidata-items]))
+                   ["Current page" :current-page (visible-items :current-page)]
+                   ["Nodes" :nodes (visible-items :nodes)]
                    ["Recently updated" :recently-updated-pages (visible-items :recently-updated-pages)]
-                   ["Commands"         :commands       (visible-items :commands)]
-                   ["Files"            :files          (visible-items :files)]
-                   ["Filters"          :filters        (visible-items :filters)]]
+                   ["Commands" :commands (visible-items :commands)]
+                   ["Files" :files (visible-items :files)]
+                   ["Filters" :filters (visible-items :filters)]]
                   (remove nil?)))
         order (remove nil? order*)]
     (for [[group-name group-key group-items] order]
@@ -288,7 +289,7 @@
   [content q]
   (when-not (or (string/blank? content) (string/blank? q))
     [:div (loop [content content ;; why recur? because there might be multiple matches
-                 result  []]
+                 result []]
             (let [[b-cut hl-cut e-cut] (text-util/cut-by content "$pfts_2lqh>$" "$<pfts_2lqh$")
                   hiccups-add [[:span b-cut]
                                [:span {:class "ui__list-item-highlighted-span"} hl-cut]]
@@ -366,8 +367,8 @@
                             (block-item repo block current-page @!input))) blocks)]
       (if (= group :current-page)
         (let [items-on-current-page (filter :current-page? items)]
-          (swap! !results update group         merge {:status :success :items items-on-current-page}))
-        (swap! !results update group         merge {:status :success :items items})))))
+          (swap! !results update group merge {:status :success :items items-on-current-page}))
+        (swap! !results update group merge {:status :success :items items})))))
 
 (defmethod load-results :files [group state]
   (let [!input (::input state)
@@ -474,13 +475,11 @@
                 (p/then (fn [results]
                           (when-not @cancelled?
                             (let [items (->> results
-                                             (take 5)
                                              (mapv (fn [{:keys [qid label description]}]
                                                      {:icon "globe"
                                                       :icon-theme :gray
                                                       :text label
                                                       :info description
-                                                      ;; Preview icon info (will be enriched with image URL later)
                                                       :preview-initials (wikidata/derive-avatar-initials label)
                                                       :source-wikidata {:qid qid
                                                                         :label label
@@ -618,7 +617,7 @@
   (when-let [item (some-> state state->highlighted-item)]
     (let [page? (page-item? item)
           block? (boolean (:source-block item))
-          shift?  @(::shift? state)
+          shift? @(::shift? state)
           shift-or-sidebar? (or shift? (boolean (:open-sidebar? (:opts state))))
           search-mode (:search/mode @state/state)
           graph-view? (= search-mode :graph)]
@@ -809,7 +808,7 @@
         target-rect (.getBoundingClientRect target)
         t2 (.-top target-rect)
         b2 (.-bottom target-rect)]
-    (when-not (<= t1 t2 b2 b1)          ; not visible
+    (when-not (<= t1 t2 b2 b1) ; not visible
       (.scrollIntoView target
                        #js {:inline "nearest"
                             :behavior "smooth"}))))
@@ -835,9 +834,9 @@
         show-more #(swap! (::results state) assoc-in [group :show] :more)]
     [:<>
      (mouse-active-effect! *mouse-active? [highlighted-item])
-     [:div {:class         (if (= title "Create")
-                             "border-b border-gray-06 last:border-b-0"
-                             "border-b border-gray-06 pb-1 last:border-b-0")
+     [:div {:class (if (= title "Create")
+                     "border-b border-gray-06 last:border-b-0"
+                     "border-b border-gray-06 pb-1 last:border-b-0")
             :on-mouse-move #(reset! *mouse-active? true)}
       (when-not (= title "Create")
         [:div {:class "text-xs py-1.5 px-3 flex justify-between items-center gap-2 bg-gray-02 h-8"}
@@ -1035,7 +1034,7 @@
       (open-current-item-link state)
       (= keyname "/") (do
                         (shui/shortcut-press! "/" true)
-                        nil)  ; Don't prevent default, allow typing
+                        nil) ; Don't prevent default, allow typing
       :else nil)))
 
 (defn- keyup-handler
@@ -1136,7 +1135,7 @@
   (shui/button
    (merge {:class "hint-button [&>span:first-child]:hover:opacity-100 opacity-40 hover:opacity-80"
            :variant :ghost
-           :size  :sm}
+           :size :sm}
           opts)
    [[:span.opacity-60 text]
      ;; shortcut
@@ -1158,7 +1157,7 @@
         button-fn (fn [text shortcut & {:as opts}]
                     (hint-button text shortcut
                                  {:on-click #(handle-action action (assoc state :opts opts) %)
-                                  :muted    true}))]
+                                  :muted true}))]
     (when action
       [:div.hints
        [:div.text-sm.leading-6
@@ -1198,9 +1197,9 @@
    [:div "Search only:"]
    [:div group-name]
    (shui/button
-    {:variant  :ghost
-     :size     :icon
-     :class    "p-1 scale-75"
+    {:variant :ghost
+     :size :icon
+     :class "p-1 scale-75"
      :on-click (fn []
                  (reset! (::filter state) nil))}
     (shui/tabler-icon "x"))])

@@ -3,12 +3,12 @@
    Enables searching Wikidata for entities and importing them as Logseq pages
    with appropriate class tags, icons, and properties."
   (:require [clojure.string :as string]
-            [goog.object :as gobj]
-            [promesa.core :as p]
-            [frontend.state :as state]
             [frontend.config :as config]
             [frontend.db :as db]
-            [logseq.db :as ldb]))
+            [frontend.state :as state]
+            [goog.object :as gobj]
+            [logseq.db :as ldb]
+            [promesa.core :as p]))
 
 ;; =============================================================================
 ;; Constants & Configuration
@@ -41,68 +41,68 @@
   "Maps Wikidata Q-IDs (instance-of values) to Logseq class definitions.
    Each value is {:ident :db/ident, :title \"Display Name\"}"
   {;; Creative works
-   "Q571"     {:ident :user.class/book       :title "Book"}
-   "Q7725634" {:ident :user.class/book       :title "Book"}           ; literary work
-   "Q11424"   {:ident :user.class/film       :title "Film"}
-   "Q482994"  {:ident :user.class/album      :title "Album"}
-   "Q134556"  {:ident :user.class/song       :title "Song"}
-   "Q5398426" {:ident :user.class/tv-series  :title "TV Series"}
-   "Q7889"    {:ident :user.class/video-game :title "Video Game"}
+   "Q571" {:ident :user.class/book :title "Book"}
+   "Q7725634" {:ident :user.class/book :title "Book"} ; literary work
+   "Q11424" {:ident :user.class/film :title "Film"}
+   "Q482994" {:ident :user.class/album :title "Album"}
+   "Q134556" {:ident :user.class/song :title "Song"}
+   "Q5398426" {:ident :user.class/tv-series :title "TV Series"}
+   "Q7889" {:ident :user.class/video-game :title "Video Game"}
    ;; Organizations
-   "Q4830453" {:ident :user.class/company    :title "Company"}
+   "Q4830453" {:ident :user.class/company :title "Company"}
    "Q6881511" {:ident :user.class/enterprise :title "Enterprise"}
-   "Q7275"    {:ident :user.class/state      :title "State"}
-   "Q515"     {:ident :user.class/city       :title "City"}
+   "Q7275" {:ident :user.class/state :title "State"}
+   "Q515" {:ident :user.class/city :title "City"}
    ;; People
-   "Q5"       {:ident :user.class/person     :title "Person"}
+   "Q5" {:ident :user.class/person :title "Person"}
    ;; Software
-   "Q7397"    {:ident :user.class/software   :title "Software"}
-   "Q35127"   {:ident :user.class/website    :title "Website"}
+   "Q7397" {:ident :user.class/software :title "Software"}
+   "Q35127" {:ident :user.class/website :title "Website"}
    ;; Other
-   "Q15416"   {:ident :user.class/tv-channel :title "TV Channel"}
-   "Q41298"   {:ident :user.class/magazine   :title "Magazine"}
-   "Q5633421" {:ident :user.class/newspaper  :title "Newspaper"}})
+   "Q15416" {:ident :user.class/tv-channel :title "TV Channel"}
+   "Q41298" {:ident :user.class/magazine :title "Magazine"}
+   "Q5633421" {:ident :user.class/newspaper :title "Newspaper"}})
 
 (def class->image-property
   "Maps Logseq class idents to the preferred Wikidata image property.
    P154 = logo, P18 = image (portrait/cover/poster), P41 = flag"
-  {:user.class/company    "P154"  ; logo
-   :user.class/enterprise "P154"  ; logo
-   :user.class/software   "P154"  ; logo
-   :user.class/website    "P154"  ; logo
-   :user.class/tv-channel "P154"  ; logo
-   :user.class/newspaper  "P154"  ; logo
-   :user.class/person     "P18"   ; portrait
-   :user.class/book       "P18"   ; cover
-   :user.class/film       "P18"   ; poster
-   :user.class/album      "P18"   ; cover
-   :user.class/tv-series  "P18"   ; poster
-   :user.class/video-game "P18"   ; cover art
-   :user.class/magazine   "P18"   ; cover
-   :user.class/song       "P18"   ; cover
-   :user.class/city       nil     ; no image fetch for cities
-   :user.class/state      "P41"}) ; flag
+  {:user.class/company "P154" ; logo
+   :user.class/enterprise "P154" ; logo
+   :user.class/software "P154" ; logo
+   :user.class/website "P154" ; logo
+   :user.class/tv-channel "P154" ; logo
+   :user.class/newspaper "P154" ; logo
+   :user.class/person "P18" ; portrait
+   :user.class/book "P18" ; cover
+   :user.class/film "P18" ; poster
+   :user.class/album "P18" ; cover
+   :user.class/tv-series "P18" ; poster
+   :user.class/video-game "P18" ; cover art
+   :user.class/magazine "P18" ; cover
+   :user.class/song "P18" ; cover
+   :user.class/city nil ; no image fetch for cities
+   :user.class/state "P41"}) ; flag
 
 (def class->default-icon
   "Maps class titles to their default icon configuration.
    Used when auto-creating classes and for preview rendering in search results.
    nil = no default icon (use system default)"
-  {"Person"     {:type :avatar}
-   "Company"    {:type :image}
+  {"Person" {:type :avatar}
+   "Company" {:type :image}
    "Enterprise" {:type :image}
-   "Software"   {:type :image}
-   "Website"    {:type :image}
+   "Software" {:type :image}
+   "Website" {:type :image}
    "TV Channel" {:type :image}
-   "Newspaper"  {:type :image}
-   "Book"       {:type :image}
-   "Film"       {:type :image}
-   "Album"      {:type :image}
-   "TV Series"  {:type :image}
+   "Newspaper" {:type :image}
+   "Book" {:type :image}
+   "Film" {:type :image}
+   "Album" {:type :image}
+   "TV Series" {:type :image}
    "Video Game" {:type :image}
-   "Magazine"   {:type :image}
-   "Song"       nil  ; no default icon
-   "City"       {:type :tabler-icon :id "map-pin"}
-   "State"      {:type :image}})
+   "Magazine" {:type :image}
+   "Song" nil ; no default icon
+   "City" {:type :tabler-icon :id "map-pin"}
+   "State" {:type :image}})
 
 (def default-image-property
   "Default image property to try when class has no specific mapping"
@@ -118,21 +118,21 @@
 
 (def wikidata-property->logseq
   "Maps Wikidata property IDs to Logseq property definitions"
-  {"P50"  {:ident :user.property/author       :title "Author"       :type :node}
-   "P577" {:ident :user.property/published    :title "Published"    :type :datetime}
-   "P123" {:ident :user.property/publisher    :title "Publisher"    :type :node}
-   "P136" {:ident :user.property/genre        :title "Genre"        :type :default}
-   "P112" {:ident :user.property/founder      :title "Founder"      :type :node}
-   "P571" {:ident :user.property/founded      :title "Founded"      :type :datetime}
+  {"P50" {:ident :user.property/author :title "Author" :type :node}
+   "P577" {:ident :user.property/published :title "Published" :type :datetime}
+   "P123" {:ident :user.property/publisher :title "Publisher" :type :node}
+   "P136" {:ident :user.property/genre :title "Genre" :type :default}
+   "P112" {:ident :user.property/founder :title "Founder" :type :node}
+   "P571" {:ident :user.property/founded :title "Founded" :type :datetime}
    "P159" {:ident :user.property/headquarters :title "Headquarters" :type :node}
-   "P856" {:ident :user.property/website      :title "Website"      :type :url}
-   "P17"  {:ident :user.property/country      :title "Country"      :type :node}
-   "P495" {:ident :user.property/origin       :title "Country of Origin" :type :node}
-   "P364" {:ident :user.property/language     :title "Language"     :type :node}
-   "P57"  {:ident :user.property/director     :title "Director"     :type :node}
-   "P58"  {:ident :user.property/screenwriter :title "Screenwriter" :type :node}
-   "P162" {:ident :user.property/producer     :title "Producer"     :type :node}
-   "P175" {:ident :user.property/performer    :title "Performer"    :type :node}})
+   "P856" {:ident :user.property/website :title "Website" :type :url}
+   "P17" {:ident :user.property/country :title "Country" :type :node}
+   "P495" {:ident :user.property/origin :title "Country of Origin" :type :node}
+   "P364" {:ident :user.property/language :title "Language" :type :node}
+   "P57" {:ident :user.property/director :title "Director" :type :node}
+   "P58" {:ident :user.property/screenwriter :title "Screenwriter" :type :node}
+   "P162" {:ident :user.property/producer :title "Producer" :type :node}
+   "P175" {:ident :user.property/performer :title "Performer" :type :node}})
 
 ;; =============================================================================
 ;; Preview Icon Type Resolution
@@ -248,47 +248,79 @@
 ;; =============================================================================
 
 (defn <search-wikidata-entities
-  "Search Wikidata for entities matching query.
-   Returns promise with vector of entity results:
-   [{:qid \"Q95\" :label \"Google\" :description \"American company\" :url \"...\"}]"
+  "Search Wikidata using CirrusSearch full-text search via generator=search.
+   Unlike the old wbsearchentities approach which only did prefix matching,
+   CirrusSearch finds entities where the query appears anywhere in labels,
+   aliases, or descriptions. Returns results with labels, descriptions,
+   sitelinks, and claims counts — all in a single API call.
+   
+   Response pages are keyed by numeric pageid and sorted by the `index` field
+   which preserves CirrusSearch's BM25 relevance ranking."
   ([query] (<search-wikidata-entities query "en"))
   ([query language]
    (when-not (string/blank? query)
      (let [url (build-url wikidata-api-url
-                          {:action "wbsearchentities"
-                           :search query
-                           :language language
-                           :uselang language
-                           :type "item"
-                           :limit wikidata-search-limit
+                          {:action "query"
+                           :generator "search"
+                           :gsrsearch query
+                           :gsrnamespace 0
+                           :gsrlimit wikidata-search-limit
+                           :prop "pageprops|entityterms"
+                           :ppprop "wb-sitelinks|wb-claims"
+                           :wbetterms "label|description"
+                           :wbetlanguage language
                            :format "json"
                            :origin "*"})]
        (p/let [data (<fetch-json url)]
          (when data
-           (->> (get data "search" [])
-                (mapv (fn [item]
-                        {:qid (get item "id")
-                         :label (get item "label")
-                         :description (get item "description")
-                         :url (get item "concepturi")
-                         :match-type (get-in item ["match" "type"])})))))))))
+           (let [pages (vals (get-in data ["query" "pages"] {}))]
+             (->> pages
+                  (remove #(contains? % "missing"))
+                  (sort-by #(get % "index" 999))
+                  (mapv (fn [page]
+                          (let [qid (get page "title")
+                                terms (get page "entityterms" {})
+                                pp (get page "pageprops" {})
+                                sitelinks-raw (get pp "wb-sitelinks" "0")
+                                claims-raw (get pp "wb-claims" "0")
+                                sitelinks (let [n (js/parseInt sitelinks-raw 10)]
+                                            (if (js/isNaN n) 0 n))
+                                claims (let [n (js/parseInt claims-raw 10)]
+                                         (if (js/isNaN n) 0 n))]
+                            {:qid qid
+                             :label (first (get terms "label" []))
+                             :description (first (get terms "description" []))
+                             :url (str "https://www.wikidata.org/wiki/" qid)
+                             :sitelinks sitelinks
+                             :claims claims})))))))))))
 
 (defn <search-multilingual
   "Search Wikidata in user's language and English, deduplicate by Q-ID.
-   Prefers user's language labels when available."
+   Uses CirrusSearch which does full-text matching across all languages,
+   but the entityterms (labels/descriptions) are returned in the requested
+   language. Dual search ensures we get labels in the user's preferred
+   language where available, falling back to English labels."
   [query]
   (let [user-lang (or (state/sub :preferred-language) "en")
         search-en? (not= user-lang "en")]
-    (p/let [;; Search in user's language
-            user-results (<search-wikidata-entities query user-lang)
-            ;; Optionally search in English too
+    (p/let [;; Search in user's language (labels returned in user's language)
+            user-results (or (<search-wikidata-entities query user-lang) [])
+            ;; Optionally search in English too (for English labels as fallback)
             en-results (if search-en?
-                         (<search-wikidata-entities query "en")
+                         (or (<search-wikidata-entities query "en") [])
                          [])
-            ;; Merge: user language first, then English (deduplicated)
+            ;; Merge: user language first, then English (deduplicated by Q-ID)
             seen-qids (set (map :qid user-results))
             additional-en (remove #(contains? seen-qids (:qid %)) en-results)]
-      (vec (concat user-results additional-en)))))
+      ;; For results from user's language that are missing labels,
+      ;; try to fill in from English results
+      (let [en-labels (into {} (map (juxt :qid :label) en-results))
+            patched-user (mapv (fn [r]
+                                 (if (and (nil? (:label r)) (get en-labels (:qid r)))
+                                   (assoc r :label (get en-labels (:qid r)))
+                                   r))
+                               user-results)]
+        (vec (concat patched-user additional-en))))))
 
 ;; =============================================================================
 ;; Wikidata Entity Fetch API
@@ -410,7 +442,7 @@
                           :titles (str "File:" filename)
                           :prop "imageinfo"
                           :iiprop "url|mime"
-                          :iiurlwidth 400  ;; Request 400px thumbnail for SVGs
+                          :iiurlwidth 400 ;; Request 400px thumbnail for SVGs
                           :format "json"
                           :origin "*"})]
       (p/let [data (<fetch-json url)]
@@ -536,16 +568,45 @@
 ;; High-Level API
 ;; =============================================================================
 
+;; <fetch-pageprops removed — CirrusSearch generator=search returns
+;; sitelinks/claims inline via pageprops, no separate call needed.
+
+(defn- query-word-match?
+  "Returns true if query appears as a complete word in label (case-insensitive).
+   E.g., 'Trump' in 'Donald Trump' -> true, 'Trump' in 'trumpet' -> false.
+   Checks exact match, word-start, word-end, and word-within positions."
+  [query label]
+  (let [q (string/lower-case (or query ""))
+        l (string/lower-case (or label ""))]
+    (or (= q l)
+        (string/starts-with? l (str q " "))
+        (string/ends-with? l (str " " q))
+        (string/includes? l (str " " q " ")))))
+
+(defn- sort-by-notability
+  "Sort search results by notability using sitelinks and claims counts.
+   Sort priority: word-boundary matches over prefix-only matches,
+   then by sitelinks desc, then claims desc as tiebreaker.
+   Sitelinks and claims are already present on each result from CirrusSearch."
+  [query results]
+  (vec (sort-by (fn [{:keys [label sitelinks claims]}]
+                  ;; Sort key: [word-match, -sitelinks, -claims]
+                  ;; Lower values sort first
+                  [(if (query-word-match? query label) 0 1)
+                   (- (or sitelinks 0))
+                   (- (or claims 0))])
+                results)))
+
 (defn <search-and-enrich
-  "Search for entities and enrich with type information.
-   Returns results with class info included."
+  "Search for entities using CirrusSearch and sort by notability.
+   CirrusSearch returns sitelinks/claims inline via pageprops, so no
+   separate batch call is needed. Results are re-ranked by sitelinks count
+   to ensure the most notable entity appears first."
   [query]
   (p/let [results (<search-multilingual query)]
     (->> results
-         (mapv (fn [result]
-                 ;; Note: We don't have full entity data at search time,
-                 ;; so we can't determine class yet. That happens on selection.
-                 (assoc result :source :wikidata))))))
+         (sort-by-notability query)
+         (mapv #(assoc % :source :wikidata)))))
 
 (defn <fetch-full-entity
   "Fetch complete entity data with class, image, and properties resolved.
