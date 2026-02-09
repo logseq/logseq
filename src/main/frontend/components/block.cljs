@@ -425,7 +425,6 @@
 
 (rum/defcs asset-link < rum/reactive
   (rum/local nil ::src)
-  (rum/local 0 ::reload-n)
   [state config title href metadata full_text]
   (let [src (::src state)
         ^js js-url (:link-js-url config)
