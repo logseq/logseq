@@ -1,4 +1,6 @@
 (ns logseq.db-sync.worker
+  ;; Turn off false defclass errors
+  {:clj-kondo/config {:linters {:unresolved-symbol {:level :off}}}}
   (:require ["cloudflare:workers" :refer [DurableObject]]
             [lambdaisland.glogi :as log]
             [logseq.db-sync.common :as common]

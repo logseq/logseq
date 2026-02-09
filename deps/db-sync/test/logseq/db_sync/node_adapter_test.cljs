@@ -1,4 +1,6 @@
 (ns logseq.db-sync.node-adapter-test
+  ;; Linters disabled because commented out FIXME code causes false positives
+  {:clj-kondo/config {:ignore true}}
   (:require [cljs.test :refer [deftest is async testing]]
             [clojure.string :as string]
             [logseq.db-sync.node.server :as node-server]

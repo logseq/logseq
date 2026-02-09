@@ -10,8 +10,18 @@
              clojure.string string
              datascript.core d
              datascript.transit dt
-             logseq.publish.common publish-common
-             logseq.publish.model publish-model}}}
+             logseq.db-sync.common common
+             logseq.db-sync.config config
+             logseq.db-sync.node.routes node-routes
+             logseq.db-sync.platform.core platform
+             logseq.db-sync.protocol protocol
+             logseq.db-sync.storage storage
+             logseq.db-sync.worker.auth auth
+             logseq.db-sync.worker.handler.sync sync-handler
+             logseq.db-sync.worker.handler.ws ws-handler
+             logseq.db-sync.worker.http http
+             logseq.db-sync.worker.routes.index routes
+             logseq.db-sync.worker.ws ws}}}
  :lint-as {promesa.core/let clojure.core/let
            shadow.cljs.modern/defclass clj-kondo.lint-as/def-catch-all}
  :skip-comments true
