@@ -884,6 +884,7 @@
          [:div {:class "flex-1"}]
 
          (when (and (or can-show-more? can-show-less?)
+                    (= group @(::highlighted-group state))
                     (empty? filter')
                     (not sidebar?))
            [:a.text-link.select-node.opacity-50.hover:opacity-90
