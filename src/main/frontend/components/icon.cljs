@@ -52,7 +52,7 @@
 
 ;; Asset picker drag & drop state
 (defonce *drag-active? (atom false))
-(defonce *drag-depth (atom 0))  ;; Track drag enter/leave depth to prevent flicker
+(defonce *drag-depth (atom 0)) ;; Track drag enter/leave depth to prevent flicker
 (defonce *asset-picker-open? (atom false))
 (defonce *upload-status (atom ""))
 (defonce *uploading-files (atom {}))
@@ -599,7 +599,6 @@
         fresh-entity (when-let [db-id (:db/id node-entity)]
                        (or (model/sub-block db-id) node-entity))
         entity (or fresh-entity node-entity)
-        opts' (merge {:size 14} opts)
         node-icon (cond
                     (:own-icon? opts)
                     (get entity :logseq.property/icon)
@@ -607,6 +606,12 @@
                     "arrow-narrow-right"
                     :else
                     (get-node-icon entity))
+        ;; Photo-based custom icons (avatar/image) always render at 20px.
+        ;; Symbolic icons (emoji, tabler, text, defaults) use caller's :size or 14.
+        photo-icon? (and (map? node-icon)
+                         (contains? #{:avatar :image} (:type node-icon)))
+        effective-size (if photo-icon? 20 (or (:size opts) 14))
+        opts' (assoc opts :size effective-size)
         ;; Check if this is an avatar that might need auto-fetch:
         ;; - It's an avatar type
         ;; - It doesn't have an asset-uuid (text-only avatar)
@@ -643,8 +648,9 @@
          (auto-fetch-image-effect entity))
        ;; Icon rendering
        [:div.icon-cp-container.flex.items-center.justify-center
-        (merge {:style {:color (or (:color node-icon) "inherit")}}
-               (select-keys opts [:class]))
+        {:style {:color (or (:color node-icon) "inherit")}
+         :class (str (when photo-icon? "photo-icon")
+                     (when-let [c (:class opts)] (str " " c)))}
         ;; For empty images, use the clickable placeholder component
         (if is-auto-fetchable-image?
           (empty-image-icon-cp entity opts')
@@ -2169,8 +2175,8 @@
                 ;; Use PNG thumbnail for SVGs (avoids blob rendering issues)
                 ;; Fall back to original URL for non-SVGs or if no thumbnail
                 download-url (if (and (svg-url? url) thumb-url)
-                               thumb-url  ; PNG thumbnail for SVG
-                               url)       ; Original for other formats
+                               thumb-url ; PNG thumbnail for SVG
+                               url) ; Original for other formats
                 asset-name (or title "web-image")]
             (-> (<save-url-asset! repo download-url asset-name)
                 (p/then (fn [asset-entity]

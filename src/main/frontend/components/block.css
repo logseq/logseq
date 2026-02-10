@@ -70,6 +70,10 @@
 
   .icon-cp-container {
     @apply inline-flex items-center pr-0.5;
+
+    &.photo-icon {
+      @apply pr-1.5;
+    }
   }
 
   .icon-emoji-wrap em-emoji,
@@ -80,6 +84,17 @@
   .block-title-wrap.as-heading {
     @apply inline text-[length:inherit];
   }
+}
+
+/* Center emoji icons in inline icon boxes (used by CMD+K, page refs, etc.) */
+.icon-inline .ui__icon {
+  @apply inline-flex items-center justify-center;
+}
+
+.icon-inline em-emoji,
+.icon-inline .emoji-mart-emoji,
+.icon-inline .emoji-mart-emoji > span {
+  line-height: 1 !important;
 }
 
 .breadcrumb {

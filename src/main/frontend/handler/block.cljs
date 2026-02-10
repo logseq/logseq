@@ -143,11 +143,13 @@
   "Used for select item"
   [block title icon-cp]
   (if-let [icon (:logseq.property/icon block)]
-    [:div.flex.flex-row.items-baseline.gap-1
-     [:span.self-center.inline-flex.items-center.justify-center.flex-shrink-0
-      {:style {:width 14 :height 14}}
-      (icon-cp icon {:size 14})]
-     title]
+    (let [photo? (contains? #{:avatar :image} (:type icon))
+          icon-size (if photo? 20 16)]
+      [:div.flex.flex-row.items-baseline.gap-2
+       [:span.icon-inline.self-center.inline-flex.items-center.justify-center.flex-shrink-0
+        {:style {:width 20 :height 20}}
+        (icon-cp icon {:size icon-size})]
+       title])
     (or title (:block/title block))))
 
 (defn edit-block!
