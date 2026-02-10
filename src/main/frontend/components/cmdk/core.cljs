@@ -318,7 +318,7 @@
         repo (state/get-current-repo)
         current-page (when-let [id (page-util/get-current-page-id)]
                        (db/entity id))
-        opts (cond-> {:limit 100 :dev? config/dev? :built-in? true}
+        opts (cond-> {:limit 100 :dev? config/dev? :built-in? true :enable-snippet? false}
                (contains? #{:move-blocks} (get-action))
                (assoc :page-only? true))]
     (swap! !results assoc-in [group :status] :loading)
@@ -331,8 +331,8 @@
                             (block-item repo block current-page @!input))) blocks)]
       (if (= group :current-page)
         (let [items-on-current-page (filter :current-page? items)]
-          (swap! !results update group         merge {:status :success :items items-on-current-page}))
-        (swap! !results update group         merge {:status :success :items items})))))
+          (swap! !results update group merge {:status :success :items items-on-current-page}))
+        (swap! !results update group merge {:status :success :items items})))))
 
 (defmethod load-results :files [group state]
   (let [!input (::input state)
@@ -389,7 +389,7 @@
     (let [!results (::results state)
           !input (::input state)
           repo (state/get-current-repo)
-          opts {:limit 100 :page (str (:block/uuid current-page))}]
+          opts {:limit 100 :page (str (:block/uuid current-page)) :enable-snippet? false}]
       (swap! !results assoc-in [group :status] :loading)
       (swap! !results assoc-in [:current-page :status] :loading)
       (p/let [blocks (search/block-search repo @!input opts)
