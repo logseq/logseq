@@ -512,13 +512,23 @@ DROP TRIGGER IF EXISTS blocks_au;
         sorted-result (sort-by :combined-score #(compare %2 %1) merged)]
     sorted-result))
 
+(defn- code-block?
+  [code-class block]
+  (boolean
+   (and (not (ldb/page? block))
+        (or (= :code (:logseq.property.node/display-type block))
+            (and code-class
+                 (ldb/class-instance? code-class block))))))
+
 (defn search-blocks
   "Options:
    * :page - the page to specifically search on
    * :limit - Number of result to limit search results. Defaults to 100
+   * :search-limit - Number of result to limit sqlite search results. Defaults to nil
    * :dev? - Allow all nodes to be seen for development. Defaults to false
+   * :code-only? - Whether to return only code blocks. Defaults to false
    * :built-in?  - Whether to return public built-in nodes for db graphs. Defaults to false"
-  [repo conn search-db q {:keys [limit page enable-snippet? built-in? dev? page-only? library-page-search?]
+  [repo conn search-db q {:keys [limit search-limit page enable-snippet? built-in? dev? page-only? library-page-search? code-only?]
                           :as option
                           :or {enable-snippet? true}}]
   (m/sp
@@ -528,7 +538,8 @@ DROP TRIGGER IF EXISTS blocks_au;
            large-graph? (> page-count 2500)
            non-match-input (when (<= (count q) 2)
                              (str "%" (string/replace q #"\s+" "%") "%"))
-           limit  (or limit 100)
+           limit (or limit 100)
+           limit-p (or search-limit limit)
             ;; https://www.sqlite.org/fts5.html#the_highlight_function
             ;; the 2nd column in blocks_fts (content)
             ;; pfts_2lqh is a key for retrieval
@@ -543,9 +554,9 @@ DROP TRIGGER IF EXISTS blocks_au;
                        (str select pg-sql " title match ? order by rank limit ?"))
            non-match-sql (str select pg-sql " title like ? limit ?")
            matched-result (when-not page-only?
-                            (search-blocks-aux search-db match-sql q match-input page limit enable-snippet?))
+                            (search-blocks-aux search-db match-sql q match-input page limit-p enable-snippet?))
            non-match-result (when (and (not page-only?) non-match-input)
-                              (->> (search-blocks-aux search-db non-match-sql q non-match-input page limit enable-snippet?)
+                              (->> (search-blocks-aux search-db non-match-sql q non-match-input page limit-p enable-snippet?)
                                    (map (fn [result]
                                           (assoc result :keyword-score (fuzzy/score q (:title result)))))))
             ;; fuzzy is too slow for large graphs
@@ -569,10 +580,12 @@ DROP TRIGGER IF EXISTS blocks_au;
             ;; _ (doseq [item semantic-search-result]
             ;;     (prn :debug :semantic-search-item item))
            combined-result (combine-results @conn (concat fuzzy-result matched-result non-match-result) semantic-search-result)
+           code-class (when code-only?
+                        (d/entity @conn :logseq.class/Code-block))
            result (->> combined-result
                        (common-util/distinct-by :id)
-                       (keep (fn [result]
-                               (let [{:keys [id page title snippet]} result
+                       (keep (fn [search-result]
+                               (let [{:keys [id page title snippet]} search-result
                                      block-id (uuid id)]
                                  (when-let [block (d/entity @conn [:block/uuid block-id])]
                                    (when-not (or
@@ -590,23 +603,28 @@ DROP TRIGGER IF EXISTS blocks_au;
                                                    (ldb/class? block))
                                                (or (not (ldb/built-in? block))
                                                    (ldb/class? block))))
-                                       (let [display-title (or (block-search-title block) title)]
-                                         {:db/id (:db/id block)
-                                          :block/uuid (:block/uuid block)
-                                          :block/title (ensure-highlighted-snippet snippet display-title q)
-                                          :block.temp/original-title (:block/title block)
-                                          :block/page (or
-                                                       (:block/uuid (:block/page block))
-                                                       (when page
-                                                         (if (common-util/uuid-string? page)
-                                                           (uuid page)
-                                                           nil)))
-                                          :block/parent (:db/id (:block/parent block))
-                                          :block/tags (seq (map :db/id (:block/tags block)))
-                                          :logseq.property/icon (:logseq.property/icon block)
-                                          :page? (ldb/page? block)
-                                          :alias (some-> (first (:block/_alias block))
-                                                         (select-keys [:block/uuid :block/title]))}))))))))]
+                                       (when (or (not code-only?)
+                                                 (code-block? code-class block))
+                                         (let [display-title (or (block-search-title block) title)]
+                                           {:db/id (:db/id block)
+                                            :block/uuid (:block/uuid block)
+                                            :block/title (ensure-highlighted-snippet snippet display-title q)
+                                            :block.temp/original-title (:block/title block)
+                                            :block/page (or
+                                                         (:block/uuid (:block/page block))
+                                                         (when page
+                                                           (if (common-util/uuid-string? page)
+                                                             (uuid page)
+                                                             nil)))
+                                            :block/parent (:db/id (:block/parent block))
+                                            :block/tags (seq (map :db/id (:block/tags block)))
+                                            :logseq.property/icon (:logseq.property/icon block)
+                                            :page? (ldb/page? block)
+                                            :alias (some-> (first (:block/_alias block))
+                                                           (select-keys [:block/uuid :block/title]))})))))))))
+           result (cond->> result
+                    search-limit
+                    (take limit))]
        (common-util/distinct-by :block/uuid result)))))
 
 (defn truncate-table!
