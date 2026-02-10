@@ -60,6 +60,7 @@
      [(when current-page
         {:filter {:group :current-page} :text "Search only current page" :info "Add filter to search" :icon-theme :gray :icon "file"})
       {:filter {:group :nodes} :text "Search only nodes" :info "Add filter to search" :icon-theme :gray :icon "point-filled"}
+      {:filter {:group :code} :text "Search only code" :info "Add filter to search" :icon-theme :gray :icon "code"}
       {:filter {:group :commands} :text "Search only commands" :info "Add filter to search" :icon-theme :gray :icon "command"}
       {:filter {:group :files} :text "Search only files" :info "Add filter to search" :icon-theme :gray :icon "file"}
       {:filter {:group :themes} :text "Search only themes" :info "Add filter to search" :icon-theme :gray :icon "palette"}]
@@ -72,6 +73,7 @@
    :favorites      {:status :success :show :less :items nil}
    :current-page   {:status :success :show :less :items nil}
    :nodes          {:status :success :show :less :items nil}
+   :code           {:status :success :show :less :items nil}
    :files          {:status :success :show :less :items nil}
    :themes         {:status :success :show :less :items nil}
    :filters        {:status :success :show :less :items nil}})
@@ -155,7 +157,10 @@
                  filter-group
                  [(when (= filter-group :nodes)
                     ["Current page"   :current-page   (visible-items :current-page)])
-                  [(if (= filter-group :current-page) "Current page" (name filter-group))
+                  [(cond
+                     (= filter-group :current-page) "Current page"
+                     (= filter-group :code) "Code"
+                     :else (name filter-group))
                    filter-group
                    (visible-items filter-group)]
                   (when-not node-exists?
@@ -333,6 +338,23 @@
         (let [items-on-current-page (filter :current-page? items)]
           (swap! !results update group merge {:status :success :items items-on-current-page}))
         (swap! !results update group merge {:status :success :items items})))))
+
+(defmethod load-results :code [group state]
+  (let [!input (::input state)
+        !results (::results state)
+        repo (state/get-current-repo)]
+    (swap! !results assoc-in [group :status] :loading)
+    ;; larger limit for code search since most of the results will be filtered out
+    (p/let [blocks (search/block-search repo @!input {:search-limit 300
+                                                      :dev? config/dev?
+                                                      :built-in? true
+                                                      :enable-snippet? false
+                                                      :code-only? true})
+            blocks (remove nil? blocks)
+            items (map (fn [block]
+                         (block-item repo block nil @!input))
+                       blocks)]
+      (swap! !results update group merge {:status :success :items items}))))
 
 (defmethod load-results :files [group state]
   (let [!input (::input state)
