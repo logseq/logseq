@@ -137,10 +137,13 @@ DROP TRIGGER IF EXISTS blocks_au;
     (.exec db sql)))
 
 (def ^:private max-snippet-length 250)
+(def ^:private snippet-prefix-length 50)
+(def ^:private snippet-merge-distance 200)
 (def ^:private snippet-highlight-start "$pfts_2lqh>$")
 (def ^:private snippet-highlight-end "$<pfts_2lqh$")
-(def ^:private snippet-prefix-length 50)
-(def ^:private snippet-ellipsis "\u00A0\u00A0\u00A0...\u00A0\u00A0\u00A0")
+(def ^:private snippet-ellipsis "\u00A0\u00A0\u00A0...\u00A0\u00A0\u00A0") ;; \u00A0 is No-Break Space (NBSP)
+(def ^:private query-boolean-operators #{"and" "or" "not" "|" "&"})
+(def ^:private query-break-chars #{\, \. \; \! \? \uFF0C \u3002 \uFF1B \uFF01 \uFF1F \u3001}) ;; , . ; ! ? ， 。 ； ！ ？ 、
 
 (defn- snippet-by
   [content length]
@@ -149,8 +152,7 @@ DROP TRIGGER IF EXISTS blocks_au;
 (defn- get-snippet-result
   [snippet]
   (let [;; Cut snippet to limited size chars for non-matched results
-        flag-highlight (str snippet-highlight-start " ")
-        snippet (if (string/includes? snippet flag-highlight)
+        snippet (if (string/includes? snippet snippet-highlight-start)
                   snippet
                   (snippet-by snippet max-snippet-length))]
     snippet))
@@ -159,89 +161,121 @@ DROP TRIGGER IF EXISTS blocks_au;
   [q]
   (->> (string/split (string/trim q) #"\s+")
        (remove string/blank?)
-       (remove #(contains? #{"and" "or" "not"} (string/lower-case %)))))
+       (remove #(contains? query-boolean-operators (string/lower-case %)))))
 
-(defn- break-char?
-  [ch]
-  (or (boolean (re-find #"\s" (str ch)))
-      (contains? #{\, \. \! \? \， \。 \！ \？ \、} ch)))
+(defn- find-matches
+  ([text terms]
+   (find-matches text terms <))
+  ([text terms sort-fn]
+   (->> terms
+        (keep (fn [term]
+                (when-let [idx (string/index-of (string/lower-case text) (string/lower-case term))]
+                  {:term term :idx idx :len (count term) :end (+ idx (count term))})))
+        (sort-by :idx sort-fn))))
 
 (defn- find-break-before
   [s start end]
   (loop [i (dec end)]
     (if (< i start)
       nil
-      (if (break-char? (.charAt s i))
+      (if (contains? query-break-chars (.charAt s i))
         i
         (recur (dec i))))))
 
 (defn- snippet-window-around
-  [text idx match-len]
+  [text idx match-len window-len]
   (let [text-len (count text)
-        prefix-len (min snippet-prefix-length text-len)
-        window-len (max 0 (- max-snippet-length prefix-len (count snippet-ellipsis)))
         window-start (max 0 (- idx (quot window-len 2)))
         min-end (min text-len (+ idx match-len))
         window-end (min text-len (max min-end (+ window-start window-len)))
         break-idx (find-break-before text window-start idx)
         snippet-start (min window-end (max window-start (if break-idx (inc break-idx) window-start)))
         snippet-end (min text-len (+ snippet-start window-len))
-        prefix (subs text 0 prefix-len)
         snippet (subs text snippet-start snippet-end)]
-    {:prefix prefix
-     :snippet snippet
-     :snippet-start snippet-start
-     :snippet-end snippet-end
-     :prefix-len prefix-len}))
+    ;; (prn :debug {:snippet snippet :snippet-start snippet-start :snippet-end snippet-end})
+    snippet))
 
-(defn- find-best-match
-  [text terms]
-  (let [text-lc (string/lower-case text)]
+(defn- highlight-terms
+  [text terms max-len]
+  (let [clipped-text (if (> (count text) max-len)
+                       (subs text 0 max-len)
+                       text)
+        matches (find-matches clipped-text terms >)]
     (reduce
-     (fn [best term]
-       (let [term-lc (string/lower-case term)
-             idx (string/index-of text-lc term-lc)]
-         (cond
-           (nil? idx) best
-           (nil? best) {:term term :idx idx}
-           (< idx (:idx best)) {:term term :idx idx}
-           (and (= idx (:idx best))
-                (> (count term) (count (:term best))))
-           {:term term :idx idx}
-           :else best)))
-     nil
-     terms)))
+     (fn [acc {:keys [idx len]}]
+       (str (subs acc 0 idx)
+            snippet-highlight-start
+            (subs acc idx (+ idx len))
+            snippet-highlight-end
+            (subs acc (+ idx len))))
+     clipped-text
+     matches)))
+
+(defn enough-highlighted?
+  [text num]
+  (loop [from 0
+         cnt 0]
+    (let [idx (string/index-of text snippet-highlight-start from)]
+      (cond
+        (nil? idx) false
+        (>= (inc cnt) num) true
+        :else (recur (+ idx (count snippet-highlight-start)) (inc cnt))))))
 
 (defn ensure-highlighted-snippet
   "Ensure snippet includes SQLite-style highlight markers. Uses `title` as a fallback
   when snippet is missing or unhighlighted."
   [snippet title q]
   (let [base (or snippet title)
-        full-text (or title snippet)]
+        text (or title snippet)
+        terms (query->terms q)
+        expect-highlight-num (if (> (count terms) 2) 2 (count terms))]
+    ;; (prn :debug {:snippet snippet :title title :q q :terms terms})
     (cond
       (string/blank? base) base
       (string/blank? q) base
-      (string/includes? base snippet-highlight-start) base
+      (enough-highlighted? base expect-highlight-num) base
       :else
-      (if-let [{:keys [term idx]} (and full-text (find-best-match full-text (query->terms q)))]
-        (let [use-window? (and (> (count full-text) max-snippet-length)
-                               (>= idx max-snippet-length))
-              {:keys [prefix snippet snippet-start]} (when use-window?
-                                                       (snippet-window-around full-text idx (count term)))
-              [target-text offset]
-              (if use-window?
-                [(str prefix snippet-ellipsis snippet)
-                 (+ (count prefix) (count snippet-ellipsis) (- idx snippet-start))]
-                [base idx])
-              target-end (+ offset (count term))]
-          (if (and offset (<= 0 offset) (<= target-end (count target-text)))
-            (str (subs target-text 0 offset)
-                 snippet-highlight-start
-                 (subs target-text offset target-end)
-                 snippet-highlight-end
-                 (subs target-text target-end))
-            target-text))
-        base))))
+      (let [text (-> text
+                     (string/replace snippet-highlight-start "")
+                     (string/replace snippet-highlight-end ""))
+            matches (and text (find-matches text terms))]
+        (if (seq matches)
+          (let [prefix (subs text 0 (min snippet-prefix-length (count text)))
+                merged-window-len (max 0 (- max-snippet-length snippet-prefix-length (count snippet-ellipsis)))
+                split-window-len (max 0 (quot (- max-snippet-length snippet-prefix-length (* 2 (count snippet-ellipsis))) 2))
+                match-terms (map :term matches)
+                {:keys [term idx len end]} (first matches)
+                match-2 (second matches)
+                term-2 (:term match-2)
+                idx-2 (:idx match-2)
+                len-2 (:len match-2)
+                end-2 (:end match-2)
+                use-window? (and (> (count text) max-snippet-length)
+                                 (>= (or end-2 end) max-snippet-length))
+                close? (and end-2 (<= (- end-2 idx) snippet-merge-distance))
+                use-merge? (or (nil? idx-2) close?)]
+            ;; (prn :debug {:matches matches :use-window? use-window? :close? close? :use-merge? use-merge?})
+            (if-not use-window?
+              (highlight-terms text terms max-snippet-length)
+              (if use-merge?
+                (let [snippet (snippet-window-around text idx len merged-window-len)]
+                  (str prefix snippet-ellipsis (highlight-terms snippet match-terms merged-window-len)))
+                (let [snippet (snippet-window-around text idx len split-window-len)
+                      snippet-2 (snippet-window-around text idx-2 len-2 split-window-len)
+                      prefix-hit? (< idx (count prefix))
+                      highlighted-prefix (if prefix-hit?
+                                           (highlight-terms prefix [term] snippet-prefix-length)
+                                           prefix)]
+                  (if prefix-hit?
+                    (str highlighted-prefix
+                         snippet-ellipsis
+                         (highlight-terms snippet-2 [term-2] split-window-len))
+                    (str highlighted-prefix
+                         snippet-ellipsis
+                         (highlight-terms snippet [term] split-window-len)
+                         snippet-ellipsis
+                         (highlight-terms snippet-2 [term-2] split-window-len)))))))
+          base)))))
 
 (defn- get-match-input
   [q]
