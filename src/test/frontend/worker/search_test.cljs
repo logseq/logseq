@@ -1,7 +1,8 @@
 (ns frontend.worker.search-test
   (:require [cljs.test :refer [deftest is testing]]
             [clojure.string :as string]
-            [frontend.worker.search :as search]))
+            [frontend.worker.search :as search]
+            [logseq.db :as ldb]))
 
 (deftest ensure-highlighted-snippet-adds-marker
   (testing "adds highlight markers for first matching term"
@@ -106,3 +107,23 @@
       (is (re-find #"\$pfts_2lqh>\$target\$<pfts_2lqh\$" result))
       (is (re-find #"\u00A0\u00A0\u00A0\.\.\.\u00A0\u00A0\u00A0" result))
       (is (not (re-find #"\u00A0\u00A0\u00A0\.\.\.\u00A0\u00A0\u00A0.*\u00A0\u00A0\u00A0\.\.\.\u00A0\u00A0\u00A0" result))))))
+
+(deftest code-block-predicate
+  (testing "matches display-type code first"
+    (with-redefs [ldb/page? (constantly false)
+                  ldb/class-instance? (fn [_ _] false)]
+      (is (true? (#'search/code-block? nil {:logseq.property.node/display-type :code})))
+      (is (false? (#'search/code-block? nil {:logseq.property.node/display-type :math})))))
+
+  (testing "falls back to Code class instance when display-type is missing"
+    (with-redefs [ldb/page? (constantly false)
+                  ldb/class-instance? (fn [code-class block]
+                                        (and (= :code-class code-class)
+                                             (= "code block" (:block/title block))))]
+      (is (true? (#'search/code-block? :code-class {:block/title "code block"})))
+      (is (false? (#'search/code-block? :code-class {:block/title "normal block"})))))
+
+  (testing "excludes page entities in code-only mode"
+    (with-redefs [ldb/page? (constantly true)
+                  ldb/class-instance? (fn [_ _] true)]
+      (is (false? (#'search/code-block? :code-class {:logseq.property.node/display-type :code}))))))
