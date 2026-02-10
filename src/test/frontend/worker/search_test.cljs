@@ -60,7 +60,6 @@
 
 (deftest ^:focus ensure-highlighted-snippet-multi-term-split
   (testing "two terms far apart split into two windows"
-    (prn :test (search/ensure-highlighted-snippet nil "Logseq starts as a PKM that works directly with plain-text files, a lot of users believe that it's the best format for both longevity and cooperation with other editors. They might be worried about the database version." "Logseq database"))
     (let [filler (apply str (repeat 20 "甲乙丙丁戊己庚辛壬癸，子丑寅卯辰巳午未申酉戌亥。"))
           text (str "君不见黄河之水天上来，" filler "奔流到海不复回")
           result (search/ensure-highlighted-snippet nil text "黄河 到海")]
@@ -84,4 +83,12 @@
       (is (string/starts-with? result (str (subs prefix 0 50) ellipsis)))
       (is (re-find #"\u00A0\u00A0\u00A0...\u00A0\u00A0\u00A0life it seems will \$pfts_2lqh>\$fade\$<pfts_2lqh\$" result))
       (is (re-find #"\u00A0\u00A0\u00A0...\u00A0\u00A0\u00A0now i will just \$pfts_2lqh>\$say\$<pfts_2lqh\$" result))
-      (is (re-find #"\u00A0\u00A0\u00A0\.\.\.\u00A0\u00A0\u00A0.*\u00A0\u00A0\u00A0\.\.\.\u00A0\u00A0\u00A0" result)))))
+      (is (re-find #"\u00A0\u00A0\u00A0\.\.\.\u00A0\u00A0\u00A0.*\u00A0\u00A0\u00A0\.\.\.\u00A0\u00A0\u00A0" result)))
+    (let [prefix (apply str (repeat 48 "A"))
+          far (apply str (repeat 260 "B"))
+          text (str prefix "token" far " ending target")
+          result (search/ensure-highlighted-snippet nil text "token target")]
+      (is (string/starts-with? result (str prefix "$pfts_2lqh>$token$<pfts_2lqh$")))
+      (is (re-find #"\$pfts_2lqh>\$target\$<pfts_2lqh\$" result))
+      (is (re-find #"\u00A0\u00A0\u00A0\.\.\.\u00A0\u00A0\u00A0" result))
+      (is (not (re-find #"\u00A0\u00A0\u00A0\.\.\.\u00A0\u00A0\u00A0.*\u00A0\u00A0\u00A0\.\.\.\u00A0\u00A0\u00A0" result))))))
