@@ -130,7 +130,10 @@
 (defn get-edit-content
   []
   (when-let [editor (get-editor)]
-    (get-text editor)))
+    ;; `textarea.textContent` is not the runtime value. Use `inputValue` so
+    ;; helpers like `input-command` can reliably decide when a leading space is
+    ;; needed before typing `/`.
+    (.inputValue editor)))
 
 (defn bounding-xy
   [locator]
@@ -182,14 +185,37 @@
 
 (defn input-command
   [command]
-  (let [content (get-edit-content)]
-    (when (and (not= (str (last content)) " ")
-               (not= content ""))
-      (press-seq " ")))
-  (press-seq "/" {:delay 20})
-  (w/wait-for ".ui__popover-content")
-  (press-seq command {:delay 20})
-  (w/click "a.menu-link.chosen"))
+  (loop [attempt 0]
+    ;; Ensure editor focus before typing `/...`.
+    (when (w/visible? editor-q)
+      (w/click editor-q))
+    (let [content (or (get-edit-content) "")]
+      (when (and (not= content "")
+                 (not= (str (last content)) " "))
+        (press-seq " ")))
+    (let [ok?
+          (try
+            (press-seq "/" {:delay 20})
+            (w/wait-for ".ui__popover-content" {:timeout 30000})
+            (press-seq command {:delay 20})
+            (w/click "a.menu-link.chosen")
+            true
+            (catch TimeoutError _e
+              false))]
+      (when-not ok?
+        (if (< attempt 2)
+          (do
+            ;; Sometimes the editor isn't ready (or an overlay steals focus).
+            ;; Clear any partial input, then retry.
+            (k/esc)
+            (k/esc)
+            (when (w/visible? editor-q)
+              (w/click editor-q)
+              (k/press "ControlOrMeta+a")
+              (k/backspace))
+            (recur (inc attempt)))
+          (throw (ex-info "input-command failed to open command menu"
+                          {:command command :attempt attempt})))))))
 
 (defn set-tag
   "`hidden?`: some tags may be hidden from the UI, e.g. Page"

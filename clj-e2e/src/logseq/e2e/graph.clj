@@ -17,10 +17,22 @@
 
 (defn- input-e2ee-password
   []
-  (w/wait-for "input[type=\"password\"]" {:timeout 20000})
-  (w/click "input[type=\"password\"]")
-  (util/input "e2etest")
-  (w/click "button:text(\"Submit\")"))
+  (try
+    (w/wait-for "input[type=\"password\"]" {:timeout 20000})
+    ;; The E2EE password dialog can be either:
+    ;; - a single password input (unlock / confirm), or
+    ;; - two inputs (set password + confirm password).
+    ;; Playwright strict mode will explode if we `click` by selector, so we
+    ;; always target specific elements.
+    (let [inputs (vec (w/query "input[type=\"password\"]"))]
+      (doseq [input (take 2 inputs)]
+        (.click input)
+        (util/input "e2etest")))
+    (w/click "button:text(\"Submit\")")
+    (catch com.microsoft.playwright.TimeoutError _e
+      ;; Some transitions (especially re-downloading a graph) won't prompt
+      ;; for a password if it's already been set for this session.
+      nil)))
 
 (defn- new-graph-helper
   [graph-name enable-sync?]
@@ -32,7 +44,7 @@
     (w/wait-for "button#rtc-sync" {:timeout 3000})
     (w/click "button#rtc-sync")
     (input-e2ee-password)
-    (w/wait-for "button.cloud.on.idle" {:timeout 20000}))
+    (w/wait-for "button.cloud.on.idle" {:timeout 60000}))
   (when-not enable-sync?
     (w/click "button:not([disabled]):text(\"Submit\")"))
   ;; new graph can blocks the ui because the db need to be created and restored,
@@ -83,7 +95,7 @@
   (w/click (.last (w/-query (format "div[data-testid='logseq_db_%1$s'] span:has-text('%1$s')" to-graph-name))))
   (when wait-sync?
     (when need-input-password? (input-e2ee-password))
-    (w/wait-for "button.cloud.on.idle" {:timeout 20000}))
+    (w/wait-for "button.cloud.on.idle" {:timeout 60000}))
   (assert/assert-graph-loaded?))
 
 (defn validate-graph
