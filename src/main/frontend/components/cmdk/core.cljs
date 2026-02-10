@@ -207,7 +207,7 @@
   (when-let [db (db/get-db)]
     (let [!results (::results state)
           recent-pages (map (fn [block]
-                              (let [text (block-handler/block-unique-title block)
+                              (let [text (block-handler/block-unique-title block :truncate? false)
                                     icon (icon-component/get-node-icon-cp block {:ignore-current-icon? true})]
                                 {:icon icon
                                  :icon-theme :gray
@@ -245,7 +245,7 @@
                            (search/fuzzy-search recent-pages @!input {:extract-fn :block/title}))]
       (->> search-results
            (map (fn [block]
-                  (let [text (block-handler/block-unique-title block)
+                  (let [text (block-handler/block-unique-title block :truncate? false)
                         icon (icon-component/get-node-icon-cp block {:ignore-current-icon? true})]
                     {:icon icon
                      :icon-theme :gray
@@ -281,7 +281,8 @@
                         (:alias page))
         icon (icon-component/get-node-icon-cp entity {:ignore-current-icon? true})
         title (block-handler/block-unique-title entity
-                                                {:alias (:block/title source-page)})]
+                                                :alias (:block/title source-page)
+                                                :truncate? false)]
     (hash-map :icon icon
               :icon-theme :gray
               :text (if (string/includes? title "$pfts_2lqh>$") ; sqlite matched
@@ -298,7 +299,7 @@
 (defn block-item
   [repo block current-page input]
   (let [id (:block/uuid block)
-        text (block-handler/block-unique-title block)
+        text (block-handler/block-unique-title block :truncate? false)
         icon (icon-component/get-node-icon-cp block {:ignore-current-icon? true})]
     {:icon icon
      :icon-theme :gray
