@@ -24,6 +24,13 @@
     (is (= "Nothing here"
            (search/ensure-highlighted-snippet nil "Nothing here" "中文")))))
 
+(deftest ensure-highlighted-snippet-appends-tail-ellipsis-when-truncated
+  (testing "append trailing ... when result doesn't keep original text tail"
+    (let [text (str "match starts here " (apply str (repeat 320 "x")))
+          result (search/ensure-highlighted-snippet nil text "match")]
+      (is (re-find #"\$pfts_2lqh>\$match\$<pfts_2lqh\$" result))
+      (is (string/ends-with? result "...")))))
+
 (deftest ensure-highlighted-snippet-windowed
   (testing "keeps prefix and shows window around match"
     (let [prefix (apply str (apply str (repeat 10 "甲乙丙丁戊己庚辛壬癸，子丑寅卯辰巳午未申酉戌亥。")))
