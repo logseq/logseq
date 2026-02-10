@@ -525,6 +525,7 @@ DROP TRIGGER IF EXISTS blocks_au;
    * :page - the page to specifically search on
    * :limit - Number of result to limit search results. Defaults to 100
    * :search-limit - Number of result to limit sqlite search results. Defaults to nil
+   * :enable-snippet? - Whether to ask sqlite to generate snippet values. Defaults to true
    * :dev? - Allow all nodes to be seen for development. Defaults to false
    * :code-only? - Whether to return only code blocks. Defaults to false
    * :built-in?  - Whether to return public built-in nodes for db graphs. Defaults to false"
@@ -574,11 +575,11 @@ DROP TRIGGER IF EXISTS blocks_au;
                                                   :semantic-score (/ 1.0 (+ 1.0 distance))}
                                                   page-id
                                                   (assoc :page page-id))))))
-           _ (prn :debug "Search results before combine:" enable-snippet? (map :snippet matched-result))
-            ;; _ (doseq [item (concat fuzzy-result matched-result)]
-            ;;     (prn :debug :keyword-search-result item))
-            ;; _ (doseq [item semantic-search-result]
-            ;;     (prn :debug :semantic-search-item item))
+          ;;  _ (prn :debug "Search results before combine:" enable-snippet? (map :snippet matched-result))
+          ;;  _ (doseq [item (concat fuzzy-result matched-result)]
+          ;;      (prn :debug :keyword-search-result item))
+          ;;  _ (doseq [item semantic-search-result]
+          ;;      (prn :debug :semantic-search-item item))
            combined-result (combine-results @conn (concat fuzzy-result matched-result non-match-result) semantic-search-result)
            code-class (when code-only?
                         (d/entity @conn :logseq.class/Code-block))

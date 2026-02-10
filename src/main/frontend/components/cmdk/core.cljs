@@ -3,6 +3,7 @@
             [clojure.string :as string]
             [frontend.components.block :as block]
             [frontend.components.cmdk.list-item :as list-item]
+            [frontend.components.cmdk.state :as cmdk-state]
             [frontend.components.icon :as icon-component]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -323,9 +324,10 @@
         repo (state/get-current-repo)
         current-page (when-let [id (page-util/get-current-page-id)]
                        (db/entity id))
-        opts (cond-> {:limit 100 :dev? config/dev? :built-in? true :enable-snippet? false}
-               (contains? #{:move-blocks} (get-action))
-               (assoc :page-only? true))]
+        opts (cmdk-state/cmdk-block-search-options
+              {:filter-group :nodes
+               :dev? config/dev?
+               :action (get-action)})]
     (swap! !results assoc-in [group :status] :loading)
     (swap! !results assoc-in [:current-page :status] :loading)
     (p/let [blocks (search/block-search repo @!input opts)
@@ -342,14 +344,12 @@
 (defmethod load-results :code [group state]
   (let [!input (::input state)
         !results (::results state)
-        repo (state/get-current-repo)]
+        repo (state/get-current-repo)
+        opts (cmdk-state/cmdk-block-search-options
+              {:filter-group :code
+               :dev? config/dev?})]
     (swap! !results assoc-in [group :status] :loading)
-    ;; larger limit for code search since most of the results will be filtered out
-    (p/let [blocks (search/block-search repo @!input {:search-limit 300
-                                                      :dev? config/dev?
-                                                      :built-in? true
-                                                      :enable-snippet? false
-                                                      :code-only? true})
+    (p/let [blocks (search/block-search repo @!input opts)
             blocks (remove nil? blocks)
             items (map (fn [block]
                          (block-item repo block nil @!input))
@@ -411,7 +411,10 @@
     (let [!results (::results state)
           !input (::input state)
           repo (state/get-current-repo)
-          opts {:limit 100 :page (str (:block/uuid current-page)) :enable-snippet? false}]
+          opts (cmdk-state/cmdk-block-search-options
+                {:filter-group :current-page
+                 :dev? config/dev?
+                 :page-uuid (:block/uuid current-page)})]
       (swap! !results assoc-in [group :status] :loading)
       (swap! !results assoc-in [:current-page :status] :loading)
       (p/let [blocks (search/block-search repo @!input opts)
@@ -586,6 +589,17 @@
     :else
     input))
 
+(defn- persist-cmdk-query-state!
+  [state]
+  (let [opts (last (:rum/args state))]
+    (cmdk-state/persist-last-cmdk-search!
+     opts
+     (:search/mode @state/state)
+     (:search/args @state/state)
+     (state/get-current-repo)
+     @(::input state)
+     @(::filter state))))
+
 (defmethod handle-action :filter [_ state _event]
   (let [item (some-> state state->highlighted-item)
         !input (::input state)
@@ -596,6 +610,7 @@
     (let [!filter (::filter state)
           group (get-in item [:filter :group])]
       (swap! !filter assoc :group group)
+      (persist-cmdk-query-state! state)
       (load-results group state))))
 
 (defmethod handle-action :theme [_ state]
@@ -742,6 +757,7 @@
 
      ;; retrieve the load-results function and update all the results
      (when (or (not composing?) composing-end?)
+       (persist-cmdk-query-state! state)
        (load-results :default state)))))
 
 (defn- open-current-item-link
@@ -819,6 +835,7 @@
                (do
                  (util/stop e)
                  (reset! (::filter state) nil)
+                 (persist-cmdk-query-state! state)
                  (load-results :default state))
 
                :else
@@ -877,6 +894,19 @@
                          (when (and highlighted-item (= -1 (.indexOf all-items (dissoc highlighted-item :mouse-enter-triggered-highlight))))
                            (reset! (::highlighted-item state) nil)))
                        [all-items])
+    (hooks/use-effect!
+     (fn []
+       (let [timeout-id (when-not (:sidebar? opts)
+                          (js/setTimeout
+                           (fn []
+                             (when-let [el @input-ref]
+                               (.focus el)
+                               (.select el)))
+                           0))]
+         (fn []
+           (when timeout-id
+             (js/clearTimeout timeout-id)))))
+     [])
     (hooks/use-effect! (fn [] (load-results :default state)) [])
     [:div {:class "bg-gray-02 border-b border-1 border-gray-07"}
      [:input.cp__cmdk-search-input
@@ -1014,19 +1044,23 @@
        (shortcut/listen-all!))
      state)}
   {:init (fn [state]
-           (let [search-mode (or (:search/mode @state/state) :global)
-                 opts (last (:rum/args state))]
-             (when (nil? search-mode)
+           (let [raw-search-mode (:search/mode @state/state)
+                 search-mode (or raw-search-mode :global)
+                 search-args (:search/args @state/state)
+                 opts (last (:rum/args state))
+                 {input :input filter-group :filter} (cmdk-state/build-initial-cmdk-search
+                                                      opts
+                                                      search-mode
+                                                      search-args
+                                                      (state/get-current-repo))]
+             (when (nil? raw-search-mode)
                (state/set-state! :search/mode :global))
              (assoc state
                     ::ref (atom nil)
-                    ::filter (if (and search-mode
-                                      (not (contains? #{:global :graph} search-mode))
-                                      (not (:sidebar? opts)))
-                               (atom {:group search-mode})
-                               (atom nil))
-                    ::input (atom (or (:initial-input opts) "")))))
+                    ::filter (atom filter-group)
+                    ::input (atom input))))
    :will-unmount (fn [state]
+                   (persist-cmdk-query-state! state)
                    (state/set-state! :search/mode nil)
                    (state/set-state! :search/args nil)
                    state)}
