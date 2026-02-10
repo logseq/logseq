@@ -863,7 +863,7 @@
                                                                               {:disabled? true})]))
                                                       tags (when-not (seq (:logseq.property/classes property))
                                                              (block-handler/visible-tags node))
-                                                      label [:div.flex.flex-row.items-center.gap-1
+                                                      label [:div.flex.flex-row.items-center.gap-2
                                                              (when-not (or (:logseq.property/classes property)
                                                                            (contains? #{:class :property} property-type))
                                                                (icon-component/get-node-icon-cp node {:ignore-current-icon? true}))

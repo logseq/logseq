@@ -41,10 +41,10 @@
   [repo idx block]
   (let [id (:block/uuid block)]
     [:div.mt-2
-     (page/page-cp {:parameters  {:path {:name (str id)}}
-                    :sidebar?    true
+     (page/page-cp {:parameters {:path {:name (str id)}}
+                    :sidebar? true
                     :sidebar/idx idx
-                    :repo        repo})]))
+                    :repo repo})]))
 
 (defn get-scrollable-container
   []
@@ -53,7 +53,7 @@
 (rum/defc page-cp < rum/reactive
   [repo page-name]
   (page/page-cp {:parameters {:path {:name page-name}}
-                 :sidebar?   true
+                 :sidebar? true
                  :scroll-container (get-scrollable-container)
                  :repo repo}))
 
@@ -66,7 +66,7 @@
   [repo block idx sidebar-key ref?]
   (when-let [block-id (:block/uuid block)]
     [[:.flex.items-center {:class (when ref? "ml-2")}
-      (block/breadcrumb {:id     "block-parent"
+      (block/breadcrumb {:id "block-parent"
                          :block? true
                          :sidebar-key sidebar-key} repo block-id {:indent? false})]
      (block-cp repo idx block)]))
@@ -104,8 +104,9 @@
           block-render (fn []
                          (when entity
                            (if page?
-                             [[:.flex.items-center.page-title.gap-1
-                               (icon/get-node-icon-cp entity {:class "text-md"})
+                             [[:.flex.items-center.page-title
+                               [:span.flex.items-center.justify-center.mr-2.flex-shrink-0 {:style {:width 20 :height 20}}
+                                (icon/get-node-icon-cp entity {:class "text-md" :size 16})]
                                [:span.overflow-hidden.text-ellipsis (:block/title entity)]]
                               (page-cp repo (str (:block/uuid entity)))]
                              (block-with-breadcrumb repo entity idx [repo db-id block-type] false))))]
@@ -226,8 +227,8 @@
         (let [[title component] item]
           [:div.flex.flex-col.w-full.relative
            [:.flex.flex-row.justify-between.sidebar-item-header.color-level.rounded-t-md
-            {:class         (when collapsed? "rounded-b-md")
-             :draggable     true
+            {:class (when collapsed? "rounded-b-md")
+             :draggable true
              :on-context-menu (fn [e]
                                 (util/stop e)
                                 (shui/popup-show! e
@@ -237,21 +238,21 @@
              :on-drag-start (fn [event]
                               (editor-handler/block->data-transfer! (:block/name (db/entity db-id)) event true)
                               (reset! *drag-from idx))
-             :on-drag-end   (fn [_event]
-                              (when drag-to (state/sidebar-move-block! idx drag-to))
-                              (reset! *drag-to nil)
-                              (reset! *drag-from nil))
-             :on-pointer-up   (fn [event]
-                                (when (= (.-which (.-nativeEvent event)) 2)
-                                  (state/sidebar-remove-block! idx)))}
+             :on-drag-end (fn [_event]
+                            (when drag-to (state/sidebar-move-block! idx drag-to))
+                            (reset! *drag-to nil)
+                            (reset! *drag-from nil))
+             :on-pointer-up (fn [event]
+                              (when (= (.-which (.-nativeEvent event)) 2)
+                                (state/sidebar-remove-block! idx)))}
 
             [:button.flex.flex-row.px-2.items-center.w-full.overflow-hidden
              {:aria-expanded (str (not collapsed?))
-              :id            (str "sidebar-panel-header-" idx)
+              :id (str "sidebar-panel-header-" idx)
               :aria-controls (str "sidebar-panel-content-" idx)
-              :on-click      (fn [event]
-                               (util/stop event)
-                               (state/sidebar-block-toggle-collapse! db-id))}
+              :on-click (fn [event]
+                          (util/stop event)
+                          (state/sidebar-block-toggle-collapse! db-id))}
              [:span.opacity-50.hover:opacity-100.flex.items-center.pr-1
               (ui/rotating-arrow collapsed?)]
              [:div.ml-1.font-medium.text-sm.overflow-hidden.whitespace-nowrap
@@ -278,10 +279,10 @@
            [:div {:role "region"
                   :id (str "sidebar-panel-content-" idx)
                   :aria-labelledby (str "sidebar-panel-header-" idx)
-                  :class           (util/classnames [{:hidden  collapsed?
-                                                      :initial (not collapsed?)
-                                                      :sidebar-panel-content true
-                                                      :px-2    (not (contains? #{:search :shortcut-settings} block-type))}])}
+                  :class (util/classnames [{:hidden collapsed?
+                                            :initial (not collapsed?)
+                                            :sidebar-panel-content true
+                                            :px-2 (not (contains? #{:search :shortcut-settings} block-type))}])}
             (inner-component component (not drag-from))]
            (when drag-from (drop-area idx))])]
        (drop-indicator idx drag-to)])))
@@ -400,15 +401,15 @@
      [sidebar-open?])
 
     [:.resizer
-     {:ref              el-ref
-      :role             "separator"
+     {:ref el-ref
+      :role "separator"
       :aria-orientation "vertical"
-      :aria-label       (t :right-side-bar/separator)
-      :aria-valuemin    (* min-ratio 100)
-      :aria-valuemax    (* max-ratio 100)
-      :aria-valuenow    50
-      :tabIndex         "0"
-      :data-expanded    sidebar-open?}]))
+      :aria-label (t :right-side-bar/separator)
+      :aria-valuemin (* min-ratio 100)
+      :aria-valuemax (* max-ratio 100)
+      :aria-valuenow 50
+      :tabIndex "0"
+      :data-expanded sidebar-open?}]))
 
 (rum/defcs sidebar-inner <
   (rum/local false ::anim-finished?)
