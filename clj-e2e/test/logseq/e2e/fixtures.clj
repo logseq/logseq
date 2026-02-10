@@ -12,6 +12,9 @@
             [logseq.e2e.util :as util]
             [wally.main :as w]))
 
+(def ^:private reuse-rtc-graph?
+  (= "1" (System/getenv "LOGSEQ_E2E_REUSE_RTC_GRAPH")))
+
 ;; TODO: save trace
 ;; TODO: parallel support
 (defn open-page
@@ -92,7 +95,10 @@
 
 (defn create-page
   [& [page-name]]
-  (let [page-name (or page-name (str "page " (swap! *page-number inc)))]
+  (let [page-name (or page-name
+                      (if reuse-rtc-graph?
+                        (str "page " (System/currentTimeMillis))
+                        (str "page " (swap! *page-number inc))))]
     (page/new-page page-name)
     page-name))
 
@@ -136,7 +142,9 @@
 (defn prepare-rtc-graph-fixture
   "open 2 app instances, add a rtc graph, check this graph available on other instance"
   [graph-name-prefix f]
-  (let [graph-name (str graph-name-prefix "-" (inst-string (java.time.Instant/now)))]
+  (let [graph-name (if reuse-rtc-graph?
+                     (str graph-name-prefix "-reused")
+                     (str graph-name-prefix "-" (inst-string (java.time.Instant/now))))]
     (cp/prun!
      2
      #(w/with-page %
@@ -145,7 +153,13 @@
         (util/login-test-account))
      [@*page1 @*page2])
     (w/with-page @*page1
-      (graph/new-graph graph-name true))
+      (if reuse-rtc-graph?
+        (try
+          (graph/wait-for-remote-graph graph-name)
+          (graph/switch-graph graph-name true true)
+          (catch Throwable _e
+            (graph/new-graph graph-name true)))
+        (graph/new-graph graph-name true)))
     (w/with-page @*page2
       (graph/wait-for-remote-graph graph-name)
       (graph/switch-graph graph-name true true))
@@ -154,7 +168,7 @@
               *graph-name* graph-name]
       (f)
       ;; cleanup
-      (if custom-report/*preserve-graph*
+      (if (or reuse-rtc-graph? custom-report/*preserve-graph*)
         (println "Don't remove graph: " graph-name)
         (w/with-page @*page2
           (graph/remove-remote-graph graph-name))))))
