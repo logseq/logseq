@@ -260,21 +260,38 @@ DROP TRIGGER IF EXISTS blocks_au;
               (if use-merge?
                 (let [snippet (snippet-window-around text idx len merged-window-len)]
                   (str prefix snippet-ellipsis (highlight-terms snippet match-terms merged-window-len)))
-                (let [snippet (snippet-window-around text idx len split-window-len)
-                      snippet-2 (snippet-window-around text idx-2 len-2 split-window-len)
-                      prefix-hit? (< idx (count prefix))
-                      highlighted-prefix (if prefix-hit?
-                                           (highlight-terms prefix [term] snippet-prefix-length)
-                                           prefix)]
-                  (if prefix-hit?
-                    (str highlighted-prefix
-                         snippet-ellipsis
-                         (highlight-terms snippet-2 [term-2] split-window-len))
-                    (str highlighted-prefix
-                         snippet-ellipsis
-                         (highlight-terms snippet [term] split-window-len)
-                         snippet-ellipsis
-                         (highlight-terms snippet-2 [term-2] split-window-len)))))))
+                (let [prefix-len (count prefix)
+                      prefix-full-hit? (and (< idx prefix-len)
+                                            (<= end prefix-len))
+                      cross-prefix-hit? (and (< idx prefix-len)
+                                             (> end prefix-len))]
+                  (cond
+                    prefix-full-hit?
+                    (let [snippet-2 (snippet-window-around text idx-2 len-2 split-window-len)
+                          highlighted-prefix (highlight-terms prefix [term] snippet-prefix-length)]
+                      (str highlighted-prefix
+                           snippet-ellipsis
+                           (highlight-terms snippet-2 [term-2] split-window-len)))
+
+                    cross-prefix-hit?
+                    (let [prefix-for-split (subs text 0 (min end (count text)))
+                          cross-window-len (max 0 (- max-snippet-length
+                                                     (count prefix-for-split)
+                                                     (count snippet-ellipsis)))
+                          snippet-2 (snippet-window-around text idx-2 len-2 cross-window-len)
+                          highlighted-prefix (highlight-terms prefix-for-split [term] (count prefix-for-split))]
+                      (str highlighted-prefix
+                           snippet-ellipsis
+                           (highlight-terms snippet-2 [term-2] cross-window-len)))
+
+                    :else
+                    (let [snippet (snippet-window-around text idx len split-window-len)
+                          snippet-2 (snippet-window-around text idx-2 len-2 split-window-len)]
+                      (str prefix
+                           snippet-ellipsis
+                           (highlight-terms snippet [term] split-window-len)
+                           snippet-ellipsis
+                           (highlight-terms snippet-2 [term-2] split-window-len))))))))
           base)))))
 
 (defn- get-match-input
