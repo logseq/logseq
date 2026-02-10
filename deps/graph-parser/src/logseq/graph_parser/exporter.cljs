@@ -612,6 +612,8 @@
       ;; Change to :node as dates can be pages but pages can't be dates
       (= {:from :date :to :node} type-change)
       (do
+        (swap! upstream-properties assoc prop {:schema {:logseq.property/type :node}
+                                               :from-type :date})
         (swap! property-schemas assoc-in [prop :logseq.property/type] :node)
         (update-page-or-date-values page-names-to-uuids val))
 
