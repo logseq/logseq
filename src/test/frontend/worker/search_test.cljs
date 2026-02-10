@@ -17,7 +17,14 @@
 (deftest ensure-highlighted-snippet-keeps-existing
   (testing "keeps snippet when already highlighted"
     (is (= "Hi $pfts_2lqh>$Logseq$<pfts_2lqh$"
-           (search/ensure-highlighted-snippet "Hi $pfts_2lqh>$Logseq$<pfts_2lqh$" "Logseq" "logseq")))))
+           (search/ensure-highlighted-snippet "Hi $pfts_2lqh>$Logseq$<pfts_2lqh$" "Hi Logseq" "logseq")))))
+
+(deftest ensure-highlighted-snippet-preserves-original-title-case
+  (testing "uses original title casing while keeping case-insensitive term matching"
+    (let [snippet "clojure is a dynamic and $pfts_2lqh>$functional$<pfts_2lqh$ dialect of the programming $pfts_2lqh>$language$<pfts_2lqh$ lisp on the java platform."
+          title "Clojure is a dynamic and functional dialect of the programming language Lisp on the Java platform."
+          result (search/ensure-highlighted-snippet snippet title "functional language")]
+      (is (= "Clojure is a dynamic and $pfts_2lqh>$functional$<pfts_2lqh$ dialect of the programming $pfts_2lqh>$language$<pfts_2lqh$ Lisp on the Java platform." result)))))
 
 (deftest ensure-highlighted-snippet-no-match
   (testing "returns base text when no match"
