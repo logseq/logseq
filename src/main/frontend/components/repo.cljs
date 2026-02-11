@@ -439,6 +439,16 @@
       (string/includes? graph-name "+")
       (string/includes? graph-name "/")))
 
+(defn ensure-e2ee-rsa-key-for-cloud!
+  [{:keys [cloud? refresh-token token user-uuid e2ee-rsa-key-ensured?]} set-e2ee-rsa-key-ensured?]
+  (if (and cloud? refresh-token token user-uuid (not e2ee-rsa-key-ensured?))
+    (-> (p/let [rsa-key-pair (state/<invoke-db-worker :thread-api/db-sync-ensure-user-rsa-keys)]
+          (set-e2ee-rsa-key-ensured? (some? rsa-key-pair)))
+        (p/catch (fn [e]
+                   (log/error :db-sync/ensure-user-rsa-keys-failed e)
+                   e)))
+    (p/resolved nil)))
+
 (rum/defc new-db-graph
   []
   (let [[creating-db? set-creating-db?] (hooks/use-state false)
@@ -483,17 +493,14 @@
      (fn []
        (let [token (state/get-auth-id-token)
              user-uuid (user-handler/user-uuid)
-             refresh-token (str (state/get-auth-refresh-token))
-             db-name (util/trim-safe (.-value (rum/deref input-ref)))]
-         (when (and cloud? refresh-token token user-uuid
-                    (not e2ee-rsa-key-ensured?))
-           (-> (p/let [rsa-key-pair (state/<invoke-db-worker :thread-api/db-sync-ensure-user-rsa-keys)]
-                 (set-e2ee-rsa-key-ensured? (some? rsa-key-pair))
-                 (when rsa-key-pair
-                   (when db-name (new-db-f db-name))))
-               (p/catch (fn [e]
-                          (log/error :db-sync/ensure-user-rsa-keys-failed e)
-                          e))))))
+             refresh-token (state/get-auth-refresh-token)]
+         (ensure-e2ee-rsa-key-for-cloud!
+          {:cloud? cloud?
+           :refresh-token refresh-token
+           :token token
+           :user-uuid user-uuid
+           :e2ee-rsa-key-ensured? e2ee-rsa-key-ensured?}
+          set-e2ee-rsa-key-ensured?)))
      [cloud?])
 
     [:div.new-graph.flex.flex-col.gap-4.p-1.pt-2
