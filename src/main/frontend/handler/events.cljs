@@ -128,7 +128,9 @@
 
 (defmethod handle :instrument [[_ {:keys [type payload] :as opts}]]
   (when-not (empty? (dissoc opts :type :payload))
-    (js/console.error "instrument data-map should only contains [:type :payload]"))
+    (log/error :event :invalid-instrument-payload-keys
+               :message "instrument data-map should only contain [:type :payload]"
+               :payload opts))
   (posthog/capture type payload))
 
 (defmethod handle :capture-error [[_ {:keys [error payload extra]}]]
@@ -203,7 +205,12 @@
     (state/pub-event! [:graph/ready graph])))
 
 (defmethod handle :graph/save-db-to-disk [[_ _opts]]
-  (persist-db/export-current-graph! {:succ-notification? true :force-save? true}))
+  (if (util/electron?)
+    (notification/show! "The graph database is automatically saved to disk. Manual save is no longer required." :info)
+    (persist-db/export-current-graph! {:succ-notification? true :force-save? true})))
+
+(defmethod handle :graph/db-save-shortcut [[_]]
+  (handle [:graph/save-db-to-disk {:source :shortcut}]))
 
 (defmethod handle :ui/re-render-root [[_]]
   (ui-handler/re-render-root!))

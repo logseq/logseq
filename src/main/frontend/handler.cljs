@@ -150,7 +150,7 @@
 
     (p/do!
      (-> (p/let [t2 (util/time-ms)
-                 _ (db-browser/start-db-worker!)
+                 _ (persist-db/<start-runtime!)
                  _ (log/info ::db-worker-spent-time (- (util/time-ms) t2))
                  repos (repo-handler/get-repos)
                  _ (state/set-repos! repos)
@@ -160,9 +160,6 @@
                      (repo-handler/new-db! config/demo-repo)
                      (restore-and-setup! repo))]
            (set-network-watcher!)
-
-           (when (util/electron?)
-             (persist-db/run-export-periodically!))
            (when (mobile-util/native-platform?)
              (state/restore-mobile-theme!)))
          (p/catch (fn [e]
