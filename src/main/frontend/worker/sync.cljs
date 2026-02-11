@@ -1371,11 +1371,11 @@
         {:body buf :encoding snapshot-content-encoding})
       (p/resolved {:body frame :encoding nil}))))
 
-(defn- set-graph-e2ee-enabled!
-  [repo]
+(defn- set-graph-sync-metadata!
+  [repo graph-e2ee?]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (ldb/transact! conn [(ldb/kv :logseq.kv/graph-remote? true)
-                         (ldb/kv :logseq.kv/graph-rtc-e2ee? true)])))
+                         (ldb/kv :logseq.kv/graph-rtc-e2ee? (true? graph-e2ee?))])))
 
 (defn upload-graph!
   [repo]
@@ -1389,50 +1389,54 @@
                                                             payload)))]
      (if (and (seq base) (seq graph-id))
        (if-let [source-conn (worker-state/get-datascript-conn repo)]
-         (p/let [aes-key (sync-crypt/<ensure-graph-aes-key repo graph-id)
-                 _ (when (and (sync-crypt/graph-e2ee? repo) (nil? aes-key))
-                     (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))]
-           (set-graph-e2ee-enabled! repo)
-           (ensure-client-graph-uuid! repo graph-id)
-           (p/let [datoms (d/datoms @source-conn :eavt)
-                   _ (prn :debug :datoms-count (count datoms) :time (js/Date.))
-                   datoms* (offload-large-titles-in-datoms repo graph-id datoms aes-key)
-                   _ (update-progress {:sub-type :upload-progress
-                                       :message "Encrypting data"})
-                   encrypted-datoms (sync-crypt/<encrypt-datoms aes-key datoms*)
-                   {:keys [db] :as temp} (<create-temp-sqlite-conn (d/schema @source-conn) encrypted-datoms)
-                   total-rows (count-kvs-rows db)]
-             (->
-              (p/loop [last-addr -1
-                       first-batch? true
-                       loaded 0]
-                (let [rows (fetch-kvs-rows db last-addr upload-kvs-batch-size)]
-                  (if (empty? rows)
-                    (do
-                      (client-op/remove-local-tx repo)
-                      (client-op/update-local-tx repo 0)
-                      (client-op/add-all-exists-asset-as-ops repo)
-                      (update-progress {:sub-type :upload-completed
-                                        :message "Graph upload finished!"})
-                      {:graph-id graph-id})
-                    (let [max-addr (apply max (map first rows))
-                          rows (normalize-snapshot-rows rows)
-                          upload-url (str base "/sync/" graph-id "/snapshot/upload?reset=" (if first-batch? "true" "false"))]
-                      (p/let [{:keys [body encoding]} (<snapshot-upload-body rows)
-                              headers (cond-> {"content-type" snapshot-content-type}
-                                        (string? encoding) (assoc "content-encoding" encoding))
-                              _ (fetch-json upload-url
-                                            {:method "POST"
-                                             :headers headers
-                                             :body body}
-                                            {:response-schema :sync/snapshot-upload})]
-                        (let [loaded' (+ loaded (count rows))]
-                          (update-progress {:sub-type :upload-progress
-                                            :message (str "Uploading " loaded' "/" total-rows)})
-                          (p/recur max-addr false loaded')))))))
-              (p/finally
-                (fn []
-                  (cleanup-temp-sqlite! temp))))))
+         (let [graph-e2ee? (true? (sync-crypt/graph-e2ee? repo))]
+           (p/let [aes-key (when graph-e2ee?
+                             (sync-crypt/<ensure-graph-aes-key repo graph-id))
+                   _ (when (and graph-e2ee? (nil? aes-key))
+                       (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))]
+             (set-graph-sync-metadata! repo graph-e2ee?)
+             (ensure-client-graph-uuid! repo graph-id)
+             (p/let [datoms (d/datoms @source-conn :eavt)
+                     _ (prn :debug :datoms-count (count datoms) :time (js/Date.))
+                     datoms* (offload-large-titles-in-datoms repo graph-id datoms aes-key)
+                     _ (update-progress {:sub-type :upload-progress
+                                         :message (if graph-e2ee? "Encrypting data" "Preparing data")})
+                     encrypted-datoms (if graph-e2ee?
+                                        (sync-crypt/<encrypt-datoms aes-key datoms*)
+                                        datoms*)
+                     {:keys [db] :as temp} (<create-temp-sqlite-conn (d/schema @source-conn) encrypted-datoms)
+                     total-rows (count-kvs-rows db)]
+               (->
+                (p/loop [last-addr -1
+                         first-batch? true
+                         loaded 0]
+                  (let [rows (fetch-kvs-rows db last-addr upload-kvs-batch-size)]
+                    (if (empty? rows)
+                      (do
+                        (client-op/remove-local-tx repo)
+                        (client-op/update-local-tx repo 0)
+                        (client-op/add-all-exists-asset-as-ops repo)
+                        (update-progress {:sub-type :upload-completed
+                                          :message "Graph upload finished!"})
+                        {:graph-id graph-id})
+                      (let [max-addr (apply max (map first rows))
+                            rows (normalize-snapshot-rows rows)
+                            upload-url (str base "/sync/" graph-id "/snapshot/upload?reset=" (if first-batch? "true" "false"))]
+                        (p/let [{:keys [body encoding]} (<snapshot-upload-body rows)
+                                headers (cond-> {"content-type" snapshot-content-type}
+                                          (string? encoding) (assoc "content-encoding" encoding))
+                                _ (fetch-json upload-url
+                                              {:method "POST"
+                                               :headers headers
+                                               :body body}
+                                              {:response-schema :sync/snapshot-upload})]
+                          (let [loaded' (+ loaded (count rows))]
+                            (update-progress {:sub-type :upload-progress
+                                              :message (str "Uploading " loaded' "/" total-rows)})
+                            (p/recur max-addr false loaded')))))))
+                (p/finally
+                  (fn []
+                    (cleanup-temp-sqlite! temp)))))))
          (p/rejected (ex-info "db-sync missing datascript conn"
                               {:repo repo :graph-id graph-id})))
        (p/rejected (ex-info "db-sync missing upload info"

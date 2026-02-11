@@ -1,9 +1,11 @@
 (ns frontend.handler.db-based.sync-test
   (:require [cljs.test :refer [deftest is async]]
             [clojure.string :as string]
+            [frontend.db :as db]
             [frontend.handler.db-based.sync :as db-sync]
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
+            [logseq.db :as ldb]
             [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
 
@@ -111,6 +113,75 @@
                           (is false (str e))
                           (done)))))))
 
+(deftest rtc-create-graph-persists-disabled-e2ee-flag-test
+  (async done
+         (let [fetch-called (atom nil)
+               tx-called (atom nil)]
+           (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
+                               user-handler/task--ensure-id&access-token (fn [resolve _reject]
+                                                                           (resolve true))
+                               db/get-db (fn [] :db)
+                               ldb/get-graph-schema-version (fn [_] {:major 65})
+                               db-sync/fetch-json (fn [url opts _]
+                                                    (reset! fetch-called {:url url :opts opts})
+                                                    (p/resolved {:graph-id "graph-1"
+                                                                 :graph-e2ee? false}))
+                               ldb/transact! (fn [repo tx-data]
+                                               (reset! tx-called {:repo repo :tx-data tx-data})
+                                               nil)]
+                 (db-sync/<rtc-create-graph! "logseq_db_demo" false))
+               (p/then (fn [graph-id]
+                         (let [request-body (-> @fetch-called
+                                                (get-in [:opts :body])
+                                                js/JSON.parse
+                                                (js->clj :keywordize-keys true))
+                               tx-data (:tx-data @tx-called)]
+                           (is (= "graph-1" graph-id))
+                           (is (= "http://base/graphs" (:url @fetch-called)))
+                           (is (= false (:graph-e2ee? request-body)))
+                           (is (= :logseq.kv/graph-rtc-e2ee?
+                                  (get-in tx-data [2 :db/ident])))
+                           (is (= false
+                                  (get-in tx-data [2 :kv/value]))))
+                         (done)))
+               (p/catch (fn [e]
+                          (is false (str e))
+                          (done)))))))
+
+(deftest rtc-create-graph-defaults-e2ee-enabled-test
+  (async done
+         (let [fetch-called (atom nil)
+               tx-called (atom nil)]
+           (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
+                               user-handler/task--ensure-id&access-token (fn [resolve _reject]
+                                                                           (resolve true))
+                               db/get-db (fn [] :db)
+                               ldb/get-graph-schema-version (fn [_] {:major 65})
+                               db-sync/fetch-json (fn [url opts _]
+                                                    (reset! fetch-called {:url url :opts opts})
+                                                    (p/resolved {:graph-id "graph-2"}))
+                               ldb/transact! (fn [repo tx-data]
+                                               (reset! tx-called {:repo repo :tx-data tx-data})
+                                               nil)]
+                 (db-sync/<rtc-create-graph! "logseq_db_demo"))
+               (p/then (fn [graph-id]
+                         (let [request-body (-> @fetch-called
+                                                (get-in [:opts :body])
+                                                js/JSON.parse
+                                                (js->clj :keywordize-keys true))
+                               tx-data (:tx-data @tx-called)]
+                           (is (= "graph-2" graph-id))
+                           (is (= "http://base/graphs" (:url @fetch-called)))
+                           (is (= true (:graph-e2ee? request-body)))
+                           (is (= :logseq.kv/graph-rtc-e2ee?
+                                  (get-in tx-data [2 :db/ident])))
+                           (is (= true
+                                  (get-in tx-data [2 :kv/value]))))
+                         (done)))
+               (p/catch (fn [e]
+                          (is false (str e))
+                          (done)))))))
+
 (deftest rtc-download-graph-emits-feedback-before-snapshot-fetch-test
   (let [trace (atom [])
         log-events (atom [])]
@@ -182,17 +253,18 @@
                                                                (p/resolved :ok))
                                      state/set-state! (fn [& _] nil)
                                      state/pub-event! (fn [& _] nil)]
-                       (db-sync/<rtc-download-graph! "demo-graph" "graph-1"))
+                       (db-sync/<rtc-download-graph! "demo-graph" "graph-1" false))
                      (p/finally (fn [] (set! js/fetch original-fetch)))))
                (p/then (fn [_]
                          (is (= 1 (count @import-calls)))
-                         (let [[op graph imported-rows reset? graph-uuid remote-tx] (first @import-calls)]
+                         (let [[op graph imported-rows reset? graph-uuid remote-tx graph-e2ee?] (first @import-calls)]
                            (is (= :thread-api/db-sync-import-kvs-rows op))
                            (is (string/ends-with? graph "demo-graph"))
                            (is (= rows imported-rows))
                            (is (= true reset?))
                            (is (= "graph-1" graph-uuid))
-                           (is (= 42 remote-tx)))
+                           (is (= 42 remote-tx))
+                           (is (= false graph-e2ee?)))
                          (is (= [[stream-url "GET"]]
                                 @fetch-calls))
                          (done)))

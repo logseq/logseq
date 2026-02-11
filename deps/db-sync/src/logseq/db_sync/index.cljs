@@ -27,6 +27,18 @@
                                            :cached-at now-ms})
   (prune-user-upsert-cache! now-ms))
 
+(defn- graph-e2ee-sql->bool
+  [v]
+  (cond
+    (nil? v) true
+    (or (= 1 v) (= "1" v)) true
+    (or (= 0 v) (= "0" v)) false
+    :else (true? v)))
+
+(defn- graph-e2ee-bool->sql
+  [v]
+  (if (false? v) 0 1))
+
 (defn <index-init! [db]
   (p/do!
    (common/<d1-run db
@@ -35,6 +47,7 @@
                         "graph_name TEXT,"
                         "user_id TEXT,"
                         "schema_version TEXT,"
+                        "graph_e2ee INTEGER DEFAULT 1,"
                         "created_at INTEGER,"
                         "updated_at INTEGER"
                         ");"))
@@ -76,7 +89,7 @@
 (defn <index-list [db user-id]
   (if (string? user-id)
     (p/let [result (common/<d1-all db
-                                   (str "select g.graph_id, g.graph_name, g.schema_version, g.created_at, g.updated_at, "
+                                   (str "select g.graph_id, g.graph_name, g.schema_version, g.graph_e2ee, g.created_at, g.updated_at, "
                                         "m.role, m.invited_by "
                                         "from graphs g "
                                         "left join graph_members m on g.graph_id = m.graph_id and m.user_id = ? "
@@ -90,6 +103,7 @@
               {:graph-id (aget row "graph_id")
                :graph-name (aget row "graph_name")
                :schema-version (aget row "schema_version")
+               :graph-e2ee? (graph-e2ee-sql->bool (aget row "graph_e2ee"))
                :role (aget row "role")
                :invited-by (aget row "invited_by")
                :created-at (aget row "created_at")
@@ -97,20 +111,23 @@
             rows))
     []))
 
-(defn <index-upsert! [db graph-id graph-name user-id schema-version]
+(defn <index-upsert! [db graph-id graph-name user-id schema-version graph-e2ee?]
   (p/let [now (common/now-ms)
+          graph-e2ee? (graph-e2ee-bool->sql graph-e2ee?)
           result (common/<d1-run db
-                                 (str "insert into graphs (graph_id, graph_name, user_id, schema_version, created_at, updated_at) "
-                                      "values (?, ?, ?, ?, ?, ?) "
+                                 (str "insert into graphs (graph_id, graph_name, user_id, schema_version, graph_e2ee, created_at, updated_at) "
+                                      "values (?, ?, ?, ?, ?, ?, ?) "
                                       "on conflict(graph_id) do update set "
                                       "graph_name = excluded.graph_name, "
                                       "user_id = excluded.user_id, "
                                       "schema_version = excluded.schema_version, "
+                                      "graph_e2ee = excluded.graph_e2ee, "
                                       "updated_at = excluded.updated_at")
                                  graph-id
                                  graph-name
                                  user-id
                                  schema-version
+                                 graph-e2ee?
                                  now
                                  now)]
     result))

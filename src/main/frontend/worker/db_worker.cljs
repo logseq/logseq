@@ -622,30 +622,42 @@
                  (js/console.error error)))))
 
 (def-thread-api :thread-api/db-sync-import-kvs-rows
-  [repo rows reset? graph-id remote-tx]
-  (p/let [_ (when reset? (close-db! repo))
-          aes-key (sync-crypt/<fetch-graph-aes-key-for-download graph-id)
-          _ (when (nil? aes-key)
-              (db-sync/fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
-          db (ensure-db-sync-import-db! repo reset?)
-          batches (medley/indexed (partition-all 100 rows))]
-    (rtc-log-and-state/rtc-log :rtc.log/download
-                               {:sub-type :download-progress
-                                :graph-uuid graph-id
-                                :message "Start decrypting data"})
-    ;; sequential batches: low memory
-    (p/doseq [[i batch] batches]
-      (p/let [dec-rows (sync-crypt/<decrypt-snapshot-rows-batch aes-key batch)]
-        (upsert-addr-content! db (rows->sqlite-binds dec-rows))
-        (rtc-log-and-state/rtc-log :rtc.log/download
-                                   {:sub-type :download-progress
-                                    :graph-uuid graph-id
-                                    :message (str "Decrypting data " (inc i) "/" (count batches))})))
-    (let [storage (new-sqlite-storage db)
-          conn (common-sqlite/get-storage-conn storage db-schema/schema)
-          datoms (vec (d/datoms @conn :eavt))]
-      (.close db)
-      (import-datoms-to-db! repo graph-id remote-tx datoms))))
+  [repo rows reset? graph-id remote-tx graph-e2ee?]
+  (let [graph-e2ee? (if (nil? graph-e2ee?) true (true? graph-e2ee?))]
+    (p/let [_ (when reset? (close-db! repo))
+            aes-key (when graph-e2ee?
+                      (sync-crypt/<fetch-graph-aes-key-for-download graph-id))
+            _ (when (and graph-e2ee? (nil? aes-key))
+                (db-sync/fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
+            db (ensure-db-sync-import-db! repo reset?)
+            batches (medley/indexed (partition-all 100 rows))]
+      (rtc-log-and-state/rtc-log :rtc.log/download
+                                 {:sub-type :download-progress
+                                  :graph-uuid graph-id
+                                  :message (if graph-e2ee?
+                                             "Start decrypting data"
+                                             "Start importing data")})
+      ;; sequential batches: low memory
+      (p/doseq [[i batch] batches]
+        (p/let [rows-batch (if graph-e2ee?
+                             (sync-crypt/<decrypt-snapshot-rows-batch aes-key batch)
+                             batch)]
+          (upsert-addr-content! db (rows->sqlite-binds rows-batch))
+          (rtc-log-and-state/rtc-log :rtc.log/download
+                                     {:sub-type :download-progress
+                                      :graph-uuid graph-id
+                                      :message (str (if graph-e2ee?
+                                                      "Decrypting data"
+                                                      "Importing data")
+                                                    " "
+                                                    (inc i)
+                                                    "/"
+                                                    (count batches))})))
+      (let [storage (new-sqlite-storage db)
+            conn (common-sqlite/get-storage-conn storage db-schema/schema)
+            datoms (vec (d/datoms @conn :eavt))]
+        (.close db)
+        (import-datoms-to-db! repo graph-id remote-tx datoms)))))
 
 (def-thread-api :thread-api/release-access-handles
   [repo]
