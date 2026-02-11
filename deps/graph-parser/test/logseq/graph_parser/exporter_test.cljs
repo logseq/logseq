@@ -129,6 +129,7 @@
                                            (let [abs-path (if (node-path/isAbsolute path)
                                                             path
                                                             (node-path/resolve file-graph-dir path))]
+                                             ;; inline require to allow cljs tests to run
                                              (.stat (js/require "fs/promises") abs-path)))
                          :<read-and-copy-asset (fn [file *assets buffer-handler]
                                                  (<read-and-copy-asset file *assets buffer-handler assets))}
