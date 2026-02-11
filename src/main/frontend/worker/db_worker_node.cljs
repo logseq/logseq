@@ -78,8 +78,8 @@
 
 (defn- handle-event!
   [type payload]
-  (let [event (js/JSON.stringify (clj->js {:type type}
-                                          :payload (encode-event-payload payload)))
+  (let [event (js/JSON.stringify (clj->js {:type type
+                                           :payload (encode-event-payload payload)}))
         message (str "data: " event "\n\n")]
     (doseq [^js res @*sse-clients]
       (try
@@ -125,7 +125,30 @@
   #{:thread-api/init
     :thread-api/list-db
     :thread-api/get-version
-    :thread-api/set-infer-worker-proxy})
+    :thread-api/set-infer-worker-proxy
+    :thread-api/set-context
+    :thread-api/sync-app-state
+    :thread-api/update-thread-atom
+    :thread-api/mobile-logs
+    :thread-api/rtc-start
+    :thread-api/rtc-stop
+    :thread-api/rtc-toggle-auto-push
+    :thread-api/rtc-toggle-remote-profile
+    :thread-api/rtc-grant-graph-access
+    :thread-api/rtc-get-graphs
+    :thread-api/rtc-delete-graph
+    :thread-api/rtc-get-users-info
+    :thread-api/rtc-get-block-content-versions
+    :thread-api/rtc-get-debug-state
+    :thread-api/rtc-request-download-graph
+    :thread-api/rtc-wait-download-graph-info-ready
+    :thread-api/rtc-download-graph-from-s3
+    :thread-api/get-user-rsa-key-pair
+    :thread-api/init-user-rsa-key-pair
+    :thread-api/reset-user-rsa-key-pair
+    :thread-api/change-e2ee-password
+    :thread-api/get-e2ee-password
+    :thread-api/save-e2ee-password})
 
 (def ^:private write-methods
   #{:thread-api/transact

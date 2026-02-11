@@ -16,6 +16,7 @@
             [electron.backup-file :as backup-file]
             [electron.configs :as cfgs]
             [electron.db :as db]
+            [electron.db-worker :as db-worker]
             [electron.find-in-page :as find]
             [electron.handler-interface :refer [handle]]
             [electron.keychain :as keychain]
@@ -219,11 +220,26 @@
 
 ;; DB related IPCs start
 
+(defn stop-all-db-workers!
+  []
+  (db-worker/stop-all-managed!))
+
+(defmethod handle :db-worker-runtime [^js window [_ repo]]
+  (if (string/blank? repo)
+    (p/rejected (ex-info "repo is required" {:code :missing-repo}))
+    (db-worker/ensure-runtime! repo (.-id window))))
+
 (defmethod handle :db-export [_window [_ repo data]]
+  (logger/warn ::db-export-compat
+               {:repo repo
+                :message "legacy db-export IPC path invoked; desktop should use db-worker runtime"})
   (db/ensure-graph-dir! repo)
   (db/save-db! repo data))
 
 (defmethod handle :db-get [_window [_ repo]]
+  (logger/warn ::db-get-compat
+               {:repo repo
+                :message "legacy db-get IPC path invoked; desktop should use db-worker runtime"})
   (db/get-db repo))
 
 ;; DB related IPCs End
@@ -309,8 +325,14 @@
   nil)
 
 (defmethod handle :setCurrentGraph [^js window [_ graph-name]]
-  (when graph-name
-    (set-current-graph! window (utils/get-graph-dir graph-name))))
+  (let [next-graph-path (when graph-name (utils/get-graph-dir graph-name))
+        current-graph-path (state/get-window-graph-path window)]
+    (p/let [_ (when (not= current-graph-path next-graph-path)
+                (db-worker/release-window! (.-id window)))]
+      (if next-graph-path
+        (set-current-graph! window next-graph-path)
+        (state/close-window! window))
+      nil)))
 
 (defmethod handle :runCli [window [_ {:keys [command args returnResult]}]]
   (try
@@ -463,21 +485,43 @@
 (defmethod handle :window/open-blank-callback [^js win [_ _type]]
   (win/setup-window-listeners! win) nil)
 
+(defn- decode-main-ipc-message
+  [args-js]
+  (if (string? args-js)
+    (sqlite-util/read-transit-str args-js)
+    (bean/->clj args-js)))
+
+(defn- command-name
+  [message]
+  (let [command (first message)]
+    (cond
+      (keyword? command) (name command)
+      (string? command) command
+      :else nil)))
+
+(defn- <encode-main-ipc-result
+  [result]
+  (if (or (p/promise? result)
+          (instance? js/Promise result))
+    (p/let [result' result]
+      (sqlite-util/write-transit-str result'))
+    (sqlite-util/write-transit-str result)))
+
 (defn set-ipc-handler! [window]
   (let [main-channel "main"]
     (.handle ipcMain main-channel
              (fn [^js event args-js]
-               (try
-                 (let [message (bean/->clj args-js)]
-                   ;; Be careful with the return values of `handle` defmethods.
-                   ;; Values that are not non-JS objects will cause this
-                   ;; exception -
-                   ;; https://www.electronjs.org/docs/latest/breaking-changes#behavior-changed-sending-non-js-objects-over-ipc-now-throws-an-exception
-                   (bean/->js (handle (or (utils/get-win-from-sender event) window) message)))
-                 (catch :default e
-                   (when-not (contains? #{"mkdir" "stat"} (nth args-js 0))
-                     (logger/error "IPC error: " {:event event
-                                                  :args args-js}
-                                   e))
-                   e))))
+               (let [message* (volatile! nil)]
+                 (try
+                   (let [message (decode-main-ipc-message args-js)
+                         _ (vreset! message* message)
+                         result (handle (or (utils/get-win-from-sender event) window) message)]
+                     (<encode-main-ipc-result result))
+                   (catch :default e
+                     (let [command (command-name @message*)]
+                       (when-not (contains? #{"mkdir" "stat"} command)
+                         (logger/error "IPC error: " {:event event
+                                                      :args args-js}
+                                       e)))
+                     e)))))
     #(.removeHandler ipcMain main-channel)))
