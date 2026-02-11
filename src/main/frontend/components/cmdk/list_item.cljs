@@ -46,7 +46,7 @@
                 (map-indexed (fn [i seg]
                                (if (even? i)
                                  [:span seg]
-                                 [:span {:class "ui__list-item-highlighted-span"} seg]))
+                                 [:mark.p-0.rounded-none seg]))
                              segs))
           [:span normal-text])))))
 
@@ -57,26 +57,45 @@
                 {:keys [app-config]}]
   (let [ref (hooks/create-ref)
         highlight-query (partial highlight-query* app-config query)
-        [hover? set-hover?] (rum/use-state false)]
+        [hover? set-hover?] (rum/use-state false)
+        mouse-highlighted? (and highlighted hoverable hover?)
+        keyboard-highlighted? (and highlighted (not mouse-highlighted?))
+        interaction-bg "var(--lx-gray-03, var(--ls-a-chosen-bg, var(--ls-tertiary-background-color, rgba(0,0,0,0.10))))"
+        interaction-border "var(--ls-border-color, var(--lx-gray-08, rgba(0,0,0,0.24)))"
+        mouse-selected-border "var(--ls-border-color, var(--lx-gray-09, rgba(0,0,0,0.32)))"
+        keyboard-ring "var(--lx-accent-09, #3b82f6)"
+        keyboard-overlay "rgba(0,0,0,0.07)"]
     (hooks/use-effect!
      (fn []
        (when (and highlighted on-highlight)
          (on-highlight ref)))
      [highlighted on-highlight-dep])
     [:div (merge
-           {:style {:opacity (if highlighted 1 0.8)}
-            :class (cond-> "flex flex-col transition-opacity"
-                     highlighted (str " !opacity-100 bg-gray-03-alpha dark:bg-gray-04-alpha")
-                     hoverable (str " transition-all duration-50 ease-in !opacity-75 hover:!opacity-100 hover:cursor-pointer hover:bg-gradient-to-r hover:from-gray-03-alpha hover:to-gray-01-alpha from-0% to-100%")
-                     (and hoverable rounded) (str " !rounded-lg")
+           {:style (cond-> {:opacity 1
+                            :background-color "transparent"
+                            :box-shadow "inset 0 0 0 0 transparent"}
+                     (and hover? hoverable (not highlighted))
+                     (assoc :background-color interaction-bg
+                            :box-shadow (str "inset 0 0 0 1px " interaction-border))
+                     mouse-highlighted?
+                     (assoc :background-color interaction-bg
+                            :box-shadow (str "inset 0 0 0 1px " mouse-selected-border))
+                     keyboard-highlighted?
+                     (assoc :background-color interaction-bg
+                            :box-shadow (str "inset 0 0 0 9999px " keyboard-overlay
+                                             ", inset 0 0 0 2px " keyboard-ring)))
+            :class (cond-> "flex flex-col transition-colors duration-75 ease-in"
+                     hoverable (str " cursor-pointer")
+                     rounded (str " rounded-lg")
                      (not compact) (str " py-4 px-6 gap-1")
-                     compact (str " py-1.5 px-3 gap-0.5")
-                     (not highlighted) (str " "))
+                     compact (str " py-1.5 px-3 gap-0.5"))
             :ref ref
             :on-click (when on-click on-click)
-            :on-mouse-over #(set-hover? true)
-            :on-mouse-out #(set-hover? false)
-            :on-mouse-enter (when on-mouse-enter on-mouse-enter)}
+            :on-mouse-enter (fn [e]
+                              (set-hover? true)
+                              (when on-mouse-enter
+                                (on-mouse-enter e)))
+            :on-mouse-leave #(set-hover? false)}
            component-opts)
      ;; header
      (when header
