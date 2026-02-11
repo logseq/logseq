@@ -103,18 +103,21 @@
     (js/process.exit 1)))
 
 (defn default-export-options
-  [options]
+  [file-graph-dir options]
   {;; common options
    :rpath-key ::rpath
    :notify-user (partial notify-user options)
    :<read-file <read-file
    ;; :set-ui-state prn
+
    ;; config file options
    ;; TODO: Add actual default
    :default-config {}
-   ;; TODO: Add zotero support
-   ;; :<get-file-stat (fn [path])
-   })
+   :<get-file-stat (fn [path]
+                     (let [abs-path (if (node-path/isAbsolute path)
+                                      path
+                                      (node-path/resolve file-graph-dir path))]
+                       (fsp/stat abs-path)))})
 
 (defn- import-file-graph-to-db
   "Import a file graph dir just like UI does. However, unlike the UI the
@@ -125,7 +128,7 @@
         config-file (first (filter #(string/ends-with? (:path %) "logseq/config.edn") *files))
         _ (assert config-file "No 'logseq/config.edn' found for file graph dir")
         options (merge options
-                       (default-export-options options)
+                       (default-export-options file-graph-dir options)
                         ;; asset file options
                        {:<read-and-copy-asset #(<read-and-copy-asset db-graph-dir %1 %2 %3)})]
     (p/with-redefs [d/transact! dev-transact!]
@@ -141,7 +144,9 @@
 (defn- import-files-to-db
   "Import specific doc files for dev purposes"
   [file conn {:keys [files] :as options}]
-  (let [doc-options (gp-exporter/build-doc-options {:macros {}} (merge options (default-export-options options)))
+  (let [doc-options (gp-exporter/build-doc-options {:macros {}}
+                                                   ;; Pass file-graph-dir as nil since individual files don't specify it
+                                                   (merge options (default-export-options nil options)))
         files' (mapv #(hash-map :path %)
                      (into [file] (map resolve-path files)))]
     (p/with-redefs [d/transact! dev-transact!]

@@ -1,5 +1,6 @@
 (ns ^:node-only logseq.graph-parser.exporter-test
   (:require ["fs" :as fs]
+            ["fs/promises" :as fsp]
             ["path" :as node-path]
             [cljs.test :refer [are deftest is testing]]
             [clojure.set :as set]
@@ -129,7 +130,7 @@
                                            (let [abs-path (if (node-path/isAbsolute path)
                                                             path
                                                             (node-path/resolve file-graph-dir path))]
-                                             (.stat (js/require "fs/promises") abs-path)))
+                                             (fsp/stat abs-path)))
                          :<read-and-copy-asset (fn [file *assets buffer-handler]
                                                  (<read-and-copy-asset file *assets buffer-handler assets))}
                         (select-keys options [:verbose]))]
