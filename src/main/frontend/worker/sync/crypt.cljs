@@ -63,7 +63,9 @@
   (worker-state/get-id-token))
 
 (defn- auth-headers []
-  (when-let [token (auth-token)]
+  (let [token (auth-token)]
+    (when (nil? token)
+      (throw (ex-info "Empty token" {})))
     {"authorization" (str "Bearer " token)}))
 
 (defn- with-auth-headers [opts]
@@ -205,9 +207,11 @@
 (defn ensure-user-rsa-keys!
   []
   (let [base (e2ee-base)]
-    (when-not (string? base)
-      (fail-fast :db-sync/missing-field {:base base}))
-    (<ensure-user-rsa-key-pair-raw base)))
+    (if (string? base)
+      (<ensure-user-rsa-key-pair-raw base)
+      (do
+        (log/info :db-sync/skip-ensure-user-rsa-keys {:reason :missing-e2ee-base})
+        (p/resolved nil)))))
 
 (defn- <decrypt-private-key
   [encrypted-private-key-str]

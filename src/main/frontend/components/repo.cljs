@@ -442,8 +442,13 @@
 (defn ensure-e2ee-rsa-key-for-cloud!
   [{:keys [cloud? refresh-token token user-uuid e2ee-rsa-key-ensured?]} set-e2ee-rsa-key-ensured?]
   (if (and cloud? refresh-token token user-uuid (not e2ee-rsa-key-ensured?))
-    (-> (p/let [rsa-key-pair (state/<invoke-db-worker :thread-api/db-sync-ensure-user-rsa-keys)]
-          (set-e2ee-rsa-key-ensured? (some? rsa-key-pair)))
+    (-> (p/do!
+         (state/<invoke-db-worker :thread-api/set-db-sync-config
+                                  {:enabled? true
+                                   :ws-url config/db-sync-ws-url
+                                   :http-base config/db-sync-http-base})
+         (p/let [rsa-key-pair (state/<invoke-db-worker :thread-api/db-sync-ensure-user-rsa-keys)]
+           (set-e2ee-rsa-key-ensured? (some? rsa-key-pair))))
         (p/catch (fn [e]
                    (log/error :db-sync/ensure-user-rsa-keys-failed e)
                    e)))
