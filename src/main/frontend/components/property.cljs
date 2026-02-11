@@ -182,7 +182,8 @@
                                        (if plugin?
                                          [:span.pt-1 (shui/tabler-icon "puzzle" {:size 15 :class "opacity-40"})]
                                          [:span.pt-1 (shui/tabler-icon "letter-t" {:size 15 :class "opacity-40"})])
-                                       [:strong.font-normal (:block/title x)]]))
+                                       [:strong.font-normal (:block/title x)
+                                        (when plugin? [:span.ml-1.text-xs.opacity-40 (str "" _plugin-name)])]]))
                            :value (:block/uuid x)
                            :block/title (:block/title x)
                            :convert-page-to-property? convert?})) properties)
