@@ -671,9 +671,9 @@
   [state e]
   ;; Wheel input means user wants free scrolling, so exit keyboard-anchored mode first.
   (when (= :keyboard @(::focus-source state))
+    (apply-anchored-wheel-scroll! state e)
     (reset! (::focus-source state) :mouse)
-    (reset! (::highlighted-row-el state) nil))
-  (apply-anchored-wheel-scroll! state e))
+    (reset! (::highlighted-row-el state) nil)))
 
 (defn- render-result-list-item
   [state group highlighted-item highlighted? *mouse-active? disable-lazy? item hls-page? text]
