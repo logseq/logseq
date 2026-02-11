@@ -154,8 +154,9 @@
 (def ^:private reconnect-base-delay-ms 1000)
 (def ^:private reconnect-max-delay-ms 30000)
 (def ^:private reconnect-jitter-ms 250)
-(def ^:private ws-pull-loop-interval-ms 30000)
-(def ^:private ws-stale-timeout-ms 120000)
+(def ^:private ws-stale-kill-interval-ms 60000)
+;; kill ws when 10-mins inactive
+(def ^:private ws-stale-timeout-ms 600000)
 (def ^:private large-title-byte-limit 4096)
 (def ^:private large-title-asset-type "txt")
 (def ^:private large-title-object-attr :logseq.property.sync/large-title-object)
@@ -290,8 +291,8 @@
     (clear-reconnect-timer! reconnect)
     (swap! reconnect assoc :attempt 0)))
 
-(defn- clear-pull-loop-timer! [client]
-  (when-let [*timer (:pull-loop-timer client)]
+(defn- clear-stale-ws-loop-timer! [client]
+  (when-let [*timer (:stale-kill-timer client)]
     (when-let [timer @*timer]
       (js/clearInterval timer)
       (reset! *timer nil))))
@@ -564,7 +565,7 @@
                 :asset-queue (atom (p/resolved nil))
                 :inflight (atom [])
                 :reconnect (atom {:attempt 0 :timer nil})
-                :pull-loop-timer (atom nil)
+                :stale-kill-timer (atom nil)
                 :last-ws-message-ts (atom (common-util/time-ms))
                 :online-users (atom [])
                 :ws-state (atom :closed)}]
@@ -1183,7 +1184,7 @@
   (set! (.-onclose ws)
         (fn [_]
           (log/info :db-sync/ws-closed {:repo repo})
-          (clear-pull-loop-timer! client)
+          (clear-stale-ws-loop-timer! client)
           (update-online-users! client [])
           (set-ws-state! client :closed)
           (schedule-reconnect! repo client url :close))))
@@ -1194,37 +1195,33 @@
   (set! (.-onerror ws) nil)
   (set! (.-onclose ws) nil))
 
-(defn- start-pull-loop! [client ws]
+(defn- close-stale-ws-loop [client ws]
   (let [repo (:repo client)
         graph-id (:graph-id client)]
-    (clear-pull-loop-timer! client)
-    (when-let [*timer (:pull-loop-timer client)]
+    (clear-stale-ws-loop-timer! client)
+    (when-let [*timer (:stale-kill-timer client)]
       (let [timer (js/setInterval
                    (fn []
                      (when-let [current @worker-state/*db-sync-client]
                        (when (and (= repo (:repo current))
                                   (= graph-id (:graph-id current))
                                   (identical? ws (:ws current))
-                                  (ws-open? ws)
-                                  (worker-state/online?))
+                                  (ws-open? ws))
                          (let [now (common-util/time-ms)
                                last-ts (or (some-> (:last-ws-message-ts current) deref) now)
                                stale-ms (- now last-ts)]
-                           (if (>= stale-ms ws-stale-timeout-ms)
-                             (do
-                               (log/warn :db-sync/ws-stale-timeout {:repo repo :stale-ms stale-ms})
-                               (try
-                                 (.close ws)
-                                 (catch :default _
-                                   nil)))
-                             (let [local-tx (or (client-op/get-local-tx repo) 0)]
-                               (send! ws {:type "pull" :since local-tx})))))))
-                   ws-pull-loop-interval-ms)]
+                           (when (>= stale-ms ws-stale-timeout-ms)
+                             (log/warn :db-sync/ws-stale-timeout {:repo repo :stale-ms stale-ms})
+                             (try
+                               (.close ws)
+                               (catch :default _
+                                 nil)))))))
+                   ws-stale-kill-interval-ms)]
         (reset! *timer timer))))
   client)
 
 (defn- stop-client! [client]
-  (clear-pull-loop-timer! client)
+  (clear-stale-ws-loop-timer! client)
   (when-let [reconnect (:reconnect client)]
     (clear-reconnect-timer! reconnect))
   (when-let [ws (:ws client)]
@@ -1249,7 +1246,7 @@
             (set-ws-state! updated :open)
             (send! ws {:type "hello" :client repo})
             (enqueue-asset-sync! repo updated)))
-    (start-pull-loop! updated ws)))
+    (close-stale-ws-loop updated ws)))
 
 (defn stop!
   []
