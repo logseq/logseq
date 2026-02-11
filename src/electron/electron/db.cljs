@@ -19,6 +19,7 @@
     graph-dir))
 
 (defn get-db
+  "Legacy compatibility path for Electron OPFS import bootstrap."
   [db-name]
   (let [_ (ensure-graph-dir! db-name)
         [_db-name db-path] (common-sqlite/get-db-full-path (cli-common-graph/get-db-graphs-dir) db-name)]
@@ -26,6 +27,7 @@
       (fs/readFileSync db-path))))
 
 (defn save-db!
+  "Legacy compatibility path for Electron OPFS export."
   [db-name data]
   (let [[db-name db-path] (common-sqlite/get-db-full-path (cli-common-graph/get-db-graphs-dir) db-name)
         old-data (get-db db-name)
