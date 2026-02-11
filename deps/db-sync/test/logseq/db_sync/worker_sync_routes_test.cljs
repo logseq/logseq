@@ -10,6 +10,8 @@
       (is (= :sync/pull (:handler match))))
     (let [match (sync-routes/match-route "GET" "/snapshot/download")]
       (is (= :sync/snapshot-download (:handler match))))
+    (let [match (sync-routes/match-route "GET" "/snapshot/stream")]
+      (is (= :sync/snapshot-stream (:handler match))))
     (let [match (sync-routes/match-route "DELETE" "/admin/reset")]
       (is (= :sync/admin-reset (:handler match))))
     (let [match (sync-routes/match-route "POST" "/tx/batch")]
