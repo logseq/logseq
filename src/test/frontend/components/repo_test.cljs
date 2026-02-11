@@ -30,6 +30,7 @@
                                    (swap! create-calls inc)
                                    (p/resolved "repo"))]
                    (ensure-fn {:cloud? true
+                               :graph-e2ee? true
                                :refresh-token "refresh"
                                :token "token"
                                :user-uuid "user-1"
@@ -66,6 +67,7 @@
                                    (swap! create-calls inc)
                                    (p/resolved "repo"))]
                    (ensure-fn {:cloud? true
+                               :graph-e2ee? true
                                :refresh-token "refresh"
                                :token "token"
                                :user-uuid "user-1"
@@ -112,6 +114,35 @@
                            (is (zero? @ensure-calls))
                            (is (empty? @ensured-values))
                            (is (zero? @create-calls))
+                           (done)))
+                 (p/catch (fn [error]
+                            (is false (str error))
+                            (done))))))))
+
+(deftest ensure-rsa-key-skips-when-graph-e2ee-disabled-test
+  (async done
+         (let [ensure-fn (ensure-rsa-key-fn)
+               ensure-calls (atom 0)
+               ensured-values (atom [])]
+           (if-not ensure-fn
+             (do
+               (is false "missing ensure-e2ee-rsa-key-for-cloud!")
+               (done))
+             (-> (p/with-redefs [state/<invoke-db-worker
+                                 (fn [& _]
+                                   (swap! ensure-calls inc)
+                                   (p/resolved {:public-key "pk"}))]
+                   (ensure-fn {:cloud? true
+                               :graph-e2ee? false
+                               :refresh-token "refresh"
+                               :token "token"
+                               :user-uuid "user-1"
+                               :e2ee-rsa-key-ensured? false}
+                              (fn [value]
+                                (swap! ensured-values conj value))))
+                 (p/then (fn [_]
+                           (is (zero? @ensure-calls))
+                           (is (empty? @ensured-values))
                            (done)))
                  (p/catch (fn [error]
                             (is false (str error))
