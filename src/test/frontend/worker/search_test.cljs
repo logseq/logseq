@@ -73,7 +73,7 @@
       (is (re-find #"\u00A0\u00A0\u00A0\.\.\.\u00A0\u00A0\u00A0" result))
       (is (not (re-find #"\u00A0\u00A0\u00A0\.\.\.\u00A0\u00A0\u00A0.*\u00A0\u00A0\u00A0\.\.\.\u00A0\u00A0\u00A0" result))))))
 
-(deftest ^:focus ensure-highlighted-snippet-multi-term-split
+(deftest ensure-highlighted-snippet-multi-term-split
   (testing "two terms far apart split into two windows"
     (let [filler (apply str (repeat 20 "甲乙丙丁戊己庚辛壬癸，子丑寅卯辰巳午未申酉戌亥。"))
           text (str "君不见黄河之水天上来，" filler "奔流到海不复回")
