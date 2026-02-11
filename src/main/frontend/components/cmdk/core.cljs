@@ -3,6 +3,7 @@
             [clojure.string :as string]
             [frontend.components.block :as block]
             [frontend.components.cmdk.list-item :as list-item]
+            [frontend.components.cmdk.scroll :as scroll]
             [frontend.components.cmdk.state :as cmdk-state]
             [frontend.components.icon :as icon-component]
             [frontend.config :as config]
@@ -622,25 +623,45 @@
   (when-let [action (state->action state)]
     (handle-action action state event)))
 
-(defn- scroll-into-view-when-invisible
+(defn- ensure-focus-visible!
   [state target]
-  (let [*container-ref (::scroll-container-ref state)
-        container-rect (.getBoundingClientRect @*container-ref)
-        t1 (.-top container-rect)
-        b1 (.-bottom container-rect)
-        target-rect (.getBoundingClientRect target)
-        t2 (.-top target-rect)
-        b2 (.-bottom target-rect)]
-    (when-not (<= t1 t2 b2 b1)          ; not visible
-      (.scrollIntoView target
-                       #js {:inline "nearest"
-                            :behavior "smooth"}))))
+  (let [container @(::scroll-container-ref state)
+        rect (scroll/focus-row-visible-rect container target)]
+    (when rect
+      (let [next-scroll-top (scroll/ensure-focus-visible-scroll-top rect)]
+        (when (not= next-scroll-top (.-scrollTop container))
+          (set! (.-scrollTop container) next-scroll-top))))))
+
+(defn- apply-anchored-wheel-scroll!
+  [state e]
+  (when (and @(::wheel-focus-anchor? state)
+             (= :keyboard @(::focus-source state)))
+    (let [container @(::scroll-container-ref state)
+          target @(::highlighted-row-el state)
+          rect (scroll/focus-row-visible-rect container target)
+          delta-y (some-> e .-deltaY)]
+      (when (and rect (number? delta-y) (not (zero? delta-y)))
+        (let [next-scroll-top (scroll/anchored-scroll-top (assoc rect :delta-y delta-y))]
+          (.preventDefault e)
+          (when (not= next-scroll-top (.-scrollTop container))
+            (set! (.-scrollTop container) next-scroll-top)))))))
+
+(defn- handle-results-wheel!
+  [state e]
+  ;; Wheel input means user wants free scrolling, so exit keyboard-anchored mode first.
+  (when (= :keyboard @(::focus-source state))
+    (reset! (::focus-source state) :mouse)
+    (reset! (::highlighted-row-el state) nil))
+  (apply-anchored-wheel-scroll! state e))
 
 (rum/defcs result-group
   < rum/reactive
   [state' state title group visible-items first-item sidebar?]
   (let [{:keys [show items]} (some-> state ::results deref group)
-        highlighted-item (or @(::highlighted-item state) first-item)
+        focus-source @(::focus-source state)
+        highlighted-item (or @(::highlighted-item state)
+                             (when (= :keyboard focus-source) first-item))
+        disable-lazy? @(::disable-lazy? state)
         *mouse-active? (::mouse-active? state)
         filter' @(::filter state)
         can-show-less? (< (get-group-limit group) (count visible-items))
@@ -650,8 +671,14 @@
     [:div {:class         (if (= title "Create")
                             "border-b border-gray-06 last:border-b-0"
                             "border-b border-gray-06 pb-1 last:border-b-0")
-           :on-mouse-move #(reset! *mouse-active? true)
-           :on-mouse-enter #(reset! *mouse-active? true)}
+           :on-mouse-move (fn [e]
+                            (let [dx (or (.-movementX e) 0)
+                                  dy (or (.-movementY e) 0)
+                                  real-pointer-move? (or (not (zero? dx))
+                                                         (not (zero? dy)))]
+                               (when real-pointer-move?
+                                 (when-not @*mouse-active?
+                                  (reset! *mouse-active? true)))))}
      (when-not (= title "Create")
        [:div {:class "text-xs py-1.5 px-3 flex justify-between items-center gap-2 text-gray-11 bg-gray-02 h-8"}
         [:div {:class "font-bold text-gray-11 pl-0.5 cursor-pointer select-none"
@@ -664,7 +691,7 @@
           [:div {:class "pl-1.5 text-gray-12 rounded-full"
                  :style {:font-size "0.7rem"}}
            (if (<= 100 (count items))
-             (str "99+")
+             "99+"
              (count items))])
 
         [:div {:class "flex-1"}]
@@ -673,7 +700,12 @@
                    (empty? filter')
                    (not sidebar?))
           [:a.text-link.select-node.opacity-50.hover:opacity-90
-           {:on-click (if (= show :more) show-less show-more)}
+           {:on-click (fn [e]
+                        (util/stop e)
+                        (reset! (::focus-source state) :mouse)
+                        (when-let [input-el @(::input-ref state)]
+                          (.focus input-el))
+                        ((if (= show :more) show-less show-more)))}
            (if (= show :more)
              [:div.flex.flex-row.gap-1.items-center
               "Show less"
@@ -709,28 +741,64 @@
                              (handle-action :default state item)
                              (when-let [on-click (:on-click item)]
                                (on-click e)))
-                           :on-mouse-enter
-                           (fn [_e]
-                             (when (not= item @(::highlighted-item state))
-                               (reset! (::highlighted-item state) item)))
-                           :on-highlight (fn [ref]
-                                           (reset! (::highlighted-group state) group)
-                                           (when (and ref (.-current ref)
-                                                      (not (:mouse-enter-triggered-highlight @(::highlighted-item state))))
-                                             (scroll-into-view-when-invisible state (.-current ref)))))
-                    nil)]
-          (if (= group :nodes)
+                            :on-mouse-enter
+                            (fn [_e]
+                              (when (and @*mouse-active?
+                                         (= :mouse @(::focus-source state)))
+                                (when (not= item @(::highlighted-item state))
+                                  (reset! (::highlighted-item state) item))))
+                            :component-opts
+                            {:on-mouse-move
+                             (fn [e]
+                               (let [dx (or (.-movementX e) 0)
+                                     dy (or (.-movementY e) 0)
+                                     real-pointer-move? (or (not (zero? dx))
+                                                            (not (zero? dy)))]
+                                 (when real-pointer-move?
+                                   (when-not @*mouse-active?
+                                     (reset! *mouse-active? true))
+                                   (when-not (= :mouse @(::focus-source state))
+                                     (reset! (::focus-source state) :mouse))
+                                   (when (not= item @(::highlighted-item state))
+                                     (reset! (::highlighted-item state) item)))))}
+                            :on-highlight (fn [ref]
+                                            (reset! (::highlighted-group state) group)
+                                            (when (and ref (.-current ref))
+                                              (let [row-el (.-current ref)]
+                                                (reset! (::highlighted-row-el state) row-el)
+                                                (when (= :keyboard @(::focus-source state))
+                                                  (ensure-focus-visible! state row-el))))))
+                     nil)]
+          (if (and (= group :nodes) (not disable-lazy?))
             (ui/lazy-visible (fn [] item) {:trigger-once? true})
             item)))]]))
 
 (defn move-highlight [state n]
   (let [items (mapcat last (state->results-ordered state (:search/mode @state/state)))
+        focus-source @(::focus-source state)
         highlighted-item (some-> state ::highlighted-item deref (dissoc :mouse-enter-triggered-highlight))
-        current-item-index (some->> highlighted-item (.indexOf items))
-        next-item-index (some-> (or current-item-index 0) (+ n) (mod (count items)))]
-    (if-let [next-highlighted-item (nth items next-item-index nil)]
-      (reset! (::highlighted-item state) next-highlighted-item)
-      (reset! (::highlighted-item state) nil))))
+        fallback-highlighted? (and (nil? highlighted-item)
+                                   (= :keyboard focus-source)
+                                   (seq items))
+        current-item-index (cond
+                             highlighted-item (.indexOf items highlighted-item)
+                             fallback-highlighted? 0
+                             :else nil)
+        items-count (count items)]
+    (if (pos? items-count)
+      (let [base-index (if (some? current-item-index)
+                         current-item-index
+                         (if (pos? n) -1 0))
+            next-item-index (mod (+ base-index n) items-count)
+            next-highlighted-item (nth items next-item-index nil)]
+        (if next-highlighted-item
+          (reset! (::highlighted-item state) next-highlighted-item)
+          (do
+            (reset! (::highlighted-item state) nil)
+            (reset! (::highlighted-row-el state) nil))))
+      (do
+        (reset! (::highlighted-item state) nil)
+        (reset! (::highlighted-row-el state) nil)))))
 
 (defn handle-input-change
   ([state e] (handle-input-change state e (.. e -target -value)))
@@ -808,14 +876,24 @@
         (shui/dialog-close! :ls-dialog-cmdk)
         (state/sidebar-add-block! repo input :search))
       as-keydown? (if meta?
-                    (show-more)
                     (do
+                      (reset! (::disable-lazy? state) true)
+                      (show-more))
+                    (do
+                      (reset! (::disable-lazy? state) true)
                       (reset! (::mouse-active? state) false)
+                      (reset! (::focus-source state) :keyboard)
+                      (reset! (::highlighted-row-el state) nil)
                       (move-highlight state 1)))
       as-keyup? (if meta?
-                  (show-less)
                   (do
+                    (reset! (::disable-lazy? state) true)
+                    (show-less))
+                  (do
+                    (reset! (::disable-lazy? state) true)
                     (reset! (::mouse-active? state) false)
+                    (reset! (::focus-source state) :keyboard)
+                    (reset! (::highlighted-row-el state) nil)
                     (move-highlight state -1)))
       (and enter? (not composing?)) (do
                                       (handle-action :default state e)
@@ -888,7 +966,8 @@
     ;; This was moved to a functional component
     (hooks/use-effect! (fn []
                          (when (and highlighted-item (= -1 (.indexOf all-items (dissoc highlighted-item :mouse-enter-triggered-highlight))))
-                           (reset! (::highlighted-item state) nil)))
+                           (reset! (::highlighted-item state) nil)
+                           (reset! (::highlighted-row-el state) nil)))
                        [all-items])
     (hooks/use-effect!
      (fn []
@@ -1072,7 +1151,11 @@
   (rum/local false ::meta?)
   (rum/local nil ::highlighted-group)
   (rum/local nil ::highlighted-item)
+  (rum/local nil ::highlighted-row-el)
+  (rum/local false ::disable-lazy?)
+  (rum/local :keyboard ::focus-source)
   (rum/local false ::mouse-active?)
+  (rum/local true ::wheel-focus-anchor?)
   (rum/local default-results ::results)
   (rum/local nil ::scroll-container-ref)
   (rum/local nil ::input-ref)
@@ -1090,36 +1173,36 @@
                     :class (cond-> "w-full h-full relative flex flex-col justify-start"
                              (not sidebar?) (str " rounded-lg"))}
      (input-row state all-items opts)
-     [:div {:class (cond-> "w-full flex-1 overflow-y-auto min-h-[65dvh] max-h-[65dvh]"
-                     (not sidebar?) (str " pb-14"))
-            :ref #(let [*ref (::scroll-container-ref state)]
-                    (when-not @*ref (reset! *ref %)))
-            :on-mouse-enter #(reset! (::mouse-active? state) true)
-            :on-mouse-leave #(reset! (::mouse-active? state) false)
-            :style {:background "var(--lx-gray-02)"
-                    :scroll-padding-block 32}}
+      [:div {:class (cond-> "w-full flex-1 overflow-y-auto min-h-[65dvh] max-h-[65dvh]"
+                      (not sidebar?) (str " pb-14"))
+             :ref #(let [*ref (::scroll-container-ref state)]
+                     (when-not @*ref (reset! *ref %)))
+             :on-mouse-leave #(reset! (::mouse-active? state) false)
+             :on-wheel #(handle-results-wheel! state %)
+             :style {:background "var(--lx-gray-02)"
+                     :scroll-padding-block 32}}
 
-      (when group-filter
-        [:div.flex.flex-col.px-3.py-1.opacity-70.text-sm
-         (search-only state (string/capitalize (name group-filter)))])
+       (when group-filter
+         [:div.flex.flex-col.px-3.py-1.opacity-70.text-sm
+          (search-only state (string/capitalize (name group-filter)))])
 
-      (let [items (filter
-                   (fn [[_group-name group-key group-count _group-items]]
-                     (and (not= 0 group-count)
-                          (if-not group-filter true
-                                  (or (= group-filter group-key)
-                                      (and (= group-filter :nodes)
-                                           (= group-key :current-page))
-                                      (and (contains? #{:create} group-filter)
-                                           (= group-key :create))))))
-                   results-ordered)]
-        (if (seq items)
-          (for [[group-name group-key _group-count group-items] items]
-            (let [title (string/capitalize group-name)]
-              (result-group state title group-key group-items first-item sidebar?)))
-          [:div.flex.flex-col.p-4.opacity-50
-           (when-not (string/blank? @*input)
-             "No matched results")]))]
+       (let [items (filter
+                    (fn [[_group-name group-key group-count _group-items]]
+                      (and (not= 0 group-count)
+                           (if-not group-filter true
+                                   (or (= group-filter group-key)
+                                       (and (= group-filter :nodes)
+                                            (= group-key :current-page))
+                                       (and (contains? #{:create} group-filter)
+                                            (= group-key :create))))))
+                    results-ordered)]
+         (if (seq items)
+           (for [[group-name group-key _group-count group-items] items]
+             (let [title (string/capitalize group-name)]
+               (result-group state title group-key group-items first-item sidebar?)))
+           [:div.flex.flex-col.p-4.opacity-50
+            (when-not (string/blank? @*input)
+              "No matched results")]))]
      (when-not sidebar? (hints state))]))
 
 (rum/defc cmdk-modal [props]
