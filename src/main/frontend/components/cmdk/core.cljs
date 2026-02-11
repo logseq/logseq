@@ -277,7 +277,7 @@
                  new-result)))]))
 
 (defn page-item
-  [repo page input]
+  [repo page current-page input]
   (let [entity (-> (or (db/entity [:block/uuid (:block/uuid page)]) page)
                    (update :block/tags (fn [tags]
                                          (map (fn [tag]
@@ -286,6 +286,12 @@
                                                   tag)) tags))))
         source-page (or (model/get-alias-source-page repo (:db/id entity))
                         (:alias page))
+        current-page-id (:block/uuid current-page)
+        result-page-id (or (:block/uuid source-page)
+                           (:block/uuid entity)
+                           (:block/uuid page))
+        current-page? (and current-page-id
+                           (= current-page-id result-page-id))
         icon (icon-component/get-node-icon-cp entity {:ignore-current-icon? true})
         title (block-handler/block-unique-title entity
                                                 :alias (:block/title source-page)
@@ -300,6 +306,8 @@
                         (block/breadcrumb {:disable-preview? true
                                            :search? true} repo (:block/uuid page)
                                           {:disabled? true}))
+              :result-type :page
+              :current-page? current-page?
               :alias (:alias page)
               :source-block (or source-page page))))
 
@@ -314,6 +322,7 @@
      :header (block/breadcrumb {:disable-preview? true
                                 :search? true} repo id
                                {:disabled? true})
+     :result-type :block
      :current-page? (when-let [page-id (:block/page block)]
                       (= page-id (:block/uuid current-page)))
      :source-block block}))
@@ -335,7 +344,7 @@
             blocks (remove nil? blocks)
             items (keep (fn [block]
                           (if (:page? block)
-                            (page-item repo block @!input)
+                            (page-item repo block current-page @!input)
                             (block-item repo block current-page @!input))) blocks)]
       (if (= group :current-page)
         (let [items-on-current-page (filter :current-page? items)]
@@ -346,6 +355,8 @@
   (let [!input (::input state)
         !results (::results state)
         repo (state/get-current-repo)
+        current-page (when-let [id (page-util/get-current-page-id)]
+                       (db/entity id))
         opts (cmdk-state/cmdk-block-search-options
               {:filter-group :code
                :dev? config/dev?})]
@@ -353,7 +364,7 @@
     (p/let [blocks (search/block-search repo @!input opts)
             blocks (remove nil? blocks)
             items (map (fn [block]
-                         (block-item repo block nil @!input))
+                         (block-item repo block current-page @!input))
                        blocks)]
       (swap! !results update group merge {:status :success :items items}))))
 
@@ -428,6 +439,7 @@
                               :icon-theme :gray
                               :text (highlight-content-query (:block/title block) @!input)
                               :header (block/breadcrumb {:search? true} repo id {:disabled? true})
+                              :result-type (if (:page? block) :page :block)
                               :current-page? true
                               :source-block block})) blocks)]
         (swap! !results update :current-page merge {:status :success :items items})))
