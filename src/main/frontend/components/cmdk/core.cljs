@@ -277,7 +277,7 @@
                  new-result)))]))
 
 (defn page-item
-  [repo page current-page input]
+  [repo page current-page-uuid input]
   (let [entity (-> (or (db/entity [:block/uuid (:block/uuid page)]) page)
                    (update :block/tags (fn [tags]
                                          (map (fn [tag]
@@ -286,12 +286,11 @@
                                                   tag)) tags))))
         source-page (or (model/get-alias-source-page repo (:db/id entity))
                         (:alias page))
-        current-page-id (:block/uuid current-page)
         result-page-id (or (:block/uuid source-page)
                            (:block/uuid entity)
                            (:block/uuid page))
-        current-page? (and current-page-id
-                           (= current-page-id result-page-id))
+        current-page? (and current-page-uuid
+                           (= current-page-uuid result-page-id))
         icon (icon-component/get-node-icon-cp entity {:ignore-current-icon? true})
         title (block-handler/block-unique-title entity
                                                 :alias (:block/title source-page)
@@ -312,7 +311,7 @@
               :source-block (or source-page page))))
 
 (defn block-item
-  [repo block current-page input]
+  [repo block current-page-uuid input]
   (let [id (:block/uuid block)
         text (block-handler/block-unique-title block :truncate? false)
         icon (icon-component/get-node-icon-cp block {:ignore-current-icon? true})]
@@ -324,7 +323,7 @@
                                {:disabled? true})
      :result-type :block
      :current-page? (when-let [page-id (:block/page block)]
-                      (= page-id (:block/uuid current-page)))
+                      (= page-id current-page-uuid))
      :source-block block}))
 
 ;; The blocks search action uses an existing handler
@@ -332,8 +331,7 @@
   (let [!input (::input state)
         !results (::results state)
         repo (state/get-current-repo)
-        current-page (when-let [id (page-util/get-current-page-id)]
-                       (db/entity id))
+        current-page-uuid (page-util/get-current-page-uuid)
         opts (cmdk-state/cmdk-block-search-options
               {:filter-group :nodes
                :dev? config/dev?
@@ -344,8 +342,8 @@
             blocks (remove nil? blocks)
             items (keep (fn [block]
                           (if (:page? block)
-                            (page-item repo block current-page @!input)
-                            (block-item repo block current-page @!input))) blocks)]
+                            (page-item repo block current-page-uuid @!input)
+                            (block-item repo block current-page-uuid @!input))) blocks)]
       (if (= group :current-page)
         (let [items-on-current-page (filter :current-page? items)]
           (swap! !results update group merge {:status :success :items items-on-current-page}))
