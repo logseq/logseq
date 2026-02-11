@@ -11,6 +11,7 @@
             [logseq.db-sync.worker.handler.ws :as ws-handler]
             [logseq.db-sync.worker.presence :as presence]
             [logseq.db-sync.worker.ws :as ws]
+            [promesa.core :as p]
             [shadow.cljs.modern :refer (defclass)]))
 
 (logging/install!)
@@ -41,9 +42,22 @@
 
   Object
   (fetch [this request]
-         (if (common/upgrade-request? request)
-           (ws-handler/handle-ws this request)
-           (sync-handler/handle-http this request)))
+         (->
+          (p/do
+            (if (common/upgrade-request? request)
+              (ws-handler/handle-ws this request)
+              (sync-handler/handle-http this request)))
+          (p/catch (fn [error]
+                     (let [message (cond
+                                     (instance? ExceptionInfo error) (str (.-message error) " | " (pr-str (ex-data error)))
+                                     (instance? js/Error error) (.-message error)
+                                     :else (pr-str error))
+                           stack (when (instance? js/Error error) (.-stack error))]
+                       (common/json-response
+                        {:error "DO internal error"
+                         :debug-message message
+                         :debug-stack stack}
+                        500))))))
   (webSocketMessage [this ws message]
                     (try
                       (ws-handler/handle-ws-message! this ws message)

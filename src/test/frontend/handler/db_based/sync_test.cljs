@@ -145,14 +145,15 @@
                rows [[1 "content-1" "addresses-1"]
                      [2 "content-2" "addresses-2"]]
                framed-bytes (encode-framed-rows rows)
-               original-fetch js/fetch]
+               original-fetch js/fetch
+               stream-url "http://base/sync/graph-1/snapshot/stream"]
            (-> (p/let [gzip-bytes (<gzip-bytes framed-bytes)]
                  (set! js/fetch
                        (fn [url opts]
                          (let [method (or (aget opts "method") "GET")]
                            (swap! fetch-calls conj [url method])
                            (cond
-                             (and (= url "http://snapshot") (= method "GET"))
+                             (and (= url stream-url) (= method "GET"))
                              (js/Promise.resolve
                               #js {:ok true
                                    :status 200
@@ -170,9 +171,6 @@
                                                           (cond
                                                             (string/ends-with? url "/pull")
                                                             (p/resolved {:t 42})
-
-                                                            (string/ends-with? url "/snapshot/download")
-                                                            (p/resolved {:url "http://snapshot"})
 
                                                             :else
                                                             (p/rejected (ex-info "unexpected fetch-json URL"
@@ -195,8 +193,7 @@
                            (is (= true reset?))
                            (is (= "graph-1" graph-uuid))
                            (is (= 42 remote-tx)))
-                         (is (= [["http://snapshot" "GET"]
-                                 ["http://snapshot" "DELETE"]]
+                         (is (= [[stream-url "GET"]]
                                 @fetch-calls))
                          (done)))
                (p/catch (fn [error]

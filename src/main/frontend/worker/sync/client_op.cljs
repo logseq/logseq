@@ -49,7 +49,11 @@
   [repo graph-uuid]
   {:pre [(some? graph-uuid)]}
   (when-let [conn (worker-state/get-client-ops-conn repo)]
-    (ldb/transact! conn [[:db/add "e" :graph-uuid graph-uuid]])))
+    (let [old-datoms (d/datoms @conn :avet :graph-uuid)
+          retractions (mapv (fn [datom]
+                              [:db/retract (:e datom) :graph-uuid (:v datom)])
+                            old-datoms)]
+      (ldb/transact! conn (conj retractions [:db/add "e" :graph-uuid graph-uuid])))))
 
 (defn get-graph-uuid
   [repo]
