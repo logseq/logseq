@@ -420,12 +420,20 @@
 
 (defn <encrypt-datoms
   [aes-key datoms]
-  (p/all (map (fn [d]
-                (if (contains? sync-const/encrypt-attr-set (:a d))
-                  (p/let [v' (<encrypt-text-value aes-key (:v d))]
-                    (assoc d :v v'))
-                  (p/resolved d)))
-              datoms)))
+  (let [batch-size 5000
+        batches (partition-all batch-size datoms)]
+    (p/loop [remaining batches
+             result []]
+      (if (empty? remaining)
+        result
+        (p/let [batch (first remaining)
+                encrypted (p/all (map (fn [datom]
+                                        (if (contains? sync-const/encrypt-attr-set (:a datom))
+                                          (p/let [v' (<encrypt-text-value aes-key (:v datom))]
+                                            (assoc datom :v v'))
+                                          (p/resolved datom)))
+                                      batch))]
+          (p/recur (rest remaining) (into result encrypted)))))))
 
 (defn- <re-encrypt-private-key
   [encrypted-private-key-str old-password new-password]

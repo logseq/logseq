@@ -16,7 +16,13 @@
    (if-let [coercer (get db-sync-schema/http-response-coercers schema-key)]
      (let [coerced (coerce/coerce coercer data {:schema schema-key :dir :response})]
        (if (= coerced coerce/invalid-coerce)
-         (common/json-response {:error "server error"} 500)
+         (do
+           (js/console.error "DEBUG json-response coercion FAILED for" (pr-str schema-key) "data:" (pr-str data))
+           (common/json-response
+            {:error "server error"
+             :debug-coercion-failed (pr-str schema-key)
+             :debug-data (pr-str data)}
+            500))
          (common/json-response coerced status)))
      (common/json-response data status))))
 
