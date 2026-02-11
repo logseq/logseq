@@ -592,14 +592,25 @@
 
 (defn- persist-cmdk-query-state!
   [state]
-  (let [opts (last (:rum/args state))]
+  (let [input-ref @(::input-ref state)
+        input-value (or (some-> input-ref .-value)
+                        @(::input state))
+        _ (when (not= input-value @(::input state))
+            (reset! (::input state) input-value))
+        opts (last (:rum/args state))]
     (cmdk-state/persist-last-cmdk-search!
      opts
      (:search/mode @state/state)
      (:search/args @state/state)
      (state/get-current-repo)
-     @(::input state)
+     input-value
      @(::filter state))))
+
+(defn- clear-filter-and-refresh!
+  [state]
+  (reset! (::filter state) nil)
+  (persist-cmdk-query-state! state)
+  (load-results :default state))
 
 (defmethod handle-action :filter [_ state _event]
   (let [item (some-> state state->highlighted-item)
@@ -908,9 +919,7 @@
                (and filter' (not move-blocks?))
                (do
                  (util/stop e)
-                 (reset! (::filter state) nil)
-                 (persist-cmdk-query-state! state)
-                 (load-results :default state))
+                 (clear-filter-and-refresh! state))
 
                :else
                (when-not (string/blank? input)
@@ -1101,7 +1110,7 @@
      :size     :icon
      :class    "p-1 scale-75"
      :on-click (fn []
-                 (reset! (::filter state) nil))}
+                 (clear-filter-and-refresh! state))}
     (shui/tabler-icon "x"))])
 
 (rum/defcs cmdk
