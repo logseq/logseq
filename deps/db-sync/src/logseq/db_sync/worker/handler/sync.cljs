@@ -299,123 +299,150 @@
         {:type "tx/reject"
          :reason "empty tx data"}))))
 
+(defn- handle-sync-pull
+  [^js self ^js url]
+  (let [raw-since (.get (.-searchParams url) "since")
+        since (if (some? raw-since) (parse-int raw-since) 0)]
+    (if (or (and (some? raw-since) (not (number? since))) (neg? since))
+      (http/bad-request "invalid since")
+      (http/json-response :sync/pull (pull-response self since)))))
+
+(defn- handle-sync-snapshot-stream
+  [^js self request]
+  (let [graph-id (graph-id-from-request request)]
+    (if (not (seq graph-id))
+      (http/bad-request "missing graph id")
+      (let [use-compression? (exists? js/CompressionStream)
+            content-encoding (when use-compression? snapshot-content-encoding)
+            stream (snapshot-export-stream self)
+            stream (if use-compression?
+                     (maybe-compress-stream stream)
+                     stream)]
+        (js/Response. stream
+                      #js {:status 200
+                           :headers (js/Object.assign
+                                     #js {"content-type" snapshot-content-type
+                                          "content-encoding" (or content-encoding "identity")}
+                                     (common/cors-headers))})))))
+
+(defn- handle-sync-snapshot-download
+  [^js self request]
+  (let [graph-id (graph-id-from-request request)
+        ^js bucket (.-LOGSEQ_SYNC_ASSETS (.-env self))]
+    (cond
+      (not (seq graph-id))
+      (http/bad-request "missing graph id")
+
+      (nil? bucket)
+      (http/error-response "missing assets bucket" 500)
+
+      :else
+      (p/let [snapshot-id (str (random-uuid))
+              key (snapshot-key graph-id snapshot-id)
+              use-compression? (exists? js/CompressionStream)
+              content-encoding (when use-compression? snapshot-content-encoding)
+              stream (snapshot-export-stream self)
+              stream (if use-compression?
+                       (maybe-compress-stream stream)
+                       stream)
+              multipart? (and (some? (.-createMultipartUpload bucket))
+                              (fn? (.-createMultipartUpload bucket)))
+              opts #js {:httpMetadata #js {:contentType snapshot-content-type
+                                           :contentEncoding content-encoding
+                                           :cacheControl snapshot-cache-control}
+                        :customMetadata #js {:purpose "snapshot"
+                                             :created-at (str (common/now-ms))}}
+              _ (if multipart?
+                  (upload-multipart! bucket key stream opts)
+                  (if use-compression?
+                    (p/let [body (<buffer-stream stream)]
+                      (.put bucket key body opts))
+                    (p/let [body (snapshot-export-fixed-length self)]
+                      (.put bucket key body opts))))
+              url (snapshot-url request graph-id snapshot-id)]
+        (http/json-response :sync/snapshot-download {:ok true
+                                                     :key key
+                                                     :url url
+                                                     :content-encoding content-encoding})))))
+
+(defn- handle-sync-admin-reset
+  [^js self]
+  (common/sql-exec (.-sql self) "drop table if exists kvs")
+  (common/sql-exec (.-sql self) "drop table if exists tx_log")
+  (common/sql-exec (.-sql self) "drop table if exists sync_meta")
+  (storage/init-schema! (.-sql self))
+  (set! (.-schema-ready self) true)
+  (set! (.-conn self) nil)
+  (http/json-response :sync/admin-reset {:ok true}))
+
+(defn- handle-sync-tx-batch
+  [^js self request]
+  (.then (common/read-json request)
+         (fn [result]
+           (if (nil? result)
+             (http/bad-request "missing body")
+             (let [body (js->clj result :keywordize-keys true)
+                   body (http/coerce-http-request :sync/tx-batch body)]
+               (if (nil? body)
+                 (http/bad-request "invalid tx")
+                 (let [{:keys [txs t-before]} body
+                       t-before (parse-int t-before)]
+                   (if (string? txs)
+                     (http/json-response :sync/tx-batch (handle-tx-batch! self nil txs t-before))
+                     (http/bad-request "invalid tx")))))))))
+
+(defn- parse-reset-param
+  [value]
+  (if (nil? value)
+    true
+    (not (contains? #{"false" "0"} value))))
+
+(defn- handle-sync-snapshot-upload
+  [^js self request url]
+  (let [graph-id (graph-id-from-request request)
+        reset-param (.get (.-searchParams url) "reset")
+        reset? (parse-reset-param reset-param)
+        req-encoding (.get (.-headers request) "content-encoding")]
+    (cond
+      (not (seq graph-id))
+      (http/bad-request "missing graph id")
+
+      (nil? (.-body request))
+      (http/bad-request "missing body")
+
+      :else
+      (let [stream (.-body request)
+            encoding (or req-encoding "")]
+        (if (and (= encoding snapshot-content-encoding)
+                 (not (exists? js/DecompressionStream)))
+          (http/error-response "gzip not supported" 500)
+          (p/let [stream (maybe-decompress-stream stream encoding)
+                  count (import-snapshot-stream! self stream reset?)]
+            (http/json-response :sync/snapshot-upload {:ok true
+                                                       :count count})))))))
+
 (defn handle [{:keys [^js self request url route]}]
   (case (:handler route)
     :sync/health
     (http/json-response :sync/health {:ok true})
 
     :sync/pull
-    (let [raw-since (.get (.-searchParams url) "since")
-          since (if (some? raw-since) (parse-int raw-since) 0)]
-      (if (or (and (some? raw-since) (not (number? since))) (neg? since))
-        (http/bad-request "invalid since")
-        (http/json-response :sync/pull (pull-response self since))))
+    (handle-sync-pull self url)
 
     :sync/snapshot-stream
-    (let [graph-id (graph-id-from-request request)]
-      (if (not (seq graph-id))
-        (http/bad-request "missing graph id")
-        (let [use-compression? (exists? js/CompressionStream)
-              content-encoding (when use-compression? snapshot-content-encoding)
-              stream (snapshot-export-stream self)
-              stream (if use-compression?
-                       (maybe-compress-stream stream)
-                       stream)]
-          (js/Response. stream
-                        #js {:status 200
-                             :headers (js/Object.assign
-                                       #js {"content-type" snapshot-content-type
-                                            "content-encoding" (or content-encoding "identity")}
-                                       (common/cors-headers))}))))
+    (handle-sync-snapshot-stream self request)
 
     :sync/snapshot-download
-    (let [graph-id (graph-id-from-request request)
-          ^js bucket (.-LOGSEQ_SYNC_ASSETS (.-env self))]
-      (cond
-        (not (seq graph-id))
-        (http/bad-request "missing graph id")
-
-        (nil? bucket)
-        (http/error-response "missing assets bucket" 500)
-
-        :else
-        (p/let [snapshot-id (str (random-uuid))
-                key (snapshot-key graph-id snapshot-id)
-                use-compression? (exists? js/CompressionStream)
-                content-encoding (when use-compression? snapshot-content-encoding)
-                stream (snapshot-export-stream self)
-                stream (if use-compression?
-                         (maybe-compress-stream stream)
-                         stream)
-                multipart? (and (some? (.-createMultipartUpload bucket))
-                                (fn? (.-createMultipartUpload bucket)))
-                opts #js {:httpMetadata #js {:contentType snapshot-content-type
-                                             :contentEncoding content-encoding
-                                             :cacheControl snapshot-cache-control}
-                          :customMetadata #js {:purpose "snapshot"
-                                               :created-at (str (common/now-ms))}}
-                _ (if multipart?
-                    (upload-multipart! bucket key stream opts)
-                    (if use-compression?
-                      (p/let [body (<buffer-stream stream)]
-                        (.put bucket key body opts))
-                      (p/let [body (snapshot-export-fixed-length self)]
-                        (.put bucket key body opts))))
-                url (snapshot-url request graph-id snapshot-id)]
-          (http/json-response :sync/snapshot-download {:ok true
-                                                       :key key
-                                                       :url url
-                                                       :content-encoding content-encoding}))))
+    (handle-sync-snapshot-download self request)
 
     :sync/admin-reset
-    (do
-      (common/sql-exec (.-sql self) "drop table if exists kvs")
-      (common/sql-exec (.-sql self) "drop table if exists tx_log")
-      (common/sql-exec (.-sql self) "drop table if exists sync_meta")
-      (storage/init-schema! (.-sql self))
-      (set! (.-schema-ready self) true)
-      (set! (.-conn self) nil)
-      (http/json-response :sync/admin-reset {:ok true}))
+    (handle-sync-admin-reset self)
 
     :sync/tx-batch
-    (.then (common/read-json request)
-           (fn [result]
-             (if (nil? result)
-               (http/bad-request "missing body")
-               (let [body (js->clj result :keywordize-keys true)
-                     body (http/coerce-http-request :sync/tx-batch body)]
-                 (if (nil? body)
-                   (http/bad-request "invalid tx")
-                   (let [{:keys [txs t-before]} body
-                         t-before (parse-int t-before)]
-                     (if (string? txs)
-                       (http/json-response :sync/tx-batch (handle-tx-batch! self nil txs t-before))
-                       (http/bad-request "invalid tx"))))))))
+    (handle-sync-tx-batch self request)
 
     :sync/snapshot-upload
-    (let [graph-id (graph-id-from-request request)
-          reset-param (.get (.-searchParams url) "reset")
-          reset? (if (nil? reset-param)
-                   true
-                   (not (contains? #{"false" "0"} reset-param)))
-          req-encoding (.get (.-headers request) "content-encoding")]
-      (cond
-        (not (seq graph-id))
-        (http/bad-request "missing graph id")
-
-        (nil? (.-body request))
-        (http/bad-request "missing body")
-
-        :else
-        (let [stream (.-body request)
-              encoding (or req-encoding "")]
-          (if (and (= encoding snapshot-content-encoding)
-                   (not (exists? js/DecompressionStream)))
-            (http/error-response "gzip not supported" 500)
-            (p/let [stream (maybe-decompress-stream stream encoding)
-                    count (import-snapshot-stream! self stream reset?)]
-              (http/json-response :sync/snapshot-upload {:ok true
-                                                         :count count}))))))
+    (handle-sync-snapshot-upload self request url)
 
     (http/not-found)))
 
