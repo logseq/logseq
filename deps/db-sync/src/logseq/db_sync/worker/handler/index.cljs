@@ -41,13 +41,15 @@
                      (http/bad-request "invalid body")
 
                      :else
-                     (p/let [{:keys [graph-name schema-version]} body
+                     (p/let [{:keys [graph-name schema-version graph-e2ee?]} body
+                             graph-e2ee? (if (nil? graph-e2ee?) true (true? graph-e2ee?))
                              name-exists? (index/<graph-name-exists? db graph-name user-id)]
                        (if name-exists?
                          (http/bad-request "duplicate graph name")
-                         (p/let [_ (index/<index-upsert! db graph-id graph-name user-id schema-version)
+                         (p/let [_ (index/<index-upsert! db graph-id graph-name user-id schema-version graph-e2ee?)
                                  _ (index/<graph-member-upsert! db graph-id user-id "manager" user-id)]
-                           (http/json-response :graphs/create {:graph-id graph-id})))))))))
+                           (http/json-response :graphs/create {:graph-id graph-id
+                                                               :graph-e2ee? graph-e2ee?})))))))))
 
       :graphs/access
       (cond

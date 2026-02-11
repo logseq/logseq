@@ -322,7 +322,7 @@
    (notification/show! "This graph has been removed from Logseq Sync." :warning false)
    (rtc-handler/<get-remote-graphs)))
 
-(defmethod handle :rtc/download-remote-graph [[_ graph-name graph-uuid graph-schema-version]]
+(defmethod handle :rtc/download-remote-graph [[_ graph-name graph-uuid graph-schema-version graph-e2ee?]]
   (assert (= (:major (db-schema/parse-schema-version db-schema/version))
              (:major (db-schema/parse-schema-version graph-schema-version)))
           {:app db-schema/version
@@ -337,7 +337,7 @@
           [:div (str "Downloading " graph-name " ...")]
           (indicator/downloading-logs)])
        {:id :download-rtc-graph}))
-    (rtc-handler/<rtc-download-graph! graph-name graph-uuid)
+    (rtc-handler/<rtc-download-graph! graph-name graph-uuid graph-e2ee?)
     (rtc-handler/<get-remote-graphs)
     (when (util/mobile?)
       (shui/popup-hide! :download-rtc-graph)))
