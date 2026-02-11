@@ -375,7 +375,7 @@
   [e block href]
   (let [href (if-let [url (:logseq.property.asset/external-url block)]
                (if (string/starts-with? url "zotero://")
-                 (zotero/zotero-full-path (last (string/split url #"/")) (:logseq.property.asset/external-file-name block))
+                 (pdf-assets/get-zotero-local-pdf-path (:logseq.property.asset/external-file-name block) :id (last (string/split url #"/")))
                  url)
                href)]
     (when-let [s (or href (some-> (.-target e) (.-dataset) (.-href)))]
