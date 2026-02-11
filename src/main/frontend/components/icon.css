@@ -575,6 +575,90 @@
 }
 
 /* ============================================================================
+   Text Picker (Level 2 view) - matches asset-picker structure
+   ============================================================================ */
+
+.text-picker {
+  @apply flex flex-col overflow-hidden;
+  width: 380px;
+  min-width: 380px;
+  background-color: var(--lx-gray-02);
+}
+
+.text-picker-topbar {
+  @apply flex-shrink-0;
+}
+
+.text-picker-back {
+  @apply flex-shrink-0 flex items-center justify-between;
+  padding: 8px 14px 7px 14px;
+  background-color: var(--lx-gray-03);
+  border-bottom: 1px solid var(--rx-gray-05);
+
+  .back-button {
+    @apply flex items-center gap-0.5;
+    @apply text-sm font-medium cursor-pointer;
+    @apply border-none bg-transparent p-0;
+    @apply transition-colors duration-150;
+    color: var(--rx-gray-10);
+
+    &:hover {
+      color: var(--rx-gray-12);
+    }
+  }
+
+  .ui__button[data-action=del] {
+    @apply !w-6 !h-6 overflow-hidden rounded-md opacity-60;
+    @apply hover:text-red-rx-09 hover:opacity-90;
+  }
+}
+
+.text-picker-actions {
+  @apply flex items-center gap-1;
+}
+
+.text-picker-body {
+  @apply flex flex-col gap-4 p-3;
+
+  .format-note {
+    @apply text-xs leading-relaxed;
+    color: var(--rx-gray-09);
+  }
+}
+
+.text-picker-section {
+  @apply flex flex-col gap-1;
+
+  > label {
+    @apply text-xs font-medium;
+    color: var(--rx-gray-11);
+  }
+}
+
+.text-picker-input-row {
+  @apply flex items-center gap-1.5;
+
+  .ui__input {
+    @apply flex-1;
+  }
+}
+
+.text-picker-preview {
+  @apply flex items-center justify-center flex-shrink-0;
+  @apply w-9 h-8 rounded;
+  border: 1px solid var(--rx-gray-06);
+  background-color: var(--rx-gray-03);
+}
+
+.text-picker-alignment {
+  @apply flex gap-1;
+
+  .ui__button {
+    @apply !w-8 !h-8;
+  }
+}
+
+/* ============================================================================
    Web Image Search Section
    ============================================================================ */
 

@@ -57,6 +57,11 @@
 (defonce *upload-status (atom ""))
 (defonce *uploading-files (atom {}))
 
+;; Offscreen canvas for measuring text width (never attached to DOM)
+(defonce *text-measure-ctx
+  (let [canvas (js/document.createElement "canvas")]
+    (.getContext canvas "2d")))
+
 (def wikipedia-fetch-delay-ms
   "Delay between Wikipedia API requests to avoid rate limiting"
   200)
@@ -284,6 +289,41 @@
                :color color}}
       display-text))))
 
+(defn measure-text-width
+  "Measure pixel width of text at given font-size using offscreen canvas."
+  [text font-size-px]
+  (set! (.-font *text-measure-ctx)
+        (str "500 " font-size-px "px Inter, sans-serif"))
+  (.-width (.measureText *text-measure-ctx text)))
+
+(defn svg-text-font-size
+  "Compute font-size in viewBox coords (0-100) that makes text fill ~85% width.
+   Uses canvas measureText for accuracy across proportional fonts."
+  [text]
+  (if (string/blank? text)
+    72
+    (let [target-width 85
+          initial-size (cond
+                         (<= (count text) 1) 72
+                         (<= (count text) 2) 56
+                         (<= (count text) 3) 44
+                         (<= (count text) 4) 36
+                         :else               28)
+          measured (measure-text-width text initial-size)
+          adjusted (* initial-size (/ target-width measured))]
+      (min 80 (max 10 adjusted)))))
+
+(defn smart-split-text
+  "Split 5+ char text into two lines at natural boundaries.
+   Returns vector of 1 or 2 strings."
+  [text]
+  (if (<= (count text) 4)
+    [text]
+    (if-let [[_ letters digits] (re-matches #"^([A-Za-z]+)(\d+)$" text)]
+      [letters digits]
+      (let [mid (js/Math.ceil (/ (count text) 2))]
+        [(subs text 0 mid) (subs text mid)]))))
+
 (defn icon
   [icon' & [opts]]
   (let [normalized (or (normalize-icon icon') icon')
@@ -303,21 +343,49 @@
                (and (map? normalized) (= :text (:type normalized)) (get-in normalized [:data :value]))
                (let [text-value (get-in normalized [:data :value])
                      text-color (get-in normalized [:data :color])
+                     text-align (get-in normalized [:data :alignment])
                      display-text (if (> (count text-value) 8)
                                     (subs text-value 0 8)
                                     text-value)
                      size (or (:size opts) 20)
-                     ;; Scale font-size with icon size
-                     font-size (cond
-                                 (<= size 16) "10px"
-                                 (<= size 24) "12px"
-                                 (<= size 32) "14px"
-                                 :else "16px")]
-                 [:span.inline-flex.items-center.justify-center.flex-shrink-0
-                  [:span.font-medium.text-center.whitespace-nowrap
-                   {:style (cond-> {:font-size font-size}
-                             text-color (assoc :color text-color))}
-                   display-text]])
+                     ;; Always split 5+ char text — icon should look identical at all sizes
+                     lines (smart-split-text display-text)
+                     multi-line? (> (count lines) 1)
+                     ;; Compute font-size in viewBox coords for widest line
+                     widest-line (if multi-line?
+                                   (apply max-key count lines)
+                                   display-text)
+                     font-size (svg-text-font-size widest-line)
+                     ;; For multi-line, clamp so both lines fit vertically
+                     font-size (if (and multi-line? (> (* font-size 2.4) 95))
+                                 (/ 95 2.4)
+                                 font-size)
+                     ;; Dynamic y-positions based on font-size
+                     line-spacing (* font-size 1.25)
+                     y1 (- 50 (/ line-spacing 2))
+                     y2 (+ 50 (/ line-spacing 2))
+                     ;; SVG text-anchor from alignment
+                     anchor (case text-align "left" "start" "right" "end" "middle")
+                     x (case text-align "left" 8 "right" 92 50)
+                     fill (or text-color "currentColor")]
+                 [:svg {:viewBox "0 0 100 100"
+                        :width size :height size
+                        :style {:fill fill
+                                :flex-shrink 0}}
+                  (if multi-line?
+                    (list
+                     [:text {:x x :y y1 :font-size font-size :font-weight "500"
+                             :font-family "Inter, sans-serif"
+                             :text-anchor anchor :dominant-baseline "central"}
+                      (first lines)]
+                     [:text {:x x :y y2 :font-size font-size :font-weight "500"
+                             :font-family "Inter, sans-serif"
+                             :text-anchor anchor :dominant-baseline "central"}
+                      (second lines)])
+                    [:text {:x x :y 50 :font-size font-size :font-weight "500"
+                            :font-family "Inter, sans-serif"
+                            :text-anchor anchor :dominant-baseline "central"}
+                     display-text])])
 
                (and (map? normalized) (= :avatar (:type normalized)) (get-in normalized [:data :value]))
                (let [avatar-data (get normalized :data)
@@ -456,12 +524,6 @@
         not-attempted? (not (contains? @*avatar-fetch-attempted page-id))
         no-existing-asset? (not (get-in (:logseq.property/icon page-entity) [:data :asset-uuid]))
         result (and feature-enabled? has-title? not-attempted? no-existing-asset?)]
-    (js/console.log "[auto-fetch-avatar] Checking conditions:"
-                    "\n  feature-enabled?" feature-enabled?
-                    "\n  has-title?" has-title? "(" (:block/title page-entity) ")"
-                    "\n  not-attempted?" not-attempted?
-                    "\n  no-existing-asset?" no-existing-asset?
-                    "\n  RESULT:" result)
     result))
 
 (defn- <auto-fetch-avatar-image!
@@ -491,12 +553,9 @@
   "Effect component that triggers auto-fetch for avatar images.
    Renders nothing, just runs the side effect on mount."
   [page-entity]
-  (js/console.log "[auto-fetch-avatar] Effect component mounted for:" (:block/title page-entity))
   (hooks/use-effect!
    (fn []
-     (js/console.log "[auto-fetch-avatar] Effect running for:" (:block/title page-entity))
      (when (should-auto-fetch-avatar? page-entity)
-       (js/console.log "[auto-fetch-avatar] Starting fetch for:" (:block/title page-entity))
        (<auto-fetch-avatar-image! page-entity))
      js/undefined)
    [(:db/id page-entity)])
@@ -526,12 +585,6 @@
         not-attempted? (not (contains? @*image-fetch-attempted page-id))
         no-existing-asset? (not (get-in (:logseq.property/icon page-entity) [:data :asset-uuid]))
         result (and feature-enabled? has-title? not-attempted? no-existing-asset?)]
-    (js/console.log "[auto-fetch-image] Checking conditions:"
-                    "\n  feature-enabled?" feature-enabled?
-                    "\n  has-title?" has-title? "(" (:block/title page-entity) ")"
-                    "\n  not-attempted?" not-attempted?
-                    "\n  no-existing-asset?" no-existing-asset?
-                    "\n  RESULT:" result)
     result))
 
 (defn- <auto-fetch-image!
@@ -564,12 +617,9 @@
    Renders nothing, just runs the side effect on mount.
    Uses rate-limited queue to prevent API overload."
   [page-entity]
-  (js/console.log "[auto-fetch-image] Effect component mounted for:" (:block/title page-entity))
   (hooks/use-effect!
    (fn []
-     (js/console.log "[auto-fetch-image] Effect running for:" (:block/title page-entity))
      (when (should-auto-fetch-image? page-entity)
-       (js/console.log "[auto-fetch-image] Enqueuing fetch for:" (:block/title page-entity))
        (<auto-fetch-image! page-entity))
      js/undefined)
    [(:db/id page-entity)])
@@ -712,11 +762,13 @@
                :label (or label value)
                :data (cond-> {:value value}
                        color (assoc :color color))}
-        :text {:type :text
-               :id (or id (str "text-" value))
-               :label (or label value)
-               :data (cond-> {:value value}
-                       color (assoc :color color))}
+        :text (let [alignment (or (get-in v [:data :alignment]) (:alignment v))]
+                {:type :text
+                 :id (or id (str "text-" value))
+                 :label (or label value)
+                 :data (cond-> {:value value}
+                         color (assoc :color color)
+                         alignment (assoc :alignment alignment))})
         :avatar (let [backgroundColor (or (:backgroundColor v)
                                           (colors/variable :gray :09))
                       color (or (:color v)
@@ -1577,7 +1629,7 @@
      ;; Text option
      (when text-item
        [:button.custom-tab-item
-        {:on-click #(on-chosen % text-item)}
+        {:on-click #(reset! *view :text-picker)}
         [:div.custom-tab-item-preview
          (icon text-item {:size 24})]
         [:span.custom-tab-item-label "Text"]])
@@ -2706,6 +2758,137 @@
                  [:strong {:style {:color (or color "inherit")}}
                   (shui/tabler-icon "palette")])))
 
+(rum/defcs text-picker < rum/reactive
+  (rum/local nil ::text-value)
+  (rum/local nil ::alignment)
+  (rum/local nil ::color)
+  {:will-mount (fn [s]
+                 (let [opts (first (:rum/args s))
+                       current-icon (:current-icon opts)
+                       title (or (:page-title opts)
+                                 (some-> (state/get-current-page)
+                                         (db/get-page)
+                                         (:block/title)))
+                       existing-value (get-in current-icon [:data :value])
+                       existing-alignment (get-in current-icon [:data :alignment])
+                       existing-color (get-in current-icon [:data :color])]
+                   (reset! (::text-value s) (or existing-value (derive-initials title)))
+                   (reset! (::alignment s) (or existing-alignment "center"))
+                   (reset! (::color s) existing-color)
+                   s))
+   :will-unmount (fn [s]
+                   ;; Persist on unmount (popup close or view switch)
+                   (let [opts (first (:rum/args s))
+                         on-chosen (:on-chosen opts)
+                         *tv (::text-value s)
+                         *al (::alignment s)
+                         *co (::color s)
+                         title (or (:page-title opts)
+                                   (some-> (state/get-current-page)
+                                           (db/get-page)
+                                           (:block/title)))
+                         derived (or (derive-initials title) "?")
+                         text (if (string/blank? @*tv) derived @*tv)
+                         icon-item {:type :text
+                                    :id (str "text-" text)
+                                    :label text
+                                    :data (cond-> {:value text}
+                                            @*co (assoc :color @*co)
+                                            @*al (assoc :alignment @*al))}]
+                     (on-chosen nil icon-item true)
+                     (add-used-item! icon-item))
+                   s)}
+  [state {:keys [on-chosen on-back on-delete del-btn? page-title]}]
+  (let [*text-value (::text-value state)
+        *alignment (::alignment state)
+        *color (::color state)
+        title (or page-title
+                  (some-> (state/get-current-page)
+                          (db/get-page)
+                          (:block/title)))
+        derived (or (derive-initials title) "?")
+        ;; Build icon item from current local state
+        build-icon (fn []
+                     (let [text (if (string/blank? @*text-value) derived @*text-value)]
+                       {:type :text
+                        :id (str "text-" text)
+                        :label text
+                        :data (cond-> {:value text}
+                                @*color (assoc :color @*color)
+                                @*alignment (assoc :alignment @*alignment))}))
+        persist! (fn []
+                   (let [icon-item (build-icon)]
+                     (on-chosen nil icon-item true)
+                     (add-used-item! icon-item)))
+        preview-item (build-icon)]
+    [:div.text-picker
+     ;; Topbar
+     [:div.text-picker-topbar
+      [:div.text-picker-back
+       [:button.back-button
+        {:on-click (fn []
+                     (persist!)
+                     (on-back))}
+        (shui/tabler-icon "chevron-left" {:size 16})
+        [:span "Back"]]
+       [:div.text-picker-actions
+        (color-picker *color (fn [c]
+                               (reset! *color c)
+                               (let [text (if (string/blank? @*text-value) derived @*text-value)
+                                     icon-item {:type :text
+                                                :id (str "text-" text)
+                                                :label text
+                                                :data (cond-> {:value text}
+                                                        c (assoc :color c)
+                                                        @*alignment (assoc :alignment @*alignment))}]
+                                 (on-chosen nil icon-item true))))
+        (when del-btn?
+          (shui/button {:variant :outline :size :sm :data-action "del"
+                        :on-click on-delete}
+                       (shui/tabler-icon "trash" {:size 17})))]]
+      (shui/separator {:class "my-0 opacity-50"})]
+
+     ;; Body
+     [:div.text-picker-body
+      ;; Hint
+      [:div.format-note "Auto-derived from page title. You can customize it below."]
+
+      ;; Text input with preview
+      [:div.text-picker-section
+       [:label "Text"]
+       [:div.text-picker-input-row
+        [:div.text-picker-preview
+         (icon preview-item {:size 32})]
+        (shui/input
+         {:size "sm"
+          :auto-focus true
+          :max-length 8
+          :placeholder derived
+          :default-value @*text-value
+          :on-change (fn [e]
+                       (reset! *text-value (util/evalue e)))
+          :on-blur (fn [_e]
+                     (when (string/blank? @*text-value)
+                       (reset! *text-value derived)))
+          :on-key-down (fn [e]
+                         (when (= "Enter" (.-key e))
+                           (when (string/blank? @*text-value)
+                             (reset! *text-value derived))))})]]
+
+      ;; Alignment
+      [:div.text-picker-section
+       [:label "Alignment"]
+       [:div.text-picker-alignment
+        (for [align ["left" "center" "right"]
+              :let [active? (= @*alignment align)]]
+          (shui/button
+           {:key align
+            :variant (if active? :default :outline)
+            :size :sm
+            :on-click (fn []
+                        (reset! *alignment align))}
+           (shui/tabler-icon (str "align-" align) {:size 16})))]]]]))
+
 (rum/defcs ^:large-vars/cleanup-todo icon-search < rum/reactive
   (rum/local "" ::q)
   (rum/local nil ::result)
@@ -2718,9 +2901,9 @@
                        icon-value (:icon-value opts)
                        normalized (normalize-icon icon-value)
                        *view (::view s)]
-                   ;; Avatar and image icons open asset picker directly for image selection
-                   (when (contains? #{:avatar :image} (:type normalized))
-                     (reset! *view :asset-picker))
+                   ;; Avatar/image icons open asset picker, text icons open text-picker
+                   (when (contains? #{:avatar :image :text} (:type normalized))
+                     (reset! *view (if (= :text (:type normalized)) :text-picker :asset-picker)))
                    (assoc s ::color (atom (storage/get :ls-icon-color-preset)))))}
   [state {:keys [on-chosen del-btn? icon-value page-title] :as opts}]
   (let [*q (::q state)
@@ -2735,15 +2918,15 @@
         normalized-icon-value (normalize-icon icon-value)
         opts (assoc opts
                     :input-focused? @*input-focused?
-                    :on-chosen (fn [e m]
+                    :on-chosen (fn [e m & [keep-popup?]]
                                  (let [icon-item (normalize-icon m)
                                        can-have-color? (contains? #{:icon :avatar :text} (:type icon-item))
                                        ;; Update color if user selected one from picker
-                                       m' (if (and can-have-color? (not (string/blank? @*color)))
+                                       ;; Skip for :text — text-picker manages its own color
+                                       m' (if (and can-have-color? (not (string/blank? @*color)) (not (= :text (:type icon-item))))
                                             (cond-> m
-                                              ;; For icons and text: set color
-                                              (or (= :icon (:type icon-item))
-                                                  (= :text (:type icon-item)))
+                                              ;; For icons: set color
+                                              (= :icon (:type icon-item))
                                               (assoc-in [:data :color] @*color)
 
                                               ;; For avatars: set both color (text) and backgroundColor
@@ -2751,7 +2934,7 @@
                                               (-> (assoc-in [:data :color] @*color)
                                                   (assoc-in [:data :backgroundColor] @*color)))
                                             m)]
-                                   (and on-chosen (on-chosen e m'))
+                                   (and on-chosen (on-chosen e m' keep-popup?))
                                    (when (:type icon-item) (add-used-item! icon-item)))))
         *select-mode? (::select-mode? state)
         reset-q! #(when-let [^js input (rum/deref *input-ref)]
@@ -2764,7 +2947,8 @@
                        (when (not= js/document.activeElement input)
                          (.focus input))
                        (util/scroll-to (rum/deref *result-ref) 0 false))))]
-    (if (= @*view :asset-picker)
+    (case @*view
+      :asset-picker
       ;; Level 2: Asset Picker view
       (asset-picker {:on-chosen (fn [e icon-data]
                                   ((:on-chosen opts) e icon-data)
@@ -2776,7 +2960,17 @@
                      :avatar-context (when (= :avatar (:type normalized-icon-value))
                                        normalized-icon-value)
                      :page-title page-title})
-      ;; Level 1: Icon Picker view
+
+      :text-picker
+      ;; Level 2: Text Picker view
+      (text-picker {:on-chosen (:on-chosen opts)
+                    :on-back #(reset! *view :icon-picker)
+                    :on-delete #(on-chosen nil)
+                    :del-btn? del-btn?
+                    :current-icon normalized-icon-value
+                    :page-title page-title})
+
+      ;; Default - Level 1: Icon Picker view
       [:div.cp__emoji-icon-picker
        {:data-keep-selection true}
 
