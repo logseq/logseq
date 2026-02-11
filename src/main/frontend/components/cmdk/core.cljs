@@ -26,8 +26,8 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.page :as page-util]
-            [frontend.util.text :as text-util]
             [frontend.util.ref :as ref]
+            [frontend.util.text :as text-util]
             [goog.functions :as gfun]
             [goog.object :as gobj]
             [logseq.common.util :as common-util]
@@ -636,100 +636,92 @@
                        #js {:inline "nearest"
                             :behavior "smooth"}))))
 
-(rum/defc mouse-active-effect!
-  [*mouse-active? deps]
-  (hooks/use-effect!
-   #(reset! *mouse-active? false)
-   deps)
-  nil)
-
 (rum/defcs result-group
   < rum/reactive
-  (rum/local false ::mouse-active?)
   [state' state title group visible-items first-item sidebar?]
   (let [{:keys [show items]} (some-> state ::results deref group)
         highlighted-item (or @(::highlighted-item state) first-item)
-        *mouse-active? (::mouse-active? state')
+        *mouse-active? (::mouse-active? state)
         filter' @(::filter state)
         can-show-less? (< (get-group-limit group) (count visible-items))
         can-show-more? (< (count visible-items) (count items))
         show-less #(swap! (::results state) assoc-in [group :show] :less)
         show-more #(swap! (::results state) assoc-in [group :show] :more)]
-    [:<>
-     (mouse-active-effect! *mouse-active? [highlighted-item])
-     [:div {:class         (if (= title "Create")
-                             "border-b border-gray-06 last:border-b-0"
-                             "border-b border-gray-06 pb-1 last:border-b-0")
-            :on-mouse-move #(reset! *mouse-active? true)}
-      (when-not (= title "Create")
-        [:div {:class "text-xs py-1.5 px-3 flex justify-between items-center gap-2 text-gray-11 bg-gray-02 h-8"}
-         [:div {:class "font-bold text-gray-11 pl-0.5 cursor-pointer select-none"
-                :on-click (fn [_e]
+    [:div {:class         (if (= title "Create")
+                            "border-b border-gray-06 last:border-b-0"
+                            "border-b border-gray-06 pb-1 last:border-b-0")
+           :on-mouse-move #(reset! *mouse-active? true)
+           :on-mouse-enter #(reset! *mouse-active? true)}
+     (when-not (= title "Create")
+       [:div {:class "text-xs py-1.5 px-3 flex justify-between items-center gap-2 text-gray-11 bg-gray-02 h-8"}
+        [:div {:class "font-bold text-gray-11 pl-0.5 cursor-pointer select-none"
+               :on-click (fn [_e]
                           ;; change :less to :more or :more to :less
-                            (swap! (::results state) update-in [group :show] {:more :less
-                                                                              :less :more}))}
-          title]
-         (when (not= group :create)
-           [:div {:class "pl-1.5 text-gray-12 rounded-full"
-                  :style {:font-size "0.7rem"}}
-            (if (<= 100 (count items))
-              (str "99+")
-              (count items))])
+                           (swap! (::results state) update-in [group :show] {:more :less
+                                                                             :less :more}))}
+         title]
+        (when (not= group :create)
+          [:div {:class "pl-1.5 text-gray-12 rounded-full"
+                 :style {:font-size "0.7rem"}}
+           (if (<= 100 (count items))
+             (str "99+")
+             (count items))])
 
-         [:div {:class "flex-1"}]
+        [:div {:class "flex-1"}]
 
-         (when (and (or can-show-more? can-show-less?)
-                    (empty? filter')
-                    (not sidebar?))
-           [:a.text-link.select-node.opacity-50.hover:opacity-90
-            {:on-click (if (= show :more) show-less show-more)}
-            (if (= show :more)
-              [:div.flex.flex-row.gap-1.items-center
-               "Show less"
-               (shui/shortcut "mod up" nil)]
-              [:div.flex.flex-row.gap-1.items-center
-               "Show more"
-               (shui/shortcut "mod down" nil)])])])
+        (when (and (or can-show-more? can-show-less?)
+                   (empty? filter')
+                   (not sidebar?))
+          [:a.text-link.select-node.opacity-50.hover:opacity-90
+           {:on-click (if (= show :more) show-less show-more)}
+           (if (= show :more)
+             [:div.flex.flex-row.gap-1.items-center
+              "Show less"
+              (shui/shortcut "mod up" nil)]
+             [:div.flex.flex-row.gap-1.items-center
+              "Show more"
+              (shui/shortcut "mod down" nil)])])])
 
-      [:div.search-results
-       (for [item visible-items
-             :let [highlighted? (= item highlighted-item)
-                   page? (= "file" (some-> item :icon))
-                   text (some-> item :text)
-                   source-block (some-> item :source-block)
-                   hls-page? (and page? (pdf-utils/hls-file? (:block/title source-block)))]]
-         (let [item (list-item/root
-                     (assoc item
-                            :group group
-                            :query (when-not (= group :create) @(::input state))
-                            :text (if hls-page? (pdf-utils/fix-local-asset-pagename text) text)
-                            :hls-page? hls-page?
-                            :compact true
-                            :rounded false
-                            :hoverable @*mouse-active?
-                            :highlighted highlighted?
+     [:div.search-results
+      (for [item visible-items
+            :let [highlighted? (= item highlighted-item)
+                  page? (= "file" (some-> item :icon))
+                  text (some-> item :text)
+                  source-block (some-> item :source-block)
+                  hls-page? (and page? (pdf-utils/hls-file? (:block/title source-block)))]]
+        (let [item (list-item/root
+                    (assoc item
+                           :group group
+                           :query (when-not (= group :create) @(::input state))
+                           :text (if hls-page? (pdf-utils/fix-local-asset-pagename text) text)
+                           :hls-page? hls-page?
+                           :compact true
+                           :rounded true
+                           :hoverable @*mouse-active?
+                           :highlighted highlighted?
                              ;; for some reason, the highlight effect does not always trigger on a
                              ;; boolean value change so manually pass in the dep
-                            :on-highlight-dep highlighted-item
-                            :on-click
-                            (fn [e]
-                              (util/stop-propagation e)
-                              (reset! (::highlighted-item state) item)
-                              (handle-action :default state item)
-                              (when-let [on-click (:on-click item)]
-                                (on-click e)))
-                             ;; :on-mouse-enter (fn [e]
-                             ;;                   (when (not highlighted?)
-                             ;;                     (reset! (::highlighted-item state) (assoc item :mouse-enter-triggered-highlight true))))
-                            :on-highlight (fn [ref]
-                                            (reset! (::highlighted-group state) group)
-                                            (when (and ref (.-current ref)
-                                                       (not (:mouse-enter-triggered-highlight @(::highlighted-item state))))
-                                              (scroll-into-view-when-invisible state (.-current ref)))))
-                     nil)]
-           (if (= group :nodes)
-             (ui/lazy-visible (fn [] item) {:trigger-once? true})
-             item)))]]]))
+                           :on-highlight-dep highlighted-item
+                           :on-click
+                           (fn [e]
+                             (util/stop-propagation e)
+                             (reset! (::highlighted-item state) item)
+                             (handle-action :default state item)
+                             (when-let [on-click (:on-click item)]
+                               (on-click e)))
+                           :on-mouse-enter
+                           (fn [_e]
+                             (when (not= item @(::highlighted-item state))
+                               (reset! (::highlighted-item state) item)))
+                           :on-highlight (fn [ref]
+                                           (reset! (::highlighted-group state) group)
+                                           (when (and ref (.-current ref)
+                                                      (not (:mouse-enter-triggered-highlight @(::highlighted-item state))))
+                                             (scroll-into-view-when-invisible state (.-current ref)))))
+                    nil)]
+          (if (= group :nodes)
+            (ui/lazy-visible (fn [] item) {:trigger-once? true})
+            item)))]]))
 
 (defn move-highlight [state n]
   (let [items (mapcat last (state->results-ordered state (:search/mode @state/state)))
@@ -817,10 +809,14 @@
         (state/sidebar-add-block! repo input :search))
       as-keydown? (if meta?
                     (show-more)
-                    (move-highlight state 1))
+                    (do
+                      (reset! (::mouse-active? state) false)
+                      (move-highlight state 1)))
       as-keyup? (if meta?
                   (show-less)
-                  (move-highlight state -1))
+                  (do
+                    (reset! (::mouse-active? state) false)
+                    (move-highlight state -1)))
       (and enter? (not composing?)) (do
                                       (handle-action :default state e)
                                       (util/stop-propagation e))
@@ -1076,6 +1072,7 @@
   (rum/local false ::meta?)
   (rum/local nil ::highlighted-group)
   (rum/local nil ::highlighted-item)
+  (rum/local false ::mouse-active?)
   (rum/local default-results ::results)
   (rum/local nil ::scroll-container-ref)
   (rum/local nil ::input-ref)
@@ -1097,6 +1094,8 @@
                      (not sidebar?) (str " pb-14"))
             :ref #(let [*ref (::scroll-container-ref state)]
                     (when-not @*ref (reset! *ref %)))
+            :on-mouse-enter #(reset! (::mouse-active? state) true)
+            :on-mouse-leave #(reset! (::mouse-active? state) false)
             :style {:background "var(--lx-gray-02)"
                     :scroll-padding-block 32}}
 
