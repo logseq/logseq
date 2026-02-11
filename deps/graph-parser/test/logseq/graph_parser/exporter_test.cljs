@@ -125,6 +125,11 @@
         options' (merge default-export-options
                         {:user-options (merge {:convert-all-tags? false} (dissoc options :assets :verbose))
                         ;; asset file options
+                         :<get-file-stat (fn [path]
+                                           (let [abs-path (if (node-path/isAbsolute path)
+                                                            path
+                                                            (node-path/resolve file-graph-dir path))]
+                                             (.stat (js/require "fs/promises") abs-path)))
                          :<read-and-copy-asset (fn [file *assets buffer-handler]
                                                  (<read-and-copy-asset file *assets buffer-handler assets))}
                         (select-keys options [:verbose]))]
@@ -210,17 +215,17 @@
 
       ;; Counts
       ;; Includes journals as property values e.g. :logseq.property/deadline
-      (is (= 32 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
+      (is (= 33 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
 
-      (is (= 5 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Asset]] @conn))))
+      (is (= 9 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Asset]] @conn))))
       (is (= 5 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
       (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Card]] @conn))))
       (is (= 5 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Quote-block]] @conn))))
-      (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Pdf-annotation]] @conn))))
+      (is (= 7 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Pdf-annotation]] @conn))))
 
       ;; Properties and tags aren't included in this count as they aren't a Page
-      (is (= 11
+      (is (= 13
              (->> (d/q '[:find [?b ...]
                          :where
                          [?b :block/title]
@@ -239,7 +244,8 @@
       (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")
       (is (= 0 (count @(:ignored-assets import-state))) "No ignored assets")
       (is (= 1 (count @(:ignored-files import-state))) "Ignore .edn for now")
-      (is (= 5 (count @assets))))
+      ;; 2 zotero pdf are external files so not counted here
+      (is (= 7 (count @assets))))
 
     (testing "logseq files"
       (is (= ".foo {}\n"
@@ -419,6 +425,28 @@
               :logseq.property.asset/resize-metadata {:height 288, :width 252}}
              (db-test/readable-properties (db-test/find-block-by-content @conn "greg-popovich-thumbs-up_1704749687791_0")))
           "Asset has correct properties")
+      (is (= {:block/tags [:logseq.class/Asset]
+              :logseq.property.asset/type "pdf"
+              :logseq.property.asset/external-url "zotero://select/library/items/QDM8H6EH"
+              :logseq.property.asset/external-file-name "zotero-link://it/Understanding EXPLAIN.pdf"}
+             (select-keys
+              (db-test/readable-properties (db-test/find-block-by-content @conn "Understanding EXPLAIN"))
+              [:block/tags
+               :logseq.property.asset/type
+               :logseq.property.asset/external-url
+               :logseq.property.asset/external-file-name]))
+          "Zotero linked pdf asset has correct external path info")
+      (is (= {:block/tags [:logseq.class/Asset]
+              :logseq.property.asset/type "pdf"
+              :logseq.property.asset/external-url "zotero://select/library/items/RX5JS7SY"
+              :logseq.property.asset/external-file-name "zotero-path://RX5JS7SY/zlib.pdf"}
+             (select-keys
+              (db-test/readable-properties (db-test/find-block-by-content @conn "zlib"))
+              [:block/tags
+               :logseq.property.asset/type
+               :logseq.property.asset/external-url
+               :logseq.property.asset/external-file-name]))
+          "Zotero imported pdf asset has correct external path info")
       (is (= (d/entity @conn :logseq.class/Asset)
              (:block/page (db-test/find-block-by-content @conn "greg-popovich-thumbs-up_1704749687791_0")))
           "Imported into Asset page")
@@ -447,6 +475,90 @@
                           db-test/readable-properties)
                      :logseq.property.pdf/hl-value :logseq.property/ls-type))
           "Pdf area highlight has correct properties")
+      (is (= {:block/tags [:logseq.class/Pdf-annotation]
+              :logseq.property/asset "Understanding EXPLAIN"
+              :logseq.property.pdf/hl-color :logseq.property/color.yellow
+              :logseq.property.pdf/hl-page 6}
+             (select-keys
+              (db-test/readable-properties (db-test/find-block-by-content @conn #"EXPLAIN is a really nice command"))
+              [:block/tags
+               :logseq.property/asset
+               :logseq.property.pdf/hl-color
+               :logseq.property.pdf/hl-page]))
+          "Zotero linked pdf text highlight links to correct asset")
+      (is (= {:block/tags [:logseq.class/Pdf-annotation]
+              :logseq.property/asset "zlib"
+              :logseq.property.pdf/hl-color :logseq.property/color.red
+              :logseq.property.pdf/hl-page 1}
+             (select-keys
+              (db-test/readable-properties (db-test/find-block-by-content @conn #"The zlib library is a general purpose data compression library"))
+              [:block/tags
+               :logseq.property/asset
+               :logseq.property.pdf/hl-color
+               :logseq.property.pdf/hl-page]))
+          "Zotero imported pdf text highlight links to correct asset")
+      (let [area-hl (d/q '[:find (pull ?b [:block/title
+                                           {:block/tags [:db/ident]}
+                                           {:logseq.property/asset [:block/title]}
+                                           {:logseq.property.pdf/hl-image [:block/title]}
+                                           {:logseq.property.pdf/hl-color [:db/ident]}
+                                           :logseq.property.pdf/hl-type
+                                           :logseq.property.pdf/hl-page]) .
+                           :where
+                           [?asset :block/title "Understanding EXPLAIN"]
+                           [?asset :block/tags :logseq.class/Asset]
+                           [?b :block/title "[:span]"]
+                           [?b :logseq.property/asset ?asset]]
+                         @conn)]
+        (is (= {:logseq.property.pdf/hl-color :logseq.property/color.green
+                :logseq.property.pdf/hl-page 8
+                :block/tags [:logseq.class/Pdf-annotation]
+                :logseq.property/asset "Understanding EXPLAIN"
+                :logseq.property.pdf/hl-image "pdf area highlight"
+                :logseq.property.pdf/hl-type :area}
+               (-> area-hl
+                   (update :block/tags #(mapv :db/ident %))
+                   (update :logseq.property/asset #(:block/title %))
+                   (update :logseq.property.pdf/hl-color #(:db/ident %))
+                   (update :logseq.property.pdf/hl-image #(:block/title %))
+                   (select-keys [:block/tags
+                                 :logseq.property/asset
+                                 :logseq.property.pdf/hl-color
+                                 :logseq.property.pdf/hl-page
+                                 :logseq.property.pdf/hl-image
+                                 :logseq.property.pdf/hl-type])))
+            "Zotero linked pdf area highlight links to correct asset"))
+      (let [area-hl (d/q '[:find (pull ?b [:block/title
+                                           {:block/tags [:db/ident]}
+                                           {:logseq.property/asset [:block/title]}
+                                           {:logseq.property.pdf/hl-image [:block/title]}
+                                           {:logseq.property.pdf/hl-color [:db/ident]}
+                                           :logseq.property.pdf/hl-type
+                                           :logseq.property.pdf/hl-page]) .
+                           :where
+                           [?asset :block/title "zlib"]
+                           [?asset :block/tags :logseq.class/Asset]
+                           [?b :block/title "[:span]"]
+                           [?b :logseq.property/asset ?asset]]
+                         @conn)]
+        (is (= {:logseq.property.pdf/hl-color :logseq.property/color.blue
+                :logseq.property.pdf/hl-page 1
+                :block/tags [:logseq.class/Pdf-annotation]
+                :logseq.property/asset "zlib"
+                :logseq.property.pdf/hl-image "pdf area highlight"
+                :logseq.property.pdf/hl-type :area}
+               (-> area-hl
+                   (update :block/tags #(mapv :db/ident %))
+                   (update :logseq.property/asset #(:block/title %))
+                   (update :logseq.property.pdf/hl-color #(:db/ident %))
+                   (update :logseq.property.pdf/hl-image #(:block/title %))
+                   (select-keys [:block/tags
+                                 :logseq.property/asset
+                                 :logseq.property.pdf/hl-color
+                                 :logseq.property.pdf/hl-page
+                                 :logseq.property.pdf/hl-image
+                                 :logseq.property.pdf/hl-type])))
+            "Zotero imported pdf area highlight links to correct asset"))
 
       ;; Quotes
       (is (= {:block/tags [:logseq.class/Quote-block]
