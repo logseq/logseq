@@ -213,6 +213,14 @@
   @apply -m-1;
 }
 
+.ui__dropdown-menu-content:has(> .text-picker) {
+  @apply flex;
+}
+
+.ui__dropdown-menu-content .text-picker {
+  @apply -m-1;
+}
+
 .ls-icon {
   &-Backlog {
     @apply text-gray-05;
@@ -615,6 +623,19 @@
 
 .text-picker-actions {
   @apply flex items-center gap-1;
+
+  .color-picker {
+    @apply rounded-md w-[24px] h-[24px] overflow-hidden flex relative p-0;
+
+    > strong {
+      @apply w-[18px] h-[18px] rounded-full absolute opacity-90
+      hover:opacity-100 font-normal text-sm;
+
+      .ui__icon {
+        @apply opacity-90 scale-90;
+      }
+    }
+  }
 }
 
 .text-picker-body {
