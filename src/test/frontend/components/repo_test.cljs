@@ -12,7 +12,7 @@
 (deftest ensure-rsa-key-does-not-create-graph-test
   (async done
          (let [ensure-fn (ensure-rsa-key-fn)
-               ensure-calls (atom 0)
+               db-worker-ops (atom [])
                create-calls (atom 0)
                ensured-values (atom [])]
            (if-not ensure-fn
@@ -20,9 +20,11 @@
                (is false "missing ensure-e2ee-rsa-key-for-cloud!")
                (done))
              (-> (p/with-redefs [state/<invoke-db-worker
-                                 (fn [& _]
-                                   (swap! ensure-calls inc)
-                                   (p/resolved {:public-key "pk"}))
+                                 (fn [op & _]
+                                   (swap! db-worker-ops conj op)
+                                   (if (= op :thread-api/db-sync-ensure-user-rsa-keys)
+                                     (p/resolved {:public-key "pk"})
+                                     (p/resolved nil)))
                                  repo-handler/new-db!
                                  (fn [& _]
                                    (swap! create-calls inc)
@@ -35,7 +37,9 @@
                               (fn [value]
                                 (swap! ensured-values conj value))))
                  (p/then (fn [_]
-                           (is (= 1 @ensure-calls))
+                           (is (= [:thread-api/set-db-sync-config
+                                   :thread-api/db-sync-ensure-user-rsa-keys]
+                                  @db-worker-ops))
                            (is (= [true] @ensured-values))
                            (is (zero? @create-calls))
                            (done)))
@@ -46,7 +50,7 @@
 (deftest ensure-rsa-key-nil-result-does-not-create-graph-test
   (async done
          (let [ensure-fn (ensure-rsa-key-fn)
-               ensure-calls (atom 0)
+               db-worker-ops (atom [])
                create-calls (atom 0)
                ensured-values (atom [])]
            (if-not ensure-fn
@@ -54,8 +58,8 @@
                (is false "missing ensure-e2ee-rsa-key-for-cloud!")
                (done))
              (-> (p/with-redefs [state/<invoke-db-worker
-                                 (fn [& _]
-                                   (swap! ensure-calls inc)
+                                 (fn [op & _]
+                                   (swap! db-worker-ops conj op)
                                    (p/resolved nil))
                                  repo-handler/new-db!
                                  (fn [& _]
@@ -69,7 +73,9 @@
                               (fn [value]
                                 (swap! ensured-values conj value))))
                  (p/then (fn [_]
-                           (is (= 1 @ensure-calls))
+                           (is (= [:thread-api/set-db-sync-config
+                                   :thread-api/db-sync-ensure-user-rsa-keys]
+                                  @db-worker-ops))
                            (is (= [false] @ensured-values))
                            (is (zero? @create-calls))
                            (done)))
