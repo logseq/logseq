@@ -1,0 +1,5 @@
+- Attachments
+	- [Understanding EXPLAIN.pdf](zotero://select/library/items/QDM8H6EH) {{zotero-linked-file "it/Understanding EXPLAIN.pdf"}}
+- Notes
+	- ((697874ba-26e9-4e8a-a55d-0639d337dcc6)) definition
+	- ((69787518-9eb8-4fd0-ad3b-b394e28bb547)) select
