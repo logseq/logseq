@@ -5,6 +5,7 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [datascript.storage :refer [IStorage]]
+            [frontend.common.crypt :as crypt]
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.shared-service :as shared-service]
@@ -729,14 +730,24 @@
            (fn [prev]
              (p/then prev (fn [_] (task)))))))
 
+(defn- <exported-graph-aes-key
+  [repo graph-id]
+  (if (sync-crypt/graph-e2ee? repo)
+    (p/let [aes-key (sync-crypt/<ensure-graph-aes-key repo graph-id)
+            _ (when (nil? aes-key)
+                (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))]
+      (crypt/<export-aes-key aes-key))
+    (p/resolved nil)))
+
 (defn- upload-remote-asset!
   [repo graph-id asset-uuid asset-type checksum]
   (let [base (http-base-url)]
     (if (and (seq base) (seq graph-id) (seq asset-type) (seq checksum))
-      (worker-state/<invoke-main-thread :thread-api/rtc-upload-asset
-                                        repo nil (str asset-uuid) asset-type checksum
-                                        (asset-url base graph-id (str asset-uuid) asset-type)
-                                        {:extra-headers (auth-headers)})
+      (p/let [exported-aes-key (<exported-graph-aes-key repo graph-id)]
+        (worker-state/<invoke-main-thread :thread-api/rtc-upload-asset
+                                          repo exported-aes-key (str asset-uuid) asset-type checksum
+                                          (asset-url base graph-id (str asset-uuid) asset-type)
+                                          {:extra-headers (auth-headers)}))
       (p/rejected (ex-info "missing asset upload info"
                            {:repo repo
                             :asset-uuid asset-uuid
@@ -749,10 +760,11 @@
   [repo graph-id asset-uuid asset-type]
   (let [base (http-base-url)]
     (if (and (seq base) (seq graph-id) (seq asset-type))
-      (worker-state/<invoke-main-thread :thread-api/rtc-download-asset
-                                        repo nil (str asset-uuid) asset-type
-                                        (asset-url base graph-id (str asset-uuid) asset-type)
-                                        {:extra-headers (auth-headers)})
+      (p/let [exported-aes-key (<exported-graph-aes-key repo graph-id)]
+        (worker-state/<invoke-main-thread :thread-api/rtc-download-asset
+                                          repo exported-aes-key (str asset-uuid) asset-type
+                                          (asset-url base graph-id (str asset-uuid) asset-type)
+                                          {:extra-headers (auth-headers)}))
       (p/rejected (ex-info "missing asset download info"
                            {:repo repo
                             :asset-uuid asset-uuid
