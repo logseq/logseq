@@ -116,7 +116,7 @@
   []
   (:ws-url @worker-state/*db-sync-config))
 
-(defn- http-base-url
+(defn http-base-url
   []
   (or (:http-base @worker-state/*db-sync-config)
       (when-let [ws-url (ws-base-url)]
