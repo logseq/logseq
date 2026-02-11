@@ -612,6 +612,8 @@
       ;; Change to :node as dates can be pages but pages can't be dates
       (= {:from :date :to :node} type-change)
       (do
+        (swap! upstream-properties assoc prop {:schema {:logseq.property/type :node}
+                                               :from-type :date})
         (swap! property-schemas assoc-in [prop :logseq.property/type] :node)
         (update-page-or-date-values page-names-to-uuids val))
 
@@ -2247,6 +2249,7 @@
                    (-> (select-keys options [:notify-user :default-config :<save-config-file])
                        (set/rename-keys {:<save-config-file :<save-file})))]
      (let [files (common-config/remove-hidden-files *files config rpath-key)
+           ;; Path normalization is needed just for windows
            normalized-rpath (fn [f]
                               (some-> (get f rpath-key) path/path-normalize))
            logseq-file? #(string/starts-with? (normalized-rpath %) "logseq/")

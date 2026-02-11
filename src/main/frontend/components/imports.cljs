@@ -67,6 +67,7 @@
 
 (defn- finished-cb
   []
+  (state/pub-event! [:graph/sync-context])
   (notification/show! "Import finished!" :success)
   (shui/dialog-close! :import-indicator)
   (route-handler/redirect-to-home!)
