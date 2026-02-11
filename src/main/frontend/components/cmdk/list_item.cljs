@@ -50,13 +50,31 @@
                              segs))
           [:span normal-text])))))
 
+(def current-page-badge-label "Current Page")
+
+(defn current-page-badge-placement
+  [{:keys [current-page? result-type]}]
+  (when current-page?
+    (case result-type
+      :page {:text-badge current-page-badge-label}
+      :block {:header-badge current-page-badge-label}
+      nil)))
+
+(defn current-page-badge-node
+  [label]
+  (when-not (string/blank? label)
+    [:span.cp__cmdk-current-page-badge label]))
+
 (rum/defc root [{:keys [icon icon-theme query text info shortcut value-label value
                         title highlighted on-highlight on-highlight-dep header on-click
-                        hoverable compact rounded on-mouse-enter component-opts source-block] :as _props
+                        hoverable compact rounded on-mouse-enter component-opts source-block] :as props
                  :or {hoverable true rounded true}}
                 {:keys [app-config]}]
   (let [ref (hooks/create-ref)
         highlight-query (partial highlight-query* app-config query)
+        badge-placement (current-page-badge-placement props)
+        text-badge (current-page-badge-node (:text-badge badge-placement))
+        header-badge (current-page-badge-node (:header-badge badge-placement))
         [hover? set-hover?] (rum/use-state false)
         mouse-highlighted? (and highlighted hoverable hover?)
         keyboard-highlighted? (and highlighted (not mouse-highlighted?))
@@ -99,9 +117,10 @@
            component-opts)
      ;; header
      (when header
-       [:div.text-xs.pl-8.font-light {:class "-mt-1"
+       [:div.text-xs.pl-8.font-light.flex.items-center.gap-2.flex-wrap {:class "-mt-1"
                                       :style {:color "var(--lx-gray-11)"}}
-        (highlight-query header)])
+        (highlight-query header)
+        header-badge])
      ;; main row
      [:div.flex.items-start.gap-3
       [:div.w-5.h-5.rounded.flex.items-center.justify-center
@@ -119,10 +138,11 @@
       [:div.flex.flex-1.flex-col
        (when title
          [:div.text-sm.pb-2.font-bold.text-gray-11 (highlight-query title)])
-       [:div {:class "text-sm font-medium text-gray-12"}
+       [:div {:class "text-sm font-medium text-gray-12 flex items-center gap-2 flex-wrap"}
         (block-handler/block-title-with-icon source-block
                                              (highlight-query text)
                                              icon-component/icon)
+        text-badge
         (when info
           [:span.text-xs.text-gray-11 " — " (highlight-query info)])]]
       (when (or value-label value)
