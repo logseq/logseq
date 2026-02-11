@@ -675,6 +675,60 @@
     (reset! (::highlighted-row-el state) nil))
   (apply-anchored-wheel-scroll! state e))
 
+(defn- render-result-list-item
+  [state group highlighted-item highlighted? *mouse-active? disable-lazy? item hls-page? text]
+  (let [item (list-item/root
+              (assoc item
+                     :group group
+                     :query (when-not (= group :create) @(::input state))
+                     :text (if hls-page? (pdf-utils/fix-local-asset-pagename text) text)
+                     :hls-page? hls-page?
+                     :compact true
+                     :rounded true
+                     :hoverable @*mouse-active?
+                     :highlighted highlighted?
+                     ;; for some reason, the highlight effect does not always trigger on a
+                     ;; boolean value change so manually pass in the dep
+                     :on-highlight-dep highlighted-item
+                     :on-click
+                     (fn [e]
+                       (util/stop-propagation e)
+                       (reset! (::highlighted-item state) item)
+                       (handle-action :default state item)
+                       (when-let [on-click (:on-click item)]
+                         (on-click e)))
+                     :on-mouse-enter
+                     (fn [_e]
+                       (when (and @*mouse-active?
+                                  (= :mouse @(::focus-source state)))
+                         (when (not= item @(::highlighted-item state))
+                           (reset! (::highlighted-item state) item))))
+                     :component-opts
+                     {:on-mouse-move
+                      (fn [e]
+                        (let [dx (or (.-movementX e) 0)
+                              dy (or (.-movementY e) 0)
+                              real-pointer-move? (or (not (zero? dx))
+                                                     (not (zero? dy)))]
+                          (when real-pointer-move?
+                            (when-not @*mouse-active?
+                              (reset! *mouse-active? true))
+                            (when-not (= :mouse @(::focus-source state))
+                              (reset! (::focus-source state) :mouse))
+                            (when (not= item @(::highlighted-item state))
+                              (reset! (::highlighted-item state) item)))))}
+                     :on-highlight (fn [ref]
+                                     (reset! (::highlighted-group state) group)
+                                     (when (and ref (.-current ref))
+                                       (let [row-el (.-current ref)]
+                                         (reset! (::highlighted-row-el state) row-el)
+                                         (when (= :keyboard @(::focus-source state))
+                                           (ensure-focus-visible! state row-el))))))
+              nil)]
+    (if (and (= group :nodes) (not disable-lazy?))
+      (ui/lazy-visible (fn [] item) {:trigger-once? true})
+      item)))
+
 (rum/defcs result-group
   < rum/reactive
   [state' state title group visible-items first-item sidebar?]
@@ -742,57 +796,7 @@
                   text (some-> item :text)
                   source-block (some-> item :source-block)
                   hls-page? (and page? (pdf-utils/hls-file? (:block/title source-block)))]]
-        (let [item (list-item/root
-                    (assoc item
-                           :group group
-                           :query (when-not (= group :create) @(::input state))
-                           :text (if hls-page? (pdf-utils/fix-local-asset-pagename text) text)
-                           :hls-page? hls-page?
-                           :compact true
-                           :rounded true
-                           :hoverable @*mouse-active?
-                           :highlighted highlighted?
-                             ;; for some reason, the highlight effect does not always trigger on a
-                             ;; boolean value change so manually pass in the dep
-                           :on-highlight-dep highlighted-item
-                           :on-click
-                           (fn [e]
-                             (util/stop-propagation e)
-                             (reset! (::highlighted-item state) item)
-                             (handle-action :default state item)
-                             (when-let [on-click (:on-click item)]
-                               (on-click e)))
-                            :on-mouse-enter
-                            (fn [_e]
-                              (when (and @*mouse-active?
-                                         (= :mouse @(::focus-source state)))
-                                (when (not= item @(::highlighted-item state))
-                                  (reset! (::highlighted-item state) item))))
-                            :component-opts
-                            {:on-mouse-move
-                             (fn [e]
-                               (let [dx (or (.-movementX e) 0)
-                                     dy (or (.-movementY e) 0)
-                                     real-pointer-move? (or (not (zero? dx))
-                                                            (not (zero? dy)))]
-                                 (when real-pointer-move?
-                                   (when-not @*mouse-active?
-                                     (reset! *mouse-active? true))
-                                   (when-not (= :mouse @(::focus-source state))
-                                     (reset! (::focus-source state) :mouse))
-                                   (when (not= item @(::highlighted-item state))
-                                     (reset! (::highlighted-item state) item)))))}
-                            :on-highlight (fn [ref]
-                                            (reset! (::highlighted-group state) group)
-                                            (when (and ref (.-current ref))
-                                              (let [row-el (.-current ref)]
-                                                (reset! (::highlighted-row-el state) row-el)
-                                                (when (= :keyboard @(::focus-source state))
-                                                  (ensure-focus-visible! state row-el))))))
-                     nil)]
-          (if (and (= group :nodes) (not disable-lazy?))
-            (ui/lazy-visible (fn [] item) {:trigger-once? true})
-            item)))]]))
+        (render-result-list-item state group highlighted-item highlighted? *mouse-active? disable-lazy? item hls-page? text))]]))
 
 (defn move-highlight [state n]
   (let [items (mapcat last (state->results-ordered state (:search/mode @state/state)))
