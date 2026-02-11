@@ -565,6 +565,7 @@
                                                    :hide? false
                                                    :public? true}
                                           :queryable? true}
+     ;; need to rename for better alignment with practical purposes
      :logseq.property.asset/external-file-name {:title "External file name"
                                                 :schema {:type :string
                                                          :hide? true
@@ -732,8 +733,7 @@
     "logseq.property.code" "logseq.property.repeat"
     "logseq.property.journal" "logseq.property.class" "logseq.property.view"
     "logseq.property.user" "logseq.property.history" "logseq.property.embedding"
-    "logseq.property.reaction"
-    "logseq.property.publish"})
+    "logseq.property.reaction" "logseq.property.sync" "logseq.property.publish"})
 
 (defn logseq-property?
   "Determines if keyword is a logseq property"

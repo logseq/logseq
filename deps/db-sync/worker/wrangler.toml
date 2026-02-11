@@ -12,6 +12,9 @@ max_instances = 1
 [containers.settings]
 idle_timeout = "10m"
 
+[version_metadata]
+binding = "CF_VERSION_METADATA"
+
 [observability]
 enabled = true
 
@@ -62,6 +65,9 @@ COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLn
 COGNITO_ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
 COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"
 GITHUB_DEFAULT_BASE_BRANCH = "main"
+SENTRY_DSN = "https://dc09d27243b9492bbe15e0dd279ad7de@o416451.ingest.us.sentry.io/5311485"
+SENTRY_ENVIRONMENT = "staging"
+SENTRY_TRACES_SAMPLE_RATE = "0.1"
 
 [[env.staging.durable_objects.bindings]]
 name = "LOGSEQ_SYNC_DO"
@@ -100,6 +106,9 @@ binding = "DB"
 database_name = "logseq-sync-graph-meta-staging"
 database_id = "00325aa2-c805-4693-b599-900a25dcde42"
 
+[env.staging.version_metadata]
+binding = "CF_VERSION_METADATA"
+
 [env.prod]
 name = "logseq-sync-prod"
 
@@ -108,6 +117,9 @@ COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLn
 COGNITO_ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
 COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"
 GITHUB_DEFAULT_BASE_BRANCH = "main"
+SENTRY_DSN = "https://dc09d27243b9492bbe15e0dd279ad7de@o416451.ingest.us.sentry.io/5311485"
+SENTRY_ENVIRONMENT = "prod"
+SENTRY_TRACES_SAMPLE_RATE = "0.1"
 
 [[env.prod.durable_objects.bindings]]
 name = "LOGSEQ_SYNC_DO"
@@ -141,3 +153,6 @@ bucket_name = "logseq-sync-assets-prod"
 binding = "DB"
 database_name = "logseq-sync-graphs-prod"
 database_id = "4c80e058-69b5-4985-88d1-f53711d817ba"
+
+[env.prod.version_metadata]
+binding = "CF_VERSION_METADATA"

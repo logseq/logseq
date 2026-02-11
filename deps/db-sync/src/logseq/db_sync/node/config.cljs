@@ -58,6 +58,22 @@
      :cognito-client-id (env-value env "COGNITO_CLIENT_ID")
      :cognito-jwks-url (env-value env "COGNITO_JWKS_URL")}))
 
+(def ^:private allowed-config-keys
+  [:port :base-url :data-dir :storage-driver :assets-driver
+   :auth-driver :auth-token :static-user-id :static-email :static-username
+   :agent-runtime-provider :sandbox-agent-url :sandbox-agent-token
+   :sprite-token :sprites-token :sprites-api-url :sprites-timeout-ms
+   :sprites-name-prefix :sprites-ram-mb :sprites-cpus :sprites-region
+   :sprites-storage-gb :sprites-bootstrap-command :sprites-repo-clone-command
+   :sprites-sandbox-agent-port :sprites-health-retries :sprites-health-interval-ms
+   :cloudflare-sandbox-name-prefix :cloudflare-sandbox-agent-port
+   :cloudflare-bootstrap-command :cloudflare-repo-clone-command
+   :cloudflare-health-retries :cloudflare-health-interval-ms
+   :github-token :github-push-token :github-pr-token :github-api-base
+   :github-default-base-branch
+   :openai-api-key :anthropic-api-key :openai-base-url :anthropic-base-url
+   :log-level :cognito-issuer :cognito-client-id :cognito-jwks-url])
+
 (defn normalize-config [overrides]
   (let [defaults {:port 8080
                   :data-dir "data/db-sync"
@@ -75,7 +91,8 @@
       (throw (js/Error. (str "unsupported storage driver: " storage-driver))))
     (when-not (#{"filesystem"} assets-driver)
       (throw (js/Error. (str "unsupported assets driver: " assets-driver))))
-    (assoc merged
-           :auth-driver auth-driver
-           :storage-driver storage-driver
-           :assets-driver assets-driver)))
+    (-> merged
+        (select-keys allowed-config-keys)
+        (assoc :auth-driver auth-driver
+               :storage-driver storage-driver
+               :assets-driver assets-driver))))

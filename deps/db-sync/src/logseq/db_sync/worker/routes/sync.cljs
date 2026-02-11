@@ -5,6 +5,7 @@
   [["/health" {:methods {"GET" :sync/health}}]
    ["/pull" {:methods {"GET" :sync/pull}}]
    ["/snapshot/download" {:methods {"GET" :sync/snapshot-download}}]
+   ["/snapshot/stream" {:methods {"GET" :sync/snapshot-stream}}]
    ["/admin/reset" {:methods {"DELETE" :sync/admin-reset}}]
    ["/tx/batch" {:methods {"POST" :sync/tx-batch}}]
    ["/snapshot/upload" {:methods {"POST" :sync/snapshot-upload}}]])

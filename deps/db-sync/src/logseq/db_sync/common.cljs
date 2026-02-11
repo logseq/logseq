@@ -4,13 +4,11 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
 
-(def text-decoder (js/TextDecoder.))
-
 (defn cors-headers []
   #js {"Access-Control-Allow-Origin" "*"
        "Access-Control-Allow-Headers" "content-type,content-encoding,authorization,x-amz-meta-checksum,x-amz-meta-type"
        "Access-Control-Allow-Methods" "GET,POST,PUT,DELETE,OPTIONS,HEAD"
-       "Access-Control-Expose-Headers" "content-type,content-encoding,cache-control,x-asset-type"})
+       "Access-Control-Expose-Headers" "content-type,content-encoding,content-length,cache-control,x-asset-type"})
 
 (defn json-response
   ([data] (json-response data 200))
@@ -24,18 +22,6 @@
 
 (defn options-response []
   (platform/response nil #js {:status 204 :headers (cors-headers)}))
-
-(defn bad-request [message]
-  (json-response {:error message} 400))
-
-(defn unauthorized []
-  (json-response {:error "unauthorized"} 401))
-
-(defn forbidden []
-  (json-response {:error "forbidden"} 403))
-
-(defn not-found []
-  (json-response {:error "not found"} 404))
 
 (defn get-sql-rows [^js result]
   (let [iter-fn (when result (aget result js/Symbol.iterator))]
@@ -66,15 +52,20 @@
                      stmt)]
     (.run stmt)))
 
+(defn- with-session-db [^js db session-mode]
+  (let [with-session (.-withSession db)]
+    (if (fn? with-session)
+      (if (some? session-mode)
+        (.withSession db session-mode)
+        (.withSession db))
+      db)))
+
 (defn <d1-all
   [^js db sql-or-opts & more]
   (let [[opts sql-str args] (if (map? sql-or-opts)
                               [sql-or-opts (first more) (rest more)]
                               [nil sql-or-opts more])
-        session-mode (:session opts)
-        session (if (some? session-mode)
-                  (.withSession db session-mode)
-                  (.withSession db))]
+        session (with-session-db db (:session opts))]
     (p/let [^js stmt (.prepare session sql-str)
             ^js stmt (if (seq args)
                        (.apply (.-bind stmt) stmt (to-array args))

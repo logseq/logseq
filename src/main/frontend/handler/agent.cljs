@@ -200,8 +200,8 @@
       (if (neg? idx)
         [frames remaining]
         (let [frame (subs remaining 0 idx)
-              rest (subs remaining (+ idx 2))]
-          (recur rest (conj frames frame)))))))
+              tail (subs remaining (+ idx 2))]
+          (recur tail (conj frames frame)))))))
 
 (defn- message-body
   [content]

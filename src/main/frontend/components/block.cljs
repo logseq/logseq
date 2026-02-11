@@ -73,7 +73,6 @@
             [goog.dom :as gdom]
             [goog.functions :refer [debounce]]
             [goog.object :as gobj]
-            [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
@@ -378,7 +377,7 @@
   [e block href]
   (let [href (if-let [url (:logseq.property.asset/external-url block)]
                (if (string/starts-with? url "zotero://")
-                 (zotero/zotero-full-path (last (string/split url #"/")) (:logseq.property.asset/external-file-name block))
+                 (pdf-assets/get-zotero-local-pdf-path (:logseq.property.asset/external-file-name block) :id (last (string/split url #"/")))
                  url)
                href)]
     (when-let [s (or href (some-> (.-target e) (.-dataset) (.-href)))]
@@ -2511,24 +2510,6 @@
                                          (fn [] (status-history-cp status-history))
                                          {:align :end}))}
           (clock/seconds->days:hours:minutes:seconds time-spent))]))))
-
-(defn- agent-status-class
-  [status]
-  (case status
-    "running" "text-emerald-600"
-    "paused" "text-amber-600"
-    "failed" "text-red-600"
-    "canceled" "text-red-600"
-    "completed" "text-emerald-700"
-    "created" "text-muted-foreground"
-    "text-muted-foreground"))
-
-(defn- agent-status-label
-  [status]
-  (when (string? status)
-    (-> status
-        (string/replace "-" " ")
-        (string/capitalize))))
 
 (rum/defc task-agent-session-cp < rum/reactive
   [block]

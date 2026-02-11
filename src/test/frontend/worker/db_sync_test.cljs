@@ -2,12 +2,15 @@
   (:require [cljs.test :refer [deftest is testing async]]
             [datascript.core :as d]
             [frontend.common.crypt :as crypt]
+            [frontend.worker-common.util :as worker-util]
+            [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync :as db-sync]
             [frontend.worker.sync.client-op :as client-op]
             [frontend.worker.sync.crypt :as sync-crypt]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]
+            [logseq.outliner.op :as outliner-op]
             [promesa.core :as p]))
 
 (def ^:private test-repo "test-db-sync-repo")
@@ -53,7 +56,99 @@
      :child2 child2
      :child3 child3}))
 
-(deftest reparent-block-when-cycle-detected-test
+(deftest update-online-users-dedupes-identical-messages-test
+  (let [client {:repo test-repo
+                :online-users (atom [])
+                :ws-state (atom :open)}
+        broadcasts (atom [])]
+    (with-redefs [shared-service/broadcast-to-clients! (fn [topic payload]
+                                                         (swap! broadcasts conj {:topic topic :payload payload}))]
+      (#'db-sync/update-online-users! client [{:user-id "u1" :username "Alice"}])
+      (#'db-sync/update-online-users! client [{:user-id "u1" :username "Alice"}])
+      (is (= 1 (count @broadcasts)))
+      (is (= [{:user/uuid "u1" :user/name "Alice"}]
+             (get-in (first @broadcasts) [:payload :online-users]))))))
+
+(deftest presence-message-ignores-source-client-test
+  (let [client {:repo test-repo
+                :online-users (atom [{:user/uuid "u1" :user/name "Alice"}
+                                     {:user/uuid "u2" :user/name "Bob"}])
+                :ws-state (atom :open)}
+        broadcasts (atom [])
+        raw-message (js/JSON.stringify
+                     (clj->js {:type "presence"
+                               :user-id "u1"
+                               :editing-block-uuid "block-self"}))]
+    (with-redefs [worker-state/get-id-token (fn [] "token")
+                  worker-util/parse-jwt (fn [_] {:sub "u1"})
+                  client-op/get-local-tx (fn [_repo] 0)
+                  shared-service/broadcast-to-clients! (fn [topic payload]
+                                                         (swap! broadcasts conj {:topic topic :payload payload}))]
+      (#'db-sync/handle-message! test-repo client raw-message)
+      (is (= [{:user/uuid "u1" :user/name "Alice"}
+              {:user/uuid "u2" :user/name "Bob"}]
+             @(:online-users client)))
+      (is (empty? @broadcasts)))))
+
+(deftest presence-message-updates-other-user-test
+  (let [client {:repo test-repo
+                :online-users (atom [{:user/uuid "u1" :user/name "Alice"}
+                                     {:user/uuid "u2" :user/name "Bob"}])
+                :ws-state (atom :open)}
+        broadcasts (atom [])
+        raw-message (js/JSON.stringify
+                     (clj->js {:type "presence"
+                               :user-id "u2"
+                               :editing-block-uuid "block-2"}))]
+    (with-redefs [worker-state/get-id-token (fn [] "token")
+                  worker-util/parse-jwt (fn [_] {:sub "u1"})
+                  client-op/get-local-tx (fn [_repo] 0)
+                  shared-service/broadcast-to-clients! (fn [topic payload]
+                                                         (swap! broadcasts conj {:topic topic :payload payload}))]
+      (#'db-sync/handle-message! test-repo client raw-message)
+      (is (= [{:user/uuid "u1" :user/name "Alice"}
+              {:user/uuid "u2" :user/name "Bob" :user/editing-block-uuid "block-2"}]
+             @(:online-users client)))
+      (is (= 1 (count @broadcasts))))))
+
+(deftest reaction-add-enqueues-pending-sync-tx-test
+  (testing "adding a reaction should enqueue tx for db-sync"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (outliner-op/apply-ops! conn
+                                  [[:toggle-reaction [(:block/uuid parent) "+1" nil]]]
+                                  {})
+          (let [pending (#'db-sync/pending-txs test-repo)
+                txs (mapcat :tx pending)]
+            (is (seq pending))
+            (is (some (fn [tx]
+                        (and (vector? tx)
+                             (= :db/add (first tx))
+                             (= :logseq.property.reaction/emoji-id (nth tx 2 nil))
+                             (= "+1" (nth tx 3 nil))))
+                      txs))))))))
+
+(deftest reaction-remove-enqueues-pending-sync-tx-test
+  (testing "removing a reaction should enqueue tx for db-sync"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (outliner-op/apply-ops! conn
+                                  [[:toggle-reaction [(:block/uuid parent) "+1" nil]]]
+                                  {})
+          (let [reaction-eid (-> (d/datoms @conn :avet :logseq.property.reaction/target (:db/id parent))
+                                 first
+                                 :e)
+                before-count (count (#'db-sync/pending-txs test-repo))]
+            (is (some? reaction-eid))
+            (outliner-op/apply-ops! conn
+                                    [[:toggle-reaction [(:block/uuid parent) "+1" nil]]]
+                                    {})
+            (let [after-count (count (#'db-sync/pending-txs test-repo))]
+              (is (> after-count before-count)))))))))
+
+(deftest ^:long reparent-block-when-cycle-detected-test
   (testing "cycle from remote sync reparent block to page root"
     (let [{:keys [conn parent child1]} (setup-parent-child)]
       (with-datascript-conns conn nil
@@ -70,7 +165,7 @@
             (is (= (:db/id child1') (:db/id (:block/parent parent'))))
             (is (= (:db/id page') (:db/id (:block/parent child1'))))))))))
 
-(deftest two-children-cycle-test
+(deftest ^:long two-children-cycle-test
   (testing "cycle from remote sync overwrite client (2 children)"
     (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)]
       (with-datascript-conns conn client-ops-conn
@@ -85,7 +180,7 @@
             (is (= "parent" (:block/title (:block/parent child1'))))
             (is (= "child 1" (:block/title (:block/parent child2'))))))))))
 
-(deftest three-children-cycle-test
+(deftest ^:long three-children-cycle-test
   (testing "cycle from remote sync overwrite client (3 children)"
     (let [{:keys [conn client-ops-conn child1 child2 child3]} (setup-parent-child)]
       (with-datascript-conns conn client-ops-conn
@@ -104,7 +199,7 @@
             (is (= "child 3" (:block/title (:block/parent child2'))))
             (is (= "parent" (:block/title (:block/parent child3'))))))))))
 
-(deftest ignore-missing-parent-update-after-local-delete-test
+(deftest ^:long ignore-missing-parent-update-after-local-delete-test
   (testing "remote parent retracted while local adds another child"
     (let [{:keys [conn client-ops-conn parent child1]} (setup-parent-child)
           child-uuid (:block/uuid child1)]
@@ -118,7 +213,7 @@
           (let [child' (d/entity @conn [:block/uuid child-uuid])]
             (is (nil? child'))))))))
 
-(deftest fix-duplicate-orders-after-rebase-test
+(deftest ^:long fix-duplicate-orders-after-rebase-test
   (testing "duplicate order updates are fixed after remote rebase"
     (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)
           order (:block/order (d/entity @conn (:db/id child1)))]
@@ -136,7 +231,7 @@
             (is (every? some? orders))
             (is (= 2 (count (distinct orders))))))))))
 
-(deftest fix-duplicate-order-against-existing-sibling-test
+(deftest ^:long fix-duplicate-order-against-existing-sibling-test
   (testing "duplicate order update is fixed when it collides with an existing sibling"
     (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)
           child2-order (:block/order (d/entity @conn (:db/id child2)))]
@@ -152,7 +247,7 @@
             (is (some? (:block/order child1')))
             (is (not= (:block/order child1') (:block/order child2')))))))))
 
-(deftest two-clients-extends-cycle-test
+(deftest ^:long two-clients-extends-cycle-test
   (testing "remote extends wins when two clients create a cycle"
     (let [conn (db-test/create-conn)
           client-ops-conn (d/create-conn client-op/schema-in-db)
@@ -198,7 +293,7 @@
               (is (contains? extends-a :logseq.class/Root))
               (is (contains? extends-b :user.class/A)))))))))
 
-(deftest fix-duplicate-orders-with-local-and-remote-new-blocks-test
+(deftest ^:long fix-duplicate-orders-with-local-and-remote-new-blocks-test
   (testing "local and remote new sibling blocks at the same location get unique orders"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
           parent-id (:db/id parent)
@@ -238,7 +333,7 @@
             (is (every? some? orders))
             (is (= (count orders) (count (distinct orders))))))))))
 
-(deftest rebase-replaces-pending-txs-test
+(deftest ^:long rebase-replaces-pending-txs-test
   (testing "pending txs are rebased into a single tx after remote rebase"
     (let [{:keys [conn client-ops-conn parent child1 child2]} (setup-parent-child)
           child1-uuid (:block/uuid child1)
@@ -265,7 +360,7 @@
               (is (some #(= % [:db/add [:block/uuid child1-uuid] :block/title "child 1 local"]) txs))
               (is (some #(= % [:db/add [:block/uuid child2-uuid] :block/title "child 2 local"]) txs)))))))))
 
-(deftest rebase-keeps-pending-when-rebased-empty-test
+(deftest ^:long rebase-keeps-pending-when-rebased-empty-test
   (testing "pending txs stay when rebased txs are empty"
     (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)]
       (with-redefs [db-sync/enqueue-local-tx!
@@ -283,7 +378,7 @@
              [[:db/add (:db/id child1) :block/title "same"]])
             (is (= 0 (count (#'db-sync/pending-txs test-repo))))))))))
 
-(deftest rebase-preserves-title-when-reversed-tx-ids-change-test
+(deftest ^:long rebase-preserves-title-when-reversed-tx-ids-change-test
   (testing "rebase keeps local title when reverse tx gets a new tx id"
     (let [conn (db-test/create-conn-with-blocks
                 {:pages-and-blocks
@@ -307,7 +402,7 @@
             (let [block' (d/entity @conn (:db/id block))]
               (is (= "test" (:block/title block'))))))))))
 
-(deftest offload-large-title-test
+(deftest ^:long offload-large-title-test
   (testing "large titles are offloaded to object storage with placeholder"
     (async done
            (let [large-title (apply str (repeat 5000 "a"))
@@ -331,7 +426,7 @@
                           result)))
                  (p/finally done))))))
 
-(deftest offload-small-title-test
+(deftest ^:long offload-small-title-test
   (testing "small titles are not offloaded"
     (async done
            (let [tx-data [[:db/add 1 :block/title "short"]]
@@ -346,7 +441,7 @@
                    (is (= tx-data result)))
                  (p/finally done))))))
 
-(deftest upload-large-title-encrypts-transit-payload-test
+(deftest ^:long upload-large-title-encrypts-transit-payload-test
   (testing "encrypted large title uploads transit-encoded payload"
     (async done
            (let [title (apply str (repeat 5000 "a"))
@@ -371,7 +466,7 @@
                      (reset! worker-state/*db-sync-config config-prev)
                      (done))))))))
 
-(deftest ^:fix-me download-large-title-decrypts-transit-payload-test
+(deftest ^:long ^:fix-me download-large-title-decrypts-transit-payload-test
   (testing "encrypted large title downloads transit-encoded payload"
     (async done
            (let [title (apply str (repeat 5000 "b"))
@@ -400,7 +495,7 @@
                      (reset! worker-state/*db-sync-config config-prev)
                      (done))))))))
 
-(deftest rehydrate-large-title-test
+(deftest ^:long rehydrate-large-title-test
   (testing "rehydrate fills empty title from object storage"
     (async done
            (let [conn (db-test/create-conn-with-blocks

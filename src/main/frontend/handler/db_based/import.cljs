@@ -62,13 +62,6 @@
                (string/replace-first name #"^assets/" ""))]
     (last (string/split name #"/"))))
 
-(defn- <write-asset-file!
-  [repo assets-dir file-name data]
-  (let [file-path (path/path-join assets-dir file-name)]
-    (if (util/electron?)
-      (fs/write-file! file-path data)
-      (fs/write-plain-text-file! repo assets-dir file-name data {:skip-transact? true}))))
-
 (defn- <copy-zip-assets!
   [repo entries {:keys [progress-fn total]}]
   (let [assets (->> entries
@@ -91,7 +84,7 @@
               (if (string/blank? file-name)
                 (p/recur (subvec remaining 1) count failed)
                 (p/let [data (.async entry "uint8array")
-                        write-result (p/catch (<write-asset-file! repo assets-dir file-name data)
+                        write-result (p/catch (fs/write-asset-file! repo file-name data)
                                               (fn [e]
                                                 (js/console.error e)
                                                 ::write-failed))]

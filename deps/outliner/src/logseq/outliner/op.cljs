@@ -176,7 +176,8 @@
                          {:outliner-op :toggle-reaction})
           true)
         (let [now (common-util/time-ms)
-              reaction-tx (cond-> {:block/created-at now
+              reaction-tx (cond-> {:block/uuid (d/squuid)
+                                   :block/created-at now
                                    :logseq.property.reaction/emoji-id emoji-id
                                    :logseq.property.reaction/target (:db/id target)}
                             user-id

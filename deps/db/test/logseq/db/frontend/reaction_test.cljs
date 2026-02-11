@@ -13,9 +13,7 @@
                    :blocks [{:block/title "Block"}]}]})
           block (db-test/find-block-by-content @conn "Block")
           now (common-util/time-ms)
-          reaction {:block/uuid (random-uuid)
-                    :block/created-at now
-                    :block/updated-at now
+          reaction {:block/created-at now
                     :logseq.property.reaction/emoji-id "+1"
                     :logseq.property.reaction/target (:db/id block)}]
       (d/transact! conn [reaction])

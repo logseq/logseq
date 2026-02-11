@@ -88,7 +88,7 @@
                            (:block/name agent-value))
     :else nil))
 
-(defn- session->messages
+(defn- ^:large-vars/cleanup-todo session->messages
   [session block]
   (let [events (:events session)
         base (let [acc (atom {:items {}
@@ -367,7 +367,7 @@
                    true))
                session-messages)))))
 
-(rum/defc agent-chat-dialog
+(rum/defc ^:large-vars/cleanup-todo agent-chat-dialog
   [block]
   (let [block-uuid (:block/uuid block)
         [sessions] (hooks/use-atom (:agent/sessions @state/state))
@@ -392,7 +392,6 @@
                      (when e
                        (or (.-message e)
                            (str e))))
-        status (or chat-status (:status session))
         error (or chat-error (:stream-error session))
         session-started? (boolean (:session-id session))
         session-chat-messages (->> session-messages

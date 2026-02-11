@@ -1,14 +1,16 @@
 (ns logseq.db-sync.worker
+  ;; Turn off false defclass errors
+  {:clj-kondo/config {:linters {:unresolved-symbol {:level :off}}}}
   (:require ["@cloudflare/sandbox" :as cf-sandbox]
             ["cloudflare:workers" :refer [DurableObject]]
             [lambdaisland.glogi :as log]
             [logseq.db-sync.common :as common]
             [logseq.db-sync.logging :as logging]
+            [logseq.db-sync.sentry.worker :as sentry]
             [logseq.db-sync.worker.agent.do :as agent-do]
             [logseq.db-sync.worker.dispatch :as dispatch]
             [logseq.db-sync.worker.handler.sync :as sync-handler]
             [logseq.db-sync.worker.handler.ws :as ws-handler]
-            [logseq.db-sync.worker.http :as http]
             [logseq.db-sync.worker.presence :as presence]
             [logseq.db-sync.worker.ws :as ws]
             [promesa.core :as p]
@@ -19,13 +21,9 @@
 (def Sandbox (.-Sandbox cf-sandbox))
 
 (def worker
-  #js {:fetch (fn [request env _ctx]
-                (->
-                 (p/let [result (dispatch/handle-worker-fetch request env)]
-                   result)
-                 (p/catch (fn [error]
-                            (log/error :db-sync/worker-fetch-error {:error error})
-                            (http/error-response (str error) 500)))))})
+  (sentry/wrap-handler
+   #js {:fetch (fn [request env _ctx]
+                 (dispatch/handle-worker-fetch request env))}))
 
 (defclass SyncDO
   (extends DurableObject)
@@ -48,13 +46,27 @@
 
   Object
   (fetch [this request]
-         (if (common/upgrade-request? request)
-           (ws-handler/handle-ws this request)
-           (sync-handler/handle-http this request)))
+         (->
+          (p/do
+            (if (common/upgrade-request? request)
+              (ws-handler/handle-ws this request)
+              (sync-handler/handle-http this request)))
+          (p/catch (fn [error]
+                     (let [message (cond
+                                     (instance? ExceptionInfo error) (str (.-message error) " | " (pr-str (ex-data error)))
+                                     (instance? js/Error error) (.-message error)
+                                     :else (pr-str error))
+                           stack (when (instance? js/Error error) (.-stack error))]
+                       (common/json-response
+                        {:error "DO internal error"
+                         :debug-message message
+                         :debug-stack stack}
+                        500))))))
   (webSocketMessage [this ws message]
                     (try
                       (ws-handler/handle-ws-message! this ws message)
                       (catch :default e
+                        (sentry/capture-exception! e)
                         (log/error :db-sync/ws-error e)
                         (js/console.error e)
                         (ws/send! ws {:type "error" :message "server error"}))))
@@ -65,6 +77,7 @@
   (webSocketError [this ws error]
                   (presence/remove-presence! this ws)
                   (presence/broadcast-online-users! this)
+                  (sentry/capture-exception! error)
                   (log/error :db-sync/ws-error {:error error})))
 
 (defclass AgentSessionDO

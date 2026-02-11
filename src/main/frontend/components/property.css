@@ -185,13 +185,21 @@
 }
 
 
-.positioned-properties, .property-value-inner {
+.positioned-properties, .property-value-inner, .ls-icon-color-wrap {
   .select-item {
     @apply flex items-center shrink-0;
   }
 
   .ls-icon-priorityLvlUrgent {
     @apply text-orange-rx-08;
+  }
+
+  .ls-icon-priorityLvlMedium {
+    @apply opacity-80;
+  }
+
+  .ls-icon-priorityLvlLow {
+    @apply opacity-60;
   }
 }
 

@@ -199,7 +199,7 @@
               (let [k (keyword (api-block/sanitize-user-property-name class-uuid-or-ident-or-title))]
                 (if (qualified-keyword? k)
                   k
-                  (ldb/get-case-page (db/get-db) class-uuid-or-ident-or-title))))
+                  (some-> (ldb/get-case-page (db/get-db) class-uuid-or-ident-or-title) :db/id))))
         class (db/entity eid)]
     (when-not (ldb/class? class)
       (throw (ex-info "Not a tag" {:input class-uuid-or-ident-or-title})))

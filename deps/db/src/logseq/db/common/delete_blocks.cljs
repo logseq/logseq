@@ -46,7 +46,8 @@
      refs)))
 
 (defn update-refs-history
-  "When a block is deleted, refs are updated, property history are deleted."
+  "When a block is deleted, a block's refs are updated and related property history, views and reactions
+   are deleted"
   [db txs _opts]
   (let [retracted-block-ids (->> (keep (fn [tx]
                                          (when (and (vector? tx)

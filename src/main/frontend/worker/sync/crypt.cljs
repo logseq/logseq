@@ -63,7 +63,9 @@
   (worker-state/get-id-token))
 
 (defn- auth-headers []
-  (when-let [token (auth-token)]
+  (let [token (auth-token)]
+    (when (nil? token)
+      (throw (ex-info "Empty token" {})))
     {"authorization" (str "Bearer " token)}))
 
 (defn- with-auth-headers [opts]
@@ -205,9 +207,11 @@
 (defn ensure-user-rsa-keys!
   []
   (let [base (e2ee-base)]
-    (when-not (string? base)
-      (fail-fast :db-sync/missing-field {:base base}))
-    (<ensure-user-rsa-key-pair-raw base)))
+    (if (string? base)
+      (<ensure-user-rsa-key-pair-raw base)
+      (do
+        (log/info :db-sync/skip-ensure-user-rsa-keys {:reason :missing-e2ee-base})
+        (p/resolved nil)))))
 
 (defn- <decrypt-private-key
   [encrypted-private-key-str]
@@ -420,12 +424,20 @@
 
 (defn <encrypt-datoms
   [aes-key datoms]
-  (p/all (map (fn [d]
-                (if (contains? sync-const/encrypt-attr-set (:a d))
-                  (p/let [v' (<encrypt-text-value aes-key (:v d))]
-                    (assoc d :v v'))
-                  (p/resolved d)))
-              datoms)))
+  (let [batch-size 5000
+        batches (partition-all batch-size datoms)]
+    (p/loop [remaining batches
+             result []]
+      (if (empty? remaining)
+        result
+        (p/let [batch (first remaining)
+                encrypted (p/all (map (fn [datom]
+                                        (if (contains? sync-const/encrypt-attr-set (:a datom))
+                                          (p/let [v' (<encrypt-text-value aes-key (:v datom))]
+                                            (assoc datom :v v'))
+                                          (p/resolved datom)))
+                                      batch))]
+          (p/recur (rest remaining) (into result encrypted)))))))
 
 (defn- <re-encrypt-private-key
   [encrypted-private-key-str old-password new-password]

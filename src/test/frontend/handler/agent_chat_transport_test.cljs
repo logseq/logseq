@@ -465,7 +465,7 @@
                          (is false (str "unexpected error: " error))
                          (done)))))))
 
-(deftest send-messages-supports-nested-agent-event-envelope-test
+(deftest ^:large-vars/cleanup-todo send-messages-supports-nested-agent-event-envelope-test
   (async done
          (let [fetch-fn (fn [url init]
                           (let [method (or (aget init "method") "GET")]

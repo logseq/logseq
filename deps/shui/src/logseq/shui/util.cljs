@@ -46,12 +46,18 @@
 
 (defn uuid-color
   [uuid-str]
-  (some-> ($LSUtils) (aget "uniqolor")
-          (apply [uuid-str
-                  #js {:saturation #js [55, 70],
-                       :lightness 70,
-                       :differencePoint 60}])
-          (aget "color")))
+  (let [uniqolor (some-> ($LSUtils) (aget "uniqolor"))
+        uniqolor-fn (cond
+                      (fn? uniqolor) uniqolor
+                      (fn? (some-> uniqolor (aget "default"))) (aget uniqolor "default")
+                      (fn? (some-> uniqolor (aget "uniqolor"))) (aget uniqolor "uniqolor")
+                      :else nil)]
+    (when uniqolor-fn
+      (some-> (uniqolor-fn uuid-str
+                           #js {:saturation #js [55, 70]
+                                :lightness 70
+                                :differencePoint 60})
+              (aget "color")))))
 
 (defn get-path
   "Returns the component path."

@@ -28,12 +28,16 @@
                             (let [user (:logseq.property/created-by-ref reaction)]
                               (cond
                                 (map? user)
-                                (if (:db/id user)
-                                  (:logseq.property.user/name user)
-                                  (or (:logseq.property.user/name user)
-                                      (:block/title user)))
+                                (if-let [user-id (:db/id user)]
+                                  (let [entity (db/entity user-id)]
+                                    (or (:block/title user)
+                                        (:block/title entity)))
+                                  (or (:block/title user)
+                                      (:logseq.property.user/name user)))
                                 (number? user)
-                                (:logseq.property.user/name (db/entity user))
+                                (let [entity (db/entity user)]
+                                  (or (:block/title entity)
+                                      (:logseq.property.user/name entity)))
                                 :else nil)))
         summary (reduce (fn [acc reaction]
                           (let [emoji-id (:logseq.property.reaction/emoji-id reaction)

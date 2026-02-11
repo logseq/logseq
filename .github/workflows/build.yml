@@ -82,7 +82,7 @@ jobs:
         run: DB_QUERY_TYPE=basic node static/tests.js -r frontend.db.query-dsl-test
 
       - name: Run ClojureScript tests
-        run: node static/tests.js -e fix-me
+        run: yarn cljs:run-test
 
   lint:
     runs-on: ubuntu-22.04

@@ -1,4 +1,8 @@
 (ns frontend.handler.agent-chat-transport
+  "Transport adapter for agent chat UI.
+
+  Converts message send/stream HTTP calls into chunk events consumed by
+  `useChat`."
   (:require [clojure.string :as string]
             [frontend.modules.agent-chat.event :as chat-event]
             [frontend.state :as state]
@@ -90,8 +94,8 @@
       (if (neg? idx)
         [frames remaining]
         (let [frame (subs remaining 0 idx)
-              rest (subs remaining (+ idx 2))]
-          (recur rest (conj frames frame)))))))
+              tail (subs remaining (+ idx 2))]
+          (recur tail (conj frames frame)))))))
 
 (defn- write-chunks!
   [writer chunks]
@@ -155,7 +159,7 @@
   [event-type]
   (contains? #{"session.completed" "session.failed" "session.canceled"} event-type))
 
-(defn- start-stream-consumer!
+(defn- ^:large-vars/cleanup-todo start-stream-consumer!
   [{:keys [response writer start-ts idle-timeout-ms abort-signal]}]
   (let [reader (.getReader (.-body response))
         decoder (js/TextDecoder.)
@@ -553,7 +557,7 @@
               abort-signal (aget opts "abortSignal")
               headers (auth-headers)
               post-url (messages-url base session-id)
-              stream-url (stream-url base session-id)]
+              stream-endpoint (stream-url base session-id)]
           (-> (p/let [post-resp (fetch-fn post-url
                                           #js {:method "POST"
                                                :headers headers
@@ -565,7 +569,7 @@
                           (throw (js/Error. (str "send message failed: " (.-status post-resp)))))]
                 (if (false? open-stream?)
                   (chunks->readable-stream [{:type "finish"}])
-                  (p/let [stream-resp (fetch-fn stream-url
+                  (p/let [stream-resp (fetch-fn stream-endpoint
                                                 #js {:method "GET"
                                                      :headers headers
                                                      :signal abort-signal})
