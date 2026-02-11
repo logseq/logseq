@@ -31,6 +31,7 @@
      ["/resume" {:methods {"POST" :sessions/resume}}]
      ["/interrupt" {:methods {"POST" :sessions/interrupt}}]
      ["/cancel" {:methods {"POST" :sessions/cancel}}]
+     ["/pr" {:methods {"POST" :sessions/pr}}]
      ["/events" {:methods {"GET" :sessions/events}}]
      ["/stream" {:methods {"GET" :sessions/stream}}]]]])
 

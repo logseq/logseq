@@ -9,6 +9,7 @@
             [frontend.state :as state]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
+            [promesa.core :as p]
             [rum.core :as rum]))
 
 (defn- normalized-text
@@ -401,9 +402,12 @@
                            (map message->chat-message)
                            (remove nil?))
         [draft set-draft!] (rum/use-state "")
+        [publish-mode set-publish-mode!] (rum/use-state nil)
         trimmed-draft (string/trim (or draft ""))
         busy? (contains? #{"submitted" "streaming"} chat-status)
         input-disabled? (or (not session-started?) (not (agent-handler/task-ready? block)))
+        publish-busy? (some? publish-mode)
+        publish-disabled? (or input-disabled? busy? publish-busy?)
         can-send? (and (not input-disabled?)
                        (not (string/blank? trimmed-draft))
                        (not busy?))
@@ -411,7 +415,13 @@
                         (when (and can-send? base session-id)
                           (set-draft! "")
                           (-> (.sendMessage chat #js {:text trimmed-draft})
-                              (.catch (fn [_] nil)))))]
+                              (.catch (fn [_] nil)))))
+        publish! (fn [create-pr?]
+                   (when (and base session-id (not publish-disabled?))
+                     (set-publish-mode! (if create-pr? :pr :push))
+                     (-> (agent-handler/<publish-session! block {:create-pr? create-pr?})
+                         (p/catch (fn [_] nil))
+                         (p/finally (fn [] (set-publish-mode! nil))))))]
     (hooks/use-effect!
      (fn []
        (when (agent-handler/task-ready? block)
@@ -450,6 +460,31 @@
         :agent-label agent-label
         :class "h-full"
         :content-class-name "gap-3 px-2 py-2 sm:px-3"})]
+     [:div.mt-3.flex.items-center.justify-between.gap-2
+      [:div.text-xs.opacity-60
+       (if publish-busy?
+         "Publishing changes..."
+         "Publish session changes")]
+      [:div.flex.items-center.gap-2
+       (shui/button
+        {:size :sm
+         :variant :outline
+         :class "h-7 px-2 text-xs"
+         :disabled publish-disabled?
+         :on-click (fn [_]
+                     (publish! false))}
+        (if (= publish-mode :push)
+          "Pushing..."
+          "Push"))
+       (shui/button
+        {:size :sm
+         :class "h-7 px-2 text-xs"
+         :disabled publish-disabled?
+         :on-click (fn [_]
+                     (publish! true))}
+        (if (= publish-mode :pr)
+          "Creating PR..."
+          "Push + PR"))]]
      (shui/agent-chat-prompt-input
       {:value draft
        :on-value-change set-draft!

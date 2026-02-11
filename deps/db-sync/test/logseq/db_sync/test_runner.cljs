@@ -3,8 +3,10 @@
             [logseq.db-sync.agent-do-test]
             [logseq.db-sync.agent-request-test]
             [logseq.db-sync.agent-runtime-provider-test]
+            [logseq.db-sync.agent-source-control-test]
             [logseq.db-sync.node-config-test]
             [logseq.db-sync.platform-test]
+            [logseq.db-sync.worker-routes-test]
             [shadow.test :as st]
             [shadow.test.env :as env]))
 

@@ -80,4 +80,7 @@
       (is (= "session-11" (get-in match [:path-params :session-id]))))
     (let [match (routes/match-route "POST" "/sessions/session-12/interrupt")]
       (is (= :sessions/interrupt (:handler match)))
-      (is (= "session-12" (get-in match [:path-params :session-id]))))))
+      (is (= "session-12" (get-in match [:path-params :session-id]))))
+    (let [match (routes/match-route "POST" "/sessions/session-13/pr")]
+      (is (= :sessions/pr (:handler match)))
+      (is (= "session-13" (get-in match [:path-params :session-id]))))))

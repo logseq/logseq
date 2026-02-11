@@ -110,3 +110,35 @@
 - `DELETE /assets/:graph-id/:asset-uuid.:ext`
   - Delete asset. Response: `{"ok":true}`.
 - Asset error responses: `{"error":"invalid asset path"}` (400), `{"error":"not found"}` (404), `{"error":"asset too large"}` (413), `{"error":"method not allowed"}` (405), `{"error":"missing assets bucket"}` (500).
+
+### Agent Sessions
+- `POST /sessions`
+  - Create or resume an agent session for a task. Response: `{"session-id":"...","status":"...","stream-url":"..."}`.
+- `GET /sessions/:session-id`
+  - Session metadata. Response: `{"session-id":"...","status":"...","task":{...},"audit":{...},"created-at":<ms>,"updated-at":<ms>}`.
+- `POST /sessions/:session-id/messages`
+  - Send a user message to the running session. Body: `{"message":"...","kind":"user"}`.
+  - Response: `{"ok":true}`.
+- `GET /sessions/:session-id/events?since=<ms>&limit=<n>`
+  - Poll session events. Response: `{"events":[{event-id, session-id, type, ts, data}...]}`.
+- `GET /sessions/:session-id/stream`
+  - SSE stream of session events.
+- `POST /sessions/:session-id/pause`
+  - Pause the session. Response: `{"ok":true}`.
+- `POST /sessions/:session-id/resume`
+  - Resume the session and flush queued messages. Response: `{"ok":true,"flushed":<n>}`.
+- `POST /sessions/:session-id/interrupt`
+  - Interrupt active execution (transitions to paused). Response: `{"ok":true}`.
+- `POST /sessions/:session-id/cancel`
+  - Cancel the session and terminate runtime. Response: `{"ok":true}`.
+- `POST /sessions/:session-id/pr`
+  - Push the session branch and optionally create a PR. Body fields:
+    - `create-pr` (optional, default `true`)
+    - `force` (optional, default `false`)
+    - `head-branch` (optional)
+    - `base-branch` (optional)
+    - `title` / `body` (optional PR metadata)
+  - Response statuses:
+    - `{"status":"pushed", ...}` for push-only
+    - `{"status":"pr-created","pr-url":"...", ...}` for push + PR success
+    - `{"status":"manual-pr-required","manual-pr-url":"...", ...}` when branch push succeeded but PR must be created manually

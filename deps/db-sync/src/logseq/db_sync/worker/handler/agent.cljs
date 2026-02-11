@@ -139,6 +139,25 @@
           (forward-request stub do-url "GET" headers nil))
         (http/error-response "server error" 500)))))
 
+(defn- handle-pr [{:keys [env request url claims route]}]
+  (let [session-id (get-in route [:path-params :session-id])]
+    (if-not (string? session-id)
+      (http/bad-request "invalid session id")
+      (.then (common/read-json request)
+             (fn [result]
+               (let [raw-body (if (nil? result)
+                                {}
+                                (js->clj result :keywordize-keys true))
+                     body (http/coerce-http-request :sessions/pr raw-body)]
+                 (if (nil? body)
+                   (http/bad-request "invalid body")
+                   (if-let [^js stub (session-stub env session-id)]
+                     (let [headers (base-headers request claims)
+                           body-json (js/JSON.stringify (clj->js body))
+                           do-url (str (.-origin url) "/__session__/pr")]
+                       (forward-request stub do-url "POST" headers body-json))
+                     (http/error-response "server error" 500)))))))))
+
 (defn handle [{:keys [route] :as ctx}]
   (case (:handler route)
     :sessions/create (handle-create ctx)
@@ -148,6 +167,7 @@
     :sessions/resume (handle-control ctx "/__session__/resume")
     :sessions/interrupt (handle-control ctx "/__session__/interrupt")
     :sessions/cancel (handle-cancel ctx)
+    :sessions/pr (handle-pr ctx)
     :sessions/events (handle-events ctx)
     :sessions/stream (handle-stream ctx)
     (http/not-found)))

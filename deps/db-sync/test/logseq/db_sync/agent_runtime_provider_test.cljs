@@ -184,6 +184,82 @@
                          (is false (str "unexpected error: " error))
                          (done)))))))
 
+(deftest local-dev-provider-push-branch-unsupported-test
+  (async done
+         (let [env #js {"SANDBOX_AGENT_URL" "http://127.0.0.1:2468"}
+               provider (runtime-provider/create-provider env "local-dev")
+               runtime {:provider "local-dev"
+                        :base-url "http://127.0.0.1:2468"
+                        :session-id "sess-push-unsupported"}]
+           (-> (runtime-provider/<push-branch! provider
+                                               runtime
+                                               {:session-id "sess-push-unsupported"
+                                                :repo-url "https://github.com/example/repo"
+                                                :head-branch "feature/m14"
+                                                :force false
+                                                :push-token "token-1"})
+               (.then (fn [_]
+                        (is false "expected local-dev push to reject as unsupported")
+                        (done)))
+               (.catch (fn [error]
+                         (let [data (ex-data error)]
+                           (is (= :unsupported (:reason data)))
+                           (is (= "local-dev" (:provider data))))
+                         (done)))))))
+
+(deftest sprites-provider-push-branch-command-test
+  (async done
+         (let [captured (atom nil)
+               env #js {"SPRITE_TOKEN" "sprite-token"}
+               provider (runtime-provider/create-provider env "sprites")
+               runtime {:provider "sprites"
+                        :sprite-name "sprite-1"
+                        :sandbox-port 2468
+                        :session-id "sess-push"}
+               original-fetch js/fetch]
+           (set! js/fetch
+                 (fn [request init]
+                   (let [url (fetch-url request)
+                         method (fetch-method request init)]
+                     (if (and (= "POST" method)
+                              (string/includes? url "/v1/sprites/sprite-1/exec"))
+                       (let [parsed (js/URL. url)
+                             cmds (vec (.getAll (.-searchParams parsed) "cmd"))
+                             script (nth cmds 2 nil)]
+                         (reset! captured {:url url
+                                           :method method
+                                           :script script})
+                         (js/Promise.resolve
+                          (js/Response.
+                           (js/JSON.stringify #js {:ok true})
+                           #js {:status 200
+                                :headers #js {"content-type" "application/json"}})))
+                       (js/Promise.resolve
+                        (js/Response.
+                         (js/JSON.stringify #js {:error "unexpected request"})
+                         #js {:status 500
+                              :headers #js {"content-type" "application/json"}}))))))
+           (-> (runtime-provider/<push-branch! provider
+                                               runtime
+                                               {:session-id "sess-push"
+                                                :repo-url "https://github.com/example/repo"
+                                                :head-branch "feature/m14"
+                                                :force true
+                                                :push-token "token-1"})
+               (.then (fn [result]
+                        (set! js/fetch original-fetch)
+                        (is (= "feature/m14" (:head-branch result)))
+                        (is (= "https://github.com/example/repo" (:repo-url result)))
+                        (is (= true (:force result)))
+                        (is (string/includes? (:script @captured) "git push"))
+                        (is (string/includes? (:script @captured) "feature/m14"))
+                        (is (string/includes? (:script @captured) "x-access-token:token-1"))
+                        (done)))
+               (.catch (fn [error]
+                         (set! js/fetch original-fetch)
+                         (is false (str "unexpected error: " error))
+                         (done)))))))
+
 (deftest sprites-provider-send-message-test
   (async done
          (let [captured (atom nil)

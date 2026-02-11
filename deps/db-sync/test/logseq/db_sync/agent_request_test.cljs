@@ -44,5 +44,24 @@
                         :repo-url "https://github.com/example/repo"}
               :agent {:provider "codex"
                       :api-token "token-123"
-                      :auth-json "{\"tokens\":{\"access_token\":\"abc\"}}"}}
+                      :auth-json "{\"tokens\":{\"access_token\":\"abc\"}}"}
+              :capabilities {:push-enabled true
+                             :pr-enabled true}}
              normalized)))))
+
+(deftest sessions-pr-coerce-test
+  (testing "accepts sessions/pr request payload"
+    (let [body {:title "feat: add m14 publish"
+                :body "This change enables push + optional PR."
+                :head-branch "m14/publish"
+                :base-branch "main"
+                :create-pr true
+                :force false}
+          coerced (http/coerce-http-request :sessions/pr body)]
+      (is (= body coerced))))
+  (testing "accepts empty sessions/pr payload (defaults resolved in handler)"
+    (is (= {} (http/coerce-http-request :sessions/pr {}))))
+  (testing "rejects invalid sessions/pr payload"
+    (is (nil? (http/coerce-http-request :sessions/pr {:create-pr "yes"})))
+    (is (nil? (http/coerce-http-request :sessions/pr {:force "no"})))
+    (is (nil? (http/coerce-http-request :sessions/pr {:head-branch 42})))))

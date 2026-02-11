@@ -234,12 +234,25 @@
              [:mode {:optional true} :string]
              [:permission-mode {:optional true} :string]
              [:api-token {:optional true} :string]
-             [:auth-json {:optional true} :string]]]]])
+             [:auth-json {:optional true} :string]]]]
+   [:capabilities {:optional true}
+    [:map
+     [:push-enabled {:optional true} :boolean]
+     [:pr-enabled {:optional true} :boolean]]]])
 
 (def sessions-message-request-schema
   [:map
    [:message :string]
    [:kind {:optional true} :string]])
+
+(def sessions-pr-request-schema
+  [:map
+   [:title {:optional true} :string]
+   [:body {:optional true} :string]
+   [:head-branch {:optional true} :string]
+   [:base-branch {:optional true} :string]
+   [:create-pr {:optional true} :boolean]
+   [:force {:optional true} :boolean]])
 
 (def sessions-create-response-schema
   [:map
@@ -265,6 +278,16 @@
    [:ok :boolean]
    [:flushed {:optional true} :int]])
 
+(def sessions-pr-response-schema
+  [:map
+   [:status :string]
+   [:head-branch :string]
+   [:base-branch {:optional true} :string]
+   [:pr-url {:optional true} :string]
+   [:manual-pr-url {:optional true} :string]
+   [:force {:optional true} :boolean]
+   [:message {:optional true} :string]])
+
 (def http-request-schemas
   {:graphs/create graph-create-request-schema
    :graph-members/create graph-member-create-request-schema
@@ -274,7 +297,8 @@
    :e2ee/graph-aes-key e2ee-graph-aes-key-request-schema
    :e2ee/grant-access e2ee-grant-access-request-schema
    :sessions/create sessions-create-request-schema
-   :sessions/message sessions-message-request-schema})
+   :sessions/message sessions-message-request-schema
+   :sessions/pr sessions-pr-request-schema})
 
 (def http-response-schemas
   {:graphs/list graphs-list-response-schema
@@ -306,6 +330,7 @@
    :sessions/resume sessions-resume-response-schema
    :sessions/interrupt http-ok-response-schema
    :sessions/cancel http-ok-response-schema
+   :sessions/pr sessions-pr-response-schema
    :sessions/events sessions-events-response-schema
    :error http-error-response-schema})
 

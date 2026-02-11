@@ -96,7 +96,9 @@
        :content content
        :attachments attachments
        :project project
-       :agent agent})))
+       :agent agent
+       :capabilities {:push-enabled true
+                      :pr-enabled true}})))
 
 (def ^:private stream-reconnect-delay-ms 1500)
 
@@ -399,3 +401,78 @@
                                                :started-at (util/time-ms)})
             (<connect-session-stream! block-uuid stream-url)
             resp))))))
+
+(defn- publish-request-body
+  [{:keys [title body head-branch base-branch create-pr? force?]}]
+  (cond-> {:create-pr (if (nil? create-pr?) true (true? create-pr?))
+           :force (true? force?)}
+    (string? (blank->nil title)) (assoc :title (blank->nil title))
+    (string? (blank->nil body)) (assoc :body (blank->nil body))
+    (string? (blank->nil head-branch)) (assoc :head-branch (blank->nil head-branch))
+    (string? (blank->nil base-branch)) (assoc :base-branch (blank->nil base-branch))))
+
+(defn- publish-status-message
+  [resp]
+  (or (:message resp)
+      (case (:status resp)
+        "pushed" "Branch pushed."
+        "pr-created" "Pull request created."
+        "manual-pr-required" "Branch pushed. Create pull request manually."
+        "Publish finished.")))
+
+(defn- publish-error-message
+  [error]
+  (or (some-> (ex-data error) :body :message)
+      (some-> (ex-data error) :body :error)
+      (some-> error ex-message)
+      "Publish failed."))
+
+(defn <publish-session!
+  [block opts]
+  (let [base (db-sync/http-base)
+        block-uuid (:block/uuid block)
+        session (session-state block-uuid)
+        session-id (or (:session-id session)
+                       (some-> block-uuid str))]
+    (cond
+      (not base)
+      (do
+        (notification/show! "DB sync is not configured." :error false)
+        (p/resolved nil))
+
+      (not (task-ready? block))
+      (do
+        (notification/show! "Task needs Project (with Git Repo) and Agent." :warning)
+        (p/resolved nil))
+
+      (not (:session-id session))
+      (do
+        (notification/show! "Start the agent session before publishing." :warning)
+        (p/resolved nil))
+
+      :else
+      (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
+              raw-body (publish-request-body opts)
+              body (coerce-http-request :sessions/pr raw-body)]
+        (if (nil? body)
+          (do
+            (notification/show! "Invalid publish payload." :error false)
+            nil)
+          (-> (db-sync/fetch-json (str base "/sessions/" session-id "/pr")
+                                  {:method "POST"
+                                   :headers {"content-type" "application/json"}
+                                   :body (js/JSON.stringify (clj->js body))}
+                                  {:response-schema :sessions/pr})
+              (p/then (fn [resp]
+                        (update-session-state! block-uuid {:last-publish resp
+                                                           :last-publish-at (util/time-ms)})
+                        (notification/show! (publish-status-message resp)
+                                            (if (= "manual-pr-required" (:status resp))
+                                              :warning
+                                              :success)
+                                            false)
+                        (<fetch-events! block)
+                        resp))
+              (p/catch (fn [error]
+                         (notification/show! (publish-error-message error) :error false)
+                         (p/rejected error)))))))))

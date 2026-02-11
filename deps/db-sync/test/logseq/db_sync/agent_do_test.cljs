@@ -1,7 +1,8 @@
 (ns logseq.db-sync.agent-do-test
   (:require [cljs.test :refer [async deftest is testing]]
             [clojure.string :as string]
-            [logseq.db-sync.worker.agent.do :as agent-do]))
+            [logseq.db-sync.worker.agent.do :as agent-do]
+            [logseq.db-sync.worker.agent.runtime-provider :as runtime-provider]))
 
 (defn- make-agent-storage []
   (let [data (js/Map.)]
@@ -581,6 +582,79 @@
                             (is (nil? (.get data "events")))
                             (is (some? (.get data "events.7"))))
                           (done)))
+                 (.catch (fn [error]
+                           (is false (str "unexpected error: " error))
+                           (done))))))))
+
+(deftest pr-endpoint-requires-authenticated-user-test
+  (testing "session publish endpoint requires x-user-id header"
+    (async done
+           (let [self (make-self #js {})
+                 headers {"content-type" "application/json"}]
+             (-> (.put (.-storage self)
+                       "session"
+                       (clj->js {:id "sess-pr-auth"
+                                 :status "running"
+                                 :task {:project {:repo-url "https://github.com/example/repo"}}
+                                 :runtime {:provider "local-dev"
+                                           :session-id "sess-pr-auth"}
+                                 :audit {}
+                                 :created-at 0
+                                 :updated-at 0}))
+                 (.then (fn [_]
+                          (agent-do/handle-fetch self
+                                                 (json-request "http://db-sync.local/__session__/pr"
+                                                               "POST"
+                                                               {:create-pr false
+                                                                :head-branch "m14/pr-auth"}
+                                                               headers))))
+                 (.then (fn [resp]
+                          (is (= 401 (.-status resp)))
+                          (done)))
+                 (.catch (fn [error]
+                           (is false (str "unexpected error: " error))
+                           (done))))))))
+
+(deftest pr-endpoint-push-only-success-test
+  (testing "session publish endpoint supports push-only flow"
+    (async done
+           (let [env #js {"AGENT_RUNTIME_PROVIDER" "local-dev"}
+                 self (make-self env)
+                 headers {"content-type" "application/json"
+                          "x-user-id" "user-1"}]
+             (-> (.put (.-storage self)
+                       "session"
+                       (clj->js {:id "sess-pr-push-only"
+                                 :status "running"
+                                 :task {:project {:repo-url "https://github.com/example/repo"}}
+                                 :runtime {:provider "local-dev"
+                                           :session-id "sess-pr-push-only"}
+                                 :audit {}
+                                 :created-at 0
+                                 :updated-at 0}))
+                 (.then (fn [_]
+                          (with-redefs [runtime-provider/<push-branch!
+                                        (fn [_provider _runtime opts]
+                                          (js/Promise.resolve
+                                           {:head-branch (:head-branch opts)
+                                            :repo-url (:repo-url opts)
+                                            :force (:force opts)
+                                            :remote "origin"}))]
+                            (agent-do/handle-fetch self
+                                                   (json-request "http://db-sync.local/__session__/pr"
+                                                                 "POST"
+                                                                 {:create-pr false
+                                                                  :head-branch "m14/push-only"
+                                                                  :force true}
+                                                                 headers)))))
+                 (.then (fn [resp]
+                          (is (= 200 (.-status resp)))
+                          (.then (<json resp)
+                                 (fn [body]
+                                   (is (= "pushed" (:status body)))
+                                   (is (= "m14/push-only" (:head-branch body)))
+                                   (is (= true (:force body)))
+                                   (done)))))
                  (.catch (fn [error]
                            (is false (str "unexpected error: " error))
                            (done))))))))

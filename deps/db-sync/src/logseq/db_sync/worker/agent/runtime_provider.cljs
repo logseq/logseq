@@ -2,6 +2,7 @@
   (:require [clojure.string :as string]
             [lambdaisland.glogi :as log]
             [logseq.db-sync.worker.agent.sandbox :as sandbox]
+            [logseq.db-sync.worker.agent.source-control :as source-control]
             [promesa.core :as p]))
 
 ;; -----------------------
@@ -386,6 +387,44 @@
               (escape-shell-single repo-url) "' '" (escape-shell-single repo-dir) "'"
               " && chmod -R u+rw '" (escape-shell-single repo-dir) "'"))))))
 
+(defn- classify-push-error
+  [error]
+  (let [data (ex-data error)
+        {:keys [stderr stdout]} (when (map? data) data)
+        message (str (or (ex-message error) "")
+                     "\n"
+                     (or stderr "")
+                     "\n"
+                     (or stdout ""))
+        message (string/lower-case message)]
+    (cond
+      (or (string/includes? message "authentication failed")
+          (string/includes? message "could not read username")
+          (string/includes? message "permission denied")
+          (string/includes? message "repository not found"))
+      :auth
+
+      (or (string/includes? message "src refspec")
+          (string/includes? message "does not match any"))
+      :no-commits
+
+      (or (string/includes? message "non-fast-forward")
+          (string/includes? message "[rejected]")
+          (string/includes? message "fetch first"))
+      :remote-rejected
+
+      :else
+      :unknown)))
+
+(defn- push-command
+  [{:keys [repo-dir remote-url head-branch force]}]
+  (str "set -e; "
+       "cd '" (escape-shell-single repo-dir) "'; "
+       "git rev-parse --is-inside-work-tree >/dev/null; "
+       "git push '" (escape-shell-single remote-url) "' HEAD:refs/heads/"
+       (escape-shell-single head-branch)
+       (when force " --force")))
+
 (defn session-payload [task]
   (let [agent (or (get-in task [:agent :provider])
                   (get-in task [:agent :id])
@@ -565,6 +604,15 @@
   (if (js-method sandbox "exec")
     (->promise (.exec sandbox cmd))
     (throw (ex-info "cloudflare sandbox missing exec method" {}))))
+
+(defn- cloudflare-exec-output
+  [result]
+  {:stdout (or (aget result "stdout") "")
+   :stderr (or (aget result "stderr") "")
+   :exit-code (or (aget result "exitCode")
+                  (aget result "exit_code"))
+   :success (let [success (aget result "success")]
+              (if (boolean? success) success true))})
 
 (defn- <cloudflare-health-once! [sandbox port agent-token]
   (-> (js/Promise.resolve (<cloudflare-exec! sandbox (cloudflare-health-command port agent-token)))
@@ -789,6 +837,7 @@
   (<provision-runtime! [this session-id task])
   (<open-events-stream! [this runtime])
   (<send-message! [this runtime message])
+  (<push-branch! [this runtime opts])
   (<terminate-runtime! [this runtime]))
 
 (defrecord SpritesProvider [env]
@@ -862,6 +911,57 @@
         (p/let [_ (sprites-exec-post! env name ["bash" "-lc" script])]
           true))))
 
+  (<push-branch! [_ runtime opts]
+    (let [name (:sprite-name runtime)
+          session-id (:session-id opts)
+          repo-url (:repo-url opts)
+          head-branch (:head-branch opts)
+          force? (true? (:force opts))
+          repo-dir (get-repo-dir session-id)
+          remote-url (or (source-control/push-remote-url repo-url (:push-token opts))
+                         repo-url)]
+      (when-not (string? name)
+        (throw (ex-info "missing sprite-name on runtime" {:runtime runtime})))
+      (when-not (string? repo-dir)
+        (throw (ex-info "missing repo dir for push"
+                        {:reason :missing-repo-dir
+                         :session-id session-id})))
+      (when-not (string? remote-url)
+        (throw (ex-info "missing remote url for push"
+                        {:reason :missing-remote-url
+                         :repo-url repo-url})))
+      (when-not (string? head-branch)
+        (throw (ex-info "missing head branch for push"
+                        {:reason :missing-branch})))
+      (let [script (push-command {:repo-dir repo-dir
+                                  :remote-url remote-url
+                                  :head-branch head-branch
+                                  :force force?})]
+        (-> (p/let [result (sprites-exec-post! env name ["bash" "-lc" script])
+                    {:keys [stdout stderr exit-code]} (sprites-exec-output result)]
+              (when (and (number? exit-code) (not (zero? exit-code)))
+                (throw (ex-info "git push failed"
+                                {:reason :git-exit
+                                 :stdout stdout
+                                 :stderr stderr
+                                 :exit-code exit-code})))
+              {:head-branch head-branch
+               :repo-url repo-url
+               :force force?
+               :remote "origin"})
+            (p/catch (fn [error]
+                       (p/rejected
+                        (if-let [data (ex-data error)]
+                          (ex-info (ex-message error)
+                                   (assoc data
+                                          :provider "sprites"
+                                          :reason (or (:reason data)
+                                                      (classify-push-error error))))
+                          (ex-info "git push failed"
+                                   {:provider "sprites"
+                                    :reason (classify-push-error error)
+                                    :error (str error)})))))))))
+
   (<terminate-runtime! [_ runtime]
     (if-not (string? (:sprite-name runtime))
       (p/resolved nil)
@@ -889,6 +989,12 @@
     (let [base-url (local-dev-base-url env runtime)
           agent-token (local-dev-token env runtime)]
       (sandbox/<send-message base-url agent-token (:session-id runtime) message)))
+
+  (<push-branch! [_ _runtime _opts]
+    (p/rejected
+     (ex-info "local-dev runtime provider does not support managed git push"
+              {:reason :unsupported
+               :provider "local-dev"})))
 
   (<terminate-runtime! [_ runtime]
     (let [base-url (local-dev-base-url env runtime)
@@ -964,6 +1070,61 @@
         (throw (ex-info "missing runtime session-id on runtime" {:runtime runtime})))
       (let [sandbox (cloudflare-sandbox env sandbox-id)]
         (<cloudflare-send-message! sandbox port agent-token session-id message))))
+
+  (<push-branch! [_ runtime opts]
+    (let [sandbox-id (:sandbox-id runtime)
+          session-id (:session-id opts)
+          repo-url (:repo-url opts)
+          head-branch (:head-branch opts)
+          force? (true? (:force opts))
+          port (or (:sandbox-port runtime) (cloudflare-agent-port env))
+          repo-dir (get-repo-dir session-id)
+          remote-url (or (source-control/push-remote-url repo-url (:push-token opts))
+                         repo-url)]
+      (when-not (string? sandbox-id)
+        (throw (ex-info "missing sandbox-id on runtime" {:runtime runtime})))
+      (when-not (string? repo-dir)
+        (throw (ex-info "missing repo dir for push"
+                        {:reason :missing-repo-dir
+                         :session-id session-id})))
+      (when-not (string? remote-url)
+        (throw (ex-info "missing remote url for push"
+                        {:reason :missing-remote-url
+                         :repo-url repo-url})))
+      (when-not (string? head-branch)
+        (throw (ex-info "missing head branch for push"
+                        {:reason :missing-branch})))
+      (let [sandbox (cloudflare-sandbox env sandbox-id)
+            script (push-command {:repo-dir repo-dir
+                                  :remote-url remote-url
+                                  :head-branch head-branch
+                                  :force force?})]
+        (-> (p/let [result (<cloudflare-exec! sandbox script)
+                    {:keys [stdout stderr exit-code success]} (cloudflare-exec-output result)]
+              (when (or (false? success)
+                        (and (number? exit-code) (not (zero? exit-code))))
+                (throw (ex-info "git push failed"
+                                {:reason :git-exit
+                                 :stdout stdout
+                                 :stderr stderr
+                                 :exit-code exit-code})))
+              {:head-branch head-branch
+               :repo-url repo-url
+               :force force?
+               :remote "origin"
+               :sandbox-port port})
+            (p/catch (fn [error]
+                       (p/rejected
+                        (if-let [data (ex-data error)]
+                          (ex-info (ex-message error)
+                                   (assoc data
+                                          :provider "cloudflare"
+                                          :reason (or (:reason data)
+                                                      (classify-push-error error))))
+                          (ex-info "git push failed"
+                                   {:provider "cloudflare"
+                                    :reason (classify-push-error error)
+                                    :error (str error)})))))))))
 
   (<terminate-runtime! [_ runtime]
     (let [sandbox-id (:sandbox-id runtime)

@@ -5,6 +5,7 @@
             [logseq.db-sync.platform.core :as platform]
             [logseq.db-sync.worker.agent.runtime-provider :as runtime-provider]
             [logseq.db-sync.worker.agent.session :as session]
+            [logseq.db-sync.worker.agent.source-control :as source-control]
             [logseq.db-sync.worker.http :as http]
             [promesa.core :as p]))
 
@@ -114,11 +115,60 @@
           (broadcast-event! self event)
           {:session session :event event})))))
 
+(defn- <append-publish-event!
+  [^js self event-type data]
+  (<append-event! self {:type event-type
+                        :data data
+                        :ts (common/now-ms)}))
+
 (defn- session-conflict [message]
   (http/error-response message 409))
 
 (defn- terminal-status? [status]
   (contains? #{"completed" "failed" "canceled"} status))
+
+(defn- session-capabilities
+  [session]
+  (merge {:push-enabled true
+          :pr-enabled true}
+         (when (map? (:capabilities (:task session)))
+           (:capabilities (:task session)))))
+
+(defn- push-enabled?
+  [session]
+  (true? (:push-enabled (session-capabilities session))))
+
+(defn- pr-enabled?
+  [session]
+  (true? (:pr-enabled (session-capabilities session))))
+
+(defn- repo-url-from-session
+  [session]
+  (some-> (get-in session [:task :project :repo-url]) str string/trim not-empty))
+
+(defn- generated-head-branch
+  [session-id]
+  (let [suffix (some-> session-id
+                       str
+                       string/lower-case
+                       (string/replace #"[^a-z0-9-]+" "-")
+                       (string/replace #"-+" "-")
+                       (string/replace #"^-+" "")
+                       (string/replace #"-+$" ""))]
+    (str "logseq-agent/" (if (string/blank? suffix) "session" suffix))))
+
+(defn- default-base-branch
+  [^js env]
+  (or (some-> (aget env "GITHUB_DEFAULT_BASE_BRANCH") str string/trim not-empty)
+      "main"))
+
+(defn- error-reason
+  [error]
+  (let [reason (some-> error ex-data :reason)]
+    (cond
+      (keyword? reason) (name reason)
+      (string? reason) reason
+      :else nil)))
 
 (defn- <terminate-runtime! [^js self runtime]
   (set! (.-runtime-events-stream self) nil)
@@ -382,6 +432,197 @@
                                                          (:kind body))
                        (http/json-response :sessions/message {:ok true}))))))))))
 
+(defn- <manual-pr-required-response!
+  [^js self {:keys [user-id head-branch base-branch manual-url reason force? message]}]
+  (p/let [_ (<append-publish-event! self "git.pr.manual"
+                                    {:by user-id
+                                     :head-branch head-branch
+                                     :base-branch base-branch
+                                     :manual-pr-url manual-url
+                                     :reason reason})]
+    (http/json-response :sessions/pr
+                        {:status "manual-pr-required"
+                         :head-branch head-branch
+                         :base-branch base-branch
+                         :manual-pr-url manual-url
+                         :force force?
+                         :message message})))
+
+(defn- <create-pr-response!
+  [^js self {:keys [user-id repo-url head-branch base-branch title description pr-token force? manual-url]}]
+  (-> (p/let [_ (<append-publish-event! self "git.pr.started"
+                                        {:by user-id
+                                         :head-branch head-branch
+                                         :base-branch base-branch})
+              pr-result (source-control/<create-pull-request! (.-env self)
+                                                              pr-token
+                                                              repo-url
+                                                              {:title title
+                                                               :body description
+                                                               :head-branch head-branch
+                                                               :base-branch base-branch})
+              _ (<append-publish-event! self "git.pr.succeeded"
+                                        {:by user-id
+                                         :head-branch head-branch
+                                         :base-branch base-branch
+                                         :pr-url (:url pr-result)
+                                         :pr-id (:id pr-result)})]
+        (http/json-response :sessions/pr
+                            {:status "pr-created"
+                             :head-branch head-branch
+                             :base-branch base-branch
+                             :pr-url (:url pr-result)
+                             :force force?
+                             :message "branch pushed and pull request created"}))
+      (p/catch (fn [error]
+                 (p/let [_ (<append-publish-event! self "git.pr.failed"
+                                                   {:by user-id
+                                                    :head-branch head-branch
+                                                    :base-branch base-branch
+                                                    :reason (error-reason error)
+                                                    :error (str error)})]
+                   (<manual-pr-required-response! self
+                                                  {:user-id user-id
+                                                   :head-branch head-branch
+                                                   :base-branch base-branch
+                                                   :manual-url manual-url
+                                                   :reason "api-failed"
+                                                   :force? force?
+                                                   :message "branch pushed; pull request API failed, use manual URL"}))))))
+
+(defn- <handle-pr-after-push!
+  [^js self current-session body user-id repo-url head-branch force? create-pr?]
+  (p/let [pr-token (source-control/pr-token (.-env self))
+          base-branch (or (source-control/sanitize-branch-name (:base-branch body))
+                          (when (string? pr-token)
+                            (source-control/<default-branch! (.-env self)
+                                                             pr-token
+                                                             repo-url))
+                          (default-base-branch (.-env self)))]
+    (cond
+      (false? create-pr?)
+      (http/json-response :sessions/pr
+                          {:status "pushed"
+                           :head-branch head-branch
+                           :base-branch base-branch
+                           :force force?
+                           :message "branch pushed"})
+
+      (not (pr-enabled? current-session))
+      (http/forbidden)
+
+      :else
+      (let [title (or (some-> (:title body) str string/trim not-empty)
+                      (str "Agent updates for session " (:id current-session)))
+            description (or (some-> (:body body) str string/trim not-empty)
+                            "Automated changes from agent session.")
+            manual-url (source-control/manual-pr-url repo-url head-branch base-branch)]
+        (if-not (string? pr-token)
+          (<manual-pr-required-response! self
+                                         {:user-id user-id
+                                          :head-branch head-branch
+                                          :base-branch base-branch
+                                          :manual-url manual-url
+                                          :reason "missing-token"
+                                          :force? force?
+                                          :message "branch pushed; create pull request manually"})
+          (<create-pr-response! self
+                                {:user-id user-id
+                                 :repo-url repo-url
+                                 :head-branch head-branch
+                                 :base-branch base-branch
+                                 :title title
+                                 :description description
+                                 :pr-token pr-token
+                                 :force? force?
+                                 :manual-url manual-url}))))))
+
+(defn- <perform-pr-push!
+  [^js self current-session body user-id repo-url runtime force? create-pr? push-branch-fn]
+  (let [provider (runtime-provider/resolve-provider (.-env self) runtime)
+        push-token (source-control/push-token (.-env self))
+        head-branch (source-control/resolve-head-branch (:head-branch body)
+                                                        (generated-head-branch (:id current-session)))]
+    (if-not (string? head-branch)
+      (http/bad-request "invalid head branch")
+      (-> (p/let [_ (<append-publish-event! self "git.push.started"
+                                            {:by user-id
+                                             :head-branch head-branch
+                                             :force force?})
+                  push-result (push-branch-fn provider
+                                              runtime
+                                              {:session-id (:id current-session)
+                                               :repo-url repo-url
+                                               :head-branch head-branch
+                                               :force force?
+                                               :push-token push-token})
+                  _ (<append-publish-event! self "git.push.succeeded"
+                                            {:by user-id
+                                             :head-branch head-branch
+                                             :force force?
+                                             :remote (:remote push-result)})]
+            (<handle-pr-after-push! self
+                                    current-session
+                                    body
+                                    user-id
+                                    repo-url
+                                    head-branch
+                                    force?
+                                    create-pr?))
+          (p/catch (fn [error]
+                     (p/let [_ (<append-publish-event! self "git.push.failed"
+                                                       {:by user-id
+                                                        :head-branch head-branch
+                                                        :reason (error-reason error)
+                                                        :error (str error)})]
+                       (http/error-response (str error) 500))))))))
+
+(defn- handle-pr [^js self request]
+  (let [push-branch-fn runtime-provider/<push-branch!]
+    (.then (common/read-json request)
+           (fn [result]
+             (let [body (if (nil? result)
+                          {}
+                          (js->clj result :keywordize-keys true))
+                   user-id (user-id-from-request request)
+                   force? (true? (:force body))
+                   create-pr? (if (contains? body :create-pr)
+                                (true? (:create-pr body))
+                                true)]
+               (if-not (string? user-id)
+                 (http/unauthorized)
+                 (p/let [current-session (<get-session self)]
+                   (cond
+                     (nil? current-session)
+                     (http/not-found)
+
+                     (terminal-status? (:status current-session))
+                     (session-conflict "session is not writable")
+
+                     (not (push-enabled? current-session))
+                     (http/forbidden)
+
+                     :else
+                     (let [repo-url (repo-url-from-session current-session)
+                           runtime (:runtime current-session)]
+                       (cond
+                         (not (string? repo-url))
+                         (http/bad-request "missing repo url")
+
+                         (not (map? runtime))
+                         (session-conflict "session runtime unavailable")
+
+                         :else
+                         (<perform-pr-push! self
+                                            current-session
+                                            body
+                                            user-id
+                                            repo-url
+                                            runtime
+                                            force?
+                                            create-pr?
+                                            push-branch-fn)))))))))))
+
 (defn- handle-cancel [^js self request]
   (let [user-id (user-id-from-request request)]
     (if-not (string? user-id)
@@ -529,6 +770,9 @@
 
         (= path "/__session__/cancel")
         (handle-cancel self request)
+
+        (= path "/__session__/pr")
+        (handle-pr self request)
 
         (= path "/__session__/stream")
         (handle-stream self request)

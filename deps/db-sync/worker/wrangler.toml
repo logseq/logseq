@@ -52,6 +52,7 @@ new_sqlite_classes = [ "Sandbox" ]
 COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
 COGNITO_ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
 COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"
+GITHUB_DEFAULT_BASE_BRANCH = "main"
 
 [env.staging]
 name = "logseq-sync-staging"
@@ -60,6 +61,7 @@ name = "logseq-sync-staging"
 COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
 COGNITO_ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
 COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"
+GITHUB_DEFAULT_BASE_BRANCH = "main"
 
 [[env.staging.durable_objects.bindings]]
 name = "LOGSEQ_SYNC_DO"
@@ -105,6 +107,7 @@ name = "logseq-sync-prod"
 COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
 COGNITO_ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
 COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"
+GITHUB_DEFAULT_BASE_BRANCH = "main"
 
 [[env.prod.durable_objects.bindings]]
 name = "LOGSEQ_SYNC_DO"
