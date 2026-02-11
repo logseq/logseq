@@ -163,6 +163,34 @@
   (-> (if (string? file) file (.arrayBuffer file))
       (p/then db-asset/<get-file-array-buffer-checksum)))
 
+(defn- ->uint8
+  [payload]
+  (cond
+    (instance? js/Uint8Array payload)
+    payload
+
+    (instance? js/ArrayBuffer payload)
+    (js/Uint8Array. payload)
+
+    (and (exists? js/ArrayBuffer)
+         (.isView js/ArrayBuffer payload))
+    (js/Uint8Array. (.-buffer payload) (.-byteOffset payload) (.-byteLength payload))
+
+    (array? payload)
+    (js/Uint8Array. payload)
+
+    (sequential? payload)
+    (js/Uint8Array. (clj->js payload))
+
+    (and (object? payload)
+         (= "Buffer" (aget payload "type"))
+         (array? (aget payload "data")))
+    (js/Uint8Array. (aget payload "data"))
+
+    :else
+    (throw (ex-info "unsupported binary payload"
+                    {:payload-type (str (type payload))}))))
+
 (defn <get-all-assets
   []
   (when-let [path (config/get-current-repo-assets-root)]
@@ -276,6 +304,9 @@
                           (catch :default e
                             (log/info :read-asset e)
                             (throw (ex-info "read-asset failed" {:type :rtc.exception/read-asset-failed} e))))
+          asset-file (if aes-key
+                       (->uint8 asset-file)
+                       asset-file)
           asset-file* (if (not aes-key)
                         asset-file
                         (ldb/write-transit-str
