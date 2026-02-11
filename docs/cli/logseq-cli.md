@@ -12,6 +12,12 @@ clojure -M:cljs compile logseq-cli db-worker-node
 
 `logseq` manages `db-worker-node` automatically. You should not start the server manually. The server binds to localhost on a random port and records that port in the repo lock file.
 
+Desktop + CLI shared semantics:
+- Electron desktop and CLI are expected to use the same `db-worker-node` and lock-file protocol for a graph.
+- Disk SQLite under `~/logseq/graphs` is the source of truth; OPFS periodic export is not part of the desktop primary write path.
+- If a daemon already exists for the graph, CLI reuses it via lock-file discovery instead of starting a second writer.
+- If lock ownership is invalid or stale, startup cleans stale lock state before retrying.
+
 ## Run the CLI
 
 ```bash
