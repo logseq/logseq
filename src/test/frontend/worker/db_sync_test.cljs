@@ -8,6 +8,7 @@
             [frontend.worker.sync :as db-sync]
             [frontend.worker.sync.client-op :as client-op]
             [frontend.worker.sync.crypt :as sync-crypt]
+            [logseq.common.util :as common-util]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]
             [promesa.core :as p]))
@@ -109,6 +110,78 @@
               {:user/uuid "u2" :user/name "Bob" :user/editing-block-uuid "block-2"}]
              @(:online-users client)))
       (is (= 1 (count @broadcasts))))))
+
+(deftest start-pull-loop-sends-periodic-pull-test
+  (let [prev-client @worker-state/*db-sync-client
+        prev-set-interval js/setInterval
+        prev-clear-interval js/clearInterval
+        *tick (atom nil)
+        sent-payloads (atom [])
+        ws #js {:readyState 1
+                :send (fn [payload] (swap! sent-payloads conj payload))
+                :close (fn [] nil)}
+        client {:repo test-repo
+                :graph-id "graph-1"
+                :ws ws
+                :pull-loop-timer (atom nil)
+                :last-ws-message-ts (atom 1000)
+                :reconnect (atom {:attempt 0 :timer nil})}]
+    (set! js/setInterval (fn [f _ms]
+                           (reset! *tick f)
+                           1))
+    (set! js/clearInterval (fn [_id] nil))
+    (try
+      (reset! worker-state/*db-sync-client client)
+      (with-redefs [worker-state/online? (fn [] true)
+                    client-op/get-local-tx (fn [_repo] 42)
+                    common-util/time-ms (fn [] 1010)]
+        (#'db-sync/start-pull-loop! client ws)
+        (is (fn? @*tick))
+        (when (fn? @*tick)
+          (@*tick))
+        (is (= 1 (count @sent-payloads)))
+        (let [payload (js->clj (js/JSON.parse (first @sent-payloads))
+                               :keywordize-keys true)]
+          (is (= "pull" (:type payload)))
+          (is (= 42 (:since payload)))))
+      (finally
+        (set! js/setInterval prev-set-interval)
+        (set! js/clearInterval prev-clear-interval)
+        (reset! worker-state/*db-sync-client prev-client)))))
+
+(deftest start-pull-loop-closes-stale-open-websocket-test
+  (let [prev-client @worker-state/*db-sync-client
+        prev-set-interval js/setInterval
+        prev-clear-interval js/clearInterval
+        *tick (atom nil)
+        close-called? (atom false)
+        ws #js {:readyState 1
+                :send (fn [_payload] nil)
+                :close (fn [] (reset! close-called? true))}
+        client {:repo test-repo
+                :graph-id "graph-1"
+                :ws ws
+                :pull-loop-timer (atom nil)
+                :last-ws-message-ts (atom 0)
+                :reconnect (atom {:attempt 0 :timer nil})}]
+    (set! js/setInterval (fn [f _ms]
+                           (reset! *tick f)
+                           1))
+    (set! js/clearInterval (fn [_id] nil))
+    (try
+      (reset! worker-state/*db-sync-client client)
+      (with-redefs [worker-state/online? (fn [] true)
+                    client-op/get-local-tx (fn [_repo] 0)
+                    common-util/time-ms (fn [] 1000000)]
+        (#'db-sync/start-pull-loop! client ws)
+        (is (fn? @*tick))
+        (when (fn? @*tick)
+          (@*tick))
+        (is (true? @close-called?)))
+      (finally
+        (set! js/setInterval prev-set-interval)
+        (set! js/clearInterval prev-clear-interval)
+        (reset! worker-state/*db-sync-client prev-client)))))
 
 (deftest ^:long reparent-block-when-cycle-detected-test
   (testing "cycle from remote sync reparent block to page root"
