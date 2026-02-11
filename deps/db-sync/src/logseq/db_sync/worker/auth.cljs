@@ -1,6 +1,7 @@
 (ns logseq.db-sync.worker.auth
   (:require [clojure.string :as string]
-            [logseq.common.authorization :as authorization]))
+            [logseq.common.authorization :as authorization]
+            [promesa.core :as p]))
 
 (defn- bearer-token [auth-header]
   (when (and (string? auth-header) (string/starts-with? auth-header "Bearer "))
@@ -30,8 +31,21 @@
     (catch :default _
       nil)))
 
+(def ^:private recoverable-auth-errors
+  #{"invalid" "iss not found" "aud not found" "exp" "kid"})
+
+(defn- recoverable-auth-error?
+  [error]
+  (when error
+    (let [message (or (ex-message error) (some-> error .-message))]
+      (contains? recoverable-auth-errors message))))
+
 (defn auth-claims [request env]
   (let [token (token-from-request request)]
     (if (string? token)
-      (authorization/verify-jwt token env)
-      (js/Promise.resolve nil))))
+      (-> (authorization/verify-jwt token env)
+          (p/catch (fn [error]
+                     (if (recoverable-auth-error? error)
+                       nil
+                       (p/rejected error)))))
+      (p/resolved nil))))
