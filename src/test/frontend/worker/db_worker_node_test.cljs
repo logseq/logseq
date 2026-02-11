@@ -8,6 +8,7 @@
             [frontend.worker.db-worker-node-lock :as db-lock]
             [frontend.worker.db-worker-node :as db-worker-node]
             [goog.object :as gobj]
+            [logseq.cli.server :as cli-server]
             [logseq.cli.style :as style]
             [logseq.db :as ldb]
             [promesa.core :as p]))
@@ -210,6 +211,28 @@
     (is (nil? (:auth-token result)))
     (is (= "/tmp/db-worker" (:data-dir result)))))
 
+(deftest db-worker-node-handle-event-encodes-sse-json-payload
+  (let [handle-event! #'db-worker-node/handle-event!
+        *sse-clients @#'db-worker-node/*sse-clients
+        old-clients @*sse-clients
+        writes (atom [])
+        fake-res #js {:write (fn [message]
+                               (swap! writes conj message))}]
+    (try
+      (reset! *sse-clients #{fake-res})
+      (handle-event! "sync-db-changes" {:repo "graph-a"})
+      (is (= 1 (count @writes)))
+      (let [raw-message (first @writes)
+            event-json (-> raw-message
+                           (string/replace-first #"^data: " "")
+                           (string/replace #"\n\n$" ""))
+            parsed (js->clj (js/JSON.parse event-json) :keywordize-keys true)]
+        (is (= "sync-db-changes" (:type parsed)))
+        (is (= {:repo "graph-a"}
+               (ldb/read-transit-str (:payload parsed)))))
+      (finally
+        (reset! *sse-clients old-clients)))))
+
 (deftest db-worker-node-help-omits-auth-token
   (let [show-help! #'db-worker-node/show-help!
         output (binding [style/*color-enabled?* true]
@@ -229,6 +252,8 @@
         bound-repo "logseq_db_bound"]
     (is (nil? (repo-error :thread-api/list-db [] bound-repo)))
     (is (nil? (repo-error "thread-api/list-db" [] bound-repo)))
+    (is (nil? (repo-error :thread-api/rtc-get-graphs ["token"] bound-repo)))
+    (is (nil? (repo-error :thread-api/set-context [{:repo "not-a-repo-arg"}] bound-repo)))
     (is (= {:status 400
             :error {:code :missing-repo
                     :message "repo is required"}}
@@ -239,6 +264,24 @@
                     :repo "other"
                     :bound-repo bound-repo}}
            (repo-error :thread-api/create-or-open-db ["other"] bound-repo)))))
+
+(deftest db-worker-node-set-context-does-not-trigger-repo-mismatch
+  (async done
+         (let [daemon (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-set-context")
+               repo (str "logseq_db_set_context_" (subs (str (random-uuid)) 0 8))]
+           (-> (p/let [{:keys [host port stop!]}
+                       (db-worker-node/start-daemon! {:data-dir data-dir
+                                                      :repo repo})
+                       _ (reset! daemon {:host host :port port :stop! stop!})
+                       result (invoke host port "thread-api/set-context" [{:app "desktop"}])]
+                 (is (nil? result)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!) (p/finally (fn [] (done))))
+                              (done))))))))
 
 (deftest db-worker-node-daemon-smoke-test
   (async done
@@ -555,4 +598,74 @@
                (p/finally (fn []
                             (if-let [stop! (:stop! @daemon)]
                               (-> (stop!) (p/finally (fn [] (done))))
+                              (done))))))))
+
+(deftest db-worker-node-start-recovers-stale-lock-before-acquire
+  (async done
+         (let [daemon (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-stale-lock-recover")
+               repo (str "logseq_db_stale_lock_" (subs (str (random-uuid)) 0 8))
+               lock-file (lock-path data-dir repo)
+               stale-lock {:repo repo
+                           :pid 999999
+                           :host "127.0.0.1"
+                           :port 6553
+                           :lock-id "stale-lock-id"}]
+           (fs/mkdirSync (node-path/dirname lock-file) #js {:recursive true})
+           (fs/writeFileSync lock-file (js/JSON.stringify (clj->js stale-lock)))
+           (-> (p/let [{:keys [stop!]}
+                       (db-worker-node/start-daemon! {:data-dir data-dir
+                                                      :repo repo})
+                       _ (reset! daemon {:stop! stop!})
+                       lock' (js->clj (js/JSON.parse (.toString (fs/readFileSync lock-file) "utf8"))
+                                      :keywordize-keys true)]
+                 (is (not= 999999 (:pid lock')))
+                 (is (not= "stale-lock-id" (:lock-id lock'))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!)
+                                  (p/finally (fn [] (done))))
+                              (done))))))))
+
+(deftest db-worker-node-desktop-and-cli-share-same-graph-daemon
+  (async done
+         (let [daemon (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-desktop-cli")
+               repo (str "logseq_db_desktop_cli_" (subs (str (random-uuid)) 0 8))
+               now (js/Date.now)
+               page-uuid (random-uuid)]
+           (-> (p/let [{:keys [host port stop!]}
+                       (db-worker-node/start-daemon! {:data-dir data-dir
+                                                      :repo repo})
+                       _ (reset! daemon {:stop! stop!})
+                       _ (invoke host port "thread-api/create-or-open-db" [repo {}])
+                       _ (invoke host port "thread-api/transact"
+                                 [repo
+                                  [{:block/uuid page-uuid
+                                    :block/title "Desktop+CLI Shared"
+                                    :block/name "desktop-cli-shared"
+                                    :block/tags #{:logseq.class/Page}
+                                    :block/created-at now
+                                    :block/updated-at now}]
+                                  {}
+                                  nil])
+                       ensured (cli-server/ensure-server! {:data-dir data-dir} repo)
+                       url (js/URL. (:base-url ensured))
+                       cli-host (.-hostname url)
+                       cli-port (js/parseInt (.-port url) 10)
+                       result (invoke cli-host cli-port "thread-api/q"
+                                      [repo
+                                       ['[:find ?e
+                                          :in $ ?title
+                                          :where [?e :block/title ?title]]
+                                        "Desktop+CLI Shared"]])]
+                 (is (seq result)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!)
+                                  (p/finally (fn [] (done))))
                               (done))))))))
