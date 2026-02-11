@@ -499,6 +499,14 @@ should be done through this fn in order to get global config and config defaults
       2)
     2))
 
+(defn get-linked-references-collapsed-threshold
+  []
+  (if-let [value (:ref/linked-references-collapsed-threshold (get-config))]
+    (if (and (int? value) (>= value 0))
+      value
+      50)
+    50))
+
 (defn get-export-bullet-indentation
   []
   (case (get (get-config) :export/bullet-indentation :tab)

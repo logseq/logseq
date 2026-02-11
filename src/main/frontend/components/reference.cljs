@@ -45,6 +45,7 @@
       :view-feature-type :linked-references
       :show-items-count? true
       :additional-actions [reference-filter]
+      :foldable-options (:foldable-options config)
       :columns (views/build-columns config [] {})
       :config config})))
 
@@ -65,11 +66,15 @@
                (set-refs-total-count! result)))))
        [])
       (when (> refs-total-count 0)
-        (ui/catch-error
-         (ui/component-error
-          "Linked References: Unexpected error.")
-         [:div.references
-          (references-cp entity (assoc config :refs-total-count refs-total-count))])))))
+        (let [collapse-threshold (state/get-linked-references-collapsed-threshold)
+              default-collapsed? (> refs-total-count collapse-threshold)]
+          (ui/catch-error
+           (ui/component-error
+            "Linked References: Unexpected error.")
+           [:div.references
+            (references-cp entity (assoc config
+                                         :refs-total-count refs-total-count
+                                         :foldable-options {:default-collapsed? default-collapsed?}))]))))))
 
 (rum/defc unlinked-references
   [entity config]

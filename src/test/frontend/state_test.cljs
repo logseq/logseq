@@ -24,3 +24,14 @@
                               {:shortcuts {:ui/toggle-brackets "t b"}}
                               {:shortcuts {:editor/up ["ctrl+p" "up"]}}))
       "Map values get merged across configs"))
+
+(deftest linked-references-collapsed-threshold
+  (is (= 50
+         (with-redefs [state/get-config (constantly {})]
+           (state/get-linked-references-collapsed-threshold))))
+  (is (= 0
+         (with-redefs [state/get-config (constantly {:ref/linked-references-collapsed-threshold 0})]
+           (state/get-linked-references-collapsed-threshold))))
+  (is (= 50
+         (with-redefs [state/get-config (constantly {:ref/linked-references-collapsed-threshold -1})]
+           (state/get-linked-references-collapsed-threshold)))))
