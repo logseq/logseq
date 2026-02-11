@@ -11,6 +11,7 @@
             [logseq.common.util :as common-util]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]
+            [logseq.outliner.op :as outliner-op]
             [promesa.core :as p]))
 
 (def ^:private test-repo "test-db-sync-repo")
@@ -110,6 +111,43 @@
               {:user/uuid "u2" :user/name "Bob" :user/editing-block-uuid "block-2"}]
              @(:online-users client)))
       (is (= 1 (count @broadcasts))))))
+
+(deftest reaction-add-enqueues-pending-sync-tx-test
+  (testing "adding a reaction should enqueue tx for db-sync"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (outliner-op/apply-ops! conn
+                                  [[:toggle-reaction [(:block/uuid parent) "+1" nil]]]
+                                  {})
+          (let [pending (#'db-sync/pending-txs test-repo)
+                txs (mapcat :tx pending)]
+            (is (seq pending))
+            (is (some (fn [tx]
+                        (and (vector? tx)
+                             (= :db/add (first tx))
+                             (= :logseq.property.reaction/emoji-id (nth tx 2 nil))
+                             (= "+1" (nth tx 3 nil))))
+                      txs))))))))
+
+(deftest reaction-remove-enqueues-pending-sync-tx-test
+  (testing "removing a reaction should enqueue tx for db-sync"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (outliner-op/apply-ops! conn
+                                  [[:toggle-reaction [(:block/uuid parent) "+1" nil]]]
+                                  {})
+          (let [reaction-eid (-> (d/datoms @conn :avet :logseq.property.reaction/target (:db/id parent))
+                                 first
+                                 :e)
+                before-count (count (#'db-sync/pending-txs test-repo))]
+            (is (some? reaction-eid))
+            (outliner-op/apply-ops! conn
+                                    [[:toggle-reaction [(:block/uuid parent) "+1" nil]]]
+                                    {})
+            (let [after-count (count (#'db-sync/pending-txs test-repo))]
+              (is (> after-count before-count)))))))))
 
 (deftest start-pull-loop-sends-periodic-pull-test
   (let [prev-client @worker-state/*db-sync-client
