@@ -286,54 +286,41 @@
               :message "Preparing graph snapshot download"}])
   (let [base (http-base)]
     (-> (if (and graph-uuid base)
-          (let [download-url* (atom nil)]
-            (-> (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
-                        graph (str config/db-version-prefix graph-name)
-                        pull-resp (fetch-json (str base "/sync/" graph-uuid "/pull")
-                                              {:method "GET"}
-                                              {:response-schema :sync/pull})
-                        remote-tx (:t pull-resp)
-                        _ (when-not (integer? remote-tx)
-                            (throw (ex-info "non-integer remote-tx when downloading graph"
-                                            {:graph graph-name
-                                             :remote-tx remote-tx})))
-                        download-resp (fetch-json (str base "/sync/" graph-uuid "/snapshot/download")
-                                                  {:method "GET"}
-                                                  {:response-schema :sync/snapshot-download})
-                        download-url (:url download-resp)
-                        _ (reset! download-url* download-url)
-                        _ (when-not (string? download-url)
-                            (throw (ex-info "missing snapshot download url"
-                                            {:graph graph-name
-                                             :response download-resp})))
-                        resp (js/fetch download-url (clj->js (with-auth-headers {:method "GET"})))
-                        total-bytes (when-let [raw (some-> resp .-headers (.get "content-length"))]
-                                      (let [parsed (js/parseInt raw 10)]
-                                        (when-not (js/isNaN parsed) parsed)))
-                        _ (state/pub-event!
-                           [:rtc/log {:type :rtc.log/download
-                                      :sub-type :download-progress
-                                      :graph-uuid graph-uuid
-                                      :message (str "Start downloading graph snapshot, file size: " total-bytes)}])]
-                  (when-not (.-ok resp)
-                    (throw (ex-info "snapshot download failed"
-                                    {:graph graph-name
-                                     :status (.-status resp)})))
-                  (p/let [snapshot-bytes (<snapshot-response-bytes resp)
-                          rows (finalize-framed-buffer snapshot-bytes)]
-                    (state/pub-event!
-                     [:rtc/log {:type :rtc.log/download
-                                :sub-type :download-completed
-                                :graph-uuid graph-uuid
-                                :message "Graph snapshot downloaded"}])
-                    (when (seq rows)
-                      (state/<invoke-db-worker :thread-api/db-sync-import-kvs-rows
-                                               graph rows true graph-uuid remote-tx))
-                    (count rows)))
-                (p/finally
-                  (fn []
-                    (when-let [download-url @download-url*]
-                      (js/fetch download-url (clj->js (with-auth-headers {:method "DELETE"}))))))))
+          (-> (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
+                      graph (str config/db-version-prefix graph-name)
+                      pull-resp (fetch-json (str base "/sync/" graph-uuid "/pull")
+                                            {:method "GET"}
+                                            {:response-schema :sync/pull})
+                      remote-tx (:t pull-resp)
+                      _ (when-not (integer? remote-tx)
+                          (throw (ex-info "non-integer remote-tx when downloading graph"
+                                          {:graph graph-name
+                                           :remote-tx remote-tx})))
+                      resp (js/fetch (str base "/sync/" graph-uuid "/snapshot/stream")
+                                     (clj->js (with-auth-headers {:method "GET"})))
+                      total-bytes (when-let [raw (some-> resp .-headers (.get "content-length"))]
+                                    (let [parsed (js/parseInt raw 10)]
+                                      (when-not (js/isNaN parsed) parsed)))
+                      _ (state/pub-event!
+                         [:rtc/log {:type :rtc.log/download
+                                    :sub-type :download-progress
+                                    :graph-uuid graph-uuid
+                                    :message (str "Start downloading graph snapshot, file size: " total-bytes)}])]
+                (when-not (.-ok resp)
+                  (throw (ex-info "snapshot download failed"
+                                  {:graph graph-name
+                                   :status (.-status resp)})))
+                (p/let [snapshot-bytes (<snapshot-response-bytes resp)
+                        rows (finalize-framed-buffer snapshot-bytes)]
+                  (state/pub-event!
+                   [:rtc/log {:type :rtc.log/download
+                              :sub-type :download-completed
+                              :graph-uuid graph-uuid
+                              :message "Graph snapshot downloaded"}])
+                  (when (seq rows)
+                    (state/<invoke-db-worker :thread-api/db-sync-import-kvs-rows
+                                             graph rows true graph-uuid remote-tx))
+                  (count rows))))
           (p/rejected (ex-info "db-sync missing graph info"
                                {:type :db-sync/invalid-graph
                                 :graph-uuid graph-uuid

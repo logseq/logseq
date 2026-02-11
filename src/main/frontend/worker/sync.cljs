@@ -147,7 +147,7 @@
     opts))
 
 (def ^:private max-asset-size (* 100 1024 1024))
-(def ^:private upload-kvs-batch-size 2000)
+(def ^:private upload-kvs-batch-size 500)
 (def ^:private snapshot-content-type "application/transit+json")
 (def ^:private snapshot-content-encoding "gzip")
 (def ^:private snapshot-text-encoder (js/TextEncoder.))
@@ -672,21 +672,33 @@
 
 (defn- offload-large-titles-in-datoms
   [repo graph-id datoms aes-key]
-  (p/loop [remaining datoms
-           acc []]
-    (if (empty? remaining)
-      acc
-      (let [datom (first remaining)
-            attr (:a datom)
-            value (:v datom)]
-        (if (and (= :block/title attr)
-                 (string? value)
-                 (large-title? value))
-          (p/let [obj (upload-large-title! repo graph-id value aes-key)
-                  placeholder (assoc datom :v "")
-                  obj-datom (assoc datom :a large-title-object-attr :v obj)]
-            (p/recur (rest remaining) (conj acc placeholder obj-datom)))
-          (p/recur (rest remaining) (conj acc datom)))))))
+  (let [needs-offload (filterv (fn [datom]
+                                 (and (= :block/title (:a datom))
+                                      (string? (:v datom))
+                                      (large-title? (:v datom))))
+                               datoms)
+        offload-entities (into #{} (map :e) needs-offload)]
+    (if (empty? needs-offload)
+      (p/resolved datoms)
+      (p/let [offloaded (p/loop [remaining needs-offload
+                                 result {}]
+                          (if (empty? remaining)
+                            result
+                            (let [datom (first remaining)]
+                              (p/let [obj (upload-large-title! repo graph-id (:v datom) aes-key)]
+                                (p/recur (rest remaining)
+                                         (assoc result (:e datom)
+                                                {:placeholder (assoc datom :v "")
+                                                 :obj-datom (assoc datom :a large-title-object-attr :v obj)}))))))]
+        (reduce (fn [acc datom]
+                  (if (contains? offload-entities (:e datom))
+                    (if (= :block/title (:a datom))
+                      (let [{:keys [placeholder obj-datom]} (get offloaded (:e datom))]
+                        (-> acc (conj placeholder) (conj obj-datom)))
+                      (conj acc datom))
+                    (conj acc datom)))
+                []
+                datoms)))))
 
 (defn rehydrate-large-titles-from-db!
   [repo graph-id]
@@ -1363,7 +1375,7 @@
                                             {:response-schema :sync/snapshot-upload})]
                         (let [loaded' (+ loaded (count rows))]
                           (update-progress {:sub-type :upload-progress
-                                            :message (str "Uploading " loaded "/" total-rows)})
+                                            :message (str "Uploading " loaded' "/" total-rows)})
                           (p/recur max-addr false loaded')))))))
               (p/finally
                 (fn []

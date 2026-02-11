@@ -315,8 +315,9 @@
                            (http/not-found))]
           response))
       (catch :default error
+        (js/console.error "DEBUG handle-fetch error:" error)
         (log/error :db-sync/index-error error)
-        (http/error-response "server error" 500)))))
+        (http/error-response (str "server error: " error) 500)))))
 
 (defn graph-access-response [request env graph-id]
   (let [token (auth/token-from-request request)

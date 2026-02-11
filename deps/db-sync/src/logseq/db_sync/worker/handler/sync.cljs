@@ -12,7 +12,7 @@
             [logseq.db-sync.worker.ws :as ws]
             [promesa.core :as p]))
 
-(def ^:private snapshot-download-batch-size 500)
+(def ^:private snapshot-download-batch-size 5000)
 (def ^:private snapshot-cache-control "private, max-age=300")
 (def ^:private snapshot-content-type "application/transit+json")
 (def ^:private snapshot-content-encoding "gzip")
@@ -27,7 +27,17 @@
 
 (defn- ensure-schema! [^js self]
   (when-not (true? (.-schema-ready self))
-    (storage/init-schema! (.-sql self))
+    (try
+      (storage/init-schema! (.-sql self))
+      (catch :default e
+        ;; Schema may already exist. If DDL writes are rejected, probe
+        ;; existing tables before deciding this is a fatal error.
+        (try
+          (common/sql-exec (.-sql self) "select 1 from kvs limit 1")
+          (common/sql-exec (.-sql self) "select 1 from tx_log limit 1")
+          (common/sql-exec (.-sql self) "select 1 from sync_meta limit 1")
+          (catch :default _
+            (throw e)))))
     (set! (.-schema-ready self) true)))
 
 (defn- ensure-conn! [^js self]
@@ -301,6 +311,23 @@
         (http/bad-request "invalid since")
         (http/json-response :sync/pull (pull-response self since))))
 
+    :sync/snapshot-stream
+    (let [graph-id (graph-id-from-request request)]
+      (if (not (seq graph-id))
+        (http/bad-request "missing graph id")
+        (let [use-compression? (exists? js/CompressionStream)
+              content-encoding (when use-compression? snapshot-content-encoding)
+              stream (snapshot-export-stream self)
+              stream (if use-compression?
+                       (maybe-compress-stream stream)
+                       stream)]
+          (js/Response. stream
+                        #js {:status 200
+                             :headers (js/Object.assign
+                                       #js {"content-type" snapshot-content-type
+                                            "content-encoding" (or content-encoding "identity")}
+                                       (common/cors-headers))}))))
+
     :sync/snapshot-download
     (let [graph-id (graph-id-from-request request)
           ^js bucket (.-LOGSEQ_SYNC_ASSETS (.-env self))]
@@ -407,7 +434,11 @@
               (.catch resp
                       (fn [e]
                         (log/error :db-sync/http-error {:error e})
-                        (http/error-response "server error" 500)))
+                        (common/json-response
+                         {:error "server error"
+                          :debug-message (str e)
+                          :debug-stack (when (instance? js/Error e) (.-stack e))}
+                         500)))
               resp))]
     (try
       (let [url (js/URL. (.-url request))
@@ -428,4 +459,8 @@
               (http/not-found)))))
       (catch :default e
         (log/error :db-sync/http-error {:error e})
-        (http/error-response "server error" 500)))))
+        (common/json-response
+         {:error "server error"
+          :debug-message (str e)
+          :debug-stack (when (instance? js/Error e) (.-stack e))}
+         500)))))
