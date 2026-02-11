@@ -936,7 +936,7 @@
       (when (and link id label)
         (when-let [zotero-data-dir (get-in config [:zotero/settings-v2 "default" :zotero-data-directory])]
           {:link (str "zotero://" link)
-           :path (node-path/join zotero-data-dir "storage" id label)
+           :path (path/path-join zotero-data-dir "storage" id label)
            :base label})))))
 
 (defn- walk-ast-blocks
@@ -945,13 +945,15 @@
   [config ast-blocks]
   (let [results (atom {:simple-queries []
                        :asset-links []
-                       :embeds []})]
+                       :embeds []
+                       :zotero-imported-files {}
+                       :zotero-linked-files []})]
     (walk/prewalk
      (fn [x]
        (cond
-         (and (vector? x)
-              (= "Link" (first x))
-              (let [path-or-map (second (:url (second x)))]
+        (and (vector? x)
+             (= "Link" (first x))
+             (let [path-or-map (second (:url (second x)))]
                 (cond
                   (string? path-or-map)
                   (or (common-config/local-relative-asset? path-or-map)
@@ -965,6 +967,19 @@
               (= "Macro" (first x))
               (= "embed" (:name (second x))))
          (swap! results update :embeds conj x)
+        (and (vector? x)
+             (= "Macro" (first x))
+             (= "zotero-imported-file" (:name (second x))))
+        (let [[item-key filename] (:arguments (second x))]
+          (when (and item-key filename)
+            (swap! results update :zotero-imported-files assoc item-key (common-util/safe-read-string filename))))
+        (and (vector? x)
+             (= "Macro" (first x))
+             (= "zotero-linked-file" (:name (second x))))
+        (let [[relative-path] (:arguments (second x))
+              parsed-path (common-util/safe-read-string relative-path)]
+          (when (string? parsed-path)
+            (swap! results update :zotero-linked-files conj parsed-path)))
          (and (vector? x)
               (= "Macro" (first x))
               (= "query" (:name (second x))))
@@ -1231,10 +1246,10 @@
 (defn- build-pdf-annotations-tx
   "Builds tx for pdf annotations when a pdf has an annotations EDN file under assets/"
   [parent-asset-path assets parent-asset pdf-annotation-pages opts]
-  (let [asset-edn-path (path/path-normalize
-                        (node-path/join common-config/local-assets-dir
-                                        (safe-sanitize-file-name
-                                         (node-path/basename (string/replace-first parent-asset-path #"(?i)\.pdf$" ".edn")))))
+  (let [asset-edn-path (path/path-join
+                        common-config/local-assets-dir
+                        (safe-sanitize-file-name
+                         (node-path/basename (string/replace-first parent-asset-path #"(?i)\.pdf$" ".edn"))))
         asset-md-name (str "hls__" (safe-sanitize-file-name
                                     (node-path/basename (string/replace-first parent-asset-path #"(?i)\.pdf$" ".md"))))]
     (when-let [asset-edn-map (get @assets asset-edn-path)]
@@ -1242,79 +1257,127 @@
         (concat txs
                 (build-pdf-annotations-tx* asset-edn-map (get @pdf-annotation-pages asset-md-name) parent-asset image-asset-name-to-uuids opts))))))
 
+(defn- resolve-asset-data
+  [asset-link user-config linked-files linked-base-dir zotero-imported-files]
+  (let [link-map (second asset-link)
+        path* (-> link-map :url second)
+        zotero-path-data (when (map? path*)
+                           (get-zotero-local-pdf-path user-config link-map))
+        zotero-asset? (some? zotero-path-data)
+        linked-relative (when (and linked-files zotero-asset? (seq @linked-files))
+                          (let [value (first @linked-files)]
+                            (swap! linked-files rest)
+                            (string/replace-first value "attachments:" "")))
+        linked-base (when (string? linked-relative)
+                      (node-path/basename linked-relative))
+        linked-path (when (and (string? linked-relative)
+                               (string? linked-base-dir)
+                               (not (string/blank? linked-base-dir)))
+                      (node-path/join linked-base-dir linked-relative))
+        {:keys [path link base]} (cond
+                                   linked-path {:path linked-path
+                                                :link (:link zotero-path-data)
+                                                :base linked-base}
+                                   zotero-asset? zotero-path-data
+                                   :else {:path path*})
+        asset-name (cond
+                     linked-path base
+                     zotero-asset? (or (get zotero-imported-files (last (string/split link #"/"))) base)
+                     :else (some-> path asset-path->name))
+        path (cond
+               linked-path path
+               (and zotero-asset? asset-name) (string/replace path #"[^/]+$" asset-name)
+               :else path)
+        asset-link-or-name (or link asset-name)
+        asset-path (when zotero-asset?
+                     (if linked-path
+                       (str "zotero-link://" linked-relative)
+                       (str "zotero-path://" (string/join ns-util/namespace-char [(last (string/split link #"/")) asset-name]))))]
+    {:asset-link-or-name asset-link-or-name
+     :asset-name asset-name
+     :asset-path asset-path
+     :path path
+     :zotero-asset? zotero-asset?}))
+
+(defn- ensure-asset-data!
+  [assets asset-link-or-name path asset-path <get-file-stat]
+  (when (and asset-link-or-name
+             (not (get @assets asset-link-or-name))
+             (string/ends-with? path ".pdf")
+             (fn? <get-file-stat))
+    (-> (p/let [^js stat (<get-file-stat path)]
+          (swap! assets assoc asset-link-or-name
+                 {:asset-id (d/squuid)
+                  :type "pdf"
+                  ;; avoid using the real checksum since it could be the same with in-graph asset
+                  :checksum "0000000000000000000000000000000000000000000000000000000000000000"
+                  :size (.-size stat)
+                  :external-url (or asset-link-or-name path)
+                  :external-file-name asset-path}))
+        (p/catch (fn [error]
+                   (js/console.error error))))))
+
+(defn- build-asset-tx
+  [asset-data asset-name asset-link-or-name asset-link pdf-annotation-pages opts assets zotero-asset?]
+  (let [new-asset (merge (build-new-asset asset-data)
+                         {:block/title (db-asset/asset-name->title (node-path/basename asset-name))
+                          :block/uuid (get-asset-block-id assets asset-link-or-name)}
+                         (when-let [metadata (not-empty (common-util/safe-read-map-string (:metadata (second asset-link))))]
+                           {:logseq.property.asset/resize-metadata metadata}))
+        pdf-annotations-path (if (and zotero-asset? (string? asset-name))
+                               (path/path-join common-config/local-assets-dir asset-name)
+                               (or asset-name asset-link-or-name))
+        pdf-annotations-tx (when (= "pdf" (path/file-ext pdf-annotations-path))
+                             (build-pdf-annotations-tx pdf-annotations-path assets new-asset pdf-annotation-pages opts))
+        asset-tx (concat [new-asset] pdf-annotations-tx)]
+    ;; (prn :asset-added! (node-path/basename asset-name))
+    ;; (cljs.pprint/pprint asset-link)
+    ;; (prn :debug :asset-tx asset-tx)
+    (swap! assets assoc-in [asset-link-or-name :asset-created?] true)
+    {:asset-name-uuid [asset-link-or-name (:block/uuid new-asset)]
+     :asset-tx asset-tx}))
+
 (defn- <handle-assets-in-block
   "If a block contains assets, creates them as #Asset nodes in the Asset page and references them in the block."
-  [block {:keys [asset-links]} {:keys [assets ignored-assets pdf-annotation-pages]} {:keys [notify-user <get-file-stat user-config] :as opts}]
-  (if (seq asset-links)
-    (p/let [asset-maps* (p/all (map
-                                (fn [asset-link]
-                                  (p/let [path* (-> asset-link second :url second)
-                                          zotero-asset? (when (map? path*)
-                                                          (= "zotero" (:protocol (second (:url (second asset-link))))))
-                                          {:keys [path link base]} (if (map? path*)
-                                                                     (get-zotero-local-pdf-path user-config (second asset-link))
-                                                                     {:path path*})
-                                          asset-name (some-> path asset-path->name)
-                                          asset-link-or-name (or link (some-> path asset-path->name))
-                                          asset-data* (when asset-link-or-name (get @assets asset-link-or-name))
-                                          _ (when (and asset-link-or-name
-                                                       (not asset-data*)
-                                                       (string/ends-with? path ".pdf")
-                                                       (fn? <get-file-stat)) ; external pdf
-                                              (->
-                                               (p/let [^js stat (<get-file-stat path)]
-                                                 (swap! assets assoc asset-link-or-name
-                                                        {:asset-id (d/squuid)
-                                                         :type "pdf"
-                                                         ;; avoid using the real checksum since it could be the same with in-graph asset
-                                                         :checksum "0000000000000000000000000000000000000000000000000000000000000000"
-                                                         :size (.-size stat)
-                                                         :external-url (or link path)
-                                                         :external-file-name base}))
-                                               (p/catch (fn [error]
-                                                          (js/console.error error)))))
-                                          asset-data (when asset-link-or-name (get @assets asset-link-or-name))]
-                                    (if asset-data
-                                      (cond
-                                        (not (get-asset-block-id assets asset-link-or-name))
-                                        (notify-user {:msg (str "Skipped creating asset " (pr-str asset-link-or-name) " because it has no asset id")
-                                                      :level :error})
+  [block {:keys [asset-links zotero-imported-files zotero-linked-files]} {:keys [assets ignored-assets pdf-annotation-pages]} {:keys [notify-user <get-file-stat user-config] :as opts}]
+  (let [linked-files (when (seq zotero-linked-files) (atom zotero-linked-files))
+        linked-base-dir (when linked-files
+                          (get-in user-config [:zotero/settings-v2 "default" :zotero-linked-attachment-base-directory]))]
+    (if (seq asset-links)
+      (p/let [asset-maps* (p/all (map
+                                  (fn [asset-link]
+                                    (p/let [{:keys [asset-link-or-name asset-name asset-path path zotero-asset?]}
+                                            (resolve-asset-data asset-link user-config linked-files linked-base-dir zotero-imported-files)
+                                            _ (ensure-asset-data! assets asset-link-or-name path asset-path <get-file-stat)
+                                            asset-data (when asset-link-or-name (get @assets asset-link-or-name))]
+                                      (if asset-data
+                                        (cond
+                                          (not (get-asset-block-id assets asset-link-or-name))
+                                          (notify-user {:msg (str "Skipped creating asset " (pr-str asset-link-or-name) " because it has no asset id")
+                                                        :level :error})
 
-                                        ;; If asset tx is already built, no need to do it again
-                                        (:asset-created? asset-data)
-                                        {:asset-name-uuid [asset-link-or-name (:asset-id asset-data)]}
+                                          ;; If asset tx is already built, no need to do it again
+                                          (:asset-created? asset-data)
+                                          {:asset-name-uuid [asset-link-or-name (:asset-id asset-data)]}
 
-                                        :else
-                                        (let [new-asset (merge (build-new-asset asset-data)
-                                                               {:block/title (db-asset/asset-name->title (node-path/basename asset-name))
-                                                                :block/uuid (get-asset-block-id assets asset-link-or-name)}
-                                                               (when-let [metadata (not-empty (common-util/safe-read-map-string (:metadata (second asset-link))))]
-                                                                 {:logseq.property.asset/resize-metadata metadata}))
-                                              pdf-annotations-tx (when (= "pdf" (path/file-ext asset-link-or-name))
-                                                                   (build-pdf-annotations-tx asset-link-or-name assets new-asset pdf-annotation-pages opts))
-                                              asset-tx (concat [new-asset] pdf-annotations-tx)]
-                                          ;; (prn :asset-added! (node-path/basename asset-name))
-                                          ;; (cljs.pprint/pprint asset-link)
-                                          ;; (prn :debug :asset-tx asset-tx)
-                                          (swap! assets assoc-in [asset-link-or-name :asset-created?] true)
-                                          {:asset-name-uuid [asset-link-or-name (:block/uuid new-asset)]
-                                           :asset-tx asset-tx}))
-                                      (when-not zotero-asset? ; no need to report warning for zotero managed pdf files
-                                        (swap! ignored-assets conj
-                                               {:reason "No asset data found for this asset path"
-                                                :path (-> asset-link second :url second)
-                                                :location {:block (:block/title block)}})
-                                        nil))))
-                                asset-links))
-            asset-maps (remove nil? asset-maps*)
-            asset-blocks (mapcat :asset-tx asset-maps)
-            asset-names-to-uuids
-            (into {} (map :asset-name-uuid asset-maps))]
-      (cond-> {:block
-               (update block :block/title update-asset-links-in-block-title asset-names-to-uuids ignored-assets)}
-        (seq asset-blocks)
-        (assoc :asset-blocks-tx asset-blocks)))
-    (p/resolved {:block block})))
+                                          :else
+                                          (build-asset-tx asset-data asset-name asset-link-or-name asset-link pdf-annotation-pages opts assets zotero-asset?))
+                                        (when-not zotero-asset? ; no need to report warning for zotero managed pdf files
+                                          (swap! ignored-assets conj
+                                                 {:reason "No asset data found for this asset path"
+                                                  :path (-> asset-link second :url second)
+                                                  :location {:block (:block/title block)}})
+                                          nil))))
+                                  asset-links))
+              asset-maps (remove nil? asset-maps*)
+              asset-blocks (mapcat :asset-tx asset-maps)
+              asset-names-to-uuids
+              (into {} (map :asset-name-uuid asset-maps))]
+        (cond-> {:block
+                 (update block :block/title update-asset-links-in-block-title asset-names-to-uuids ignored-assets)}
+          (seq asset-blocks)
+          (assoc :asset-blocks-tx asset-blocks)))
+      (p/resolved {:block block}))))
 
 (defn- handle-quotes
   "If a block contains a quote, convert block to #Quote node"
@@ -1361,7 +1424,7 @@
           {block-after-built-in-props :block deadline-properties-tx :properties-tx}
           (update-block-deadline-and-scheduled block page-names-to-uuids options)
           {block-after-assets :block :keys [asset-blocks-tx]}
-          (<handle-assets-in-block block-after-built-in-props walked-ast-blocks import-state (select-keys options [:log-fn :notify-user :<get-file-stat]))
+          (<handle-assets-in-block block-after-built-in-props walked-ast-blocks import-state (select-keys options [:log-fn :notify-user :<get-file-stat :user-config]))
           ;; :block/page should be [:block/page NAME]
 
           journal-page-created-at (some-> (:block/page block*) second journal-created-ats)
@@ -1978,6 +2041,21 @@
                                  :level :error
                                  :ex-data {:error error}}))))))
 
+(defn- resolve-zotero-config-path
+  [config config-file]
+  (let [config-path (:path config-file)
+        base-dir (when (and (string? config-path)
+                            (node-path/isAbsolute config-path))
+                   ;; config.edn lives in <graph-root>/logseq/config.edn
+                   (node-path/dirname (node-path/dirname config-path)))
+        to-abs (fn [p]
+                 (if (and base-dir (string? p) (not (string/blank? p)) (not (node-path/isAbsolute p)))
+                   (path/path-join base-dir p)
+                   p))]
+    (-> config
+        (update-in [:zotero/settings-v2 "default" :zotero-data-directory] to-abs)
+        (update-in [:zotero/settings-v2 "default" :zotero-linked-attachment-base-directory] to-abs))))
+
 (defn export-config-file
   "Exports logseq/config.edn by saving to database and setting any properties related to config"
   [repo-or-conn config-file <read-file {:keys [<save-file notify-user default-config]
@@ -1990,7 +2068,7 @@
                             ;; Converts a file graph config.edn for use with DB graphs. Unlike common-config/create-config-for-db-graph,
                             ;; manually dissoc deprecated keys for config to be valid
                             (pretty-print-dissoc % (keys common-config/file-only-config)))
-                (let [config (edn/read-string %)]
+                (let [config (resolve-zotero-config-path (edn/read-string %) config-file)]
                   (when-let [title-format (or (:journal/page-title-format config) (:date-formatter config))]
                     (ldb/transact! repo-or-conn [{:db/ident :logseq.class/Journal
                                                   :logseq.property.journal/title-format title-format}]))
