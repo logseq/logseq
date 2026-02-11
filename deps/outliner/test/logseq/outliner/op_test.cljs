@@ -29,6 +29,7 @@
               reactions (:logseq.property.reaction/_target block-entity)
               reaction (first reactions)]
           (is (= 1 (count reactions)))
+          (is (uuid? (:block/uuid reaction)))
           (is (= "+1" (:logseq.property.reaction/emoji-id reaction)))
           (is (= (:db/id (d/entity @conn [:block/uuid user-uuid]))
                  (:db/id (:logseq.property/created-by-ref reaction)))))
