@@ -285,11 +285,15 @@
   [:map
    [:status :string]
    [:head-branch :string]
-   [:base-branch {:optional true} :string]
-   [:pr-url {:optional true} :string]
-   [:manual-pr-url {:optional true} :string]
+   [:base-branch {:optional true} [:maybe :string]]
+   [:pr-url {:optional true} [:maybe :string]]
+   [:manual-pr-url {:optional true} [:maybe :string]]
    [:force {:optional true} :boolean]
-   [:message {:optional true} :string]])
+   [:message {:optional true} [:maybe :string]]
+   [:github-status {:optional true} :int]
+   [:github-body {:optional true} :any]
+   [:github-raw-body {:optional true} :string]
+   [:github-response-headers {:optional true} :any]])
 
 (def http-request-schemas
   {:graphs/create graph-create-request-schema

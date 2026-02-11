@@ -170,6 +170,15 @@
       (string? reason) reason
       :else nil)))
 
+(defn- github-error-details
+  [error]
+  (let [{:keys [status body raw-body response-headers]} (ex-data error)]
+    (cond-> {}
+      (number? status) (assoc :github-status status)
+      (some? body) (assoc :github-body body)
+      (string? raw-body) (assoc :github-raw-body raw-body)
+      (map? response-headers) (assoc :github-response-headers response-headers))))
+
 (defn- <terminate-runtime! [^js self runtime]
   (set! (.-runtime-events-stream self) nil)
   (if-not (map? runtime)
@@ -433,7 +442,8 @@
                        (http/json-response :sessions/message {:ok true}))))))))))
 
 (defn- <manual-pr-required-response!
-  [^js self {:keys [user-id head-branch base-branch manual-url reason force? message]}]
+  [^js self {:keys [user-id head-branch base-branch manual-url reason force? message
+                    github-status github-body github-raw-body github-response-headers]}]
   (p/let [_ (<append-publish-event! self "git.pr.manual"
                                     {:by user-id
                                      :head-branch head-branch
@@ -441,12 +451,16 @@
                                      :manual-pr-url manual-url
                                      :reason reason})]
     (http/json-response :sessions/pr
-                        {:status "manual-pr-required"
-                         :head-branch head-branch
-                         :base-branch base-branch
-                         :manual-pr-url manual-url
-                         :force force?
-                         :message message})))
+                        (cond-> {:status "manual-pr-required"
+                                 :head-branch head-branch}
+                          (string? base-branch) (assoc :base-branch base-branch)
+                          (string? manual-url) (assoc :manual-pr-url manual-url)
+                          (some? force?) (assoc :force force?)
+                          (string? message) (assoc :message message)
+                          (number? github-status) (assoc :github-status github-status)
+                          (some? github-body) (assoc :github-body github-body)
+                          (string? github-raw-body) (assoc :github-raw-body github-raw-body)
+                          (map? github-response-headers) (assoc :github-response-headers github-response-headers)))))
 
 (defn- <create-pr-response!
   [^js self {:keys [user-id repo-url head-branch base-branch title description pr-token force? manual-url]}]
@@ -468,45 +482,77 @@
                                          :pr-url (:url pr-result)
                                          :pr-id (:id pr-result)})]
         (http/json-response :sessions/pr
-                            {:status "pr-created"
-                             :head-branch head-branch
-                             :base-branch base-branch
-                             :pr-url (:url pr-result)
-                             :force force?
-                             :message "branch pushed and pull request created"}))
+                            (cond-> {:status "pr-created"
+                                     :head-branch head-branch
+                                     :message "branch pushed and pull request created"}
+                              (string? base-branch) (assoc :base-branch base-branch)
+                              (string? (:url pr-result)) (assoc :pr-url (:url pr-result))
+                              (some? force?) (assoc :force force?))))
       (p/catch (fn [error]
-                 (p/let [_ (<append-publish-event! self "git.pr.failed"
-                                                   {:by user-id
-                                                    :head-branch head-branch
-                                                    :base-branch base-branch
-                                                    :reason (error-reason error)
-                                                    :error (str error)})]
-                   (<manual-pr-required-response! self
-                                                  {:user-id user-id
-                                                   :head-branch head-branch
-                                                   :base-branch base-branch
-                                                   :manual-url manual-url
-                                                   :reason "api-failed"
-                                                   :force? force?
-                                                   :message "branch pushed; pull request API failed, use manual URL"}))))))
+                 (let [reason (error-reason error)
+                       {:keys [github-status github-body github-raw-body github-response-headers]} (github-error-details error)]
+                   (p/let [existing-pr (when (= reason "api-error")
+                                         (source-control/<find-open-pull-request! (.-env self)
+                                                                                  pr-token
+                                                                                  repo-url
+                                                                                  {:head-branch head-branch
+                                                                                   :base-branch base-branch}))]
+                     (if (map? existing-pr)
+                       (p/let [_ (<append-publish-event! self "git.pr.succeeded"
+                                                         {:by user-id
+                                                          :head-branch head-branch
+                                                          :base-branch (or (:base-branch existing-pr) base-branch)
+                                                          :pr-url (:url existing-pr)
+                                                          :pr-id (:id existing-pr)
+                                                          :existing true})]
+                         (http/json-response :sessions/pr
+                                             (cond-> {:status "pr-created"
+                                                      :head-branch head-branch
+                                                      :message "branch pushed; existing pull request found"}
+                                               (string? (or (:base-branch existing-pr) base-branch))
+                                               (assoc :base-branch (or (:base-branch existing-pr) base-branch))
+                                               (string? (:url existing-pr)) (assoc :pr-url (:url existing-pr))
+                                               (some? force?) (assoc :force force?))))
+                       (p/let [_ (<append-publish-event! self "git.pr.failed"
+                                                         {:by user-id
+                                                          :head-branch head-branch
+                                                          :base-branch base-branch
+                                                          :reason reason
+                                                          :error (str error)
+                                                          :github-status github-status})]
+                         (<manual-pr-required-response! self
+                                                        (cond-> {:user-id user-id
+                                                                 :head-branch head-branch
+                                                                 :base-branch base-branch
+                                                                 :manual-url manual-url
+                                                                 :reason "api-failed"
+                                                                 :force? force?
+                                                                 :message "branch pushed; pull request API failed, use manual URL"}
+                                                          (number? github-status) (assoc :github-status github-status)
+                                                          (some? github-body) (assoc :github-body github-body)
+                                                          (string? github-raw-body) (assoc :github-raw-body github-raw-body)
+                                                          (map? github-response-headers) (assoc :github-response-headers github-response-headers)))))))))))
 
 (defn- <handle-pr-after-push!
   [^js self current-session body user-id repo-url head-branch force? create-pr?]
   (p/let [pr-token (source-control/pr-token (.-env self))
-          base-branch (or (source-control/sanitize-branch-name (:base-branch body))
-                          (when (string? pr-token)
-                            (source-control/<default-branch! (.-env self)
-                                                             pr-token
-                                                             repo-url))
+          requested-base-branch (source-control/sanitize-branch-name (:base-branch body))
+          detected-base-branch (when (and (nil? requested-base-branch)
+                                          (string? pr-token))
+                                 (source-control/<default-branch! (.-env self)
+                                                                  pr-token
+                                                                  repo-url))
+          base-branch (or requested-base-branch
+                          detected-base-branch
                           (default-base-branch (.-env self)))]
     (cond
       (false? create-pr?)
       (http/json-response :sessions/pr
-                          {:status "pushed"
-                           :head-branch head-branch
-                           :base-branch base-branch
-                           :force force?
-                           :message "branch pushed"})
+                          (cond-> {:status "pushed"
+                                   :head-branch head-branch
+                                   :message "branch pushed"}
+                            (string? base-branch) (assoc :base-branch base-branch)
+                            (some? force?) (assoc :force force?)))
 
       (not (pr-enabled? current-session))
       (http/forbidden)

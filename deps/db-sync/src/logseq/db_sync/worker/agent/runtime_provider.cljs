@@ -428,13 +428,21 @@
       :unknown)))
 
 (defn- push-command
-  [{:keys [repo-dir remote-url head-branch force]}]
-  (str "set -e; "
-       "cd '" (escape-shell-single repo-dir) "'; "
-       "git rev-parse --is-inside-work-tree >/dev/null; "
-       "git push '" (escape-shell-single remote-url) "' HEAD:refs/heads/"
-       (escape-shell-single head-branch)
-       (when force " --force")))
+  [{:keys [repo-dir remote-url head-branch] :as opts}]
+  (let [force? (true? (:force opts))
+        branch (escape-shell-single head-branch)
+        remote (escape-shell-single remote-url)]
+    (str "set -e; "
+         "cd '" (escape-shell-single repo-dir) "'; "
+         "git rev-parse --is-inside-work-tree >/dev/null; "
+         "git checkout -B '" branch "'; "
+         "git add -A; "
+         "if git diff --cached --quiet; then true; else "
+         "git -c user.name='Logseq Agent' -c user.email='agent@logseq.local' "
+         "commit -m 'chore(agent): update files'; "
+         "fi; "
+         "git push '" remote "' HEAD:refs/heads/" branch
+         (when force? " --force"))))
 
 (defn session-payload [task]
   (let [agent (or (get-in task [:agent :provider])
@@ -949,6 +957,7 @@
                                   :remote-url remote-url
                                   :head-branch head-branch
                                   :force force?})]
+
         (-> (p/let [result (sprites-exec-post! env name ["bash" "-lc" script])
                     {:keys [stdout stderr exit-code]} (sprites-exec-output result)]
               (when (and (number? exit-code) (not (zero? exit-code)))
