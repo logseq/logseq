@@ -317,13 +317,24 @@
   (when-let [dir (get-repo-dir session-id)]
     (str "cd '" (escape-shell-single dir) "'")))
 
+;; FIXME: sandbox-agent 2.x.x changes session routes to opencode/session
+(defn- sandbox-agent-version
+  [^js env]
+  (or (env-str env "SANDBOX_AGENT_VERSION")
+      "0.1.5"))
+
+(defn- sandbox-agent-install-command
+  [^js env]
+  (let [version (escape-shell-single (sandbox-agent-version env))
+        install-script (str "https://releases.rivet.dev/sandbox-agent/" version "/install.sh")]
+    (str "(curl -fsSL " install-script " | sh);")))
+
 (defn- <sprite-bootstrap! [^js env sprite-name port task session-id]
   (let [auth-json (get-in task [:agent :auth-json])
         write-auth (or (auth-json-write-command auth-json) "")
         repo-cd (or (repo-cd-command session-id) "")
         bootstrap (or (env-str env "SPRITES_BOOTSTRAP_COMMAND")
-                      (str "command -v sandbox-agent >/dev/null 2>&1 || "
-                           "(curl -fsSL https://releases.rivet.dev/sandbox-agent/latest/install.sh | sh); "
+                      (str (sandbox-agent-install-command env)
                            write-auth
                            (when (string? repo-cd) (str repo-cd "; "))
                            "nohup sandbox-agent server --no-token --host 0.0.0.0 --port " port
@@ -673,7 +684,8 @@
         write-auth (or (auth-json-write-command auth-json) "")
         override (env-str env "CLOUDFLARE_BOOTSTRAP_COMMAND")]
     (or override
-        (str write-auth
+        (str (sandbox-agent-install-command env)
+             write-auth
              "sandbox-agent server "
              (if (string? agent-token)
                (str "--token '" (escape-shell-single agent-token) "'")

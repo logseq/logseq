@@ -745,43 +745,48 @@
   (let [url (platform/request-url request)
         path (.-pathname url)
         method (.-method request)]
-    (try
-      (cond
-        (contains? #{"OPTIONS" "HEAD"} method)
-        (common/options-response)
+    (.catch
+     (js/Promise.resolve
+      (try
+        (cond
+          (contains? #{"OPTIONS" "HEAD"} method)
+          (common/options-response)
 
-        (= path "/__session__/init")
-        (handle-init self request)
+          (= path "/__session__/init")
+          (handle-init self request)
 
-        (= path "/__session__/status")
-        (handle-status self request)
+          (= path "/__session__/status")
+          (handle-status self request)
 
-        (= path "/__session__/messages")
-        (handle-messages self request)
+          (= path "/__session__/messages")
+          (handle-messages self request)
 
-        (= path "/__session__/pause")
-        (handle-pause self request)
+          (= path "/__session__/pause")
+          (handle-pause self request)
 
-        (= path "/__session__/resume")
-        (handle-resume self request)
+          (= path "/__session__/resume")
+          (handle-resume self request)
 
-        (= path "/__session__/interrupt")
-        (handle-interrupt self request)
+          (= path "/__session__/interrupt")
+          (handle-interrupt self request)
 
-        (= path "/__session__/cancel")
-        (handle-cancel self request)
+          (= path "/__session__/cancel")
+          (handle-cancel self request)
 
-        (= path "/__session__/pr")
-        (handle-pr self request)
+          (= path "/__session__/pr")
+          (handle-pr self request)
 
-        (= path "/__session__/stream")
-        (handle-stream self request)
+          (= path "/__session__/stream")
+          (handle-stream self request)
 
-        (= path "/__session__/events")
-        (handle-events self request)
+          (= path "/__session__/events")
+          (handle-events self request)
 
-        :else
-        (http/not-found))
-      (catch :default error
-        (log/error :agent/session-do-error error)
-        (http/error-response "server error" 500)))))
+          :else
+          (http/not-found))
+        (catch :default error
+          (log/error :agent/session-do-error error)
+          (http/error-response "server error" 500))))
+     (fn [error]
+       (log/error :agent/session-do-error error)
+       (http/error-response "server error" 500)))))

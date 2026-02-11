@@ -177,28 +177,33 @@
         url (js/URL. (.-url request))
         path (.-pathname url)
         method (.-method request)]
-    (try
-      (cond
-        (contains? #{"OPTIONS" "HEAD"} method)
-        (common/options-response)
+    (.catch
+     (js/Promise.resolve
+      (try
+        (cond
+          (contains? #{"OPTIONS" "HEAD"} method)
+          (common/options-response)
 
-        :else
-        (p/let [claims (auth/auth-claims request env)
-                route (routes/match-route method path)
-                response (cond
-                           (nil? claims)
-                           (http/unauthorized)
+          :else
+          (p/let [claims (auth/auth-claims request env)
+                  route (routes/match-route method path)
+                  response (cond
+                             (nil? claims)
+                             (http/unauthorized)
 
-                           route
-                           (handle {:env env
-                                    :request request
-                                    :url url
-                                    :claims claims
-                                    :route route})
+                             route
+                             (handle {:env env
+                                      :request request
+                                      :url url
+                                      :claims claims
+                                      :route route})
 
-                           :else
-                           (http/not-found))]
-          response))
-      (catch :default error
-        (log/error :agent/session-handler-error error)
-        (http/error-response "server error" 500)))))
+                             :else
+                             (http/not-found))]
+            response))
+        (catch :default error
+          (log/error :agent/session-handler-error error)
+          (http/error-response "server error" 500))))
+     (fn [error]
+       (log/error :agent/session-handler-error error)
+       (http/error-response "server error" 500)))))
