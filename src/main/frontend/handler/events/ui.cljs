@@ -4,6 +4,7 @@
             [clojure.core.async.interop :refer [p->c]]
             [frontend.components.assets :as assets]
             [frontend.components.cmdk.core :as cmdk]
+            [frontend.components.icon :as icon-component]
             [frontend.components.page :as component-page]
             [frontend.components.page-menu :as page-menu]
             [frontend.components.plugins :as plugin]
@@ -25,6 +26,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.reaction :as reaction-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
@@ -228,6 +230,41 @@
     (p/do!
      (editor-handler/save-current-block!)
      (editor-new-property block target opts))))
+
+(defn- editor-new-reaction [target]
+  (let [editing-block (state/get-edit-block)
+        target-block-id (or (:block/uuid editing-block)
+                            (first (state/get-selection-block-ids)))
+        target' (or target
+                    (some-> (state/get-edit-input-id)
+                            (gdom/getElement))
+                    (first (state/get-selection-blocks)))
+        on-pick (fn [popup-id icon]
+                  (let [emoji-id (:id icon)
+                        emoji? (= :emoji (:type icon))]
+                    (if emoji?
+                      (do
+                        (reaction-handler/toggle-reaction! target-block-id emoji-id)
+                        (shui/popup-hide! popup-id))
+                      (notification/show! "Please pick an emoji reaction." :warning))))]
+    (when (and target-block-id target')
+      (shui/popup-show!
+       target'
+       (fn [{:keys [id]}]
+         (icon-component/icon-search
+          {:on-chosen (fn [_e icon _keep-popup?] (on-pick id icon))
+           :tabs [[:emoji "Emojis"]]
+           :default-tab :emoji
+           :show-used? true
+           :icon-value nil}))
+       {:align :start
+        :content-props {:class "ls-icon-picker"}}))))
+
+(defmethod events/handle :editor/new-reaction [[_ {:keys [target]}]]
+  (when-not config/publishing?
+    (p/do!
+     (editor-handler/save-current-block!)
+     (editor-new-reaction target))))
 
 (defmethod events/handle :graph/new-db-graph [[_ _opts]]
   (shui/dialog-open!
