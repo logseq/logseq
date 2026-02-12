@@ -134,7 +134,7 @@
                          (some (fn [block]
                                  (and
                                   (:page? block)
-                                  (= input (util/page-name-sanity-lc (:block.temp/original-title block))))) blocks-result)))
+                                  (= (util/page-name-sanity-lc input) (util/page-name-sanity-lc (:block.temp/original-title block))))) blocks-result)))
         include-slash? (or (string/includes? input "/")
                            (string/starts-with? input "/"))
         start-with-slash? (string/starts-with? input "/")
