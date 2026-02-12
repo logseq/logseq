@@ -127,6 +127,7 @@
  :linked-references/filter-excludes "Excludes: "
  :editor/block-search "Search for a block"
  :text/image "Image"
+ :text/video "Video"
  :asset/show-in-folder "Show image in folder"
  :asset/open-in-browser "Open image in browser"
  :asset/delete "Delete image"
