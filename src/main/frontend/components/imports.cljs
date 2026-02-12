@@ -116,7 +116,7 @@
           :else
           (db-import-handler/import-from-sqlite-zip! file graph-name
                                                      (fn []
-                                                       (finished-cb false)))))
+                                                       (finished-cb {:reload? false})))))
 
       (or debug-transit? db-edn?)
       (let [graph-name (string/trim graph-name)]
