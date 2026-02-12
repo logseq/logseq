@@ -12,9 +12,7 @@
             [logseq.db.frontend.property.type :as db-property-type]))
 
 (def ^:private property-ignore-rtc
-  {:rtc/ignore-attr-when-init-upload true
-   :rtc/ignore-attr-when-init-download true
-   :rtc/ignore-attr-when-syncing true})
+  {:rtc/ignore-attr-when-syncing true})
 
 ;; Main property vars
 ;; ==================
