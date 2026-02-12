@@ -774,6 +774,7 @@
 
     img {
       @apply rounded-full;
+      object-fit: cover;
     }
 
     .external-badge {
