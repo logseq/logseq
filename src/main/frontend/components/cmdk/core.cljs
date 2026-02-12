@@ -178,30 +178,56 @@
                     ["Create" :create (create-items input)])]
 
                  :else
-                 (->>
-                  [(when-not node-exists?
-                     ["Create" :create (create-items input)])
-                   ;; "From Web" section - Wikidata entity search results
-                   ;; Filter out results that match existing page names (D layer)
-                   (let [all-wikidata (get-in results [:wikidata-entities :items])
-                         wikidata-status (get-in results [:wikidata-entities :status])
-                         filtered (remove (fn [item]
-                                            (when-let [label (get-in item [:source-wikidata :label])]
-                                              (contains? existing-page-names
-                                                         (util/page-name-sanity-lc label))))
-                                          all-wikidata)
-                         wikidata-items (if (or sidebar? (= :more (get-in results [:wikidata-entities :show])))
-                                          filtered
-                                          (take (get-group-limit :wikidata-entities) filtered))]
-                     (when (or (seq wikidata-items) (= :loading wikidata-status))
-                       ["From Web" :wikidata-entities wikidata-items]))
-                   ["Current page" :current-page (visible-items :current-page)]
-                   ["Nodes" :nodes (visible-items :nodes)]
-                   ["Recently updated" :recently-updated-pages (visible-items :recently-updated-pages)]
-                   ["Commands" :commands (visible-items :commands)]
-                   ["Files" :files (visible-items :files)]
-                   ["Filters" :filters (visible-items :filters)]]
-                  (remove nil?)))
+                 (let [;; "From Web" section - Wikidata entity search results
+                       ;; Filter out results that match existing page names (D layer)
+                       from-web (let [all-wikidata (get-in results [:wikidata-entities :items])
+                                      wikidata-status (get-in results [:wikidata-entities :status])
+                                      filtered (remove (fn [item]
+                                                         (when-let [label (get-in item [:source-wikidata :label])]
+                                                           (contains? existing-page-names
+                                                                      (util/page-name-sanity-lc label))))
+                                                       all-wikidata)
+                                      wikidata-items (if (or sidebar? (= :more (get-in results [:wikidata-entities :show])))
+                                                       filtered
+                                                       (take (get-group-limit :wikidata-entities) filtered))]
+                                  (when (or (seq wikidata-items) (= :loading wikidata-status))
+                                    ["From Web" :wikidata-entities wikidata-items]))
+                       ;; Show Nodes above From Web when local pages match the query
+                       has-local-matches?
+                       (if (< (count (string/trim input)) 3)
+                         true ;; Short queries: always Nodes first
+                         (let [query-words (string/split (string/lower-case (string/trim input)) #"\s+")
+                               system-prefix? (fn [title-lc]
+                                                (or (string/starts-with? title-lc "wikidata-")
+                                                    (string/starts-with? title-lc "avatar-")))]
+                           (some (fn [item]
+                                   (when-let [block (:source-block item)]
+                                     (let [title (str (:block.temp/original-title block))
+                                           title-lc (string/lower-case title)]
+                                       (and (:page? block)
+                                            (not (system-prefix? title-lc))
+                                            (let [title-words (string/split title-lc #"[^\w]+")]
+                                              (every? (fn [qw]
+                                                        (some #(string/starts-with? % qw) title-words))
+                                                      query-words))))))
+                                 (visible-items :nodes))))]
+                   (->>
+                    [(when-not node-exists?
+                       ["Create" :create (create-items input)])
+                     (if has-local-matches?
+                       ["Current page" :current-page (visible-items :current-page)]
+                       from-web)
+                     (if has-local-matches?
+                       ["Nodes" :nodes (visible-items :nodes)]
+                       ["Current page" :current-page (visible-items :current-page)])
+                     (if has-local-matches?
+                       from-web
+                       ["Nodes" :nodes (visible-items :nodes)])
+                     ["Recently updated" :recently-updated-pages (visible-items :recently-updated-pages)]
+                     ["Commands" :commands (visible-items :commands)]
+                     ["Files" :files (visible-items :files)]
+                     ["Filters" :filters (visible-items :filters)]]
+                    (remove nil?))))
         order (remove nil? order*)]
     (for [[group-name group-key group-items] order]
       [group-name
