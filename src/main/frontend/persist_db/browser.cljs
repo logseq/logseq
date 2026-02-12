@@ -182,8 +182,9 @@
 
 (defn <connect-db-worker-and-infer-worker!
   []
-  (assert (and @state/*infer-worker @state/*db-worker))
-  (state/<invoke-db-worker-direct-pass :thread-api/set-infer-worker-proxy (Comlink/proxy @state/*infer-worker)))
+  (when-not (util/electron?)
+    (assert (and @state/*infer-worker @state/*db-worker))
+    (state/<invoke-db-worker-direct-pass :thread-api/set-infer-worker-proxy (Comlink/proxy @state/*infer-worker))))
 
 (defn <export-db!
   [repo data]

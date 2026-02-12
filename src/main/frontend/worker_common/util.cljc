@@ -31,6 +31,21 @@
        (when-let [worker (or port js/self)]
          (.postMessage worker (ldb/write-transit-str [type data]))))
 
+     (defn encode-graph-dir-name
+       [graph-name]
+       (let [encoded (js/encodeURIComponent (or graph-name ""))]
+         (-> encoded
+             (string/replace "~" "%7E")
+             (string/replace "%" "~"))))
+
+     (defn decode-graph-dir-name
+       [dir-name]
+       (when (some? dir-name)
+         (try
+           (js/decodeURIComponent (string/replace dir-name "~" "%"))
+           (catch :default _
+             nil))))
+
      (defn get-pool-name
        [graph-name]
        (str "logseq-pool-" (common-sqlite/sanitize-db-name graph-name)))

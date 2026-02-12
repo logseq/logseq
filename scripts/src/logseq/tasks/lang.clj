@@ -150,7 +150,7 @@
   the ones defined for the default :en lang. This catches translations that have
   been added in UI but don't have an entry or translations no longer used in the UI"
   [{:keys [fix?]}]
-  (let [actual-dicts (->> (shell {:out :string}
+  (let [actual-dicts (->> (shell {:out :string :shutdown nil}
                                  ;; This currently assumes all ui translations
                                  ;; use (t and src/main. This can easily be
                                  ;; tweaked as needed

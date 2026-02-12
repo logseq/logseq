@@ -4,6 +4,7 @@
   https://github.com/ReilySiegel/missionary-websocket/blob/master/src/com/reilysiegel/missionary/websocket.cljs"
   (:require [cljs-http-missionary.client :as http]
             [frontend.common.missionary :as c.m]
+            [frontend.worker.platform :as platform]
             [frontend.worker.flows :as worker-flows]
             [frontend.worker.rtc.debug-log :as rtc-debug-log]
             [frontend.worker.rtc.exception :as r.ex]
@@ -22,7 +23,7 @@
   [url]
   (fn [s! f!]
     (try
-      (let [ws (js/WebSocket. url)]
+      (let [ws (platform/websocket-connect (platform/current) url)]
         (set! (.-onopen ws)
               (fn [_]
                 (let [close-dfv (m/dfv)

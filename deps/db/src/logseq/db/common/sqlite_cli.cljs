@@ -22,6 +22,7 @@
 (defn- upsert-addr-content!
   "Upsert addr+data-seq. Should be functionally equivalent to db-worker/upsert-addr-content!"
   [db data]
+  (assert db ::upsert-addr-content!)
   (let [insert (.prepare db "INSERT INTO kvs (addr, content, addresses) values ($addr, $content, $addresses) on conflict(addr) do update set content = $content, addresses = $addresses")
         insert-many (.transaction ^object db
                                   (fn [data]

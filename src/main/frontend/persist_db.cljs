@@ -1,44 +1,127 @@
 (ns frontend.persist-db
   "Backend of DB based graph"
-  (:require [frontend.db :as db]
+  (:require [electron.ipc :as ipc]
+            [frontend.db :as db]
             [frontend.persist-db.browser :as browser]
+            [frontend.persist-db.node :as node]
             [frontend.persist-db.protocol :as protocol]
+            [frontend.persist-db.remote :as remote]
+            [frontend.handler.worker :as worker-handler]
             [frontend.state :as state]
             [frontend.util :as util]
+            [lambdaisland.glogi :as log]
             [promesa.core :as p]))
 
 (defonce opfs-db (browser/->InBrowser))
+(defonce node-db (atom nil))
+(defonce remote-db (atom nil))
+(defonce remote-repo (atom nil))
+
+(defn- node-runtime?
+  []
+  (and (exists? js/process)
+       (not (exists? js/window))))
+
+(defn- electron-runtime?
+  []
+  (and (not (node-runtime?))
+       (util/electron?)))
+
+(defn- <ensure-remote!
+  [repo]
+  (if (or (nil? repo) (= repo @remote-repo))
+    (p/resolved @remote-db)
+    (p/let [_ (when @remote-db
+                (remote/stop! @remote-db))
+            runtime (ipc/ipc "db-worker-runtime" repo)
+            client (remote/start! (assoc runtime
+                                         :repo repo
+                                         :event-handler worker-handler/handle))]
+      (reset! remote-db client)
+      (reset! remote-repo repo)
+      (reset! state/*db-worker (:wrapped-worker client))
+      client)))
+
+(defn <start-runtime!
+  []
+  (cond
+    (node-runtime?)
+    (p/resolved (or @node-db
+                    (let [client (node/start! (assoc (node/default-config)
+                                                     :event-handler worker-handler/handle))]
+                      (reset! node-db client)
+                      (reset! state/*db-worker (:wrapped-worker client))
+                      client)))
+
+    (electron-runtime?)
+    (if-let [repo (state/get-current-repo)]
+      (<ensure-remote! repo)
+      (p/resolved nil))
+
+    :else
+    (browser/start-db-worker!)))
 
 (defn- get-impl
   "Get the actual implementation of PersistentDB"
   []
-  opfs-db)
+  (if (node-runtime?)
+    (or @node-db
+        (let [client (node/start! (assoc (node/default-config)
+                                         :event-handler worker-handler/handle))]
+          (reset! node-db client)
+          (reset! state/*db-worker (:wrapped-worker client))
+          client))
+    opfs-db))
 
 (defn <list-db []
-  (protocol/<list-db (get-impl)))
+  (if (electron-runtime?)
+    (if-let [repo (or @remote-repo (state/get-current-repo))]
+      (p/let [client (<ensure-remote! repo)]
+        (protocol/<list-db client))
+      (p/resolved []))
+    (protocol/<list-db (get-impl))))
 
 (defn <unsafe-delete [repo]
-  (when repo (protocol/<unsafe-delete (get-impl) repo)))
+  (when repo
+    (if (electron-runtime?)
+      (p/let [client (<ensure-remote! repo)]
+        (protocol/<unsafe-delete client repo))
+      (protocol/<unsafe-delete (get-impl) repo))))
 
 (defn <export-db
   [repo opts]
-  (when repo (protocol/<export-db (get-impl) repo opts)))
+  (when repo
+    (if (electron-runtime?)
+      (p/let [client (<ensure-remote! repo)]
+        (protocol/<export-db client repo opts))
+      (protocol/<export-db (get-impl) repo opts))))
 
 (defn <import-db
   [repo data]
-  (when repo (protocol/<import-db (get-impl) repo data)))
+  (when repo
+    (if (electron-runtime?)
+      (p/let [client (<ensure-remote! repo)]
+        (protocol/<import-db client repo data))
+      (protocol/<import-db (get-impl) repo data))))
 
 (defn <fetch-init-data
   ([repo]
    (<fetch-init-data repo {}))
   ([repo opts]
-   (when repo (protocol/<fetch-initial-data (get-impl) repo opts))))
+   (when repo
+     (if (electron-runtime?)
+       (p/let [client (<ensure-remote! repo)]
+         (protocol/<fetch-initial-data client repo opts))
+       (protocol/<fetch-initial-data (get-impl) repo opts)))))
 
 ;; FIXME: limit repo name's length and sanity
 ;; @shuyu Do we still need this?
 (defn <new [repo opts]
   {:pre [(<= (count repo) 128)]}
-  (p/let [_ (protocol/<new (get-impl) repo opts)]
+  (p/let [impl (if (electron-runtime?)
+                 (<ensure-remote! repo)
+                 (p/resolved (get-impl)))
+          _ (protocol/<new impl repo opts)]
     (<export-db repo {})))
 
 ;; repo->max-tx
@@ -56,7 +139,7 @@
   (when (util/electron?)
     (when-let [repo (state/get-current-repo)]
       (when (or (graph-has-changed? repo) force-save?)
-        (println :debug :save-db-to-disk repo)
+        (log/debug :event :save-db-to-disk :repo repo)
         (->
          (p/do!
           (<export-db repo {})
@@ -66,14 +149,8 @@
              [:notification/show {:content "The current db has been saved successfully to the disk."
                                   :status :success}])))
          (p/catch (fn [^js error]
-                    (js/console.error error)
+                    (log/error :event :save-db-to-disk-failed :repo repo :error error)
                     (state/pub-event!
                      [:notification/show {:content (str (.getMessage error))
                                           :status :error
                                           :clear? false}]))))))))
-
-(defn run-export-periodically!
-  []
-  (js/setInterval export-current-graph!
-                  ;; every 30 seconds
-                  (* 30 1000)))

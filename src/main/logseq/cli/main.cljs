@@ -1,0 +1,116 @@
+(ns logseq.cli.main
+  "CLI entrypoint for invoking db-worker-node."
+  (:refer-clojure :exclude [run!])
+  (:require [clojure.string :as string]
+            [logseq.cli.commands :as commands]
+            [logseq.cli.config :as config]
+            [logseq.cli.data-dir :as data-dir]
+            [logseq.cli.format :as format]
+            [logseq.cli.log :as cli-log]
+            [logseq.cli.version :as version]
+            [lambdaisland.glogi :as log]
+            [promesa.core :as p]))
+
+(defn- usage
+  [summary]
+  (string/join "\n"
+               ["logseq <command> [options]"
+                ""
+                "Options:"
+                summary]))
+
+(defn run!
+  ([args] (run! args {}))
+  ([args _opts]
+   (let [parsed (commands/parse-args args)]
+     (cond
+       (:help? parsed)
+       (p/resolved {:exit-code 0
+                    :output (usage (:summary parsed))})
+
+       (not (:ok? parsed))
+       (p/resolved {:exit-code 1
+                    :output (format/format-result {:status :error
+                                                   :error (:error parsed)
+                                                   :command (:command parsed)}
+                                                  {})})
+
+       (= :version (:command parsed))
+       (p/resolved {:exit-code 0
+                    :output (version/format-version)})
+
+       :else
+       (let [cfg (config/resolve-config (:options parsed))]
+         (cli-log/set-verbose! (:verbose cfg))
+         (log/debug :event :cli/parsed-options
+                    :command (:command parsed)
+                    :args (cli-log/truncate-preview (:args parsed))
+                    :options (into {}
+                                   (map (fn [[k v]]
+                                          [k (cli-log/truncate-preview v)])
+                                        (:options parsed)))
+                    :config (into {}
+                                  (map (fn [[k v]]
+                                         [k (cli-log/truncate-preview v)])
+                                       (dissoc cfg :auth-token))))
+         (try
+           (let [cfg (assoc cfg :data-dir (data-dir/ensure-data-dir! (:data-dir cfg)))
+                 action-result (commands/build-action parsed cfg)]
+             (if-not (:ok? action-result)
+               (p/resolved {:exit-code 1
+                            :output (format/format-result {:status :error
+                                                           :error (:error action-result)
+                                                           :command (:command parsed)
+                                                           :context (select-keys (:options parsed)
+                                                                                 [:repo :graph :page :block])}
+                                                          cfg)})
+               (-> (commands/execute (:action action-result) cfg)
+                   (p/then (fn [result]
+                             (let [opts (cond-> cfg
+                                          (:output-format result)
+                                          (assoc :output-format (:output-format result)))]
+                               {:exit-code 0
+                                :output (format/format-result result opts)})))
+                   (p/catch (fn [error]
+                              (let [data (ex-data error)
+                                    message (cond
+                                              (and (= :http-error (:code data)) (seq (:body data)))
+                                              (str "http request failed (" (:status data) "): " (:body data))
+
+                                              (some? (:message data))
+                                              (:message data)
+
+                                              :else
+                                              (or (.-message error) (str error)))]
+                                (if (= :data-dir-permission (:code data))
+                                  {:exit-code 1
+                                   :output (format/format-result {:status :error
+                                                                  :error {:code :data-dir-permission
+                                                                          :message message
+                                                                          :path (:path data)}}
+                                                                 cfg)}
+                                  {:exit-code 1
+                                   :output (format/format-result {:status :error
+                                                                  :error {:code :exception
+                                                                          :message message}}
+                                                                 cfg)})))))))
+           (catch :default error
+             (let [data (ex-data error)
+                   message (or (.-message error) (str error))]
+               (if (= :data-dir-permission (:code data))
+                 (p/resolved {:exit-code 1
+                              :output (format/format-result {:status :error
+                                                             :error {:code :data-dir-permission
+                                                                     :message message
+                                                                     :path (:path data)}}
+                                                            cfg)})
+                 (throw error))))))))))
+
+(defn main
+  [& args]
+  (-> (run! args)
+      (p/then (fn [{:keys [exit-code output]}]
+                (when (seq output)
+                  (println output))
+                (when-not (zero? exit-code)
+                  (.exit js/process exit-code))))))

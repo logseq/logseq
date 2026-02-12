@@ -1,0 +1,365 @@
+(ns logseq.cli.format
+  "Formatting helpers for CLI output."
+  (:require [clojure.string :as string]
+            [clojure.walk :as walk]
+            [logseq.cli.command.core :as command-core]
+            [logseq.cli.style :as style]
+            [logseq.common.util :as common-util]))
+
+(defn- normalize-json
+  [value]
+  (walk/postwalk (fn [entry]
+                   (if (uuid? entry)
+                     (str entry)
+                     entry))
+                 value))
+
+(defn- ->json
+  [{:keys [status data error command]}]
+  (let [obj (js-obj)]
+    (set! (.-status obj) (name status))
+    (cond
+      (= status :ok)
+      (set! (.-data obj) (clj->js (normalize-json data)))
+
+      (= status :error)
+      (do
+        (set! (.-error obj) (clj->js (normalize-json (update error :code name))))
+        (when (and (= :doctor command) (some? data))
+          (set! (.-data obj) (clj->js (normalize-json data))))))
+    (js/JSON.stringify obj)))
+
+(defn- pad-right
+  [value width]
+  (let [text (str value)
+        missing (- width (count text))]
+    (if (pos? missing)
+      (str text (apply str (repeat missing " ")))
+      text)))
+
+(defn- normalize-cell
+  [value]
+  (cond
+    (nil? value) "-"
+    (keyword? value) (str value)
+    :else (str value)))
+
+(defn- render-table
+  [headers rows]
+  (let [split-lines (fn [value]
+                      (string/split (normalize-cell value) #"\n" -1))
+        normalized-rows (mapv (fn [row]
+                                (mapv split-lines row))
+                              rows)
+        trim-right (fn [value]
+                     (string/replace value #"\s+$" ""))
+        widths (mapv (fn [idx header]
+                       (reduce max
+                               (count header)
+                               (mapcat #(map count (nth % idx)) normalized-rows)))
+                     (range (count headers))
+                     headers)
+        render-row (fn [row]
+                     (->> (map pad-right row widths)
+                          (string/join "  ")
+                          (trim-right)))
+        render-multiline-row (fn [row]
+                               (let [line-count (reduce max 1 (map count row))]
+                                 (mapv (fn [line-idx]
+                                         (->> (map-indexed (fn [col-idx lines]
+                                                            (pad-right (get lines line-idx "")
+                                                                       (nth widths col-idx)))
+                                                          row)
+                                              (string/join "  ")
+                                              (trim-right)))
+                                       (range line-count))))
+        lines (cons (render-row headers)
+                    (mapcat render-multiline-row normalized-rows))]
+    (string/join "\n" lines)))
+
+(defn- format-counted-table
+  [headers rows]
+  (str (render-table headers rows)
+       "\n"
+       "Count: "
+       (count rows)))
+
+(defn- error-hint
+  [{:keys [code]}]
+  (case code
+    :missing-graph "Use --repo <name>"
+    :missing-repo "Use --repo <name>"
+    :missing-content "Use --content or pass content as args"
+    :missing-query "Use --query <edn>"
+    :unknown-query "Use `logseq query list` to see available queries"
+    :data-dir-permission "Check filesystem permissions or set LOGSEQ_CLI_DATA_DIR"
+    nil))
+
+(defn- format-error
+  [error]
+  (let [{:keys [code message]} error
+        hint (error-hint error)
+        message* (style/bold-keywords message ["option" "command" "argument"])]
+    (cond-> (str "Error (" (name (or code :error)) "): " message*)
+      hint (str "\nHint: " hint))))
+
+(defn- maybe-ident-header
+  [items]
+  (when (some :db/ident items)
+    ["IDENT"]))
+
+(defn- parse-ts
+  [value]
+  (cond
+    (number? value) value
+    (string? value) (let [ms (js/Date.parse value)]
+                      (when-not (js/isNaN ms) ms))
+    :else nil))
+
+(defn- human-ago
+  [value now-ms]
+  (if-let [ts (parse-ts value)]
+    (let [diff-ms (max 0 (- now-ms ts))
+          secs (js/Math.floor (/ diff-ms 1000))
+          mins (js/Math.floor (/ secs 60))
+          hours (js/Math.floor (/ mins 60))
+          days (js/Math.floor (/ hours 24))
+          months (js/Math.floor (/ days 30))
+          years (js/Math.floor (/ days 365))]
+      (cond
+        (< secs 60) (str secs "s ago")
+        (< mins 60) (str mins "m ago")
+        (< hours 24) (str hours "h ago")
+        (< days 30) (str days "d ago")
+        (< months 12) (str months "mo ago")
+        :else (str years "y ago")))
+    "-"))
+
+(defn- format-list-row
+  [item include-ident? now-ms]
+  (let [base [(or (:db/id item) (:id item))
+              (or (:title item) (:block/title item) (:name item))]
+        with-ident (cond-> base
+                     include-ident? (conj (:db/ident item)))
+        updated (human-ago (or (:updated-at item) (:block/updated-at item)) now-ms)
+        created (human-ago (or (:created-at item) (:block/created-at item)) now-ms)]
+    (conj with-ident updated created)))
+
+(defn- format-list-page
+  [items now-ms]
+  (let [items (or items [])
+        include-ident? (boolean (some :db/ident items))
+        headers (into ["ID" "TITLE"]
+                      (concat (or (maybe-ident-header items) [])
+                              ["UPDATED-AT" "CREATED-AT"]))]
+    (format-counted-table
+     headers
+     (mapv #(format-list-row % include-ident? now-ms) items))))
+
+(defn- format-list-tag-or-property
+  [items now-ms]
+  (let [items (or items [])
+        include-ident? (boolean (some :db/ident items))
+        headers (into ["ID" "TITLE"]
+                      (concat (or (maybe-ident-header items) [])
+                              ["UPDATED-AT" "CREATED-AT"]))]
+    (format-counted-table
+     headers
+     (mapv #(format-list-row % include-ident? now-ms) items))))
+
+(defn- format-graph-list
+  [graphs]
+  (format-counted-table
+   ["GRAPH"]
+   (mapv (fn [graph] [graph]) (or graphs []))))
+
+(defn- format-server-list
+  [servers]
+  (format-counted-table
+   ["REPO" "STATUS" "HOST" "PORT" "PID"]
+   (mapv (fn [server]
+           [(:repo server)
+            (:status server)
+            (:host server)
+            (:port server)
+            (:pid server)])
+         (or servers []))))
+
+(defn- format-query-results
+  [result]
+  (let [edn-str (pr-str result)
+        parsed (common-util/safe-read-string {:log-error? false} edn-str)
+        valid? (or (some? parsed) (= "nil" (string/trim edn-str)))]
+    (if valid?
+      edn-str
+      edn-str)))
+
+(defn- format-query-list
+  [queries]
+  (format-counted-table
+   ["NAME" "INPUTS" "SOURCE" "DOC"]
+   (mapv (fn [{:keys [name inputs source doc]}]
+           [name
+            (if (seq inputs) (string/join ", " inputs) "-")
+            (clojure.core/name (or source :custom))
+            (or doc "-")])
+         (or queries []))))
+
+(defn- format-graph-info
+  [{:keys [graph logseq.kv/graph-created-at logseq.kv/schema-version]} now-ms]
+  (string/join "\n"
+               [(str "Graph: " (or graph "-"))
+                (str "Created at: " (if (some? graph-created-at)
+                                      (human-ago graph-created-at now-ms)
+                                      "-"))
+                (str "Schema version: " (or schema-version "-"))]))
+
+(defn- format-server-status
+  [{:keys [repo status host port]}]
+  (string/join "\n"
+               (cond-> [(str "Server " (name (or status :unknown)) ": " repo)]
+                 (and host port) (conj (str "Host: " host "  Port: " port)))))
+
+(defn- format-server-action
+  [command {:keys [repo status host port]}]
+  (let [status (or status
+                   (case command
+                     :server-start :started
+                     :server-stop :stopped
+                     :server-restart :restarted
+                     :unknown))]
+    (string/join "\n"
+                 (cond-> [(str "Server " (name status) ": " repo)]
+                   (and host port) (conj (str "Host: " host "  Port: " port))))))
+
+(defn- format-add-block
+  [{:keys [repo blocks]}]
+  (str "Added blocks: " (count blocks) " (repo: " repo ")"))
+
+(defn- format-add-page
+  [{:keys [repo page]}]
+  (str "Added page: " page " (repo: " repo ")"))
+
+(defn- format-remove
+  [{:keys [repo page uuid id ids]}]
+  (cond
+    (seq page) (str "Removed page: " page " (repo: " repo ")")
+    (seq uuid) (str "Removed block: " uuid " (repo: " repo ")")
+    (seq ids) (str "Removed blocks: " (count ids) " (repo: " repo ")")
+    (some? id) (str "Removed block: " id " (repo: " repo ")")
+    :else (str "Removed item (repo: " repo ")")))
+
+(defn- format-update-block
+  [{:keys [repo source target update-tags update-properties remove-tags remove-properties]}]
+  (let [change-parts (cond-> []
+                       (seq update-tags) (conj (str "tags:+" (count update-tags)))
+                       (seq update-properties) (conj (str "properties:+" (count update-properties)))
+                       (seq remove-tags) (conj (str "remove-tags:+" (count remove-tags)))
+                       (seq remove-properties) (conj (str "remove-properties:+" (count remove-properties))))
+        changes (when (seq change-parts)
+                  (str ", " (string/join ", " change-parts)))
+        move-fragment (when (seq target)
+                        (str " -> " target))]
+    (str "Updated block: " source (or move-fragment "") " (repo: " repo (or changes "") ")")))
+
+(defn- format-graph-export
+  [{:keys [export-type output]}]
+  (str "Exported " export-type " to " output))
+
+(defn- format-graph-import
+  [{:keys [import-type input]}]
+  (str "Imported " import-type " from " input))
+
+(defn- format-graph-action
+  [command {:keys [graph]}]
+  (let [verb (case command
+               :graph-create "created"
+               :graph-switch "switched"
+               :graph-remove "removed"
+               :graph-validate "validated"
+               "updated")]
+    (str "Graph " verb ": " graph)))
+
+(defn- format-doctor
+  [status checks]
+  (let [header (str "Doctor: " (name (or status :unknown)))
+        check-lines (mapv (fn [{:keys [id status message]}]
+                            (str "[" (name (or status :unknown))
+                                 "] "
+                                 (name (or id :unknown))
+                                 (when (seq message)
+                                   (str " - " message))))
+                          (or checks []))]
+    (string/join "\n" (into [header] check-lines))))
+
+(defn- ->human
+  [{:keys [status data error command context]} {:keys [now-ms]}]
+  (let [now-ms (or now-ms (js/Date.now))]
+    (case status
+      :ok
+      (case command
+        :graph-list (format-graph-list (:graphs data))
+        :graph-info (format-graph-info data now-ms)
+        (:graph-create :graph-switch :graph-remove :graph-validate)
+        (format-graph-action command context)
+        :server-list (format-server-list (:servers data))
+        :server-status (format-server-status data)
+        (:server-start :server-stop :server-restart)
+        (format-server-action command data)
+        :list-page (format-list-page (:items data) now-ms)
+        (:list-tag :list-property) (format-list-tag-or-property (:items data) now-ms)
+        :add-block (format-add-block context)
+        :add-page (format-add-page context)
+        :remove (format-remove context)
+        :update-block (format-update-block context)
+        :graph-export (format-graph-export context)
+        :graph-import (format-graph-import context)
+        :query (format-query-results (:result data))
+        :query-list (format-query-list (:queries data))
+        :show (or (:message data) (pr-str data))
+        :doctor (format-doctor (:status data) (:checks data))
+        (if (and (map? data) (contains? data :message))
+          (:message data)
+          (pr-str data)))
+
+      :error
+      (if (= :doctor command)
+        (format-doctor (or (get-in data [:status]) :error)
+                       (or (get-in data [:checks])
+                           (get-in error [:checks])))
+        (format-error error))
+
+      (pr-str {:status status :data data :error error}))))
+
+(defn- ->edn
+  [{:keys [status data error command]}]
+  (pr-str (cond-> {:status status}
+            (= status :ok) (assoc :data data)
+            (= status :error) (assoc :error error)
+            (and (= status :error) (= :doctor command) (some? data))
+            (assoc :data data))))
+
+(defn- normalize-graph-result
+  [result]
+  (walk/postwalk
+   (fn [entry]
+     (if (map? entry)
+       (cond-> entry
+         (string? (:repo entry)) (update :repo command-core/repo->graph)
+         (string? (:graph entry)) (update :graph command-core/repo->graph)
+         (seq (:graphs entry)) (update :graphs (fn [graphs]
+                                                 (mapv command-core/repo->graph graphs))))
+       entry))
+   result))
+
+(defn format-result
+  [result {:keys [output-format] :as opts}]
+  (let [result (normalize-graph-result result)
+        format (cond
+                 (= output-format :edn) :edn
+                 (= output-format :json) :json
+                 :else :human)]
+    (case format
+      :json (->json result)
+      :edn (->edn result)
+      (->human result opts))))
