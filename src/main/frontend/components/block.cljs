@@ -11,6 +11,7 @@
             [dommy.core :as dom]
             [electron.ipc :as ipc]
             [frontend.components.block.macros :as block-macros]
+            [frontend.components.block-image-editor :as block-image-editor]
             [frontend.components.icon :as icon-component]
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.components.macro :as macro]
@@ -199,7 +200,7 @@
 
 (defonce *resizing-image? (atom false))
 (rum/defc ^:large-vars/cleanup-todo asset-container
-  [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text]}]
+  [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text rebuild-asset-url!]}]
   (let [asset-width (:logseq.property.asset/width asset-block)
         asset-height (:logseq.property.asset/height asset-block)]
     (hooks/use-effect!
@@ -221,7 +222,17 @@
                        (string/starts-with? src "~"))
                  (str "file://" src)
                  src)
-          get-blockid #(some-> (rum/deref *el-ref) (.closest "[blockid]") (.getAttribute "blockid") (uuid))]
+          get-blockid #(some-> (rum/deref *el-ref) (.closest "[blockid]") (.getAttribute "blockid") (uuid))
+          [reload-n set-reload-n!] (rum/use-state 0)
+          reload-asset! #(if (util/electron?)
+                           (set-reload-n! inc)
+                           (rebuild-asset-url!))]
+      (hooks/use-effect!
+       (fn []
+         (when (> reload-n 0)
+           (util/schedule
+            #(set-reload-n! 0))))
+       [reload-n])
       [:div.asset-container
        {:key "resize-asset-container"
         :on-pointer-down util/stop
@@ -230,13 +241,14 @@
                     (when (= "IMG" (some-> (.-target e) (.-nodeName)))
                       (open-lightbox! e)))
         :ref *el-ref}
-       [:img.rounded-sm.relative.fade-in.fade-in-faster
-        (merge
-         {:loading "lazy"
-          :referrerPolicy "no-referrer"
-          :src src'
-          :title title}
-         metadata)]
+       (when (zero? reload-n)
+         [:img.rounded-sm.relative.fade-in.fade-in-faster
+          (merge
+           {:loading "lazy"
+            :referrerPolicy "no-referrer"
+            :src src'
+            :title title}
+           metadata)])
        (when (and (not breadcrumb?)
                   (not positioned?))
          [:<>
@@ -287,10 +299,21 @@
                   {:on-click handle-copy!}
                   [:span.flex.items-center.gap-1
                    (ui/icon "copy") (t :asset/copy)])
+                 (when (and local?
+                            (not config/publishing?)
+                            (not (state/mobile?))
+                            (block-image-editor/editable-image? asset-block image-src))
+                   (shui/dropdown-menu-item
+                    {:on-click (fn []
+                                 (state/pub-event! [:editor/show-block-image-editor
+                                                    asset-block
+                                                    {:src src'
+                                                     :reload-asset! reload-asset!}]))}
+                    [:span.flex.items-center.gap-1
+                     (ui/icon "photo-edit") (t :asset/edit)]))
                  (when (util/electron?)
                    (shui/dropdown-menu-item
-                    {:on-click (fn [e]
-                                 (util/stop e)
+                    {:on-click (fn []
                                  (if local?
                                    (ipc/ipc "openFileInFolder" image-src)
                                    (js/window.apis.openExternal image-src)))}
@@ -321,10 +344,11 @@
                         (not breadcrumb?)
                         (not positioned?))
         asset-container-cp (asset-container asset-block src title metadata'
-                                            {:breadcrumb? breadcrumb?
-                                             :positioned? positioned?
-                                             :local? local?
-                                             :full-text full-text})]
+                                            (merge config
+                                                   {:breadcrumb? breadcrumb?
+                                                    :positioned? positioned?
+                                                    :local? local?
+                                                    :full-text full-text}))]
     (if (or (:disable-resize? config)
             (:table-view? config)
             (not resizable?))
@@ -405,13 +429,16 @@
   (let [src (::src state)
         ^js js-url (:link-js-url config)
         href (cond-> href
-               (nil? js-url)
-               (config/get-local-asset-absolute-path))]
-    (when (nil? @src)
-      (-> (assets-handler/<make-asset-url href js-url)
-          (p/then (fn [url]
-                    (reset! src (common-util/safe-decode-uri-component url))))
-          (p/catch #(js/console.log "Failed to load asset:" %))))
+                     (nil? js-url)
+                     (config/get-local-asset-absolute-path))
+        rebuild-asset-url! (fn []
+                             (-> (assets-handler/<make-asset-url href js-url)
+                                 (p/then (fn [url]
+                                           (reset! src (common-util/safe-decode-uri-component url))))
+                                 (p/catch #(js/console.log "Failed to load asset:" %))))
+
+        config (assoc config :rebuild-asset-url! rebuild-asset-url!)]
+    (when (nil? @src) (rebuild-asset-url!))
     (:image-placeholder config)
     (if (and (:image-placeholder config) (nil? @src))
       (:image-placeholder config)
