@@ -156,7 +156,7 @@
 
                              :else
                              v)})]
-                      (if (set? v) (set (map build-pvalue v)) (build-pvalue v)))])))
+                    (if (set? v) (set (map build-pvalue v)) (build-pvalue v)))])))
        ((fn [x]
           (db-property-build/build-property-values-tx-m new-block x {:pvalue-map? true})))))
 

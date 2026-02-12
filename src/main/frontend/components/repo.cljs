@@ -4,8 +4,8 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
+            [frontend.handler.db-based.sync :as rtc-handler]
             [frontend.handler.graph :as graph]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
@@ -18,6 +18,7 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.common.util :as common-util]
+            [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
@@ -55,7 +56,7 @@
 (rum/defc ^:large-vars/cleanup-todo repos-inner
   "Graph list in `All graphs` page"
   [repos]
-  (for [{:keys [root url remote? GraphUUID GraphSchemaVersion GraphName created-at last-seen-at] :as repo}
+  (for [{:keys [root url remote? graph-e2ee? GraphUUID GraphSchemaVersion GraphName created-at last-seen-at] :as repo}
         (sort-repos-with-metadata-local repos)
         :let [graph-name (config/db-graph-name url)]]
     [:div.flex.justify-between.mb-2.items-center.group {:key (or url GraphUUID)
@@ -70,7 +71,7 @@
                                      (state/pub-event! [:graph/switch url])
 
                                      remote?
-                                     (state/pub-event! [:rtc/download-remote-graph GraphName GraphUUID GraphSchemaVersion])
+                                     (state/pub-event! [:rtc/download-remote-graph GraphName GraphUUID GraphSchemaVersion graph-e2ee?])
 
                                      :else
                                      (when-not (util/capacitor?)
@@ -120,10 +121,11 @@
                :on-click (fn []
                            (let [repo (state/get-current-repo)
                                  token (state/get-auth-id-token)
-                                 remote-graph-name (config/db-graph-name (state/get-current-repo))]
+                                 remote-graph-name (config/db-graph-name (state/get-current-repo))
+                                 graph-e2ee? (let [e2ee? (ldb/get-graph-rtc-e2ee? (db/get-db))]
+                                               (if (nil? e2ee?) true (true? e2ee?)))]
                              (when (and token remote-graph-name)
-                               (state/<invoke-db-worker :thread-api/rtc-async-upload-graph
-                                                        repo token remote-graph-name)
+                               (rtc-handler/<rtc-upload-graph! repo graph-e2ee?)
                                (when (util/mobile?)
                                  (shui/popup-show! nil
                                                    (fn []
@@ -138,7 +140,8 @@
                                    (rtc-handler/<get-remote-graphs)))))))}
               "Use Logseq sync (Beta testing)"))
 
-           (when (and remote? manager?)
+           (when (and remote?
+                      manager?)
              (shui/dropdown-menu-item
               {:key "delete-remotely"
                :class "delete-remote-graph-menu-item"
@@ -150,13 +153,12 @@
                                     [:small "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."]]])
                                  (p/then
                                   (fn []
-                                    (let [<delete-graph rtc-handler/<rtc-delete-graph!]
-                                      (state/set-state! :rtc/loading-graphs? true)
-                                      (when (= (state/get-current-repo) repo)
-                                        (state/<invoke-db-worker :thread-api/rtc-stop))
-                                      (p/do! (<delete-graph GraphUUID GraphSchemaVersion)
-                                             (state/set-state! :rtc/loading-graphs? false)
-                                             (rtc-handler/<get-remote-graphs))))))))}
+                                    (state/set-state! :rtc/loading-graphs? true)
+                                    (when (= (state/get-current-repo) repo)
+                                      (state/<invoke-db-worker :thread-api/rtc-stop))
+                                    (p/do! (rtc-handler/<rtc-delete-graph! GraphUUID GraphSchemaVersion)
+                                           (state/set-state! :rtc/loading-graphs? false)
+                                           (rtc-handler/<get-remote-graphs)))))))}
               "Delete from server"))
 
            (when (and remote? (not manager?))
@@ -164,17 +166,25 @@
               {:key "leave-shared-graph"
                :class "leave-shared-graph-menu-item"
                :on-click (fn []
-                           (notification/show!
-                            "Please ask this graph's manager to rovoke your access."
-                            :info
-                            false)
-                           ;; (let [prompt-str "Are you sure you want to leave this graph?"]
-                           ;;   (-> (shui/dialog-confirm!
-                           ;;        [:p.font-medium.-my-4 prompt-str])
-                           ;;       (p/then
-                           ;;        (fn []
-                           ;;          ))))
-                           )}
+                           (let [prompt-str "Are you sure you want to leave this graph?"]
+                             (-> (shui/dialog-confirm!
+                                  [:p.font-medium.-my-4 prompt-str])
+                                 (p/then
+                                  (fn []
+                                    (state/set-state! :rtc/loading-graphs? true)
+                                    (when (= (state/get-current-repo) repo)
+                                      (state/<invoke-db-worker :thread-api/rtc-stop))
+                                    (-> (rtc-handler/<rtc-leave-graph! GraphUUID)
+                                        (p/then (fn []
+                                                  (notification/show! "Left graph." :success)
+                                                  (rtc-handler/<get-remote-graphs)))
+                                        (p/catch (fn [e]
+                                                   (notification/show! "Failed to leave graph." :error)
+                                                   (log/error :db-sync/leave-graph-failed
+                                                              {:error e
+                                                               :graph-uuid GraphUUID})))
+                                        (p/finally (fn []
+                                                     (state/set-state! :rtc/loading-graphs? false)))))))))}
               "Leave this graph")))))]]]))
 
 (rum/defc repos-cp < rum/reactive
@@ -276,7 +286,7 @@
 
                                              (and rtc-graph? remote?)
                                              (state/pub-event!
-                                              [:rtc/download-remote-graph GraphName GraphUUID GraphSchemaVersion])
+                                              [:rtc/download-remote-graph GraphName GraphUUID GraphSchemaVersion graph-e2ee?])
 
                                              :else
                                              (state/pub-event! [:graph/pull-down-remote-graph graph])))))}})))
@@ -432,10 +442,26 @@
       (string/includes? graph-name "+")
       (string/includes? graph-name "/")))
 
+(defn ensure-e2ee-rsa-key-for-cloud!
+  [{:keys [cloud? graph-e2ee? refresh-token token user-uuid e2ee-rsa-key-ensured?]} set-e2ee-rsa-key-ensured?]
+  (if (and cloud? graph-e2ee? refresh-token token user-uuid (not e2ee-rsa-key-ensured?))
+    (-> (p/do!
+         (state/<invoke-db-worker :thread-api/set-db-sync-config
+                                  {:enabled? true
+                                   :ws-url config/db-sync-ws-url
+                                   :http-base config/db-sync-http-base})
+         (p/let [rsa-key-pair (state/<invoke-db-worker :thread-api/db-sync-ensure-user-rsa-keys)]
+           (set-e2ee-rsa-key-ensured? (some? rsa-key-pair))))
+        (p/catch (fn [e]
+                   (log/error :db-sync/ensure-user-rsa-keys-failed e)
+                   e)))
+    (p/resolved nil)))
+
 (rum/defc new-db-graph
   []
   (let [[creating-db? set-creating-db?] (hooks/use-state false)
         [cloud? set-cloud?] (hooks/use-state false)
+        [graph-e2ee? set-graph-e2ee?] (hooks/use-state true)
         [e2ee-rsa-key-ensured? set-e2ee-rsa-key-ensured?] (hooks/use-state nil)
         input-ref (hooks/create-ref)
         new-db-f (fn new-db-f
@@ -446,14 +472,15 @@
                        (invalid-graph-name-warning)
                        (do
                          (set-creating-db? true)
-                         (p/let [repo (repo-handler/new-db! graph-name)]
+                         (p/let [repo (repo-handler/new-db! graph-name
+                                                            {:remote-graph? cloud?})]
                            (when cloud?
                              (->
                               (p/do
                                 (state/set-state! :rtc/uploading? true)
-                                (rtc-handler/<rtc-create-graph! repo)
-                                (rtc-flows/trigger-rtc-start repo)
-                                (rtc-handler/<get-remote-graphs))
+                                (rtc-handler/<rtc-create-graph! repo graph-e2ee?)
+                                (rtc-handler/<get-remote-graphs)
+                                (rtc-flows/trigger-rtc-start repo))
                               (p/catch (fn [error]
                                          (log/error :create-db-failed error)))
                               (p/finally (fn []
@@ -475,23 +502,16 @@
      (fn []
        (let [token (state/get-auth-id-token)
              user-uuid (user-handler/user-uuid)
-             refresh-token (str (state/get-auth-refresh-token))
-             db-name (util/trim-safe (.-value (rum/deref input-ref)))]
-         (when (and cloud? refresh-token token user-uuid
-                    (not e2ee-rsa-key-ensured?))
-           (p/do!
-            (state/<invoke-db-worker :thread-api/init-user-rsa-key-pair
-                                     token
-                                     refresh-token
-                                     user-uuid))
-           (-> (p/let [rsa-key-pair (state/<invoke-db-worker :thread-api/get-user-rsa-key-pair token user-uuid)]
-                 (set-e2ee-rsa-key-ensured? (some? rsa-key-pair))
-                 (when rsa-key-pair
-                   (when db-name (new-db-f db-name))))
-               (p/catch (fn [e]
-                          (log/error :get-user-rsa-key-pair e)
-                          e))))))
-     [cloud?])
+             refresh-token (state/get-auth-refresh-token)]
+         (ensure-e2ee-rsa-key-for-cloud!
+          {:cloud? cloud?
+           :graph-e2ee? graph-e2ee?
+           :refresh-token refresh-token
+           :token token
+           :user-uuid user-uuid
+           :e2ee-rsa-key-ensured? e2ee-rsa-key-ensured?}
+          set-e2ee-rsa-key-ensured?)))
+     [cloud? graph-e2ee?])
 
     [:div.new-graph.flex.flex-col.gap-4.p-1.pt-2
      (shui/input
@@ -505,16 +525,27 @@
         [:div.flex.flex-row.items-center.gap-1
          (shui/checkbox
           {:id "rtc-sync"
-           :value cloud?
+           :checked cloud?
            :on-checked-change
            (fn []
              (let [v (boolean (not cloud?))]
                (set-cloud? v)))})
          [:label.opacity-70.text-sm
           {:for "rtc-sync"}
-          "Use Logseq Sync?"]]])
+          "Use Logseq Sync?"]
+         (when cloud?
+           [:div.flex.flex-row.items-center.gap-1.ml-3
+            (shui/checkbox
+             {:id "rtc-graph-e2ee"
+              :checked graph-e2ee?
+              :on-checked-change
+              (fn []
+                (set-graph-e2ee? (boolean (not graph-e2ee?))))})
+            [:label.opacity-70.text-sm
+             {:for "rtc-graph-e2ee"}
+             "Encrypt graph data"]])]])
      (shui/button
-      {:disabled (and cloud? (not e2ee-rsa-key-ensured?))
+      {:disabled (and cloud? graph-e2ee? (not e2ee-rsa-key-ensured?))
        :on-click #(submit! % true)
        :on-key-down submit!}
       (if creating-db?

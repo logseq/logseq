@@ -13,10 +13,10 @@
             [frontend.schema.handler.repo-config :as repo-config-schema]
             [frontend.state :as state]
             [frontend.util :as util]
+            [logseq.common.config :as common-config]
             [logseq.db.frontend.content :as db-content]
             [logseq.outliner.op]
-            [promesa.core :as p]
-            [logseq.common.config :as common-config]))
+            [promesa.core :as p]))
 
 (defn- remove-non-existed-refs!
   [refs]
