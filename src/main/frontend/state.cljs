@@ -493,11 +493,14 @@ should be done through this fn in order to get global config and config defaults
 
 (defn get-ref-open-blocks-level
   []
-  (if-let [value (:ref/default-open-blocks-level (get-config))]
-    (if (and (int? value) (>= value 0))
-      (min value 9)
-      2)
-    2))
+  (let [config (get-config)]
+    (if-let [value (or (:ref/default-open-blocks-level config)
+                       ;; Backward compatibility for existing user configs.
+                       (:ref/linked-references-collapsed-threshold config))]
+      (if (and (int? value) (>= value 0))
+        (min value 9)
+        2)
+      2)))
 
 (defn get-export-bullet-indentation
   []

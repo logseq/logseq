@@ -24,3 +24,20 @@
                               {:shortcuts {:ui/toggle-brackets "t b"}}
                               {:shortcuts {:editor/up ["ctrl+p" "up"]}}))
       "Map values get merged across configs"))
+
+(deftest get-ref-open-blocks-level
+  (with-redefs [state/get-config (constantly {:ref/default-open-blocks-level 3})]
+    (is (= 3 (state/get-ref-open-blocks-level))
+        "Uses current config key when present"))
+
+  (with-redefs [state/get-config (constantly {:ref/linked-references-collapsed-threshold 0})]
+    (is (= 0 (state/get-ref-open-blocks-level))
+        "Supports legacy linked references collapse key"))
+
+  (with-redefs [state/get-config (constantly {:ref/default-open-blocks-level 12})]
+    (is (= 9 (state/get-ref-open-blocks-level))
+        "Caps values at 9"))
+
+  (with-redefs [state/get-config (constantly {:ref/linked-references-collapsed-threshold -1})]
+    (is (= 2 (state/get-ref-open-blocks-level))
+        "Falls back to default for invalid values")))
