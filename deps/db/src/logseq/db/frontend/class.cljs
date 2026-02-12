@@ -155,15 +155,15 @@
    (remove #{eid})))
 
 (defn get-class-extends
-  "Returns all extends of a class"
+  "Returns all extends of a class. Returns nil if class is not a valid entity."
   [class]
-  (assert (de/entity? class) "get-class-extends `class` should be an entity")
-  (loop [extends (:logseq.property.class/extends class)
-         result []]
-    (if (seq extends)
-      (recur (mapcat :logseq.property.class/extends extends)
-             (into result extends))
-      (reverse (distinct result)))))
+  (when (de/entity? class)
+    (loop [extends (:logseq.property.class/extends class)
+           result []]
+      (if (seq extends)
+        (recur (mapcat :logseq.property.class/extends extends)
+               (into result extends))
+        (reverse (distinct result))))))
 
 (defn create-user-class-ident-from-name
   "Creates a class :db/ident for a default user namespace.

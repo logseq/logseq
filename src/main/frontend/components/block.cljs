@@ -2522,7 +2522,9 @@
        (let [block-icon-raw (:logseq.property/icon block)
              block-icon (when (not= :none (:type block-icon-raw)) block-icon-raw)
              ;; Check for default-icon on tags (walking extends chain)
-             sorted-tags (sort-by :db/id (:block/tags block))
+             sorted-tags (->> (:block/tags block)
+                              (keep (fn [tag] (if (number? tag) (db/entity tag) tag)))
+                              (sort-by :db/id))
              default-icon (some (fn [tag]
                                   (or (:logseq.property.class/default-icon tag)
                                       (some :logseq.property.class/default-icon
@@ -3042,7 +3044,9 @@
                     (let [icon-raw (get block :logseq.property/icon)
                           icon' (when (not= :none (:type icon-raw)) icon-raw)
                           ;; Check for default-icon on tags (walking extends chain)
-                          sorted-tags (sort-by :db/id (:block/tags block))
+                          sorted-tags (->> (:block/tags block)
+                                           (keep (fn [tag] (if (number? tag) (db/entity tag) tag)))
+                                           (sort-by :db/id))
                           default-icon (some (fn [tag]
                                                (or (:logseq.property.class/default-icon tag)
                                                    (some :logseq.property.class/default-icon

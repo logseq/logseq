@@ -480,7 +480,9 @@
 (defn get-node-icon
   [node-entity]
   (let [block-icon (get node-entity :logseq.property/icon)
-        sorted-tags (sort-by :db/id (:block/tags node-entity))
+        sorted-tags (->> (:block/tags node-entity)
+                         (keep (fn [tag] (if (number? tag) (db/entity tag) tag)))
+                         (sort-by :db/id))
         ;; Check for default-icon on tags, walking extends chain for inheritance
         default-icon (some (fn [tag]
                              (or (:logseq.property.class/default-icon tag)

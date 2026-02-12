@@ -829,10 +829,13 @@
                                                                               {:disabled? true})]))
                                                       tags (when-not (seq (:logseq.property/classes property))
                                                              (block-handler/visible-tags node))
+                                                      node-icon (icon-component/get-node-icon node)
+                                                      rich-icon (when (map? node-icon)
+                                                                  [:span.flex-shrink-0.inline-flex.items-center.justify-center
+                                                                   {:style {:width 20 :height 20}}
+                                                                   (icon-component/icon node-icon {:size (if (contains? #{:avatar :image} (:type node-icon)) 20 16)})])
                                                       label [:div.flex.flex-row.items-center.gap-2
-                                                             (when-not (or (:logseq.property/classes property)
-                                                                           (contains? #{:class :property} property-type))
-                                                               (icon-component/get-node-icon-cp node {:ignore-current-icon? true}))
+                                                             rich-icon
                                                              [:div (if (contains? #{:class :property :page} property-type)
                                                                      title
                                                                      (if (seq tags)
@@ -843,6 +846,11 @@
                                                   [header label]))
                                               [nil (:block/title node)])]
                          (assoc node
+                                :icon (cond
+                                        (ldb/class? node) "hash"
+                                        (ldb/property? node) "letter-p"
+                                        (db/page? node) "file"
+                                        :else "letter-n")
                                 :header header
                                 :label-value (:block/title node)
                                 :label label
