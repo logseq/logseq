@@ -79,7 +79,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: 2553ea8236c11ea0f88de28fce1cbfee
-          projectName: " logseq-db-test"
+          projectName: "logseq-db-test"
           directory: "public"
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
           branch: "main"
