@@ -108,6 +108,45 @@
       (is (re-find #"\u00A0\u00A0\u00A0\.\.\.\u00A0\u00A0\u00A0" result))
       (is (not (re-find #"\u00A0\u00A0\u00A0\.\.\.\u00A0\u00A0\u00A0.*\u00A0\u00A0\u00A0\.\.\.\u00A0\u00A0\u00A0" result))))))
 
+(deftest ensure-highlighted-snippet-overlap-prefers-non-overlap-hit
+  (testing "highlights non-overlap occurrences when shorter query term overlaps longer one"
+    (let [text "十步杀一人，千里不留行。北国风光，千里冰封，万里雪飘。"
+          result (search/ensure-highlighted-snippet nil text "十步 杀一人")]
+      (is (= "$pfts_2lqh>$十步$<pfts_2lqh$$pfts_2lqh>$杀一人$<pfts_2lqh$，千里不留行。北国风光，千里冰封，万里雪飘。"
+             result)))
+    (let [text "十步杀一人，千里不留行。北国风光，千里冰封，万里雪飘。"
+          result (search/ensure-highlighted-snippet nil text "千里 千")]
+      (is (= "十步杀一人，$pfts_2lqh>$千里$<pfts_2lqh$不留行。北国风光，$pfts_2lqh>$千$<pfts_2lqh$里冰封，万里雪飘。"
+             result)))
+    (let [text "十步杀一人，千里不留行。北国风光，千里冰封，万里雪飘。"
+          result (search/ensure-highlighted-snippet nil text "千 千里")]
+      (is (= "十步杀一人，$pfts_2lqh>$千里$<pfts_2lqh$不留行。北国风光，$pfts_2lqh>$千$<pfts_2lqh$里冰封，万里雪飘。"
+             result)))
+    (let [text "十步杀一人，千里不留行。北国风光，千里冰封，万里雪飘。"
+          result (search/ensure-highlighted-snippet nil text "千里不留行 千里")]
+      (is (= "十步杀一人，$pfts_2lqh>$千里不留行$<pfts_2lqh$。北国风光，$pfts_2lqh>$千里$<pfts_2lqh$冰封，万里雪飘。"
+             result)))
+    (let [text "十步杀一人，千里不留行。北国风光，千里冰封，万里雪飘。"
+          result (search/ensure-highlighted-snippet nil text "千里不留行 千里不")]
+      (is (= "十步杀一人，$pfts_2lqh>$千里不留行$<pfts_2lqh$。北国风光，千里冰封，万里雪飘。"
+             result)))
+    (let [text "Clojure is a dynamic and functional dialect of the programming language Lisp on the Java platform."
+          result (search/ensure-highlighted-snippet nil text "programming i")]
+      (is (= "Clojure $pfts_2lqh>$i$<pfts_2lqh$s a dynamic and functional dialect of the $pfts_2lqh>$programming$<pfts_2lqh$ language Lisp on the Java platform."
+             result)))
+    (let [text "Clojure is a dynamic and functional dialect of the programming language Lisp on the Java platform."
+          result (search/ensure-highlighted-snippet nil text "functional f")]
+      (is (= "Clojure is a dynamic and $pfts_2lqh>$functional$<pfts_2lqh$ dialect o$pfts_2lqh>$f$<pfts_2lqh$ the programming language Lisp on the Java platform."
+             result)))
+    (let [text "Clojure is a dynamic and functional dialect of the programming language Lisp on the Java platform."
+          result (search/ensure-highlighted-snippet nil text "Clojure l")]
+      (is (= "$pfts_2lqh>$Clojure$<pfts_2lqh$ is a dynamic and functiona$pfts_2lqh>$l$<pfts_2lqh$ dialect of the programming language Lisp on the Java platform."
+             result)))
+    (let [text "Clojure is a dynamic and functional dialect of the programming language Lisp on the Java platform."
+          result (search/ensure-highlighted-snippet nil text "dynamic dy")]
+      (is (= "Clojure is a $pfts_2lqh>$dynamic$<pfts_2lqh$ and functional dialect of the programming language Lisp on the Java platform."
+             result)))))
+
 (deftest code-block-predicate
   (testing "matches display-type code first"
     (with-redefs [ldb/page? (constantly false)
