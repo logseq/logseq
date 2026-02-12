@@ -195,7 +195,6 @@
     [:div.wikidata-import-panel.p-4
      ;; Header
      [:div.mb-4
-      [:h3.text-lg.font-semibold "Import from Wikidata"]
       [:p.text-sm.text-gray-11.mt-1
        (str "\"" page-title "\" has additional properties available:")]]
 
