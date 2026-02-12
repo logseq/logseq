@@ -643,38 +643,38 @@ Some bindings in this fn:
   (when (and (string? s)
              (not (string/blank? s)))
     (binding [*current-db* db]
-     (let [s (if (= \# (first s)) (page-ref/->page-ref (subs s 1)) s)
-           form (some->> s
-                         (pre-transform)
-                         (reader/read-string custom-readers))
-           sort-by (atom nil)
-           blocks? (atom nil)
-           sample (atom nil)
-           form (simplify-query form)
-           {result :query rules :rules}
-           (when form (build-query form {:form form
-                                         :sort-by sort-by
-                                         :blocks? blocks?
-                                         :sample sample
-                                         :cards? cards?}))
-           result' (when (seq result)
-                     (let [key (if (coll? (first result))
+      (let [s (if (= \# (first s)) (page-ref/->page-ref (subs s 1)) s)
+            form (some->> s
+                          (pre-transform)
+                          (reader/read-string custom-readers))
+            sort-by (atom nil)
+            blocks? (atom nil)
+            sample (atom nil)
+            form (simplify-query form)
+            {result :query rules :rules}
+            (when form (build-query form {:form form
+                                          :sort-by sort-by
+                                          :blocks? blocks?
+                                          :sample sample
+                                          :cards? cards?}))
+            result' (when (seq result)
+                      (let [key (if (coll? (first result))
                                 ;; Only queries for this branch are not's like:
                                 ;; [(not (page-ref ?b "page 2"))]
-                                 (keyword (ffirst result))
-                                 (keyword (first result)))]
-                       (add-bindings! (if (= key :and) (rest result) result))))
-           extract-rules (fn [rules]
-                           (rules/extract-rules rules/db-query-dsl-rules rules {:deps rules/rules-dependencies}))
-           rules' (let [rules' (if (contains? (set rules) :page-ref)
-                                 (conj (set rules) :self-ref)
-                                 rules)]
-                    (extract-rules rules'))]
-       {:query result'
-        :rules rules'
-        :sort-by @sort-by
-        :blocks? (boolean @blocks?)
-        :sample sample}))))
+                                  (keyword (ffirst result))
+                                  (keyword (first result)))]
+                        (add-bindings! (if (= key :and) (rest result) result))))
+            extract-rules (fn [rules]
+                            (rules/extract-rules rules/db-query-dsl-rules rules {:deps rules/rules-dependencies}))
+            rules' (let [rules' (if (contains? (set rules) :page-ref)
+                                  (conj (set rules) :self-ref)
+                                  rules)]
+                     (extract-rules rules'))]
+        {:query result'
+         :rules rules'
+         :sort-by @sort-by
+         :blocks? (boolean @blocks?)
+         :sample sample}))))
 
 ;; Main fns
 ;; ========

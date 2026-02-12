@@ -224,9 +224,11 @@
   (when id
     (let [clipboard-data (gobj/get e "clipboardData")
           files (.-files clipboard-data)]
-      (editor-handler/upload-asset! id files
-                                    (get (state/get-edit-block) :block/format :markdown)
-                                    editor-handler/*asset-uploading? true)
+      (p/let [blocks (editor-handler/upload-asset! id files
+                                                   (get (state/get-edit-block) :block/format :markdown)
+                                                   editor-handler/*asset-uploading? true)]
+        (when-let [asset (first blocks)]
+          (editor-handler/edit-block! asset :max {})))
       (util/stop e))))
 
 (defn editor-on-paste!
