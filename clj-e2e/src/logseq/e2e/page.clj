@@ -4,8 +4,7 @@
             [logseq.e2e.keyboard :as k]
             [logseq.e2e.locator :as loc]
             [logseq.e2e.util :as util]
-            [wally.main :as w]
-            [wally.selectors :as ws])
+            [wally.main :as w])
   (:import (com.microsoft.playwright TimeoutError)))
 
 (defn goto-page
@@ -28,7 +27,10 @@
   ;; close popup, exit editing
   ;; (repl/pause)
   (util/search title)
-  (w/click [(ws/text "Create page") (ws/nth= "0")])
+  (let [create-page-item (loc/filter ".search-results > div"
+                                     :has-text (str "Create page called '" title "'"))]
+    (w/wait-for create-page-item)
+    (w/click (.first create-page-item)))
   (util/wait-editor-visible))
 
 (defn delete-page
