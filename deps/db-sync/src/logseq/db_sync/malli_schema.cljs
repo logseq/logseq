@@ -252,6 +252,7 @@
   [:map
    [:title {:optional true} :string]
    [:body {:optional true} :string]
+   [:commit-message {:optional true} :string]
    [:head-branch {:optional true} :string]
    [:base-branch {:optional true} :string]
    [:create-pr {:optional true} :boolean]

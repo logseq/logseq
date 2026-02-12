@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [frontend.db :as db]
             [frontend.handler.db-based.sync :as db-sync]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
@@ -403,13 +404,27 @@
             resp))))))
 
 (defn- publish-request-body
-  [{:keys [title body head-branch base-branch create-pr? force?]}]
+  [{:keys [title body commit-message head-branch base-branch create-pr? force?]}]
   (cond-> {:create-pr (if (nil? create-pr?) true (true? create-pr?))
            :force (true? force?)}
     (string? (blank->nil title)) (assoc :title (blank->nil title))
     (string? (blank->nil body)) (assoc :body (blank->nil body))
+    (string? (blank->nil commit-message)) (assoc :commit-message (blank->nil commit-message))
     (string? (blank->nil head-branch)) (assoc :head-branch (blank->nil head-branch))
     (string? (blank->nil base-branch)) (assoc :base-branch (blank->nil base-branch))))
+
+(defn- maybe-insert-pr-sibling-blocks!
+  [block-uuid resp summary]
+  (when-let [url (or (blank->nil (:pr-url resp))
+                     (blank->nil (:manual-pr-url resp)))]
+    (p/let [block (editor-handler/api-insert-new-block! (str "PR URL: " url)
+                                                        {:block-uuid block-uuid
+                                                         :sibling? false})]
+
+      (when-let [summary (blank->nil summary)]
+        (editor-handler/api-insert-new-block! (str "PR Summary: " summary)
+                                              {:block-uuid (:block/uuid block)
+                                               :sibling? true})))))
 
 (defn- publish-status-message
   [resp]
@@ -466,6 +481,7 @@
               (p/then (fn [resp]
                         (update-session-state! block-uuid {:last-publish resp
                                                            :last-publish-at (util/time-ms)})
+                        (maybe-insert-pr-sibling-blocks! block-uuid resp (:body raw-body))
                         (notification/show! (publish-status-message resp)
                                             (if (= "manual-pr-required" (:status resp))
                                               :warning

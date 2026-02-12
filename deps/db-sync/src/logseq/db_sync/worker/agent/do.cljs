@@ -537,14 +537,25 @@
   [^js self current-session body user-id repo-url head-branch force? create-pr?]
   (p/let [pr-token (source-control/pr-token (.-env self))
           requested-base-branch (source-control/sanitize-branch-name (:base-branch body))
+          default-base (source-control/sanitize-branch-name (default-base-branch (.-env self)))
           detected-base-branch (when (and (nil? requested-base-branch)
                                           (string? pr-token))
                                  (source-control/<default-branch! (.-env self)
                                                                   pr-token
                                                                   repo-url))
+          detected-base-branch (source-control/sanitize-branch-name detected-base-branch)
           base-branch (or requested-base-branch
                           detected-base-branch
-                          (default-base-branch (.-env self)))]
+                          default-base)
+          base-branch (if (= base-branch head-branch)
+                        (or (some (fn [candidate]
+                                    (let [candidate (source-control/sanitize-branch-name candidate)]
+                                      (when (and (string? candidate)
+                                                 (not= candidate head-branch))
+                                        candidate)))
+                                  [default-base "main" "master"])
+                            base-branch)
+                        base-branch)]
     (cond
       (false? create-pr?)
       (http/json-response :sessions/pr
@@ -587,6 +598,7 @@
   [^js self current-session body user-id repo-url runtime force? create-pr? push-branch-fn]
   (let [provider (runtime-provider/resolve-provider (.-env self) runtime)
         push-token (source-control/push-token (.-env self))
+        commit-message (some-> (:commit-message body) str string/trim not-empty)
         head-branch (source-control/resolve-head-branch (:head-branch body)
                                                         (generated-head-branch (:id current-session)))]
     (if-not (string? head-branch)
@@ -597,11 +609,12 @@
                                              :force force?})
                   push-result (push-branch-fn provider
                                               runtime
-                                              {:session-id (:id current-session)
-                                               :repo-url repo-url
-                                               :head-branch head-branch
-                                               :force force?
-                                               :push-token push-token})
+                                              (cond-> {:session-id (:id current-session)
+                                                       :repo-url repo-url
+                                                       :head-branch head-branch
+                                                       :force force?
+                                                       :push-token push-token}
+                                                commit-message (assoc :commit-message commit-message)))
                   _ (<append-publish-event! self "git.push.succeeded"
                                             {:by user-id
                                              :head-branch head-branch

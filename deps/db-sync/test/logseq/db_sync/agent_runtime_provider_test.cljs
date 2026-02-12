@@ -244,6 +244,7 @@
                                                {:session-id "sess-push"
                                                 :repo-url "https://github.com/example/repo"
                                                 :head-branch "feature/m14"
+                                                :commit-message "feat: summarize PR updates"
                                                 :force true
                                                 :push-token "token-1"})
                (.then (fn [result]
@@ -253,6 +254,7 @@
                         (is (= true (:force result)))
                         (is (string/includes? (:script @captured) "git push"))
                         (is (string/includes? (:script @captured) "feature/m14"))
+                        (is (string/includes? (:script @captured) "commit -m 'feat: summarize PR updates'"))
                         (is (string/includes? (:script @captured) "x-access-token:token-1"))
                         (done)))
                (.catch (fn [error]

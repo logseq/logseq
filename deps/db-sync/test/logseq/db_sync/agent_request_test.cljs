@@ -53,6 +53,7 @@
   (testing "accepts sessions/pr request payload"
     (let [body {:title "feat: add m14 publish"
                 :body "This change enables push + optional PR."
+                :commit-message "feat: summarize m14 publish changes"
                 :head-branch "m14/publish"
                 :base-branch "main"
                 :create-pr true
@@ -64,4 +65,5 @@
   (testing "rejects invalid sessions/pr payload"
     (is (nil? (http/coerce-http-request :sessions/pr {:create-pr "yes"})))
     (is (nil? (http/coerce-http-request :sessions/pr {:force "no"})))
+    (is (nil? (http/coerce-http-request :sessions/pr {:commit-message 100})))
     (is (nil? (http/coerce-http-request :sessions/pr {:head-branch 42})))))

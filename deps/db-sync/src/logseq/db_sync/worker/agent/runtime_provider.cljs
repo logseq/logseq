@@ -430,7 +430,10 @@
 (defn- push-command
   [{:keys [repo-dir remote-url head-branch] :as opts}]
   (let [force? (true? (:force opts))
+        commit-message (or (some-> (:commit-message opts) string/trim not-empty)
+                           "chore(agent): update files")
         branch (escape-shell-single head-branch)
+        commit-message (escape-shell-single commit-message)
         remote (escape-shell-single remote-url)]
     (str "set -e; "
          "cd '" (escape-shell-single repo-dir) "'; "
@@ -439,7 +442,7 @@
          "git add -A; "
          "if git diff --cached --quiet; then true; else "
          "git -c user.name='Logseq Agent' -c user.email='agent@logseq.local' "
-         "commit -m 'chore(agent): update files'; "
+         "commit -m '" commit-message "'; "
          "fi; "
          "git push '" remote "' HEAD:refs/heads/" branch
          (when force? " --force"))))
@@ -956,6 +959,7 @@
       (let [script (push-command {:repo-dir repo-dir
                                   :remote-url remote-url
                                   :head-branch head-branch
+                                  :commit-message (:commit-message opts)
                                   :force force?})]
 
         (-> (p/let [result (sprites-exec-post! env name ["bash" "-lc" script])
@@ -1119,6 +1123,7 @@
             script (push-command {:repo-dir repo-dir
                                   :remote-url remote-url
                                   :head-branch head-branch
+                                  :commit-message (:commit-message opts)
                                   :force force?})]
         (-> (p/let [result (<cloudflare-exec! sandbox script)
                     {:keys [stdout stderr exit-code success]} (cloudflare-exec-output result)]

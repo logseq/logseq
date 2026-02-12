@@ -2,7 +2,8 @@
   (:require [cljs.test :refer [async deftest is testing]]
             [clojure.string :as string]
             [logseq.db-sync.worker.agent.do :as agent-do]
-            [logseq.db-sync.worker.agent.runtime-provider :as runtime-provider]))
+            [logseq.db-sync.worker.agent.runtime-provider :as runtime-provider]
+            [logseq.db-sync.worker.agent.source-control :as source-control]))
 
 (defn- make-agent-storage []
   (let [data (js/Map.)]
@@ -618,7 +619,8 @@
 (deftest pr-endpoint-push-only-success-test
   (testing "session publish endpoint supports push-only flow"
     (async done
-           (let [env #js {"AGENT_RUNTIME_PROVIDER" "local-dev"}
+           (let [push-calls (atom [])
+                 env #js {"AGENT_RUNTIME_PROVIDER" "local-dev"}
                  self (make-self env)
                  headers {"content-type" "application/json"
                           "x-user-id" "user-1"}]
@@ -635,6 +637,7 @@
                  (.then (fn [_]
                           (with-redefs [runtime-provider/<push-branch!
                                         (fn [_provider _runtime opts]
+                                          (swap! push-calls conj opts)
                                           (js/Promise.resolve
                                            {:head-branch (:head-branch opts)
                                             :repo-url (:repo-url opts)
@@ -645,6 +648,7 @@
                                                                  "POST"
                                                                  {:create-pr false
                                                                   :head-branch "m14/push-only"
+                                                                  :commit-message "feat: summarize PR changes"
                                                                   :force true}
                                                                  headers)))))
                  (.then (fn [resp]
@@ -654,6 +658,57 @@
                                    (is (= "pushed" (:status body)))
                                    (is (= "m14/push-only" (:head-branch body)))
                                    (is (= true (:force body)))
+                                   (is (= "feat: summarize PR changes"
+                                          (:commit-message (first @push-calls))))
+                                   (done)))))
+                 (.catch (fn [error]
+                           (is false (str "unexpected error: " error))
+                           (done))))))))
+
+(deftest pr-endpoint-fallbacks-base-branch-when-equal-to-head-test
+  (testing "session publish endpoint avoids head==base branch when resolving base branch"
+    (async done
+           (let [env #js {"AGENT_RUNTIME_PROVIDER" "local-dev"}
+                 self (make-self env)
+                 headers {"content-type" "application/json"
+                          "x-user-id" "user-1"}
+                 same-branch "logseq-agent/same-branch"]
+             (-> (.put (.-storage self)
+                       "session"
+                       (clj->js {:id "sess-pr-branch-fallback"
+                                 :status "running"
+                                 :task {:project {:repo-url "https://github.com/example/repo"}}
+                                 :runtime {:provider "local-dev"
+                                           :session-id "sess-pr-branch-fallback"}
+                                 :audit {}
+                                 :created-at 0
+                                 :updated-at 0}))
+                 (.then (fn [_]
+                          (with-redefs [runtime-provider/<push-branch!
+                                        (fn [_provider _runtime opts]
+                                          (js/Promise.resolve
+                                           {:head-branch (:head-branch opts)
+                                            :repo-url (:repo-url opts)
+                                            :force (:force opts)
+                                            :remote "origin"}))
+                                        source-control/pr-token
+                                        (fn [_env] "token-1")
+                                        source-control/<default-branch!
+                                        (fn [_env _token _repo-url]
+                                          (js/Promise.resolve same-branch))]
+                            (agent-do/handle-fetch self
+                                                   (json-request "http://db-sync.local/__session__/pr"
+                                                                 "POST"
+                                                                 {:create-pr false
+                                                                  :head-branch same-branch}
+                                                                 headers)))))
+                 (.then (fn [resp]
+                          (is (= 200 (.-status resp)))
+                          (.then (<json resp)
+                                 (fn [body]
+                                   (is (= "pushed" (:status body)))
+                                   (is (= same-branch (:head-branch body)))
+                                   (is (= "main" (:base-branch body)))
                                    (done)))))
                  (.catch (fn [error]
                            (is false (str "unexpected error: " error))

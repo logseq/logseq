@@ -352,6 +352,24 @@
   [message]
   (count (pr-str (select-keys message [:id :role :parts]))))
 
+(def ^:private commit-message-max-len 120)
+
+(defn- latest-assistant-summary
+  [messages]
+  (some->> messages
+           reverse
+           (keep (fn [message]
+                   (when (= "assistant" (normalize-role (:role message)))
+                     (ui-message-text message))))
+           first
+           normalized-text))
+
+(defn- summary->commit-message
+  [summary]
+  (when-let [summary (normalized-text summary)]
+    (let [single-line (string/replace summary #"\s+" " ")]
+      (subs single-line 0 (min commit-message-max-len (count single-line))))))
+
 (defn- session-messages-need-sync?
   [session-messages ui-messages]
   (let [ui-by-id (into {} (map (juxt :id identity) ui-messages))]
@@ -418,9 +436,14 @@
         publish! (fn [create-pr?]
                    (when (and base session-id (not publish-disabled?))
                      (set-publish-mode! (if create-pr? :pr :push))
-                     (-> (agent-handler/<publish-session! block {:create-pr? create-pr?})
-                         (p/catch (fn [_] nil))
-                         (p/finally (fn [] (set-publish-mode! nil))))))]
+                     (let [summary (latest-assistant-summary session-chat-messages)
+                           commit-message (summary->commit-message summary)
+                           opts (cond-> {:create-pr? create-pr?}
+                                  (string? summary) (assoc :body summary)
+                                  (string? commit-message) (assoc :commit-message commit-message))]
+                       (-> (agent-handler/<publish-session! block opts)
+                           (p/catch (fn [_] nil))
+                           (p/finally (fn [] (set-publish-mode! nil)))))))]
     (hooks/use-effect!
      (fn []
        (when (agent-handler/task-ready? block)
