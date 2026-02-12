@@ -163,15 +163,41 @@ DROP TRIGGER IF EXISTS blocks_au;
        (remove string/blank?)
        (remove #(contains? query-boolean-operators (string/lower-case %)))))
 
+(defn- overlap-match?
+  [{idx-1 :idx end-1 :end}
+   {idx-2 :idx end-2 :end}]
+  (and (< idx-1 end-2)
+       (< idx-2 end-1)))
+
+(defn- find-non-overlap-term-match
+  [text-lc term selected-matches]
+  (let [term-lc (string/lower-case term)
+        term-len (count term)]
+    (loop [from 0]
+      (when-let [idx (string/index-of text-lc term-lc from)]
+        (let [match {:term term
+                     :idx idx
+                     :len term-len
+                     :end (+ idx term-len)}]
+          (if (some #(overlap-match? match %) selected-matches)
+            (recur (inc idx))
+            match))))))
+
 (defn- find-matches
   ([text terms]
    (find-matches text terms <))
   ([text terms sort-fn]
-   (->> terms
-        (keep (fn [term]
-                (when-let [idx (string/index-of (string/lower-case text) (string/lower-case term))]
-                  {:term term :idx idx :len (count term) :end (+ idx (count term))})))
-        (sort-by :idx sort-fn))))
+   (let [text-lc (string/lower-case text)]
+     (->> terms
+          (map-indexed vector)
+          (sort-by (fn [[order term]]
+                     [(- (count term)) order]))
+          (reduce (fn [selected-matches [_ term]]
+                    (if-let [match (find-non-overlap-term-match text-lc term selected-matches)]
+                      (conj selected-matches match)
+                      selected-matches))
+                  [])
+          (sort-by :idx sort-fn)))))
 
 (defn- find-break-before
   [s start end]
