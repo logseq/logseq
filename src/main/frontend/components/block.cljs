@@ -998,7 +998,9 @@
                              :contents-page? contents-page?
                              :show-icon? true?
                              :with-tags? false)
-              asset? (some? (:logseq.property.asset/type block))
+              asset? (and (some? (:logseq.property.asset/type block))
+                          (some? (:logseq.property.asset/checksum block))
+                          (some? (:logseq.property.asset/size block)))
               brackets? (and (or show-brackets? nested-link?)
                              (not html-export?)
                              (not contents-page?))]
@@ -2621,7 +2623,11 @@
                                      config))]
              show-editor? (and editor-box edit? (not type-block-editor?))]
          (cond
-           (and (not (:page-title? config)) (ldb/asset? block) (img-audio-video? block))
+           (and (not (:page-title? config))
+                (ldb/asset? block)
+                (some? (:logseq.property.asset/checksum block))
+                (some? (:logseq.property.asset/size block))
+                (img-audio-video? block))
            [:div.flex.flex-col.asset-block-wrap.w-full
             (block-content-f {:custom-block-content
                               [:div.flex.flex-1
@@ -3068,11 +3074,12 @@
                                                                           (:db/id block)
                                                                           :logseq.property.class/default-icon
                                                                           icon-data)))
-                                                                     ;; del
+                                                                     ;; del — set :none to override inheritance (prevents auto-fetch re-trigger)
                                                                      (do
-                                                                       (db-property-handler/remove-block-property!
+                                                                       (db-property-handler/set-block-property!
                                                                         (:db/id block)
-                                                                        :logseq.property/icon)
+                                                                        :logseq.property/icon
+                                                                        {:type :none})
                                                                        ;; For classes, only remove default-icon if it matches page icon
                                                                        (let [default-icon (:logseq.property.class/default-icon block)]
                                                                          (when (and (ldb/class? block)

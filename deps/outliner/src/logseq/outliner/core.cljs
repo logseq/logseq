@@ -306,13 +306,33 @@
         (when (and (:block/title m) (not= (:block/title m) (:block/title block-entity)))
           (remove-orphaned-refs-when-save db *txs-state block-entity m)))
 
-      ;; handle others txs
-      (let [other-tx (:db/other-tx m)]
-        (when (seq other-tx)
-          (swap! *txs-state (fn [txs]
-                              (vec (concat txs other-tx)))))
-        (swap! *txs-state conj
-               (dissoc m :db/other-tx)))
+      ;; Clean up orphaned asset properties.
+      ;; Asset blocks always have type+checksum+size written atomically.
+      ;; If only a subset is present, it's stale data — strip it.
+      (let [orphaned-asset? (and (some? (:logseq.property.asset/type m))
+                                 (or (nil? (:logseq.property.asset/checksum m))
+                                     (nil? (:logseq.property.asset/size m))))
+            asset-props [:logseq.property.asset/type
+                         :logseq.property.asset/checksum
+                         :logseq.property.asset/size
+                         :logseq.property.asset/width
+                         :logseq.property.asset/height]
+            m (if orphaned-asset?
+                (apply dissoc m asset-props)
+                m)]
+        (when orphaned-asset?
+          (swap! *txs-state into
+                 (keep (fn [attr]
+                         (when (get block-entity attr)
+                           [:db/retract eid attr]))
+                       asset-props)))
+        ;; handle others txs
+        (let [other-tx (:db/other-tx m)]
+          (when (seq other-tx)
+            (swap! *txs-state (fn [txs]
+                                (vec (concat txs other-tx)))))
+          (swap! *txs-state conj
+                 (dissoc m :db/other-tx))))
 
       (when (and (:block/tags block-entity) block-entity)
         (let [;; delete tags when title changed

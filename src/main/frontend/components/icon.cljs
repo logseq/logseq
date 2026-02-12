@@ -500,11 +500,17 @@
       default-icon
       (case (:type default-icon)
         :avatar (when (:block/title node-entity)
-                  {:type :avatar
-                   :data {:value (derive-avatar-initials (:block/title node-entity))}})
+                  (let [colors (select-keys (:data default-icon) [:backgroundColor :color])]
+                    (cond-> {:type :avatar
+                             :data (merge colors
+                                          {:value (derive-avatar-initials (:block/title node-entity))})}
+                      (:color colors) (assoc :color (:color colors)))))
         :text (when (:block/title node-entity)
-                {:type :text
-                 :data {:value (derive-initials (:block/title node-entity))}})
+                (let [colors (select-keys (:data default-icon) [:color])]
+                  (cond-> {:type :text
+                           :data (merge colors
+                                        {:value (derive-initials (:block/title node-entity))})}
+                    (:color colors) (assoc :color (:color colors)))))
         ;; Image type: return marker indicating inherited image without asset yet
         ;; This triggers the empty placeholder and auto-fetch behavior
         :image {:type :image
@@ -537,6 +543,7 @@
    - Auto-fetch is enabled in config
    - The page has a title
    - The page hasn't been attempted before (tracked in local atom)
+   - The page doesn't have its own icon set (only fetch for inherited avatars)
    - The page doesn't already have a custom icon with an image"
   [page-entity]
   (let [page-id (:db/id page-entity)
@@ -546,8 +553,11 @@
                              (:feature/auto-fetch-avatar-images? config))
         has-title? (some? (:block/title page-entity))
         not-attempted? (not (contains? @*avatar-fetch-attempted page-id))
+        ;; Only auto-fetch for inherited avatars — if the page has its own icon,
+        ;; the user has already interacted with it (set, deleted, etc.)
+        no-own-icon? (nil? (:logseq.property/icon page-entity))
         no-existing-asset? (not (get-in (:logseq.property/icon page-entity) [:data :asset-uuid]))
-        result (and feature-enabled? has-title? not-attempted? no-existing-asset?)]
+        result (and feature-enabled? has-title? not-attempted? no-own-icon? no-existing-asset?)]
     result))
 
 (defn- <auto-fetch-avatar-image!
@@ -595,6 +605,7 @@
    - Auto-fetch is enabled in config
    - The page has a title
    - The page hasn't been attempted before (tracked in *image-fetch-attempted atom)
+   - The page doesn't have its own icon set (only fetch for inherited images)
    - The page doesn't already have a custom icon with an image
 
    Note: Wikidata pages are prevented from auto-fetch by adding their page ID to
@@ -607,8 +618,11 @@
                              (:feature/auto-fetch-avatar-images? config))
         has-title? (some? (:block/title page-entity))
         not-attempted? (not (contains? @*image-fetch-attempted page-id))
+        ;; Only auto-fetch for inherited images — if the page has its own icon,
+        ;; the user has already interacted with it (set, deleted, etc.)
+        no-own-icon? (nil? (:logseq.property/icon page-entity))
         no-existing-asset? (not (get-in (:logseq.property/icon page-entity) [:data :asset-uuid]))
-        result (and feature-enabled? has-title? not-attempted? no-existing-asset?)]
+        result (and feature-enabled? has-title? not-attempted? no-own-icon? no-existing-asset?)]
     result))
 
 (defn- <auto-fetch-image!
