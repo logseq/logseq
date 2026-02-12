@@ -20,6 +20,14 @@
 - Run a single unit-test:
   - `bb dev:test -v <namespace/testcase-name>`
 - E2E tests files are located in `/clj-e2e`
+- Do not use `npx shadow-cljs compile test` — it does not activate the
+  `:test` alias from `deps.edn`, so `src/test/` is not on the source path
+  and compilation fails. Use the `bb` commands above instead.
+- `pixi-graph-fork` and its `@pixi/*` dependencies crash at module load in
+  Node.js (`self is not defined` in `@pixi/settings`). Any namespace that
+  requires it — including `frontend.extensions.graph.pixi` — is untestable
+  in the unit-test environment. Extract testable logic into a separate
+  namespace with no browser-only dependencies before writing tests.
 
 ## Common used cljs keywords
 - All commonly used ClojureScript keywords are defined using `logseq.common.defkeywords/defkeyword`.
