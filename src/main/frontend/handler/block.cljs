@@ -142,7 +142,7 @@
 (defn block-title-with-icon
   "Used for select item"
   [block title icon-cp]
-  (if-let [icon (:logseq.property/icon block)]
+  (if-let [icon (let [i (:logseq.property/icon block)] (when (not= :none (:type i)) i))]
     (let [photo? (contains? #{:avatar :image} (:type icon))
           icon-size (if photo? 20 16)]
       [:div.flex.flex-row.items-baseline.gap-2

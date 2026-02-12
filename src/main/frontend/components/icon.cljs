@@ -488,13 +488,31 @@
                                        (ldb/get-class-extends tag))))
                            sorted-tags)]
     (cond
-      ;; 1. Explicit "no icon" override - hide icon even if inherited
+      ;; 0. Explicit "no icon" override — user deleted, suppress inheritance
+      ;; Skip to type-based defaults (file/hash/letter-p) instead of nil
       (= :none (:type block-icon))
-      nil
+      (cond
+        (ldb/class? node-entity) "hash"
+        (ldb/property? node-entity) "letter-p"
+        (ldb/page? node-entity) "file"
+        :else nil)
 
-      ;; 2. Instance's own icon takes precedence
+      ;; 1. Instance's own icon takes precedence
+      ;; For avatar/text without color, inherit color from parent's default-icon
       block-icon
-      block-icon
+      (let [icon-type (:type block-icon)
+            needs-color? (and (contains? #{:avatar :text} icon-type)
+                              (not (get-in block-icon [:data :color])))]
+        (if (and needs-color? default-icon
+                 (contains? #{:avatar :text} (:type default-icon)))
+          (let [parent-colors (select-keys (:data default-icon)
+                                           (if (= :avatar icon-type)
+                                             [:backgroundColor :color]
+                                             [:color]))]
+            (cond-> block-icon
+              (seq parent-colors) (update :data merge parent-colors)
+              (:color parent-colors) (assoc :color (:color parent-colors))))
+          block-icon))
 
       ;; 3. Resolve from tag's default-icon (unified inheritance)
       default-icon
@@ -543,7 +561,7 @@
    - Auto-fetch is enabled in config
    - The page has a title
    - The page hasn't been attempted before (tracked in local atom)
-   - The page doesn't have its own icon set (only fetch for inherited avatars)
+   - The user hasn't dismissed auto-fetch (via :no-auto-fetch flag)
    - The page doesn't already have a custom icon with an image"
   [page-entity]
   (let [page-id (:db/id page-entity)
@@ -553,11 +571,10 @@
                              (:feature/auto-fetch-avatar-images? config))
         has-title? (some? (:block/title page-entity))
         not-attempted? (not (contains? @*avatar-fetch-attempted page-id))
-        ;; Only auto-fetch for inherited avatars — if the page has its own icon,
-        ;; the user has already interacted with it (set, deleted, etc.)
-        no-own-icon? (nil? (:logseq.property/icon page-entity))
+        ;; Don't re-fetch if user explicitly dismissed the auto-fetched image
+        not-dismissed? (not (get-in (:logseq.property/icon page-entity) [:data :no-auto-fetch]))
         no-existing-asset? (not (get-in (:logseq.property/icon page-entity) [:data :asset-uuid]))
-        result (and feature-enabled? has-title? not-attempted? no-own-icon? no-existing-asset?)]
+        result (and feature-enabled? has-title? not-attempted? not-dismissed? no-existing-asset?)]
     result))
 
 (defn- <auto-fetch-avatar-image!
@@ -605,7 +622,7 @@
    - Auto-fetch is enabled in config
    - The page has a title
    - The page hasn't been attempted before (tracked in *image-fetch-attempted atom)
-   - The page doesn't have its own icon set (only fetch for inherited images)
+   - The user hasn't dismissed auto-fetch (via :no-auto-fetch flag)
    - The page doesn't already have a custom icon with an image
 
    Note: Wikidata pages are prevented from auto-fetch by adding their page ID to
@@ -618,11 +635,10 @@
                              (:feature/auto-fetch-avatar-images? config))
         has-title? (some? (:block/title page-entity))
         not-attempted? (not (contains? @*image-fetch-attempted page-id))
-        ;; Only auto-fetch for inherited images — if the page has its own icon,
-        ;; the user has already interacted with it (set, deleted, etc.)
-        no-own-icon? (nil? (:logseq.property/icon page-entity))
+        ;; Don't re-fetch if user explicitly dismissed the auto-fetched image
+        not-dismissed? (not (get-in (:logseq.property/icon page-entity) [:data :no-auto-fetch]))
         no-existing-asset? (not (get-in (:logseq.property/icon page-entity) [:data :asset-uuid]))
-        result (and feature-enabled? has-title? not-attempted? no-own-icon? no-existing-asset?)]
+        result (and feature-enabled? has-title? not-attempted? not-dismissed? no-existing-asset?)]
     result))
 
 (defn- <auto-fetch-image!
@@ -706,6 +722,7 @@
         ;; - The entity is a page (not a block)
         is-auto-fetchable-avatar? (and (= :avatar (:type node-icon))
                                        (not (get-in node-icon [:data :asset-uuid]))
+                                       (not (get-in node-icon [:data :no-auto-fetch]))
                                        (ldb/page? entity))
         ;; Check if this is an image that might need auto-fetch:
         ;; - It's an image type with empty? marker (inherited from default-icon)
@@ -3134,7 +3151,16 @@
                                   ((:on-chosen opts) e icon-data)
                                   (reset! *view :icon-picker))
                      :on-back #(reset! *view :icon-picker)
-                     :on-delete #(on-chosen nil)
+                     :on-delete (fn []
+                                  (if (and (= :avatar (:type normalized-icon-value))
+                                           (get-in normalized-icon-value [:data :asset-uuid]))
+                                    ;; Two-step: strip image asset, keep avatar with initials + block re-fetch
+                                    (let [avatar-without-asset (-> normalized-icon-value
+                                                                   (update :data dissoc :asset-uuid :asset-type)
+                                                                   (assoc-in [:data :no-auto-fetch] true))]
+                                      (on-chosen nil avatar-without-asset))
+                                    ;; Full delete
+                                    (on-chosen nil)))
                      :del-btn? del-btn?
                      :current-icon normalized-icon-value
                      :avatar-context (when (= :avatar (:type normalized-icon-value))
@@ -3294,7 +3320,7 @@
      [initial-open?])
 
     ;; trigger
-    (let [has-icon? (some? icon-value)]
+    (let [has-icon? (and (some? icon-value) (not= :none (:type icon-value)))]
       (shui/button
        (merge
         {:ref *trigger-ref

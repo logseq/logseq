@@ -235,16 +235,17 @@
   [page]
   [:div.ls-page-title-actions
    [:div.flex.flex-row.items-center.gap-2
-    (when-not (:logseq.property/icon (db/entity (:db/id page)))
-      (shui/button
-       {:variant :ghost
-        :size :sm
-        :class "px-2 py-0 h-6 text-xs text-muted-foreground"
-        :on-click (fn [e]
-                    (state/pub-event! [:editor/new-property {:property-key "Icon"
-                                                             :block page
-                                                             :target (.-target e)}]))}
-       "Add icon"))
+    (let [icon-prop (:logseq.property/icon (db/entity (:db/id page)))]
+      (when (or (nil? icon-prop) (= :none (:type icon-prop)))
+        (shui/button
+         {:variant :ghost
+          :size :sm
+          :class "px-2 py-0 h-6 text-xs text-muted-foreground"
+          :on-click (fn [e]
+                      (state/pub-event! [:editor/new-property {:property-key "Icon"
+                                                               :block page
+                                                               :target (.-target e)}]))}
+         "Add icon")))
 
     (shui/button
      {:variant :ghost

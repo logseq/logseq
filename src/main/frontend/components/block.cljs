@@ -2519,29 +2519,47 @@
 
      ;; Inline block icon - displayed BEFORE positioned properties like Status
      (when-not (or table? (:page-title? config))
-       (let [block-icon (:logseq.property/icon block)
-             ;; Check for :none override - explicitly hidden icon
-             icon-hidden? (= :none (:type block-icon))
-             ;; Check for default-icon on tags (unified icon inheritance)
+       (let [block-icon-raw (:logseq.property/icon block)
+             block-icon (when (not= :none (:type block-icon-raw)) block-icon-raw)
+             ;; Check for default-icon on tags (walking extends chain)
              sorted-tags (sort-by :db/id (:block/tags block))
              default-icon (some (fn [tag]
-                                  (:logseq.property.class/default-icon tag))
+                                  (or (:logseq.property.class/default-icon tag)
+                                      (some :logseq.property.class/default-icon
+                                            (ldb/get-class-extends tag))))
                                 sorted-tags)
-             ;; Determine if we have an icon to show
-             has-icon? (and (not icon-hidden?)
-                            (or (and block-icon (not= :none (:type block-icon)))
-                                default-icon))]
+             has-icon? (and (not= :none (:type block-icon-raw))
+                            (or block-icon default-icon))]
          (when has-icon?
-           (let [icon (or (when (and block-icon (not= :none (:type block-icon)))
-                            block-icon)
+           (let [icon (or (when block-icon
+                            ;; Merge inherited colors for avatar/text without color
+                            (let [icon-type (:type block-icon)
+                                  needs-color? (and (contains? #{:avatar :text} icon-type)
+                                                    (not (get-in block-icon [:data :color])))]
+                              (if (and needs-color? default-icon
+                                       (contains? #{:avatar :text} (:type default-icon)))
+                                (let [parent-colors (select-keys (:data default-icon)
+                                                                 (if (= :avatar icon-type)
+                                                                   [:backgroundColor :color]
+                                                                   [:color]))]
+                                  (cond-> block-icon
+                                    (seq parent-colors) (update :data merge parent-colors)
+                                    (:color parent-colors) (assoc :color (:color parent-colors))))
+                                block-icon)))
                           (when default-icon
                             (case (:type default-icon)
                               :avatar (when (:block/title block)
-                                        {:type :avatar
-                                         :data {:value (icon-component/derive-avatar-initials (:block/title block))}})
+                                        (let [colors (select-keys (:data default-icon) [:backgroundColor :color])]
+                                          (cond-> {:type :avatar
+                                                   :data (merge colors
+                                                                {:value (icon-component/derive-avatar-initials (:block/title block))})}
+                                            (:color colors) (assoc :color (:color colors)))))
                               :text (when (:block/title block)
-                                      {:type :text
-                                       :data {:value (icon-component/derive-initials (:block/title block))}})
+                                      (let [colors (select-keys (:data default-icon) [:color])]
+                                        (cond-> {:type :text
+                                                 :data (merge colors
+                                                              {:value (icon-component/derive-initials (:block/title block))})}
+                                          (:color colors) (assoc :color (:color colors)))))
                               ;; For tabler-icon and emoji, use the stored value directly
                               default-icon)))]
              (when icon
@@ -2566,7 +2584,7 @@
                                     (:db/id block)
                                     :logseq.property/icon
                                     icon-data))
-                                 ;; Delete = set :none to override inheritance
+                                 ;; Delete = set :none to suppress inheritance
                                  (db-property-handler/set-block-property!
                                   (:db/id block)
                                   :logseq.property/icon
@@ -3021,21 +3039,45 @@
         order-list? (boolean own-number-list?)
         children (ldb/get-children block)
         page-icon (when (:page-title? config)
-                    (let [icon' (get block :logseq.property/icon)
-                          ;; Check for default-icon on tags (for auto-generated icons)
+                    (let [icon-raw (get block :logseq.property/icon)
+                          icon' (when (not= :none (:type icon-raw)) icon-raw)
+                          ;; Check for default-icon on tags (walking extends chain)
                           sorted-tags (sort-by :db/id (:block/tags block))
                           default-icon (some (fn [tag]
-                                               (:logseq.property.class/default-icon tag))
+                                               (or (:logseq.property.class/default-icon tag)
+                                                   (some :logseq.property.class/default-icon
+                                                         (ldb/get-class-extends tag))))
                                              sorted-tags)]
-                      (when-let [icon (and (ldb/page? block)
-                                           (or icon'
-                                               ;; Generate icon from default-icon
+                      (when-let [icon (and (not= :none (:type icon-raw))
+                                           (ldb/page? block)
+                                           (or (when icon'
+                                                 ;; Merge inherited colors for avatar/text without color
+                                                 (let [icon-type (:type icon')
+                                                       needs-color? (and (contains? #{:avatar :text} icon-type)
+                                                                         (not (get-in icon' [:data :color])))]
+                                                   (if (and needs-color? default-icon
+                                                            (contains? #{:avatar :text} (:type default-icon)))
+                                                     (let [parent-colors (select-keys (:data default-icon)
+                                                                                      (if (= :avatar icon-type)
+                                                                                        [:backgroundColor :color]
+                                                                                        [:color]))]
+                                                       (cond-> icon'
+                                                         (seq parent-colors) (update :data merge parent-colors)
+                                                         (:color parent-colors) (assoc :color (:color parent-colors))))
+                                                     icon')))
+                                               ;; Generate icon from default-icon (with color merge)
                                                (when (and default-icon (:block/title block))
                                                  (case (:type default-icon)
-                                                   :avatar {:type :avatar
-                                                            :data {:value (icon-component/derive-avatar-initials (:block/title block))}}
-                                                   :text {:type :text
-                                                          :data {:value (icon-component/derive-initials (:block/title block))}}
+                                                   :avatar (let [colors (select-keys (:data default-icon) [:backgroundColor :color])]
+                                                             (cond-> {:type :avatar
+                                                                      :data (merge colors
+                                                                                   {:value (icon-component/derive-avatar-initials (:block/title block))})}
+                                                               (:color colors) (assoc :color (:color colors))))
+                                                   :text (let [colors (select-keys (:data default-icon) [:color])]
+                                                           (cond-> {:type :text
+                                                                    :data (merge colors
+                                                                                 {:value (icon-component/derive-initials (:block/title block))})}
+                                                             (:color colors) (assoc :color (:color colors))))
                                                    ;; For tabler-icon and emoji, use the stored value
                                                    default-icon))
                                                (some :logseq.property/icon (:block/tags block))
@@ -3074,7 +3116,7 @@
                                                                           (:db/id block)
                                                                           :logseq.property.class/default-icon
                                                                           icon-data)))
-                                                                     ;; del — set :none to override inheritance (prevents auto-fetch re-trigger)
+                                                                     ;; del — set :none to suppress inheritance
                                                                      (do
                                                                        (db-property-handler/set-block-property!
                                                                         (:db/id block)
