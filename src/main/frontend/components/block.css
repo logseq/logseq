@@ -195,6 +195,7 @@
 
 .block-control-wrap, .ls-page-title .property-value .block-control-wrap {
   @apply h-[24px];
+  @apply relative;
 
   &.is-order-list {
     @apply mr-0 pr-0;
@@ -225,6 +226,24 @@
 
   &.bullet-hidden {
     padding-right: 2px;
+  }
+}
+
+.block-editing-avatar-wrap {
+  @apply absolute top-1/2 -translate-y-1/2 pointer-events-none;
+  left: 6px;
+  z-index: 2;
+  opacity: 0;
+  animation: block-editing-avatar-fade-in 160ms ease-out forwards;
+}
+
+@keyframes block-editing-avatar-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
   }
 }
 
@@ -1241,4 +1260,24 @@ html.is-mac {
             @apply opacity-100;
         }
     }
+}
+
+.asset-transfer-shell {
+  @apply relative inline-block w-full;
+}
+
+.asset-transfer-placeholder {
+  @apply text-sm text-gray-11 mt-2;
+}
+
+.asset-transfer-progress {
+  @apply absolute left-2 right-2 bottom-2 rounded-md px-2 py-1 text-xs text-white bg-black/60 flex flex-col gap-1;
+}
+
+.asset-transfer-progress-bar {
+  @apply w-full h-1 rounded bg-white/30 overflow-hidden;
+
+  > span {
+    @apply block h-full bg-white;
+  }
 }

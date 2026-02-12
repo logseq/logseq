@@ -104,7 +104,6 @@
      [:h1.title
       [:bdi (or rel-path path)]]
 
-
      (cond
        ;; image type
        (and format (contains? (common-config/img-formats) format))

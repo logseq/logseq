@@ -1,13 +1,13 @@
 (ns frontend.components.shortcut-help
   "Shortcut help"
-  (:require [frontend.context.i18n :refer [t]]
-            [frontend.extensions.latex :as latex]
+  (:require [frontend.components.shortcut :as shortcut]
+            [frontend.context.i18n :refer [t]]
             [frontend.extensions.highlight :as highlight]
+            [frontend.extensions.latex :as latex]
             [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.page-ref :as page-ref]
-            [rum.core :as rum]
-            [frontend.components.shortcut :as shortcut]
-            [logseq.shui.ui :as shui]))
+            [logseq.shui.ui :as shui]
+            [rum.core :as rum]))
 
 (rum/defc trigger-table []
   [:table.classic-table.w-full

@@ -13,7 +13,7 @@
             [frontend.db :as db]
             [frontend.dicts :as dicts]
             [frontend.handler.config :as config-handler]
-            [frontend.handler.db-based.rtc :as rtc-handler]
+            [frontend.handler.db-based.sync :as rtc-handler]
             [frontend.handler.db-based.vector-search-flows :as vector-search-flows]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.notification :as notification]
@@ -912,6 +912,7 @@
   (let [[invite-email set-invite-email!] (hooks/use-state "")
         [loading? set-loading!] (hooks/use-state true)
         current-repo (state/get-current-repo)
+        manager? (user-handler/manager? current-repo)
         [users-info] (hooks/use-atom (:rtc/users-info @state/state))
         users (get users-info current-repo)
         invite-user! (fn []
@@ -938,11 +939,41 @@
            (shui/skeleton {:class "h-4 w-full"})])
         (for [{user-name :user/name
                user-email :user/email
+               user-uuid :user/uuid
                graph<->user-user-type :graph<->user/user-type} users]
-          [:div.flex.flex-row.items-center.gap-2 {:key (str "user-" user-name)}
-           [:div user-name]
-           (when user-email [:div.opacity-50.text-sm user-email])
-           (when graph<->user-user-type [:div.opacity-50.text-sm (name graph<->user-user-type)])]))]
+          (let [member? (= :member graph<->user-user-type)
+                can-remove? (and manager? member?)]
+            [:div.flex.flex-row.items-center.gap-2
+             {:key (str "user-" (or user-uuid user-name))}
+             [:div user-name]
+             (when user-email [:div.opacity-50.text-sm user-email])
+             (when graph<->user-user-type [:div.opacity-50.text-sm (name graph<->user-user-type)])
+             (when can-remove?
+               (shui/dropdown-menu
+                (shui/dropdown-menu-trigger
+                 {:asChild true}
+                 (shui/button
+                  {:variant "ghost"
+                   :size :sm
+                   :class "px-1 h-7"}
+                  (ui/icon "dots" {:size 14})))
+                (shui/dropdown-menu-content
+                 {:align "end"}
+                 (shui/dropdown-menu-item
+                  {:class "remove-member-menu-item"
+                   :on-click (fn []
+                               (let [graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))
+                                     member-id user-uuid]
+                                 (when (and graph-uuid member-id)
+                                   (-> (rtc-handler/<rtc-remove-member! graph-uuid member-id)
+                                       (p/then (fn []
+                                                 (rtc-handler/<rtc-get-users-info)))
+                                       (p/catch (fn [e]
+                                                  (notification/show! "Failed to remove member." :error)
+                                                  (log/error :db-sync/remove-member-failed {:error e
+                                                                                            :graph-uuid graph-uuid
+                                                                                            :member-id member-id})))))))}
+                  "Remove access"))))])))]
      [:div.flex.flex-col.gap-4.mt-4
       (shui/input
        {:placeholder   "Email address"

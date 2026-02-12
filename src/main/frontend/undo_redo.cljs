@@ -287,11 +287,15 @@
                               {:undo? undo?
                                :editor-cursors editor-cursors
                                :block-content block-content}))]
-              (when (seq reversed-tx-data)
+              (if (seq reversed-tx-data)
                 (if util/node-test?
-                  (do
+                  (try
                     (ldb/transact! conn reversed-tx-data tx-meta')
-                    (handler))
+                    (handler)
+                    (catch :default e
+                      (log/error ::undo-redo-failed e)
+                      (clear-history! repo)
+                      (if undo? ::empty-undo-stack ::empty-redo-stack)))
                   (->
                    (p/do!
                     ;; async write to the master worker
@@ -299,7 +303,10 @@
                     (handler))
                    (p/catch (fn [e]
                               (log/error ::undo-redo-failed e)
-                              (clear-history! repo)))))))))))
+                              (clear-history! repo)))))
+                (do
+                  (clear-history! repo)
+                  (if undo? ::empty-undo-stack ::empty-redo-stack))))))))
 
     (when ((if undo? empty-undo-stack? empty-redo-stack?) repo)
       (prn (str "No further " (if undo? "undo" "redo") " information"))
@@ -331,9 +338,10 @@
 
 (defn gen-undo-ops!
   [repo {:keys [tx-data tx-meta db-after db-before]}]
-  (let [{:keys [outliner-op]} tx-meta]
+  (let [{:keys [outliner-op local-tx?]} tx-meta]
     (when (and
            (= (:client-id tx-meta) (:client-id @state/state))
+           local-tx?
            outliner-op
            (not (false? (:gen-undo-ops? tx-meta)))
            (not (:create-today-journal? tx-meta)))

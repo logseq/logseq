@@ -4,7 +4,6 @@
             [clojure.string :as string]
             [clojure.walk :as w]
             [dommy.core :as dom]
-            [electron.ipc :as ipc]
             [frontend.commands :as commands]
             [frontend.config :as config]
             [frontend.date :as date]
@@ -46,7 +45,6 @@
             [goog.string :as gstring]
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
-            [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.page-ref :as page-ref]
@@ -63,6 +61,7 @@
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.ui :as shui]
+            [medley.core :as medley]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -1308,18 +1307,12 @@
         (delete-block-aux! asset-block)))))
 
 (defn db-based-write-asset!
-  [repo dir file file-rpath]
+  [repo file-path file]
   (p/let [buffer (.arrayBuffer file)]
-    (if (util/electron?)
-      (ipc/ipc "writeFile" repo (path/path-join dir file-rpath) buffer)
-      ;; web
-      (p/let [buffer (.arrayBuffer file)
-              content (js/Uint8Array. buffer)]
-        ;; actually, writing binary using memory fs
-        (fs/write-plain-text-file! repo dir file-rpath content nil)))))
+    (fs/write-asset-file! repo file-path buffer)))
 
 (defn- new-asset-block
-  [repo ^js file {:keys [repo-dir asset-dir-rpath external-url]}]
+  [repo ^js file {:keys [external-url] :as opts}]
   ;; WARN file name maybe fully qualified path when paste file
   (p/let [[file title] (if (map? file) [(:src file) (:title file)] [file nil])
           [file external-url] (if (string? file) [nil file] [file external-url])
@@ -1339,7 +1332,7 @@
                             false)
         nil)
       ;; new asset block
-      (let [block-id (ldb/new-block-id)
+      (let [block-id (or (:block/uuid opts) (ldb/new-block-id))
             ext (when file-name (db-asset/asset-path->type file-name))
             _ (when (string/blank? ext)
                 (throw (ex-info "File doesn't have a valid ext."
@@ -1352,10 +1345,8 @@
             asset (db/entity :logseq.class/Asset)]
         (p/do!
          (when file
-           (let [file-path (str block-id "." ext)
-                 file-rpath (str asset-dir-rpath "/" file-path)
-                 dir repo-dir]
-             (db-based-write-asset! repo dir file file-rpath)))
+           (let [file-path (str block-id "." ext)]
+             (db-based-write-asset! repo file-path file)))
          {:block/title (or title file-name-without-ext)
           :block/uuid block-id
           :logseq.property.asset/type ext
@@ -1375,13 +1366,18 @@
           today-page (if (nil? today-page-e)
                        (state/pub-event! [:page/create today-page-name])
                        today-page-e)
+          edit-block (or (state/get-edit-block) last-edit-block)
+          empty-target? (if (state/get-edit-block)
+                          (string/blank? (state/get-edit-content))
+                          (string/blank? (:block/title last-edit-block)))
           blocks* (p/all
-                   (for [^js file files]
+                   (for [^js [idx file] (medley/indexed files)]
                      (new-asset-block repo file
                                       {:repo-dir repo-dir
-                                       :asset-dir-rpath asset-dir-rpath})))
+                                       :asset-dir-rpath asset-dir-rpath
+                                       :block/uuid (when (and (zero? idx) empty-target?)
+                                                     (:block/uuid edit-block))})))
           blocks (remove nil? blocks*)
-          edit-block (or (state/get-edit-block) last-edit-block)
           insert-to-current-block-page? (and (:block/uuid edit-block) (not pdf-area?))
           target (cond
                    insert-to-current-block-page?

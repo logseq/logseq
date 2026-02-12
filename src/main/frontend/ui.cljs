@@ -945,11 +945,11 @@
                      fade-in? true
                      root-margin 100}}]
    (let [[visible? set-visible!] (rum/use-state initial-state)
-         inViewState (useInView #js {:initialInView initial-state
-                                     :rootMargin (str root-margin "px")
-                                     :triggerOnce trigger-once?
-                                     :onChange (fn [in-view? _entry]
-                                                 (set-visible! in-view?))})
+         ^js inViewState (useInView #js {:initialInView initial-state
+                                         :rootMargin (str root-margin "px")
+                                         :triggerOnce trigger-once?
+                                         :onChange (fn [in-view? _entry]
+                                                     (set-visible! in-view?))})
          ref (.-ref inViewState)]
      (lazy-visible-inner visible? content-fn ref fade-in? placeholder))))
 

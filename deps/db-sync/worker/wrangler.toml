@@ -1,0 +1,94 @@
+name = "logseq-sync"
+main = "dist/worker/main.js"
+compatibility_date = "2025-05-05"
+compatibility_flags = [ "nodejs_compat" ]
+
+[version_metadata]
+binding = "CF_VERSION_METADATA"
+
+[observability]
+enabled = true
+
+[[durable_objects.bindings]]
+name = "LOGSEQ_SYNC_DO"
+class_name = "SyncDO"
+
+[[r2_buckets]]
+binding = "LOGSEQ_SYNC_ASSETS"
+bucket_name = "logseq-sync-assets-prod"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "logseq-sync-graph-meta-prod"
+database_id = "00325aa2-c805-4693-b599-900a25dcde42"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = [ "SyncDO" ]
+
+[vars]
+COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
+COGNITO_ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
+COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"
+
+[env.staging]
+name = "logseq-sync-staging"
+
+[env.staging.vars]
+COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
+COGNITO_ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
+COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"
+SENTRY_DSN = "https://dc09d27243b9492bbe15e0dd279ad7de@o416451.ingest.us.sentry.io/5311485"
+SENTRY_ENVIRONMENT = "staging"
+SENTRY_TRACES_SAMPLE_RATE = "0.1"
+
+[[env.staging.durable_objects.bindings]]
+name = "LOGSEQ_SYNC_DO"
+class_name = "SyncDO"
+
+[[env.staging.migrations]]
+tag = "v1"
+new_sqlite_classes = [ "SyncDO" ]
+
+[[env.staging.r2_buckets]]
+binding = "LOGSEQ_SYNC_ASSETS"
+bucket_name = "logseq-sync-assets-dev"
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "logseq-sync-graph-meta-staging"
+database_id = "00325aa2-c805-4693-b599-900a25dcde42"
+
+[env.staging.version_metadata]
+binding = "CF_VERSION_METADATA"
+
+[env.prod]
+name = "logseq-sync-prod"
+
+[env.prod.vars]
+COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
+COGNITO_ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
+COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"
+SENTRY_DSN = "https://dc09d27243b9492bbe15e0dd279ad7de@o416451.ingest.us.sentry.io/5311485"
+SENTRY_ENVIRONMENT = "prod"
+SENTRY_TRACES_SAMPLE_RATE = "0.1"
+
+[[env.prod.durable_objects.bindings]]
+name = "LOGSEQ_SYNC_DO"
+class_name = "SyncDO"
+
+[[env.prod.migrations]]
+tag = "v1"
+new_sqlite_classes = [ "SyncDO" ]
+
+[[env.prod.r2_buckets]]
+binding = "LOGSEQ_SYNC_ASSETS"
+bucket_name = "logseq-sync-assets-prod"
+
+[[env.prod.d1_databases]]
+binding = "DB"
+database_name = "logseq-sync-graphs-prod"
+database_id = "4c80e058-69b5-4985-88d1-f53711d817ba"
+
+[env.prod.version_metadata]
+binding = "CF_VERSION_METADATA"

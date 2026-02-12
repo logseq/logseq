@@ -1,6 +1,7 @@
 (ns frontend.modules.shortcut.core-test
   (:require [cljs.test :refer [deftest is testing]]
             [clojure.string :as string]
+            [frontend.modules.shortcut.config :as shortcut-config]
             [frontend.modules.shortcut.data-helper :as dh]
             [frontend.util :as util]))
 
@@ -15,11 +16,11 @@
     (is (= (count (dh/get-conflicts-by-keys "mod+c")) 1))
 
     (is (contains?
-          (->> (dh/get-conflicts-by-keys
-                 "mod+c" :shortcut.handler/editor-global
-                 {:exclude-ids #{:editor/copy} :group-global? true})
-               (vals) (mapcat #(vals %)) (some #(when (= (first %) (if util/mac? "meta+c" "ctrl+c")) (second %))))
-          :misc/copy))
+         (->> (dh/get-conflicts-by-keys
+               "mod+c" :shortcut.handler/editor-global
+               {:exclude-ids #{:editor/copy} :group-global? true})
+              (vals) (mapcat #(vals %)) (some #(when (= (first %) (if util/mac? "meta+c" "ctrl+c")) (second %))))
+         :misc/copy))
 
     (is (->> (dh/get-conflicts-by-keys ["t"])
              (vals)
@@ -44,6 +45,16 @@
 
     (is (= (dh/parse-conflicts-from-binding ["meta+x" "meta+x t" "t r"] "meta+x x")
            ["meta+x"]))))
+
+(deftest test-add-reaction-shortcut
+  (testing "add reaction shortcut is configured with p r"
+    (is (= ["p r"] (dh/shortcut-binding :editor/add-reaction))))
+  (testing "add reaction shortcut belongs to non-editing handler"
+    (is (= :shortcut.handler/global-non-editing-only
+           (dh/get-group :editor/add-reaction))))
+  (testing "add reaction shortcut appears in block-selection category"
+    (is (some #{:editor/add-reaction}
+              (shortcut-config/get-category-shortcuts :shortcut.category/block-selection)))))
 
 (comment
   (cljs.test/run-tests))

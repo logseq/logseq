@@ -20,8 +20,8 @@
             [frontend.handler.code :as code-handler]
             [frontend.handler.common.page :as page-common-handler]
             [frontend.handler.db-based.property :as db-property-handler]
-            [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
+            [frontend.handler.db-based.sync :as rtc-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.export :as export]
             [frontend.handler.graph :as graph-handler]
@@ -43,9 +43,9 @@
             [frontend.quick-capture :as quick-capture]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.api.plugin :as plugin-api]
             [goog.dom :as gdom]
             [lambdaisland.glogi :as log]
+            [logseq.api.plugin :as plugin-api]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]))
@@ -76,8 +76,11 @@
    (graph-switch graph)
    (state/set-state! :sync-graph/init? false)
    (when (:rtc-download? opts)
-     (and (search-handler/rebuild-indices!) true)
-     (repo-handler/refresh-repos!))))
+     (repo-handler/refresh-repos!)
+     (p/do!
+      (p/delay 5000)
+      ;; TODO: search should be lazy computed
+      (search-handler/rebuild-indices!)))))
 
 (defmethod handle :graph/switch [[_ graph opts]]
   (let [switch-promise
@@ -223,8 +226,7 @@
           action (last keys')]
       (case (keyword type)
         :plugin (plugin-api/invoke_external_plugin_cmd id group action [payload])
-        (log/warn :unknown-invoke-command-type action))
-      )))
+        (log/warn :unknown-invoke-command-type action)))))
 
 (defmethod handle :modal/keymap [[_]]
   (state/open-settings! :keymap))
@@ -309,6 +311,9 @@
 (defmethod handle :rtc/sync-state [[_ state]]
   (state/update-state! :rtc/state (fn [old] (merge old state))))
 
+(defmethod handle :rtc/presence-update [[_ {:keys [editing-block-uuid]}]]
+  (rtc-handler/<rtc-update-presence! editing-block-uuid))
+
 (defmethod handle :rtc/log [[_ data]]
   (state/set-state! :rtc/log data))
 
@@ -317,7 +322,7 @@
    (notification/show! "This graph has been removed from Logseq Sync." :warning false)
    (rtc-handler/<get-remote-graphs)))
 
-(defmethod handle :rtc/download-remote-graph [[_ graph-name graph-uuid graph-schema-version]]
+(defmethod handle :rtc/download-remote-graph [[_ graph-name graph-uuid graph-schema-version graph-e2ee?]]
   (assert (= (:major (db-schema/parse-schema-version db-schema/version))
              (:major (db-schema/parse-schema-version graph-schema-version)))
           {:app db-schema/version
@@ -332,7 +337,7 @@
           [:div (str "Downloading " graph-name " ...")]
           (indicator/downloading-logs)])
        {:id :download-rtc-graph}))
-    (rtc-handler/<rtc-download-graph! graph-name graph-uuid graph-schema-version 60000)
+    (rtc-handler/<rtc-download-graph! graph-name graph-uuid graph-e2ee?)
     (rtc-handler/<get-remote-graphs)
     (when (util/mobile?)
       (shui/popup-hide! :download-rtc-graph)))

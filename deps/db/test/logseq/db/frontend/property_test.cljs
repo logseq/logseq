@@ -43,3 +43,23 @@
           sorted-entities [p1 p2]
           tx-data (db-property/normalize-sorted-entities-block-order sorted-entities)]
       (is (empty? tx-data)))))
+
+(deftest reaction-built-in-properties
+  (let [props db-property/built-in-properties]
+    (testing "entries exist"
+      (is (contains? props :logseq.property.reaction/emoji-id))
+      (is (contains? props :logseq.property.reaction/target)))
+
+    (testing "schema types"
+      (is (= :string (get-in props [:logseq.property.reaction/emoji-id :schema :type])))
+      (is (= :node (get-in props [:logseq.property.reaction/target :schema :type]))))
+
+    (testing "internal visibility"
+      (is (= false (get-in props [:logseq.property.reaction/emoji-id :schema :public?])))
+      (is (= false (get-in props [:logseq.property.reaction/target :schema :public?])))
+      (is (= true (get-in props [:logseq.property.reaction/emoji-id :schema :hide?])))
+      (is (= true (get-in props [:logseq.property.reaction/target :schema :hide?]))))
+
+    (testing "logseq property namespace"
+      (is (db-property/logseq-property? :logseq.property.reaction/emoji-id))
+      (is (db-property/logseq-property? :logseq.property.reaction/target)))))
