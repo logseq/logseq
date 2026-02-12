@@ -1,15 +1,14 @@
 (ns logseq.cli.transport
   "HTTP transport for communicating with db-worker-node."
-  (:require [cljs.reader :as reader]
-            [clojure.string :as string]
-            [logseq.db :as ldb]
-            [logseq.cli.log :as cli-log]
-            [lambdaisland.glogi :as log]
-            [promesa.core :as p]
-            ["fs" :as fs]
+  (:require ["fs" :as fs]
             ["http" :as http]
             ["https" :as https]
-            ["url" :as url]))
+            [cljs.reader :as reader]
+            [clojure.string :as string]
+            [lambdaisland.glogi :as log]
+            [logseq.cli.log :as cli-log]
+            [logseq.db :as ldb]
+            [promesa.core :as p]))
 
 (defn- request-module
   [^js parsed]
@@ -22,18 +21,25 @@
   {"Content-Type" "application/json"
    "Accept" "application/json"})
 
+(defn- request-port
+  [^js parsed]
+  (let [port (.-port parsed)]
+    (if (seq port)
+      port
+      (if (= "https:" (.-protocol parsed)) 443 80))))
+
 (defn- <raw-request
   [{:keys [method url headers body timeout-ms]}]
   (p/create
    (fn [resolve reject]
-     (let [parsed (url/parse url)
+     (let [parsed (js/URL. url)
            module (request-module parsed)
            timeout-ms (or timeout-ms 10000)
            req (.request
                 module
                 #js {:method method
                      :hostname (.-hostname parsed)
-                     :port (or (.-port parsed) (if (= "https:" (.-protocol parsed)) 443 80))
+                     :port (request-port parsed)
                      :path (str (.-pathname parsed) (.-search parsed))
                      :headers (clj->js headers)}
                 (fn [^js res]
@@ -50,13 +56,13 @@
                          (reject (ex-info "request timeout" {:code :timeout})))
                        timeout-ms)]
        (.on req "error" (fn [err]
-                           (js/clearTimeout timeout-id)
-                           (reject err)))
+                          (js/clearTimeout timeout-id)
+                          (reject err)))
        (when body
          (.write req body))
        (.end req)
        (.on req "response" (fn [_]
-                              (js/clearTimeout timeout-id)))))))
+                             (js/clearTimeout timeout-id)))))))
 
 (defn request
   [{:keys [method url headers body timeout-ms]}]
@@ -97,10 +103,10 @@
                :args args-preview
                :url url)
     (p/let [{:keys [body]} (request {:method "POST"
-                                    :url url
-                                    :headers (base-headers)
-                                    :body body
-                                    :timeout-ms timeout-ms})
+                                     :url url
+                                     :headers (base-headers)
+                                     :body body
+                                     :timeout-ms timeout-ms})
             {:keys [result resultTransit]} (js->clj (js/JSON.parse body) :keywordize-keys true)]
       (if direct-pass?
         (let [response-preview (cli-log/truncate-preview result)]
