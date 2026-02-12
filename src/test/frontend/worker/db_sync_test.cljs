@@ -8,9 +8,12 @@
             [frontend.worker.sync :as db-sync]
             [frontend.worker.sync.client-op :as client-op]
             [frontend.worker.sync.crypt :as sync-crypt]
+            [logseq.common.config :as common-config]
+            [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
+            [logseq.outliner.page :as outliner-page]
             [promesa.core :as p]))
 
 (def ^:private test-repo "test-db-sync-repo")
@@ -230,6 +233,24 @@
                 orders [(:block/order child1') (:block/order child2')]]
             (is (every? some? orders))
             (is (= 2 (count (distinct orders))))))))))
+
+(deftest ^:long create-today-journal-does-not-rewrite-existing-journal-timestamps-test
+  (testing "create today journal skips timestamp rewrite when the journal page already exists"
+    (let [conn (db-test/create-conn)
+          client-ops-conn (d/create-conn client-op/schema-in-db)
+          title "Dec 16th, 2024"]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (let [[_ page-uuid] (outliner-page/create! conn title {:today-journal? true})
+                page (d/entity @conn [:block/uuid page-uuid])
+                library-page (ldb/get-built-in-page @conn common-config/library-page-name)]
+            (d/transact! conn [[:db/add (:db/id page) :block/parent (:db/id library-page)]])
+            (let [created-at-before (:block/created-at (d/entity @conn [:block/uuid page-uuid]))
+                  updated-at-before (:block/updated-at (d/entity @conn [:block/uuid page-uuid]))]
+              (outliner-page/create! conn title {:today-journal? true})
+              (let [page' (d/entity @conn [:block/uuid page-uuid])]
+                (is (= created-at-before (:block/created-at page')))
+                (is (= updated-at-before (:block/updated-at page')))))))))))
 
 (deftest ^:long fix-duplicate-order-against-existing-sibling-test
   (testing "duplicate order update is fixed when it collides with an existing sibling"
