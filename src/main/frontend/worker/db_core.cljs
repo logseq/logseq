@@ -742,6 +742,12 @@
   (let [conn (worker-state/get-datascript-conn repo)]
     (db-view/get-property-values @conn property-ident option)))
 
+(def-thread-api :thread-api/get-bidirectional-properties
+  [repo {:keys [target-id]}]
+  (let [conn (worker-state/get-datascript-conn repo)]
+    (worker-util/profile "get-bidirectional-properties"
+                         (ldb/get-bidirectional-properties @conn target-id))))
+
 (def-thread-api :thread-api/build-graph
   [repo option]
   (let [conn (worker-state/get-datascript-conn repo)]
