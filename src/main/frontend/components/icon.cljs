@@ -308,21 +308,37 @@
                          (<= (count text) 2) 56
                          (<= (count text) 3) 44
                          (<= (count text) 4) 36
-                         :else               28)
+                         :else 28)
           measured (measure-text-width text initial-size)
           adjusted (* initial-size (/ target-width measured))]
       (min 80 (max 10 adjusted)))))
 
 (defn smart-split-text
   "Split 5+ char text into two lines at natural boundaries.
+   Prefers splitting at spaces, then letters+digits, then midpoint.
    Returns vector of 1 or 2 strings."
   [text]
   (if (<= (count text) 4)
     [text]
-    (if-let [[_ letters digits] (re-matches #"^([A-Za-z]+)(\d+)$" text)]
-      [letters digits]
-      (let [mid (js/Math.ceil (/ (count text) 2))]
-        [(subs text 0 mid) (subs text mid)]))))
+    (let [mid (js/Math.ceil (/ (count text) 2))
+          ;; Find all space positions using string/index-of
+          find-spaces (fn []
+                        (loop [idx 0 result []]
+                          (let [found (string/index-of text " " idx)]
+                            (if (some? found)
+                              (recur (inc found) (conj result found))
+                              result))))]
+      (let [spaces (find-spaces)]
+        (if (seq spaces)
+          ;; Split at space nearest to midpoint
+          (let [best (apply min-key #(js/Math.abs (- % mid)) spaces)]
+            [(string/trim (subs text 0 best))
+             (string/trim (subs text (inc best)))])
+          ;; No spaces: try letters+digits boundary
+          (if-let [[_ letters digits] (re-matches #"^([A-Za-z]+)(\d+)$" text)]
+            [letters digits]
+            ;; Fallback: midpoint
+            [(subs text 0 mid) (subs text mid)]))))))
 
 (defn icon
   [icon' & [opts]]
@@ -427,14 +443,20 @@
                ;; Image without asset (empty state) - show subtle placeholder
                ;; This is shown when inherited from default-icon before auto-fetch completes
                (and (map? normalized) (= :image (:type normalized)) (get-in normalized [:data :empty?]))
-               (let [size (or (:size opts) 20)]
+               (let [size (or (:size opts) 20)
+                     icon-size (max 10 (* size 0.55))]
                  [:span.ui__icon.image-icon.empty-image-placeholder.cursor-pointer
                   {:style {:width size
                            :height size
                            :border "1px dashed var(--lx-gray-06)"
                            :border-radius "2px"
-                           :background "var(--lx-gray-02)"}
-                   :title "Click to set image"}])
+                           :background "var(--lx-gray-02)"
+                           :display "flex"
+                           :align-items "center"
+                           :justify-content "center"}
+                   :title "Click to set image"}
+                  (shui/tabler-icon "plus" {:size icon-size
+                                            :style {:opacity 0.5}})])
 
                ;; Legacy format support (fallback if normalization failed)
                (and (map? icon') (= :emoji (:type icon')) (:id icon'))
@@ -459,9 +481,11 @@
   [node-entity]
   (let [block-icon (get node-entity :logseq.property/icon)
         sorted-tags (sort-by :db/id (:block/tags node-entity))
-        ;; Check for default-icon on tags (unified icon inheritance)
+        ;; Check for default-icon on tags, walking extends chain for inheritance
         default-icon (some (fn [tag]
-                             (:logseq.property.class/default-icon tag))
+                             (or (:logseq.property.class/default-icon tag)
+                                 (some :logseq.property.class/default-icon
+                                       (ldb/get-class-extends tag))))
                            sorted-tags)]
     (cond
       ;; 1. Explicit "no icon" override - hide icon even if inherited
@@ -762,13 +786,15 @@
                :label (or label value)
                :data (cond-> {:value value}
                        color (assoc :color color))}
-        :text (let [alignment (or (get-in v [:data :alignment]) (:alignment v))]
+        :text (let [alignment (or (get-in v [:data :alignment]) (:alignment v))
+                    mode (or (get-in v [:data :mode]) (:mode v))]
                 {:type :text
                  :id (or id (str "text-" value))
                  :label (or label value)
                  :data (cond-> {:value value}
                          color (assoc :color color)
-                         alignment (assoc :alignment alignment))})
+                         alignment (assoc :alignment alignment)
+                         mode (assoc :mode mode))})
         :avatar (let [backgroundColor (or (:backgroundColor v)
                                           (colors/variable :gray :09))
                       color (or (:color v)
@@ -1530,6 +1556,86 @@
                        (string/upper-case (subs word 0 char-count))))]
       (subs initials 0 (min 3 (count initials))))))
 
+(def ^:private abbreviated-stop-words
+  #{"the" "a" "an" "of" "to" "in" "for" "and" "or" "on" "at" "by"
+    "from" "with" "about" "into" "how" "what" "my" "your" "this" "that"})
+
+(defn- normalize-word-boundaries
+  "Pre-process title to split camelCase, snake_case, and kebab-case into spaces."
+  [title]
+  (-> title
+      ;; Strip parenthetical content: "Title (notes)" -> "Title"
+      (string/replace #"\s*\([^)]*\)\s*" " ")
+      ;; camelCase: insert space at lowerUpper boundary
+      (string/replace #"([a-z])([A-Z])" "$1 $2")
+      ;; snake_case: replace _ with space
+      (string/replace "_" " ")
+      ;; kebab-case: replace - with space (only multi-segment)
+      (string/replace #"(\w)-(\w)" "$1 $2")
+      string/trim
+      (string/replace #"\s+" " ")))
+
+(defn derive-abbreviated
+  "Derive abbreviated form from page title (max 8 chars).
+   Returns nil if result equals derive-initials output (to avoid duplicates).
+   Examples: 'Software Engineer' -> 'Soft Eng', 'Math 203' -> 'Math 203'"
+  [title]
+  (when title
+    (let [normalized (normalize-word-boundaries (string/trim title))
+          max-len 8]
+      (when-not (string/blank? normalized)
+        (if (<= (count normalized) max-len)
+          ;; Short enough, return as-is (unless same as initials)
+          (let [initials (derive-initials title)]
+            (when (not= normalized initials)
+              normalized))
+          ;; Needs abbreviation
+          (let [words (string/split normalized #"\s+")]
+            (if (<= (count words) 1)
+              ;; Single word: truncate
+              (let [result (subs (first words) 0 (min max-len (count (first words))))
+                    initials (derive-initials title)]
+                (when (not= result initials)
+                  result))
+              ;; Multi-word
+              (let [;; Drop stop words if 3+ words, keep >= 2
+                    significant (if (>= (count words) 3)
+                                  (let [filtered (remove #(contains? abbreviated-stop-words
+                                                                     (string/lower-case %))
+                                                         words)]
+                                    (if (>= (count filtered) 2)
+                                      (vec filtered)
+                                      (vec words)))
+                                  (vec words))
+                    ;; Take first 2 significant words
+                    w1 (first significant)
+                    w2 (second significant)
+                    ;; Check if they fit as-is with space
+                    joined (str w1 " " w2)
+                    text-budget (dec max-len) ;; 7 chars for text, 1 for space
+                    result (if (<= (count joined) max-len)
+                             joined
+                             ;; Need to abbreviate
+                             (cond
+                               ;; Short first word: keep it, give rest to w2
+                               (<= (count w1) 3)
+                               (str w1 " " (subs w2 0 (min (count w2)
+                                                           (- text-budget (count w1)))))
+                               ;; Short second word: keep it, abbreviate w1
+                               (<= (count w2) 3)
+                               (str (subs w1 0 (min (count w1)
+                                                    (- text-budget (count w2))))
+                                    " " w2)
+                               ;; Both long: even split (4+3)
+                               :else
+                               (let [half (js/Math.ceil (/ text-budget 2))
+                                     len1 (min (count w1) half)
+                                     len2 (min (count w2) (- text-budget len1))]
+                                 (str (subs w1 0 len1) " " (subs w2 0 len2)))))
+                    initials (derive-initials title)]
+                (when (not= result initials)
+                  result)))))))))
+
 (rum/defc text-tab-cp
   [*q page-title *color opts]
   (let [query @*q
@@ -1621,15 +1727,20 @@
                        :data {:value avatar-value
                               :backgroundColor backgroundColor
                               :color color}})
-        ;; Image item - check if current icon is an image
-        current-image-icon (when (= :image (:type (normalize-icon icon-value)))
-                             (normalize-icon icon-value))
-        on-chosen (:on-chosen opts)]
+        ;; Image placeholder item for auto-close in default-icon context
+        image-item {:type :image
+                    :id "image-placeholder"
+                    :label "Image"
+                    :data {:empty? true}}
+        on-chosen (:on-chosen opts)
+        default-icon? (:default-icon? opts)]
     [:div.custom-tab-content
      ;; Text option
      (when text-item
        [:button.custom-tab-item
-        {:on-click #(reset! *view :text-picker)}
+        {:on-click (if default-icon?
+                     #(on-chosen % text-item)
+                     #(reset! *view :text-picker))}
         [:div.custom-tab-item-preview
          (icon text-item {:size 24})]
         [:span.custom-tab-item-label "Text"]])
@@ -1642,13 +1753,22 @@
          (icon avatar-item {:size 24})]
         [:span.custom-tab-item-label "Avatar"]])
 
-     ;; Image option - clicking navigates to asset picker
+     ;; Image option — always show dashed placeholder with camera icon
      [:button.custom-tab-item
-      {:on-click #(reset! *view :asset-picker)}
+      {:on-click (if default-icon?
+                   #(on-chosen % image-item)
+                   #(reset! *view :asset-picker))}
       [:div.custom-tab-item-preview
-       (if current-image-icon
-         (icon current-image-icon {:size 32})
-         (shui/tabler-icon "photo" {:size 24 :class "text-gray-08"}))]
+       [:span.image-tile-placeholder
+        {:style {:width 28
+                 :height 28
+                 :border "1px dashed var(--rx-gray-08)"
+                 :border-radius "3px"
+                 :display "flex"
+                 :align-items "center"
+                 :justify-content "center"
+                 :background "var(--rx-gray-03-alpha)"}}
+        (shui/tabler-icon "photo" {:size 16 :style {:color "var(--lx-gray-11)"}})]]
       [:span.custom-tab-item-label "Image"]]]))
 
 (rum/defcs image-asset-item < rum/reactive
@@ -2762,6 +2882,8 @@
   (rum/local nil ::text-value)
   (rum/local nil ::alignment)
   (rum/local nil ::color)
+  (rum/local nil ::mode)
+  (rum/local false ::deleted?)
   {:will-mount (fn [s]
                  (let [opts (first (:rum/args s))
                        current-icon (:current-icon opts)
@@ -2771,56 +2893,72 @@
                                          (:block/title)))
                        existing-value (get-in current-icon [:data :value])
                        existing-alignment (get-in current-icon [:data :alignment])
-                       existing-color (get-in current-icon [:data :color])]
+                       existing-color (get-in current-icon [:data :color])
+                       existing-mode (get-in current-icon [:data :mode])]
                    (reset! (::text-value s) (or existing-value (derive-initials title)))
                    (reset! (::alignment s) (or existing-alignment "center"))
                    (reset! (::color s) existing-color)
+                   (reset! (::mode s) (or existing-mode "initials"))
                    s))
    :will-unmount (fn [s]
-                   ;; Persist on unmount (popup close or view switch)
-                   (let [opts (first (:rum/args s))
-                         on-chosen (:on-chosen opts)
-                         *tv (::text-value s)
-                         *al (::alignment s)
-                         *co (::color s)
-                         title (or (:page-title opts)
-                                   (some-> (state/get-current-page)
-                                           (db/get-page)
-                                           (:block/title)))
-                         derived (or (derive-initials title) "?")
-                         text (if (string/blank? @*tv) derived @*tv)
-                         icon-item {:type :text
-                                    :id (str "text-" text)
-                                    :label text
-                                    :data (cond-> {:value text}
-                                            @*co (assoc :color @*co)
-                                            @*al (assoc :alignment @*al))}]
-                     (on-chosen nil icon-item true)
-                     (add-used-item! icon-item))
+                   ;; Persist on unmount — but skip if icon was deleted
+                   (when-not @(::deleted? s)
+                     (let [opts (first (:rum/args s))
+                           on-chosen (:on-chosen opts)
+                           *tv (::text-value s)
+                           *al (::alignment s)
+                           *co (::color s)
+                           *md (::mode s)
+                           title (or (:page-title opts)
+                                     (some-> (state/get-current-page)
+                                             (db/get-page)
+                                             (:block/title)))
+                           derived (or (derive-initials title) "?")
+                           text (if (string/blank? @*tv) derived @*tv)
+                           icon-item {:type :text
+                                      :id (str "text-" text)
+                                      :label text
+                                      :data (cond-> {:value text}
+                                              @*co (assoc :color @*co)
+                                              @*al (assoc :alignment @*al)
+                                              @*md (assoc :mode @*md))}]
+                       (on-chosen nil icon-item true)
+                       (add-used-item! icon-item)))
                    s)}
   [state {:keys [on-chosen on-back on-delete del-btn? page-title]}]
   (let [*text-value (::text-value state)
         *alignment (::alignment state)
         *color (::color state)
+        *mode (::mode state)
+        *deleted? (::deleted? state)
         title (or page-title
                   (some-> (state/get-current-page)
                           (db/get-page)
                           (:block/title)))
-        derived (or (derive-initials title) "?")
+        derived-initials (or (derive-initials title) "?")
+        derived-abbreviated (derive-abbreviated title)
         ;; Build icon item from current local state
-        build-icon (fn []
-                     (let [text (if (string/blank? @*text-value) derived @*text-value)]
+        build-icon (fn [text-override]
+                     (let [text (or text-override
+                                    (if (string/blank? @*text-value) derived-initials @*text-value))]
                        {:type :text
                         :id (str "text-" text)
                         :label text
                         :data (cond-> {:value text}
                                 @*color (assoc :color @*color)
-                                @*alignment (assoc :alignment @*alignment))}))
+                                @*alignment (assoc :alignment @*alignment)
+                                @*mode (assoc :mode @*mode))}))
         persist! (fn []
-                   (let [icon-item (build-icon)]
+                   (let [icon-item (build-icon nil)]
                      (on-chosen nil icon-item true)
                      (add-used-item! icon-item)))
-        preview-item (build-icon)]
+        ;; Gallery options: only show abbreviated if different from initials
+        gallery-options (cond-> [{:mode "initials" :text derived-initials :label "Initials"}]
+                          derived-abbreviated
+                          (conj {:mode "abbreviated" :text derived-abbreviated :label "Abbreviated"})
+                          true
+                          (conj {:mode "custom" :text nil :label "Custom"}))
+        current-mode @*mode]
     [:div.text-picker
      ;; Topbar
      [:div.text-picker-topbar
@@ -2834,60 +2972,85 @@
        [:div.text-picker-actions
         (color-picker *color (fn [c]
                                (reset! *color c)
-                               (let [text (if (string/blank? @*text-value) derived @*text-value)
+                               (let [text (if (string/blank? @*text-value) derived-initials @*text-value)
                                      icon-item {:type :text
                                                 :id (str "text-" text)
                                                 :label text
                                                 :data (cond-> {:value text}
                                                         c (assoc :color c)
-                                                        @*alignment (assoc :alignment @*alignment))}]
+                                                        @*alignment (assoc :alignment @*alignment)
+                                                        @*mode (assoc :mode @*mode))}]
                                  (on-chosen nil icon-item true))))
         (when del-btn?
           (shui/button {:variant :outline :size :sm :data-action "del"
-                        :on-click on-delete}
+                        :on-click (fn []
+                                    (reset! *deleted? true)
+                                    (on-delete))}
                        (shui/tabler-icon "trash" {:size 17})))]]
       (shui/separator {:class "my-0 opacity-50"})]
 
      ;; Body
      [:div.text-picker-body
-      ;; Hint
-      [:div.format-note "Auto-derived from page title. You can customize it below."]
+      ;; Gallery row
+      [:div.text-picker-gallery
+       (for [{:keys [mode text label]} gallery-options]
+         (let [selected? (= current-mode mode)
+               display-text (if (= mode "custom")
+                              (when-not (string/blank? @*text-value)
+                                @*text-value)
+                              text)]
+           [:button.text-picker-gallery-item
+            {:key mode
+             :class (when selected? "selected")
+             :on-click (fn []
+                         (reset! *mode mode)
+                         (case mode
+                           "initials" (reset! *text-value derived-initials)
+                           "abbreviated" (reset! *text-value derived-abbreviated)
+                           "custom" nil))}
+            [:div.text-picker-gallery-preview
+             (if display-text
+               (icon (build-icon display-text) {:size 36})
+               (shui/tabler-icon "pencil" {:size 20}))]
+            [:span.text-picker-gallery-label label]]))]
 
-      ;; Text input with preview
-      [:div.text-picker-section
-       [:label "Text"]
-       [:div.text-picker-input-row
-        [:div.text-picker-preview
-         (icon preview-item {:size 32})]
+      (shui/separator {:class "my-0 opacity-50 -mx-3"})
+
+      ;; Controls row: Text input + Alignment side by side
+      [:div.text-picker-controls-row
+       ;; Text input
+       [:div.text-picker-section.flex-1
+        [:label "Text"]
         (shui/input
          {:size "sm"
           :auto-focus true
           :max-length 8
-          :placeholder derived
-          :default-value @*text-value
+          :placeholder derived-initials
+          :value @*text-value
           :on-change (fn [e]
-                       (reset! *text-value (util/evalue e)))
+                       (let [v (util/evalue e)]
+                         (reset! *text-value v)
+                         (when (not= @*mode "custom")
+                           (reset! *mode "custom"))))
           :on-blur (fn [_e]
                      (when (string/blank? @*text-value)
-                       (reset! *text-value derived)))
-          :on-key-down (fn [e]
-                         (when (= "Enter" (.-key e))
-                           (when (string/blank? @*text-value)
-                             (reset! *text-value derived))))})]]
+                       (reset! *text-value derived-initials)
+                       (reset! *mode "initials")))})]
 
-      ;; Alignment
-      [:div.text-picker-section
-       [:label "Alignment"]
-       [:div.text-picker-alignment
-        (for [align ["left" "center" "right"]
-              :let [active? (= @*alignment align)]]
-          (shui/button
-           {:key align
-            :variant (if active? :default :outline)
-            :size :sm
-            :on-click (fn []
-                        (reset! *alignment align))}
-           (shui/tabler-icon (str "align-" align) {:size 16})))]]]]))
+       ;; Alignment
+       [:div.text-picker-section
+        [:label "Alignment"]
+        [:div.text-picker-alignment
+         (shui/button-group
+          (for [align ["left" "center" "right"]
+                :let [active? (= @*alignment align)]]
+            (shui/button
+             {:key align
+              :variant (if active? :secondary :outline)
+              :size :sm
+              :on-click (fn []
+                          (reset! *alignment align))}
+             (shui/tabler-icon (str "align-" align) {:size 16}))))]]]]]))
 
 (rum/defcs ^:large-vars/cleanup-todo icon-search < rum/reactive
   (rum/local "" ::q)
@@ -2910,6 +3073,7 @@
         *result (::result state)
         *tab (::tab state)
         *color (::color state)
+        _ (rum/react *color) ;; Reactive watch: re-render when color swatch changes
         *input-focused? (::input-focused? state)
         *view (::view state)
         *input-ref (rum/create-ref)
@@ -3089,7 +3253,7 @@
                 (all-cp opts))]))]]])))
 
 (rum/defc icon-picker
-  [icon-value {:keys [empty-label disabled? initial-open? del-btn? on-chosen icon-props popup-opts button-opts page-title]}]
+  [icon-value {:keys [empty-label disabled? initial-open? del-btn? on-chosen icon-props popup-opts button-opts page-title default-icon?]}]
   (let [*trigger-ref (rum/use-ref nil)
         normalized-icon-value (normalize-icon icon-value)
         content-fn
@@ -3102,7 +3266,8 @@
                            (when-not (true? keep-popup?) (shui/popup-hide! id)))
               :icon-value normalized-icon-value
               :page-title page-title
-              :del-btn? del-btn?})))]
+              :del-btn? del-btn?
+              :default-icon? default-icon?})))]
     (hooks/use-effect!
      (fn []
        (when initial-open?
