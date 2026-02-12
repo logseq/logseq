@@ -666,7 +666,7 @@
                                 CODE_SIGN_ENTITLEMENTS = App/AppDebug.entitlements;
                                 CODE_SIGN_IDENTITY = "Apple Development";
                                 CODE_SIGN_STYLE = Automatic;
-                                CURRENT_PROJECT_VERSION = 230;
+                                CURRENT_PROJECT_VERSION = 1;
                                 DEVELOPMENT_TEAM = K378MFWK59;
                                 ENABLE_BITCODE = NO;
                                 INFOPLIST_FILE = App/Info.plist;
@@ -699,7 +699,7 @@
                                 CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
                                 CODE_SIGN_IDENTITY = "Apple Development";
                                 CODE_SIGN_STYLE = Automatic;
-                                CURRENT_PROJECT_VERSION = 230;
+                                CURRENT_PROJECT_VERSION = 1;
                                 DEVELOPMENT_TEAM = K378MFWK59;
                                 ENABLE_BITCODE = NO;
                                 INFOPLIST_FILE = App/Info.plist;
@@ -728,7 +728,7 @@
                                 CODE_SIGN_ENTITLEMENTS = ShareViewController/ShareViewController.entitlements;
                                 CODE_SIGN_IDENTITY = "Apple Development";
                                 CODE_SIGN_STYLE = Automatic;
-                                CURRENT_PROJECT_VERSION = 230;
+                                CURRENT_PROJECT_VERSION = 1;
                                 DEVELOPMENT_TEAM = K378MFWK59;
                                 GENERATE_INFOPLIST_FILE = YES;
                                 INFOPLIST_FILE = ShareViewController/Info.plist;
@@ -761,7 +761,7 @@
                                 CODE_SIGN_ENTITLEMENTS = ShareViewController/ShareViewController.entitlements;
                                 CODE_SIGN_IDENTITY = "Apple Development";
                                 CODE_SIGN_STYLE = Automatic;
-                                CURRENT_PROJECT_VERSION = 230;
+                                CURRENT_PROJECT_VERSION = 1;
                                 DEVELOPMENT_TEAM = K378MFWK59;
                                 GENERATE_INFOPLIST_FILE = YES;
                                 INFOPLIST_FILE = ShareViewController/Info.plist;
@@ -796,7 +796,7 @@
                                 CODE_SIGN_ENTITLEMENTS = shortcutsExtension.entitlements;
                                 CODE_SIGN_IDENTITY = "Apple Development";
                                 CODE_SIGN_STYLE = Automatic;
-                                CURRENT_PROJECT_VERSION = 230;
+                                CURRENT_PROJECT_VERSION = 1;
                                 DEVELOPMENT_TEAM = K378MFWK59;
                                 ENABLE_USER_SCRIPT_SANDBOXING = YES;
                                 GCC_C_LANGUAGE_STANDARD = gnu17;
@@ -838,7 +838,7 @@
                                 CODE_SIGN_ENTITLEMENTS = shortcutsExtension.entitlements;
                                 CODE_SIGN_IDENTITY = "Apple Development";
                                 CODE_SIGN_STYLE = Automatic;
-                                CURRENT_PROJECT_VERSION = 230;
+                                CURRENT_PROJECT_VERSION = 1;
                                 DEVELOPMENT_TEAM = K378MFWK59;
                                 ENABLE_USER_SCRIPT_SANDBOXING = YES;
                                 GCC_C_LANGUAGE_STANDARD = gnu17;
