@@ -2,7 +2,14 @@
         org.babashka/cli {:mvn/version "0.2.23"}}
  :tasks
  {:requires ([babashka.cli :as cli])
-  :init (def cli-opts (cli/parse-opts *command-line-args* {:coerce {:port :int :headers :edn}}))
+  :init (do
+          (def cli-opts (cli/parse-opts *command-line-args* {:alias {:p :port}
+                                                             :coerce {:port :int :headers :edn}}))
+          (defn clojure-with-port
+            [cmd]
+            (if-let [port (:port cli-opts)]
+              (str "-J-Dport=" port " " cmd)
+              cmd)))
 
   serve {:doc "Serve static assets"
          :requires ([babashka.http-server :as server])
@@ -13,15 +20,15 @@
   prn {:task (clojure "-X clojure.core/prn" cli-opts)}
 
   test {:doc "run tests (ns'es ending in '-basic-test')"
-        :task (do (clojure "-M:test -r \".*\\-basic\\-test$\" -e fix-me")
+        :task (do (clojure (clojure-with-port "-M:test -r \".*\\-basic\\-test$\" -e fix-me"))
                   (System/exit 0))}
 
   rtc-extra-test {:doc "run rtc-extra-test"
-                  :task (do (clojure "-M:test -n logseq.e2e.rtc-extra-test")
+                  :task (do (clojure (clojure-with-port "-M:test -n logseq.e2e.rtc-extra-test"))
                             (System/exit 0))}
 
   rtc-extra-part2-test {:doc "run rtc-extra-part2-test"
-                        :task (do (clojure "-M:test -n logseq.e2e.rtc-extra-part2-test")
+                        :task (do (clojure (clojure-with-port "-M:test -n logseq.e2e.rtc-extra-part2-test"))
                                   (System/exit 0))}
 
   -run-rtc-extra-test {:depends [serve prn rtc-extra-test]}
