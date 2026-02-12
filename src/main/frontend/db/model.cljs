@@ -341,7 +341,11 @@ independent of format as format specific heading characters are stripped"
                  remove-non-queryable-built-in-property? false
                  remove-ui-non-suitable-properties? false}}]
   (let [db (conn/get-db graph)
-        result (sort-by (juxt ldb/built-in? :block/title)
+        result (sort-by (juxt (fn [p]
+                                (some-> (:db/ident p)
+                                        (db-property/plugin-property?)))
+                              ldb/built-in?
+                              :block/title)
                         (ldb/get-all-properties db))]
     (cond->> result
       remove-built-in-property?

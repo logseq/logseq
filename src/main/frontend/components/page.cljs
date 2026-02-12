@@ -913,7 +913,9 @@
   {:will-unmount (fn [state]
                    (reset! *n-hops nil)
                    (reset! *focus-nodes [])
-                   (state/set-search-mode! :global)
+                   ;; Clear graph search mode on leave so block selection action bar
+                   ;; can open normally on non-graph routes.
+                   (state/set-search-mode! nil)
                    state)}
   [state]
   (let [settings (state/graph-settings)

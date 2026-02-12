@@ -399,4 +399,7 @@
  ;;   - :triple-lowbar (default)
  ;;      ;use triple underscore `___` for slash `/` in page title
  ;;      ;use Percent-encoding for other invalid characters
+
+ ;; use relative path here only for ci test, won't work on the Electron client
+ :zotero/settings-v2 {"default" {:type-id "1234567", :prefer-citekey? false, :attachments-block-text "Attachments", :page-insert-prefix "", :extra-tags "", :zotero-linked-attachment-base-directory "../book", :zotero-data-directory "../zotero"}}
  :file/name-format :triple-lowbar}
