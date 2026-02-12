@@ -551,7 +551,9 @@
                        :normal-page
                        (entity-util/page? d)
                        :normal-page
-                       (entity-util/asset? d)
+                       (and (entity-util/asset? d)
+                            (some? (:logseq.property.asset/checksum d))
+                            (some? (:logseq.property.asset/size d)))
                        :asset-block
                        (:file/path d)
                        :file-block

@@ -2571,7 +2571,7 @@
                                   {:type :none})))
                   :del-btn? true  ;; Always show delete when icon displayed
                   :page-title (:block/title block)
-                  :icon-props {:size 16}})])))))
+                  :icon-props {}})])))))
 
      (when-not table?
        (block-positioned-properties config block :block-left))

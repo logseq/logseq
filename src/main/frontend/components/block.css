@@ -70,6 +70,7 @@
 
   .icon-cp-container {
     @apply inline-flex items-center pr-0.5;
+    vertical-align: middle;
 
     &.photo-icon {
       @apply pr-1.5;

@@ -3089,13 +3089,15 @@
                                        ;; Skip for :text — text-picker manages its own color
                                        m' (if (and can-have-color? (not (string/blank? @*color)) (not (= :text (:type icon-item))))
                                             (cond-> m
-                                              ;; For icons: set color
+                                              ;; For icons: set color (top-level for block.cljs select-keys, nested for icon-cp)
                                               (= :icon (:type icon-item))
-                                              (assoc-in [:data :color] @*color)
+                                              (-> (assoc :color @*color)
+                                                  (assoc-in [:data :color] @*color))
 
                                               ;; For avatars: set both color (text) and backgroundColor
                                               (= :avatar (:type icon-item))
-                                              (-> (assoc-in [:data :color] @*color)
+                                              (-> (assoc :color @*color)
+                                                  (assoc-in [:data :color] @*color)
                                                   (assoc-in [:data :backgroundColor] @*color)))
                                             m)]
                                    (and on-chosen (on-chosen e m' keep-popup?))
