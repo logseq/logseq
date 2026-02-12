@@ -1191,8 +1191,8 @@
           (touch-last-ws-message! client)
           (handle-message! repo client (.-data event))))
   (set! (.-onerror ws)
-        (fn [event]
-          (log/error :db-sync/ws-error {:repo repo :error event})))
+        (fn [error]
+          (log/error :db-sync/ws-error error)))
   (set! (.-onclose ws)
         (fn [_]
           (log/info :db-sync/ws-closed {:repo repo})

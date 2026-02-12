@@ -75,7 +75,7 @@
          (presence/remove-presence! ctx socket)
          (presence/broadcast-online-users! ctx)
          (detach-ws! ctx socket)
-         (log/error :db-sync/ws-error {:error error}))))
+         (log/error :db-sync/ws-error error))))
 
 (defn start!
   [overrides]
