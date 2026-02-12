@@ -3162,10 +3162,13 @@
                                  (cond
                                    (or (= :icon (:type normalized-icon-value))
                                        (= :text (:type normalized-icon-value)))
-                                   (on-chosen nil (assoc-in normalized-icon-value [:data :color] c) true)
+                                   (on-chosen nil (-> normalized-icon-value
+                                                      (assoc :color c)
+                                                      (assoc-in [:data :color] c)) true)
 
                                    (= :avatar (:type normalized-icon-value))
                                    (on-chosen nil (-> normalized-icon-value
+                                                      (assoc :color c)
                                                       (assoc-in [:data :color] c)
                                                       (assoc-in [:data :backgroundColor] c)) true))))
           ;; delete button
