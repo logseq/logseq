@@ -57,8 +57,6 @@ and handles unexpected failure."
                      (extract-blocks ast title format {})))
           new-block (first blocks)
           block (cond-> (merge block new-block)
-                  (> (count blocks) 1)
-                  (assoc :block/warning :multiple-blocks)
                   true
                   (dissoc :block/format))
           block (dissoc block :block.temp/ast-body :block/level)]
