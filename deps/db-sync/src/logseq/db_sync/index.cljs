@@ -1,5 +1,6 @@
 (ns logseq.db-sync.index
-  (:require [logseq.db-sync.common :as common]
+  (:require [clojure.string :as string]
+            [logseq.db-sync.common :as common]
             [promesa.core :as p]))
 
 (def ^:private user-upsert-cache-ttl-ms (* 60 60 1000))
@@ -39,6 +40,32 @@
   [v]
   (if (false? v) 0 1))
 
+(def ^:private graph-e2ee-migration-sql
+  "alter table graphs add column graph_e2ee INTEGER DEFAULT 1")
+
+(defn- duplicate-column-error?
+  [error column-name]
+  (let [message (-> (or (ex-message error) (some-> error .-message) (str error))
+                    string/lower-case)]
+    (and (string/includes? message "duplicate column")
+         (string/includes? message (string/lower-case column-name)))))
+
+(defn- <ensure-graph-e2ee-column!
+  [db]
+  (letfn [(<run-migration! []
+            (-> (common/<d1-run db graph-e2ee-migration-sql)
+                (p/catch (fn [error]
+                           (if (duplicate-column-error? error "graph_e2ee")
+                             nil
+                             (p/rejected error))))))]
+    (-> (p/let [result (common/<d1-all db
+                                       "select name from pragma_table_info('graphs') where name = 'graph_e2ee'")
+                rows (common/get-sql-rows result)]
+          (when (empty? rows)
+            (<run-migration!)))
+        (p/catch (fn [_]
+                   (<run-migration!))))))
+
 (defn <index-init! [db]
   (p/do!
    (common/<d1-run db
@@ -51,6 +78,7 @@
                         "created_at INTEGER,"
                         "updated_at INTEGER"
                         ");"))
+   (<ensure-graph-e2ee-column! db)
    (common/<d1-run db
                    (str "create table if not exists users ("
                         "id TEXT primary key,"

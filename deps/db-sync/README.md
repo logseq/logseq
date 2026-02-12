@@ -46,9 +46,9 @@ Run the adapter with Cognito auth:
 
 ```bash
 DB_SYNC_PORT=8787 \
-COGNITO_ISSUER=https://cognito-idp.us-east-2.amazonaws.com/us-east-2_kAqZcxIeM \
-COGNITO_CLIENT_ID=1qi1uijg8b6ra70nejvbptis0q \
-COGNITO_JWKS_URL=https://cognito-idp.us-east-2.amazonaws.com/us-east-2_kAqZcxIeM/.well-known/jwks.json \
+COGNITO_ISSUER=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8 \
+COGNITO_CLIENT_ID=69cs1lgme7p8kbgld8n5kseii6 \
+COGNITO_JWKS_URL=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json \
 node worker/dist/node-adapter.js
 ```
 

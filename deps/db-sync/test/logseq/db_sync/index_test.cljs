@@ -5,6 +5,9 @@
             [logseq.db-sync.index :as index]
             [promesa.core :as p]))
 
+(def ^:private graph-e2ee-migration-sql
+  "alter table graphs add column graph_e2ee integer default 1")
+
 (deftest index-list-includes-graph-e2ee-flag-test
   (async done
          (let [rows #js [#js {"graph_id" "graph-1"
@@ -50,6 +53,47 @@
                          (is (string/includes? (:sql @called) "graph_e2ee"))
                          (is (= ["graph-1" "Graph 1" "user-1" "65" 0 1234 1234]
                                 (:args @called)))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest index-init-runs-graph-e2ee-migration-test
+  (async done
+         (let [sql-calls (atom [])]
+           (-> (p/with-redefs [common/<d1-all (fn [& _]
+                                                (p/resolved #js {:results #js []}))
+                               common/get-sql-rows (fn [result]
+                                                     (aget result "results"))
+                               common/<d1-run (fn [_db sql & _args]
+                                                (swap! sql-calls conj (string/lower-case sql))
+                                                (p/resolved {:ok true}))]
+                 (index/<index-init! :db))
+               (p/then (fn [_]
+                         (is (some #(string/includes? % graph-e2ee-migration-sql)
+                                   @sql-calls))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest index-init-ignores-duplicate-graph-e2ee-column-error-test
+  (async done
+         (let [sql-calls (atom [])]
+           (-> (p/with-redefs [common/<d1-all (fn [& _]
+                                                (p/resolved #js {:results #js []}))
+                               common/get-sql-rows (fn [result]
+                                                     (aget result "results"))
+                               common/<d1-run (fn [_db sql & _args]
+                                                (let [sql' (string/lower-case sql)]
+                                                  (swap! sql-calls conj sql')
+                                                  (if (string/includes? sql' graph-e2ee-migration-sql)
+                                                    (p/rejected (ex-info "duplicate column name: graph_e2ee" {}))
+                                                    (p/resolved {:ok true}))))]
+                 (index/<index-init! :db))
+               (p/then (fn [_]
+                         (is (some #(string/includes? % graph-e2ee-migration-sql)
+                                   @sql-calls))
                          (done)))
                (p/catch (fn [error]
                           (is false (str error))
