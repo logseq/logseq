@@ -3061,8 +3061,9 @@
                                                                         (:db/id block)
                                                                         :logseq.property/icon
                                                                         icon-data)
-                                                                       ;; For classes, also set default-icon for inheritance
-                                                                       (when (ldb/class? block)
+                                                                       ;; For classes, auto-sync to default-icon only when not already set
+                                                                       (when (and (ldb/class? block)
+                                                                                  (nil? (:logseq.property.class/default-icon block)))
                                                                          (db-property-handler/set-block-property!
                                                                           (:db/id block)
                                                                           :logseq.property.class/default-icon
@@ -3072,11 +3073,14 @@
                                                                        (db-property-handler/remove-block-property!
                                                                         (:db/id block)
                                                                         :logseq.property/icon)
-                                                                       ;; For classes, also remove default-icon
-                                                                       (when (ldb/class? block)
-                                                                         (db-property-handler/remove-block-property!
-                                                                          (:db/id block)
-                                                                          :logseq.property.class/default-icon)))))
+                                                                       ;; For classes, only remove default-icon if it matches page icon
+                                                                       (let [default-icon (:logseq.property.class/default-icon block)]
+                                                                         (when (and (ldb/class? block)
+                                                                                    default-icon
+                                                                                    (= default-icon icon'))
+                                                                           (db-property-handler/remove-block-property!
+                                                                            (:db/id block)
+                                                                            :logseq.property.class/default-icon))))))
                                                       :del-btn? (boolean icon')
                                                       :page-title (:block/title block)
                                                       :button-opts (when (:page-title? config)
