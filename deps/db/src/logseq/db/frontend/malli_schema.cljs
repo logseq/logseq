@@ -437,11 +437,13 @@
   "A reaction entity referencing a target node"
   (vec
    [:map {:error/path ["reaction-entity"]}
+    [:block/uuid :uuid]
     [:logseq.property.reaction/emoji-id :string]
     [:logseq.property.reaction/target :int]
-    [:logseq.property/created-by-ref {:optional true} :int]
+    [:block/properties {:optional true} block-properties]
     [:block/created-at :int]
-    [:block/tx-id {:optional true} :int]]))
+    [:block/tx-id {:optional true} :int]
+    [:block/refs {:optional true} [:set :int]]]))
 
 (def property-history-block*
   [:map

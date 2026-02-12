@@ -78,7 +78,7 @@
                   (presence/remove-presence! this ws)
                   (presence/broadcast-online-users! this)
                   (sentry/capture-exception! error)
-                  (log/error :db-sync/ws-error {:error error})))
+                  (log/error :db-sync/ws-error error)))
 
 (defclass AgentSessionDO
   (extends DurableObject)

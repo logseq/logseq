@@ -16,6 +16,7 @@
             [logseq.db-sync.worker.agent.do :as agent-do]
             [logseq.db-sync.worker.auth :as auth]
             [logseq.db-sync.worker.handler.ws :as ws-handler]
+            [logseq.db-sync.worker.http :as worker-http]
             [logseq.db-sync.worker.presence :as presence]
             [promesa.core :as p]))
 
@@ -138,7 +139,7 @@
          (presence/remove-presence! ctx socket)
          (presence/broadcast-online-users! ctx)
          (detach-ws! ctx socket)
-         (log/error :db-sync/ws-error {:error error}))))
+         (log/error :db-sync/ws-error error))))
 
 (defn start!
   [overrides]
@@ -161,8 +162,8 @@
                                     (p/catch
                                      (fn [e]
                                        (log/error :db-sync/node-request-failed {:error e})
-                                       ;; Throw until there's a more desirable behavior like 500
-                                       (throw e))))))
+                                       (js/console.error ":db-sync/node-request-failed" e)
+                                       (platform-node/send-response! res (worker-http/error-response "server error" 500)))))))
         WSS (or (.-WebSocketServer ws) (.-Server ws))
         ^js wss (new WSS #js {:noServer true})]
     (.on server "error" (fn [error] (log/error :db-sync/node-server-error {:error error})))

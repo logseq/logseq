@@ -5,9 +5,9 @@ set -euo pipefail
 
 # Defaults match the local `yarn watch` app auth config.
 # Override these env vars for production pool values if needed.
-: "${COGNITO_ISSUER:=https://cognito-idp.us-east-2.amazonaws.com/us-east-2_kAqZcxIeM}"
-: "${COGNITO_CLIENT_ID:=1qi1uijg8b6ra70nejvbptis0q}"
-: "${COGNITO_JWKS_URL:=https://cognito-idp.us-east-2.amazonaws.com/us-east-2_kAqZcxIeM/.well-known/jwks.json}"
+: "${COGNITO_ISSUER:=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8}"
+: "${COGNITO_CLIENT_ID:=69cs1lgme7p8kbgld8n5kseii6}"
+: "${COGNITO_JWKS_URL:=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json}"
 
 export DB_SYNC_PORT
 export COGNITO_ISSUER
