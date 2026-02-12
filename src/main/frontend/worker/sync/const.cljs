@@ -5,21 +5,10 @@
             [logseq.db.frontend.property :as db-property]))
 
 (defkeywords
-  :rtc/ignore-attr-when-init-upload
-  {:doc "keyword option for RTC. ignore this *attr* when initial uploading graph. Default false"}
-  :rtc/ignore-attr-when-init-download
-  {:doc "keyword option for RTC. ignore this *attr* when initial downloading graph. Default false"}
   :rtc/ignore-attr-when-syncing
   {:doc "keyword option for RTC. ignore this *attr* when syncing graph. Default false"}
   :rtc/ignore-entity-when-init-upload
-  {:doc "keyword option for RTC. ignore this *entity* when initial uploading graph. Default false"}
-  :rtc/ignore-entity-when-init-download
-  {:doc "keyword option for RTC. ignore this *entity* when initial downloading graph. Default false"}
-
-  ;; only blocks(:block/uuid) will be synced, this option is meaningless for now
-  ;; :rtc/ignore-entity-when-syncing
-  ;; {:doc "keyword option for RTC. ignore this *entity* when syncing graph. Default false"}
-  )
+  {:doc "keyword option for RTC. ignore this *entity* when initial uploading graph. Default false"})
 
 (def ignore-attrs-when-syncing
   (into #{}
