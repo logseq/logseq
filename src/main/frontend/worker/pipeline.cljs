@@ -40,7 +40,9 @@
             (:rtc-tx? tx-meta)
             (:rtc-op? tx-meta))
     (mapcat (fn [block]
-              (when (d/entity db-after (:db/id block))
+              (when (and (d/entity db-after (:db/id block))
+                         ;; don't compute refs for reactions
+                         (not (:logseq.property.reaction/target (d/entity db-after (:db/id block)))))
                 (let [refs (->> (outliner-core/rebuild-block-refs db-after block) set)
                       old-refs (->> (:block/refs (d/entity db-before (:db/id block)))
                                     (map :db/id)
