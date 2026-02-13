@@ -59,7 +59,7 @@
 
   .icon-emoji-wrap {
     position: relative;
-    top: 0.08em;
+    top: -0.5px;
     padding-left: 1px;
 
     &.as-emoji {

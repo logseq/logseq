@@ -1025,7 +1025,7 @@
                            (:logseq.property/priority block))
                    [:div.inline-block
                     {:style {:margin-right 1
-                             :margin-top -5
+                             :margin-top -2
                              :vertical-align "middle"}
                      :on-pointer-down (fn [e]
                                         (util/stop e))}
