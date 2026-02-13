@@ -153,6 +153,11 @@
   .ui__ac-group-name {
     @apply p-2 text-xs text-popover-foreground/20 font-medium;
   }
+
+  /* Hide empty breadcrumb placeholder to prevent extra height in list items */
+  .combobox-breadcrumb:empty {
+    @apply hidden;
+  }
 }
 
 /* Also apply unified styles when combobox is used in popover context (like / command) */

@@ -203,8 +203,8 @@
                     "gap-3")]
     (if (is-new-item? item config)
       ;; Render "New option:", "New page:", or "Convert" style
-      (let [pattern (first (filter #(let [text-str (if (string? text) text (str text))]
-                                      (string/starts-with? text-str %))
+      (let [raw-text (if (map? item) (or (:label item) (:value item) (:text item) (:block/title item)) (str item))
+            pattern (first (filter #(and (string? raw-text) (string/starts-with? raw-text %))
                                    (:new-item-patterns config)))
             new-text (when pattern (extract-new-item-text item pattern))
             display-pattern (string/replace pattern #":+$" "")] ; Remove one or more trailing colons
@@ -310,7 +310,7 @@
       [:div.flex.flex-col.gap-1
        {:class (or (:class config) "")}
        (when breadcrumb
-         [:div.text-xs.opacity-70.mb-1
+         [:div.combobox-breadcrumb.text-xs.opacity-70.mb-1
           breadcrumb])
        (when header
          header)

@@ -1280,6 +1280,7 @@
        (when value
          (let [opts {:disable-preview? true
                      :tag? tag?
+                     :show-icon? true
                      :with-tags? false
                      :property-position property-position
                      :other-position? other-position?

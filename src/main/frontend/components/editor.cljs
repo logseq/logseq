@@ -311,6 +311,7 @@
                                          (string/starts-with? title new-page-pattern))
                                    :create
                                    :default)))
+            :new-item-patterns [(t :new-tag) (t :new-page)]
             :show-breadcrumbs? true
             :breadcrumb-fn (fn [block]
                              (when (and (:block/uuid block) (or (:block/parent block) (not (:page? block))))
