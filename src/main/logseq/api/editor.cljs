@@ -27,6 +27,7 @@
             [logseq.api.block :as api-block]
             [logseq.api.db-based :as db-based-api]
             [logseq.common.path :as path]
+            [logseq.outliner.property :as outlier-property]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
             [logseq.sdk.core]
@@ -464,11 +465,29 @@
                    (or parsed-value
                        (bean/->js (sdk-utils/normalize-keyword-for-json property-value)))))))))
 
+(defn- get-block-classes-properties-has-default-value
+  [block-id]
+  (when-let [classes-properties
+             (some-> (outlier-property/get-block-classes-properties (db/get-db) block-id)
+                     :classes-properties)]
+    (let [properties (->> classes-properties
+                          (filter :logseq.property/default-value)
+                          (map (fn [property]
+                                 [(:db/ident property)
+                                  (:logseq.property/default-value property)])))
+          properties (into {} properties)]
+      properties)))
+
+
 (def get_block_properties
   (fn [id]
     (p/let [block (<get-block id {:children? false})]
-      (when block
-        (let [properties (api-block/into-readable-db-properties (:block/properties block))]
+      (when-let [own-properties (:block/properties block)]
+        (let [classes-properties (get-block-classes-properties-has-default-value (:db/id block))
+              properties (if (seq classes-properties)
+                           (merge classes-properties own-properties)
+                           own-properties)
+              properties (api-block/into-readable-db-properties properties)]
           (sdk-utils/result->js properties))))))
 
 (defn get_page_properties
