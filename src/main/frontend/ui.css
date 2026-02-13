@@ -85,6 +85,13 @@
   color: var(--lx-gray-12, var(--rx-gray-12)) !important;
 }
 
+/* Exception: Preserve gray-11 for quoted text in "New option" when selected */
+.ui__dropdown-menu-content .menu-link-wrap .menu-link.chosen .text-gray-11,
+.menu-links-wrapper .menu-link-wrap .menu-link.chosen .text-gray-11,
+.menu-links-outer .menu-link-wrap .menu-link.chosen .text-gray-11 {
+  color: var(--lx-gray-11, var(--rx-gray-11)) !important;
+}
+
 .ui__ac-group-name {
   @apply p-2 text-xs text-popover-foreground/20 font-medium;
 }
@@ -131,6 +138,11 @@
 
   /* Exception: Preserve gray-11 for quoted text in "New option" */
   .menu-link-wrap .menu-link .text-gray-11 {
+    color: var(--lx-gray-11, var(--rx-gray-11)) !important;
+  }
+
+  /* Exception: Preserve gray-11 for quoted text in "New option" when selected */
+  .menu-link-wrap .menu-link.chosen .text-gray-11 {
     color: var(--lx-gray-11, var(--rx-gray-11)) !important;
   }
 }
@@ -188,6 +200,11 @@
   .menu-link-wrap .menu-link .text-gray-11 {
     color: var(--lx-gray-11, var(--rx-gray-11)) !important;
   }
+
+  /* Exception: Preserve gray-11 for quoted text in "New option" when selected */
+  .menu-link-wrap .menu-link.chosen .text-gray-11 {
+    color: var(--lx-gray-11, var(--rx-gray-11)) !important;
+  }
 }
 
 /* Temporary: Apply unified styles to editor popover dropdowns even without ui__combobox class */
@@ -230,6 +247,11 @@
 
   /* Exception: Preserve gray-11 for quoted text in "New option" */
   .menu-link-wrap .menu-link .text-gray-11 {
+    color: var(--lx-gray-11, var(--rx-gray-11)) !important;
+  }
+
+  /* Exception: Preserve gray-11 for quoted text in "New option" when selected */
+  .menu-link-wrap .menu-link.chosen .text-gray-11 {
     color: var(--lx-gray-11, var(--rx-gray-11)) !important;
   }
 }

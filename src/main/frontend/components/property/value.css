@@ -174,6 +174,12 @@
   color: var(--lx-gray-11, var(--rx-gray-11)) !important;
 }
 
+/* Exception: Preserve gray-11 for quoted text in "New option" when selected */
+.ui__dropdown-menu-content .cp__select-main .item-results-wrap .menu-link.chosen .text-gray-11,
+.ui__dropdown-menu-content .ui__combobox .item-results-wrap .menu-link.chosen .text-gray-11 {
+  color: var(--lx-gray-11, var(--rx-gray-11)) !important;
+}
+
 /* Separator now spans full width since parent has no padding */
 .ui__dropdown-menu-content .cp__select-main .ui__select-separator,
 .ui__dropdown-menu-content .ui__combobox .ui__select-separator {
@@ -186,6 +192,34 @@
 .menu-links-wrapper .menu-link-wrap .menu-link .text-gray-11,
 .menu-links-outer .menu-link-wrap .menu-link .text-gray-11 {
   color: var(--lx-gray-11, var(--rx-gray-11)) !important;
+}
+
+/* Ensure quoted text in "New option" stays gray-11 when selected */
+.ui__dropdown-menu-content .menu-link-wrap .menu-link.chosen .text-gray-11,
+.menu-links-wrapper .menu-link-wrap .menu-link.chosen .text-gray-11,
+.menu-links-outer .menu-link-wrap .menu-link.chosen .text-gray-11 {
+  color: var(--lx-gray-11, var(--rx-gray-11)) !important;
+}
+
+/* Combobox multi-line item alignment: top-align icons when text wraps */
+.ui__dropdown-menu-content .cp__select-main .item-results-wrap .menu-link .list-item-icon,
+.ui__dropdown-menu-content .ui__combobox .item-results-wrap .menu-link .list-item-icon {
+  align-self: flex-start;
+}
+
+/* Top-align all page icon types inside inner gap-2 div when text wraps.
+   Safe for single-line: icon (20px) and text line-height (20px) are equal. */
+.ui__dropdown-menu-content .cp__select-main .item-results-wrap .menu-link span.flex-shrink-0,
+.ui__dropdown-menu-content .ui__combobox .item-results-wrap .menu-link span.flex-shrink-0 {
+  align-self: flex-start;
+}
+
+/* Combobox text content: prefer word-boundary breaks over mid-word breaks.
+   Specificity must beat #ui__ac-inner .menu-link { break-all } from ui.css */
+.ui__dropdown-menu-content .cp__select-main .item-results-wrap #ui__ac #ui__ac-inner .menu-link,
+.ui__dropdown-menu-content .ui__combobox .item-results-wrap #ui__ac #ui__ac-inner .menu-link {
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 .ls-properties-area .empty-btn {
