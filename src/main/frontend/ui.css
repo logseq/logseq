@@ -73,15 +73,15 @@
 }
 
 /* Override color for all nested elements */
-.ui__dropdown-menu-content .menu-link-wrap .menu-link *,
-.menu-links-wrapper .menu-link-wrap .menu-link *,
-.menu-links-outer .menu-link-wrap .menu-link * {
+.ui__dropdown-menu-content .menu-link-wrap .menu-link *:not(.ui__avatar *),
+.menu-links-wrapper .menu-link-wrap .menu-link *:not(.ui__avatar *),
+.menu-links-outer .menu-link-wrap .menu-link *:not(.ui__avatar *) {
   color: var(--lx-gray-12, var(--rx-gray-12)) !important;
 }
 
-.ui__dropdown-menu-content .menu-link-wrap .menu-link.chosen *,
-.menu-links-wrapper .menu-link-wrap .menu-link.chosen *,
-.menu-links-outer .menu-link-wrap .menu-link.chosen * {
+.ui__dropdown-menu-content .menu-link-wrap .menu-link.chosen *:not(.ui__avatar *),
+.menu-links-wrapper .menu-link-wrap .menu-link.chosen *:not(.ui__avatar *),
+.menu-links-outer .menu-link-wrap .menu-link.chosen *:not(.ui__avatar *) {
   color: var(--lx-gray-12, var(--rx-gray-12)) !important;
 }
 
@@ -120,12 +120,12 @@
   }
 
   /* Force gray-12 on all nested elements in menu items */
-  .menu-link-wrap .menu-link * {
+  .menu-link-wrap .menu-link *:not(.ui__avatar *) {
     color: var(--lx-gray-12, var(--rx-gray-12)) !important;
   }
 
   /* Force gray-12 on all nested elements in selected items */
-  .menu-link-wrap .menu-link.chosen * {
+  .menu-link-wrap .menu-link.chosen *:not(.ui__avatar *) {
     color: var(--lx-gray-12, var(--rx-gray-12)) !important;
   }
 
@@ -175,12 +175,12 @@
   }
 
   /* Force gray-12 on all nested elements in menu items */
-  .menu-link-wrap .menu-link * {
+  .menu-link-wrap .menu-link *:not(.ui__avatar *) {
     color: var(--lx-gray-12, var(--rx-gray-12)) !important;
   }
 
   /* Force gray-12 on all nested elements in selected items */
-  .menu-link-wrap .menu-link.chosen * {
+  .menu-link-wrap .menu-link.chosen *:not(.ui__avatar *) {
     color: var(--lx-gray-12, var(--rx-gray-12)) !important;
   }
 
@@ -219,12 +219,12 @@
   }
 
   /* Force gray-12 on all nested elements in menu items */
-  .menu-link-wrap .menu-link * {
+  .menu-link-wrap .menu-link *:not(.ui__avatar *) {
     color: var(--lx-gray-12, var(--rx-gray-12)) !important;
   }
 
   /* Force gray-12 on all nested elements in selected items */
-  .menu-link-wrap .menu-link.chosen * {
+  .menu-link-wrap .menu-link.chosen *:not(.ui__avatar *) {
     color: var(--lx-gray-12, var(--rx-gray-12)) !important;
   }
 
